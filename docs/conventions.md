@@ -405,8 +405,9 @@ A rule judges text by what the text is for.
 | `guide`                       | a procedural page, under `docs/guides/`                         |
 | `change-description`          | a pull request: its title on the first line, its description    |
 | `review-reply`                | a review comment, a review's body or a reply in a thread        |
-| `agent-instructions`          | Markdown an agent loads as written, such as a SKILL.md          |
-| `agent-instructions-template` | a template that renders a short and a full form of such a skill |
+| `agent-brief`                 | Markdown an agent loads as written, such as AGENTS.md           |
+| `agent-compact`               | grammar-free text only an agent reads: a skill's short form     |
+| `skill-template`              | a template that renders a short and a full form of a skill      |
 | `doc-comment`                 | one symbol's doc comment, read from the symbol index            |
 
 ### Decisions
@@ -527,10 +528,12 @@ specific behind it, and padding.
   may speak as the project (`we believe`), but no author is the actor of a change
   (`we added`), and a pull request names no author at all.
 
-A skill is loaded into an agent's context every session, so what a skill's short form
-shows meets three more rules in the `agent-instructions` kinds: no sentence over 25 words
-(`terse-sentence`), no paragraph or list item over 60 (`terse-paragraph`), and no phrase
-with a shorter equivalent (`wordy`, such as `in order to` for `to`). In a skill body
+Hand-written text an agent loads, such as AGENTS.md, is `agent-brief` and meets three
+more rules: no sentence over 25 words (`terse-sentence`), no paragraph or list item over
+60 (`terse-paragraph`), and no phrase with a shorter equivalent (`wordy`, such as
+`in order to` for `to`). What a skill's short form shows is `agent-compact`: only an agent
+reads it, so it needs no grammar, and its rules ask for fewer tokens instead (one fact
+per line, no articles or filler, no bold or tables, negation spelled as a word). In a skill body
 under `internal/agent/skills/`, text inside an `{{if .Full}}` arm is in the full form only
 and meets the rules above alone, plus `bare-rule`. In a skill a rule is only what magus
 enforces (a guard, workspace or lint rule, a diagnostic, or a rule id) and everything

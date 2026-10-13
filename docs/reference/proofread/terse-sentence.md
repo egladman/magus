@@ -26,9 +26,9 @@ House style: every word an agent loads costs context in every session. Measured 
 
 The code is `PRF7001`. The decision depends on the kind of text judged:
 
-| Kind                 | Default |
-| -------------------- | ------- |
-| `agent-instructions` | off     |
+| Kind          | Default |
+| ------------- | ------- |
+| `agent-brief` | off     |
 
 House style ships `off`: the rule encodes one repository's conventions, not
 a rule of plain writing. A repository turns it on in its decisions table.

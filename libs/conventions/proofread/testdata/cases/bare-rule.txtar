@@ -1,17 +1,17 @@
 Guidance a skill calls a rule with nothing enforcing it named.
--- hit/agent-instructions --
+-- hit/agent-brief --
 Follow the rule before you spawn.
 Four rules, in the order they bite:
 Most of it is a naming RULE.
 Strict-mode rules apply.
 - Every rule below carries a stamp.
--- hit/agent-instructions whole --
+-- hit/agent-brief whole --
 # Skill
 
 ## Rules
 
 Run it.
--- pass/agent-instructions --
+-- pass/agent-brief --
 A refused write is a guard rule you are about to hit.
 The guard's rules hold.
 Declare an additive shell-guard rule.

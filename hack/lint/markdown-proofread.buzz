@@ -18,11 +18,13 @@
 //     person by design, and the table exempts it from the voice rules. A judge that does
 //     not run is an error, never a pass.
 //   - A skill is judged by its own rules, since an agent pays for every word on every
-//     load: what its short form shows is held to the terse rules too (a sentence and a
-//     paragraph word cap, and wordy phrases with a shorter equivalent), and "rule"
-//     names only what magus enforces, so a bare one is refused. A skill body
-//     under internal/agent/skills/ renders a short and a full form, so text only the
-//     full form shows is held to the Markdown rules alone.
+//     load. A hand-written skill or AGENTS.md is an agent brief, held to the terse rules
+//     too (a sentence and a paragraph word cap, and wordy phrases with a shorter
+//     equivalent), and "rule" names only what magus enforces, so a bare one is refused.
+//     A skill body under internal/agent/skills/ is a skill template: its short form,
+//     which only an agent reads, is held to the compact rules (filler, markup, costly
+//     abbreviations, symbol negation, one fact per line, restated lines), and text only
+//     the full form shows to the Markdown rules alone.
 //   - A guide, a page the reader follows with a terminal open (GUIDES), is judged by the
 //     guide rules: the Markdown rules plus second person (no we, us or our), numbered
 //     steps that open with their verb, and no word telling the reader a step is easy.
@@ -86,7 +88,7 @@ final ALLOW_PHRASES = ["Azure Pipelines", "Claude Code", "GitHub Actions", "GitH
 final JUDGE = "{proofread\home}/{proofread\command}";
 
 // KINDS are proofread's kinds this rule runs, one judge run each.
-final KINDS = ["reference", "guide", "agent-instructions", "agent-instructions-template", "changelog"];
+final KINDS = ["reference", "guide", "agent-brief", "skill-template", "changelog"];
 
 // GUIDES are the procedural pages; concepts, reference, doctrine and the decision records
 // explain and keep the general Markdown rules.
@@ -104,10 +106,10 @@ export fun kindOf(rel: str) > str !> any {
         return "changelog";
     }
     if (path\matchesAny(["internal/agent/skills/*/SKILL.md"], path: rel)) {
-        return "agent-instructions-template";
+        return "skill-template";
     }
     if (path\matchesAny([".claude/skills/*/SKILL.md", "AGENTS.md", "**/AGENTS.md", "internal/agent/agents-section.md"], path: rel)) {
-        return "agent-instructions";
+        return "agent-brief";
     }
     if (path\matchesAny(GUIDES, path: rel)) {
         return "guide";
@@ -597,11 +599,11 @@ test "a judge that does not run is an error, not a pass" {
 }
 
 test "a skill body, a loaded skill, a guide and any other page each take their own kind" {
-    assert\equal(kindOf("internal/agent/skills/magus-run/SKILL.md"), want: "agent-instructions-template", message: "a body");
-    assert\equal(kindOf(".claude/skills/shepherd-pull-requests/SKILL.md"), want: "agent-instructions", message: "a loaded skill");
-    assert\equal(kindOf("internal/agent/agents-section.md"), want: "agent-instructions", message: "the AGENTS.md block");
-    assert\equal(kindOf("AGENTS.md"), want: "agent-instructions", message: "loaded every session");
-    assert\equal(kindOf("console/AGENTS.md"), want: "agent-instructions", message: "a nested AGENTS.md");
+    assert\equal(kindOf("internal/agent/skills/magus-run/SKILL.md"), want: "skill-template", message: "a body");
+    assert\equal(kindOf(".claude/skills/shepherd-pull-requests/SKILL.md"), want: "agent-brief", message: "a loaded skill");
+    assert\equal(kindOf("internal/agent/agents-section.md"), want: "agent-brief", message: "the AGENTS.md block");
+    assert\equal(kindOf("AGENTS.md"), want: "agent-brief", message: "loaded every session");
+    assert\equal(kindOf("console/AGENTS.md"), want: "agent-brief", message: "a nested AGENTS.md");
     assert\equal(kindOf(".claude/skills/x/notes.md"), want: "reference", message: "not a SKILL.md");
     foreach (page in ["docs/guides/integrations/agents/leases.md", "docs/guides/setup.md",
         "docs/guides/setup/linux.md", "docs/guides/migrating/from-nx.md"]) {
@@ -638,7 +640,7 @@ test "a guide is held to the guide rules and a concept page is not" {
         message: "guide findings only on the guide; second-person ships off on its labeled precision");
 }
 
-test "a skill's short form is held to the terse rules and its full-only text is not" {
+test "a brief and a full form are held to the wordy phrases, and a compact short form is not" {
     final got = check(support\fixture({
         "internal/agent/skills/magus-x/SKILL.md": "# X\n\nRun it\{\{if .Full}} in order to replay\{\{else}} in order to warm it\{\{end}}.\n",
         ".claude/skills/y/SKILL.md": "---\nname: y\ndescription: \"Y.\"\n---\n\n# Y\n\nRun it in order to replay.\n",
@@ -650,7 +652,7 @@ test "a skill's short form is held to the terse rules and its full-only text is 
         where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[")!));
     }
     assert\equal(where, want: [".claude/skills/y/SKILL.md:8 [wordy]", "internal/agent/skills/magus-x/SKILL.md:3 [wordy]"],
-        message: "one wordy finding per skill, none on the page");
+        message: "the brief's phrase and the full form's, none from the short form or the page");
 }
 
 test "ignore globs anchor a slashed entry and float a bare one" {

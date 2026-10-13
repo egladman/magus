@@ -24,13 +24,14 @@ import (
 // as a title, a paragraph of its own. KindCommitMessage reads no headings.
 // KindCLIHelp and KindToolDescription read plain text: no Markdown is
 // stripped, only backticks mark a literal. KindReleaseNotes and KindChangelog read Markdown pages.
-// KindAgentInstructionsTemplate renders text in both of its forms first, and
+// KindSkillTemplate renders text in both of its forms first, and
 // each finding's line is its line in the source.
 func JudgeText(text string, kind Kind, opts ...Option) []Finding {
 	return judgeText(text, kind, collect(opts))
 }
 
 func judgeText(text string, kind Kind, o options) []Finding {
+	kind = ParseKind(string(kind)) // compat: see kindAliases
 	raw := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 
 	switch kind {
@@ -38,7 +39,7 @@ func judgeText(text string, kind Kind, o options) []Finding {
 		return run(input{
 			symbol: Symbol{Doc: text}, kind: kind, prose: readProse(raw, false), lines: raw, source: raw, opts: o,
 		})
-	case KindAgentInstructionsTemplate:
+	case KindSkillTemplate:
 		return judgeSkillSource(strings.Join(raw, "\n"), o)
 	case KindStylesheet:
 		return judgeStylesheet(strings.Join(raw, "\n"), o)

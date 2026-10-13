@@ -10,8 +10,8 @@ import (
 // A skill body is the text/template internal/agent renders twice: once short,
 // the copy most sessions load, and once full. An `{{if .Full}}` arm is in the
 // full copy only, its `{{else}}` arm in the short copy only, and `.Short` and
-// `.Is "name"` branch the same way. The short copy is held to the terse rules
-// as well as the Markdown ones; text only the full copy shows is held to the
+// `.Is "name"` branch the same way. Only an agent reads the short copy, so it
+// is judged as [KindAgentCompact]; text only the full copy shows is held to the
 // Markdown rules and [RuleBareRule], which holds for every word of a skill.
 
 // skillForm is one render of a skill body, with the source line each of its
@@ -28,7 +28,7 @@ type skillForm struct {
 // where that rule is off.
 func judgeSkillSource(text string, o options) []Finding {
 	unrendered := func(message string) []Finding {
-		d := o.decide(templateCheck, KindAgentInstructionsTemplate)
+		d := o.decide(templateCheck, KindSkillTemplate)
 		if d == DecisionOff {
 			return nil
 		}
@@ -62,13 +62,16 @@ func judgeSkillSource(text string, o options) []Finding {
 	}
 
 	seen := map[key]bool{}
-	judged := append(judgeForm(forms[0], KindAgentInstructions, o), judgeForm(forms[1], KindReference, o)...)
+	judged := append(judgeForm(forms[0], KindAgentCompact, o), judgeForm(forms[1], KindReference, o)...)
 
-	for _, f := range judgeForm(forms[1], KindAgentInstructions, o) {
+	for _, f := range judgeForm(forms[1], KindAgentBrief, o) {
 		if f.Rule == RuleBareRule {
 			judged = append(judged, f)
 		}
 	}
+
+	judged = append(judged, judgeDescriptions(forms, o)...)
+	judged = append(judged, judgeInstructionPosition(forms[1], o)...)
 
 	source := input{source: strings.Split(text, "\n")}
 

@@ -209,7 +209,7 @@ func parseHeader(header string, c check) (Case, bool, error) {
 		return Case{}, false, fmt.Errorf("section %q needs a <label>/<kind> header", header)
 	}
 
-	out := Case{Label: Label(label), Kind: Kind(kind)}
+	out := Case{Label: Label(label), Kind: ParseKind(kind)}
 
 	switch out.Label {
 	case LabelHit, LabelPass, LabelFalsePositive, LabelFalseNegative, labelAuthor:

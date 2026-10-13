@@ -80,7 +80,8 @@ func replyVoice(in input) []Finding {
 				Message: fmt.Sprintf("Drop the section label '%s': say the thing itself.", body),
 				Match:   body, Line: ln.line,
 			})
-		case ln.item:
+		case ln.item && in.kind != KindAgentCompact:
+			// compact-markup reports every emphasis marker in compact text.
 			if m := boldLabel.FindString(body); m != "" {
 				out = append(out, Finding{
 					Message: fmt.Sprintf("Drop the bold label '%s': write the item as a sentence "+

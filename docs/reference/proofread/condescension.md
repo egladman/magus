@@ -31,7 +31,7 @@ The code is `PRF2006`. The decision depends on the kind of text judged:
 | `reference`          | off     |
 | `guide`              | off     |
 | `change-description` | off     |
-| `agent-instructions` | off     |
+| `agent-brief`        | off     |
 | `commit-message`     | off     |
 | `issue`              | off     |
 | `release-notes`      | off     |
@@ -39,6 +39,7 @@ The code is `PRF2006`. The decision depends on the kind of text judged:
 | `review-summary`     | off     |
 | `review-inline`      | off     |
 | `review-reply`       | off     |
+| `agent-compact`      | off     |
 | `cli-help`           | off     |
 | `agent-reply`        | off     |
 

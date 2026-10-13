@@ -61,11 +61,17 @@ func TestRenderSkillTakesEachArmTheWayTheVariantDoes(t *testing.T) {
 // longSentence is one sentence of n words.
 func longSentence(n int) string { return wordRun(n-1) + " end." }
 
-func TestJudgeSkillSourceHoldsOnlyTheShortFormToTheTerseRules(t *testing.T) {
-	long := longSentence(maxSkillSentenceWords + 1)
-	terse := Finding{
-		Rule: RuleTerseSentence, Line: 3,
-		Message: "Keep a skill sentence to 25 words (this one has 26): split it, or make its steps a list.",
+// packedLine is one line of two clauses joined by a semicolon, a word over the
+// compact line cap.
+func packedLine() string {
+	return wordRun(maxCompactLineWords/2+1) + "; " + wordRun(maxCompactLineWords/2+1) + "."
+}
+
+func TestJudgeSkillSourceHoldsOnlyTheShortFormToTheCompactRules(t *testing.T) {
+	long := packedLine()
+	packed := Finding{
+		Rule: RuleCompactLine, Line: 3, Decision: DecisionAdvise,
+		Message: "Split this line: 22 words joining clauses. One fact per line.",
 	}
 
 	cases := []struct {
@@ -73,25 +79,37 @@ func TestJudgeSkillSourceHoldsOnlyTheShortFormToTheTerseRules(t *testing.T) {
 		body string
 		want []Finding
 	}{
-		{"outside any arm", "# Skill\n\n" + long + "\n", []Finding{terse}},
+		{"outside any arm", "# Skill\n\n" + long + "\n", []Finding{packed}},
 		{"in a full arm", "# Skill\n\n{{if .Full}}" + long + "{{end}}\n", nil},
-		{"in an else arm", "# Skill\n\n{{if .Full}}Short.{{else}}" + long + "{{end}}\n", []Finding{terse}},
+		{"in an else arm", "# Skill\n\n{{if .Full}}Short.{{else}}" + long + "{{end}}\n", []Finding{packed}},
 		{"in a short arm nested in a full arm", "# Skill\n\n{{if .Full}}{{if .Short}}" + long + "{{end}}{{end}}\n", nil},
 		{"in an else arm nested in an else arm", "# Skill\n\n{{if .Full}}A.{{else}}{{if .Full}}B.{{else}}" + long +
-			"{{end}}{{end}}\n", []Finding{terse}},
+			"{{end}}{{end}}\n", []Finding{packed}},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assertFindings(t, JudgeText(tc.body, KindAgentInstructionsTemplate, houseOn), tc.want)
+			assertFindings(t, JudgeText(tc.body, KindSkillTemplate, houseOn), tc.want)
 		})
+	}
+}
+
+// The short form is compact text, so the terse caps written for grammatical
+// prose no longer judge it.
+func TestJudgeSkillSourceLeavesTheTerseCapsOffTheShortForm(t *testing.T) {
+	body := "# Skill\n\n" + wordRun(maxSkillSentenceWords+1) + " end.\n"
+
+	for _, f := range JudgeText(body, KindSkillTemplate, houseOn) {
+		if f.Rule == RuleTerseSentence || f.Rule == RuleTerseParagraph || f.Rule == RuleWordy {
+			t.Errorf("%s judged the short form: %+v", f.Rule, f)
+		}
 	}
 }
 
 func TestJudgeSkillSourceHoldsFullOnlyTextToTheMarkdownRules(t *testing.T) {
 	body := "# Skill\n\nRun it.{{if .Full}} The cache simply keys it, in order to replay.{{end}}\n"
 
-	assertFindings(t, JudgeText(body, KindAgentInstructionsTemplate, houseOn), []Finding{
+	assertFindings(t, JudgeText(body, KindSkillTemplate, houseOn), []Finding{
 		{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply", Line: 3},
 		{Rule: RuleWordy, Message: "Write 'to', not 'in order to'.", Match: "in order to", Line: 3},
 	})
@@ -100,7 +118,7 @@ func TestJudgeSkillSourceHoldsFullOnlyTextToTheMarkdownRules(t *testing.T) {
 func TestJudgeSkillSourceReportsSharedTextOnce(t *testing.T) {
 	body := "# Skill\n\nThe cache simply keys it{{if .Full}}, always{{else}}, now{{end}}.\n"
 
-	assertFindings(t, JudgeText(body, KindAgentInstructionsTemplate, houseOn), []Finding{
+	assertFindings(t, JudgeText(body, KindSkillTemplate, houseOn, WithOnly(RuleFiller)), []Finding{
 		{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply", Line: 3},
 	})
 }
@@ -111,7 +129,7 @@ func TestJudgeSkillSourceReportsAtTheSourceLine(t *testing.T) {
 	body := "# Skill\n\n{{if .Full}}One.\n\nTwo.\n\nThree.\n{{end}}\nRun it in order to replay.\n\n" +
 		"{{if .Full}}Long.\n{{else}}Short.\n{{end}}\nThe cache simply keys it.\n"
 
-	assertFindings(t, JudgeText(body, KindAgentInstructionsTemplate, houseOn), []Finding{
+	assertFindings(t, JudgeText(body, KindSkillTemplate, houseOn, WithOnly(RuleFiller, RuleWordy)), []Finding{
 		{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply", Line: 14},
 		{Rule: RuleWordy, Message: "Write 'to', not 'in order to'.", Match: "in order to", Line: 9},
 	})
@@ -127,12 +145,12 @@ func TestJudgeSkillSourceReportsABodyThatDoesNotRender(t *testing.T) {
 
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
-			got := JudgeText(body, KindAgentInstructionsTemplate, houseOn)
+			got := JudgeText(body, KindSkillTemplate, houseOn)
 			if len(got) != 1 || got[0].Rule != RuleTemplate || !strings.HasPrefix(got[0].Message, "The skill body does not render: ") {
 				t.Errorf("findings = %#v, want one template finding", got)
 			}
 
-			if got := JudgeText(body, KindAgentInstructionsTemplate); len(got) != 0 {
+			if got := JudgeText(body, KindSkillTemplate); len(got) != 0 {
 				t.Errorf("with template off: findings = %#v, want none", got)
 			}
 		})

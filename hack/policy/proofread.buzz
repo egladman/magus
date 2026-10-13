@@ -57,6 +57,17 @@ final RULES: {str: str} = {
     "list-marks": "advise",
     "list-parallel": "advise",
     "date-format": "advise",
+    // The agent-compact rules and the skill rules ship off until a labeling round measures them;
+    // here they advise, each backed by the token counts and studies its page cites. None denies
+    // while the short skill forms are not yet compressed to the floor.
+    "compact-filler": "advise",
+    "compact-markup": "advise",
+    "compact-costly-abbrev": "advise",
+    "compact-symbol-negation": "advise",
+    "compact-line": "advise",
+    "compact-duplicate": "advise",
+    "skill-description-budget": "advise",
+    "instruction-position": "advise",
 };
 
 // DECISIONS_FILE is RULES as the JSON file a caller that cannot import this module hands

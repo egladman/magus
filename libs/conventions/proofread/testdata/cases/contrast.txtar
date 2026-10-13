@@ -12,7 +12,7 @@ It has no flags, no config, just a path.
 It hashes the inputs, no guessing.
 -- hit/guide --
 It is not just a cache; it is the ledger.
--- hit/agent-instructions --
+-- hit/agent-brief --
 It is not just a cache; it is the ledger.
 -- pass/change-description --
 - Pins the key so a replay hits.

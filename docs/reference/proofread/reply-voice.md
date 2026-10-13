@@ -1,13 +1,13 @@
 ---
 title: "reply-voice"
-description: "A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, `review-summary`, `review-inline`, and `review-reply` and advises on `stylesheet` by default: it reports text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label."
+description: "A rule that denies on `reference`, `guide`, `change-description`, `agent-brief`, `commit-message`, `issue`, `release-notes`, `changelog`, `review-summary`, `review-inline`, `review-reply`, and `agent-compact` and advises on `stylesheet` by default: it reports text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label."
 tags: [proofread, rules, reply-voice, deny]
 aliases: [reference/prose/reply-voice]
 ---
 
 # reply-voice
 
-A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, `review-summary`, `review-inline`, and `review-reply` and advises on `stylesheet` by default: it reports text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label.
+A rule that denies on `reference`, `guide`, `change-description`, `agent-brief`, `commit-message`, `issue`, `release-notes`, `changelog`, `review-summary`, `review-inline`, `review-reply`, and `agent-compact` and advises on `stylesheet` by default: it reports text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label.
 
 ## What it catches
 
@@ -31,7 +31,7 @@ The code is `PRF1002`. The decision depends on the kind of text judged:
 | `reference`          | deny    |
 | `guide`              | deny    |
 | `change-description` | deny    |
-| `agent-instructions` | deny    |
+| `agent-brief`        | deny    |
 | `commit-message`     | deny    |
 | `issue`              | deny    |
 | `release-notes`      | deny    |
@@ -39,6 +39,7 @@ The code is `PRF1002`. The decision depends on the kind of text judged:
 | `review-summary`     | deny    |
 | `review-inline`      | deny    |
 | `review-reply`       | deny    |
+| `agent-compact`      | deny    |
 | `stylesheet`         | advise  |
 
 ## Changing it

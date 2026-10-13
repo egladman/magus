@@ -147,7 +147,7 @@ func TestNominalizationsReportsATextOverTheRate(t *testing.T) {
 
 func TestDensityRulesAdviseOnRunningProseOnly(t *testing.T) {
 	every := []Kind{
-		KindDocComment, KindReference, KindGuide, KindChangeDescription, KindAgentInstructions, KindReviewReply,
+		KindDocComment, KindReference, KindGuide, KindChangeDescription, KindAgentBrief, KindReviewReply,
 		KindIssue,
 	}
 	text := "fix(cache): keep the key stable\n" +

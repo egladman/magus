@@ -147,9 +147,11 @@ func sampleKind(name string) (proofread.Kind, error) {
 		return "", errors.New("-sample needs -kind")
 	}
 
+	kind := proofread.ParseKind(name)
+
 	for _, s := range subcommands {
-		if s.kind != "" && s.name == name {
-			if s.kind == proofread.KindAgentInstructionsTemplate {
+		if s.kind != "" && s.kind == kind {
+			if s.kind == proofread.KindSkillTemplate {
 				return "", fmt.Errorf("-kind %s renders a template first and cannot be sampled", name)
 			}
 

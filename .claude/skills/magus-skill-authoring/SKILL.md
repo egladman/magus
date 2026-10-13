@@ -174,31 +174,54 @@ that fails open, a pipe that turns a failing gate into exit 0.
 The evidence: an ablation of repository context files (arXiv:2602.11988) found
 imperative instructions followed well, while background and overview prose is not
 worth its tokens. That licenses cutting BACKGROUND (what magus is, why it exists),
-not the why of a judgment instruction. Short-context compression studies
-(arXiv:2505.00019, arXiv:2502.14255) found terse rewrites degrade short instruction
-text, so keep the grammar of what survives.
+not the why of a judgment instruction.
 
-### Write the short form terse, not de-grammared
+### Compress the short form to the floor; keep the full form for people
 
-Shorten by saying less, not by writing badly. Dropping articles and connectives to
-save bytes measurably hurts weaker models. Write plain sentences with ordinary
-punctuation in both arms.
+The short form is `agent-compact`: only an agent reads it, so write it grammar-free
+and compressed to the floor.
 
-proofread holds what the short form shows to the terse lint rules. Its
-`agent-instructions-template` and `agent-instructions` kinds run in
-hack/lint/markdown-proofread.buzz. They refuse:
+- Drop articles, linking verbs, "you", filler and emphasis.
+- Keep every KEEP word: negation (not, never, no, without) and obligation (must,
+  only). Scope (every, all, any, each, except) is one too. So are condition (if,
+  unless, when, until) and order (before, after, then, first, last).
+- Keep every number with its unit, and every identifier, path and flag.
+- Write one fact per line, `key: value` lines over tables, and `->` for "then".
+- Spell negation as a word, never `!`.
+- Abbreviate only a word of 2 or more tokens: `k8s`, `w/` and `e.g.` cost more than
+  the word.
 
-- a sentence over 25 words;
-- a paragraph or list item over 60;
-- a wordy phrase (`in order to`, `is able to`).
+This reverses the older "terse, not de-grammared" guidance. The 2026-10-13 eval ran
+`magus run agent-eval .` (Sonnet, 3 tasks x 3 runs):
+
+- c2, the short skills rewritten to the floor, used 14.9% fewer tokens than short.
+- c2 passed 9/9 against full's 8/9, with cache writes 7% lower.
+- n=9 can exclude a large pass drop, not a small one.
+
+The full form stays grammatical prose: it is the copy for people and weaker models.
+
+proofread judges a body under internal/agent/skills/ as the `skill-template` kind in
+hack/lint/markdown-proofread.buzz. The short form is `agent-compact`; text only the
+full form shows is `reference`. The compact lint rules advise and never deny until
+the short forms are compressed:
+
+- `compact-filler`: articles, linking verbs, filler, with the tokens saved;
+- `compact-markup`: bold, italic and tables;
+- `compact-costly-abbrev` and `compact-symbol-negation`;
+- `compact-line`: over 21 words joining clauses;
+- `compact-duplicate`: a line restating an earlier one.
+
+A hand-written skill or AGENTS.md is `agent-brief`: terse but grammatical. The terse
+lint rules refuse a sentence over 25 words, a paragraph over 60, and a wordy phrase
+such as `in order to`.
 
 Both forms refuse a bare `rule`. In a skill, `rule` means only what magus enforces,
 so name the mechanism: a guard, workspace or lint rule, or its id in code. Write anything
 else as an instruction. Name a guard rule rather than restate what it refuses; its
 first denial teaches the fix.
 
-Write short declarative sentences and imperative steps. Prefer a list when steps are
-a sequence. Never restate what a heading says. Move examples, history and the
+In the full form, write short declarative sentences and imperative steps. Prefer a
+list when steps are a sequence. Never restate what a heading says. Move examples, history and the
 reasoning behind an instruction into a `.Full` arm when it stands without them.
 
 When you cut:
@@ -213,8 +236,8 @@ When you cut:
   than it recovers a judgment.
 - War stories, "otherwise X" clauses, and illustrative examples go in a `.Full`
   arm. The why of a judgment instruction does NOT: shorten it into an else arm.
-- Keep the imperative grammatical after the cut. `foo{{if .Full}}, because
-  bar{{end}}.` reads as `foo.` in short; a mid-clause cut reads as damage.
+- Cut on a clause boundary. `foo{{if .Full}}, because bar{{end}}.` reads as `foo.`
+  in short; a mid-clause cut can strip a KEEP word.
 - A malformed template is a parse or execute error at install, which also catches
   typos the old scheme let through as literal text.
 - A passage that survives into short at full length is a candidate for an else

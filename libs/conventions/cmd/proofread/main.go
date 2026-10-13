@@ -6,9 +6,12 @@
 // one's doc, reporting in input order and then the order [proofread.Judge]
 // reports them. reference judges the Markdown files its arguments name, in
 // argument order; guide judges them as procedural pages, held to the guide
-// rules as well; agent-instructions judges them as instructions an agent
-// loads as written, and agent-instructions-template as template bodies that
-// render into a short and a full form, each finding at its source line.
+// rules as well. agent-brief judges them as hand-written instructions an
+// agent loads as written, agent-compact as grammar-free text only an agent
+// reads, and skill-template as template bodies that render into a short and a
+// full form, each finding at its source line. The former names
+// agent-instructions and agent-instructions-template still name agent-brief
+// and skill-template.
 // change-description reads a pull request on stdin, the title on the first
 // line and the description after it. review-summary reads a review's body on
 // stdin, review-inline a comment on a line of the diff, and review-reply a
@@ -150,8 +153,9 @@ var subcommands = []subcommand{
 	{"doc-comment", proofread.KindDocComment, "", "judge the doc of each symbol in a JSON array on stdin"},
 	{"reference", proofread.KindReference, "FILE...", "judge Markdown pages a reader looks things up in"},
 	{"guide", proofread.KindGuide, "FILE...", "judge procedural pages, held to the guide rules too"},
-	{"agent-instructions", proofread.KindAgentInstructions, "FILE...", "judge instructions an agent loads as written"},
-	{"agent-instructions-template", proofread.KindAgentInstructionsTemplate, "FILE...", "judge template bodies that render into a short and a full form"},
+	{"agent-brief", proofread.KindAgentBrief, "FILE...", "judge hand-written instructions an agent loads as written"},
+	{"agent-compact", proofread.KindAgentCompact, "FILE...", "judge grammar-free text only an agent reads"},
+	{"skill-template", proofread.KindSkillTemplate, "FILE...", "judge skill template bodies that render into a short and a full form"},
 	{"change-description", proofread.KindChangeDescription, "", "judge a pull request on stdin, its title on the first line"},
 	{"review-summary", proofread.KindReviewSummary, "", "judge a review's body on stdin, its verdict in -event"},
 	{"review-inline", proofread.KindReviewInline, "", "judge a review comment on a line of the diff, on stdin"},
@@ -231,8 +235,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runVoice(rest, stdin, stdout, stderr)
 	}
 
+	kind := proofread.ParseKind(name) // compat: see proofread's kindAliases
+
 	for _, s := range subcommands {
-		if s.kind != "" && s.name == name {
+		if s.kind != "" && s.kind == kind {
 			return runKind(s.kind, rest, stdin, stdout, stderr)
 		}
 	}
@@ -414,7 +420,7 @@ func writeExplanation(w io.Writer, doc proofread.RuleDoc) {
 // rather than from stdin.
 func readsFiles(kind proofread.Kind) bool {
 	switch kind {
-	case proofread.KindReference, proofread.KindGuide, proofread.KindAgentInstructions, proofread.KindAgentInstructionsTemplate,
+	case proofread.KindReference, proofread.KindGuide, proofread.KindAgentBrief, proofread.KindAgentCompact, proofread.KindSkillTemplate,
 		proofread.KindReleaseNotes, proofread.KindChangelog:
 		return true
 	default:

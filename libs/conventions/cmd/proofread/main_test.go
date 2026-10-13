@@ -197,8 +197,17 @@ func TestRunJudgesReferenceFilesInArgumentOrder(t *testing.T) {
 func TestRunJudgesATemplateAtItsSourceLine(t *testing.T) {
 	path := writeFile(t, t.TempDir(), "SKILL.md", "# Skill\n\n{{if .Full}}One.\n\nTwo.\n{{end}}\nRun it in order to replay.\n")
 
-	want := rows(t, row(path, path+":7", "agent-instructions-template", proofread.RuleWordy, proofread.DecisionDeny,
+	want := rows(t, row(path, path+":7", "skill-template", proofread.RuleWordy, proofread.DecisionDeny,
 		"Write 'to', not 'in order to'.", "in order to").at(7, 8, 19).replacing("to"))
+
+	assertArgs(t, []string{"skill-template", path}, "", want)
+}
+
+func TestRunReadsAFormerKindNameAsItsKind(t *testing.T) {
+	path := writeFile(t, t.TempDir(), "SKILL.md", "# Skill\n\nRun it in order to replay.\n")
+
+	want := rows(t, row(path, path+":3", "skill-template", proofread.RuleWordy, proofread.DecisionDeny,
+		"Write 'to', not 'in order to'.", "in order to").at(3, 8, 19).replacing("to"))
 
 	assertArgs(t, []string{"agent-instructions-template", path}, "", want)
 }

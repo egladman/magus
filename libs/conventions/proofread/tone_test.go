@@ -225,7 +225,7 @@ func TestCondescensionReportsPresumptionOutsideAGuide(t *testing.T) {
 	runDecisionCases(t, RuleCondescension, []textCase{
 		{"presuming words on a page", KindReference, "Of course the key is sorted, as everyone knows.",
 			[]string{"1:Of course:deny", "1:as everyone knows:deny"}},
-		{"a booster opening a sentence", KindAgentInstructions, "Clearly, the key is sorted. Obviously it holds.",
+		{"a booster opening a sentence", KindAgentBrief, "Clearly, the key is sorted. Obviously it holds.",
 			[]string{"1:Clearly:deny", "1:Obviously:deny"}},
 		{"obviously anywhere in a reply", KindReviewReply, "This obviously needs a lock.", []string{"1:obviously:deny"}},
 		// docs/recommendations.md and a blog post.

@@ -15,7 +15,7 @@ func TestReviewChecksRunInThisOrder(t *testing.T) {
 
 func TestReviewRulesAdviseOnAReplyOnly(t *testing.T) {
 	every := []Kind{
-		KindDocComment, KindReference, KindGuide, KindChangeDescription, KindAgentInstructions, KindReviewReply,
+		KindDocComment, KindReference, KindGuide, KindChangeDescription, KindAgentBrief, KindReviewReply,
 	}
 	cases := []struct {
 		rule Rule

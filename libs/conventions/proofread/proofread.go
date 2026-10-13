@@ -101,15 +101,22 @@ const (
 	// KindChangeDescription is a pull request or merge request: its title on
 	// the first line, its description after it.
 	KindChangeDescription Kind = "change-description"
-	// KindAgentInstructions is Markdown an agent loads as written, such as a
-	// skill's SKILL.md: held to the terse rules, since every word costs context
-	// in every session that loads it.
-	KindAgentInstructions Kind = "agent-instructions"
-	// KindAgentInstructionsTemplate is agent instructions written as a
-	// text/template body that renders into a short and a full form, as
-	// internal/agent renders a skill. What the short form shows is judged as
-	// KindAgentInstructions; what only the full form shows, as KindReference.
-	KindAgentInstructionsTemplate Kind = "agent-instructions-template"
+	// KindAgentBrief is hand-written Markdown an agent loads as written, such
+	// as AGENTS.md, CLAUDE.md or a skill's SKILL.md: terse but grammatical,
+	// held to the terse rules, since every word costs context in every session
+	// that loads it.
+	KindAgentBrief Kind = "agent-brief"
+	// KindAgentCompact is text only an agent reads, written below grammar: one
+	// fact per line, articles, linking verbs and emphasis dropped, every word
+	// that carries negation, obligation, scope, a condition or an order kept.
+	// The rules that hold a sentence to its grammar or its length leave it, and
+	// the compact rules hold it to the token floor instead.
+	KindAgentCompact Kind = "agent-compact"
+	// KindSkillTemplate is a skill written as a text/template body that renders
+	// into a short and a full form, as internal/agent renders one. What the
+	// short form shows is judged as KindAgentCompact; what only the full form
+	// shows, as KindReference, the full form being the copy a person reads.
+	KindSkillTemplate Kind = "skill-template"
 	// KindGuide is a procedural page, one the reader follows with a
 	// terminal open: Markdown held to the guide rules as well, which keep it
 	// in the second person, its numbered steps imperative and its words free
@@ -160,6 +167,25 @@ const (
 	KindStylesheet Kind = "stylesheet"
 )
 
+// compat(until: no caller, decisions table, round record or case file names
+// agent-instructions or agent-instructions-template): the names these kinds
+// had before kinds were named for their reader.
+var kindAliases = map[string]Kind{
+	"agent-instructions":          KindAgentBrief,
+	"agent-instructions-template": KindSkillTemplate,
+}
+
+// ParseKind returns the kind name names. A former name of a kind parses to
+// that kind; any other name is returned as given, so a caller still checks it
+// against the kinds it accepts.
+func ParseKind(name string) Kind {
+	if k, ok := kindAliases[name]; ok {
+		return k
+	}
+
+	return Kind(name)
+}
+
 // Decision is what a finding costs the caller that reads it, in the words a
 // magus guard rule's decision uses. Each rule ships a default per kind, and a
 // decisions table ([WithDecisions]) overrides it per rule.
@@ -176,9 +202,10 @@ const (
 
 var (
 	docOnly = []Kind{KindDocComment}
-	written = []Kind{KindReference, KindGuide, KindChangeDescription, KindAgentInstructions}
-	all     = []Kind{KindDocComment, KindReference, KindGuide, KindChangeDescription, KindAgentInstructions}
-	skill   = []Kind{KindAgentInstructions}
+	written = []Kind{KindReference, KindGuide, KindChangeDescription, KindAgentBrief}
+	all     = []Kind{KindDocComment, KindReference, KindGuide, KindChangeDescription, KindAgentBrief}
+	brief   = []Kind{KindAgentBrief}
+	compact = []Kind{KindAgentCompact}
 	guide   = []Kind{KindGuide}
 	// reviewed is text written to the people working on the change, where a
 	// sentence about past work or a reviewer is about someone the reader knows.
@@ -244,7 +271,8 @@ func (c check) declaredDecision(kind Kind) Decision {
 // Markdown and pull requests would hold every doc comment in the tree to
 // them at once, with no sweep behind it.
 var checks = slices.Concat(coreChecks, cssChecks, toneChecks, slopChecks, messageChecks, commitChecks, helpChecks,
-	issueChecks, densityChecks, reviewChecks, reviewKindChecks, suppressChecks, agentReplyChecks, toolChecks, listChecks, voiceChecks, []check{templateCheck})
+	issueChecks, densityChecks, reviewChecks, reviewKindChecks, suppressChecks, agentReplyChecks, toolChecks, listChecks, voiceChecks,
+	compactChecks, skillChecks, []check{templateCheck})
 
 var messageChecks = []check{
 	{rule: RuleMessageLength, on: message, judge: messageLength},
@@ -256,7 +284,7 @@ var messageChecks = []check{
 // templateCheck has no judge: a template that does not render is reported
 // before any rule runs, and the entry gives the rule its decisions and its
 // place in [Rules].
-var templateCheck = check{rule: RuleTemplate, on: []Kind{KindAgentInstructionsTemplate}, house: true}
+var templateCheck = check{rule: RuleTemplate, on: []Kind{KindSkillTemplate}, house: true}
 
 // Another rule leaves a span to each of these where it reports the span
 // itself, so one span gives one finding; see [input.reports].
@@ -266,7 +294,7 @@ var (
 		judge: filler,
 	}
 	leadContextCheck = check{rule: RuleLeadContext, on: []Kind{KindChangeDescription}, judge: leadContext}
-	tenseCheck       = check{rule: RuleTense, on: slices.Concat(proseKinds, stylesheet), house: true, judge: tense}
+	tenseCheck       = check{rule: RuleTense, on: slices.Concat(proseKinds, compact, stylesheet), house: true, judge: tense}
 )
 
 // comment is a doc comment and a stylesheet's comments, which the comment
@@ -285,20 +313,20 @@ var coreChecks = []check{
 	{rule: RuleHistory, on: comment, house: true, judge: history},
 	{rule: RuleDocStub, on: docOnly, house: true, judge: docStub},
 	leadContextCheck,
-	{rule: RuleReplyVoice, on: slices.Concat(withReply, stylesheet), advise: stylesheet, judge: replyVoice},
+	{rule: RuleReplyVoice, on: slices.Concat(withReply, compact, stylesheet), advise: stylesheet, judge: replyVoice},
 	tenseCheck,
 	{
-		rule: RuleHedge, on: slices.Concat(proseKinds, agentReply, stylesheet),
+		rule: RuleHedge, on: slices.Concat(proseKinds, compact, agentReply, stylesheet),
 		advise: slices.Concat(agentReply, stylesheet), judge: hedge,
 	},
-	{rule: RuleAttribution, on: slices.Concat(withReply, stylesheet), house: true, judge: attribution},
-	{rule: RuleTerseSentence, on: skill, house: true, judge: terseSentence},
-	{rule: RuleTerseParagraph, on: skill, house: true, judge: terseParagraph},
+	{rule: RuleAttribution, on: slices.Concat(withReply, compact, stylesheet), house: true, judge: attribution},
+	{rule: RuleTerseSentence, on: brief, house: true, judge: terseSentence},
+	{rule: RuleTerseParagraph, on: brief, house: true, judge: terseParagraph},
 	{rule: RuleWordy, on: slices.Concat(proseKinds, agentReply), advise: agentReply, judge: wordy},
-	{rule: RuleBareRule, on: skill, house: true, judge: bareRule},
+	{rule: RuleBareRule, on: slices.Concat(brief, compact), house: true, judge: bareRule},
 	{rule: RuleSecondPerson, on: guide, judge: secondPerson},
 	{rule: RuleStepVerb, on: guide, judge: stepVerb},
-	{rule: RuleCondescension, on: slices.Concat(withReply, help, agentReply), judge: condescension},
+	{rule: RuleCondescension, on: slices.Concat(withReply, compact, help, agentReply), judge: condescension},
 }
 
 // Rules returns every rule in the order [Judge] and [JudgeText] report them.

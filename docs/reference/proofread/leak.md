@@ -1,13 +1,13 @@
 ---
 title: "leak"
-description: "A rule that denies on `doc-comment`, `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, `cli-help`, `review-summary`, `review-inline`, and `review-reply` and advises on `agent-reply` by default: it reports residue of a tool or a template: a citation marker or an unfilled placeholder."
+description: "A rule that denies on `doc-comment`, `reference`, `guide`, `change-description`, `agent-brief`, `agent-compact`, `commit-message`, `issue`, `release-notes`, `changelog`, `cli-help`, `review-summary`, `review-inline`, and `review-reply` and advises on `agent-reply` by default: it reports residue of a tool or a template: a citation marker or an unfilled placeholder."
 tags: [proofread, rules, leak, deny]
 aliases: [reference/prose/leak]
 ---
 
 # leak
 
-A rule that denies on `doc-comment`, `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, `cli-help`, `review-summary`, `review-inline`, and `review-reply` and advises on `agent-reply` by default: it reports residue of a tool or a template: a citation marker or an unfilled placeholder.
+A rule that denies on `doc-comment`, `reference`, `guide`, `change-description`, `agent-brief`, `agent-compact`, `commit-message`, `issue`, `release-notes`, `changelog`, `cli-help`, `review-summary`, `review-inline`, and `review-reply` and advises on `agent-reply` by default: it reports residue of a tool or a template: a citation marker or an unfilled placeholder.
 
 ## What it catches
 
@@ -32,7 +32,8 @@ The code is `PRF4005`. The decision depends on the kind of text judged:
 | `reference`          | deny    |
 | `guide`              | deny    |
 | `change-description` | deny    |
-| `agent-instructions` | deny    |
+| `agent-brief`        | deny    |
+| `agent-compact`      | deny    |
 | `commit-message`     | deny    |
 | `issue`              | deny    |
 | `release-notes`      | deny    |

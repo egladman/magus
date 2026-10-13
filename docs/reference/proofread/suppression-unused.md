@@ -26,26 +26,27 @@ A suppression is a claim that a finding is wrong here, and a reviewer can only w
 
 The code is `PRF1090`. The decision depends on the kind of text judged:
 
-| Kind                          | Default |
-| ----------------------------- | ------- |
-| `doc-comment`                 | deny    |
-| `reference`                   | deny    |
-| `change-description`          | deny    |
-| `agent-instructions`          | deny    |
-| `agent-instructions-template` | deny    |
-| `guide`                       | deny    |
-| `review-summary`              | deny    |
-| `review-inline`               | deny    |
-| `review-reply`                | deny    |
-| `message`                     | deny    |
-| `commit-message`              | deny    |
-| `cli-help`                    | deny    |
-| `issue`                       | deny    |
-| `release-notes`               | deny    |
-| `changelog`                   | deny    |
-| `agent-reply`                 | deny    |
-| `tool-description`            | deny    |
-| `stylesheet`                  | deny    |
+| Kind                 | Default |
+| -------------------- | ------- |
+| `doc-comment`        | deny    |
+| `reference`          | deny    |
+| `change-description` | deny    |
+| `agent-brief`        | deny    |
+| `agent-compact`      | deny    |
+| `skill-template`     | deny    |
+| `guide`              | deny    |
+| `review-summary`     | deny    |
+| `review-inline`      | deny    |
+| `review-reply`       | deny    |
+| `message`            | deny    |
+| `commit-message`     | deny    |
+| `cli-help`           | deny    |
+| `issue`              | deny    |
+| `release-notes`      | deny    |
+| `changelog`          | deny    |
+| `agent-reply`        | deny    |
+| `tool-description`   | deny    |
+| `stylesheet`         | deny    |
 
 ## Changing it
 

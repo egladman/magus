@@ -57,16 +57,16 @@ var (
 	// any text a person reads as another person's own words.
 	withReply = slices.Concat(proseKinds, reviewText)
 	// everywhere is every kind that holds prose, doc comments included.
-	everywhere = slices.Concat(all, changeText, help, reviewText, agentReply)
+	everywhere = slices.Concat(all, compact, changeText, help, reviewText, agentReply)
 	// notPullRequest is where a tell a change description refuses outright
 	// only advises: a page may state a contrast on purpose.
-	notPullRequest = slices.Concat([]Kind{KindReference, KindGuide, KindAgentInstructions}, reviewText, changeText)
+	notPullRequest = slices.Concat([]Kind{KindReference, KindGuide, KindAgentBrief, KindAgentCompact}, reviewText, changeText)
 	// prosePages are the kinds written as running prose. A guide's steps and a
 	// skill's runbook are short imperatives by rule (step-verb, terse-sentence),
 	// so a run of short sentences there is the form, not a drumbeat.
 	prosePages = []Kind{KindReference, KindChangeDescription, KindIssue, KindReleaseNotes}
 	// pageKinds are the kinds that hold headings.
-	pageKinds = []Kind{KindReference, KindGuide, KindAgentInstructions, KindIssue, KindReleaseNotes}
+	pageKinds = []Kind{KindReference, KindGuide, KindAgentBrief, KindIssue, KindReleaseNotes}
 )
 
 // slopChecks run after [toneChecks].
@@ -76,7 +76,7 @@ var slopChecks = []check{
 		judge: tellJudge("Drop '%s': state the point itself.", signposts...),
 	},
 	{
-		rule: RuleChatbot, on: withReply,
+		rule: RuleChatbot, on: slices.Concat(withReply, compact),
 		judge: ownWords(tellJudge("Drop '%s': it answers a chat the reader never saw.", chatbots...)),
 	},
 	{
@@ -89,7 +89,7 @@ var slopChecks = []check{
 		judge: tellJudge("Replace '%s' with what is actually so.", weakBuzzwords...),
 	},
 	{
-		rule: RuleContrast, on: slices.Concat(proseKinds, agentReply), advise: slices.Concat(notPullRequest, agentReply),
+		rule: RuleContrast, on: slices.Concat(proseKinds, compact, agentReply), advise: slices.Concat(notPullRequest, agentReply),
 		judge: ownWords(tellJudgeExcept("State the positive claim directly: drop the negation in '%s'.",
 			contrastExempt, contrasts...)),
 	},

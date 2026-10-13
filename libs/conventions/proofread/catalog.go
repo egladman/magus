@@ -98,7 +98,7 @@ const (
 // reused: a retired rule keeps its number out of circulation. Each family
 // file keeps its own rules' texts beside their checks.
 var ruleTexts = mergeTexts(coreTexts, cssTexts, commitTexts, helpTexts, issueTexts, densityTexts, reviewTexts, reviewKindTexts, suppressTexts,
-	agentReplyTexts, toolTexts, listTexts, voiceTexts)
+	agentReplyTexts, toolTexts, listTexts, voiceTexts, compactTexts, skillTexts)
 
 func mergeTexts(tables ...map[Rule]ruleText) map[Rule]ruleText {
 	out := map[Rule]ruleText{}
@@ -515,7 +515,7 @@ var coreTexts = map[Rule]ruleText{
 	RuleTemplate: {
 		code:      "PRF7004",
 		dimension: DimensionStructure,
-		catches:   "an agent-instructions template that does not render, so neither of its forms can be judged",
+		catches:   "a skill template that does not render, so neither of its forms can be judged",
 		why: "House style: the template form is internal/agent's. A body that does not render is " +
 			"judged by this rule alone, and passes where it is off.",
 	},

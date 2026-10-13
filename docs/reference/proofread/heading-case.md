@@ -26,13 +26,13 @@ Title Case headings are a generated-writing tell. It advises: a heading of prope
 
 The code is `PRF4013`. The decision depends on the kind of text judged:
 
-| Kind                 | Default |
-| -------------------- | ------- |
-| `reference`          | advise  |
-| `guide`              | advise  |
-| `agent-instructions` | advise  |
-| `issue`              | advise  |
-| `release-notes`      | advise  |
+| Kind            | Default |
+| --------------- | ------- |
+| `reference`     | advise  |
+| `guide`         | advise  |
+| `agent-brief`   | advise  |
+| `issue`         | advise  |
+| `release-notes` | advise  |
 
 ## Changing it
 

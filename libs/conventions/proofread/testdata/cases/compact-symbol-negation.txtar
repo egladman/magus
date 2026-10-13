@@ -1,0 +1,12 @@
+A bang or a Unicode symbol standing in for "not" or a logic operator.
+-- hit/agent-compact --
+Merge driver alone !enough.
+Cache hit ≠ pass.
+¬cached -> rerun.
+dirty ∧ staged -> commit.
+-- pass/agent-compact --
+Merge driver alone not enough.
+Cache hit is not pass.
+Run `!true`.
+Done!
+See ![shot](a.png).

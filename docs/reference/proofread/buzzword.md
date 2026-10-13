@@ -31,7 +31,7 @@ The code is `PRF4006`. The decision depends on the kind of text judged:
 | `reference`          | deny    |
 | `guide`              | deny    |
 | `change-description` | deny    |
-| `agent-instructions` | deny    |
+| `agent-brief`        | deny    |
 | `commit-message`     | deny    |
 | `issue`              | deny    |
 | `release-notes`      | deny    |
@@ -40,6 +40,7 @@ The code is `PRF4006`. The decision depends on the kind of text judged:
 | `review-inline`      | deny    |
 | `review-reply`       | deny    |
 | `agent-reply`        | deny    |
+| `agent-compact`      | deny    |
 
 ## Changing it
 

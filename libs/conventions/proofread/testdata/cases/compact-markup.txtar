@@ -1,0 +1,17 @@
+Bold and italic markers, and Markdown tables, in text only an agent reads.
+-- hit/agent-compact --
+- **cache:** keyed on inputs
+Run gate *once*.
+Read __every__ log.
+-- hit/agent-compact whole --
+| flag | does |
+| --- | --- |
+| -s | silence |
+-- pass/agent-compact --
+cache: keyed on inputs
+Run gate once.
+Set max_line_words.
+- run gate
+-- pass/agent-compact whole --
+flag -s: silence
+flag -o: output shape

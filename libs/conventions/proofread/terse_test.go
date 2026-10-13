@@ -36,7 +36,7 @@ func TestTerseSentenceReportsASentenceOverTheCap(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assertFindings(t, JudgeText(tc.text, KindAgentInstructions, houseOn), tc.want)
+			assertFindings(t, JudgeText(tc.text, KindAgentBrief, houseOn), tc.want)
 		})
 	}
 }
@@ -54,7 +54,7 @@ func TestTerseParagraphReportsAParagraphOverTheCap(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assertFindings(t, JudgeText(tc.text, KindAgentInstructions, houseOn), tc.want)
+			assertFindings(t, JudgeText(tc.text, KindAgentBrief, houseOn), tc.want)
 		})
 	}
 }
@@ -70,13 +70,13 @@ func TestTerseRulesSkipWhatIsNotASentence(t *testing.T) {
 		"- `magus run " + long + "`\n" +
 		"- `magus run go-build .`, `magus affected ci`.\n"
 
-	assertFindings(t, JudgeText(page, KindAgentInstructions, houseOn), nil)
+	assertFindings(t, JudgeText(page, KindAgentBrief, houseOn), nil)
 }
 
 func TestTerseRulesJudgeTheFrontMatterDescription(t *testing.T) {
 	page := "---\nname: x\ndescription: \"" + longSentence(26) + "\"\n---\n\n# X\n"
 
-	assertFindings(t, JudgeText(page, KindAgentInstructions, houseOn), []Finding{sentenceOver(3, 26)})
+	assertFindings(t, JudgeText(page, KindAgentBrief, houseOn), []Finding{sentenceOver(3, 26)})
 }
 
 func TestWordyNamesTheShorterPhrase(t *testing.T) {
@@ -99,7 +99,7 @@ func TestWordyNamesTheShorterPhrase(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.match, func(t *testing.T) {
-			assertFindings(t, JudgeText(tc.text, KindAgentInstructions, houseOn), []Finding{{
+			assertFindings(t, JudgeText(tc.text, KindAgentBrief, houseOn), []Finding{{
 				Rule: RuleWordy, Message: fmt.Sprintf("Write %s, not '%s'.", tc.want, tc.match), Match: tc.match, Line: 1,
 				Replacements: tc.replacements,
 			}})
@@ -110,7 +110,7 @@ func TestWordyNamesTheShorterPhrase(t *testing.T) {
 func TestWordyReadsAWrappedPhraseAndSkipsAMention(t *testing.T) {
 	text := "Run it in order\nto replay.\n\nWrite \"to\", not \"in order to\", and not `in order to`.\n"
 
-	assertFindings(t, JudgeText(text, KindAgentInstructions, houseOn), []Finding{{
+	assertFindings(t, JudgeText(text, KindAgentBrief, houseOn), []Finding{{
 		Rule: RuleWordy, Message: "Write 'to', not 'in order to'.", Match: "in order to", Line: 1,
 	}})
 }
@@ -167,13 +167,13 @@ func TestWordyKeepsAFewPhrasesForASkill(t *testing.T) {
 			KindChangeDescription, []string{"due to the fact that"}},
 		{"the reason why", "The reason why the key sorts is replay.", KindGuide, []string{"The reason why"}},
 		{"a wrapped phrase", "Sort the inputs in order\nto make the key stable.", KindReference, []string{"in order to"}},
-		{"the same phrase, in a skill", "Sort the inputs in order to make the key stable.", KindAgentInstructions, []string{"in order to"}},
+		{"the same phrase, in a skill", "Sort the inputs in order to make the key stable.", KindAgentBrief, []string{"in order to"}},
 		{"to make", "Sort the inputs to make the key stable.", KindReference, nil},
 		{"whether or not is English", "Check whether or not the lock is held.", KindReference, nil},
-		{"whether or not, in a skill", "Check whether or not the lock is held.", KindAgentInstructions, []string{"whether or not"}},
+		{"whether or not, in a skill", "Check whether or not the lock is held.", KindAgentBrief, []string{"whether or not"}},
 		{"the fact is a noun", "The fact is recorded in the journal.", KindReference, nil},
 		{"in order is a sequence", "Run walks the tiers in order for lookups and stores.", KindReference, nil},
-		{"in order for, in a skill", "Run walks the tiers in order for lookups and stores.", KindAgentInstructions, []string{"in order for"}},
+		{"in order for, in a skill", "Run walks the tiers in order for lookups and stores.", KindAgentBrief, []string{"in order for"}},
 		{"a moment in time", "Read the CA at the moment it was written.", KindReference, nil},
 		{"a quoted phrase", "Write \"to\", not \"in order to\".", KindReference, nil},
 	}

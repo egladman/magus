@@ -37,11 +37,12 @@ const (
 // conversation, which the rules cannot read.
 var agentReply = []Kind{KindAgentReply}
 
-// agentWords are the kinds the word tells judge: withReply and an agent's
-// reply, which its person reads as the agent's own words. chatbot and
+// agentWords are the kinds the word tells judge: withReply, an agent's reply,
+// which its person reads as the agent's own words, and compact agent text,
+// where a buzzword costs tokens and says nothing. chatbot and
 // reply-voice stay off the reply, since its offers and openers are this file's
 // rules to report.
-var agentWords = slices.Concat(withReply, agentReply)
+var agentWords = slices.Concat(withReply, agentReply, compact)
 
 var agentReplyChecks = []check{
 	{rule: RuleBoldLabel, on: agentReply, advise: agentReply, judge: boldLabels},

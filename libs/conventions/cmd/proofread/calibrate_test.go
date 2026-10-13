@@ -233,8 +233,8 @@ func TestCalibrateRefusesFlagsItCannotUse(t *testing.T) {
 		"a sample with no kind": {[]string{"-sample", "-"}, "", "proofread: -sample needs -kind"},
 		"an unknown kind":       {[]string{"-sample", "-", "-kind", "poem"}, "", `proofread: unknown kind "poem"`},
 		"a template kind": {
-			[]string{"-sample", "-", "-kind", "agent-instructions-template"}, "",
-			"proofread: -kind agent-instructions-template renders a template first and cannot be sampled",
+			[]string{"-sample", "-", "-kind", "skill-template"}, "",
+			"proofread: -kind skill-template renders a template first and cannot be sampled",
 		},
 		"cases and a sample": {
 			[]string{"-sample", "-", "-cases", "d"}, "",

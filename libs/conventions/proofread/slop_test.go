@@ -36,7 +36,7 @@ func decisions(rule Rule, text string, opts []Option, kinds ...Kind) map[Kind]De
 
 func TestSlopRulesJudgeTheKindsAndDecisionsTheyOwn(t *testing.T) {
 	every := []Kind{
-		KindDocComment, KindReference, KindGuide, KindChangeDescription, KindAgentInstructions, KindReviewReply,
+		KindDocComment, KindReference, KindGuide, KindChangeDescription, KindAgentBrief, KindReviewReply,
 	}
 	houseDash := []Option{WithDecisions(map[Rule]Decision{RuleDash: DecisionDeny})}
 
@@ -49,46 +49,46 @@ func TestSlopRulesJudgeTheKindsAndDecisionsTheyOwn(t *testing.T) {
 	}{
 		{"a tell a reply carries too", RuleSignpost, "Make no mistake, the key sorts.", nil, map[Kind]Decision{
 			KindReference: DecisionDeny, KindGuide: DecisionDeny, KindChangeDescription: DecisionDeny,
-			KindAgentInstructions: DecisionDeny, KindReviewReply: DecisionDeny,
+			KindAgentBrief: DecisionDeny, KindReviewReply: DecisionDeny,
 		}},
 		{"residue is judged in a doc comment too", RuleLeak, "The key sorts. TBD.", nil, map[Kind]Decision{
 			KindDocComment: DecisionDeny, KindReference: DecisionDeny, KindGuide: DecisionDeny,
-			KindChangeDescription: DecisionDeny, KindAgentInstructions: DecisionDeny, KindReviewReply: DecisionDeny,
+			KindChangeDescription: DecisionDeny, KindAgentBrief: DecisionDeny, KindReviewReply: DecisionDeny,
 		}},
 		{"a contrast denies only in a change description", RuleContrast,
 			"It is not just a cache; it is the ledger.", nil, map[Kind]Decision{
 				KindReference: DecisionAdvise, KindGuide: DecisionAdvise, KindChangeDescription: DecisionDeny,
-				KindAgentInstructions: DecisionAdvise,
+				KindAgentBrief: DecisionAdvise,
 			}},
 		{"staccato leaves a guide and agent instructions their short imperatives", RuleStaccato,
 			"fix: pin the key\n\nIt is fast. It is small. It is stable.", nil,
 			map[Kind]Decision{KindReference: DecisionAdvise, KindChangeDescription: DecisionDeny}},
 		{"a weak buzzword always advises", RuleBuzzwordWeak, "The landscape is stable.", nil, map[Kind]Decision{
 			KindReference: DecisionAdvise, KindGuide: DecisionAdvise, KindChangeDescription: DecisionAdvise,
-			KindAgentInstructions: DecisionAdvise, KindReviewReply: DecisionAdvise,
+			KindAgentBrief: DecisionAdvise, KindReviewReply: DecisionAdvise,
 		}},
 		{"a participle tail always advises", RuleIngTail, "The cache stores blobs, showcasing the key.", nil,
 			map[Kind]Decision{
 				KindReference: DecisionAdvise, KindGuide: DecisionAdvise, KindChangeDescription: DecisionAdvise,
-				KindAgentInstructions: DecisionAdvise,
+				KindAgentBrief: DecisionAdvise,
 			}},
 		{"a dash is house style, off with no table", RuleDash, "The key sorts — then hashes.", nil,
 			map[Kind]Decision{}},
 		{"a dash a table turns on is judged wherever it is prose", RuleDash, "The key sorts — then hashes.",
 			houseDash, map[Kind]Decision{
 				KindReference: DecisionDeny, KindGuide: DecisionDeny, KindChangeDescription: DecisionDeny,
-				KindAgentInstructions: DecisionDeny, KindReviewReply: DecisionDeny,
+				KindAgentBrief: DecisionDeny, KindReviewReply: DecisionDeny,
 			}},
 		{"a heading has no change description", RuleHeadingCase, "## Cache Key Derivation Rules", nil,
 			map[Kind]Decision{
-				KindReference: DecisionAdvise, KindGuide: DecisionAdvise, KindAgentInstructions: DecisionAdvise,
+				KindReference: DecisionAdvise, KindGuide: DecisionAdvise, KindAgentBrief: DecisionAdvise,
 			}},
 		{"a letter is a change description's alone", RuleChatbot, "I am writing to propose a change.", nil,
 			map[Kind]Decision{KindChangeDescription: DecisionDeny}},
 		{"an agreement answers the thread a reply is in", RuleChatbot, "You're right, the key sorts.", nil,
 			map[Kind]Decision{
 				KindReference: DecisionDeny, KindGuide: DecisionDeny, KindChangeDescription: DecisionDeny,
-				KindAgentInstructions: DecisionDeny,
+				KindAgentBrief: DecisionDeny,
 			}},
 		// A reply agrees with someone the reader watched speak: every labeled
 		// "You're absolutely right" in a reply was a person's register.
@@ -96,7 +96,7 @@ func TestSlopRulesJudgeTheKindsAndDecisionsTheyOwn(t *testing.T) {
 			"You're absolutely right, the key sorts.", nil,
 			map[Kind]Decision{
 				KindReference: DecisionDeny, KindGuide: DecisionDeny, KindChangeDescription: DecisionDeny,
-				KindAgentInstructions: DecisionDeny,
+				KindAgentBrief: DecisionDeny,
 			}},
 	}
 
@@ -291,7 +291,7 @@ func TestStaccatoReportsARunOfShortSentences(t *testing.T) {
 		// docs/guides/setup.md: a bold step number opens the item.
 		{"a step number", KindReference, "**3. List.** See what a repository holds.", nil},
 		{"a guide", KindGuide, "Run it. Add a target. Check the key.", nil},
-		{"agent instructions", KindAgentInstructions, "Run it. Add a target. Check the key.", nil},
+		{"agent instructions", KindAgentBrief, "Run it. Add a target. Check the key.", nil},
 	})
 }
 

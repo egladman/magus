@@ -31,7 +31,7 @@ The code is `PRF4007`. The decision depends on the kind of text judged:
 | `reference`          | advise  |
 | `guide`              | advise  |
 | `change-description` | advise  |
-| `agent-instructions` | advise  |
+| `agent-brief`        | advise  |
 | `commit-message`     | advise  |
 | `issue`              | advise  |
 | `release-notes`      | advise  |
@@ -40,6 +40,7 @@ The code is `PRF4007`. The decision depends on the kind of text judged:
 | `review-inline`      | advise  |
 | `review-reply`       | advise  |
 | `agent-reply`        | advise  |
+| `agent-compact`      | advise  |
 
 ## Changing it
 

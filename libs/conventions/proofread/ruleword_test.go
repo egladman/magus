@@ -35,7 +35,7 @@ func TestBareRuleRefusesGuidanceCalledARule(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assertFindings(t, JudgeText(tc.text, KindAgentInstructions, houseOn), tc.want)
+			assertFindings(t, JudgeText(tc.text, KindAgentBrief, houseOn), tc.want)
 		})
 	}
 }
@@ -59,7 +59,7 @@ func TestBareRulePassesAQualifiedRule(t *testing.T) {
 
 	for name, text := range cases {
 		t.Run(name, func(t *testing.T) {
-			for _, f := range JudgeText(text, KindAgentInstructions, houseOn) {
+			for _, f := range JudgeText(text, KindAgentBrief, houseOn) {
 				if f.Rule == RuleBareRule {
 					t.Errorf("reported %q", f.Match)
 				}
@@ -83,7 +83,7 @@ func TestBareRuleJudgesOnlyASkill(t *testing.T) {
 func TestBareRuleJudgesBothFormsOfASkillSource(t *testing.T) {
 	body := "# Skill\n\nRun it.{{if .Full}} The rule holds.{{end}}\n\nThe rule binds{{if .Full}}, always{{end}}.\n"
 
-	assertFindings(t, JudgeText(body, KindAgentInstructionsTemplate, houseOn), []Finding{
+	assertFindings(t, JudgeText(body, KindSkillTemplate, houseOn, WithOnly(RuleBareRule)), []Finding{
 		bareRuleFinding(3, "rule"),
 		bareRuleFinding(5, "rule"),
 	})

@@ -26,9 +26,9 @@ House style: over the same skills 642 paragraphs and items ran p50 27 words, p90
 
 The code is `PRF7002`. The decision depends on the kind of text judged:
 
-| Kind                 | Default |
-| -------------------- | ------- |
-| `agent-instructions` | off     |
+| Kind          | Default |
+| ------------- | ------- |
+| `agent-brief` | off     |
 
 House style ships `off`: the rule encodes one repository's conventions, not
 a rule of plain writing. A repository turns it on in its decisions table.

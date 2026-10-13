@@ -89,7 +89,7 @@ func TestSuppressionCoversWhatItNamesWithAReason(t *testing.T) {
 
 func TestSuppressionAppliesToEveryKind(t *testing.T) {
 	for _, kind := range everyKind {
-		if kind == KindAgentInstructionsTemplate || !slices.Contains(KindRules(kind), RuleFiller) {
+		if kind == KindSkillTemplate || !slices.Contains(KindRules(kind), RuleFiller) {
 			continue
 		}
 
