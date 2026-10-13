@@ -51,7 +51,7 @@ func TestMetricsMeasuresStdinAndSymbols(t *testing.T) {
 		t.Errorf("reply metrics = %+v", got)
 	}
 
-	if s := got[0].Shape; s.Words != 7 || s.Sentences != 2 || s.Punctuation["question"] != 0 || len(s.Withheld) != 8 {
+	if s := got[0].Shape; s.Words != 7 || s.Sentences != 2 || s.Punctuation["question"] != 0 || len(s.Withheld) != 11 {
 		t.Errorf("reply shape = %+v, want 7 words in 2 sentences with every length-bound measure withheld", s)
 	}
 

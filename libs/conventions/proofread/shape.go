@@ -8,8 +8,9 @@ import (
 )
 
 // Shape is what a text measures on the features published shape-of-writing
-// detection work reads without a tagger. Like [Metrics] it is information: no
-// rule reads it.
+// detection work reads, from its words and, for Grammar, TemplateRate and
+// TagCompression, their part-of-speech tags. Like [Metrics] it is
+// information: no rule reads it.
 //
 // Words, Sentences, SentenceWordsMean and SentenceWordsSD are [Measure]'s.
 // Rates are per [Shape.Words], where a code span counts one word. The lexical
@@ -53,11 +54,23 @@ type Shape struct {
 	// AdjacentOverlap is the mean Jaccard similarity of the content words of
 	// each sentence and the next.
 	AdjacentOverlap float64 `json:"adjacent_overlap"`
+	// Grammar is per 1000 words, read from the part-of-speech tags of the
+	// words outside code spans: participial_clause, nominalization,
+	// agentless_passive, phrasal_coordination, downtoner, concessive_though
+	// and present_participle_postmodifier, after Biber (1988) as Reinhart et
+	// al. (PNAS 2025) compared them.
+	Grammar map[string]float64 `json:"grammar_per_1000,omitempty"`
+	// TemplateRate is the share of the text's UPOS 4-grams that occur in it
+	// at least twice, after Shaib et al. (EMNLP 2024).
+	TemplateRate float64 `json:"template_rate"`
+	// TagCompression is the gzip size of the space-joined UPOS sequence over
+	// its raw size; repetitive syntax compresses further.
+	TagCompression float64 `json:"tag_compression"`
 	// Withheld names, by JSON name, each measure the text is too short for,
 	// which stays zero: MATTR, WordEntropy, HapaxRatio and LexicalDensity
-	// under 100 words outside code spans, FunctionWords under 200, and
-	// SentenceWordsMean, SentenceWordsSD and AdjacentOverlap under 5
-	// sentences.
+	// under 100 words outside code spans, FunctionWords, Grammar,
+	// TemplateRate and TagCompression under 200, and SentenceWordsMean,
+	// SentenceWordsSD and AdjacentOverlap under 5 sentences.
 	Withheld []string `json:"withheld,omitempty"`
 }
 
@@ -174,8 +187,9 @@ func MeasureShape(text string, kind Kind) Shape {
 
 	if len(words) >= minFunctionWords {
 		s.FunctionWords = functionWordRates(words)
+		s.Grammar, s.TemplateRate, s.TagCompression = measureGrammar(sentences, m.Words)
 	} else {
-		withhold("function_words")
+		withhold("function_words", "grammar_per_1000", "template_rate", "tag_compression")
 	}
 
 	if m.Sentences >= minShapeSentences {

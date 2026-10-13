@@ -28,6 +28,7 @@ func repeat(words string, n int) string {
 
 var (
 	lexicalWithheld  = []string{"mattr", "word_entropy", "hapax_ratio", "lexical_density"}
+	countWithheld    = []string{"function_words", "grammar_per_1000", "template_rate", "tag_compression"}
 	sentenceWithheld = []string{"sentence_words_mean", "sentence_words_sd", "adjacent_overlap"}
 )
 
@@ -154,7 +155,7 @@ func TestShapeFunctionWordsAreDistinct(t *testing.T) {
 }
 
 func TestMeasureShapeWithholdsWhatTheTextIsTooShortFor(t *testing.T) {
-	everything := slices.Concat(lexicalWithheld, []string{"function_words"}, sentenceWithheld)
+	everything := slices.Concat(lexicalWithheld, countWithheld, sentenceWithheld)
 
 	cases := map[string]struct {
 		text string
@@ -162,10 +163,11 @@ func TestMeasureShapeWithholdsWhatTheTextIsTooShortFor(t *testing.T) {
 	}{
 		"no prose":       {"```\ncode\n```\n", everything},
 		"99 words":       {repeat("the cat", 49) + " the", everything},
-		"100 words":      {repeat("the cat", 50), append([]string{"function_words"}, sentenceWithheld...)},
+		"100 words":      {repeat("the cat", 50), slices.Concat(countWithheld, sentenceWithheld)},
+		"199 words":      {repeat("the cat", 99) + " the", slices.Concat(countWithheld, sentenceWithheld)},
 		"200 words":      {repeat("the cat", 100), sentenceWithheld},
 		"4 sentences":    {repeat("One two.", 4), everything},
-		"5 sentences":    {repeat("One two.", 5), append(slices.Clone(lexicalWithheld), "function_words")},
+		"5 sentences":    {repeat("One two.", 5), slices.Concat(lexicalWithheld, countWithheld)},
 		"100 code spans": {repeat("`x`", 100), everything},
 	}
 
@@ -183,6 +185,12 @@ func TestMeasureShapeWithholdsWhatTheTextIsTooShortFor(t *testing.T) {
 
 			if slices.Contains(got.Withheld, "function_words") && got.FunctionWords != nil {
 				t.Errorf("FunctionWords = %v, want none", got.FunctionWords)
+			}
+
+			if slices.Contains(got.Withheld, "grammar_per_1000") &&
+				(got.Grammar != nil || got.TemplateRate != 0 || got.TagCompression != 0) {
+				t.Errorf("MeasureShape = grammar %v, template rate %v, tag compression %v, want none",
+					got.Grammar, got.TemplateRate, got.TagCompression)
 			}
 		})
 	}
