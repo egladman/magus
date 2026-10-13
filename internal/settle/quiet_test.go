@@ -99,3 +99,17 @@ func TestSettleQuietlyReplaysAFailureWithNoStep(t *testing.T) {
 	require.EqualError(t, err, "already reported")
 	assert.Equal(t, "magus: no project here serves generate\n", seen)
 }
+
+// TestSettleQuietlyKeepsABusyRunsHeaderOff: a run refused over another magus's lock
+// started nothing, its error names the holder, and Waiting may retry it, so the lines it
+// printed before the refusal stay off the terminal.
+func TestSettleQuietlyKeepsABusyRunsHeaderOff(t *testing.T) {
+	run := Quietly(func(ctx context.Context, inv []string) error {
+		fmt.Fprintln(os.Stderr, "projects: docs, .")
+		return contended{}
+	}, observe)
+	var err error
+	seen := terminal(t, func() { err = run(context.Background(), []string{"generate:rw", "."}) })
+	assert.True(t, Busy(err))
+	assert.Empty(t, seen)
+}

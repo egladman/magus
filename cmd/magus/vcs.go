@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
@@ -194,6 +195,21 @@ func vcsResolveUsage(w io.Writer) {
 	fmt.Fprintln(w, "Each edit must sit in its own job's claims; import lines merge as a set. A file")
 	fmt.Fprintln(w, "a job claims gets a line saying it settled or which condition failed. Needs a")
 	fmt.Fprintln(w, "VCS that reports a merge base: git does; Mercurial, Sapling and jj do not.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "With nothing conflicted, it runs what the git settle hooks left: the")
+	fmt.Fprintln(w, "regenerations a merge left owed, and every settle deferred by setting the git")
+	fmt.Fprintln(w, "config key magus.settle to defer. A deferred settle starts no magus; the hook")
+	fmt.Fprintln(w, "records where the first deferred operation started, and this regenerates")
+	fmt.Fprintln(w, "everything changed since then in one run and stages it. To cherry-pick in")
+	fmt.Fprintln(w, "several batches and regenerate once:")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "  git -c magus.settle=defer cherry-pick A B C")
+	fmt.Fprintln(w, "  git -c magus.settle=defer cherry-pick D E")
+	fmt.Fprintln(w, "  magus vcs resolve && git commit --amend --no-edit")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "`git config magus.settle defer` defers until `git config --unset magus.settle`.")
+	fmt.Fprintln(w, "A settle another magus's project lock keeps from running waits up to 2m, then")
+	fmt.Fprintln(w, "stages nothing, leaves the regeneration owed and prints this command.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
 	fmt.Fprintln(w, "  --against <ref>  merge <ref> first, then settle what it conflicts with.")
@@ -747,7 +763,10 @@ func unresolvedError(plan settle.Plan) error {
 //
 // Failure is loud and never leaves stale output behind quietly: the exact command to
 // run is printed, a commit not yet made is stopped, and the regeneration stays owed in
-// the git dir, where `magus doctor` reports it.
+// the git dir, where `magus doctor` reports it. A run another magus keeps from starting
+// is waited on for settleLockWait, then lets the commit through with nothing staged: it
+// never ran, and stopping the last pick of a cherry-pick over someone else's lock leaves
+// the whole sequence stopped.
 func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string, args []string) error {
 	// A hook runs in the repository's top level, where the workspace root is too; the
 	// merge driver relies on the same. Read git's state before loading anything, since
@@ -777,8 +796,11 @@ func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string,
 	if err != nil {
 		return settleFailed(ctx, hook, op, settle.Outcome{}, settleLoadFailure(err))
 	}
-	run := settle.Quietly(func(ctx context.Context, inv []string) error { return runTarget(ctx, root, rc, inv) }, console.WithRunSink)
-	out, err := settle.Hook(ctx, m, op, buildDefinesTarget(ctx, m), run)
+	out, err := settle.Hook(ctx, m, op, buildDefinesTarget(ctx, m), settleRun(root, rc))
+	if settle.Busy(err) {
+		settleOwed(ctx, m, op, err)
+		return nil
+	}
 	if err != nil {
 		return settleFailed(ctx, hook, op, out, err)
 	}
@@ -803,39 +825,58 @@ func settleLoadFailure(err error) error {
 	return fmt.Errorf("the workspace did not load, so nothing regenerated: %w", err)
 }
 
-// settleOwedByHand is `magus vcs resolve` with nothing conflicted: it runs what the
-// merge driver left owed, which a settle hook that failed or was bypassed with
-// --no-verify leaves behind and `magus doctor` reports, stages the result and clears the
-// record. With nothing owed it says so.
+// settleLockWait bounds how long a settle waits for another magus to release a
+// project lock, polling every settleLockPoll.
+const (
+	settleLockWait = 2 * time.Minute
+	settleLockPoll = 2 * time.Second
+)
+
+// settleRun is the regeneration a settle runs: quiet, and waiting on a busy lock.
+func settleRun(root string, rc runConfig) settle.RunFunc {
+	run := settle.Quietly(func(ctx context.Context, inv []string) error { return runTarget(ctx, root, rc, inv) }, console.WithRunSink)
+	return settle.Waiting(run, settleLockWait, settleLockPoll, func(ctx context.Context, line string) {
+		slog.WarnContext(ctx, line, attr.Notice(""), attr.Component("magus"))
+	})
+}
+
+// settleOwed says that a settle another magus kept from running left nothing staged and
+// its regeneration owed, and the command that finishes it. Hook already recorded the
+// record that command reads.
+func settleOwed(ctx context.Context, m *magus.Magus, op vcs.HookOperation, err error) {
+	finish := hint.VCSResolve.String()
+	if op.CommitPending || settle.FoldCommand(ctx, m) != "" {
+		finish += " && git commit --amend --no-edit"
+	}
+	slog.ErrorContext(ctx, fmt.Sprintf("this %s was not regenerated and nothing was staged; the regeneration stays owed, finish it with `%s`",
+		cmp.Or(op.Kind, "operation"), finish), attr.Notice(""), attr.Component("magus"), attr.Error(err))
+}
+
+// settleOwedByHand is `magus vcs resolve` with nothing conflicted. It settles, in one
+// run per target, what the settle hooks left: everything changed since the first
+// operation they deferred under magus.settle=defer, and what the merge driver left owed,
+// which a settle hook that failed, was kept from running or was bypassed with
+// --no-verify leaves behind and `magus doctor` reports. It stages the result and clears
+// both records. With nothing left it says so.
 func settleOwedByHand(ctx context.Context, root string, rc runConfig, m *magus.Magus, driver types.VCSDriver) error {
-	owed, err := vcs.OwedRegenerations(ctx, m.Root())
+	op, deferred, err := vcs.DeferredSettle(ctx, m.Root())
 	if err != nil {
 		return fmt.Errorf("vcs resolve: %w", err)
 	}
-	ran := settle.Invocations(nil, owed, buildDefinesTarget(ctx, m))
-	if len(ran) == 0 {
-		fmt.Println("vcs resolve: nothing to resolve; no conflicted paths and no regeneration owed")
+	out, err := settle.Hook(ctx, m, op, buildDefinesTarget(ctx, m), settleRun(root, rc))
+	if err != nil {
+		return fmt.Errorf("vcs resolve: %w", err)
+	}
+	if deferred {
+		if err := vcs.ClearDeferredSettle(ctx, m.Root()); err != nil {
+			return fmt.Errorf("vcs resolve: %w", err)
+		}
+	}
+	if len(out.Ran) == 0 {
+		fmt.Println("vcs resolve: nothing to resolve; no conflicted paths, no settle deferred and no regeneration owed")
 		return nil
 	}
-	plan := settle.Plan{Rebuild: map[string][]string{}}
-	for _, inv := range ran {
-		plan.Rebuild[strings.TrimSuffix(inv[0], ":rw")] = inv[1:]
-	}
-	if err := runRebuildTargets(ctx, root, rc, plan.Rebuild); err != nil {
-		return fmt.Errorf("vcs resolve: regenerate: %w", err)
-	}
-	settled, err := plan.Paths(ctx, m, driver)
-	if err != nil {
-		return fmt.Errorf("vcs resolve: %w", err)
-	}
-	staged, _, err := stagePaths(ctx, m.Root(), driver, settled)
-	if err != nil {
-		return fmt.Errorf("vcs resolve: %w", err)
-	}
-	if err := vcs.DropOwedRegenerations(ctx, m.Root(), owed); err != nil {
-		return fmt.Errorf("vcs resolve: %w", err)
-	}
-	fmt.Printf("settled what the merge driver left owed; staged %d path(s): %s\n", len(staged), driver.ReviewCommand())
+	fmt.Printf("vcs resolve: ran %s; staged %d regenerated file(s): %s\n", out.Command(), len(out.Staged), driver.ReviewCommand())
 	return nil
 }
 
