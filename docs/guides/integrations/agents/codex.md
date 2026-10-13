@@ -22,7 +22,9 @@ contract.
 | file writes     | deny and advise both reach the model                            |
 | MCP calls       | `PreToolUse` (`mcp__.*`), deny and advise both reach the model  |
 | push approval   | `.codex/rules/magus.rules` prompts, `PermissionRequest` answers |
-| subagent spawns | `PreToolUse` (`spawn_agent`), judged as a spawn                 |
+| subagent spawns | `PreToolUse` on the spawn tool, judged as a spawn               |
+| subagent brief  | `SubagentStart`, the checkout's state as the child's context    |
+| subagent record | `PostToolUse` names the child, `SubagentStop` sizes it          |
 | your messages   | `UserPromptSubmit`, recorded and never answered                 |
 | checkpoint      | `Stop`                                                          |
 | reply check     | `Stop`, a `block` decision that continues the turn once         |
@@ -178,32 +180,46 @@ shown here:
         ]
       },
       {
-        "matcher": "Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-observe.buzz -- --agent-name codex",
-            "statusMessage": "magus: recording read"
-          }
-        ]
-      },
-      {
-        "matcher": "Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
-            "statusMessage": "magus guard: checking read"
-          }
-        ]
-      },
-      {
-        "matcher": "spawn_agent",
+        "matcher": "spawn_agent|collaborationspawn_agent|Agent",
         "hooks": [
           {
             "type": "command",
             "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus guard: checking subagent spawn"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "spawn_agent|collaborationspawn_agent|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "statusMessage": "magus: recording the subagent"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
+            "statusMessage": "magus: briefing the subagent"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "statusMessage": "magus: recording the subagent's context"
           }
         ]
       }
@@ -336,11 +352,37 @@ decisions file. Codex shows the entry's `statusMessage` while it runs.
 ### Messages, spawns and the scout
 
 `UserPromptSubmit` hands the message you typed to `magus shell --message`, which
-records the topics it raises and judges nothing. The `spawn_agent` matcher on
-`PreToolUse` (Codex's docs say it also matches the alias `Agent`) runs the command
-glue, which judges a subagent spawn the way Claude Code's `Agent` entry does. Neither
-entry declares `--reports-skills`: Codex documents no hook on a skill load, so a rule
-that requires one has nothing to read and stands down instead of denying forever.
+records the topics it raises and judges nothing. The spawn matcher on `PreToolUse` runs
+the command glue, which judges a subagent spawn the way Claude Code's `Agent` entry
+does. The matcher is `spawn_agent|collaborationspawn_agent|Agent`: a matcher made only
+of letters, digits and underscores is an exact list of tool names, and v2 models call
+the tool `collaborationspawn_agent`, which a bare `spawn_agent` entry never fires on.
+`Agent` is the alias Codex's docs name. No entry declares `--reports-skills`: Codex has
+no hook on a skill load, so a rule that requires one has nothing to read and stands
+down instead of denying forever.
+
+The spawn's input differs by model. A v2 spawn carries `task_name`, `fork_turns` and a
+`message` that is encrypted (`gAAAA...`), so the brief the parent wrote cannot be read,
+and no `lease:` marker can ride in it. A v1 spawn carries a plain `message` or `items`,
+an `agent_type`, and optionally a `model` and `reasoning_effort`. Either way there is no
+`prompt` field; magus reads `message`, `items` and `task_name` by shape.
+
+Three more hooks complete the picture of a subagent:
+
+- `PostToolUse` on the same matcher receives the finished spawn. Its `tool_response` is
+  a JSON string: `{"task_name":"/root/x"}` for v2, `{"agent_id":...,"nickname":...}` for
+  v1. It judges nothing; magus files the name or id against the spawn.
+- `SubagentStart` hands the child its brief. The command is
+  [`magus-rehydrate.buzz`](guard-templates.md#magus-rehydratebuzz) with
+  `--format json`, answering as `SubagentStart`, so the checkout's state and live leases
+  arrive as the child's `hookSpecificOutput.additionalContext`. This is the only channel
+  that reaches a v2 child, and a live probe showed the child obeying it. The payload
+  names the child (`agent_id`, `agent_type`) and nothing about the spawn that made it.
+- `SubagentStop` carries `agent_id`, `agent_transcript_path` and
+  `last_assistant_message`. magus reads the child's rollout for its last `token_count`
+  record (`last_token_usage.input_tokens` against `model_context_window`) and files the
+  context size a later continuation to that child reads. The child's own tool calls
+  carry `agent_id` and `agent_type` too, so its commands are attributed to it.
 
 The scout agent file sets `sandbox_mode = "read-only"`, so the sandbox enforces what
 its instructions only ask for. Codex's read-only sandbox blocks writes, which may
@@ -392,44 +434,55 @@ envelope and pipe it to `magus session notify`, exactly as the other hosts do; s
   through `/hooks`, so a config committed to a repository guards nobody who has
   not accepted it. That is the one way this host differs from the others in kind
   rather than degree.
-- **Shell commands keep their stdin.** On Claude Code the guard hands the command
-  back with stdin closed, so a stray stdin reader cannot hang the call. Codex
-  applies `updatedInput` only beside `permissionDecision: "allow"` and reports any
-  other shape as a hook error, so a rewrite here would turn every guard pass into
-  an approval that skips Codex's own prompt. The glue never sends one; give a
-  reader its input explicitly.
-- Codex documents `PreToolUse` for `Bash`, `apply_patch`, `Edit`, and `Write`.
-  `apply_patch` carries a patch in `tool_input.command`, rather than a file path,
-  so the declared-output guard intentionally matches `Edit|Write`.
-- The command rules are exercised by this repository's harness. The file and
-  MCP rules are wired to the documented events but still need a live Codex
-  event in this workspace to make the observation empirical; the `SessionStart`
-  envelope is likewise rendered from the documented JSON contract.
-- **Lease capture depends on the spawn tool's input.** `PreToolUse` on `spawn_agent`
-  is wired, but Codex's docs do not name the fields of that tool's `tool_input`.
-  magus records a spawn from a `prompt` there, the thing worth keeping and the thing
-  a `lease:` marker rides in. An input without one reaches the guard as nothing to
-  judge and passes. `SubagentStart` exists and matches on `agent_type`, but its
-  payload is `agent_id`, `agent_type` and `permission_mode`: identity, not the work
-  handed over, so it is not wired.
+- **The guard never rewrites a command's stdin.** On Claude Code the guard hands the
+  command back with stdin closed, so a stray stdin reader cannot hang the call. Codex
+  closes a command's stdin itself, so a rewrite buys nothing here, and the prefix it
+  would add (`exec </dev/null; ...`) moves the command out of reach of your own
+  `prefix_rule`: a probe ran `exec </dev/null; echo x` under a rule forbidding
+  `echo x`, and it ran. Codex also applies `updatedInput` only beside
+  `permissionDecision: "allow"` and marks the hook failed on any other shape, so a
+  rewrite would turn every guard pass into an approval that skips Codex's own prompt.
+  The glue never sends one.
+- Codex has no `Read` tool; a file is read through a shell command, which the command
+  rules already judge. No `Read` matcher is wired, and magus keeps no read record for
+  this host. File writes are `apply_patch`, which the `Edit|Write` matcher catches by
+  alias. Its patch rides in `tool_input.command`, and magus reads the `*** Add File`,
+  `Update File`, `Delete File` and `Move to` paths out of it as the files written.
+- **MCP and `SessionStart(compact)` are verified against a live Codex 0.155.1.** An MCP
+  call arrives as `PreToolUse` with `tool_name` `mcp__<server>__<tool>`, the `mcp__.*`
+  matcher catches it, and the complete `tool_input` goes to the same glue as a shell
+  command. A `compact` session start runs the rehydrate entry, and Codex reads its
+  `hookSpecificOutput.additionalContext`.
+- **A child cannot be tied to the spawn that made it.** The v2 spawn's `message` is
+  encrypted and its response names the child by `task_name`, while the child's own events
+  carry an `agent_id` and `SubagentStart` names no task. The child is briefed and its
+  context size is filed, but the lease a spawn would hand it by a `lease:` marker or a
+  `<parent>/<role> <job>` description cannot be joined to it on this host. A session
+  started under `BAGGAGE=magus.lease=<id>` is attributed to that lease by its
+  environment, which a Codex child inherits.
+- `ask` and the `Stop` schema limits hold. A hook `ask` is parsed, marked failed and the
+  call continues, so the push prompt comes from the rules file. `Stop` output takes
+  `decision: "block"` and its reason, no `hookSpecificOutput`, so advice from a reply
+  check cannot ride a `Stop` reply; it reaches the model only as the prompt of the
+  continuation turn.
 
 ### Events
 
-Codex supports twelve hook events. This harness wires five:
+Codex supports twelve hook events. This harness wires eight:
 
-| event                       | wired | what runs                                                                                                                                                 |
-| --------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PreToolUse`                | yes   | shell, file, read, MCP and `spawn_agent` matchers                                                                                                         |
-| `PermissionRequest`         | yes   | answers the push approval                                                                                                                                 |
-| `SessionStart`              | yes   | `compact` only, the post-compaction brief                                                                                                                 |
-| `Stop`                      | yes   | the checkpoint, then the reply check                                                                                                                      |
-| `UserPromptSubmit`          | yes   | records your message                                                                                                                                      |
-| `PostToolUse`               | no    | the one use on Claude Code, a spawn's child id, needs the response shape of `spawn_agent`, which Codex does not document                                  |
-| `SubagentStop`              | no    | the payload names `agent_id` and `agent_transcript_path`, but the transcript holds no `message.usage` record, so the context size magus files stays empty |
-| `SubagentStart`             | no    | identity only, see above                                                                                                                                  |
-| `PreCompact`, `PostCompact` | no    | their output schema carries no `hookSpecificOutput`, so nothing can steer compaction                                                                      |
-| `Interrupt`                 | no    | nothing consumes it                                                                                                                                       |
-| `SessionEnd`                | no    | `Stop` already records the checkpoint each turn                                                                                                           |
+| event                       | wired | what runs                                                                                                  |
+| --------------------------- | ----- | ---------------------------------------------------------------------------------------------------------- |
+| `PreToolUse`                | yes   | shell, file, MCP and spawn (`spawn_agent\|collaborationspawn_agent\|Agent`) matchers                       |
+| `PermissionRequest`         | yes   | answers the push approval                                                                                  |
+| `PostToolUse`               | yes   | the finished spawn, which names the child by `task_name` (v2) or `agent_id` (v1)                           |
+| `SubagentStart`             | yes   | hands the child the checkout's brief as `additionalContext`                                                |
+| `SubagentStop`              | yes   | files the child's context size from the last `token_count` record of its rollout                           |
+| `SessionStart`              | yes   | `compact` only, the post-compaction brief                                                                  |
+| `Stop`                      | yes   | the checkpoint, then the reply check                                                                       |
+| `UserPromptSubmit`          | yes   | records your message                                                                                       |
+| `PreCompact`, `PostCompact` | no    | their output schema carries no `hookSpecificOutput`, so nothing can steer compaction                       |
+| `Interrupt`                 | no    | nothing consumes it                                                                                        |
+| `SessionEnd`                | no    | `Stop` already records the checkpoint each turn                                                            |
 
 ## Verify
 
