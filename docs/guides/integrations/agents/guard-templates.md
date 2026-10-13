@@ -304,9 +304,12 @@ final PASS_AND_ADVISE_TAIL = `{{else if eq .decision "advise"}}{{else if eq .dec
 // Read through `index`: magus renders with missingkey=error, and the key is absent from
 // every verdict that carries no rewrite.
 //
-// Codex is never handed one. Its PreToolUse applies updatedInput only beside
-// permissionDecision "allow", which would turn every guard pass into an approval that
-// skips Codex's own prompt.
+// Codex is never handed one, for two reasons. It closes a command's stdin itself, so the
+// rewrite buys nothing there. And the prefix moves the command out of reach of the person's
+// own prefix_rule: `exec </dev/null; echo x` ran under a rule that forbids `echo x`. Its
+// PreToolUse also applies updatedInput only beside permissionDecision "allow", and marks
+// the hook failed on any other shape, which would turn every guard pass into an approval
+// that skips Codex's own prompt.
 final UPDATED_INPUT_SLOT = "__MAGUS_UPDATED_INPUT__";
 final UPDATED_COMMAND = `{{toJson .}}`;
 final ADVISE_REWRITE = `{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}{{with index . "updated_command"}},"updatedInput":__MAGUS_UPDATED_INPUT__{{end}}}}`;
@@ -604,9 +607,13 @@ fun readCommand(event: any?, tool: str) > str {
     return "cat {word}";
 }
 
-fun contextReply(text: str) > str {
+fun contextReply(eventName: str, text: str) > str {
     final encoded = json\stringify(text) catch `""`;
-    return CONTEXT_REPLY.replace(CONTEXT_SLOT, with: encoded);
+    var reply = CONTEXT_REPLY.replace(CONTEXT_SLOT, with: encoded);
+    // A host reads hookEventName against the event it ran the hook for, so a post-call
+    // event cannot be answered in the PreToolUse dialect.
+    if (eventName == "PostToolUse") { reply = reply.replace("PreToolUse", with: "PostToolUse"); }
+    return reply;
 }
 
 // noticeReply renders a notice in the dialect of the event that asked for it.
@@ -615,12 +622,19 @@ fun contextReply(text: str) > str {
 // envelope the other events use is one the host rejects outright: on the single event
 // where the notice is the only thing written, it arrived unreadable. There the prose goes
 // to the person on stderr and stdout carries the envelope that leaves the decision alone.
+//
+// A SubagentStop reply has no hookSpecificOutput at all, so its notice goes to stderr and
+// stdout stays empty.
 fun noticeReply(eventName: str, text: str) > str {
     if (eventName == "PermissionRequest") {
         warn(text);
         return PERMISSION_NO_DECISION;
     }
-    return contextReply(text);
+    if (eventName == "SubagentStop") {
+        warn(text);
+        return "";
+    }
+    return contextReply(eventName, text: text);
 }
 
 // askBranch picks the ask arm for the host that sent this event. Only a reply this
@@ -718,6 +732,7 @@ fun main(args: [str]) > void {
     } else if (response == "") {
         // Only a shell command the host itself will run can come back rewritten: a Read
         // restated as `cat` is not what the host runs, and a whole event is not a command.
+        // Codex gets none; the note on UPDATED_INPUT_SLOT says why.
         var updatedInput = "";
         if (!codex and !rawEvent and read == "" and eventName == "PreToolUse") {
             updatedInput = hook\objectWith(event, dotPath: "tool_input", key: "command", raw: UPDATED_COMMAND) ?? "";
@@ -1495,6 +1510,10 @@ It declares no `magus-guard-coverage` line, for the reason
 //
 //   {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}
 //
+// A subagent starts with none of its parent's history, which is the same loss, so the
+// event may also be SubagentStart: the reply then names that event, and the child reads
+// the brief before its first step. Any other event is answered as SessionStart.
+//
 // The rules line is the one host-shaped part, which is why the entry names it rather
 // than magus printing it: magus names the files it ships and can see (AGENTS.md, the
 // installed skill directories), and the file YOUR host reads is yours to name. It
@@ -1519,6 +1538,7 @@ import "lib/hook" as hook;
 
 final RULES_FLAG = "--rules";
 final FORMAT_FLAG = "--format";
+final SUBAGENT_START = "SubagentStart";
 
 // warn names the file; see magus-command.buzz. STDERR, so it never joins the reply this
 // file writes on stdout.
@@ -1551,7 +1571,10 @@ fun main(args: [str]) > void {
     }
     // The event's cwd names the checkout to brief, for the reason magus-command.buzz's
     // Guard gives. The working directory stands in when the event names none.
-    final cwd = hook\field(json\parse(io\stdin.readAll() catch "") catch null, dotPath: "cwd");
+    final event = json\parse(io\stdin.readAll() catch "") catch null;
+    final cwd = hook\field(event, dotPath: "cwd");
+    var eventName = "SessionStart";
+    if (hook\field(event, dotPath: "hook_event_name") == SUBAGENT_START) { eventName = SUBAGENT_START; }
     var root = "";
     if (cwd != "") { root = hook\workspaceRootAt(cwd); }
     if (root == "") { root = hook\workspaceRoot(); }
@@ -1588,7 +1611,7 @@ fun main(args: [str]) > void {
     if (format == "json") {
         final context = json\stringify(brief + "\n") catch "";
         if (context == "") { return; }
-        io\stdout.write(`\{"hookSpecificOutput":\{"hookEventName":"SessionStart","additionalContext":`
+        io\stdout.write(`\{"hookSpecificOutput":\{"hookEventName":"{eventName}","additionalContext":`
             + context + "}}") catch void;
         return;
     }
