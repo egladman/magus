@@ -138,16 +138,21 @@ async function withWarnings(body: () => Promise<void>): Promise<string[]> {
   return warnings;
 }
 
-/** The plugin ignores its PluginInput entirely (it is declared `async () =>`). */
+/** The slice of PluginInput these cases touch: no session has a parent, every call is a root's. */
+const pluginInput = {
+  directory: WORKSPACE_ROOT,
+  client: { session: { get: async () => ({ data: {} }) } },
+};
+
 async function hooks() {
-  const plugin = MagusGuard as unknown as () => Promise<{
+  const plugin = MagusGuard as unknown as (input: unknown) => Promise<{
     "tool.execute.before": (
       input: { tool: string; callID: string; sessionID?: string },
       output: { args: Record<string, unknown> },
     ) => Promise<void>;
     "tool.execute.after": (input: { callID: string }, output: { output: string }) => Promise<void>;
   }>;
-  return await plugin();
+  return await plugin(pluginInput);
 }
 
 test("live: bash arm denies git stash with the whole-tree reason", { skip }, async () => {

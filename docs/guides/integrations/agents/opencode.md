@@ -1,30 +1,33 @@
 ---
 title: OpenCode
-description: Wiring magus into OpenCode (skills in .opencode/skills, the TypeScript plugin that carries the shell-command and file-write rules, the post-compaction brief, and the idle checkpoint).
+description: Wiring magus into OpenCode (skills in .opencode/skills, the TypeScript plugin that carries the shell-command, file-write, MCP and subagent rules, the idle checkpoint, and the reply check).
 tags: [agents, opencode, skills, guard, plugin]
 ---
 
 # OpenCode
 
 OpenCode discovers Agent Skills and intercepts tool calls through a plugin
-rather than a hook config. Throwing from `tool.execute.before` blocks the call, so
-a deny reaches the model as the tool error; an advise is appended to the tool's
-own result by `tool.execute.after`, which is the same call and the same context
-window. One file carries all of it.
+rather than a hook config. Throwing from `tool.execute.before` blocks the call, and
+the thrown message reaches the model as the tool error; an advise is appended to the
+tool's own result by `tool.execute.after`, which is the same call and the same context
+window. One file carries all of it. Everything below was checked against OpenCode
+1.18.30.
 
-| what           | where                                                                                         |
-| -------------- | --------------------------------------------------------------------------------------------- |
-| skills         | `.opencode/skills/` (it also reads `.claude/skills/`)                                         |
-| guard wiring   | `~/.config/opencode/plugins/` or `.opencode/plugins/`                                         |
-| shell commands | deny and advise both reach the model                                                          |
-| file writes    | deny and advise both reach the model                                                          |
-| MCP calls      | not wired: `tool.execute.before` sees it, its tool-name convention is unconfirmed (see below) |
-| checkpoint     | the `session.idle` bus event                                                                  |
-| reply check    | not wired: `session.idle` cannot hand text back to the agent (see below)                      |
-| scout agent    | `.opencode/agents/magus-scout.md`, `permission: edit: deny`                                   |
-| rehydration    | `experimental.session.compacting`                                                             |
-| MCP            | [MCP](../mcp.md)                                                                              |
-| quiet output   | not set: its config has no key for it; set `MAGUS_LOG_SILENT=true` yourself (see below)       |
+| what            | where                                                                                          |
+| --------------- | ---------------------------------------------------------------------------------------------- |
+| skills          | `.opencode/skills/` (it also reads `.claude/skills/`)                                          |
+| guard wiring    | `~/.config/opencode/plugins/` or `.opencode/plugins/`                                          |
+| shell commands  | `bash`: deny and advise both reach the model                                                   |
+| file writes     | `edit`, `write` and `apply_patch`: deny and advise both reach the model                       |
+| MCP calls       | the magus server's tools, matched by the `<server>_<tool>` id: deny and advise reach the model |
+| subagent spawns | the `task` tool: judged before, the child's id recorded after; a child's calls name their root |
+| typed messages  | the `chat.message` hook records them with `magus shell --message`                              |
+| checkpoint      | the `session.idle` bus event, root sessions only                                               |
+| reply check     | the same idle event: findings go back as a follow-up prompt (see below)                        |
+| scout agent     | `.opencode/agents/magus-scout.md`, `permission: edit: deny`                                    |
+| rehydration     | not wired: the plugin does not use `experimental.session.compacting` (see below)               |
+| MCP config      | [MCP](../mcp.md)                                                                               |
+| quiet output    | the plugin's `shell.env` hook sets `MAGUS_LOG_SILENT=true` unless you already did              |
 
 ## Skills
 
@@ -67,19 +70,27 @@ prints a short secret-ref hint and a docs pointer; Magus does not write OpenCode
 MCP config. See [MCP](../mcp.md). An agent uses the CLI fallback when MCP is
 unavailable.
 
+The plugin judges calls to magus's own MCP server the way it judges the CLI. OpenCode
+names an MCP tool `<server>_<tool>`, with every character outside `a-zA-Z0-9_-` in
+either part replaced by `_`, so a server configured under `mcp.magus` exposes
+`magus_client`. The plugin finds your magus server in the `mcp` object of the config
+OpenCode loads: the entry whose local command names `magus` and `mcp`, or a key called
+`magus` that is not a local command. Under any other setup its calls are not
+recognized and not judged.
+
 ## Quiet output
 
 `MAGUS_LOG_SILENT=true` is `-s` on every magus command: verdicts, refs and failures,
-without each reason or a wait note under a minute. `opencode.json` documents no key for the environment of the commands the agent
-runs, so the harness sets nothing and `magus describe harness opencode` says so.
-Set it yourself in the environment you start OpenCode from:
+without each reason or a wait note under a minute. `opencode.json` documents no key for the
+environment of the commands the agent runs, so the harness writes none and
+`magus describe harness opencode` says so. The plugin below sets it instead: its
+`shell.env` hook exports `MAGUS_LOG_SILENT=true` into every command the agent runs,
+unless the variable is already set in the environment you started OpenCode from.
+To choose another value, set it there:
 
 ```sh
-MAGUS_LOG_SILENT=true opencode
+MAGUS_LOG_SILENT=false opencode
 ```
-
-The plugin API's `shell.env` hook could export it into every shell instead; the
-plugin below does not set it.
 
 ## Guard hook
 
@@ -107,22 +118,28 @@ other templates.
 // step with the other hosts' templates. `--agent-name opencode` only labels the
 // observation magus records; it cannot change a verdict.
 //
-// Covers shell commands AND file writes, so OpenCode gets the same rules Claude Code does:
-//   bash          the command rules
-//   edit | write  the declared-output rule
+// Covers every call magus judges on the other hosts:
+//   bash                    the command rules
+//   edit | write            the declared-output rule
+//   apply_patch             the same rule over a patch (the tool OpenCode offers gpt-* models
+//                           in place of edit and write); the patch goes to magus whole
+//   task                    a subagent spawn, recorded and graded like Claude Code's Agent
+//   <server>_<tool>         a call to magus's own MCP server
 //
-// One handler (`apply`) serves both, and both decisions now reach the model: a
-// deny throws and its reason arrives as the tool error, while an advise is
-// appended to the tool's own result by tool.execute.after, joined to the call it
-// belongs to by callID. That append is what replaced a console.warn, which reached
-// the person and never the model. The declarations below record it, and they
-// are machine-read by the host-parity gate; see the longer note in
-// magus-command.buzz.
+// One handler (`apply`) serves them all, and both decisions reach the model: a deny throws
+// and its reason arrives as the tool error, while an advise is held and appended to the
+// tool's own result by tool.execute.after, joined to the call it belongs to by callID. An MCP
+// result has no `output` string, so there the advise goes in as a text part of `content`.
 //
-// It also carries the two jobs that are not verdicts: a compacting session is
-// handed this checkout back through the compaction prompt, and a checkpoint is
-// recorded when the session goes idle, since OpenCode has no session-end event and
-// idle is the proxy its own docs name.
+// A subagent runs in a session of its own. Its calls carry the root session's id and the
+// child's own as the agent, so a rule that tells a worker from the main conversation sees
+// the same thing it sees on Claude Code. The parent comes from the session.created event,
+// else from the SDK.
+//
+// Beyond verdicts it carries four jobs: a message the person types is recorded, the shell env
+// gets MAGUS_LOG_SILENT, a checkpoint is recorded when a root session goes idle (OpenCode has
+// no session-end event; idle is the proxy its own docs name), and the reply that ends a turn
+// is proofread, with the findings sent back as a follow-up prompt.
 //
 // An ASK puts the call in front of the person, and a plugin cannot prompt: throwing is
 // the only answer tool.execute.before has. So the prompt is OpenCode's own. The opencode
@@ -136,23 +153,20 @@ other templates.
 // magus-guard-template: 24
 // magus-guard-coverage: schema=2 host=opencode input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=opencode input=path deny=model advise=model pass=none ask=model
-// magus-guard-coverage: schema=2 host=opencode input=mcp deny=none advise=none pass=none ask=none
-// NOT because tool.execute.before/.after cannot see an MCP call: they are generic and already
-// intercept every tool call OpenCode makes, MCP included - only the two branches below (bash,
-// edit/write) narrow that down by tool NAME. What is missing is knowing what name OpenCode
-// gives an MCP tool call at all; no vendored source documents its convention (SOURCES.md:
-// OpenCode ships no hook config schema, only the typed Plugin interface this file already
-// type-checks against), and a third `if (input.tool === ...)` branch keyed on a guessed string
-// risks silently misjudging an unrelated tool rather than catching magus's own calls. Flip this
-// once that naming convention is confirmed against a real OpenCode session.
+// magus-guard-coverage: schema=2 host=opencode input=mcp deny=model advise=model pass=none ask=model
 //
 // PATH contract: this shells out to `magus` by name, inheriting PATH from the
 // opencode process. If magus lives in a prefix PATH does not include (mise,
 // brew, asdf, ~/.local/bin), set __MAGUS_BIN to an absolute path. That name
 // deliberately avoids the MAGUS_* space, which is magus's own settings.
+//
+// The reply check runs proofread-reply.buzz: the path in __PROOFREAD_REPLY_BUZZ when that is
+// set, else the copy beside this file, else the workspace's docs/guides/integrations/agents
+// one. With none of them (or no proofread binary) the check is silent.
 
 import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Plugin } from "@opencode-ai/plugin";
 
 /** The verdict schema this plugin understands; a bump means re-read the docs. */
@@ -273,7 +287,74 @@ function workspaceMagus(): string | null {
   return existsSync(bin) ? bin : null;
 }
 
-export const MagusGuard: Plugin = async () => {
+/** OpenCode's name for a server or tool inside a tool id: every other character becomes "_". */
+function sanitize(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+/**
+ * The keys of OpenCode's `mcp` config that run magus's own server: a local command naming
+ * magus and `mcp`, or a key called "magus" that is not a local command (a remote server).
+ */
+function magusServers(config: unknown): string[] {
+  if (typeof config !== "object" || config === null) return [];
+  const mcp = (config as Record<string, unknown>).mcp;
+  if (typeof mcp !== "object" || mcp === null) return [];
+  const keys: string[] = [];
+  for (const [key, entry] of Object.entries(mcp)) {
+    const command = (entry as { command?: unknown } | null)?.command;
+    if (Array.isArray(command)) {
+      const words = command.map(String);
+      if (words.some((word) => basename(word) === "magus") && words.includes("mcp")) keys.push(key);
+    } else if (key === "magus") {
+      keys.push(key);
+    }
+  }
+  return keys;
+}
+
+/**
+ * The magus tool a call to an OpenCode tool id names (`<server>_<tool>`), or null when the
+ * id belongs to no magus server. The guard keeps only the names it knows, so an id that
+ * merely starts with the server's name is dropped there.
+ */
+function magusTool(tool: string, servers: readonly string[]): string | null {
+  for (const server of servers) {
+    const prefix = `${sanitize(server)}_`;
+    if (tool.startsWith(prefix) && tool.length > prefix.length) return tool.slice(prefix.length);
+  }
+  return null;
+}
+
+/**
+ * Where proofread-reply.buzz lives for this install, or null when no copy exists.
+ * __PROOFREAD_REPLY_BUZZ, when set, is the only place looked: a path that does not exist
+ * turns the reply check off.
+ */
+function replyScript(): string | null {
+  const named = process.env.__PROOFREAD_REPLY_BUZZ;
+  if (named !== undefined && named !== "") return existsSync(named) ? named : null;
+  const root = nearestWith("magus.yaml", process.cwd());
+  const candidates = [
+    join(dirname(fileURLToPath(import.meta.url)), "proofread-reply.buzz"),
+    root === null ? "" : join(root, "docs/guides/integrations/agents/proofread-reply.buzz"),
+  ];
+  return candidates.find((path) => path !== "" && existsSync(path)) ?? null;
+}
+
+/** The session a call acts in: the root's id, plus the child's when a subagent made it. */
+type Who = { session?: string; agent?: string };
+
+/** One message of a session as the SDK lists it, narrowed to what the reply check reads. */
+type Row = {
+  info?: { role?: string };
+  parts?: Array<{ type?: string; text?: string; synthetic?: boolean; ignored?: boolean }>;
+};
+
+/** An advisory held for its call, and whether that call returns MCP content instead of text. */
+type Held = { context: string; mcp: boolean };
+
+export const MagusGuard: Plugin = async (ctx) => {
   // Prefer the workspace's own ./magus over PATH, for the reason spelled out in
   // lib/hook.buzz: an older PATH binary does not fail when it lacks a rule, it
   // fails to recognize the config key that arms the rule and returns pass.
@@ -294,7 +375,7 @@ export const MagusGuard: Plugin = async () => {
   // An entry is dropped when its call lands. A call that never reaches
   // tool.execute.after strands one string for the life of the session, which is a
   // cheaper leak than judging everything twice to avoid it.
-  const pending = new Map<string, string>();
+  const pending = new Map<string, Held>();
 
   /**
    * Runs one `magus shell` invocation and returns its raw stdout, or null when the
@@ -361,14 +442,14 @@ export const MagusGuard: Plugin = async () => {
       return null;
     }
     if (stdout.trim() === "") {
-      // --renders-ask and --session go too: a binary that rejects either predates them.
+      // --renders-ask, --session and --agent go too: a binary that rejects any predates them.
       const withoutValued = (list: readonly string[], flag: string): string[] => {
         const at = list.indexOf(flag);
         return at === -1 ? [...list] : [...list.slice(0, at), ...list.slice(at + 2)];
       };
-      const withoutName = withoutValued(withoutValued(args, "--agent-name"), "--session").filter(
-        (arg) => arg !== "--renders-ask",
-      );
+      const withoutName = ["--agent-name", "--session", "--agent"]
+        .reduce((list, flag) => withoutValued(list, flag), [...args])
+        .filter((arg) => arg !== "--renders-ask");
       stdout = await runOnce(withoutName, input);
       if (stdout === null) {
         unguarded();
@@ -405,10 +486,63 @@ export const MagusGuard: Plugin = async () => {
   // prompt or throws), so this plugin may receive one. Without it magus answers with a deny.
   const shellArgs = ["shell", "--agent-name", "opencode", "--renders-ask", "-o", "json"];
 
-  // The session the call came from. A rule that must tell the main session from a subagent
-  // (a push) refuses a call that names none, so every judged call carries OpenCode's own id.
-  const inSession = (args: readonly string[], sessionID: string | undefined): string[] =>
-    sessionID ? [...args, "--session", sessionID] : [...args];
+  // A session's parent, null for a root. Filled by session.created, which fires before the
+  // session's first call; a session first met any other way is asked of the SDK once, and
+  // one the SDK cannot answer for is taken as a root.
+  const parents = new Map<string, string | null>();
+
+  const parentOf = async (id: string): Promise<string | null> => {
+    const known = parents.get(id);
+    if (known !== undefined) return known;
+    let parent: string | null = null;
+    try {
+      const found = await ctx.client.session.get({ path: { id } });
+      parent = found.data?.parentID ?? null;
+    } catch {
+      // Not knowing a session's parent costs the thread, never the call.
+    }
+    parents.set(id, parent);
+    return parent;
+  };
+
+  // The root session a call belongs to, and the subagent's own session when it is one. A rule
+  // that must tell the main session from a subagent (a push) refuses a call that names no
+  // session, so every judged call carries OpenCode's own id.
+  const whoIs = async (sessionID: string | undefined): Promise<Who> => {
+    if (!sessionID) return {};
+    let root = sessionID;
+    for (let hops = 0; hops < 16; hops++) {
+      const parent = await parentOf(root);
+      if (parent === null) break;
+      root = parent;
+    }
+    return root === sessionID ? { session: root } : { session: root, agent: sessionID };
+  };
+
+  const inThread = (args: readonly string[], who: Who): string[] => [
+    ...args,
+    ...(who.session ? ["--session", who.session] : []),
+    ...(who.agent ? ["--agent", who.agent] : []),
+  ];
+
+  // The Claude Code envelope, for the calls magus reads by shape: a spawn, an MCP call, a
+  // patch. The thread rides inside it, where a flag cannot reach the guard's decoder.
+  const envelope = (
+    event: "PreToolUse" | "PostToolUse",
+    who: Who,
+    tool: string,
+    input: unknown,
+    response?: unknown,
+  ): string =>
+    JSON.stringify({
+      hook_event_name: event,
+      session_id: who.session,
+      agent_id: who.agent,
+      tool_name: tool,
+      tool_input: input,
+      tool_response: response,
+      cwd: ctx.directory,
+    });
 
   /**
    * Throws on a deny, which is OpenCode's only way to stop a call, and on an ask that
@@ -436,21 +570,83 @@ export const MagusGuard: Plugin = async () => {
   };
 
   /** Holds an advisory for the call it judged, so tool.execute.after can deliver it. */
-  const remember = (callID: string, context: string): void => {
-    if (context !== "") pending.set(callID, context);
+  const remember = (callID: string, context: string, mcp = false): void => {
+    if (context !== "") pending.set(callID, { context, mcp });
+  };
+
+  // The reply a follow-up prompt of ours was sent for, by session. The idle that follows it
+  // belongs to that follow-up, and judging it would answer the check with the check.
+  const followUps = new Map<string, string>();
+
+  // The text of the last assistant message that has any, stopping at the last user message:
+  // a turn that has said nothing yet has no reply.
+  const lastReply = async (id: string): Promise<string> => {
+    try {
+      const listed = await ctx.client.session.messages({ path: { id } });
+      const rows = (listed.data ?? []) as unknown as Row[];
+      for (let at = rows.length - 1; at >= 0; at--) {
+        const role = rows[at].info?.role;
+        if (role === "user") return "";
+        if (role !== "assistant") continue;
+        const text = (rows[at].parts ?? [])
+          .filter((part) => part.type === "text" && !part.synthetic && !part.ignored)
+          .map((part) => part.text ?? "")
+          .filter((part) => part.trim() !== "")
+          .join("\n\n");
+        if (text !== "") return text;
+      }
+    } catch {
+      // No reply to judge is the same as no finding.
+    }
+    return "";
+  };
+
+  /**
+   * Proofreads the reply a root session just ended its turn with and, on findings, sends
+   * them back as a prompt. One follow-up per turn: the idle after it is skipped.
+   *
+   * A headless `opencode run` exits at the first idle, before the follow-up is answered.
+   * Under `opencode serve` with `run --attach` the follow-up is answered.
+   */
+  const checkReply = async (id: string): Promise<void> => {
+    if (followUps.delete(id)) return;
+    const script = replyScript();
+    if (script === null) return;
+    const reply = await lastReply(id);
+    if (reply === "") return;
+    const stdout = await runOnce(
+      ["buzz", "-s", script, "--", "--agent-name", "opencode"],
+      JSON.stringify({ last_assistant_message: reply, stop_hook_active: false }),
+    );
+    let prompt: unknown;
+    try {
+      prompt = JSON.parse(stdout ?? "").prompt;
+    } catch {
+      return;
+    }
+    if (typeof prompt !== "string" || prompt === "") return;
+    followUps.set(id, prompt);
+    try {
+      await ctx.client.session.promptAsync({
+        path: { id },
+        body: { parts: [{ type: "text", text: prompt }] },
+      });
+    } catch (error) {
+      followUps.delete(id);
+      console.warn(`[magus guard] could not send the reply check back: ${String(error)}`);
+    }
   };
 
   return {
     "tool.execute.before": async (input, output) => {
+      const who = await whoIs(input.sessionID);
+
       if (input.tool === "bash") {
         const command = argString(output.args, ["command"]);
         if (command === "") return;
         const verb = plainPushVerb(command);
         const promptable = verb !== null && asksBeforePush(loadedConfig, verb);
-        remember(
-          input.callID,
-          apply(await judge(inSession(shellArgs, input.sessionID), command), promptable),
-        );
+        remember(input.callID, apply(await judge(inThread(shellArgs, who), command), promptable));
         return;
       }
 
@@ -460,12 +656,60 @@ export const MagusGuard: Plugin = async () => {
         const path = argString(output.args, ["filePath", "file_path", "path"]);
         if (path === "") return;
         const args = ["shell", "--path", "--agent-name", "opencode", "--renders-ask", "-o", "json"];
-        remember(input.callID, apply(await judge(inSession(args, input.sessionID), path), false));
+        remember(input.callID, apply(await judge(inThread(args, who), path), false));
+        return;
+      }
+
+      // Offered to gpt-* models in place of edit and write. The patch goes whole: magus reads
+      // the files it names.
+      if (input.tool === "apply_patch") {
+        const patchText = argString(output.args, ["patchText"]);
+        if (patchText === "") return;
+        const body = envelope("PreToolUse", who, input.tool, { patchText });
+        remember(input.callID, apply(await judge(shellArgs, body), false));
+        return;
+      }
+
+      // A subagent spawn. magus reads it by its prompt, so the tool's own name is only a label.
+      if (input.tool === "task") {
+        if (argString(output.args, ["prompt"]) === "") return;
+        const body = envelope("PreToolUse", who, input.tool, output.args);
+        remember(input.callID, apply(await judge(shellArgs, body), false));
+        return;
+      }
+
+      const mcp = magusTool(input.tool, magusServers(loadedConfig));
+      if (mcp !== null) {
+        const body = envelope("PreToolUse", who, `mcp__magus__${mcp}`, output.args);
+        remember(input.callID, apply(await judge(shellArgs, body), false), true);
       }
     },
 
     config: async (config) => {
       loadedConfig = config;
+    },
+
+    // A message the person typed is recorded and judged by nothing. A subagent's first message
+    // is the spawn prompt, which the spawn already carried; our own follow-up is not the
+    // person speaking either, and any other message ends the pause it started.
+    "chat.message": async (input, output) => {
+      if ((await parentOf(input.sessionID)) !== null) return;
+      const text = output.parts
+        .flatMap((part) => (part.type === "text" && !part.synthetic ? [part.text] : []))
+        .join("\n\n");
+      if (text.trim() === "") return;
+      if (followUps.get(input.sessionID) === text) return;
+      followUps.delete(input.sessionID);
+      await runOnce(
+        ["shell", "--message", "--agent-name", "opencode", "--session", input.sessionID],
+        text,
+      );
+    },
+
+    // The env of every command the agent runs. A person's own setting wins.
+    "shell.env": async (_input, output) => {
+      const set = process.env.MAGUS_LOG_SILENT ?? output.env.MAGUS_LOG_SILENT;
+      if (set === undefined) output.env.MAGUS_LOG_SILENT = "true";
     },
 
     // OpenCode raises this before its own prompt. Only a push, the prompt magus configured,
@@ -477,7 +721,7 @@ export const MagusGuard: Plugin = async () => {
       const command =
         typeof input.metadata.command === "string" ? input.metadata.command : input.title;
       if (plainPushVerb(command) === null) return;
-      const verdict = await judge(inSession(shellArgs, input.sessionID), command);
+      const verdict = await judge(inThread(shellArgs, await whoIs(input.sessionID)), command);
       switch (verdict?.decision) {
         case "pass":
         case "advise":
@@ -493,13 +737,36 @@ export const MagusGuard: Plugin = async () => {
     },
 
     "tool.execute.after": async (input, output) => {
-      const context = pending.get(input.callID);
-      if (context === undefined) return;
-      pending.delete(input.callID);
-      // Appended to the result the model already reads, rather than replacing it:
-      // the advisory explains what to do differently NEXT time, and the tool's own
-      // output is what the call was for.
-      output.output = `${output.output}\n\n[magus guard] ${context}`;
+      // The hook types a result as text, but an MCP result carries `content` parts and no
+      // `output`: a string set there is dropped, a part pushed there reaches the model.
+      const result = output as { output?: string; content?: unknown; metadata?: unknown };
+      const held = pending.get(input.callID);
+      if (held !== undefined) {
+        pending.delete(input.callID);
+        // Appended to the result the model already reads, rather than replacing it:
+        // the advisory explains what to do differently NEXT time, and the tool's own
+        // output is what the call was for.
+        const text = `[magus guard] ${held.context}`;
+        if (held.mcp && Array.isArray(result.content)) {
+          result.content.push({ type: "text", text });
+        } else if (typeof result.output === "string") {
+          result.output = `${result.output}\n\n${text}`;
+        } else {
+          result.content = [{ type: "text", text }];
+        }
+      }
+
+      // The finished spawn names the child, which is how magus ties the child's calls to
+      // the job it was spawned for. The child's session is already known to be this one's.
+      if (input.tool !== "task") return;
+      const child = (result.metadata as { sessionId?: unknown } | undefined)?.sessionId;
+      if (typeof child !== "string" || child === "") return;
+      parents.set(child, input.sessionID);
+      const who = await whoIs(input.sessionID);
+      await judge(
+        shellArgs,
+        envelope("PostToolUse", who, input.tool, input.args, { agent_id: child }),
+      );
     },
 
     // NO experimental.session.compacting handler, deliberately, and this comment is the
@@ -521,17 +788,28 @@ export const MagusGuard: Plugin = async () => {
     // can reason about, and magus's job is to stay out of the model's way rather than to
     // shape what it remembers on whichever host happens to allow it.
     //
-    // The cost is real and is accepted: OpenCode has no post-compaction hook (its Plugin
-    // type carries only the two pre-compaction ones), so a compacted OpenCode session gets
-    // no brief. It can still ask, and `magus session --brief` prints the same state on
-    // demand, which is the command every host shares.
+    // The cost is real and is accepted: the session.compacted event fires after a
+    // compaction, but the bus is read-only and this plugin does not subscribe to it, so a
+    // compacted OpenCode session gets no brief. It can still ask, and `magus session --brief`
+    // prints the same state on demand, which is the command every host shares.
 
     event: async ({ event }) => {
+      if (event.type === "session.created" || event.type === "session.updated") {
+        parents.set(event.properties.info.id, event.properties.info.parentID ?? null);
+        return;
+      }
+      if (event.type !== "session.idle") return;
+
+      // A subagent goes idle too, once per spawn. Its work is reported by the spawn that
+      // finished, and a checkpoint or a reply check per child would drown the root's.
+      const id = event.properties.sessionID;
+      if ((await parentOf(id)) !== null) return;
+
       // OpenCode has no session-end event; session.idle is the proxy. The checkpoint
       // records where the work stands so whoever comes back reads `magus session`
       // rather than reconstructing it. It judges nothing and its output is ignored.
-      if (event.type !== "session.idle") return;
       await runOnce(["session", "checkpoint", "--agent-name", "opencode"], "");
+      await checkReply(id);
     },
   };
 };
@@ -585,8 +863,11 @@ channel, and Cursor's `preCompact` is observational. A behavior available on one
 host of four is a difference nobody can reason about, and deciding what a model
 remembers is not magus's call to make.
 
-Run `magus session --brief` yourself after a compaction: it prints the same state
-on demand, which every host shares.
+OpenCode does announce a finished compaction: the `session.compacted` event is part
+of its SDK's event union. It arrives on the read-only bus, so the plugin could observe
+it and could not put text in front of the model the way a hook's output does; the
+plugin does not subscribe to it. Run `magus session --brief` yourself after a
+compaction: it prints the same state on demand, which every host shares.
 
 ## Recording where the work stands
 
@@ -599,6 +880,11 @@ Idle fires when the agent stops working rather than when the session is closed,
 so a long session records several checkpoints. That is the same shape a `Stop`
 hook produces on the hosts that have one, and the listing is ordered.
 
+A subagent's session goes idle too, once per spawn. The plugin tells a subagent's
+session from a root one by the session's `parentID`, which the `session.created`
+event carries (and the SDK's `session.get` answers when the plugin did not see the
+event), and skips the subagents: they record no checkpoint and get no reply check.
+
 If you would rather not have the plugin do it, running
 [`magus-checkpoint.buzz`](guard-templates.md#magus-checkpointbuzz) with
 `--agent-name opencode` records the identical row.
@@ -606,14 +892,28 @@ If you would rather not have the plugin do it, running
 
 ## The reply check and the scout
 
-The reply check that Claude Code, Codex and Cursor run when a turn ends is not
-wired here. Those hosts each have a stop event that accepts an answer: context for
-the next turn, a `block` decision, or a follow-up message. OpenCode's closest event,
-`session.idle`, is on a read-only bus. A subscriber can observe it, as the
-checkpoint does, and cannot return text to the agent, so a finding has nowhere to
-go. [`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz) answers
-`claude-code`, `codex` and `cursor` and reports any other `--agent-name` as having
-no reply shape.
+The reply check that Claude Code, Codex and Cursor run when a turn ends has no stop
+hook to ride on here, and `session.idle` is on a read-only bus: a subscriber cannot
+return text from it. The plugin reaches the agent another way. On a root session's
+idle event it reads the last assistant reply with the SDK's `session.messages`, runs
+[`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz) with
+`--agent-name opencode` over it, and when proofread has findings sends them back with
+`session.promptAsync`, a new user message in the same session. The script's
+`opencode` reply shape is `{"prompt": ...}`.
+
+- One follow-up per turn. The idle after the follow-up is the follow-up's own reply
+  and is not judged; a message you type clears that, so your next turn is checked
+  again.
+- The plugin looks for `proofread-reply.buzz` at `__PROOFREAD_REPLY_BUZZ` when that is
+  set, else beside the plugin file, else under the workspace's
+  `docs/guides/integrations/agents`. With none of them, or without the `proofread`
+  binary, the check is silent. Copy the script next to the plugin when you copy the
+  plugin.
+- A headless `opencode run` exits at the first idle, before the follow-up is
+  answered: the follow-up is accepted and never runs. The check does work when the
+  session lives in a server: start `opencode serve` and drive it with
+  `opencode run --attach <url>`. Both were run against 1.18.30: the attached
+  session went idle a second time after the follow-up, the headless one did not.
 
 The scout agent's file sets `permission: edit: deny`, which OpenCode applies to
 every file-changing tool, so the read-only promise in its instructions is a
@@ -625,13 +925,20 @@ is running read-only magus commands.
 - Nothing in `harness_entries` is merged: OpenCode has no hook config, so the spell
   writes the agent files and the push permission, and the plugin is the only hook.
   The plugin wires `tool.execute.before` and `.after`, `permission.ask`,
-  `experimental.session.compacting` and the `session.idle` checkpoint. It has no
-  prompt, spawn or reply hook, for the reasons above and below.
+  `chat.message`, `shell.env`, `config` (to learn the magus MCP server's key) and
+  the `event` hook (`session.created`, `session.updated`, `session.idle`). It does
+  not use `experimental.session.compacting`.
 - An `advise` verdict is appended to the tool result that call produced, joined
   to it by `callID`. It is judged once, before the call, and delivered after it:
   judging again in `tool.execute.after` would record two verdicts for one call.
   An advised call whose result never arrives strands one string for the life of
-  the session, which is the cheaper of the two leaks.
+  the session, which is the cheaper of the two leaks. An MCP tool's result has a
+  `content` array and no `output` string, and a string set on `output` is dropped,
+  so there the advisory is pushed as a text part of `content`; that is what reaches
+  the model.
+- A thrown deny reaches the model. A `bash` call whose hook threw came back to the
+  model as the tool error with the thrown message, and the model repeated its text
+  (OpenCode 1.18.30).
 - The plugin finds the workspace's `./magus` from the nearest `magus.yaml`, so a
   session opened in `console/` or any other project directory still uses the
   root's build.
@@ -643,33 +950,28 @@ is running read-only magus commands.
 - The plugin fails open when magus cannot be run at all, and says so in the log.
   Throwing is OpenCode's only way to stop a call, so a guard that threw on a
   missing binary would block every tool call and make the session unusable.
-- Tool identifiers were confirmed against an installed OpenCode 1.18.5: `bash`,
-  `edit`, `write`, `read`, `patch` and `glob` all appear in its binary, and
-  `filePath` is the field its edit tools carry. An MCP tool's `input.tool`
-  string was NOT among them (OpenCode has no hook config schema to check it
-  against either, per `testdata/hosts/SOURCES.md`), so the MCP call
-  wiring is feasible (`tool.execute.before`/`.after` already see every call,
-  MCP included) but not wired: a branch keyed on a guessed name risks judging
-  an unrelated tool rather than magus's own calls. Confirm the string against a
-  live session, then add a third `if (input.tool === ...)` branch beside `bash`
-  and `edit`/`write`.
-- Lease capture is FEASIBLE but not wired. `tool.execute.before` fires for
-  every tool and hands the plugin `input.tool` plus the call's arguments, so a
-  branch alongside the `bash` and `edit`/`write` ones could pipe a subagent
-  tool's prompt to `magus shell` and get the same `agent_spawn` event. Which tool
-  identifier to match on has not been confirmed against an installed OpenCode,
-  so the plugin above does not guess at one.
-- `shell.env` could export `BAGGAGE=magus.lease=<id>` into every shell the
-  session runs, and deliberately does not. The only place the plugin could read
-  that id is the marker `magus job exec` writes into the checkout, and the
-  guard and the sandbox already read that marker directly; it exists precisely
-  because a host runs its hooks with its own environment. Exporting a copy of it
-  would be a second source of truth that can go stale, for a lease the tools can
-  already see.
-- OpenCode's documentation confirms that a throw blocks, but does not promise
-  the thrown message reaches the model. Treat the deny as a hard stop whose
-  explanation is best effort, and confirm against
-  [OpenCode plugins](https://opencode.ai/docs/plugins).
+- Tool identifiers were read from live calls on OpenCode 1.18.30: `bash` carries
+  `command`; `edit` carries `filePath`, `oldString` and `newString`; `task` carries
+  `subagent_type`, `prompt` and `description`. An MCP tool arrives as
+  `<server>_<tool>` with both halves sanitized (OpenCode's `McpTool.name`), for
+  example `echo_say_hi` from a server `echo`. `apply_patch`, the file-changing tool
+  a gpt-* model gets in place of `edit` and `write`, carries `patchText` (OpenCode's
+  `apply_patch` tool source); the plugin forwards it whole as an
+  `apply_patch` envelope and magus reads the files it names.
+- A spawn is judged by the `task` call's prompt before it runs. When it finishes,
+  its metadata names the child session (`metadata.sessionId`) and the plugin
+  reports that id to magus. A child session's `session.created` event carries
+  `parentID`, and every call a subagent makes goes to magus as the root session
+  with the child as the agent, which is how a rule tells a worker's call from the
+  main conversation's. A subagent's first message is the spawn prompt, so
+  `chat.message` skips child sessions.
+- A message you type goes to `magus shell --message`, which records the topics it
+  raises and judges nothing. Text pushed into a `chat.message` part reaches the model
+  on 1.18.30, but this plugin pushes none: that hook only records.
+- `shell.env` does not export `BAGGAGE=magus.lease=<id>`: the only place the plugin could read that id is the
+  marker `magus job exec` writes into the checkout, and the guard and the sandbox
+  already read that marker directly. A copy would be a second source of truth that
+  can go stale.
 
 ## Verify
 
