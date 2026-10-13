@@ -1,0 +1,326 @@
+// Cost: none.
+//
+// Rolls the cost section of `magus session show` up across the sessions this checkout
+// loaded: how large the main thread's context got, how much of its tool output a subagent
+// could have read instead, where spawns went, how often a cost advisory was answered with a
+// spawn, what each guard profile would have decided, and the cache-read price of it all
+// where the account is metered and every model is in the table.
+//
+//	magus buzz hack/dev/root-cost.buzz -- [--all]
+//
+// A section a session could not measure is not counted as zero: each total says how many
+// sessions measured it, and a section no session measured prints as not measured. --all
+// reads every checkout of this repository instead of this one.
+namespace rootcost;
+
+import "encoding/json";
+import "flags";
+import "magus";
+import "std";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/dev/root-cost.buzz -- [--all]";
+final HELP = "cost: none\n{USAGE}";
+
+// PROFILES is the order shadow verdicts print in, least to most refusing.
+final PROFILES = ["light", "standard", "strict"];
+
+export object Rollup {
+    sessions: int,
+    withContext: int,
+    maxPeak: int,
+    medianPeak: int,
+    withDelegable: int,
+    resultChars: int,
+    delegableChars: int,
+    spawns: int,
+    spawnModels: [str],
+    withAdvisories: int,
+    given: int,
+    followed: int,
+    ignored: int,
+    shadow: [str],
+    withPriceStep: int,
+    pastPriceStep: int,
+    priced: int,
+    usd: double,
+}
+
+fun count(items: {str: int}, key: str) > int {
+    return items[key] ?? 0;
+}
+
+// fold reads each `magus session show -o json` document into one rollup. A document with
+// no cost section is a session an older magus loaded and is not counted.
+export fun fold(shows: [str]) > Rollup !> any {
+    var sessions = 0;
+    var withContext = 0;
+    var withDelegable = 0;
+    var resultChars = 0;
+    var delegableChars = 0;
+    var spawns = 0;
+    var withAdvisories = 0;
+    var given = 0;
+    var followed = 0;
+    var ignored = 0;
+    var withPriceStep = 0;
+    var pastPriceStep = 0;
+    var priced = 0;
+    var usd = 0.0;
+    final peaks = mut [<int>];
+    final models = mut {<str: int>};
+    final verdicts = mut {<str: int>};
+
+    foreach (text in shows) {
+        final cost = json\parse(text)["cost"];
+        if (cost == null) {
+            continue;
+        }
+        sessions = sessions + 1;
+
+        final rc = cost["root_context"];
+        if (rc != null) {
+            withContext = withContext + 1;
+            peaks.append(std\toInt(rc["peak"] ?? 0));
+        }
+        final d = cost["delegable"];
+        if (d != null) {
+            withDelegable = withDelegable + 1;
+            resultChars = resultChars + std\toInt(d["total"] ?? 0);
+            delegableChars = delegableChars + std\toInt(d["chars"] ?? 0);
+        }
+        final sp = cost["spawns"];
+        if (sp != null) {
+            spawns = spawns + std\toInt(sp["total"] ?? 0);
+            foreach (m in sp["by_model"] ?? []) {
+                final name = m["name"] ?? "";
+                models[name] = (models[name] ?? 0) + std\toInt(m["count"] ?? 0);
+            }
+        }
+        final adv = cost["advisories"];
+        if (adv != null) {
+            withAdvisories = withAdvisories + 1;
+            given = given + std\toInt(adv["given"] ?? 0);
+            followed = followed + std\toInt(adv["followed"] ?? 0);
+            ignored = ignored + std\toInt(adv["ignored"] ?? 0);
+        }
+        foreach (t in cost["shadow"] ?? []) {
+            final profile = t["profile"] ?? "";
+            foreach (verdict in ["allow", "advise", "deny"]) {
+                final key = "{profile}/{verdict}";
+                verdicts[key] = (verdicts[key] ?? 0) + std\toInt(t[verdict] ?? 0);
+            }
+        }
+        final past = cost["past_price_step"];
+        if (past != null) {
+            withPriceStep = withPriceStep + 1;
+            pastPriceStep = pastPriceStep + std\toInt(past);
+        }
+        final dollars = cost["dollars"];
+        if (dollars != null) {
+            priced = priced + 1;
+            usd = usd + std\toDouble(dollars["floor_usd"] ?? 0);
+        }
+    }
+
+    peaks.sort(fun (a: int, b: int) > bool => a < b);
+    var maxPeak = 0;
+    var medianPeak = 0;
+    if (peaks.len() > 0) {
+        maxPeak = peaks[peaks.len() - 1];
+        medianPeak = peaks[std\toInt((peaks.len() - 1) / 2)];
+    }
+
+    final spawnModels = mut [<str>];
+    final modelNames = models.keys().cloneMutable();
+    modelNames.sort(fun (a: str, b: str) > bool => count(models, key: a) > count(models, key: b) or (count(models, key: a) == count(models, key: b) and a < b));
+    foreach (name in modelNames) {
+        spawnModels.append("{name} {models[name] ?? 0}");
+    }
+    final shadow = mut [<str>];
+    foreach (profile in PROFILES) {
+        if (verdicts.hasKey("{profile}/allow")) {
+            shadow.append("{profile} {count(verdicts, key: "{profile}/allow")} allow/{count(verdicts, key: "{profile}/advise")} advise/{count(verdicts, key: "{profile}/deny")} deny");
+        }
+    }
+
+    return Rollup{
+        sessions = sessions,
+        withContext = withContext,
+        maxPeak = maxPeak,
+        medianPeak = medianPeak,
+        withDelegable = withDelegable,
+        resultChars = resultChars,
+        delegableChars = delegableChars,
+        spawns = spawns,
+        spawnModels = spawnModels,
+        withAdvisories = withAdvisories,
+        given = given,
+        followed = followed,
+        ignored = ignored,
+        shadow = shadow,
+        withPriceStep = withPriceStep,
+        pastPriceStep = pastPriceStep,
+        priced = priced,
+        usd = usd,
+    };
+}
+
+// money renders dollars to the cent.
+export fun money(usd: double) > str {
+    final cents = std\toInt(usd * 100.0 + 0.5);
+    final whole = std\toInt(cents / 100);
+    final rest = cents - whole * 100;
+    if (rest < 10) {
+        return "${whole}.0{rest}";
+    }
+    return "${whole}.{rest}";
+}
+
+fun measured(n: int, of: int) > str {
+    return "{n} of {of} session(s)";
+}
+
+export fun render(r: Rollup) > [str] {
+    final lines = mut ["main-thread cost over {r.sessions} session(s)"];
+    if (r.withContext > 0) {
+        lines.append("  context: peak {r.maxPeak} tokens, median peak {r.medianPeak}; measured in {measured(r.withContext, of: r.sessions)}");
+    } else {
+        lines.append("  context: not measured in any session");
+    }
+    if (r.withDelegable > 0 and r.resultChars > 0) {
+        final share = std\toInt(r.delegableChars * 100 / r.resultChars);
+        lines.append("  delegable: {share}% of {r.resultChars} result chars; measured in {measured(r.withDelegable, of: r.sessions)}");
+    } else {
+        lines.append("  delegable: not measured in any session");
+    }
+    if (r.spawns > 0) {
+        lines.append("  spawns: {r.spawns} ({r.spawnModels.join(", ")})");
+    } else {
+        lines.append("  spawns: none");
+    }
+    if (r.withAdvisories > 0) {
+        lines.append("  advisories: {r.given} given, {r.followed} followed by a spawn, {r.ignored} ignored; measured in {measured(r.withAdvisories, of: r.sessions)}");
+    } else {
+        lines.append("  advisories: not measured in any session");
+    }
+    if (r.shadow.len() > 0) {
+        lines.append("  shadow: {r.shadow.join("; ")}");
+    } else {
+        lines.append("  shadow: not measured in any session");
+    }
+    if (r.withPriceStep > 0) {
+        lines.append("  past a price step: {r.pastPriceStep} child(ren); measured in {measured(r.withPriceStep, of: r.sessions)}");
+    } else {
+        lines.append("  past a price step: not measured in any session");
+    }
+    if (r.priced > 0) {
+        lines.append("  dollars: {money(r.usd)} cache-read floor; priced in {measured(r.priced, of: r.sessions)}");
+    } else {
+        lines.append("  dollars: not priced in any session (needs metered billing and every model in the table)");
+    }
+    return lines;
+}
+
+// sessionIds lists the host sessions `magus session ls` knows, each once.
+export fun sessionIds(listing: str) > [str] !> any {
+    final seen = mut {<str: bool>};
+    final ids = mut [<str>];
+    foreach (c in json\parse(listing)["checkpoints"] ?? []) {
+        final id = c["host_session"] ?? "";
+        if (id != "" and !seen.hasKey(id)) {
+            seen[id] = true;
+            ids.append(id);
+        }
+    }
+    return ids;
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help", "--all"], valued: [<str>]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "root-cost: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final listArgs = mut ["ls", "-o", "json"];
+    if (parsed.values["--all"] != null) {
+        listArgs.append("--all");
+    }
+    final listing = magus\cmd("session", args: listArgs, opts: {"quiet": true}).stdout;
+    final shows = mut [<str>];
+    foreach (id in sessionIds(listing)) {
+        final shown = magus\cmd("session", args: ["show", id, "-o", "json"], opts: {"quiet": true, "allow_failure": true});
+        if (shown.ok) {
+            shows.append(shown.stdout);
+        }
+    }
+    std\print("read-only");
+    foreach (line in render(fold(shows))) {
+        std\print(line);
+    }
+}
+
+final MEASURED = `\{"session": "a", "cost": \{
+  "root_context": \{"peak": 800000, "p50": 400000, "samples": 90\},
+  "delegable": \{"chars": 600, "total": 1000, "share": 0.6\},
+  "spawns": \{"total": 3, "by_model": [\{"name": "claude-sonnet-5-5", "count": 2\}, \{"name": "none declared", "count": 1\}]\},
+  "advisories": \{"given": 4, "followed": 1, "ignored": 3, "within": 10\},
+  "shadow": [\{"profile": "light", "allow": 80, "advise": 10, "deny": 0\}, \{"profile": "strict", "allow": 70, "advise": 10, "deny": 10\}],
+  "past_price_step": 1,
+  "dollars": \{"billing": "metered", "calls": 90, "floor_usd": 12.3\}
+\}\}`;
+
+final SECOND = `\{"session": "b", "cost": \{
+  "root_context": \{"peak": 200000, "p50": 100000, "samples": 10\},
+  "delegable": \{"chars": 200, "total": 1000, "share": 0.2\},
+  "spawns": \{"total": 1, "by_model": [\{"name": "claude-sonnet-5-5", "count": 1\}]\},
+  "advisories": \{"given": 1, "followed": 0, "ignored": 1, "within": 10\},
+  "dollars": \{"billing": "metered", "calls": 10, "floor_usd": 0.04\},
+  "not_measured": \{"shadow": "no call recorded what each profile would have decided", "price_step": "no spawn recorded its final context size"\}
+\}\}`;
+
+final UNMEASURED = `\{"session": "c", "cost": \{
+  "spawns": \{"total": 0\},
+  "not_measured": \{"root_context": "the trail holds no per-call facts for this session"\}
+\}\}`;
+
+test "totals add up and name how many sessions measured each section" {
+    assert\equal(render(fold([MEASURED, SECOND])), want: [
+        "main-thread cost over 2 session(s)",
+        "  context: peak 800000 tokens, median peak 200000; measured in 2 of 2 session(s)",
+        "  delegable: 40% of 2000 result chars; measured in 2 of 2 session(s)",
+        "  spawns: 4 (claude-sonnet-5-5 3, none declared 1)",
+        "  advisories: 5 given, 1 followed by a spawn, 4 ignored; measured in 2 of 2 session(s)",
+        "  shadow: light 80 allow/10 advise/0 deny; strict 70 allow/10 advise/10 deny",
+        "  past a price step: 1 child(ren); measured in 1 of 2 session(s)",
+        "  dollars: $12.34 cache-read floor; priced in 2 of 2 session(s)",
+    ], message: "rollup");
+}
+
+test "a session that measured nothing is counted but never as zero context" {
+    final lines = render(fold([UNMEASURED]));
+    assert\equal(lines[0], want: "main-thread cost over 1 session(s)", message: "counted");
+    assert\equal(lines[1], want: "  context: not measured in any session", message: "context");
+    assert\equal(lines[2], want: "  delegable: not measured in any session", message: "delegable");
+    assert\equal(lines[3], want: "  spawns: none", message: "spawns were measured");
+    assert\equal(lines[7], want: "  dollars: not priced in any session (needs metered billing and every model in the table)", message: "dollars");
+}
+
+test "a document with no cost section is not a session" {
+    assert\equal(fold([`\{"session": "old"\}`]).sessions, want: 0, message: "skipped");
+}
+
+test "money rounds to the cent and pads the cents" {
+    assert\equal(money(12.3), want: "$12.30", message: "pad");
+    assert\equal(money(0.04), want: "$0.04", message: "small");
+    assert\equal(money(3.456), want: "$3.46", message: "round");
+}
+
+test "session ids come once each from the listing" {
+    final listing = `\{"checkpoints": [\{"host_session": "a"\}, \{"host_session": "b"\}, \{"host_session": "a"\}, \{"host_session": ""\}]\}`;
+    assert\equal(sessionIds(listing), want: ["a", "b"], message: "ids");
+}
