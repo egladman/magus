@@ -971,18 +971,30 @@ func TestGradeLeasedWriteDependentBlocksOnceItsDependencyPasses(t *testing.T) {
 	}
 }
 
-func TestGradeLeasedWriteDeniesAnOverdueLease(t *testing.T) {
+// A taken lease past its deadline is ended by the read that grades its write, which then
+// has no boundary left to deny on; one nobody took stays live, and its writes are denied.
+func TestGradeLeasedWriteUnderAnOverdueLease(t *testing.T) {
 	leases := fixture.FleetLeases()
 	leases[1].Deadline = time.Now().Add(-time.Minute).Unix()
 	ctx, root := fleetFixture(t, leases...)
 
+	assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/main.go")).Decision)
+	rows, err := leaseRows(ctx, hookLocation(ctx, Dependencies{}))
+	require.NoError(t, err)
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == "lease-b" })
+	require.GreaterOrEqual(t, i, 0)
+	assert.Equal(t, types.StateNoReturn, rows[i].State)
+	assert.Contains(t, rows[i].EndReason, "deadline passed")
+
+	leases[1].Registered = 0
+	ctx, root = fleetFixture(t, leases...)
 	got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/main.go"))
 	require.Equal(t, "deny", got.Decision, "an overdue lease writing inside its own write paths is denied")
 	assert.Contains(t, got.Reason, "lease-b")
 	assert.Contains(t, got.Reason, "deadline")
 	assert.Contains(t, got.Reason, time.Unix(leases[1].Deadline, 0).UTC().Format(time.RFC3339))
 
-	leases[1].Deadline = time.Now().Add(time.Hour).Unix()
+	leases[1].Deadline, leases[1].Registered = time.Now().Add(time.Hour).Unix(), 1
 	ctx, root = fleetFixture(t, leases...)
 	assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/main.go")).Decision,
 		"a deadline still ahead bounds nothing yet")

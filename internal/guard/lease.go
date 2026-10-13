@@ -1051,8 +1051,9 @@ func adviseTerminalLease(standing leaseStanding, actingLease string) advice {
 }
 
 // denyOverdueLease refuses a write graded under a live lease past its deadline, or returns
-// "" for one with no deadline or time left. The row stays live: ending it is the
-// orchestrator's, and magus never transitions a row on its own.
+// "" for one with no deadline or time left. A taken row past its deadline is ended by the
+// next sweep of the store, so this refuses writes under one nobody took, which only
+// `magus job prune` ends, and under a taken one read before that sweep.
 func denyOverdueLease(me types.Job, now int64) string {
 	if !me.Overdue(now) {
 		return ""
