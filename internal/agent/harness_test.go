@@ -1501,7 +1501,7 @@ func TestShortestForegroundMaxIsFalseWhenNoneDeclaresOne(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestHarnessAcceptsAGroupOfOnlyTheReplyCheck(t *testing.T) {
+func TestHarnessRefusesAnUnmarkedReplyCheck(t *testing.T) {
 	registerHarnessSpell(t, "replycheck", `{
   "schema_version": 2,
   "id": "replycheck",
@@ -1515,8 +1515,9 @@ func TestHarnessAcceptsAGroupOfOnlyTheReplyCheck(t *testing.T) {
 }`)
 	_, _, err := LoadHarness(context.Background(), t.TempDir(), "replycheck")
 
-	require.NoError(t, err, "the reply check is a shipped template, so a stop group holding only it is magus's own")
-	assert.True(t, runsAShippedTemplate("magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name codex"))
+	require.ErrorContains(t, err, "ownership marker",
+		"the reply check is a download a person wires on purpose, so a merge never takes it for magus's own")
+	assert.False(t, runsAShippedTemplate("magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name codex"))
 	assert.False(t, invokesMagus("magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz"),
 		"it judges nothing, so it is not guard coverage")
 }
@@ -1567,9 +1568,10 @@ func requireWired(t *testing.T, path, event, matcher, script string) wiredHook {
 // spell declares for the events that follow a turn: the reply check where the host has a
 // stop event, the person's message where it has a prompt event, and the spawn where it names
 // the spawn tool. The spell tests pin the same entries from the other side.
-func TestHarnessConfigsWireTheReplyCheckPromptAndSpawnHooks(t *testing.T) {
+func TestHarnessConfigsWirePromptAndSpawnHooksAndLeaveTheReplyCheckToThePerson(t *testing.T) {
 	const reply, guard = "proofread-reply.buzz", "magus-command.buzz"
 
+	// The repository's own configs hand-write the reply check; the config magus ships does not.
 	t.Run("claude-code", func(t *testing.T) {
 		config := dogfoodedHookConfig
 		requireWired(t, config, "Stop", "", reply)
@@ -1580,7 +1582,10 @@ func TestHarnessConfigsWireTheReplyCheckPromptAndSpawnHooks(t *testing.T) {
 
 	for _, config := range hostConfigFile["codex"] {
 		t.Run(config, func(t *testing.T) {
-			requireWired(t, config, "Stop", "", reply)
+			requireWired(t, config, "Stop", "", "magus-checkpoint.buzz")
+			for _, h := range wiredOn(t, config, "Stop") {
+				assert.NotContains(t, h.Command, reply, "the shipped Codex config leaves the reply check to the person")
+			}
 			requireWired(t, config, "UserPromptSubmit", "", guard)
 			requireWired(t, config, "PreToolUse", "collaborationspawn_agent", guard)
 			requireWired(t, config, "PostToolUse", "collaborationspawn_agent", guard)

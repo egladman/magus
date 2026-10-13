@@ -66,12 +66,6 @@ fun codex_checkpoint_command() > str {
     return codex_named_command("magus-checkpoint");
 }
 
-// codex_proofread_command judges the reply a turn ends with. Codex's Stop reads back a
-// block decision, and its reason becomes the prompt of one more turn.
-fun codex_proofread_command() > str {
-    return codex_named_command("proofread-reply");
-}
-
 fun codex_command_hook(cmd: str, status: str) > {str: any} {
     return {
         "type": "command",
@@ -163,9 +157,6 @@ fun codex_entries() > [any] {
             "entries": [
                 {
                     "hooks": [codex_command_hook(codex_checkpoint_command(), "magus: recording where the work stands")],
-                },
-                {
-                    "hooks": [codex_command_hook(codex_proofread_command(), "magus: proofreading the reply")],
                 },
             ],
         },
@@ -397,7 +388,6 @@ test "every glue command names this host on its argv, and rehydrate takes none" 
     assert\isTrue(codex_guard_command().endsWith(named), "command hook");
     assert\isTrue(codex_path_command().endsWith(named), "path hook");
     assert\isTrue(codex_checkpoint_command().endsWith(named), "Stop checkpoint");
-    assert\isTrue(codex_proofread_command().endsWith(named), "Stop proofread, which picks its output shape by host");
     assert\isTrue(codex_rehydrate_command().indexOf("--agent-name") == null, "rehydrate reads no host");
 }
 
@@ -406,9 +396,8 @@ test "guard commands name the Buzz glue as a plain argv" {
     assert\isTrue(codex_path_command().indexOf("magus-path.buzz") != null, "path hook");
     assert\isTrue(codex_rehydrate_command().endsWith(" -- --format json --rules AGENTS.md"), "SessionStart and SubagentStart need JSON stdout and AGENTS.md");
     assert\isTrue(codex_checkpoint_command().indexOf("magus-checkpoint.buzz") != null, "Stop checkpoint");
-    assert\isTrue(codex_proofread_command().indexOf("proofread-reply.buzz") != null, "Stop proofread");
     foreach (cmd in [codex_guard_command(), codex_path_command(),
-            codex_rehydrate_command(), codex_checkpoint_command(), codex_proofread_command()]) {
+            codex_rehydrate_command(), codex_checkpoint_command()]) {
         assert\isTrue(cmd.startsWith("magus buzz -s "), "no environment prefix and no POSIX shell: {cmd}");
         assert\isTrue(cmd.indexOf(".sh") == null, "no entry wires a shell script: {cmd}");
     }
@@ -496,9 +485,8 @@ test "harness_entries covers the tool, subagent, session, Stop and message event
     final start_entries = codex_block("SessionStart")!["entries"] as [any];
     assert\equal("{start_entries[0]["matcher"]}", "compact", "only the moment state was lost");
     final stop_entries = codex_block("Stop")!["entries"] as [any];
-    assert\equal(stop_entries.len(), 2, "the checkpoint entry and the proofread entry");
+    assert\equal(stop_entries.len(), 1, "the checkpoint entry alone: the reply check is opt-in");
     assert\equal(codex_commands("Stop")[0], codex_checkpoint_command(), "records where the work stands");
-    assert\equal(codex_commands("Stop")[1], codex_proofread_command(), "judges the reply");
     final message = codex_block("UserPromptSubmit")!;
     final message_entries = message["entries"] as [any];
     assert\equal(message_entries.len(), 1, "one message entry");

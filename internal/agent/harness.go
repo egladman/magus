@@ -343,7 +343,7 @@ func validateHarnessEntries(group HarnessEntries) error {
 	// One invoking command per group, not every command: an entry may prepare the
 	// environment a magus is found in, like a host's session-start entry that puts the
 	// session root on PATH, and it can only do that without running one. A shipped
-	// template that judges nothing, such as the reply check, is magus's own all the same.
+	// template that judges nothing, such as the checkpoint, is magus's own all the same.
 	if !slices.ContainsFunc(commands, func(command string) bool { return invokesMagus(command) || runsAShippedTemplate(command) }) {
 		return fmt.Errorf("command %q does not invoke magus (want a shipped guard script, magus shell, or magus session)", commands[0])
 	}
@@ -954,7 +954,7 @@ func carriesOwnedMarker(command string) bool {
 // Narrower than invokesMagus on purpose: that one also answers true for a bare
 // `magus ...` line, which says nothing about who wrote it.
 func runsAShippedTemplate(command string) bool {
-	for _, template := range []string{"magus-command", "magus-path", "magus-observe", "cursor-hook.", "magus-checkpoint", "magus-rehydrate", "magus-session.buzz", "proofread-reply."} {
+	for _, template := range []string{"magus-command", "magus-path", "magus-observe", "cursor-hook.", "magus-checkpoint", "magus-rehydrate", "magus-session.buzz"} {
 		if strings.Contains(command, template) {
 			return true
 		}

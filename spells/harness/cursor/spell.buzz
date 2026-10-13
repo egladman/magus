@@ -48,12 +48,6 @@ fun cursor_guard_command() > str {
     return "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name {mgs_getName()} --reports-skills";
 }
 
-// cursor_proofread_command judges the reply a turn ends with. The stop event cannot block,
-// so a finding goes back as a followup_message that Cursor submits as another turn.
-fun cursor_proofread_command() > str {
-    return "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name {mgs_getName()}";
-}
-
 fun cursor_event_names() > [str] {
     return [
         "sessionStart",
@@ -66,7 +60,6 @@ fun cursor_event_names() > [str] {
         "subagentStart",
         "sessionEnd",
         "beforeSubmitPrompt",
-        "stop",
     ];
 }
 
@@ -89,11 +82,6 @@ fun cursor_posttool_matcher() > str {
 // it kills the process. Claude Code's harness uses the same bound; without it a
 // stuck or memory-heavy magus can pile up under parallel tool calls.
 fun cursor_hook_timeout() > int { return 10; }
-
-// cursor_proofread_loop_limit caps how many followup messages the reply check may chain.
-// The hook itself stops at the first follow-up (loop_count above 0), so one is all it uses;
-// Cursor's default of 5 would let a misbehaving copy of it run longer.
-fun cursor_proofread_loop_limit() > int { return 1; }
 
 // cursor_entry is one hooks.json command entry with a timeout.
 fun cursor_entry(cmd: str) > {str: any} {
@@ -165,14 +153,6 @@ fun cursor_entries() > [any] {
             "path": ["hooks", "beforeSubmitPrompt"],
             "entries": [cursor_entry(cmd)],
         },
-        {
-            "path": ["hooks", "stop"],
-            "entries": [{
-                "command": cursor_proofread_command(),
-                "timeout": cursor_hook_timeout(),
-                "loop_limit": cursor_proofread_loop_limit(),
-            }],
-        },
     ];
 }
 
@@ -207,9 +187,9 @@ export fun harness_entries(target: Target, cb: fun(any)) > [any] {
 
 // cursor_env_hint is what the printed config says about MAGUS_LOG_SILENT. Cursor has no
 // setting for the environment of the commands its agent runs, so hooks.json carries no env
-// key: the guard's preToolUse reply rewrites each command it passes to export the variable.
+// key, and the guard passes each command on exactly as Cursor sent it.
 fun cursor_env_hint() > str {
-    return "Cursor has no setting for the environment of the commands its agent runs, so hooks.json sets none: the guard's preToolUse reply prefixes every shell command it passes with `export MAGUS_LOG_SILENT=true;`, so magus prints its quiet output there.";
+    return "Cursor has no setting for the environment of the commands its agent runs, so hooks.json sets none and the guard hands each command back as Cursor sent it. To quiet magus there, set MAGUS_LOG_SILENT=true in the environment that starts Cursor.";
 }
 
 fun cursor_mcp() > {str: any} {
@@ -334,7 +314,7 @@ test "guard command is the shipped Cursor Buzz port, not a shell script" {
 
 test "harness_entries covers every Cursor event magus uses" {
     final names = cursor_event_names();
-    assert\equal(names.len(), 11, "sessionStart, beforeShell, beforeMCP, preToolUse, postToolUse, postToolUseFailure, preCompact, subagentStart, sessionEnd, beforeSubmitPrompt, stop");
+    assert\equal(names.len(), 10, "sessionStart, beforeShell, beforeMCP, preToolUse, postToolUse, postToolUseFailure, preCompact, subagentStart, sessionEnd, beforeSubmitPrompt");
     assert\isTrue(list_contains(names, "sessionStart"), "PATH / __MAGUS_BIN");
     assert\isTrue(list_contains(names, "beforeShellExecution"), "command guard");
     assert\isTrue(list_contains(names, "beforeMCPExecution"), "MCP guard");
@@ -345,7 +325,7 @@ test "harness_entries covers every Cursor event magus uses" {
     assert\isTrue(list_contains(names, "subagentStart"), "lease provenance");
     assert\isTrue(list_contains(names, "sessionEnd"), "checkpoint");
     assert\isTrue(list_contains(names, "beforeSubmitPrompt"), "the person's message");
-    assert\isTrue(list_contains(names, "stop"), "reply check");
+    assert\isTrue(!list_contains(names, "stop"), "the reply check is opt-in, never shipped");
 
     final entries = cursor_entries();
     assert\equal(entries.len(), names.len(), "one managed block per event");
@@ -358,16 +338,10 @@ test "harness_entries covers every Cursor event magus uses" {
         final block_entries = block["entries"] as [any];
         assert\isTrue(block_entries.len() > 0, "each event has at least one entry");
         foreach (entry in block_entries) {
-            var want = cursor_guard_command();
-            if (path[1] == "stop") { want = cursor_proofread_command(); }
-            assert\equal("{entry["command"]}", want, "every entry names the guard script, bar the reply check on stop");
+            assert\equal("{entry["command"]}", cursor_guard_command(), "every entry names the guard script");
             final timeout = entry["timeout"] as? int;
             assert\equal(timeout, cursor_hook_timeout(), "every entry bounds how long magus may run");
-            if (path[1] == "stop") {
-                assert\equal(entry["loop_limit"] as? int, cursor_proofread_loop_limit(), "the reply check chains one followup at most");
-            } else {
-                assert\isTrue(entry["loop_limit"] == null, "only the stop hook can chain turns");
-            }
+            assert\isTrue(entry["loop_limit"] == null, "only a stop hook can chain turns, and none ships");
             if (path[1] == "beforeMCPExecution") {
                 final closed = entry["failClosed"] as? bool;
                 assert\equal(closed, true, "MCP gate fails closed");
@@ -393,13 +367,6 @@ test "preToolUse matcher gates the shell, edits and the tools restated as shell"
     assert\isTrue(matcher.indexOf("Task") != null, "the subagent spawn");
 }
 
-test "the reply check names this host and is not the guard script" {
-    final cmd = cursor_proofread_command();
-    assert\isTrue(cmd.startsWith("magus buzz -s "), "host runs the Buzz port, with no shell");
-    assert\isTrue(cmd.endsWith("proofread-reply.buzz -- --agent-name {mgs_getName()}"), "names this host on the script argv: {cmd}");
-    assert\isTrue(cmd.indexOf("--reports-skills") == null, "the reply check judges no tool call");
-}
-
 test "postToolUse matcher covers shell, search and MCP tools for advise" {
     final matcher = cursor_posttool_matcher();
     assert\isTrue(matcher.indexOf("MCP:.*") != null, "MCP:<tool>, how Cursor names an MCP call after it ran");
@@ -419,11 +386,11 @@ test "harness_mcp prints Cursor setup guidance only" {
     assert\isTrue("{mcp["hint"]}".indexOf("does not write") != null, "no Magus mcp.json write");
 }
 
-test "the printed config says the guard sets MAGUS_LOG_SILENT on each command" {
+test "the printed config says the guard leaves each command as Cursor sent it" {
     final hint = "{cursor_mcp()["hint"]}";
     assert\isTrue(hint.indexOf(cursor_env_hint()) != null, "describe prints it");
     assert\isTrue(cursor_env_hint().indexOf("MAGUS_LOG_SILENT=true") != null, "names the variable and its value");
-    assert\isTrue(cursor_env_hint().indexOf("preToolUse") != null, "says which reply sets it");
+    assert\isTrue(cursor_env_hint().indexOf("export") == null, "rewrites no command");
     assert\isTrue(cursor_config_defaults()["env"] == null, "hooks.json gains no env key");
 }
 
