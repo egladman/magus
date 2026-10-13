@@ -282,7 +282,7 @@ func probeOneCommand(ctx context.Context, root, command string) (HarnessStatus, 
 	cmd := exec.CommandContext(probeCtx, "sh", "-c", command)
 	cmd.Dir = root
 	cmd.Stdin = strings.NewReader(event)
-	env := append(os.Environ(),
+	env := append(withoutLeaseClaim(os.Environ()),
 		// What the host exports to every hook: the root the session started in. Its wired
 		// commands find the checkout's own build through it, so a probe without it grades
 		// a different interpreter than the one a session runs.
@@ -338,6 +338,32 @@ func probeOneCommand(ctx context.Context, root, command string) (HarnessStatus, 
 		return HarnessUncovered, fmt.Sprintf("the wired command answered %q, not the %q a working guard would render for this event", decision, wantDecisions[0])
 	}
 	return HarnessVerified, ""
+}
+
+// withoutLeaseClaim drops the magus.lease member from BAGGAGE. A verify run from inside a
+// leased worker would otherwise judge the synthetic AGENTS.md write as that worker's, and
+// the lease's write boundary denies it where the probe expects an advisory. The other
+// members belong to other tools and stay.
+func withoutLeaseClaim(environ []string) []string {
+	const prefix = "BAGGAGE="
+	kept := make([]string, 0, len(environ))
+	for _, entry := range environ {
+		value, isBaggage := strings.CutPrefix(entry, prefix)
+		if !isBaggage {
+			kept = append(kept, entry)
+			continue
+		}
+		var members []string
+		for member := range strings.SplitSeq(value, ",") {
+			if !strings.HasPrefix(strings.TrimSpace(member), "magus.lease=") {
+				members = append(members, member)
+			}
+		}
+		if len(members) > 0 {
+			kept = append(kept, prefix+strings.Join(members, ","))
+		}
+	}
+	return kept
 }
 
 func firstLineContaining(text, substr string) (string, bool) {

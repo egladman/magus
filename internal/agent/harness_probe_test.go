@@ -139,6 +139,29 @@ func TestVerifyHarnessProbeIgnoresWhatTheWiredCommandSaysOnStderr(t *testing.T) 
 	assert.Equal(t, HarnessVerified, result.Status, result.Reason)
 }
 
+// TestVerifyHarnessProbeJudgesTheEventUnleased pins the cause of a verify run from inside a
+// leased worker reading uncovered: the probe inherited the worker's lease, whose write
+// boundary denied the synthetic event the probe expects to advise.
+func TestVerifyHarnessProbeJudgesTheEventUnleased(t *testing.T) {
+	t.Setenv("BAGGAGE", "magus.lease=job-1,other=kept")
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.WriteExecutable("magus", "#!/bin/sh\ncat >/dev/null\ncase \"$BAGGAGE\" in\n*magus.lease*) printf 'leased' ;;\nother=kept) printf 'deny' ;;\n*) printf 'baggage lost' ;;\nesac\n")
+	writeProbeableHarness(t, root, "leased", probeCommand)
+
+	result, err := VerifyHarness(untimedProbes(), root, "leased")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessVerified, result.Status, result.Reason)
+}
+
+func TestWithoutLeaseClaim(t *testing.T) {
+	got := withoutLeaseClaim([]string{"PATH=/bin", "BAGGAGE=a=1, magus.lease=job-1,magus.spawner=me", "HOME=/h"})
+	assert.Equal(t, []string{"PATH=/bin", "BAGGAGE=a=1,magus.spawner=me", "HOME=/h"}, got)
+
+	got = withoutLeaseClaim([]string{"BAGGAGE=magus.lease=job-1", "HOME=/h"})
+	assert.Equal(t, []string{"HOME=/h"}, got, "a list holding only the lease leaves no empty variable")
+}
+
 // TestVerifyHarnessProbeAnswersWithAWrongDecisionIsUncovered covers a command that
 // runs, and answers, but not with a decision a working guard would ever render for
 // this event: the case a raw "it produced non-empty output" check would have
