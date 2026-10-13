@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/interp"
@@ -666,37 +667,102 @@ func LoadApprovedWriteRule(ctx context.Context, root string) (workspace.WriteRul
 }
 
 // LoadApprovedBuiltins is LoadApprovedSpawnRule for the magus\guard.builtins settings: the
-// approved sources' declaration, resolved over the compiled defaults. With no approval
-// authority it is the defaults, since the working tree that would otherwise decide is the
-// one that did not load.
+// approved sources' declaration over their magus\guard.profile level, raised by the
+// person's agents.profile, resolved over the compiled defaults. With no approval authority
+// it is the defaults at that level, since the working tree that would otherwise decide is
+// the one that did not load. A magus.yaml that does not load is an error.
 func LoadApprovedBuiltins(ctx context.Context, root string) (map[string]builtin.Setting, error) {
 	reg, err := loadApprovedRegistry(ctx, root)
 	if err != nil {
 		return nil, err
 	}
-	var declared map[string]builtin.Setting
-	if reg != nil {
-		declared = reg.Builtins()
+	agents, err := config.LoadAgents(root)
+	if err != nil {
+		return nil, err
 	}
-	return builtin.Resolve(declared)
+	var declared map[string]builtin.Setting
+	var profile types.GuardProfile
+	if reg != nil {
+		declared, profile = reg.Builtins(), reg.Profile()
+	}
+	expanded, err := builtin.ResolveProfile(types.StricterProfile(profile.Level(), agents.Profile), declared)
+	if err != nil {
+		return nil, err
+	}
+	return builtin.Resolve(expanded)
+}
+
+// LoadApprovedProfile is LoadApprovedSpawnRule for the magus\guard.profile level: the
+// approved sources' level, light when they declare none or there is no approval authority.
+// It does not read agents.profile; GuardProfile does.
+func LoadApprovedProfile(ctx context.Context, root string) (types.GuardProfile, error) {
+	reg, err := loadApprovedRegistry(ctx, root)
+	if err != nil {
+		return "", err
+	}
+	if reg == nil {
+		return types.GuardProfileLight, nil
+	}
+	return reg.Profile().Level(), nil
+}
+
+// GuardProfile is the level a hook's compiled-rule settings start from: the stricter of
+// the approved and the working-tree magus\guard.profile, raised by the person's
+// agents.profile. rules is the working tree's load, nil when it did not load, in which case
+// root's approved sources decide alone. A side that does not load counts as light, and a
+// magus.yaml that does not load raises nothing.
+//
+// It loads what GuardBuiltins loads, so it suits a report of the level, not a per-rule
+// lookup: the level's settings are already in GuardBuiltins.
+func GuardProfile(ctx context.Context, rules *GuardRules, root string) types.GuardProfile {
+	var levels []types.GuardProfile
+	if rules != nil {
+		root = rules.root
+		levels = append(levels, rules.registry.Profile().Level())
+		reg, err := approvedRegistryIfChanged(ctx, rules.root, ".", rules.opts, secret.New(), rules.sources, true)
+		switch {
+		case err != nil:
+			levels = append(levels, types.GuardProfileLight)
+		case reg != nil:
+			levels = append(levels, reg.Profile().Level())
+		}
+	} else {
+		approved, err := LoadApprovedProfile(ctx, root)
+		if err != nil {
+			approved = types.GuardProfileLight
+		}
+		levels = append(levels, approved)
+	}
+	if agents, err := config.LoadAgents(root); err == nil {
+		levels = append(levels, agents.Profile)
+	}
+	return types.StricterProfile(levels...)
 }
 
 // GuardBuiltins is the compiled rules' effective settings for a hook, nil for the
 // defaults. rules is the working tree's load, nil when it did not load, in which case
 // root's approved sources decide alone, as they do for the function rules.
 //
-// A side that does not resolve leaves the defaults in its place rather than failing: a
-// broken commit must not take down every hook any more than a broken working tree does.
+// A side that does not resolve leaves the defaults at the light level in its place rather
+// than failing: a broken commit must not take down every hook any more than a broken
+// working tree does.
 func GuardBuiltins(ctx context.Context, rules *GuardRules, root string) map[string]builtin.Setting {
+	var effective map[string]builtin.Setting
 	if rules != nil {
-		effective, _ := rules.EffectiveBuiltins(ctx)
+		effective, _ = rules.EffectiveBuiltins(ctx)
+	} else if approved, err := LoadApprovedBuiltins(ctx, root); err == nil {
+		effective = approved
+	}
+	if effective != nil {
 		return effective
 	}
-	approved, err := LoadApprovedBuiltins(ctx, root)
-	if err != nil {
+	// The guard reads nil as the bare defaults, which would drop what the light level sets.
+	light, _ := builtin.ResolveProfile(types.GuardProfileLight, nil)
+	if len(light) == 0 {
 		return nil
 	}
-	return approved
+	effective, _ = builtin.Resolve(light)
+	return effective
 }
 
 // DeclaredBuiltinSettings is each rule the root magusfile sets through
@@ -1063,23 +1129,43 @@ func (g *GuardRules) ApprovedBuiltins(ctx context.Context) (map[string]builtin.S
 }
 
 // EffectiveBuiltins returns every compiled rule's setting as the guard applies it: per
-// rule, the stricter of the approved and the working-tree declaration, each resolved over
-// the compiled defaults, so a loosening waits for approval and a tightening applies at
-// once. Nil when neither side declares anything, which the guard reads as the defaults.
+// rule, the stricter of the approved and the working-tree declaration, each expanded from
+// its own magus\guard.profile level raised by the person's agents.profile and resolved
+// over the compiled defaults, so a loosening waits for approval and a tightening applies
+// at once. Nil when neither side sets any rule, which the guard reads as the defaults.
 //
-// When the approved declaration cannot be resolved the defaults stand in for it, beside
-// the error: a working tree can still tighten, and cannot loosen past what magus ships.
+// When the approved declaration cannot be resolved the defaults at the light level stand
+// in for it, beside the error: a working tree can still tighten, and cannot loosen past
+// what magus ships. A magus.yaml that does not load raises nothing, also beside the error.
 func (g *GuardRules) EffectiveBuiltins(ctx context.Context) (map[string]builtin.Setting, error) {
-	approved, approvedErr := g.ApprovedBuiltins(ctx)
-	working := g.Builtins()
+	approved, approvedProfile := g.Builtins(), g.registry.Profile()
+	// One approved load for the declaration and the level both: each costs a VCS status,
+	// and a second load of the root magusfile when the working tree differs.
+	reg, approvedErr := approvedRegistryIfChanged(ctx, g.root, ".", g.opts, secret.New(), g.sources, true)
+	switch {
+	case approvedErr != nil:
+		approved, approvedProfile = nil, ""
+	case reg != nil:
+		approved, approvedProfile = reg.Builtins(), reg.Profile()
+	}
+	agents, agentsErr := config.LoadAgents(g.root)
+	approved, err := builtin.ResolveProfile(types.StricterProfile(approvedProfile.Level(), agents.Profile), approved)
+	if err != nil {
+		return nil, err
+	}
+	working, err := builtin.ResolveProfile(types.StricterProfile(g.registry.Profile().Level(), agents.Profile), g.Builtins())
+	if err != nil {
+		return nil, err
+	}
+	sideErr := errors.Join(approvedErr, agentsErr)
 	if len(approved) == 0 && len(working) == 0 {
-		return nil, approvedErr
+		return nil, sideErr
 	}
 	effective, err := stricterBuiltins(approved, working)
 	if err != nil {
 		return nil, err
 	}
-	return effective, approvedErr
+	return effective, sideErr
 }
 
 // stricterBuiltins resolves both declarations and keeps the stricter setting of each rule.

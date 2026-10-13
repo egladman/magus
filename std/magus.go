@@ -514,13 +514,26 @@ var Magus = Module{
 				{
 					Name: "builtins",
 					Doc: "Set compiled guard rules by name: each value is \"off\", \"advise\" or \"deny\", or " +
-						"{\"decision\": ..., \"lines\": int} where the rule takes lines (read-navigation alone). " +
-						"A rule left out keeps the decision `magus describe rules` lists. Declared at the top " +
+						"{\"decision\": ..., \"lines\": int, \"tokens\": int, \"calls\": int, \"chars\": int} " +
+						"with only the parameters the rule takes (lines: read-navigation). A rule left out " +
+						"keeps what the profile level sets, else the decision `magus describe rules` lists. Declared at the top " +
 						"level of the root magusfile, once. When the magusfile is tracked, each rule takes the " +
 						"stricter of the committed and the working-tree setting, so a loosening applies only " +
-						"once committed. An unknown rule name, an unknown decision, lines on a rule that takes " +
-						"none, declaring twice or from another project is MGS1045.",
+						"once committed. An unknown rule name, an unknown decision, a parameter on a rule that " +
+						"takes none or out of its range, declaring twice or from another project is MGS1045.",
 					Args:   []Arg{{Name: "rules", Type: TypeAnyMap}},
+					Extern: true,
+				},
+				{
+					Name: "profile",
+					Doc: "Pick the level the guard's compiled rules start from: \"off\", \"light\", \"standard\" " +
+						"or \"strict\". A level sets the rules it names, and a rule named in builtins " +
+						"overrides the level's setting for it. Unset is light. Declared at the top level " +
+						"of the root magusfile, once. When the magusfile is tracked, the stricter of the " +
+						"committed and the working-tree level applies, and a person's agents.profile in " +
+						"magus.yaml may raise it, never lower it. An unknown level, declaring twice or " +
+						"from another project is MGS1045.",
+					Args:   []Arg{{Name: "level", Type: TypeString}},
 					Extern: true,
 				},
 				{

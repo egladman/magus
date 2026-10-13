@@ -173,3 +173,116 @@ func TestStricter(t *testing.T) {
 		}
 	}
 }
+
+// testRule gives one compiled rule every parameter for the length of a test, since no
+// shipped rule takes tokens, calls or chars yet.
+func testRule(t *testing.T) string {
+	t.Helper()
+	const name = "test-cost-rule"
+	defaults[name] = Advise
+	params[name] = []string{"tokens", "calls", "chars"}
+	t.Cleanup(func() {
+		delete(defaults, name)
+		delete(params, name)
+	})
+	return name
+}
+
+func TestResolveChecksEachParameter(t *testing.T) {
+	rule := testRule(t)
+	for _, tc := range []struct {
+		name string
+		rule string
+		s    Setting
+		want string
+	}{
+		{"tokens on a rule without it", "stage-all", Setting{Decision: Advise, Tokens: 1000},
+			`built-in rule "stage-all" takes no tokens parameter; only test-cost-rule does`},
+		{"tokens below 1", rule, Setting{Decision: Advise, Tokens: -1},
+			`built-in rule "test-cost-rule": tokens is -1; give 1 or more, or leave it out`},
+		{"tokens past every window", rule, Setting{Decision: Advise, Tokens: 1_000_001},
+			`built-in rule "test-cost-rule": tokens is 1000001, past the largest context window any known model has (1000000); give 1000000 or less, or leave it out`},
+		{"calls below 2", rule, Setting{Decision: Deny, Calls: 1},
+			`built-in rule "test-cost-rule": calls is 1; give 2 or more, or leave it out`},
+		{"chars below 1000", rule, Setting{Decision: Advise, Chars: 999},
+			`built-in rule "test-cost-rule": chars is 999; give 1000 or more, or leave it out`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Resolve(map[string]Setting{tc.rule: tc.s})
+			var de *types.DiagnosticError
+			require.ErrorAs(t, err, &de)
+			assert.Equal(t, types.GuardRuleMisdeclared, de.Code)
+			assert.Equal(t, tc.want, de.Msg)
+		})
+	}
+
+	ok := Setting{Decision: Deny, Tokens: 1_000_000, Calls: 2, Chars: 1000}
+	got, err := Resolve(map[string]Setting{rule: ok})
+	require.NoError(t, err)
+	assert.Equal(t, ok, got[rule])
+}
+
+func TestResolveNamesNoTakerForAnUnusedParameter(t *testing.T) {
+	_, err := Resolve(map[string]Setting{"stage-all": {Decision: Deny, Calls: 3}})
+	var de *types.DiagnosticError
+	require.ErrorAs(t, err, &de)
+	assert.Equal(t, `built-in rule "stage-all" takes no calls parameter; no rule does`, de.Msg)
+}
+
+// At one decision each threshold takes the lower of the two, and an unset one yields:
+// unset defers to the rule's own figure, which neither side stated.
+func TestStricterMergesThresholds(t *testing.T) {
+	a := Setting{Decision: Advise, Tokens: 200_000, Calls: 8}
+	b := Setting{Decision: Advise, Tokens: 150_000, Chars: 20_000}
+	want := Setting{Decision: Advise, Tokens: 150_000, Calls: 8, Chars: 20_000}
+	assert.Equal(t, want, Stricter(a, b))
+	assert.Equal(t, want, Stricter(b, a))
+
+	deny := Setting{Decision: Deny, Tokens: 900_000}
+	assert.Equal(t, deny, Stricter(a, deny), "a stricter decision wins whole")
+}
+
+// Every level is defined, and each row resolves as a declaration would, so none sets a
+// fixed rule or a parameter its rule does not take.
+func TestProfilesAreDefinedAndResolve(t *testing.T) {
+	for _, level := range types.GuardProfile("").Values() {
+		row, ok := profiles[types.GuardProfile(level)]
+		require.True(t, ok, level)
+		_, err := Resolve(row)
+		require.NoError(t, err, level)
+	}
+	assert.Len(t, profiles, len(types.GuardProfile("").Values()))
+}
+
+// A profile sets the rules it names; a rule the workspace declares overrides its
+// profile's setting, and every other rule keeps its default.
+func TestResolveProfileExpandsThenDeclared(t *testing.T) {
+	rule := testRule(t)
+	saved := profiles[types.GuardProfileStrict]
+	profiles[types.GuardProfileStrict] = map[string]Setting{
+		rule:        {Decision: Deny, Calls: 8},
+		"stage-all": {Decision: Deny},
+	}
+	t.Cleanup(func() { profiles[types.GuardProfileStrict] = saved })
+
+	declared := map[string]Setting{"stage-all": {Decision: Off}}
+	expanded, err := ResolveProfile(types.GuardProfileStrict, declared)
+	require.NoError(t, err)
+	got, err := Resolve(expanded)
+	require.NoError(t, err)
+	assert.Equal(t, Setting{Decision: Deny, Calls: 8}, got[rule])
+	assert.Equal(t, Setting{Decision: Off}, got["stage-all"], "the declaration overrides the profile")
+	assert.Equal(t, Setting{Decision: Advise}, got["raw-tool"], "a rule neither names keeps its default")
+	assert.Len(t, declared, 1, "ResolveProfile leaves declared alone")
+	assert.Len(t, profiles[types.GuardProfileStrict], 2, "ResolveProfile leaves the row alone")
+
+	light, err := ResolveProfile("", nil)
+	require.NoError(t, err)
+	assert.Equal(t, profiles[types.GuardProfileLight], light, "unset is light")
+
+	_, err = ResolveProfile("max", nil)
+	var de *types.DiagnosticError
+	require.ErrorAs(t, err, &de)
+	assert.Equal(t, types.GuardRuleMisdeclared, de.Code)
+	assert.Equal(t, `unknown guard profile "max"; give one of off, light, standard, strict`, de.Msg)
+}

@@ -50,6 +50,9 @@ type WorkspaceRegistry struct {
 	// builtins are the compiled guard rules a magusfile set via magus\guard.builtins, by
 	// name, already validated by builtin.Resolve; nil when it declared none.
 	builtins map[string]builtin.Setting
+	// profile is the level a magusfile set via magus\guard.profile, already validated;
+	// empty when it declared none.
+	profile types.GuardProfile
 	// kept releases what the function rules run on: the Buzz session that
 	// registered each one stays loaded until Close.
 	kept []func()
@@ -248,6 +251,22 @@ func (r *WorkspaceRegistry) Builtins() map[string]builtin.Setting {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return maps.Clone(r.builtins)
+}
+
+// SetProfile records the level magus\guard.profile declared, which the caller has
+// validated, on the terms of SetSpawnRule.
+func (r *WorkspaceRegistry) SetProfile(p types.GuardProfile) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.profile = p
+}
+
+// Profile returns the level magus\guard.profile declared, empty when it declared none;
+// the guard reads empty as light.
+func (r *WorkspaceRegistry) Profile() types.GuardProfile {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.profile
 }
 
 // Keep takes the release of what a function rule runs on, for Close to call:

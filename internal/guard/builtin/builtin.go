@@ -1,8 +1,8 @@
 // Package builtin holds the decision each compiled guard rule takes when the workspace
 // declares nothing for it, and resolves what a workspace does declare against that set.
 //
-// It is a leaf (stdlib and types only) so the guard, the Buzz binding and the CLI can all
-// read one table without importing the guard engine.
+// It imports only leaves (stdlib, types and the model table) so the guard, the Buzz binding
+// and the CLI can all read one table without importing the guard engine.
 package builtin
 
 import (
@@ -12,6 +12,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/types"
 )
 
@@ -25,14 +26,38 @@ const (
 	Deny   Decision = "deny"
 )
 
-// Setting is one rule's resolved configuration. Lines is read-navigation's size of a whole
-// read worth flagging; 0 means unset, and the binary ships no number for it.
+// Setting is one rule's resolved configuration. Each parameter is a threshold the rule
+// fires at, taken only by the rules params lists for it; 0 means unset, and the binary
+// ships no number for it.
 type Setting struct {
 	Decision Decision
-	Lines    int
+	// Lines is the size of a whole read worth flagging.
+	Lines int
+	// Tokens is a context size in tokens.
+	Tokens int
+	// Calls is a count of calls in a row.
+	Calls int
+	// Chars is the size of one tool result in characters.
+	Chars int
 }
 
 const readNavigation = "read-navigation"
+
+// params maps each rule that takes a parameter to the parameters it takes, by the names
+// magus\guard.builtins spells them.
+var params = map[string][]string{
+	readNavigation: {"lines"},
+}
+
+// profiles maps each level to the settings it gives the rules it names. A level leaves
+// every other rule at its default, and a rule magus\guard.builtins names overrides the
+// level's setting for it.
+var profiles = map[types.GuardProfile]map[string]Setting{
+	types.GuardProfileOff:      {},
+	types.GuardProfileLight:    {},
+	types.GuardProfileStandard: {},
+	types.GuardProfileStrict:   {},
+}
 
 // defaults must name exactly the rules internal/guard catalogs. A rule that refuses
 // something the caller can recover from by running a different command advises, so
@@ -163,8 +188,9 @@ func Defaults() map[string]Decision {
 // Resolve returns a setting for every compiled rule: the declared one where the workspace
 // declared it, the default otherwise. Every misdeclaration is reported at once, each as an
 // MGS1045 error: a name no rule has (naming the nearest one), a rule that is fixed, a
-// decision other than off, advise or deny, Lines on a rule that takes no such parameter,
-// or Lines below 1.
+// decision other than off, advise or deny, a parameter on a rule that takes no such
+// parameter, or a parameter out of its range (see validate). declared takes no profile;
+// expand one with ResolveProfile first.
 func Resolve(declared map[string]Setting) (map[string]Setting, error) {
 	out := make(map[string]Setting, len(defaults))
 	for name, d := range defaults {
@@ -203,20 +229,59 @@ func validate(name string, s Setting) error {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 			"built-in rule %q: decision %q is not off, advise or deny", name, s.Decision)
 	}
-	if s.Lines != 0 && name != readNavigation {
-		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-			"built-in rule %q takes no lines parameter; only %s does", name, readNavigation)
-	}
-	if s.Lines < 0 {
-		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-			"built-in rule %q: lines is %d; give 1 or more, or leave it out", name, s.Lines)
+	window := model.Shipped().LargestWindow()
+	for _, p := range []struct {
+		param string
+		value int
+		min   int
+		max   int
+	}{
+		{"lines", s.Lines, 1, 0},
+		{"tokens", s.Tokens, 1, int(window)},
+		{"calls", s.Calls, 2, 0},
+		{"chars", s.Chars, 1000, 0},
+	} {
+		if p.value == 0 {
+			continue
+		}
+		if !slices.Contains(params[name], p.param) {
+			var takers []string
+			for rule, ps := range params {
+				if slices.Contains(ps, p.param) {
+					takers = append(takers, rule)
+				}
+			}
+			slices.Sort(takers)
+			switch len(takers) {
+			case 0:
+				return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+					"built-in rule %q takes no %s parameter; no rule does", name, p.param)
+			case 1:
+				return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+					"built-in rule %q takes no %s parameter; only %s does", name, p.param, takers[0])
+			default:
+				return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+					"built-in rule %q takes no %s parameter; only %s do", name, p.param, strings.Join(takers, ", "))
+			}
+		}
+		if p.value < p.min {
+			return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+				"built-in rule %q: %s is %d; give %d or more, or leave it out", name, p.param, p.value, p.min)
+		}
+		if p.max > 0 && p.value > p.max {
+			return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+				"built-in rule %q: %s is %d, past the largest context window any known model has (%d); give %d or less, or leave it out",
+				name, p.param, p.value, p.max, p.max)
+		}
 	}
 	return nil
 }
 
 // Stricter returns whichever of a and b refuses more, ranking off < advise < deny. At the
-// same decision the smaller Lines wins, and an unset Lines beats any set one: unset
-// judges every whole read rather than only the long ones.
+// same decision each parameter takes the lower threshold of the two, since a lower one
+// fires sooner. An unset Lines beats any set one, since unset judges every whole read
+// rather than only the long ones; any other unset parameter yields to a set one, since
+// unset defers to the rule's own figure.
 func Stricter(a, b Setting) Setting {
 	ra, rb := rank(a.Decision), rank(b.Decision)
 	switch {
@@ -224,11 +289,38 @@ func Stricter(a, b Setting) Setting {
 		return a
 	case rb > ra:
 		return b
-	case a.Lines != 0 && (b.Lines == 0 || b.Lines < a.Lines):
-		return b
-	default:
-		return a
 	}
+	lower := func(x, y int) int {
+		if x == 0 || (y != 0 && y < x) {
+			return y
+		}
+		return x
+	}
+	out := a
+	if a.Lines != 0 && (b.Lines == 0 || b.Lines < a.Lines) {
+		out.Lines = b.Lines
+	}
+	out.Tokens = lower(a.Tokens, b.Tokens)
+	out.Calls = lower(a.Calls, b.Calls)
+	out.Chars = lower(a.Chars, b.Chars)
+	return out
+}
+
+// ResolveProfile expands profile p into the declaration Resolve takes: the settings p
+// gives its rules, with declared applied over them rule by rule. Unset p is light. An
+// unknown p is an MGS1045 error. Neither map is modified.
+func ResolveProfile(p types.GuardProfile, declared map[string]Setting) (map[string]Setting, error) {
+	row, ok := profiles[p.Level()]
+	if !ok {
+		return nil, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+			"unknown guard profile %q; give one of %s", string(p), strings.Join(p.Values(), ", "))
+	}
+	out := maps.Clone(row)
+	if out == nil {
+		out = map[string]Setting{}
+	}
+	maps.Copy(out, declared)
+	return out, nil
 }
 
 // rank orders decisions by how much they refuse; an unknown one ranks below off.
