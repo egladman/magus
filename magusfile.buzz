@@ -198,6 +198,9 @@ magus\project({
         "git-hooks-remove": {"skip_cache": "reconciles the git hooks directory, which is outside the tree and no input carries"},
         "termcast-record": {"skip_cache": "records a real session, so its bytes differ every run and a replay would show different code"},
         "termcast-showcase": {"skip_cache": "drives a live interactive session, so its bytes differ every run"},
+        // Four of a 10-core machine's 10 slots: the seat runs go test -p 4 with GOMAXPROCS=4,
+        // so two suites and the other workers' builds share the machine the broker counts.
+        "go-test": {"slots": 4},
     },
 });
 

@@ -388,6 +388,9 @@ func childEnv(ctx context.Context, policy *sandbox.Policy, overrides []string) (
 		confined, _ := policy.KernelConfines()
 		env = append(env, js.environ(env, jobserverFD(confined))...)
 	}
+	if slots := seatedSlots(ctx); slots > 0 {
+		env = append(env, goEnviron(env, slots)...)
+	}
 	env = append(env, overrides...)
 	if policy != nil {
 		// Last, after the caller's overrides, so a target cannot hand a child a weaker value.

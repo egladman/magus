@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -156,7 +157,8 @@ func jobserverFrom(ctx context.Context) *Jobserver {
 }
 
 // SeatJobserver returns ctx carrying a pool sized to slots, and the function that closes
-// it once the work holding those slots is done.
+// it once the work holding those slots is done. Every process Exec starts under ctx also
+// runs the Go toolchain that many wide (see goEnviron), pool or not.
 //
 // Below two slots ctx carries no pool, and one it inherited is withdrawn. A one-slot
 // step is every step that declares nothing, and a zero-token pool would serialize every
@@ -165,8 +167,9 @@ func jobserverFrom(ctx context.Context) *Jobserver {
 // children schedule themselves as they would with no magus above them.
 func SeatJobserver(ctx context.Context, slots int) (context.Context, func(), error) {
 	if slots < 2 {
-		return WithJobserver(ctx, nil), func() {}, nil
+		return WithJobserver(context.WithValue(ctx, seatKey{}, 0), nil), func() {}, nil
 	}
+	ctx = context.WithValue(ctx, seatKey{}, slots)
 	j, err := OpenJobserver(slots)
 	if errors.Is(err, errors.ErrUnsupported) {
 		return WithJobserver(ctx, nil), func() {}, nil
@@ -175,4 +178,24 @@ func SeatJobserver(ctx context.Context, slots int) (context.Context, func(), err
 		return ctx, nil, err
 	}
 	return WithJobserver(ctx, j), func() { _ = j.Close() }, nil
+}
+
+type seatKey struct{}
+
+// seatedSlots is the slots the step running under ctx holds, 0 below two.
+func seatedSlots(ctx context.Context) int {
+	n, _ := ctx.Value(seatKey{}).(int)
+	return n
+}
+
+// goEnviron runs the Go toolchain slots wide. go reads no jobserver, so `go test ./...`
+// ran GOMAXPROCS packages at once, each binary on every core, while the broker counted
+// one step: GOMAXPROCS bounds the go command and each binary, -p the packages at once.
+// An inherited -p is replaced and every other GOFLAGS word kept.
+func goEnviron(env []string, slots int) []string {
+	words := slices.DeleteFunc(strings.Fields(lookupEnv(env, "GOFLAGS")), func(w string) bool {
+		return strings.HasPrefix(w, "-p=") || strings.HasPrefix(w, "--p=")
+	})
+	n := strconv.Itoa(slots)
+	return []string{"GOMAXPROCS=" + n, "GOFLAGS=" + strings.Join(append(words, "-p="+n), " ")}
 }

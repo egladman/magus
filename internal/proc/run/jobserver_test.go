@@ -109,6 +109,30 @@ func TestChildEnvNamesTheJobserverWhereTheLauncherPutsIt(t *testing.T) {
 	assert.Equal(t, 3, jobserverFD(false))
 }
 
+// A step seated with N slots runs the Go toolchain N wide, whether or not the platform
+// opens a pool: GOMAXPROCS=N and -p=N in GOFLAGS, an inherited -p replaced and every other
+// flag kept, and a target's own GOMAXPROCS or GOFLAGS still wins. A one-slot seat leaves
+// go its defaults and withdraws a width it inherited.
+func TestASeatRunsGoAsWideAsItsSlots(t *testing.T) {
+	t.Setenv("GOFLAGS", "-mod=mod -p=16")
+	t.Setenv("GOMAXPROCS", "")
+	four, closeFour, err := SeatJobserver(context.Background(), 4)
+	require.NoError(t, err)
+	defer closeFour()
+
+	env, _ := childEnv(four, nil, nil)
+	assert.Equal(t, []string{"4", "-mod=mod -p=4"}, []string{lookupEnv(env, "GOMAXPROCS"), lookupEnv(env, "GOFLAGS")})
+
+	env, _ = childEnv(four, nil, []string{"GOMAXPROCS=2", "GOFLAGS=-race"})
+	assert.Equal(t, []string{"2", "-race"}, []string{lookupEnv(env, "GOMAXPROCS"), lookupEnv(env, "GOFLAGS")}, "a target's own env wins")
+
+	one, closeOne, err := SeatJobserver(four, 1)
+	require.NoError(t, err)
+	defer closeOne()
+	env, _ = childEnv(one, nil, nil)
+	assert.Equal(t, []string{"", "-mod=mod -p=16"}, []string{lookupEnv(env, "GOMAXPROCS"), lookupEnv(env, "GOFLAGS")})
+}
+
 func TestSeatJobserverSizesThePoolToTheSlots(t *testing.T) {
 	outer := &Jobserver{}
 	ctx := WithJobserver(context.Background(), outer)
