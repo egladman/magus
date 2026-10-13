@@ -26,9 +26,11 @@ Stacked softeners read as unsure of a point the writer has. It advises: one tell
 
 The code is `PRF8003`. The decision depends on the kind of text judged:
 
-| Kind           | Default |
-| -------------- | ------- |
-| `review-reply` | advise  |
+| Kind             | Default |
+| ---------------- | ------- |
+| `review-summary` | advise  |
+| `review-inline`  | advise  |
+| `review-reply`   | advise  |
 
 ## Changing it
 

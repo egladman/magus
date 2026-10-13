@@ -53,14 +53,14 @@ const (
 )
 
 var (
-	// withReply is the written kinds and a review reply: the tells that apply
-	// to any text a person reads as another person's own words.
-	withReply = slices.Concat(proseKinds, []Kind{KindReviewReply})
+	// withReply is the written kinds and review text: the tells that apply to
+	// any text a person reads as another person's own words.
+	withReply = slices.Concat(proseKinds, reviewText)
 	// everywhere is every kind that holds prose, doc comments included.
-	everywhere = slices.Concat(all, changeText, help, []Kind{KindReviewReply}, agentReply)
+	everywhere = slices.Concat(all, changeText, help, reviewText, agentReply)
 	// notPullRequest is where a tell a change description refuses outright
 	// only advises: a page may state a contrast on purpose.
-	notPullRequest = slices.Concat([]Kind{KindReference, KindGuide, KindAgentInstructions, KindReviewReply}, changeText)
+	notPullRequest = slices.Concat([]Kind{KindReference, KindGuide, KindAgentInstructions}, reviewText, changeText)
 	// prosePages are the kinds written as running prose. A guide's steps and a
 	// skill's runbook are short imperatives by rule (step-verb, terse-sentence),
 	// so a run of short sentences there is the form, not a drumbeat.

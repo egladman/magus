@@ -49,9 +49,8 @@ type Case struct {
 	// ThreadLength is the count of replies the author already posted, for a
 	// review-reply case.
 	ThreadLength int
-	// Anchored marks a review-reply case posted on a line of the diff, judged
-	// as the guard judges one, with [WithAnchored].
-	Anchored bool
+	// Event is the verdict a review-summary case is posted with, "" for none.
+	Event Event
 	// Voice is what the case file's author sections measure, or nil when it
 	// has none.
 	Voice *Voice
@@ -81,14 +80,15 @@ const caseLead = "fix(cache): keep the key stable\n" +
 // the rule its cases judge, <rule>.txtar, and its comment is free text. Each
 // section header reads
 //
-//	<label>/<kind> [whole] [name=NAME] [owner=OWNER] [callable] [thread=N]
+//	<label>/<kind> [whole] [name=NAME] [owner=OWNER] [callable] [thread=N] [event=EVENT]
 //
 // where label is hit, pass, fp or fn and kind is one the rule judges. Each
 // non-blank line of a section is one case; whole makes the section one case,
 // for a text whose lines belong together. A one-line change-description case
 // is judged as a bullet under a fixed title and opening paragraph; a whole one
 // as written. name, owner and callable describe a doc-comment case's symbol,
-// and thread sets a review-reply case's thread length.
+// thread sets a review case's thread length, and event a review-summary case's
+// verdict: APPROVE, REQUEST_CHANGES or COMMENT.
 //
 // A section labeled author holds no case. Its texts, one per non-blank line or
 // the whole section, are one author's own writing of its kind: every author
@@ -242,8 +242,11 @@ func parseHeader(header string, c check) (Case, bool, error) {
 			}
 
 			out.ThreadLength = n
-		case "anchored":
-			out.Anchored = true
+		case "event":
+			out.Event = Event(value)
+			if !slices.Contains([]Event{EventApprove, EventRequestChanges, EventComment}, out.Event) {
+				return Case{}, false, fmt.Errorf("event=%q is none of APPROVE, REQUEST_CHANGES or COMMENT", value)
+			}
 		case "was":
 			// The label a case carried in a labeling round before a fix moved it, as
 			// fp:<round>:<id>; hack/lint holds a moved fp to it, and calibrate ignores it.
@@ -273,10 +276,7 @@ func ruleCheck(rule Rule) (check, bool) {
 // style, under the case's voice when it has one. The other rules run because a
 // rule leaves a span to another that reports it.
 func (c Case) Fires() bool {
-	opts := []Option{WithThreadLength(c.ThreadLength), WithVoice(c.Voice)}
-	if c.Anchored {
-		opts = append(opts, WithAnchored())
-	}
+	opts := []Option{WithThreadLength(c.ThreadLength), WithEvent(c.Event), WithVoice(c.Voice)}
 
 	if ch, ok := ruleCheck(c.Rule); ok && ch.defaultDecision(c.Kind) == DecisionOff {
 		opts = append(opts, WithDecisions(map[Rule]Decision{c.Rule: DecisionDeny}))

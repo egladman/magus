@@ -26,9 +26,11 @@ Danescu-Niculescu-Mizil et al. (ACL 2013) found a direct question opening with "
 
 The code is `PRF8011`. The decision depends on the kind of text judged:
 
-| Kind           | Default |
-| -------------- | ------- |
-| `review-reply` | advise  |
+| Kind             | Default |
+| ---------------- | ------- |
+| `review-summary` | advise  |
+| `review-inline`  | advise  |
+| `review-reply`   | advise  |
 
 ## Changing it
 

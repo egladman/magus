@@ -26,9 +26,11 @@ A long exchange in text reads as a stalemate to the people watching it, and a ca
 
 The code is `PRF8004`. The decision depends on the kind of text judged:
 
-| Kind           | Default |
-| -------------- | ------- |
-| `review-reply` | advise  |
+| Kind             | Default |
+| ---------------- | ------- |
+| `review-summary` | advise  |
+| `review-inline`  | advise  |
+| `review-reply`   | advise  |
 
 ## Changing it
 

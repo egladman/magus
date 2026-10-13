@@ -118,24 +118,32 @@ Each rule also has a dimension, the cost its findings name to the reader:
 
 ## Review replies
 
-| Rule                                          | Code    | Dimension | Default | Catches                                                                                                      |
-| --------------------------------------------- | ------- | --------- | ------- | ------------------------------------------------------------------------------------------------------------ |
-| [reply-opener](reply-opener.md)               | PRF8001 | stance    | off     | a sentence of a review reply that opens by contradicting ("No,", "As I said")                                |
-| [judgment-as-fact](judgment-as-fact.md)       | PRF8002 | stance    | off     | a recommendation in a review reply stated as a fact, with no reason given                                    |
-| [stacked-hedge](stacked-hedge.md)             | PRF8003 | stance    | advise  | two softeners in one sentence of a review reply, or an apology before its point                              |
-| [long-thread](long-thread.md)                 | PRF8004 | stance    | advise  | a review reply that is its author's fourth or later in a thread                                              |
-| [nonspecific](nonspecific.md)                 | PRF8010 | evidence  | off     | a top-level review comment that judges or asks for a change and names no code, path, line, example or reason |
-| [why-opener](why-opener.md)                   | PRF8011 | stance    | advise  | a review reply sentence that opens "Why did you" or "Why would you"                                          |
-| [bare-imperative](bare-imperative.md)         | PRF8012 | stance    | off     | a short command in a review reply that gives no reason anywhere ("Fix this.")                                |
-| [all-caps](all-caps.md)                       | PRF8013 | stance    | off     | words in capitals for emphasis in a review reply ("DO NOT", "NEVER")                                         |
-| [repeated-marks](repeated-marks.md)           | PRF8014 | stance    | advise  | a run of question or exclamation marks in a review reply ("??", "!!", "?!")                                  |
-| [bold-label](bold-label.md)                   | PRF8020 | structure | advise  | list items or paragraphs of an agent reply that open with a bold label                                       |
-| [closing-offer](closing-offer.md)             | PRF8021 | stance    | advise  | an agent reply whose last paragraph offers more work or asks leave to go on                                  |
-| [request-recap](request-recap.md)             | PRF8022 | economy   | advise  | an agent reply that opens by restating what the person asked                                                 |
-| [option-list](option-list.md)                 | PRF8023 | structure | off     | an agent reply that lays out labeled options or alternatives                                                 |
-| [unbacked-done](unbacked-done.md)             | PRF8024 | evidence  | advise  | a claim of done, fixed, verified or passing with no command, output ref, file or link beside it              |
-| [short-reply-heading](short-reply-heading.md) | PRF8025 | structure | advise  | a heading in an agent reply under 300 words                                                                  |
-| [agreement-opener](agreement-opener.md)       | PRF8026 | stance    | advise  | an agent reply that opens with praise or agreement ("Great question", "You're right")                        |
+| Rule                                              | Code    | Dimension | Default | Catches                                                                                                      |
+| ------------------------------------------------- | ------- | --------- | ------- | ------------------------------------------------------------------------------------------------------------ |
+| [reply-opener](reply-opener.md)                   | PRF8001 | stance    | off     | a sentence of a review reply that opens by contradicting ("No,", "As I said")                                |
+| [judgment-as-fact](judgment-as-fact.md)           | PRF8002 | stance    | off     | a recommendation in a review reply stated as a fact, with no reason given                                    |
+| [stacked-hedge](stacked-hedge.md)                 | PRF8003 | stance    | advise  | two softeners in one sentence of a review reply, or an apology before its point                              |
+| [long-thread](long-thread.md)                     | PRF8004 | stance    | advise  | a review reply that is its author's fourth or later in a thread                                              |
+| [nonspecific](nonspecific.md)                     | PRF8010 | evidence  | off     | a top-level review comment that judges or asks for a change and names no code, path, line, example or reason |
+| [why-opener](why-opener.md)                       | PRF8011 | stance    | advise  | a review reply sentence that opens "Why did you" or "Why would you"                                          |
+| [bare-imperative](bare-imperative.md)             | PRF8012 | stance    | off     | a short command in a review reply that gives no reason anywhere ("Fix this.")                                |
+| [all-caps](all-caps.md)                           | PRF8013 | stance    | off     | words in capitals for emphasis in a review reply ("DO NOT", "NEVER")                                         |
+| [repeated-marks](repeated-marks.md)               | PRF8014 | stance    | advise  | a run of question or exclamation marks in a review reply ("??", "!!", "?!")                                  |
+| [bold-label](bold-label.md)                       | PRF8020 | structure | advise  | list items or paragraphs of an agent reply that open with a bold label                                       |
+| [closing-offer](closing-offer.md)                 | PRF8021 | stance    | advise  | an agent reply whose last paragraph offers more work or asks leave to go on                                  |
+| [request-recap](request-recap.md)                 | PRF8022 | economy   | advise  | an agent reply that opens by restating what the person asked                                                 |
+| [option-list](option-list.md)                     | PRF8023 | structure | off     | an agent reply that lays out labeled options or alternatives                                                 |
+| [unbacked-done](unbacked-done.md)                 | PRF8024 | evidence  | advise  | a claim of done, fixed, verified or passing with no command, output ref, file or link beside it              |
+| [short-reply-heading](short-reply-heading.md)     | PRF8025 | structure | advise  | a heading in an agent reply under 300 words                                                                  |
+| [agreement-opener](agreement-opener.md)           | PRF8026 | stance    | advise  | an agent reply that opens with praise or agreement ("Great question", "You're right")                        |
+| [no-reason](no-reason.md)                         | PRF8030 | evidence  | advise  | an inline review comment that asks for a change and gives no reason                                          |
+| [nit-label](nit-label.md)                         | PRF8031 | stance    | advise  | an inline review comment labeled nit on a blocking demand, or blocking on an optional one                    |
+| [empty-request-changes](empty-request-changes.md) | PRF8032 | evidence  | advise  | a review requesting changes whose body names nothing blocking and points at no inline comment                |
+| [approve-blocker](approve-blocker.md)             | PRF8033 | stance    | advise  | an approving review whose body names a blocker ("must fix", "blocking", "before merge")                      |
+| [bare-lgtm](bare-lgtm.md)                         | PRF8034 | evidence  | advise  | a review summary that only approves: "LGTM", "ship it", "looks good"                                         |
+| [deferral-no-link](deferral-no-link.md)           | PRF8035 | evidence  | advise  | a review reply deferring to later, a follow-up or a TODO, with no issue link or number                       |
+| [decline-no-reason](decline-no-reason.md)         | PRF8036 | stance    | advise  | a short review reply declining the change ("won't fix", "No, ...") with no reason                            |
+| [impatience](impatience.md)                       | PRF8037 | stance    | advise  | a review reply that reads as impatient: "as I said", "for the last time", "obviously"                        |
 
 ## Messages a program prints
 

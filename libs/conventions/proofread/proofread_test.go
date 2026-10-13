@@ -92,7 +92,7 @@ func TestRulesListsEveryRuleInReportOrder(t *testing.T) {
 		RuleRestates, RuleCommentBudget, RuleBlockBudget, RuleBannedWord,
 	}, ruleNames(toneChecks), ruleNames(slopChecks), ruleNames(messageChecks), ruleNames(commitChecks),
 		ruleNames(helpChecks), ruleNames(issueChecks), ruleNames(densityChecks), ruleNames(reviewChecks),
-		ruleNames(suppressChecks), ruleNames(agentReplyChecks), ruleNames(toolChecks), []Rule{RuleVoiceDrift},
+		ruleNames(reviewKindChecks), ruleNames(suppressChecks), ruleNames(agentReplyChecks), ruleNames(toolChecks), []Rule{RuleVoiceDrift},
 		[]Rule{RuleTemplate})
 
 	if got := Rules(); !reflect.DeepEqual(got, want) {

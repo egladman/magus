@@ -38,6 +38,8 @@ The code is `PRF5001`. The decision depends on the kind of text judged:
 | `release-notes`      | off     |
 | `changelog`          | off     |
 | `cli-help`           | off     |
+| `review-summary`     | off     |
+| `review-inline`      | off     |
 | `review-reply`       | off     |
 | `agent-reply`        | off     |
 | `stylesheet`         | off     |

@@ -49,7 +49,6 @@ const (
 
 var (
 	pullRequestOnly = []Kind{KindChangeDescription}
-	replyOnly       = []Kind{KindReviewReply}
 	// agentTone is toneKinds and an agent's reply. verdict and absolute stay off
 	// the reply: over 400 sampled replies they fired on 40 and 73, nearly all a
 	// status ("nothing pushed", "the test was wrong") rather than a posture.
@@ -68,10 +67,10 @@ var toneChecks = []check{
 	{rule: RuleIntent, on: agentTone, advise: agentTone, judge: ownWords(intent)},
 	{rule: RuleCredit, on: pullRequestOnly, advise: pullRequestOnly, judge: creditEarlier},
 	{rule: RuleClaim, on: agentTone, advise: agentTone, judge: claim},
-	{rule: RuleReplyOpener, on: replyOnly, judge: replyOpening},
-	{rule: RuleJudgmentAsFact, on: replyOnly, advise: replyOnly, judge: judgmentAsFact},
-	{rule: RuleStackedHedge, on: replyOnly, advise: replyOnly, judge: stackedHedge},
-	{rule: RuleLongThread, on: replyOnly, advise: replyOnly, judge: longThread},
+	{rule: RuleReplyOpener, on: reviewText, judge: replyOpening},
+	{rule: RuleJudgmentAsFact, on: reviewText, advise: reviewText, judge: judgmentAsFact},
+	{rule: RuleStackedHedge, on: reviewText, advise: reviewText, judge: stackedHedge},
+	{rule: RuleLongThread, on: reviewText, advise: reviewText, judge: longThread},
 }
 
 // matchFindings reports each span pattern finds in the prose of in, less those exempt

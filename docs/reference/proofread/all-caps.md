@@ -26,9 +26,11 @@ Capitals read as shouting. An acronym is left alone: the rule reports a run of c
 
 The code is `PRF8013`. The decision depends on the kind of text judged:
 
-| Kind           | Default |
-| -------------- | ------- |
-| `review-reply` | off     |
+| Kind             | Default |
+| ---------------- | ------- |
+| `review-summary` | off     |
+| `review-inline`  | off     |
+| `review-reply`   | off     |
 
 ## Changing it
 

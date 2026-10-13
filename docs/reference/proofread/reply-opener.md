@@ -26,9 +26,11 @@ A contradiction first reads as winning an argument whatever follows it. Measured
 
 The code is `PRF8001`. The decision depends on the kind of text judged:
 
-| Kind           | Default |
-| -------------- | ------- |
-| `review-reply` | off     |
+| Kind             | Default |
+| ---------------- | ------- |
+| `review-summary` | off     |
+| `review-inline`  | off     |
+| `review-reply`   | off     |
 
 ## Changing it
 

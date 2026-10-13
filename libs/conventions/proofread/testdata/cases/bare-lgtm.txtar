@@ -1,0 +1,15 @@
+Cases written with the rule (2026-10-13), not drawn from a labeling round.
+A review summary that only approves.
+-- hit/review-summary event=APPROVE --
+LGTM
+lgtm!
+Looks good to me.
+Ship it
+LGTM, thanks!
+-- hit/review-summary --
+LGTM
+-- pass/review-summary event=APPROVE --
+LGTM: ran the migration against a copy of the data.
+Looks good; the retry is covered by TestRetry.
+-- pass/review-summary event=REQUEST_CHANGES --
+LGTM

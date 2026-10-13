@@ -389,7 +389,6 @@ type sampleText struct {
 	record       int
 	kind         proofread.Kind
 	text         string
-	anchored     bool
 	threadLength int
 }
 
@@ -588,7 +587,11 @@ func (c *sampleConfig) readSource(s *sourceSpec) ([]*sampleText, error) {
 			t.kind = proofread.Kind(v)
 		}
 
-		t.anchored, _ = rec["anchored"].(bool)
+		// compat(until: no round source record carries "anchored"): records sampled before
+		// review-inline was a kind mark an inline comment this way.
+		if anchored, _ := rec["anchored"].(bool); anchored && t.kind == proofread.KindReviewReply {
+			t.kind = proofread.KindReviewInline
+		}
 
 		if n, ok := rec["thread_length"].(float64); ok {
 			t.threadLength = int(n)
@@ -646,10 +649,6 @@ func (c *sampleConfig) judge(t *sampleText) []proofread.Finding {
 	opts := []proofread.Option{
 		proofread.WithOnly(c.rules...), proofread.WithDecisions(c.decisions), proofread.WithThreadLength(t.threadLength),
 	}
-	if t.anchored {
-		opts = append(opts, proofread.WithAnchored())
-	}
-
 	if t.kind == proofread.KindDocComment {
 		return proofread.Judge(proofread.Symbol{Doc: t.text}, opts...)
 	}

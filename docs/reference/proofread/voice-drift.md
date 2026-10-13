@@ -32,6 +32,8 @@ The code is `PRF1040`. The decision depends on the kind of text judged:
 | `review-reply`       | advise  |
 | `commit-message`     | advise  |
 | `issue`              | advise  |
+| `review-summary`     | advise  |
+| `review-inline`      | advise  |
 
 ## Changing it
 

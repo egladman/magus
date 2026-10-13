@@ -87,12 +87,26 @@ var featureLabels = map[Feature]string{
 // case: its texts build the [Voice] every case in its file is judged with.
 const labelAuthor Label = "author"
 
-// voiceKinds are the kinds a person writes in their own voice.
+// voiceKinds are the kinds a [Voice] measures.
 var voiceKinds = []Kind{KindChangeDescription, KindReviewReply, KindCommitMessage, KindIssue}
+
+// voiceJudged are the kinds held to a voice: voiceKinds and every review text.
+var voiceJudged = slices.Concat(voiceKinds, []Kind{KindReviewSummary, KindReviewInline})
+
+// voiceOf is the kind whose measures in a [Voice] k is held to. A person writes
+// a review's summary, its inline comments and its replies in one voice, which a
+// voice keeps under review-reply.
+func voiceOf(k Kind) Kind {
+	if isReview(k) {
+		return KindReviewReply
+	}
+
+	return k
+}
 
 var voicePlurals = map[Kind]string{
 	KindChangeDescription: "change descriptions",
-	KindReviewReply:       "review replies",
+	KindReviewReply:       "review comments",
 	KindCommitMessage:     "commit messages",
 	KindIssue:             "issues",
 }
@@ -284,7 +298,7 @@ func (v *Voice) relaxes(rule Rule, kind Kind) bool {
 }
 
 var voiceChecks = []check{
-	{rule: RuleVoiceDrift, on: voiceKinds, advise: voiceKinds, judge: voiceDrift},
+	{rule: RuleVoiceDrift, on: voiceJudged, advise: voiceJudged, judge: voiceDrift},
 }
 
 var voiceTexts = map[Rule]ruleText{
@@ -312,12 +326,12 @@ func voiceDrift(in input) []Finding {
 		return nil
 	}
 
-	k, ok := in.opts.voice.Kinds[in.kind]
+	k, ok := in.opts.voice.Kinds[voiceOf(in.kind)]
 	if !ok || len(k.Ranges) == 0 {
 		return nil
 	}
 
-	s := measureStyle(strings.Join(in.source, "\n"), in.kind)
+	s := measureStyle(strings.Join(in.source, "\n"), voiceOf(in.kind))
 
 	var drifts []string
 
@@ -340,7 +354,7 @@ func voiceDrift(in input) []Finding {
 
 	return []Finding{{
 		Message: fmt.Sprintf("Reads unlike your own %s: %s. Read it against how you write.",
-			voicePlurals[in.kind], strings.Join(drifts, ", ")),
+			voicePlurals[voiceOf(in.kind)], strings.Join(drifts, ", ")),
 	}}
 }
 

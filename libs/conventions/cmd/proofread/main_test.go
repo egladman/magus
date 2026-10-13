@@ -270,6 +270,30 @@ func TestRunTakesAnchored(t *testing.T) {
 		rows(t, row("review-reply", "review-reply:1", "review-reply", proofread.RuleNonspecific, proofread.DecisionAdvise,
 			message, "confusing").at(1, 9, 18)))
 	assertArgs(t, []string{"review-reply", "-anchored", "-decisions", advise}, reply, "[]\n")
+	assertArgs(t, []string{"review-inline", "-decisions", advise}, reply, "[]\n")
+}
+
+// A summary's verdict decides whether its body contradicts it, so an approval
+// naming a blocker draws a finding and a comment does not.
+func TestRunTakesTheReviewEvent(t *testing.T) {
+	const body = "Approving, but the lock must be fixed before merge."
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"review-summary", "-event", "APPROVE"}, strings.NewReader(body), &stdout, &stderr); code != exitOK ||
+		!strings.Contains(stdout.String(), `"approve-blocker"`) {
+		t.Errorf("APPROVE: code %d, stdout %s, stderr %s; want an approve-blocker finding", code, stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+
+	if code := run([]string{"review-summary", "-event", "COMMENT"}, strings.NewReader(body), &stdout, &stderr); code != exitOK ||
+		strings.Contains(stdout.String(), `"approve-blocker"`) {
+		t.Errorf("COMMENT: code %d, stdout %s; want no approve-blocker finding", code, stdout.String())
+	}
+
+	if code := run([]string{"review-summary", "-event", "MERGE"}, strings.NewReader(body), &stdout, &stderr); code != exitError {
+		t.Errorf("-event MERGE: code %d; want %d", code, exitError)
+	}
 }
 
 // A reply that is its author's fourth in the thread draws one finding, which

@@ -26,9 +26,11 @@ the dimension of its rule, the cost it names to the reader.
 
 The code is `PRF8002`. The decision depends on the kind of text judged:
 
-| Kind           | Default |
-| -------------- | ------- |
-| `review-reply` | off     |
+| Kind             | Default |
+| ---------------- | ------- |
+| `review-summary` | off     |
+| `review-inline`  | off     |
+| `review-reply`   | off     |
 
 ## Changing it
 

@@ -309,7 +309,7 @@ func condescension(in input) []Finding {
 
 		for _, at := range spans {
 			if within(at[0], taken) || condescensionExempt(para.text, at) ||
-				(in.kind == KindReviewReply && assent.MatchString(para.text[sentenceAt(para.text, at[0]):])) {
+				(isReview(in.kind) && assent.MatchString(para.text[sentenceAt(para.text, at[0]):])) {
 				continue
 			}
 

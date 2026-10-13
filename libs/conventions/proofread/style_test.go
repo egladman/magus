@@ -135,7 +135,7 @@ func TestVoiceDriftNeedsTwoFeaturesOutOfRange(t *testing.T) {
 		t.Fatalf("voice-drift = %+v, want one advise finding coded PRF1040", got)
 	}
 
-	for _, want := range []string{"Reads unlike your own review replies: ", "words 84 above your ", "headings and bold 2 above your 0-0"} {
+	for _, want := range []string{"Reads unlike your own review comments: ", "words 84 above your ", "headings and bold 2 above your 0-0"} {
 		if !strings.Contains(got[0].Message, want) {
 			t.Errorf("message %q does not name %q", got[0].Message, want)
 		}

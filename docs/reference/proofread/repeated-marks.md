@@ -26,9 +26,11 @@ Repeated marks read as exasperation where one mark asks the same question. Measu
 
 The code is `PRF8014`. The decision depends on the kind of text judged:
 
-| Kind           | Default |
-| -------------- | ------- |
-| `review-reply` | advise  |
+| Kind             | Default |
+| ---------------- | ------- |
+| `review-summary` | advise  |
+| `review-inline`  | advise  |
+| `review-reply`   | advise  |
 
 ## Changing it
 

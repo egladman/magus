@@ -69,7 +69,7 @@ func readKind(text string, kind Kind) []paragraph {
 // readMarkdown reads raw, its boilerplate already blanked, as kind's Markdown:
 // the lines with everything but prose blanked, and the prose they hold.
 func readMarkdown(raw []string, kind Kind) ([]string, []proseLine) {
-	lines := markdownProse(raw, kind != KindReviewReply && !titled(kind))
+	lines := markdownProse(raw, !isReview(kind) && !titled(kind))
 	wrapCodeSpans(lines)
 	prose := readProse(lines, kind != KindCommitMessage)
 

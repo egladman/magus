@@ -36,6 +36,8 @@ The code is `PRF2006`. The decision depends on the kind of text judged:
 | `issue`              | off     |
 | `release-notes`      | off     |
 | `changelog`          | off     |
+| `review-summary`     | off     |
+| `review-inline`      | off     |
 | `review-reply`       | off     |
 | `cli-help`           | off     |
 | `agent-reply`        | off     |

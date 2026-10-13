@@ -26,9 +26,11 @@ Danescu-Niculescu-Mizil et al. (ACL 2013) found a bare imperative, and a request
 
 The code is `PRF8012`. The decision depends on the kind of text judged:
 
-| Kind           | Default |
-| -------------- | ------- |
-| `review-reply` | off     |
+| Kind             | Default |
+| ---------------- | ------- |
+| `review-summary` | off     |
+| `review-inline`  | off     |
+| `review-reply`   | off     |
 
 ## Changing it
 

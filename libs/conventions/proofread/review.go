@@ -12,8 +12,8 @@ const (
 	// RuleNonspecific reports a top-level review comment that judges code or
 	// asks for a change and names nothing to act on: no code, path, line,
 	// identifier, example or reason. A failure the reader can find ("tests are
-	// failing") is a reason. A reply [WithAnchored] marks sits on its line, and
-	// one holding a block quote answers the quoted comment; neither is judged.
+	// failing") is a reason. A [KindReviewInline] comment sits on its line, and
+	// a reply holding a block quote answers the quoted comment; neither is judged.
 	// Nor are words in single quotes, the writer's own fault or fix ("my bad",
 	// "I'll fix it"), or thanks and a conceded point that ask for nothing.
 	RuleNonspecific Rule = "nonspecific"
@@ -32,11 +32,11 @@ const (
 )
 
 var reviewChecks = []check{
-	{rule: RuleNonspecific, on: replyOnly, advise: replyOnly, judge: nonspecific},
-	{rule: RuleWhyOpener, on: replyOnly, advise: replyOnly, judge: whyOpener},
-	{rule: RuleBareImperative, on: replyOnly, advise: replyOnly, judge: bareImperative},
-	{rule: RuleAllCaps, on: replyOnly, advise: replyOnly, judge: allCaps},
-	{rule: RuleRepeatedMarks, on: replyOnly, advise: replyOnly, judge: repeatedMarks},
+	{rule: RuleNonspecific, on: reviewText, advise: reviewText, judge: nonspecific},
+	{rule: RuleWhyOpener, on: reviewText, advise: reviewText, judge: whyOpener},
+	{rule: RuleBareImperative, on: reviewText, advise: reviewText, judge: bareImperative},
+	{rule: RuleAllCaps, on: reviewText, advise: reviewText, judge: allCaps},
+	{rule: RuleRepeatedMarks, on: reviewText, advise: reviewText, judge: repeatedMarks},
 }
 
 var reviewTexts = map[Rule]ruleText{
@@ -49,10 +49,10 @@ var reviewTexts = map[Rule]ruleText{
 			"and inconsiderate, and over half of their respondents had received it in the past year; Bosu " +
 			"et al. (MSR 2015) found a third of review comments were not useful. Measured 2026-10-10 over " +
 			"the AIDev review comments: 2.92 percent of 39639 written by people and 0.15 percent of 42076 " +
-			"written by bots. It judges top-level comments only: an inline comment, or a reply in its " +
-			"thread, sits on the line it judges, which is its referent, and the caller says so with " +
-			"-anchored. The anchor gives the place, not the reason, so an anchored bare verdict still " +
-			"lacks the suggestion Gunawardena et al. count, and the rule leaves it alone. Measured " +
+			"written by bots. It judges top-level comments only: an inline comment (review-inline) sits " +
+			"on the line it judges, which is its referent. The anchor gives the place, not the reason, so " +
+			"an inline bare verdict still lacks the suggestion Gunawardena et al. count, and the rule " +
+			"leaves it alone. Measured " +
 			"2026-10-11 over the adjudicated labeling round 2: 7.0% precision (3 of 43) before, 27.3% (3 " +
 			"of 11) after. Most firings named what they judged in a noun phrase (\"the indentation\", " +
 			"\"this logic\") or by the noun the judgment modifies (\"redundant docstrings\"), so only a " +
@@ -63,7 +63,7 @@ var reviewTexts = map[Rule]ruleText{
 			"the reason for the change asked, so such a reply is left alone. A retry asked with nothing " +
 			"named (\"something went wrong, please try again\") is still reported. Many of its other wrong " +
 			"firings judged words the writer quoted. A block quote is the comment the reply answers, its " +
-			"referent as an anchored reply's line is, so a reply holding one is left alone, and so is a " +
+			"referent as an inline comment's line is, so a reply holding one is left alone, and so is a " +
 			"judgment in single quotes. An apology owning the writer's fault (\"my bad\"), a fix the writer " +
 			"takes on (\"will fix it\"), and thanks or a conceded point that asks for nothing judge nobody's " +
 			"work. A reply an automated reviewer marks as auto-generated is not the author's.",
@@ -299,8 +299,8 @@ func judged(text string) []int {
 // writer quotes, owns or concedes.
 func nonspecific(in input) []Finding {
 	// A block quote is the comment the reply answers: its referent, as the
-	// line is an anchored reply's, and words the writer did not write.
-	if in.opts.anchored || slices.ContainsFunc(in.source, inQuote) {
+	// line is an inline comment's, and words the writer did not write.
+	if in.kind == KindReviewInline || slices.ContainsFunc(in.source, inQuote) {
 		return nil
 	}
 

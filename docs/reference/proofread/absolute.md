@@ -29,6 +29,8 @@ The code is `PRF2003`. The decision depends on the kind of text judged:
 | Kind                 | Default |
 | -------------------- | ------- |
 | `change-description` | off     |
+| `review-summary`     | off     |
+| `review-inline`      | off     |
 | `review-reply`       | off     |
 | `commit-message`     | off     |
 | `issue`              | off     |

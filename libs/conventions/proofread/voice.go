@@ -61,7 +61,7 @@ func replyVoice(in input) []Finding {
 		leadAt = leadLine(in.lines)
 	}
 
-	sectioned := in.kind == KindChangeDescription || in.kind == KindReviewReply
+	sectioned := in.kind == KindChangeDescription || isReview(in.kind)
 
 	var out []Finding
 
@@ -75,7 +75,7 @@ func replyVoice(in input) []Finding {
 					Match: body, Line: ln.line,
 				})
 			}
-		case sectioned && (in.kind == KindReviewReply || ln.line > 1) && stockLabel.MatchString(body):
+		case sectioned && (isReview(in.kind) || ln.line > 1) && stockLabel.MatchString(body):
 			out = append(out, Finding{
 				Message: fmt.Sprintf("Drop the section label '%s': say the thing itself.", body),
 				Match:   body, Line: ln.line,
@@ -91,7 +91,7 @@ func replyVoice(in input) []Finding {
 		}
 	}
 
-	if in.kind == KindReviewReply {
+	if isReview(in.kind) {
 		return out
 	}
 
@@ -366,12 +366,10 @@ func attribution(in input) []Finding {
 	// A reply and a description are both posted to a review, so a tool or an
 	// agent credited in either is the story of the work.
 	patterns := []*regexp.Regexp{credit}
-	reviewed := in.kind == KindChangeDescription || in.kind == KindReviewReply
-
 	switch {
-	case in.kind == KindReviewReply:
+	case isReview(in.kind):
 		patterns = append(patterns, workNarrative)
-	case reviewed:
+	case in.kind == KindChangeDescription:
 		patterns = append(patterns, narrative, workNarrative)
 	default:
 		patterns = append(patterns, narrative)
@@ -383,7 +381,7 @@ func attribution(in input) []Finding {
 			spans = append(spans, re.FindAllStringIndex(para.text, -1)...)
 		}
 
-		if reviewed {
+		if slices.Contains(reviewed, in.kind) {
 			for _, at := range toolName.FindAllStringSubmatchIndex(para.text, -1) {
 				if !namesProduct(para.text, at[2], at[3]) && !within(at[2], spans) {
 					spans = append(spans, at[2:4])

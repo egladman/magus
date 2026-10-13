@@ -87,17 +87,36 @@ func TestLoadCasesAcceptsTheLabelACaseCarriedBeforeAMove(t *testing.T) {
 	}
 }
 
-func TestAnAnchoredCaseIsJudgedAsAnInlineComment(t *testing.T) {
+func TestAnInlineCaseIsJudgedAsAnInlineComment(t *testing.T) {
 	fsys := fstest.MapFS{"nonspecific.txtar": {Data: []byte("-- fp/review-reply --\nThis is incorrect.\n" +
-		"-- pass/review-reply anchored --\nThis is incorrect.\n")}}
+		"-- pass/review-inline --\nThis is incorrect.\n")}}
 
 	got, err := LoadCases(fsys)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(got) != 2 || got[0].Anchored || !got[1].Anchored || !got[0].Fires() || got[1].Fires() {
-		t.Errorf("cases = %+v; want the top-level one to fire and the anchored one not", got)
+	if len(got) != 2 || got[1].Kind != KindReviewInline || !got[0].Fires() || got[1].Fires() {
+		t.Errorf("cases = %+v; want the reply to fire and the inline comment not", got)
+	}
+}
+
+func TestLoadCasesReadsAReviewEvent(t *testing.T) {
+	fsys := fstest.MapFS{"approve-blocker.txtar": {Data: []byte(
+		"-- hit/review-summary event=APPROVE --\nLooks good, but this must fix the lock first.\n")}}
+
+	got, err := LoadCases(fsys)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(got) != 1 || got[0].Event != EventApprove {
+		t.Errorf("cases = %+v; want one APPROVE case", got)
+	}
+
+	bad := fstest.MapFS{"approve-blocker.txtar": {Data: []byte("-- hit/review-summary event=MERGE --\nShip it.\n")}}
+	if _, err := LoadCases(bad); err == nil {
+		t.Error("LoadCases(event=MERGE) = nil error; want an unknown event refused")
 	}
 }
 

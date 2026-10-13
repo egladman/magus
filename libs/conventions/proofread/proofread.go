@@ -115,8 +115,15 @@ const (
 	// in the second person, its numbered steps imperative and its words free
 	// of condescension.
 	KindGuide Kind = "guide"
-	// KindReviewReply is a review comment, a review's body or a reply in a
-	// review thread: Markdown with no title line.
+	// KindReviewSummary is a review's body, the verdict a reviewer posts with
+	// an approval, a request for changes or a comment: Markdown with no title
+	// line. [WithEvent] says which.
+	KindReviewSummary Kind = "review-summary"
+	// KindReviewInline is a review comment posted on a line of the diff, which
+	// is its referent: Markdown with no title line.
+	KindReviewInline Kind = "review-inline"
+	// KindReviewReply is a reply in a review thread, or a comment on a pull
+	// request's conversation: Markdown with no title line.
 	KindReviewReply Kind = "review-reply"
 	// KindMessage is one message a program prints to whoever runs it: a
 	// diagnostic, a guard verdict, a breadcrumb's reason. It is plain text, not
@@ -175,8 +182,11 @@ var (
 	guide   = []Kind{KindGuide}
 	// reviewed is text written to the people working on the change, where a
 	// sentence about past work or a reviewer is about someone the reader knows.
-	reviewed = []Kind{KindChangeDescription, KindReviewReply}
-	message  = []Kind{KindMessage}
+	reviewed = slices.Concat([]Kind{KindChangeDescription}, reviewText)
+	// reviewText is every text a review posts: its body, a comment on a line of
+	// the diff and a reply in a thread.
+	reviewText = []Kind{KindReviewSummary, KindReviewInline, KindReviewReply}
+	message    = []Kind{KindMessage}
 	// changeText is what a repository writes about its own changes for the people
 	// who follow them: a commit, an issue, release notes and a changelog.
 	changeText = []Kind{KindCommitMessage, KindIssue, KindReleaseNotes, KindChangelog}
@@ -234,7 +244,7 @@ func (c check) declaredDecision(kind Kind) Decision {
 // Markdown and pull requests would hold every doc comment in the tree to
 // them at once, with no sweep behind it.
 var checks = slices.Concat(coreChecks, cssChecks, toneChecks, slopChecks, messageChecks, commitChecks, helpChecks,
-	issueChecks, densityChecks, reviewChecks, suppressChecks, agentReplyChecks, toolChecks, voiceChecks, []check{templateCheck})
+	issueChecks, densityChecks, reviewChecks, reviewKindChecks, suppressChecks, agentReplyChecks, toolChecks, voiceChecks, []check{templateCheck})
 
 var messageChecks = []check{
 	{rule: RuleMessageLength, on: message, judge: messageLength},
@@ -365,7 +375,7 @@ type options struct {
 	only         []Rule
 	decisions    map[Rule]Decision
 	threadLength int
-	anchored     bool
+	event        Event
 	voice        *Voice
 }
 
@@ -390,14 +400,31 @@ func WithDecisions(table map[Rule]Decision) Option {
 	}
 }
 
-// WithThreadLength tells the [KindReviewReply] rules how many replies the
-// author already posted in the thread the judged reply joins.
+// WithThreadLength tells the review rules how many replies the author
+// already posted in the thread the judged text joins.
 func WithThreadLength(n int) Option { return func(o *options) { o.threadLength = n } }
 
-// WithAnchored tells the [KindReviewReply] rules the reply is posted on a line
-// of the diff, as an inline review comment or a reply in its thread. The line
-// is what the reply refers to, so [RuleNonspecific] judges nothing.
-func WithAnchored() Option { return func(o *options) { o.anchored = true } }
+// Event is the verdict a review is posted with, in the words GitHub's REST API
+// uses for a review's event.
+type Event string
+
+const (
+	// EventApprove approves the change.
+	EventApprove Event = "APPROVE"
+	// EventRequestChanges holds the change until what the review names is
+	// fixed.
+	EventRequestChanges Event = "REQUEST_CHANGES"
+	// EventComment comments without a verdict.
+	EventComment Event = "COMMENT"
+)
+
+// WithEvent tells the [KindReviewSummary] rules the verdict the review is
+// posted with. Without it, a rule that needs the verdict judges nothing.
+func WithEvent(e Event) Option { return func(o *options) { o.event = e } }
+
+// isReview reports whether k is a text a review posts: its summary, an inline
+// comment or a reply.
+func isReview(k Kind) bool { return slices.Contains(reviewText, k) }
 
 // input is what a rule reads.
 type input struct {

@@ -1,13 +1,13 @@
 ---
 title: "signpost"
-description: "A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, and `review-reply` and advises on `agent-reply` by default: it reports an announcement standing where the point should be (\"Here's the thing\", \"Let's dive in\")."
+description: "A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, `review-summary`, `review-inline`, and `review-reply` and advises on `agent-reply` by default: it reports an announcement standing where the point should be (\"Here's the thing\", \"Let's dive in\")."
 tags: [proofread, rules, signpost, deny]
 aliases: [reference/prose/signpost]
 ---
 
 # signpost
 
-A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, and `review-reply` and advises on `agent-reply` by default: it reports an announcement standing where the point should be ("Here's the thing", "Let's dive in").
+A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, `review-summary`, `review-inline`, and `review-reply` and advises on `agent-reply` by default: it reports an announcement standing where the point should be ("Here's the thing", "Let's dive in").
 
 ## What it catches
 
@@ -36,6 +36,8 @@ The code is `PRF4003`. The decision depends on the kind of text judged:
 | `issue`              | deny    |
 | `release-notes`      | deny    |
 | `changelog`          | deny    |
+| `review-summary`     | deny    |
+| `review-inline`      | deny    |
 | `review-reply`       | deny    |
 | `agent-reply`        | advise  |
 

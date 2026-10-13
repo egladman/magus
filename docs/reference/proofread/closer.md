@@ -36,6 +36,8 @@ The code is `PRF4009`. The decision depends on the kind of text judged:
 | `issue`              | deny    |
 | `release-notes`      | deny    |
 | `changelog`          | deny    |
+| `review-summary`     | deny    |
+| `review-inline`      | deny    |
 | `review-reply`       | deny    |
 | `agent-reply`        | deny    |
 
