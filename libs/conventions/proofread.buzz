@@ -1,8 +1,0 @@
-namespace proofread;
-
-// compat(until: the root magusfile imports ./libs/proofread/proofread): the release
-// packaging reads proofread's module and main package from here. Every other caller
-// imports libs/proofread/proofread.buzz, which also holds the staleness check.
-export final home = "libs/proofread";
-export final command = "cmd/proofread";
-export final binary = "gen/proofread";
