@@ -1934,7 +1934,8 @@ var (
 	denySedInPlaceWhy = "Your editor tool reads the file first and reports what it changed. Whole-tree mechanical edit? `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives column-precise sites.\n" +
 		"GNU reads `sed -i 's/x/y/' f` as an edit, macOS reads that script as the BACKUP SUFFIX. Reading with sed, or editing under a scratch path, is untouched."
 
-	denyBusyWait    = "this loop polls for work you started, which the host announces when it ends; background the work and wait for that notice."
+	denyBusyWait    = "this loop polls for work the host announces when it ends; wait for the task's completion notice, or `" + hint.JobWait.With("<job>") +
+		"` for a job. `" + hint.Status.With("--watch") + "` is for a person watching, not a loop."
 	denyBusyWaitWhy = "Past the tool timeout this loop is BACKGROUNDED rather than killed, and keeps polling a condition a failed run never prints.\n" +
 		"A watcher running the same loop is the same poll, and it wakes you again each time it fires or expires."
 
@@ -2233,7 +2234,7 @@ func stageAllRemedy(command string, d Dialect) (string, []hint.Next) {
 	return "", nil
 }
 
-// foreignWaitFires reports a sleep-only while or until loop whose condition probes a
+// foreignWaitFires reports a sleeping while or until loop whose condition probes a
 // process by pid or through magus's pool and job rows, which a caller's own backgrounded
 // command never needs: the host announces that one's end.
 func foreignWaitFires(command string, d Dialect) bool {
@@ -2244,7 +2245,7 @@ func foreignWaitFires(command string, d Dialect) bool {
 	found := false
 	syntax.Walk(f, func(n syntax.Node) bool {
 		loop, ok := n.(*syntax.WhileClause)
-		if found || !ok || !bodyOnlySleeps(loop.Do, d) {
+		if found || !ok || !sleepsIn(loop.Do, d) {
 			return !found
 		}
 		for _, cond := range loop.Cond {

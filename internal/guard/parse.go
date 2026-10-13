@@ -576,7 +576,8 @@ func stmtCommands(s *syntax.Stmt, d Dialect) []hint.Invocation {
 	return peelWrappers(literalWords(call.Args), d)
 }
 
-// busyWaitFires reports whether the line contains a loop whose body only sleeps.
+// busyWaitFires reports whether the line contains a polling loop that waits rather than
+// works (waitsIn).
 //
 // Structural, not textual, for the reason at the top of this file. The first version of
 // this rule was a pattern and proved the point twice within a minute: it denied `echo
@@ -593,12 +594,43 @@ func busyWaitFires(command string, d Dialect) bool {
 		if found {
 			return false
 		}
-		if body, ok := pollingLoop(n, d); ok && bodyOnlySleeps(body, d) {
+		if body, ok := pollingLoop(n, d); ok && waitsIn(n, body, d) {
 			found = true
 			return false
 		}
 		return true
 	})
+	return found
+}
+
+// waitsIn reports whether a polling loop n, with body, waits rather than works: a while or
+// until loop whose body sleeps anywhere, whatever its condition tests and whatever else
+// each pass runs, or a for loop that only sleeps or sleeps until it breaks out. A while
+// loop that works between sleeps is still a poll: past the tool timeout it is backgrounded
+// rather than killed, and polls on.
+func waitsIn(n syntax.Node, body []*syntax.Stmt, d Dialect) bool {
+	if _, ok := n.(*syntax.WhileClause); ok {
+		return sleepsIn(body, d)
+	}
+	return bodyOnlySleeps(body, d) || leavesIn(body, d)
+}
+
+// leavesIn reports whether body runs break, exit or return anywhere, nested commands included.
+func leavesIn(body []*syntax.Stmt, d Dialect) bool {
+	found := false
+	for _, stmt := range body {
+		syntax.Walk(stmt, func(n syntax.Node) bool {
+			if call, ok := n.(*syntax.CallExpr); ok {
+				for _, inv := range peelWrappers(literalWords(call.Args), d) {
+					switch path.Base(inv.Name) {
+					case "break", "exit", "return":
+						found = true
+					}
+				}
+			}
+			return !found
+		})
+	}
 	return found
 }
 

@@ -67,8 +67,9 @@ var ruleDocBacktickSubstitution = denyDoc(types.RuleDoc{ //nolint:unused // read
 
 var ruleDocBusyWait = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
 	Name:    string(denyRuleBusyWait),
-	Catches: "a loop that only sleeps between polls, holding a tool slot for its whole wait",
+	Catches: "a while or until loop that sleeps, or a for loop that sleeps until it breaks out",
 	Why: "A backgrounded command is tracked and announces its own completion, so starting it and doing something else is strictly better than watching it. " +
+		"Whatever the loop tests (a process, a file test on a task's output file, a grep of it) and whatever else each pass runs, a loop that sleeps is waiting: wait for the task's completion notice, or `magus job wait <job>` for a job; `magus status --watch` is for a person watching. " +
 		"A loop probing a process the caller did not start (`kill -0`, the process table, `magus status` or a job row) gets no such announcement, so its deny names the record magus keeps of that work instead: `magus job wait <job>` for a job, `magus status --watch` for the project lock. " +
 		"The loop also has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive, because a run that failed early never prints the line being grepped for. " +
 		"Several have had to be killed by hand. A host's watcher running the same loop is judged the same way, since it is the same poll that also wakes the agent on every line and at expiry. " +

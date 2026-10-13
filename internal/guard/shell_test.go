@@ -2088,16 +2088,29 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 		`until ./magus query output ref; do sleep 30; done`,
 		// A counted for loop that only sleeps is the same wait with a bound.
 		`for i in $(seq 1 60); do sleep 10; done`,
+		// Whatever the condition tests and whatever else each pass runs, a while or until
+		// loop that sleeps is a poll; so is a counted loop that sleeps until a test breaks out.
+		`until [ -s /tmp/tasks/b1.output ]; do sleep 5; done; cat /tmp/tasks/b1.output`,
+		`while [ ! -s /tmp/tasks/b1.output ]; do echo waiting; sleep 5; done`,
+		`until grep -q PASS /tmp/tasks/b1.output; do date; sleep 5; done`,
+		`while true; do ./magus run lint .; sleep 60; done`,
+		`while :; do if [ -s out.txt ]; then break; fi; sleep 2; done`,
+		`f=/tmp/tasks/b1.output; for i in $(seq 1 110); do grep -q summary: "$f" && break; sleep 5; done`,
 	} {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "announces when it ends", cmd)
+		assert.Contains(t, v.Deny, "wait for the task's completion notice", cmd)
+		assert.Contains(t, v.Deny, hint.JobWait.With("<job>"), cmd)
+		assert.Contains(t, v.Deny, hint.Status.With("--watch")+"` is for a person", cmd)
 	}
-	// A loop that works each pass, or a for loop over a list, is not waiting.
+	// A loop that works each pass without sleeping, or a for loop over a list that never
+	// breaks out, is not waiting.
 	for _, cmd := range []string{
 		`for f in a b; do gofmt -l $f; done`,
 		`for i in 1 2 3; do ./magus run build .; sleep 1; done`,
+		`while read -r f; do gofmt -l "$f"; done < list.txt`,
 	} {
 		assert.NotEqual(t, denyRuleBusyWait, Evaluate(strict(testDependencies()), cmd).Rule.Name, cmd)
 	}
@@ -2115,6 +2128,7 @@ func TestBusyWaitOnAForeignProcessSaysWhatItProves(t *testing.T) {
 		`while pgrep -f go-build >/dev/null; do sleep 5; done`,
 		`until ./magus status -o json | jq -e '.idle'; do sleep 20; done`,
 		`until ./magus describe job worker-a -o name; do sleep 60; done`,
+		`while kill -0 4242 2>/dev/null; do echo still running; sleep 30; done`,
 	} {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
@@ -2397,7 +2411,7 @@ func TestGuardStillCatchesTheRealInvocations(t *testing.T) {
 }
 
 // The rule is about polling, not about loops or about sleep. A loop that does real work
-// each pass, and a bare sleep, both stay allowed.
+// each pass without sleeping, and a bare sleep, both stay allowed.
 func TestGuardAllowsLoopsThatAreNotPolling(t *testing.T) {
 	for _, cmd := range []string{
 		`for f in *.go; do echo "$f"; done`,
@@ -2407,8 +2421,6 @@ func TestGuardAllowsLoopsThatAreNotPolling(t *testing.T) {
 		// The case the first, pattern-based version of this rule got wrong: a quoted
 		// string that runs no loop at all. It is why the rule reads the AST.
 		`echo 'until grep -q x f; do sleep 1; done'`,
-		// A loop that sleeps AND does work each pass is working, not polling.
-		`while true; do ./magus run lint .; sleep 60; done`,
 	} {
 		assert.NotEqual(t, denyRuleBusyWait, Evaluate(strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
