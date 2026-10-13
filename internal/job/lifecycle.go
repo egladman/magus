@@ -765,12 +765,13 @@ func (w *sweeper) dead(rows []types.Job) ([]ending, error) {
 	rows = slices.Clone(rows)
 	var out []ending
 	for {
+		x := indexRows(rows)
 		var round []ending
 		for _, row := range rows {
 			if !row.State.Live() || row.Holder.OrSession() == types.HolderServer || readOnly(row) != nil {
 				continue
 			}
-			reason, err := w.reason(rows, row)
+			reason, err := w.reason(x, rows, row)
 			if err != nil {
 				return nil, err
 			}
@@ -789,16 +790,48 @@ func (w *sweeper) dead(rows []types.Job) ([]ending, error) {
 	}
 }
 
+// rowIndex is one sweep round's rows by id, and the ids with a live child. Built once per
+// round: asked of every live row, a scan of the plan per question made the sweep
+// quadratic in the plan's size.
+type rowIndex struct {
+	byID      map[string]types.Job
+	liveChild map[string]bool
+}
+
+func indexRows(rows []types.Job) rowIndex {
+	x := rowIndex{byID: make(map[string]types.Job, len(rows)), liveChild: map[string]bool{}}
+	for _, r := range rows {
+		x.byID[r.ID] = r
+		if r.Parent != "" && r.State.Live() {
+			x.liveChild[r.Parent] = true
+		}
+	}
+	return x
+}
+
+// endedAncestor is [types.EndedAncestor] over the index.
+func (x rowIndex) endedAncestor(id string) (types.Job, bool) {
+	seen := map[string]bool{id: true}
+	cur, ok := x.byID[id]
+	for ok && cur.Parent != "" && !seen[cur.Parent] {
+		seen[cur.Parent] = true
+		if cur, ok = x.byID[cur.Parent]; ok && cur.State.Terminal() {
+			return cur, true
+		}
+	}
+	return types.Job{}, false
+}
+
 // reason is why row is dead, or "" when it is not. See [sweeper.dead].
-func (w *sweeper) reason(rows []types.Job, row types.Job) (string, error) {
-	if a, ok := types.EndedAncestor(rows, row.ID); ok {
+func (w *sweeper) reason(x rowIndex, rows []types.Job, row types.Job) (string, error) {
+	if a, ok := x.endedAncestor(row.ID); ok {
 		kin := "ancestor"
 		if a.ID == row.Parent {
 			kin = "parent"
 		}
 		return fmt.Sprintf("%s %s ended as %s, and its tree ends with it", kin, a.ID, a.State), nil
 	}
-	liveChild := slices.ContainsFunc(rows, func(r types.Job) bool { return r.Parent == row.ID && r.State.Live() })
+	liveChild := x.liveChild[row.ID]
 	if l, ok := w.landed[row.ID]; ok && row.State == types.StateExited && l.updated == row.Updated && !liveChild {
 		return l.reason, nil
 	}
@@ -977,12 +1010,13 @@ func (w *sweeper) prunable(rows []types.Job, window time.Duration, all bool) ([]
 	for {
 		flagged := types.JobList{Jobs: rows}.Flag(w.now, window)
 		kept := w.worked(rows, window, all)
+		x := indexRows(rows)
 		var round []Ending
 		for _, row := range rows {
 			if !row.State.Live() || row.Holder.OrSession() == types.HolderServer || readOnly(row) != nil || kept[row.ID] {
 				continue
 			}
-			reason, err := w.reason(rows, row)
+			reason, err := w.reason(x, rows, row)
 			if err != nil {
 				return nil, err
 			}
@@ -1080,39 +1114,58 @@ func landingCandidate(row types.Job) bool {
 		checkpointRevision(row.Checkpoint) != ""
 }
 
-// landings probes every exited row not probed within landingInterval and returns the
-// ones whose work landed. A probe history that cannot be read or written only costs the
-// interval, never a verdict.
+// landings probes the exited rows not probed within landingInterval, at most
+// landingBudget of them and least recently probed first, and returns the ones whose work
+// landed. The probes are recorded BEFORE they run: a process killed mid-probe (a guard
+// hook past its deadline) has still taken its turn, so the next reader moves on to the
+// rows after it rather than starting the same probes again, and two readers at once split
+// the rows rather than both probing every one. A probe history that cannot be read or
+// written only costs the interval, never a verdict.
 func (s *Store) landings(rows []types.Job, now int64) map[string]landing {
-	probe, throttled := s.landed, false
+	probe := s.landed
 	if probe == nil {
-		probe, throttled = s.landedOnBase, true
+		probe = s.landedOnBase
 	}
 	var history map[string]landingProbe
 	read := false
 	next := map[string]landingProbe{}
-	out := map[string]landing{}
+	var due []types.Job
 	for _, row := range rows {
 		if !landingCandidate(row) {
 			continue
 		}
-		if throttled && !read {
+		if !read {
 			history, read = s.readLandingProbes(), true
 		}
-		if last, ok := history[row.ID]; ok && last.Updated == row.Updated && now-last.At < int64(landingInterval/time.Second) {
+		last, ok := history[row.ID]
+		if ok {
 			next[row.ID] = last
-			continue
 		}
+		if !ok || last.Updated != row.Updated || now-last.At >= int64(landingInterval/time.Second) {
+			due = append(due, row)
+		}
+	}
+	slices.SortStableFunc(due, func(a, b types.Job) int { return cmp.Compare(history[a.ID].At, history[b.ID].At) })
+	due = due[:min(len(due), landingBudget)]
+	for _, row := range due {
 		next[row.ID] = landingProbe{At: now, Updated: row.Updated}
-		if reason := probe(context.Background(), row); reason != "" {
-			out[row.ID] = landing{updated: row.Updated, reason: reason}
-		}
 	}
 	if read && !maps.Equal(history, next) {
 		s.writeLandingProbes(next)
 	}
+	out := map[string]landing{}
+	for _, row := range due {
+		if reason := probe(context.Background(), row); reason != "" {
+			out[row.ID] = landing{updated: row.Updated, reason: reason}
+		}
+	}
 	return out
 }
+
+// landingBudget is how many exited rows one sweep probes. Every List sweeps, the guard
+// lists on every hook call, and a probe runs several VCS subprocesses, so a pass over
+// every exited row held a hook past its deadline. The rest wait for later sweeps.
+const landingBudget = 4
 
 func (s *Store) readLandingProbes() map[string]landingProbe {
 	if s.err != nil || s.path == "" {
@@ -1175,11 +1228,13 @@ func (s *Store) landedOnBase(ctx context.Context, row types.Job) string {
 		return ""
 	}
 	checkpoint := checkpointRevision(row.Checkpoint)
-	seen := changedSince(ctx, driver, "", row.CheckoutRoot, checkpoint)
-	if !seen.ChangedKnown || len(seen.Changed) == 0 {
+	// The paths alone: changedSince also places every changed line in its declaration,
+	// a VCS read per path this verdict never looks at.
+	paths, err := driver.ChangedFiles(ctx, row.CheckoutRoot, checkpoint)
+	if err != nil || len(paths) == 0 {
 		return ""
 	}
-	for _, changed := range seen.Changed {
+	for _, changed := range paths {
 		p := path.Clean(filepath.ToSlash(strings.TrimSpace(changed)))
 		ours, err := driver.ReadFileAt(ctx, row.CheckoutRoot, head.ID, p)
 		if err != nil {
@@ -1193,7 +1248,7 @@ func (s *Store) landedOnBase(ctx context.Context, row types.Job) string {
 		}
 	}
 	return fmt.Sprintf("its work landed on %s at %s: the %d changed path(s) at %s in %s read the same there",
-		res.Base, shortRevision(base), len(seen.Changed), shortRevision(head), row.CheckoutRoot)
+		res.Base, shortRevision(base), len(paths), shortRevision(head), row.CheckoutRoot)
 }
 
 // shortRevision is the commit's short id, or its id cut to 12 when the backend gave none.

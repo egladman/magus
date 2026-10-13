@@ -553,6 +553,34 @@ func TestListEndsExitedJobsWhoseWorkLanded(t *testing.T) {
 	assert.Equal(t, "ended landed: its work landed on origin/main at base1\n", notices.String())
 }
 
+// One read probes at most landingBudget rows, least recently probed first, and records
+// each before probing it: a guard hook killed mid-probe has still taken its turn, so the
+// next read moves on instead of starting the same probes over.
+func TestALandingSweepIsBoundedAndRecordsItsProbesFirst(t *testing.T) {
+	s, _ := sweepStore(t, 100_000, 0)
+	var rows []types.Job
+	for i := range landingBudget + 2 {
+		rows = append(rows, types.Job{ID: fmt.Sprintf("exited-%d", i), State: types.StateExited, Checkpoint: "c0",
+			CheckoutRoot: "/w", Result: &types.JobResult{ChangedPaths: []string{"a.go"}}, Updated: 90_000})
+	}
+	plant(t, s, rows...)
+	var probed []string
+	s.landed = func(_ context.Context, row types.Job) string {
+		assert.Contains(t, s.readLandingProbes(), row.ID, "recorded before the probe runs")
+		probed = append(probed, row.ID)
+		return ""
+	}
+
+	states(t, s)
+	assert.Equal(t, []string{"exited-0", "exited-1", "exited-2", "exited-3"}, probed)
+	probed = nil
+	states(t, s)
+	assert.Equal(t, []string{"exited-4", "exited-5"}, probed, "the next read takes the rows the budget left")
+	probed = nil
+	states(t, s)
+	assert.Empty(t, probed, "every row was probed within the interval")
+}
+
 // Two jobs whose branches were squashed into ONE base commit both end, judged by content
 // alone: no ancestry joins either branch to the squash. A job whose commit is not on the
 // base, and one whose change was never committed, both stay exited.
