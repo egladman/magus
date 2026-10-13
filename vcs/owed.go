@@ -47,6 +47,8 @@ type owedDocument struct {
 type owedPaths struct {
 	record    string
 	commonDir string
+	// gitDir is the worktree's git directory, absolute.
+	gitDir string
 }
 
 // resolveOwedPaths resolves root's owedPaths. ok is false when root is not in a git
@@ -74,7 +76,48 @@ func resolveOwedPaths(ctx context.Context, root string) (owedPaths, bool, error)
 	if !filepath.IsAbs(common) {
 		common = filepath.Join(root, common)
 	}
-	return owedPaths{record: filepath.Join(lines[0], owedFileName), commonDir: common}, true, nil
+	return owedPaths{record: filepath.Join(lines[0], owedFileName), commonDir: common, gitDir: lines[0]}, true, nil
+}
+
+// deferredSettleFile, in the worktree's git dir, holds the revision the first settle
+// deferred under magus.settle=defer started from. The settle hooks' shell writes it, so
+// a deferred settle starts no magus at all, and later deferrals leave it as it is.
+const deferredSettleFile = "magus-settle-deferred"
+
+// DeferredSettle is the settle the hooks deferred while git config magus.settle was
+// "defer": everything that changed from the revision the first deferred operation
+// started at to HEAD, as one operation of Kind "deferred" that Hook-style callers
+// regenerate and stage at once. ok is false when nothing was deferred or root is not in
+// a git repository. A recorded revision git no longer resolves is an error naming the
+// record.
+func DeferredSettle(ctx context.Context, root string) (HookOperation, bool, error) {
+	p, ok, err := resolveOwedPaths(ctx, root)
+	if err != nil || !ok {
+		return HookOperation{}, false, err
+	}
+	base := readTrimmed(p.gitDir, deferredSettleFile)
+	if base == "" {
+		return HookOperation{}, false, nil
+	}
+	op := HookOperation{Kind: "deferred", gitDir: p.gitDir, base: base}
+	if op.Changed, err = hookChangedFiles(ctx, root, op); err != nil {
+		return HookOperation{}, false, fmt.Errorf("vcs: %s names %s: %w; delete it and regenerate by hand",
+			filepath.Join(p.gitDir, deferredSettleFile), base, err)
+	}
+	return op, true, nil
+}
+
+// ClearDeferredSettle forgets what DeferredSettle read, once it is settled; nothing
+// deferred is not an error.
+func ClearDeferredSettle(ctx context.Context, root string) error {
+	p, ok, err := resolveOwedPaths(ctx, root)
+	if err != nil || !ok {
+		return err
+	}
+	if err := os.Remove(filepath.Join(p.gitDir, deferredSettleFile)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("vcs: remove %s: %w", deferredSettleFile, err)
+	}
+	return nil
 }
 
 // OwedRegenerationPath is the file holding root's record, or "" outside a git

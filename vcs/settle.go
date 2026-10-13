@@ -2,6 +2,7 @@ package vcs
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -78,6 +79,8 @@ type HookOperation struct {
 	indexFile string
 	// gitDir is the worktree's git directory, absolute.
 	gitDir string
+	// base is the revision the operation started from (operationBase).
+	base string
 }
 
 // settledTreeFile, in the worktree's git dir, names the tree a settle left staged for
@@ -120,7 +123,9 @@ func HookTreeSettled(ctx context.Context, root string, op HookOperation) (bool, 
 // touching the tree. ok is false when the hook fired for something no settle applies to:
 // an ordinary commit, a pick inside a rebase (post-rewrite settles the whole rebase once
 // it finishes), a cherry-pick or revert with picks still to come, an amend, or a patch of
-// an am series before the last. A hook name this package does not install is an error.
+// an am series before the last or of a rebase. A hook name this package does not install
+// is an error. The installed hooks make the same decision in shell (gitSettleGuard), so
+// only a settle starts magus.
 func GitHookOperation(ctx context.Context, root string, ev HookEvent) (HookOperation, bool, error) {
 	gitDir, err := gitOutput(ctx, root, gitOpts{}, "rev-parse", "--absolute-git-dir")
 	if err != nil {
@@ -146,6 +151,12 @@ func GitHookOperation(ctx context.Context, root string, ev HookEvent) (HookOpera
 		case state("REVERT_HEAD"):
 			op.Kind = "revert"
 		default:
+			return HookOperation{}, false, nil
+		}
+		// A pick git stopped on, concluded with more to come: the last one settles them all.
+		if pending, err := sequencerPending(gitDir); err != nil {
+			return HookOperation{}, false, err
+		} else if pending > 1 {
 			return HookOperation{}, false, nil
 		}
 		op.CommitPending = true
@@ -175,6 +186,10 @@ func GitHookOperation(ctx context.Context, root string, ev HookEvent) (HookOpera
 		}
 		op.Kind = "rebase"
 	case HookPostApplypatch:
+		// `git rebase --apply` applies its patches through am; post-rewrite settles it.
+		if state(filepath.Join("rebase-apply", "rebasing")) {
+			return HookOperation{}, false, nil
+		}
 		next, last := readTrimmed(gitDir, "rebase-apply", "next"), readTrimmed(gitDir, "rebase-apply", "last")
 		if next == "" || next != last {
 			return HookOperation{}, false, nil
@@ -183,43 +198,53 @@ func GitHookOperation(ctx context.Context, root string, ev HookEvent) (HookOpera
 	default:
 		return HookOperation{}, false, fmt.Errorf("vcs: %q is not a hook magus settles a merge from (one of %s)", ev.Hook, strings.Join(SettleHooks, ", "))
 	}
-	op.Changed, err = hookChangedFiles(ctx, root, gitDir, op)
+	op.base = operationBase(gitDir, op)
+	op.Changed, err = hookChangedFiles(ctx, root, op)
 	if err != nil {
 		return HookOperation{}, false, err
 	}
 	return op, true, nil
 }
 
-// hookChangedFiles lists what op changed. Before the commit that is the index against
-// HEAD; after it, the commits the operation made: a rebase's replayed commits (from the
-// `onto` its state dir still names during post-rewrite), an am series from where it
-// started, one pick or revert from its parent.
-func hookChangedFiles(ctx context.Context, root, gitDir string, op HookOperation) ([]string, error) {
+// operationBase is the revision op started from: the onto a rebase replays onto (during
+// post-rewrite its state dir still names it), where an am series started, the HEAD a
+// sequence of picks or reverts started at, and otherwise the commit before this one. A
+// sequence settles once, at its last pick, so diffing that pick alone would miss the
+// rest; the sequencer keeps the start until the sequence is done. gitSettleBase spells
+// the same in shell.
+func operationBase(gitDir string, op HookOperation) string {
+	switch op.Kind {
+	case "rebase":
+		// With the state dir gone, what upstream changed is counted too: a superset,
+		// never less than the replayed commits.
+		return cmp.Or(readTrimmed(gitDir, "rebase-merge", "onto"), readTrimmed(gitDir, "rebase-apply", "onto"), "ORIG_HEAD")
+	case "am":
+		return "ORIG_HEAD"
+	case "cherry-pick", "revert":
+		if head := readTrimmed(gitDir, "sequencer", "head"); head != "" {
+			return head
+		}
+	}
+	if op.CommitPending {
+		return "HEAD"
+	}
+	return "HEAD~1"
+}
+
+// hookChangedFiles lists what op changed: the index against its base while git has not
+// committed yet, HEAD against its base otherwise.
+func hookChangedFiles(ctx context.Context, root string, op HookOperation) ([]string, error) {
 	// --no-renames for the reason ChangedFiles gives: a rename changes the project the
 	// file left too.
 	args := []string{"diff", "--name-only", "--no-renames", "--ignore-submodules=none"}
-	switch {
-	case op.CommitPending:
-		args = append(args, "--cached", "HEAD")
-	case op.Kind == "rebase":
-		onto := readTrimmed(gitDir, "rebase-merge", "onto")
-		if onto == "" {
-			onto = readTrimmed(gitDir, "rebase-apply", "onto")
-		}
-		if onto == "" {
-			// The state dir is gone, so what upstream changed is counted too: a
-			// superset, never less than the replayed commits.
-			onto = "ORIG_HEAD"
-		}
-		args = append(args, onto, "HEAD")
-	case op.Kind == "am":
-		args = append(args, "ORIG_HEAD", "HEAD")
-	default:
-		args = []string{"diff-tree", "--no-commit-id", "--name-only", "-r", "--no-renames", "HEAD"}
+	if op.CommitPending {
+		args = append(args, "--cached", op.base)
+	} else {
+		args = append(args, op.base, "HEAD")
 	}
 	out, err := gitOutput(ctx, root, op.gitOpts(gitOpts{}), args...)
 	if err != nil {
-		return nil, fmt.Errorf("git %s: %w", strings.Join(args[:2], " "), err)
+		return nil, fmt.Errorf("git diff: %w", err)
 	}
 	return splitLines([]byte(out)), nil
 }

@@ -2272,41 +2272,79 @@ func (v gitVCS) InstallRegenHook(ctx context.Context, root, command string) ([]s
 	return append(installed, removed...), err
 }
 
-// gitSettleHookBody is the shell one settle hook runs. The pre-commit and post-commit
-// guards read the operation state off the git dir so an ordinary commit, which is most
-// of them, never starts magus; post-rewrite fires for an amend too, which is not a
-// merge. The guards are `if` blocks rather than early exits so a section below this one
-// still runs.
+// gitSettleHookBody is the shell one settle hook runs. The guard is GitHookOperation's
+// decision, made from the git dir so that no commit but the one that settles starts
+// magus: an ordinary commit, every pick of a sequence before the last, a rebase's picks,
+// an amend and every patch of an am series before the last exit here. Under
+// magus.settle=defer the settle point records where the operation started instead (see
+// DeferredSettle) and starts nothing either. The guard is an `if` block rather than an
+// early exit so a section below this one still runs.
 func gitSettleHookBody(name, command string) string {
 	bin, _, _ := strings.Cut(command, " ")
 	run := command + " " + name
-	tolerate := "magus_rc=$?\n" +
+	if name == HookPostRewrite {
+		run += ` "$@"`
+	}
+	settle := run + "\n" +
+		"magus_rc=$?\n" +
 		"if [ $magus_rc -eq 2 ] || [ $magus_rc -eq 127 ]; then\n" +
 		"  echo \"magus: the settle hook did not run: " + bin + " is missing or predates 'vcs resolve --hook', so this operation is not regenerated; run '" + bin + " vcs resolve' once it is\" >&2\n"
-	stop := "elif [ $magus_rc -ne 0 ]; then\n  exit $magus_rc\n"
-	const end = "fi\n"
-	guarded := func(test, body string) string {
-		var b strings.Builder
-		b.WriteString("if " + test + "; then\n")
-		for _, line := range strings.SplitAfter(strings.TrimSuffix(body, "\n"), "\n") {
-			b.WriteString("  " + line)
-		}
-		b.WriteString("\nfi\n")
-		return b.String()
+	if name == HookPreMergeCommit || name == HookPreCommit {
+		settle += "elif [ $magus_rc -ne 0 ]; then\n  exit $magus_rc\n"
 	}
-	const stateHeads = "magus_git_dir=$(git rev-parse --git-dir) && { [ -e \"$magus_git_dir/CHERRY_PICK_HEAD\" ] || [ -e \"$magus_git_dir/REVERT_HEAD\" ]"
+	settle += "fi\n"
+	deferred := "magus_base=$(" + gitSettleBase(name) + ") && { [ -e \"$magus_git_dir/" + deferredSettleFile + "\" ] || echo \"$magus_base\" >\"$magus_git_dir/" + deferredSettleFile + "\"; }\n" +
+		"echo \"magus: magus.settle is defer, so this operation was not regenerated; '" + bin + " vcs resolve' regenerates everything deferred\" >&2\n"
+	body := "if [ \"$(git config --get magus.settle)\" = defer ]; then\n" + indentShell(deferred) + "else\n" + indentShell(settle) + "fi\n"
+	return "if magus_git_dir=$(git rev-parse --git-dir)" + gitSettleGuard(name) + "; then\n" + indentShell(body) + "fi\n"
+}
+
+// gitSettleGuard is the test, after the git dir is read, that a settle hook settles.
+func gitSettleGuard(name string) string {
+	const (
+		rebasing = " && ! { [ -d \"$magus_git_dir/rebase-merge\" ] || [ -d \"$magus_git_dir/rebase-apply\" ]; }"
+		// sequencerPending's count: the last pick's todo still lists itself.
+		lastPick = " && { magus_picks=$(grep -c -E '^[[:space:]]*(pick|p|revert)([[:space:]]|$)' \"$magus_git_dir/sequencer/todo\" 2>/dev/null); [ \"${magus_picks:-0}\" -le 1 ]; }"
+		picking  = "[ -e \"$magus_git_dir/CHERRY_PICK_HEAD\" ] || [ -e \"$magus_git_dir/REVERT_HEAD\" ]"
+	)
+	switch name {
+	case HookPreCommit:
+		return " && { " + picking + " || [ -e \"$magus_git_dir/MERGE_HEAD\" ]; }" + rebasing + lastPick
+	case HookPostCommit:
+		return " && { " + picking + "; }" + rebasing + lastPick
+	case HookPostRewrite:
+		return " && [ \"$1\" = rebase ]"
+	case HookPostApplypatch:
+		return " && [ ! -e \"$magus_git_dir/rebase-apply/rebasing\" ] && magus_next=$(cat \"$magus_git_dir/rebase-apply/next\" 2>/dev/null) && [ \"$magus_next\" = \"$(cat \"$magus_git_dir/rebase-apply/last\" 2>/dev/null)\" ]"
+	default:
+		return ""
+	}
+}
+
+// gitSettleBase prints the revision the hook's operation started from: operationBase,
+// spelled in shell.
+func gitSettleBase(name string) string {
 	switch name {
 	case HookPreMergeCommit:
-		return run + "\n" + tolerate + stop + end
+		return "git rev-parse HEAD"
 	case HookPreCommit:
-		return guarded(stateHeads+" || [ -e \"$magus_git_dir/MERGE_HEAD\" ]; }", run+"\n"+tolerate+stop+end)
+		return "cat \"$magus_git_dir/sequencer/head\" 2>/dev/null || git rev-parse HEAD"
 	case HookPostCommit:
-		return guarded(stateHeads+"; }", run+"\n"+tolerate+end)
+		return "cat \"$magus_git_dir/sequencer/head\" 2>/dev/null || git rev-parse HEAD~1"
 	case HookPostRewrite:
-		return guarded("[ \"$1\" = rebase ]", run+" \"$@\"\n"+tolerate+end)
+		return "cat \"$magus_git_dir/rebase-merge/onto\" 2>/dev/null || cat \"$magus_git_dir/rebase-apply/onto\" 2>/dev/null || git rev-parse ORIG_HEAD"
 	default:
-		return run + "\n" + tolerate + end
+		return "git rev-parse ORIG_HEAD"
 	}
+}
+
+func indentShell(body string) string {
+	var b strings.Builder
+	for _, line := range strings.SplitAfter(strings.TrimSuffix(body, "\n"), "\n") {
+		b.WriteString("  " + line)
+	}
+	b.WriteString("\n")
+	return b.String()
 }
 
 // removeGitHookSections deletes the m section from each named hook of root's repository
