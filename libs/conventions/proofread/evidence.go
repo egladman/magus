@@ -51,6 +51,9 @@ var evidenceCeiling = map[Rule]Decision{
 	RuleDeferralNoLink:      DecisionOff,    // no labeled firing yet
 	RuleDeclineNoReason:     DecisionOff,    // no labeled firing yet
 	RuleImpatience:          DecisionOff,    // no labeled firing yet
+	RuleListMarks:           DecisionOff,    // no labeled firing yet
+	RuleListParallel:        DecisionOff,    // no labeled firing yet
+	RuleDateFormat:          DecisionOff,    // no labeled firing yet
 	RuleBlame:               DecisionAdvise, // 34/37, 0.79
 	RuleSubjectMood:         DecisionAdvise, // 37/40, 0.80
 }

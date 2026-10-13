@@ -521,7 +521,9 @@ func readsAsProse(sentence string) bool {
 // dash reports an em dash, an en dash, or a double hyphen set between words.
 // A double hyphen is reported with the words either side, as aside spells a
 // spaced hyphen; a command's `--` goes in a code span. A dash's match takes
-// the spaces around it, so its replacement reads as written.
+// the spaces around it, so its replacement reads as written. A date range is
+// no aside: its double hyphen stands, and its em or en dash, still not ASCII,
+// is replaced by a hyphen.
 func dash(in input) []Finding {
 	const message = "Write a colon, a semicolon, a comma or parentheses instead of '%s'."
 
@@ -546,7 +548,12 @@ func dash(in input) []Finding {
 				from, to = from-1, to+1
 			}
 
-			report(from, to, dashReplacement(para.text, from, to))
+			replacement := dashReplacement(para.text, from, to)
+			if dateRange(para.text, from, to) {
+				replacement = strings.Replace(para.text[from:to], string(r), "-", 1)
+			}
+
+			report(from, to, replacement)
 		}
 
 		for i := 0; ; {
@@ -556,7 +563,8 @@ func dash(in input) []Finding {
 			}
 
 			at := i + j + 1
-			if at > 1 && para.text[at-2] != ' ' && at+3 < len(para.text) && para.text[at+3] != ' ' {
+			if at > 1 && para.text[at-2] != ' ' && at+3 < len(para.text) && para.text[at+3] != ' ' &&
+				!dateRange(para.text, at-1, at+3) {
 				from, to := wordBefore(para.text, at), wordAfter(para.text, at+1)
 				report(from, to, para.text[from:at-1]+dashReplacement(para.text, at-1, at+3)+para.text[at+3:to])
 			}

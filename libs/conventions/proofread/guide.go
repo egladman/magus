@@ -111,24 +111,16 @@ var stepOpeners = wordSet(
 func stepVerb(in input) []Finding {
 	var out []Finding
 
-	for _, list := range numberedLists(in.prose) {
-		procedure := false
-
-		for _, item := range list {
-			if imperatives[strings.ToLower(firstWord(stepBody(item)))] {
-				procedure = true
-
-				break
-			}
-		}
-
-		if !procedure {
+	for _, list := range lists(in.prose, asWritten) {
+		if !list.numbered() || !slices.ContainsFunc(list.items, func(item paragraph) bool {
+			return imperatives[strings.ToLower(firstWord(stepBody(item.head)))]
+		}) {
 			continue
 		}
 
-		for _, item := range list {
-			if f, ok := stepFinding(stepBody(item)); ok {
-				f.Line = item.line
+		for _, item := range list.items {
+			if f, ok := stepFinding(stepBody(item.head)); ok {
+				f.Line = item.head.line
 				out = append(out, f)
 			}
 		}
@@ -190,53 +182,6 @@ func firstWord(body string) string {
 	}
 
 	return body[:end]
-}
-
-// numberedLists groups the items of each numbered list in prose, in order. A
-// list runs until a heading, a paragraph at its own indent or less, or a
-// bulleted item at its indent; a fenced block between two steps, which
-// prose never holds, does not end it.
-func numberedLists(prose []proseLine) [][]proseLine {
-	var (
-		out  [][]proseLine
-		open = map[int]int{} // indent -> index in out of the list open there
-	)
-
-	closeFrom := func(indent int) {
-		for at := range open {
-			if at >= indent {
-				delete(open, at)
-			}
-		}
-	}
-
-	for _, ln := range prose {
-		indent := len(ln.text) - len(strings.TrimLeft(ln.text, " \t"))
-
-		switch {
-		case ln.heading:
-			clear(open)
-		case !ln.item:
-			if ln.opens {
-				closeFrom(indent)
-			}
-		case !isDigit(ln.text[indent]):
-			closeFrom(indent)
-		default:
-			closeFrom(indent + 1)
-
-			if i, ok := open[indent]; ok {
-				out[i] = append(out[i], ln)
-
-				continue
-			}
-
-			open[indent] = len(out)
-			out = append(out, []proseLine{ln})
-		}
-	}
-
-	return out
 }
 
 var (

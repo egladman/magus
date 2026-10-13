@@ -244,7 +244,7 @@ func (c check) declaredDecision(kind Kind) Decision {
 // Markdown and pull requests would hold every doc comment in the tree to
 // them at once, with no sweep behind it.
 var checks = slices.Concat(coreChecks, cssChecks, toneChecks, slopChecks, messageChecks, commitChecks, helpChecks,
-	issueChecks, densityChecks, reviewChecks, reviewKindChecks, suppressChecks, agentReplyChecks, toolChecks, voiceChecks, []check{templateCheck})
+	issueChecks, densityChecks, reviewChecks, reviewKindChecks, suppressChecks, agentReplyChecks, toolChecks, listChecks, voiceChecks, []check{templateCheck})
 
 var messageChecks = []check{
 	{rule: RuleMessageLength, on: message, judge: messageLength},

@@ -25,6 +25,9 @@
     "bare-lgtm": "advise",
     "deferral-no-link": "advise",
     "decline-no-reason": "advise",
-    "impatience": "advise"
+    "impatience": "advise",
+    "list-marks": "advise",
+    "list-parallel": "advise",
+    "date-format": "advise"
   }
 }

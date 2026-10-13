@@ -42,6 +42,8 @@ Each rule also has a dimension, the cost its findings name to the reader:
 | [changelog-group](changelog-group.md)       | PRF1031 | conventions | varies by kind | a changelog heading that is not Added, Changed, Deprecated, Removed, Fixed or Security                                                                    |
 | [changelog-entry](changelog-entry.md)       | PRF1032 | stance      | advise         | a changelog entry that names a Go identifier and says little else                                                                                         |
 | [voice-drift](voice-drift.md)               | PRF1040 | stance      | advise         | a draft that reads further from its author's own texts of its kind than 95 percent of them do, or a commit subject longer than 95 percent of the author's |
+| [list-marks](list-marks.md)                 | PRF1060 | conventions | off            | a list item whose initial capital or closing full stop differs from the list's other items                                                                |
+| [list-parallel](list-parallel.md)           | PRF1061 | structure   | off            | a list item that opens with a verb where the others open with a noun phrase, or in another tense                                                          |
 | [suppression-unused](suppression-unused.md) | PRF1090 | evidence    | deny           | a suppression comment that gives no reason or that matched no finding                                                                                     |
 
 ## Tone
@@ -84,14 +86,15 @@ Each rule also has a dimension, the cost its findings name to the reader:
 
 ## House style
 
-| Rule                          | Code    | Dimension   | Default     | Catches                                                                  |
-| ----------------------------- | ------- | ----------- | ----------- | ------------------------------------------------------------------------ |
-| [terms](terms.md)             | PRF5001 | conventions | off (house) | a spelling the glossary replaces ("sub-agent")                           |
-| [dash](dash.md)               | PRF5002 | conventions | off (house) | an em dash, an en dash or a spaced double hyphen in prose                |
-| [ascii](ascii.md)             | PRF5003 | conventions | off (house) | a curly quote, an ellipsis character or an emoji in prose                |
-| [tense](tense.md)             | PRF5004 | conventions | off (house) | a claim in the future tense, or a first-person account of a change       |
-| [attribution](attribution.md) | PRF5005 | conventions | off (house) | credit to a tool or an agent, or an account of how the work was produced |
-| [banned-word](banned-word.md) | PRF5006 | conventions | off (house) | a word this repository bans, in a stylesheet comment                     |
+| Rule                          | Code    | Dimension   | Default     | Catches                                                                                                      |
+| ----------------------------- | ------- | ----------- | ----------- | ------------------------------------------------------------------------------------------------------------ |
+| [terms](terms.md)             | PRF5001 | conventions | off (house) | a spelling the glossary replaces ("sub-agent")                                                               |
+| [dash](dash.md)               | PRF5002 | conventions | off (house) | an em dash, an en dash or a spaced double hyphen in prose                                                    |
+| [ascii](ascii.md)             | PRF5003 | conventions | off (house) | a curly quote, an ellipsis character or an emoji in prose                                                    |
+| [tense](tense.md)             | PRF5004 | conventions | off (house) | a claim in the future tense, or a first-person account of a change                                           |
+| [attribution](attribution.md) | PRF5005 | conventions | off (house) | credit to a tool or an agent, or an account of how the work was produced                                     |
+| [banned-word](banned-word.md) | PRF5006 | conventions | off (house) | a word this repository bans, in a stylesheet comment                                                         |
+| [date-format](date-format.md) | PRF5007 | conventions | off         | dates in more than one style in one text: 2026-10-13, Oct 2026, October 2026, 10/13/2026, or Sep beside Sept |
 
 ## Doc comments
 
