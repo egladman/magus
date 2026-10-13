@@ -131,11 +131,11 @@ func TestARetentionPassReadsJobsRetain(t *testing.T) {
 		want    []string
 		wantErr string
 	}{
-		"absent keeps a week": {want: []string{"two-days", "live"}},
-		"a day":               {yaml: "jobs:\n  retain: 24h\n", want: []string{"live"}},
+		"absent keeps a week":  {want: []string{"two-days", "live"}},
+		"a day":                {yaml: "jobs:\n  retain: 24h\n", want: []string{"live"}},
 		"zero keeps every row": {yaml: "jobs:\n  retain: 0s\n", want: []string{"ten-days", "two-days", "live"}},
-		"negative":            {yaml: "jobs:\n  retain: -1h\n", wantErr: "retain"},
-		"not a duration":      {yaml: "jobs:\n  retain: forever\n", wantErr: "retain"},
+		"negative":             {yaml: "jobs:\n  retain: -1h\n", wantErr: "retain"},
+		"not a duration":       {yaml: "jobs:\n  retain: forever\n", wantErr: "retain"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
