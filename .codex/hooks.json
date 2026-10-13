@@ -12,6 +12,18 @@
         "matcher": "Bash"
       }
     ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "statusMessage": "magus: recording the subagent",
+            "type": "command"
+          }
+        ],
+        "matcher": "spawn_agent|collaborationspawn_agent|Agent"
+      }
+    ],
     "PreToolUse": [
       {
         "hooks": [
@@ -36,26 +48,6 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-observe.buzz -- --agent-name codex",
-            "statusMessage": "magus: recording read",
-            "type": "command"
-          }
-        ],
-        "matcher": "Read"
-      },
-      {
-        "hooks": [
-          {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
-            "statusMessage": "magus guard: checking read",
-            "type": "command"
-          }
-        ],
-        "matcher": "Read"
-      },
-      {
-        "hooks": [
-          {
             "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus guard: checking MCP tool call",
             "type": "command"
@@ -71,7 +63,7 @@
             "type": "command"
           }
         ],
-        "matcher": "spawn_agent"
+        "matcher": "spawn_agent|collaborationspawn_agent|Agent"
       }
     ],
     "SessionStart": [
@@ -101,6 +93,28 @@
           {
             "command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name codex",
             "statusMessage": "magus: proofreading the reply",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
+            "statusMessage": "magus: briefing the subagent",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "statusMessage": "magus: recording the subagent's context",
             "type": "command"
           }
         ]
