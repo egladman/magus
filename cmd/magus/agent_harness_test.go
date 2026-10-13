@@ -236,10 +236,11 @@ export fun harness_entries(target: Target, cb: fun(any)) > [any] {
 `
 
 // TestShippedHarnessEntriesRetireWhenRewritten holds every entry a shipped harness spell
-// renders to being one a later merge recognizes as magus's. It merges each host's config
-// from nothing, rewrites every command the way a new spell version would, and merges again:
-// an entry the planner did not recognize stays beside its replacement, which is how Claude
-// Code's session PATH entry came to be wired twice while describe called the file current.
+// renders to being one a later merge recognizes as magus's. It merges each host's config,
+// rewrites every command the way a new spell version would, and merges again: an entry the
+// planner did not recognize stays beside its replacement, which is how Claude Code's session
+// PATH entry came to be wired twice while describe called the file current. Each config starts
+// with a hand-written reply check that no merge may add a second copy of, retire or rewrite.
 func TestShippedHarnessEntriesRetireWhenRewritten(t *testing.T) {
 	script := filepath.Join(t.TempDir(), "shipped_harness_retire.txtar")
 	require.NoError(t, os.WriteFile(script, []byte(shippedHarnessRetireTxtar), 0o644))
@@ -272,9 +273,6 @@ grep 'magus-command.buzz' .claude/settings.json
 grep 'CLAUDE_ENV_FILE' .claude/settings.json
 grep 'magus-command.buzz' .codex/hooks.json
 grep 'cursor-hook.buzz' .cursor/hooks.json
-grep 'proofread-reply.buzz -- --agent-name claude-code' .claude/settings.json
-grep 'proofread-reply.buzz -- --agent-name codex' .codex/hooks.json
-grep 'proofread-reply.buzz -- --agent-name cursor' .cursor/hooks.json
 grep '"matcher": "spawn_agent\|collaborationspawn_agent\|Agent"' .codex/hooks.json
 grep '"PostToolUse"' .codex/hooks.json
 grep '"SubagentStart"' .codex/hooks.json
@@ -282,8 +280,10 @@ grep '"SubagentStop"' .codex/hooks.json
 ! grep '"matcher": "Read"' .codex/hooks.json
 grep '"UserPromptSubmit"' .codex/hooks.json
 grep '"beforeSubmitPrompt"' .cursor/hooks.json
-grep '"loop_limit": 1' .cursor/hooks.json
 grep 'sandbox_mode = "read-only"' .codex/agents/magus-scout.toml
+grep -count=1 'proofread-reply.buzz' .claude/settings.json
+grep -count=1 'proofread-reply.buzz' .codex/hooks.json
+grep -count=1 'proofread-reply.buzz' .cursor/hooks.json
 exec sh rewrite.sh
 grep 'stale-rendering' .claude/settings.json
 exec sh merge.sh
@@ -310,6 +310,12 @@ import "spells/harness/cursor";
 magus\harness.provider(claude);
 magus\harness.provider(codex);
 magus\harness.provider(cursor);
+-- .claude/settings.json --
+{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name claude-code"}]}]}}
+-- .codex/hooks.json --
+{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name codex"}]}]}}
+-- .cursor/hooks.json --
+{"version": 1, "hooks": {"stop": [{"command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name cursor", "loop_limit": 1}]}}
 -- merge.sh --
 set -e
 for id in claude-code codex cursor; do
@@ -319,7 +325,7 @@ done
 -- rewrite.sh --
 set -e
 for f in .claude/settings.json .codex/hooks.json .cursor/hooks.json; do
-  sed 's/"command": "/"command": ": stale-rendering; /g' "$f" > rewritten
+  sed '/proofread-reply/!s/"command": "/"command": ": stale-rendering; /g' "$f" > rewritten
   mv rewritten "$f"
 done
 `

@@ -32,7 +32,7 @@ env GLUE_LOG=$WORK/cursor-flag.log
 stdin cursor-shell.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout 'FAKE-VERDICT'
-grep -count=3 '^shell ' $WORK/cursor-flag.log
+grep -count=2 '^shell ' $WORK/cursor-flag.log
 
 # --- any other failure is answered once ----------------------------------------
 

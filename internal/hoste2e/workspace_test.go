@@ -212,6 +212,33 @@ func (w *workspace) mergeHarness(t *testing.T, spell string) {
 	w.run(t, "sh", "-c", plan.Merge)
 }
 
+// replyCheckScript is the template a person downloads to turn the reply check on. No
+// harness config ships an entry for it, so each host's wire step adds one by hand.
+const replyCheckScript = "docs/guides/integrations/agents/proofread-reply.buzz"
+
+// wireReplyCheck appends entry under event in the hooks object of config, a path in the
+// workspace: the Stop entry a person writes to turn the reply check on.
+func (w *workspace) wireReplyCheck(t *testing.T, config, event string, entry map[string]any) {
+	t.Helper()
+	path := filepath.Join(w.dir, config)
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(body, &doc); err != nil {
+		t.Fatalf("%s: %v", path, err)
+	}
+	hooks, _ := doc["hooks"].(map[string]any)
+	if hooks == nil {
+		hooks = map[string]any{}
+		doc["hooks"] = hooks
+	}
+	existing, _ := hooks[event].([]any)
+	hooks[event] = append(existing, entry)
+	writeJSON(t, path, doc)
+}
+
 // harnessPlan is what `magus describe harness` says after the merge, for the MCP hint.
 func (w *workspace) harnessPlan(t *testing.T, spell string) types.HarnessPlan {
 	t.Helper()

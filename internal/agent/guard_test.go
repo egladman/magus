@@ -95,6 +95,8 @@ var hookConfigExemptions = map[string]map[string]string{
 			"checkout root on PATH for later shell commands",
 		"magus-observe": "Codex has no read tool: a file is read through a shell command, which the command " +
 			"rules already judge, so no PreToolUse matcher exists for the read record to ride",
+		"proofread-reply": "the reply check is opt-in on every host and no shipped config wires it; the " +
+			"dogfooded Claude Code config does by hand, which is the only reason the two differ",
 	},
 }
 

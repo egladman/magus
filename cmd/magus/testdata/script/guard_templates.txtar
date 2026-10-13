@@ -536,17 +536,15 @@ stdout '"permission":"allow"'
 
 # --- cursor-hook.buzz: the shell on preToolUse, one judgment per call ----------
 #
-# preToolUse is the shell's gate because its reply can rewrite the command, which Cursor
-# applies (probed on cursor-agent 2026.10.01): a command that passes runs with stdin
-# closed and MAGUS_LOG_SILENT exported, as it does under Claude Code.
+# preToolUse is the shell's gate. A command that passes is answered with a plain allow:
+# the hook hands Cursor no updated_input, so the command runs exactly as Cursor sent it.
 env CURSOR_HOOK_STATE_DIR=$WORK/cursor-state
 
 # case: command/pass
 stdin cursor-pre-shell-pass.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
 stdout '"permission":"allow"'
-stdout '"updated_input":\{"command":"export MAGUS_LOG_SILENT=true; exec </dev/null; ls -la"'
-stdout '"timeout":30000'
+! stdout 'updated_input'
 
 # case: command/deny
 # A refused command is never rewritten: it does not run.
@@ -583,11 +581,11 @@ env COUNTING_MAGUS_LOG=$WORK/calls.log
 
 stdin cursor-pre-shell-counted.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
-stdout '"updated_input":\{"command":"export MAGUS_LOG_SILENT=true; exec </dev/null; echo hi"'
-grep 'shell .*rewrites-input' $WORK/calls.log
+stdout '"permission":"allow"'
+! stdout 'updated_input'
 grep 'shell .*reports-skills' $WORK/calls.log
 
-# beforeShellExecution sees the rewritten line, and lets it through unjudged.
+# beforeShellExecution sees the same line, and lets it through unjudged.
 stdin cursor-before-shell-counted.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
 stdout '"permission":"allow"'
@@ -1651,20 +1649,20 @@ not json at all
 echo "$*" >> "$COUNTING_MAGUS_LOG"
 cat > "$COUNTING_MAGUS_LOG.stdin"
 case "$1" in
-  shell) printf '%s\n' '{"schema_version":2,"decision":"advise","context":"COUNTED-ADVICE","rule":"counted","updated_command":"exec </dev/null; echo hi"}' ;;
+  shell) printf '%s\n' '{"schema_version":2,"decision":"advise","context":"COUNTED-ADVICE","rule":"counted"}' ;;
   session) echo COUNTED-BRIEF ;;
 esac
 exit 0
 -- cursor-pre-shell-counted.json --
 {"hook_event_name": "preToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Shell", "tool_use_id": "s-1", "tool_input": {"command": "echo hi", "cwd": "", "timeout": 30000}, "cwd": ""}
 -- cursor-before-shell-counted.json --
-{"hook_event_name": "beforeShellExecution", "conversation_id": "c2", "session_id": "c2", "command": "export MAGUS_LOG_SILENT=true; exec </dev/null; echo hi", "cwd": "", "sandbox": false}
+{"hook_event_name": "beforeShellExecution", "conversation_id": "c2", "session_id": "c2", "command": "echo hi", "cwd": "", "sandbox": false}
 -- cursor-post-shell-counted.json --
-{"hook_event_name": "postToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Shell", "tool_use_id": "s-1", "tool_input": {"command": "export MAGUS_LOG_SILENT=true; exec </dev/null; echo hi", "cwd": "", "timeout": 30000}, "tool_output": "{\"output\":\"hi\\n\",\"exitCode\":0}", "cwd": ""}
+{"hook_event_name": "postToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Shell", "tool_use_id": "s-1", "tool_input": {"command": "echo hi", "cwd": "", "timeout": 30000}, "tool_output": "{\"output\":\"hi\\n\",\"exitCode\":0}", "cwd": ""}
 -- cursor-pre-shell-failing.json --
 {"hook_event_name": "preToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Shell", "tool_use_id": "s-2", "tool_input": {"command": "ls /not/here", "cwd": "", "timeout": 30000}, "cwd": ""}
 -- cursor-post-shell-failing.json --
-{"hook_event_name": "postToolUseFailure", "conversation_id": "c2", "session_id": "c2", "tool_name": "Shell", "tool_use_id": "s-2", "tool_input": {"command": "export MAGUS_LOG_SILENT=true; exec </dev/null; ls /not/here", "cwd": "", "timeout": 30000}, "error_message": "ls: /not/here: No such file or directory", "failure_type": "error", "is_interrupt": false, "cwd": ""}
+{"hook_event_name": "postToolUseFailure", "conversation_id": "c2", "session_id": "c2", "tool_name": "Shell", "tool_use_id": "s-2", "tool_input": {"command": "ls /not/here", "cwd": "", "timeout": 30000}, "error_message": "ls: /not/here: No such file or directory", "failure_type": "error", "is_interrupt": false, "cwd": ""}
 -- cursor-pre-read-counted.json --
 {"hook_event_name": "preToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Read", "tool_use_id": "call-1\nfc_1", "tool_input": {"file_path": "README.md"}}
 -- cursor-pre-write-counted.json --

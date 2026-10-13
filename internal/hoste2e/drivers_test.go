@@ -35,6 +35,10 @@ func claudeDriver() *hostDriver {
 	h.locate("CLAUDE", [2]string{os.Getenv("CLAUDE_CODE_EXECPATH"), "CLAUDE_CODE_EXECPATH"})
 	h.env = func(*testing.T, *workspace) []string { return nil }
 	h.wire = func(t *testing.T, w *workspace) {
+		w.wireReplyCheck(t, ".claude/settings.json", "Stop", map[string]any{"hooks": []any{map[string]any{
+			"type": "command", "timeout": 10,
+			"command": `magus buzz -C "$CLAUDE_PROJECT_DIR" -s ` + replyCheckScript + " -- --agent-name claude-code",
+		}}})
 		// The command `magus describe harness claude-code` prints for MCP.
 		w.run(t, h.path, "mcp", "add", "--scope", "project", "magus", "--", "./magus", "mcp")
 	}
@@ -66,6 +70,9 @@ func codexDriver() *hostDriver {
 	home := func(w *workspace) string { return filepath.Join(w.root, "codex-home") }
 	h.env = func(_ *testing.T, w *workspace) []string { return []string{"CODEX_HOME=" + home(w)} }
 	h.wire = func(t *testing.T, w *workspace) {
+		w.wireReplyCheck(t, ".codex/hooks.json", "Stop", map[string]any{"hooks": []any{map[string]any{
+			"type": "command", "command": "magus buzz -s " + replyCheckScript + " -- --agent-name codex",
+		}}})
 		dir := home(w)
 		mustMkdir(t, dir)
 		auth := filepath.Join(os.Getenv("HOME"), ".codex", "auth.json")
@@ -118,6 +125,9 @@ func cursorDriver() *hostDriver {
 	h.locate("CURSOR")
 	h.env = func(*testing.T, *workspace) []string { return nil }
 	h.wire = func(t *testing.T, w *workspace) {
+		w.wireReplyCheck(t, ".cursor/hooks.json", "stop", map[string]any{
+			"command": "magus buzz -s " + replyCheckScript + " -- --agent-name cursor", "timeout": 10, "loop_limit": 1,
+		})
 		// The stdio entry `magus describe harness cursor` describes in prose.
 		writeJSON(t, filepath.Join(w.dir, ".cursor", "mcp.json"), map[string]any{
 			"mcpServers": map[string]any{"magus": map[string]any{"command": "./magus", "args": []string{"mcp"}}},
@@ -150,7 +160,11 @@ func opencodeDriver() *hostDriver {
 	h := &hostDriver{id: "opencode", spell: "opencode", binary: "opencode", model: envModel("OPENCODE", "opencode/big-pickle")}
 	h.locate("OPENCODE")
 	h.env = func(_ *testing.T, w *workspace) []string {
-		return []string{"XDG_CONFIG_HOME=" + filepath.Join(w.root, "xdg-config")}
+		return []string{
+			"XDG_CONFIG_HOME=" + filepath.Join(w.root, "xdg-config"),
+			// The plugin runs the reply check only when this names the script.
+			"__PROOFREAD_REPLY_BUZZ=" + filepath.Join(w.dir, replyCheckScript),
+		}
 	}
 	h.wire = func(t *testing.T, w *workspace) {
 		// The plugin the OpenCode guide says to save under .opencode/plugins/.

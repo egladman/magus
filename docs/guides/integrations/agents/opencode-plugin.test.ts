@@ -819,6 +819,25 @@ test("with no reply script the idle records its checkpoint and judges no reply",
   });
 });
 
+test("the reply check is off by default: with the variable unset or empty nothing is judged", async () => {
+  const saved = process.env.__PROOFREAD_REPLY_BUZZ;
+  try {
+    for (const value of [undefined, ""]) {
+      if (value === undefined) delete process.env.__PROOFREAD_REPLY_BUZZ;
+      else process.env.__PROOFREAD_REPLY_BUZZ = value;
+      const calls = stubBun(() => findings);
+      const prompts: Array<{ id: string; text: string }> = [];
+      const h = await hooks({ messages: { root: turn("Done.") }, prompts });
+      await h.event(idle("root"));
+      assert.ok(!calls.some((call) => call.argv[0] === "buzz"), `judged with the variable ${value === undefined ? "unset" : "empty"}`);
+      assert.deepEqual(prompts, []);
+    }
+  } finally {
+    if (saved === undefined) delete process.env.__PROOFREAD_REPLY_BUZZ;
+    else process.env.__PROOFREAD_REPLY_BUZZ = saved;
+  }
+});
+
 /**
  * Runs `body` with the process in `cwd` and no __MAGUS_BIN, so the plugin resolves its own
  * binary the way an installed copy does.
