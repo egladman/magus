@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 25918
-skill_short_bytes: 19645
+skill_full_bytes: 26066
+skill_short_bytes: 19843
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `121` |
+| `agent-skill-version` | `122` |
 | `knowledge-schema-version` | `17` |
-| `skill-content` | `7344cf003a5f` |
+| `skill-content` | `0ee8580a130a` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -302,7 +302,8 @@ A read-only job has no write set, so it is outside this analysis.
 Two jobs may run together only when:
 
 - The combined classification reports no overlaps: source write sets and declared
-  outputs disjoint.
+  outputs disjoint, or sharing a file by claiming DIFFERENT declarations of it
+  (`<file>#<declaration>`, the default; `--depends-on` is for the SAME one).
 - Neither consumes an API or generated artifact the other changes.
 - Shared manifests, lockfiles, schemas, workspace configuration, and agent
   instructions have one owner.
@@ -425,9 +426,9 @@ each verifies. [reference.md](reference.md) has the table and the rename pattern
 ## Observe through the correct control plane
 
 Run workers non-blocking; block on one only when your next action needs its result.
-Watch processes with `magus status --watch=15s`. Never message a worker to ask how it
-is going: `magus describe job <job>` grades where it stands, and `magus job watch <job>`
-shows it happening. Message a worker only to CHANGE what it was handed.
+`magus status --watch=15s` is for a person, never an agent's background task: an agent waits
+for its own run's completion notice. The root reads `magus describe job <job>` or `magus job watch <job>`
+only when it needs to know. Never message a worker to ask how it is going, only to CHANGE what it was handed.
 [reference.md](reference.md) covers blocked workers and auditing what a job ran.
 
 ## Integrate and verify
@@ -780,15 +781,15 @@ Read the facts:
 - `depends_on` carries the owner's direct edges.
 - Affinity stays with `client` (`magus\insight`, read affinity). Without MCP,
   run `magus buzz -e` printing `magus\insight().affinity`.
-- Use `magus refs <symbol>` when two jobs may touch the same API; `magus path <a> <b>` settles
-  a suspicious pair.
+- Use `magus refs <symbol>` when two jobs may touch the same API.
 
 A read-only job has no write set, so it is outside this analysis.
 
 Two jobs may run together only when:
 
 - The combined classification reports no overlaps: source write sets and declared
-  outputs disjoint.
+  outputs disjoint, or sharing a file by claiming DIFFERENT declarations of it
+  (`<file>#<declaration>`, the default; `--depends-on` is for the SAME one).
 - Neither consumes an API or generated artifact the other changes.
 - Shared manifests, lockfiles, schemas, workspace configuration, and agent
   instructions have one owner.
@@ -930,9 +931,9 @@ each verifies. [reference.md](reference.md) has the table and the rename pattern
 ## Observe through the correct control plane
 
 Run workers non-blocking; block on one only when your next action needs its result.
-Watch processes with `magus status --watch=15s`. Never message a worker to ask how it
-is going: `magus describe job <job>` grades where it stands, and `magus job watch <job>`
-shows it happening. Message a worker only to CHANGE what it was handed.
+`magus status --watch=15s` is for a person, never an agent's background task: an agent waits
+for its own run's completion notice. The root reads `magus describe job <job>` or `magus job watch <job>`
+only when it needs to know. Never message a worker to ask how it is going, only to CHANGE what it was handed.
 [reference.md](reference.md) covers blocked workers and auditing what a job ran.
 
 ## Integrate and verify
