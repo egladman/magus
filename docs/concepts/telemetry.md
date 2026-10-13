@@ -168,14 +168,18 @@ attention request, the agent guard grading a write) reach the
 [activity trail](../guides/integrations/server.md) instead. Read each row for
 what it counts, not for all three.
 
-| Metric                                       | Instrument | Unit             | Attributes                              | Meaning                                            |
-| -------------------------------------------- | ---------- | ---------------- | --------------------------------------- | -------------------------------------------------- |
-| `magus.lease.registrations`                  | counter    | `{registration}` | `verdict`                               | A worker registered the base it actually landed on |
-| `magus.attention.disposition.duration`       | histogram  | `s`              | `severity`                              | How long a request waited, from raised to disposed |
-| `magus.review.remarks`                       | counter    | `{remark}`       | `author ∈ {unattributed, agent}`        | A remark drafted on a change                       |
-| `magus.review.publishes`                     | counter    | `{publish}`      | `verdict`, `downgraded ∈ {true, false}` | A review published, by the verdict that landed     |
-| `magus.review.merged_while_reading`          | counter    | `{merge}`        | none                                    | A review merged while its reader was reading       |
-| `magus.review.merged_while_reading.duration` | histogram  | `s`              | none                                    | Time from the reader's mark to the merge           |
+| Metric                                       | Instrument | Unit             | Attributes                              | Meaning                                             |
+| -------------------------------------------- | ---------- | ---------------- | --------------------------------------- | --------------------------------------------------- |
+| `magus.lease.registrations`                  | counter    | `{registration}` | `verdict`                               | A worker registered the base it actually landed on  |
+| `magus.attention.disposition.duration`       | histogram  | `s`              | `severity`                              | How long a request waited, from raised to disposed  |
+| `magus.review.remarks`                       | counter    | `{remark}`       | `author ∈ {unattributed, agent}`        | A remark drafted on a change                        |
+| `magus.review.publishes`                     | counter    | `{publish}`      | `verdict`, `downgraded ∈ {true, false}` | A review published, by the verdict that landed      |
+| `magus.review.merged_while_reading`          | counter    | `{merge}`        | none                                    | A review merged while its reader was reading        |
+| `magus.review.merged_while_reading.duration` | histogram  | `s`              | none                                    | Time from the reader's mark to the merge            |
+| `magus.agent.context.tokens`                 | histogram  | `{token}`        | `thread`, `model`                       | Context size a caller reported on a tool call       |
+| `magus.agent.delegable.chars`                | counter    | `{char}`         | `class`                                 | Result characters a subagent could have fetched     |
+| `magus.agent.billing`                        | counter    | `{call}`         | `mode`                                  | Tool calls, by the billing mode in effect           |
+| `magus.agent.shadow.verdicts`                | counter    | `{call}`         | `profile`, `decision`                   | Tool calls, by what each guard profile would decide |
 
 `verdict` on registrations is `match`, `revision-match`, `diverged` or `unknown`;
 a rising `diverged` share says a fleet's workers are building on trees their
@@ -192,6 +196,14 @@ distribution rather than a queue depth, which would read as the whole queue and
 be neither. `severity` is re-read from the store and clamped to the declared
 tiers (`info`, `notice`, `warning`, `critical`, plus `unset`), so a record written
 by another build can never mint a series.
+
+The `magus.agent.*` metrics are fed from the tool calls of an agent session.
+`thread` is `main`, `sub` or `unknown` (a host that reports nothing to tell
+them apart), and `model` falls back to `unknown`. `class` names the kind of call
+a subagent could have made in the caller's place, and the counter adds the
+characters its result put into the caller's context. `mode` is the billing mode
+in effect. `profile` is a guard profile and `decision` is what that profile
+would have decided; the row records the verdict without enforcing it.
 
 **Metrics observe, they never gate.** `magus.review.remarks` is attributed by
 `author` because that says which **door** a remark came through, and both doors
