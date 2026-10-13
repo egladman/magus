@@ -123,6 +123,12 @@ The records to apply: a file, or `\-` for stdin; one JSON job, a JSON array, or 
 .TP
 \fB\-\-base\fR \fImagus vcs checkpoint -o name\fR
 The base this checkout landed on, as `magus vcs checkpoint \-o name` prints it (default: read from this checkout)
+.TP
+\fB\-\-slots\fR \fIint\fR (default: 1)
+With \-\-timeout: the machine budget slots the command takes while it runs
+.TP
+\fB\-\-timeout\fR \fIduration\fR
+Run the command after \-\- and stop its whole process group once this long has passed (e.g. 20m); exits 124 at the deadline
 .RE
 .SS job exit options
 .RS
@@ -207,6 +213,12 @@ magus job fork --stdin < job.json
 .PP
 .EX
 magus job exec session-load/core
+.EE
+.PP
+\fIBound a long command\fR
+.PP
+.EX
+magus job exec --timeout 20m -- rg -l TODO ~/src
 .EE
 .PP
 \fIReturn it with its result\fR

@@ -132,6 +132,12 @@ them and magus describe job prints one job's terms.
 **--base** *magus vcs checkpoint -o name*
 : The base this checkout landed on, as \`magus vcs checkpoint -o name\` prints it (default: read from this checkout)
 
+**--slots** *int* (default: 1)
+: With --timeout: the machine budget slots the command takes while it runs
+
+**--timeout** *duration*
+: Run the command after -- and stop its whole process group once this long has passed (e.g. 20m); exits 124 at the deadline
+
 ### job exit options
 
 **--schema**
@@ -211,6 +217,12 @@ magus job fork --stdin < job.json
 
 ```sh
 magus job exec session-load/core
+```
+
+*Bound a long command*
+
+```sh
+magus job exec --timeout 20m -- rg -l TODO ~/src
 ```
 
 *Return it with its result*

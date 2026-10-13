@@ -287,6 +287,10 @@ const (
 	FlagJobApplyF = "f"
 	// job exec: --base
 	FlagJobExecBase = "base"
+	// job exec: --slots
+	FlagJobExecSlots = "slots"
+	// job exec: --timeout
+	FlagJobExecTimeout = "timeout"
 	// job exit: --schema
 	FlagJobExitSchema = "schema"
 	// job exit: --stdin
@@ -1766,13 +1770,17 @@ func BindJobApply(fs *flag.FlagSet) *JobApplyFlags {
 
 // JobExecFlags are the flags declared for `magus job exec`.
 type JobExecFlags struct {
-	Base string // --base
+	Base    string        // --base
+	Timeout time.Duration // --timeout
+	Slots   int           // --slots
 }
 
 // BindJobExec registers `magus job exec`'s flags on fs and returns the destination.
 func BindJobExec(fs *flag.FlagSet) *JobExecFlags {
 	var f JobExecFlags
 	fs.StringVar(&f.Base, FlagJobExecBase, "", "The base this checkout landed on, as `magus vcs checkpoint -o name` prints it (default: read from this checkout)")
+	fs.DurationVar(&f.Timeout, FlagJobExecTimeout, 0, "Run the command after -- and stop its whole process group once this long has passed (e.g. 20m); exits 124 at the deadline")
+	fs.IntVar(&f.Slots, FlagJobExecSlots, 1, "With --timeout: the machine budget slots the command takes while it runs")
 	return &f
 }
 
