@@ -1307,8 +1307,10 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     final up = proofread\home.split("/").map(fun (i: int, s: str) > str => "..").join("/");
     go["go-build"](ctx.withEnv(env), {"args": ["-C", proofread\home, "-trimpath",
         "-o", up + "/" + releases\toSlash(fs\join(pstage, pbinary)), "./" + proofread\command]});
+    // The embedded tagger model is trained on CC BY-SA 4.0 data, which requires its attribution.
+    fs\copyFile(fs\join(proofread\home, "postag", "testdata", "ATTRIBUTION"), fs\join(pstage, "ATTRIBUTION-postag"));
     archive_release_stage(pstage, tool: "proofread", binary: pbinary,
-        readme: fs\join(proofread\home, "readme.md"), asset: proofreadAsset, buildinfo: "proofread" + info);
+        readme: fs\join(proofread\home, "proofread", "README.md"), asset: proofreadAsset, buildinfo: "proofread" + info);
 }
 
 fun release_target_platform(goos: str, goarch: str) > [str] !> any {
