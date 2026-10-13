@@ -178,6 +178,8 @@ func readOnlyInvocation(c hint.Invocation, dynamic bool, magusAllowed func(args 
 		return false
 	case name == "sed":
 		return !rewritesInPlace(c)
+	case name == "awk" || name == "gawk" || name == "mawk" || name == "nawk":
+		return awkReadOnly(c.Args)
 	case name == "sort":
 		return !slices.ContainsFunc(c.Args, func(a string) bool { return a == "-o" || strings.HasPrefix(a, "--output") })
 	case name == "find":
@@ -195,6 +197,30 @@ func readOnlyInvocation(c hint.Invocation, dynamic bool, magusAllowed func(args 
 		return magusAllowed(c.Args)
 	}
 	return false
+}
+
+// awkReadOnly reports an awk run whose program is on the line and cannot write: no program
+// file, no flag beyond -F and -v, and no redirect, pipe or system() in the program. A `>`
+// comparison reads as a redirect here, which errs toward refusing.
+func awkReadOnly(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "-F" || a == "-v":
+			i++
+		case strings.HasPrefix(a, "-F") || strings.HasPrefix(a, "-v"):
+		case a == "--":
+			return i+1 < len(args) && awkProgramReads(args[i+1])
+		case strings.HasPrefix(a, "-"):
+			return false
+		default:
+			return awkProgramReads(a)
+		}
+	}
+	return false
+}
+
+func awkProgramReads(program string) bool {
+	return !strings.ContainsAny(program, ">|") && !strings.Contains(program, "system")
 }
 
 // gitReadSubcommands read a repository and take no flag that writes one, bar --output,

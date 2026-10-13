@@ -500,6 +500,28 @@ func TestReadOnlyLine(t *testing.T) {
 	}
 }
 
+// awk reads when its program is on the line and neither redirects, pipes nor calls system().
+// The first line is the one the 10-13 lockout denied as state-changing.
+func TestReadOnlyLineReadsAnAwkProgram(t *testing.T) {
+	for _, line := range []string{
+		`sed -n 340,360p f; sed -n 955,990p g; grep -n x g | awk -F: '{print $1}'`,
+		`awk -v n=2 '{print $n}' f`,
+		`awk -F, -- '{print $2}' f`,
+	} {
+		assert.True(t, readOnlyLine(line, DialectBash), line)
+	}
+	for _, line := range []string{
+		`awk '{print > "out"}' f`,
+		`awk '{print | "sh"}' f`,
+		`awk 'BEGIN{system("rm x")}'`,
+		`awk -f prog.awk f`,
+		`gawk -i inplace '{print}' f`,
+		`awk -F:`,
+	} {
+		assert.False(t, readOnlyLine(line, DialectBash), line)
+	}
+}
+
 func mcpEnvelope(t *testing.T, tool string, input map[string]any) string {
 	t.Helper()
 	return hookJSON(t, map[string]any{
