@@ -1,81 +1,56 @@
 ## magus
 
-This repo is a magus workspace (magusfile.buzz at the root). magus already
-holds a verified model of it: the project dependency graph, every target's
-declared inputs and outputs, and what a diff affects. Use that model instead
-of rediscovering it by reading files.
+This repo is a magus workspace. magus holds a verified model of it: the project
+graph, each target's inputs and outputs, and what a diff affects. Ask that model
+instead of reading files to rediscover it.
 
-If the magus-* skills are installed (.claude/skills/, .opencode/skills/, or
-.agents/skills/), load the matching skill BEFORE acting, at the moment, not
-after something breaks:
+Load the matching magus-* skill (in .claude/skills/, .opencode/skills/ or
+.agents/skills/) before you act:
 
-| before you                                                 | load                  |
-| ---------------------------------------------------------- | --------------------- |
-| git commit, git add, git stash/reset, read a diff          | magus-vcs-hygiene     |
-| build, test, lint, format, or generate anything            | magus-run             |
-| grep for what exists, depends on, or uses X                | magus-query           |
-| answer "how does magus X" from memory                      | magus-upstream-docs   |
-| blame magus itself: it crashed, or contradicts its docs    | magus-upstream-source |
-| summarize what merged or landed recently                   | magus-change-summary  |
-| edit an installed magus-* skill, or write a workspace rule | magus-workspace-rules |
-| recurring guard feedback or a proposed local rule          | magus-workspace-rules |
+| before you                                                  | load                  |
+| ----------------------------------------------------------- | --------------------- |
+| git commit, add, stash or reset, or read a diff             | magus-vcs-hygiene     |
+| build, test, lint, format or generate                       | magus-run             |
+| grep for what exists, depends on or uses X                  | magus-query           |
+| answer "how does magus X" from memory                       | magus-upstream-docs   |
+| blame magus: a crash, or behavior against its docs          | magus-upstream-source |
+| summarize what merged recently                              | magus-change-summary  |
+| edit an installed skill, or answer recurring guard feedback | magus-workspace-rules |
 
 Query before grepping.
 {{routing-index}}
 
 ```sh
-magus query "<terms>"        # find/relate entities: kind=spell, project=web, kind!=op, id=~regex
+magus query "<terms>"        # find and relate entities: kind=spell, project=web, id=~regex
 magus explain <node>         # one node: edges, provenance, blast radius
-magus path <a> <b>           # how two entities relate
-magus refs <symbol>          # where a code symbol is defined and referenced
-magus graph stats            # god nodes, orphans, doc coverage
+magus refs <symbol>          # where a code symbol is defined and used
 ```
 
-Run work through targets, never raw language tools (`go test`, `eslint`,
-`pytest` lose the cache, the sandbox, and affected tracking):
+Run work through targets. A raw `go test`, `eslint` or `pytest` skips the cache,
+the sandbox and affected tracking:
 
 ```sh
-magus run <target>           # top-level targets: build, test, lint, format, generate
-magus affected ci            # the final gate: full pipeline over everything a diff reaches
+magus run <target> <project> # build, test, lint, format, generate
+magus affected ci            # the final gate over everything a diff reaches
 ```
 
-Ask magus for the output you want; never filter or capture it with the shell.
-Piping AND redirecting magus output are both denied by the guard:
+The guard denies piping or redirecting magus output, and a pipe hides the exit
+status. Ask magus for the shape you want:
 
 ```sh
-magus <cmd> -o name          # just the ids/names - what grep/awk/cut were reaching for
-magus <cmd> -o json          # the structured record; -o template='{{.Field}}' for one field
-magus <cmd> -s               # quiet until something fails, then diagnostics + the log path
-magus query output <ref>     # a failing target's full captured log (the ONE pipeable command)
+magus <cmd> -o name          # ids only
+magus <cmd> -o json          # the record; -o template='{{.Field}}' for one field
+magus query output <ref>     # a run's full log
 ```
 
-A pipe also replaces the exit status with the last stage's, so `magus affected ci
-| tail` reports tail's success and a failing gate reads as exit 0. `> file` and
-`2>&1` are never needed: every run persists its full log and a failure prints
-that path. Run magus from the workspace and name the project (`magus run <target>
-<project>`) rather than `cd`-ing; a different workspace is `--root <path>`, and
-running magus inside a temp or scratchpad COPY of the tree is denied outright
-because the verdict would describe a tree nobody ships.
+Before reading a diff or committing, run `magus describe file <path>...`. An
+output is generated: regenerate it and commit it with its source, never hand-edit
+it.
 
-Generated files are declared. Classify changed paths before reading diffs or
-committing: `magus describe file <path>...` reports each path's owning project
-and role (output = generated: never hand-edit, regenerate and commit with the
-source change; source = the diff worth reading; maintained = magus wrote it
-itself, commit it and never ignore it; unclaimed = keys nothing, but still seeds
-its containing project, so touching it reruns work for no answer).
+Prefer the host's magus MCP tools (`client` runs the magus module), and fall back
+to the CLI when one is missing or fails. The host manages that connection: never
+start a server for it.
 
-Prefer MCP tools when this host exposes them (`client` for magus\query,
-magus\run, magus\output, and the rest of that module); `magus describe
-mcp-tools` lists them all. If a tool is missing or its call fails, use the CLI
-fallback. `magus status --probe=mcp` checks only the loopback HTTP listener, so
-it cannot judge a host connected through stdio or the server's Unix socket.
-For server-socket diagnosis, `magus status --probe=readiness` checks whether this
-workspace is loaded, not whether the host registered MCP. The host manages its
-own connection; do not manually start a server for an agent or block work on it.
-
-The installed magus-* skills are generated and stamped: an edit to one reads as
-drift to `magus doctor` and is erased by the next `magus agent install
---force`. Rules specific to THIS workspace go in a local magus-local-development skill
-beside them, which install and verify both leave alone. If one exists, read it
-alongside the shipped skills; it overrides nothing, so report a conflict rather
-than picking a side. The magus-workspace-rules skill carries the method.
+Installed magus-* skills are stamped, and `magus agent install --force` erases an
+edit. Put workspace-specific instructions in a local magus-local-development
+skill beside them.
