@@ -238,6 +238,26 @@ type SessionTrail struct {
 	Leases []string `json:"leases,omitempty"`
 	// Spawns are the subagents this session started, oldest first.
 	Spawns []SessionSpawn `json:"spawns,omitempty"`
+	// Calls are the observations in the same order, with the cost facts each recorded. They
+	// feed the cost summary and stay out of the encoded form, which would otherwise carry
+	// one row per tool call.
+	Calls []SessionCall `json:"-"`
+}
+
+// SessionCall is one guard observation of a call and the cost facts recorded beside it.
+// The facts are the caller's; see AgentCommand. A field the record did not carry reads
+// as its zero value.
+type SessionCall struct {
+	At             time.Time
+	Thread         types.AgentThread
+	Decision       string
+	Rule           string
+	ContextTokens  int64
+	ContextModel   string
+	Billing        types.AgentBilling
+	DelegableClass string
+	ResultChars    int
+	Shadow         map[types.GuardProfile]types.GuardDecision
 }
 
 // SessionSpawn is one recorded spawn: the label the host gave the callee, the lease the
@@ -251,6 +271,8 @@ type SessionSpawn struct {
 	Lease         string    `json:"lease,omitempty"`
 	At            time.Time `json:"at"`
 	DeclaredModel string    `json:"declared_model,omitempty"`
+	// ContextTokens is the context size the spawn record reported, 0 when it reported none.
+	ContextTokens int64 `json:"context_tokens,omitempty"`
 }
 
 // ForSession folds the trail at base for one host session, reading at most limit recent
@@ -273,12 +295,25 @@ func ForSession(base, session string, limit int) SessionTrail {
 		switch e.Kind {
 		case KindAgentCommand:
 			out.Commands++
+			call := SessionCall{At: time.UnixMilli(e.Ts)}
 			if raw, err := ReadBlob(base, e.ResponseRef); err == nil {
 				var resp agentCommandResponse
-				if json.Unmarshal(raw, &resp) == nil && resp.Decision == "deny" {
-					out.Denied++
+				if json.Unmarshal(raw, &resp) == nil {
+					call.Decision, call.Rule = resp.Decision, resp.Rule
+					if resp.Decision == "deny" {
+						out.Denied++
+					}
 				}
 			}
+			if raw, err := ReadBlob(base, e.RequestRef); err == nil {
+				var req agentCommandRequest
+				if json.Unmarshal(raw, &req) == nil {
+					call.Thread, call.ContextTokens, call.ContextModel = req.Thread, req.ContextTokens, req.ContextModel
+					call.Billing, call.DelegableClass, call.ResultChars = req.Billing, req.DelegableClass, req.ResultChars
+					call.Shadow = req.Shadow
+				}
+			}
+			out.Calls = append(out.Calls, call)
 		case KindAgentSpawn:
 			if e.Action == ActionAgentContinue {
 				continue
@@ -287,7 +322,7 @@ func ForSession(base, session string, limit int) SessionTrail {
 			if raw, err := ReadBlob(base, e.RequestRef); err == nil {
 				var req agentSpawnRequest
 				if json.Unmarshal(raw, &req) == nil {
-					sp.DeclaredModel = req.DeclaredModel
+					sp.DeclaredModel, sp.ContextTokens = req.DeclaredModel, req.ContextTokens
 				}
 			}
 			out.Spawns = append(out.Spawns, sp)

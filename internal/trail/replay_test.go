@@ -256,15 +256,48 @@ func TestForSessionFoldsOneHostSessionsTrail(t *testing.T) {
 
 	got := ForSession(base, "s1", 100)
 	require.Len(t, got.Spawns, 1)
+	require.Len(t, got.Calls, 2)
 	assert.Equal(t, SessionTrail{
 		Commands: 2,
 		Denied:   1,
 		Leases:   []string{"fleet/w1", "fleet/w1-child"},
 		Spawns:   []SessionSpawn{{Child: "Explore", Lease: "fleet/w1-child", At: got.Spawns[0].At}}, // At is a wall-clock stamp
+		Calls: []SessionCall{
+			{At: got.Calls[0].At, Decision: "pass"},
+			{At: got.Calls[1].At, Decision: "deny"},
+		},
 	}, got)
 
 	assert.Zero(t, ForSession(base, "", 100).Commands, "no session id joins nothing")
 	assert.Zero(t, ForSession(t.TempDir(), "s1", 100).Commands, "an absent trail is empty, not an error")
+}
+
+func TestForSessionReturnsEachCallsCostFacts(t *testing.T) {
+	base := t.TempDir()
+	shadow := map[types.GuardProfile]types.GuardDecision{types.GuardProfileStandard: types.GuardAdvise}
+	record(t, base, AgentCommand{
+		Session: "s1", Tool: toolShell, Command: "grep -r x .", Decision: "advise", Rule: "root-heavy-command",
+		Thread: types.AgentThreadMain, ContextTokens: 300_000, ContextModel: "claude-opus-5-5",
+		Billing: types.AgentBillingMetered, Shadow: shadow,
+	})
+	record(t, base, AgentCommand{
+		Session: "s1", Tool: toolShell, Command: "grep -r x .", Decision: "pass",
+		Thread: types.AgentThreadMain, DelegableClass: "search", ResultChars: 5000,
+	})
+	record(t, base, AgentCommand{Session: "other", Tool: toolShell, Command: "ls", ContextTokens: 1})
+	AppendAgentSpawn(t.Context(), base, AgentSpawn{Session: "s1", Child: "Explore", Context: "look", ContextTokens: 77_000})
+
+	got := ForSession(base, "s1", 100)
+	require.Len(t, got.Calls, 2, "another session's calls are not this one's")
+	assert.Equal(t, SessionCall{
+		At: got.Calls[0].At, Thread: types.AgentThreadMain, Decision: "advise", Rule: "root-heavy-command",
+		ContextTokens: 300_000, ContextModel: "claude-opus-5-5", Billing: types.AgentBillingMetered, Shadow: shadow,
+	}, got.Calls[0])
+	assert.Equal(t, SessionCall{
+		At: got.Calls[1].At, Thread: types.AgentThreadMain, Decision: "pass", DelegableClass: "search", ResultChars: 5000,
+	}, got.Calls[1])
+	require.Len(t, got.Spawns, 1)
+	assert.Equal(t, int64(77_000), got.Spawns[0].ContextTokens)
 }
 
 func TestLastAgentActivityReadsTheNewestObservation(t *testing.T) {

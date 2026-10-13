@@ -275,6 +275,65 @@ func TestAppendAgentCommand_RecordsAClosedStdin(t *testing.T) {
 	require.Equal(t, agentCommandResponse{SchemaVersion: agentCommandSchemaVersion, Decision: "pass", StdinClosed: true}, gotResponse)
 }
 
+func TestAppendAgentCommand_RecordsTheCostFacts(t *testing.T) {
+	dir := t.TempDir()
+	want := agentFacts{
+		Thread:         types.AgentThreadMain,
+		ContextTokens:  412_000,
+		ContextModel:   "claude-opus-5-5",
+		Billing:        types.AgentBillingMetered,
+		DelegableClass: "search",
+		ResultChars:    9100,
+		Shadow:         map[types.GuardProfile]types.GuardDecision{types.GuardProfileStrict: types.GuardDeny, types.GuardProfileLight: types.GuardAllow},
+	}
+	AppendAgentCommand(t.Context(), dir, AgentCommand{
+		Command: "grep x", Decision: "pass",
+		Thread: want.Thread, ContextTokens: want.ContextTokens, ContextModel: want.ContextModel,
+		Billing: want.Billing, DelegableClass: want.DelegableClass, ResultChars: want.ResultChars, Shadow: want.Shadow,
+	})
+
+	events, err := ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	raw, err := ReadBlob(dir, events[0].RequestRef)
+	require.NoError(t, err)
+	var got agentCommandRequest
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, want, got.agentFacts)
+}
+
+func TestAppendAgentCommand_OmitsCostFactsItWasNotGiven(t *testing.T) {
+	dir := t.TempDir()
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "ls"})
+
+	events, err := ReadRecent(dir, 1)
+	require.NoError(t, err)
+	raw, err := ReadBlob(dir, events[0].RequestRef)
+	require.NoError(t, err)
+	for _, key := range []string{"thread", "context_tokens", "context_model", "billing", "delegable_class", "result_chars", "shadow"} {
+		assert.NotContains(t, string(raw), `"`+key+`"`)
+	}
+}
+
+func TestAppendAgentSpawn_RecordsTheCostFacts(t *testing.T) {
+	dir := t.TempDir()
+	AppendAgentSpawn(t.Context(), dir, AgentSpawn{
+		Child: "Explore", Context: "look around", DeclaredModel: "claude-haiku-5-5",
+		Thread: types.AgentThreadMain, ContextTokens: 88_000, ContextModel: "claude-opus-5-5", Billing: types.AgentBillingQuota,
+	})
+
+	events, err := ReadRecent(dir, 1)
+	require.NoError(t, err)
+	raw, err := ReadBlob(dir, events[0].RequestRef)
+	require.NoError(t, err)
+	var got agentSpawnRequest
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, agentFacts{
+		Thread: types.AgentThreadMain, ContextTokens: 88_000, ContextModel: "claude-opus-5-5", Billing: types.AgentBillingQuota,
+	}, got.agentFacts)
+	assert.Equal(t, "claude-haiku-5-5", got.DeclaredModel)
+}
+
 // TestAppendAgentSpawn_RecordsHandedContext is the lease-audit round trip: the event line
 // says who handed work to whom and which lease it belongs to, and the context itself is reachable
 // only through the blob, never inlined, because a lease prompt is routinely kilobytes.

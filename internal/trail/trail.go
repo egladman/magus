@@ -310,6 +310,21 @@ type agentCommandRequest struct {
 	Tool          string `json:"tool,omitempty"`
 	Command       string `json:"command,omitempty"`
 	Path          string `json:"path,omitempty"`
+	agentFacts
+}
+
+// agentFacts is what a request blob records about the caller's cost: its thread, context
+// size and model, billing mode, the delegable class and result size a post-call record
+// carries, and what each profile would have decided. ContextModel is the caller's, never
+// a spawned child's. Additive for the reason agentCommandResponse.PreauthorizedBy gives.
+type agentFacts struct {
+	Thread         types.AgentThread                          `json:"thread,omitempty"`
+	ContextTokens  int64                                      `json:"context_tokens,omitzero"`
+	ContextModel   string                                     `json:"context_model,omitempty"`
+	Billing        types.AgentBilling                         `json:"billing,omitempty"`
+	DelegableClass string                                     `json:"delegable_class,omitempty"`
+	ResultChars    int                                        `json:"result_chars,omitzero"`
+	Shadow         map[types.GuardProfile]types.GuardDecision `json:"shadow,omitempty"`
 }
 
 type agentCommandResponse struct {
@@ -358,6 +373,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	command.Path = secret.RedactString(ctx, command.Path)
 	command.Reason = secret.RedactString(ctx, command.Reason)
 	command.Context = secret.RedactString(ctx, command.Context)
+	command.ContextModel = clampRunes(command.ContextModel, MaxSpawnerLen)
 	request, _ := json.Marshal(agentCommandRequest{
 		SchemaVersion: agentCommandSchemaVersion,
 		Host:          command.Host,
@@ -367,6 +383,15 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Tool:          command.Tool,
 		Command:       command.Command,
 		Path:          command.Path,
+		agentFacts: agentFacts{
+			Thread:         command.Thread,
+			ContextTokens:  command.ContextTokens,
+			ContextModel:   command.ContextModel,
+			Billing:        command.Billing,
+			DelegableClass: command.DelegableClass,
+			ResultChars:    command.ResultChars,
+			Shadow:         command.Shadow,
+		},
 	})
 	response, _ := json.Marshal(agentCommandResponse{
 		SchemaVersion:   agentCommandSchemaVersion,
@@ -512,6 +537,7 @@ type agentSpawnRequest struct {
 	// Target and RuleFailures are additive for the reason DeclaredModel is.
 	Target       string        `json:"target,omitempty"`
 	RuleFailures []RuleFailure `json:"rule_failures,omitempty"`
+	agentFacts
 }
 
 const (
@@ -546,6 +572,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	// name is short, and an unbounded claim is a cost every later read of the
 	// repository would pay for one bad payload.
 	spawn.DeclaredModel = clampRunes(spawn.DeclaredModel, MaxSpawnerLen)
+	spawn.ContextModel = clampRunes(spawn.ContextModel, MaxSpawnerLen)
 	lease := leaseFromContext(spawn.Context)
 	failures := redactFailures(ctx, spawn.RuleFailures)
 	request, _ := json.Marshal(agentSpawnRequest{
@@ -560,6 +587,15 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 		DeclaredModel: spawn.DeclaredModel,
 		Target:        spawn.Target,
 		RuleFailures:  failures,
+		agentFacts: agentFacts{
+			Thread:         spawn.Thread,
+			ContextTokens:  spawn.ContextTokens,
+			ContextModel:   spawn.ContextModel,
+			Billing:        spawn.Billing,
+			DelegableClass: spawn.DelegableClass,
+			ResultChars:    spawn.ResultChars,
+			Shadow:         spawn.Shadow,
+		},
 	})
 	reqRef, reqBytes := WriteBlob(ctx, base, "spawn", request)
 
