@@ -465,6 +465,13 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 			cfg.Jobs.StaleAfter = d
 		}
 	}
+	if v := getenv("MAGUS_JOBS_RETAIN"); v != "" {
+		if d, err := time.ParseDuration(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_JOBS_RETAIN: %w", err))
+		} else {
+			cfg.Jobs.Retain = d
+		}
+	}
 	if v := getenv("MAGUS_CONCURRENCY"); v != "" {
 		if n, err := strconv.Atoi(v); err != nil {
 			errs = append(errs, fmt.Errorf("MAGUS_CONCURRENCY: %w", err))

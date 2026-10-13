@@ -339,6 +339,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_JOBS_STALE_AFTER**
 : Flag a live job nobody updated for this long in \`magus ls jobs\` and \`magus doctor\`; 0 never flags (default: 0). Equivalent magus.yaml key: **jobs.stale_after**.
 
+**MAGUS_JOBS_RETAIN**
+: How long a job that is over, and a clear's or delete's archive, stay in the job store; 0 keeps them; the store reads it from the workspace's magus.yaml only (default: 168h). Equivalent magus.yaml key: **jobs.retain**.
+
 **MAGUS_SECRET_INTERACTIVE_TIMEOUT**
 : Bound on a secret-provider read when stdin is a terminal (default: 60s). Equivalent magus.yaml key: **secret.interactive_timeout**.
 

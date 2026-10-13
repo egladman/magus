@@ -565,6 +565,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_JOBS_STALE_AFTER: StaleAfter ends a declared job nobody took and nobody updated for this long, and flags a taken one in 'magus ls jobs'...",
 	},
 	{
+		GoPath:   "Jobs.Retain",
+		YamlPath: "jobs.retain",
+		EnvVar:   "MAGUS_JOBS_RETAIN",
+		Flag:     fieldtype.FlagNames{Long: "jobs-retain"},
+		Kind:     fieldtype.KindDuration,
+		Usage:    "MAGUS_JOBS_RETAIN: Retain is how long a job that is over (graded, ended, or exited with its result never collected), and the archive a c...",
+	},
+	{
 		GoPath:   "Concurrency",
 		YamlPath: "concurrency",
 		EnvVar:   "MAGUS_CONCURRENCY",
