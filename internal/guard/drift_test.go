@@ -1,8 +1,11 @@
 package guard
 
 import (
+	"context"
+	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -111,6 +114,29 @@ func TestScopeDriftFiresOncePerProject(t *testing.T) {
 	repeat := driftVerdict(ws, "/ws/libs/ui/input.ts", touchedProjects(markers))
 	assert.Empty(t, repeat.advice, "the project is in the session's set now, so the second write is in scope")
 	assert.Equal(t, []string{"app", "libs/ui"}, touchedProjects(markers))
+}
+
+// A workspace open that never answers holds the drift rule no longer than ctx allows, and
+// generatedOutput, which has no ctx, no longer than inspectBudget: both go silent.
+func TestDriftAndGeneratedOutputBoundAStalledOpen(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	release := make(chan struct{})
+	defer close(release)
+	deps := Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) {
+		<-release
+		return nil, errors.New("released")
+	}}
+
+	short, cancel := context.WithTimeout(ctx, judgeReserve+100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	drift := gradeScopeDrift(short, deps, hint.NewGate(t.TempDir(), "s1"), "", "app/main.go")
+	assert.Empty(t, drift.project)
+	assert.Less(t, time.Since(start), time.Second)
+
+	start = time.Now()
+	assert.False(t, generatedOutput(deps, "gen/out.go"))
+	assert.Less(t, time.Since(start), inspectBudget+time.Second)
 }
 
 // A gate with no cache base remembers nothing, and a rule that cannot remember must

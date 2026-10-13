@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"slices"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus/internal/agent"
@@ -16,6 +19,10 @@ import (
 // process start and exit, which a loaded machine stretches too.
 const hookBudget = 7 * time.Second
 
+// inspectBudget bounds the wait for one workspace open, half the hook's budget so the rest
+// of the judgment still answers in time.
+const inspectBudget = hookBudget / 2
+
 // judgeReserve is held back from every phase for wording the verdict and writing the trail
 // row once the phases are done.
 const judgeReserve = 500 * time.Millisecond
@@ -26,6 +33,7 @@ const (
 	phaseApprovedResolve = "approved_resolve"
 	phaseApprovedRule    = "approved_rule"
 	phaseWorktreeRule    = "worktree_rule"
+	phaseInspect         = "inspect"
 	phaseJudge           = "judge"
 )
 
@@ -62,6 +70,7 @@ type phaseShares map[string]int
 // less judgeReserve: zero when nothing is left, never less. bounded is false when ctx
 // carries no deadline, and the phase then runs to completion.
 func (p phaseShares) take(ctx context.Context, phase string) (budget time.Duration, bounded bool) {
+	judgmentPhases(ctx).underway(phase)
 	shares := p[phase]
 	delete(p, phase)
 	deadline, ok := ctx.Deadline()
@@ -92,6 +101,7 @@ func TimeRuleLoad[T any](ctx context.Context, load func() (T, error)) (T, trail.
 	budget, _ := phaseShares{phaseLoadRules: 1}.take(ctx, phaseLoadRules)
 	start := time.Now()
 	got, err := load()
+	judgmentPhases(ctx).underway("")
 	return got, trail.Phase{
 		Name:      phaseLoadRules,
 		ElapsedMs: time.Since(start).Milliseconds(),
@@ -147,19 +157,27 @@ func JudgeWithin(ctx context.Context, base Dependencies, req Request, judge func
 	if begunJudgment(ctx).path == "" {
 		ctx = BeginJudgment(ctx, base.CacheDir, req)
 	}
+	log := &phaseLog{start: time.Now()}
+	ctx = context.WithValue(ctx, phaseLogKey{}, log)
 	deadline, _ := ctx.Deadline()
-	start := time.Now()
 	done := make(chan Verdict, 1)
 	go func() { done <- judge(ctx) }()
 	timer := time.NewTimer(time.Until(deadline) + judgeReserve)
 	defer timer.Stop()
 	select {
 	case v := <-done:
+		begunJudgment(ctx).answeredInTime()
 		return v
 	case <-timer.C:
-		return unjudged(context.WithoutCancel(ctx), base, req, time.Since(start))
+		return unjudged(context.WithoutCancel(ctx), base, req, log)
 	}
 }
+
+// lapsesBeforeDegrade is how many judgments in a row a session's calls that change state are
+// denied for lapsing. Past it they pass with a notice until one judgment answers in time: a
+// guard slower than its budget on every call, on a loaded machine or against a daemon from
+// another build, otherwise denies every edit and spawn the session makes.
+const lapsesBeforeDegrade = 2
 
 // phaseAnswer is the trail's name for the bound JudgeWithin holds a whole judgment to.
 const phaseAnswer = "answer"
@@ -172,7 +190,13 @@ var unjudgedNote = "This guard check did not finish within " + hookBudget.String
 // in the stance a lapsed workspace rule phase takes: a call that changes state is denied
 // and one that only reads passes with a note. A call with nothing to judge passes as it
 // would have. It ends the call's judgment mark, since the host got its answer in time.
-func unjudged(ctx context.Context, base Dependencies, req Request, elapsed time.Duration) Verdict {
+//
+// Past lapsesBeforeDegrade lapses in a row in the session, a call that changes state passes
+// too, with a notice naming the phase that stalled; the first such notice says why and what
+// to check, the rest say only that the guard is still not judging. The trail row records
+// log's finished phases, the one underway, and the bound.
+func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog) Verdict {
+	elapsed := time.Since(log.start)
 	pass := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
 	input, isPath, callDir := req.Input, req.IsPath, ""
@@ -194,10 +218,12 @@ func unjudged(ctx context.Context, base Dependencies, req Request, elapsed time.
 		who.Agent = cmp.Or(who.Agent, env.Who.Agent)
 		input, isPath, readOnly = env.Value, isPath || env.IsPath, env.ReadOnlyTool
 	}
-	begunJudgment(ctx).end(time.Now(), noHookTimeout)
+	mark := begunJudgment(ctx)
+	mark.end(time.Now(), noHookTimeout)
 	if req.Observe || req.Message || input == "" || (isEnvelope && (env.NothingToJudge || env.LoadedSkill != "")) {
 		return pass
 	}
+	stalled := log.stalled()
 	tool := hookToolCommand
 	switch {
 	case isPath:
@@ -211,59 +237,146 @@ func unjudged(ctx context.Context, base Dependencies, req Request, elapsed time.
 	}
 	verdict := pass
 	verdict.Lease = req.Lease
-	if call.changes {
+	lapses := mark.lapsed()
+	switch {
+	case call.changes && lapses <= lapsesBeforeDegrade:
 		lapse := ruleLapse{budget: hookBudget, said: lapseWording{"the guard's judgment", "finish"}}
 		verdict.Decision, verdict.Reason, verdict.Rule = decisionDeny, lapseReason(call, lapse, false), string(advisoryUnfinished)
-	} else {
+	case call.changes:
+		verdict = applyRuleFailureNote(verdict, degradedNote(call, stalled, log.finished(), lapses), advisoryUnfinished)
+	default:
 		verdict = applyRuleFailureNote(verdict, unjudgedNote, advisoryUnfinished)
 	}
-	ctx = context.WithValue(ctx, phaseLogKey{}, &phaseLog{
-		start: time.Now().Add(-elapsed),
-		done:  []trail.Phase{timedPhase(phaseAnswer, elapsed, hookBudget, true)},
-	})
+	finished := log.finished()
+	row := &phaseLog{start: log.start, done: finished}
+	if stalled.Name != "" {
+		row.done = append(row.done, stalled)
+	}
+	row.done = append(row.done, timedPhase(phaseAnswer, elapsed, hookBudget, true))
+	ctx = context.WithValue(ctx, phaseLogKey{}, row)
 	appendHookActivity(ctx, hookLocation(ctx, base), input, who, tool, req.Lease, "", "", "", verdict, workspaceRuleRecord{}, base.judging(callDir))
 	return verdict
 }
 
-// phaseLog collects the phases of one judgment for its trail row. A judgment runs its
-// phases one at a time, so it takes no lock.
+// degradedNote tells a session that a call that changes state went through unjudged, the
+// lapses-th judgment in a row to run out of time. Only the first past lapsesBeforeDegrade
+// names the cause and what to check; the session has it from then on.
+func degradedNote(call judgedCall, stalled trail.Phase, finished []trail.Phase, lapses int) string {
+	if lapses > lapsesBeforeDegrade+1 {
+		return "The guard is still not finishing in time (" + strconv.Itoa(lapses) + " judgments in a row), so " +
+			call.what + " ran unjudged, as the notice before said."
+	}
+	where := "before its first phase"
+	switch {
+	case stalled.Name != "":
+		where = "in its " + stalled.Name + " phase, " + roundBudget(time.Duration(stalled.ElapsedMs)*time.Millisecond).String() + " in"
+	case len(finished) > 0:
+		where = "after its " + finished[len(finished)-1].Name + " phase"
+	}
+	return "The guard has run out of its " + hookBudget.String() + " budget on " + strconv.Itoa(lapses) +
+		" judgments in a row in this session, so " + call.what + " ran with no rule judging it, and so will every call " +
+		"until a judgment finishes in time. This one stalled " + where + ". A judgment this slow is a loaded machine or a " +
+		"magus built from another commit than the daemon it talks to: compare `magus version` with `magus server status`, " +
+		"and check `magus status` for what is running."
+}
+
+// phaseLog collects the phases of one judgment for its trail row, and the one underway. The
+// judgment writes it while JudgeWithin may read it to word a lapse, hence the lock. Every
+// method is a no-op, or answers zero, on a nil log.
 type phaseLog struct {
 	start time.Time
-	done  []trail.Phase
+
+	mu      sync.Mutex
+	done    []trail.Phase
+	running string
+	since   time.Time
 }
 
 type phaseLogKey struct{}
 
 // withPhaseLog starts timing a judgment, with the rule load its caller timed, if any, as
-// the first phase.
+// the first phase. A log JudgeWithin already put on ctx is the one used, so a lapse can
+// name what the judgment had reached.
 func withPhaseLog(ctx context.Context, load trail.Phase) context.Context {
-	l := &phaseLog{start: time.Now()}
-	if load.Name != "" {
-		l.done = append(l.done, load)
+	l := judgmentPhases(ctx)
+	if l == nil {
+		l = &phaseLog{start: time.Now()}
+		ctx = context.WithValue(ctx, phaseLogKey{}, l)
 	}
-	return context.WithValue(ctx, phaseLogKey{}, l)
+	if load.Name != "" {
+		l.record(load)
+	}
+	return ctx
 }
 
-// judgmentPhases is the judgment's phase log, nil outside Judge.
+// judgmentPhases is the judgment's phase log, nil outside Judge and JudgeWithin.
 func judgmentPhases(ctx context.Context) *phaseLog {
 	l, _ := ctx.Value(phaseLogKey{}).(*phaseLog)
 	return l
 }
 
-// record adds one phase. A nil log records nothing.
+// underway notes that phase started now; "" notes that none is running.
+func (l *phaseLog) underway(phase string) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.running, l.since = phase, time.Now()
+}
+
+// record adds one finished phase, ending it as the one underway.
 func (l *phaseLog) record(p trail.Phase) {
 	if l == nil {
 		return
 	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	l.done = append(l.done, p)
+	if l.running == p.Name {
+		l.running = ""
+	}
 }
 
-// phases is every recorded phase, then the whole judgment so far. Nil for a nil log.
+// finished is a copy of the recorded phases.
+func (l *phaseLog) finished() []trail.Phase {
+	if l == nil {
+		return nil
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return slices.Clone(l.done)
+}
+
+// lapsed reports whether a recorded phase named name ran out of time.
+func (l *phaseLog) lapsed(name string) bool {
+	if l == nil {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return slices.ContainsFunc(l.done, func(p trail.Phase) bool { return p.Name == name && p.Lapsed })
+}
+
+// stalled is the phase underway, lapsed and timed from its start, or zero when none is.
+func (l *phaseLog) stalled() trail.Phase {
+	if l == nil {
+		return trail.Phase{}
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.running == "" {
+		return trail.Phase{}
+	}
+	return trail.Phase{Name: l.running, ElapsedMs: time.Since(l.since).Milliseconds(), Lapsed: true}
+}
+
+// phases is every recorded phase, then the whole judgment so far.
 func (l *phaseLog) phases() []trail.Phase {
 	if l == nil {
 		return nil
 	}
-	return append(l.done[:len(l.done):len(l.done)], trail.Phase{Name: phaseJudge, ElapsedMs: time.Since(l.start).Milliseconds()})
+	return append(l.finished(), trail.Phase{Name: phaseJudge, ElapsedMs: time.Since(l.start).Milliseconds()})
 }
 
 // timedPhase is one phase's trail entry.

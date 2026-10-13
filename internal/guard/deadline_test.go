@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -213,4 +214,89 @@ func TestDryRunLapseIsNotGraded(t *testing.T) {
 	assert.Equal(t, "deny", v.Decision)
 	assert.Contains(t, v.Reason, "magus did not finish grading this file write: ")
 	assert.Contains(t, v.Reason, "so it is not graded. A dry run is bounded at 2m0s")
+}
+
+// A session whose every judgment runs out of time is not locked: its first
+// lapsesBeforeDegrade calls that change state are denied, the ones after pass with a notice
+// that names the phase that stalled once and then only says the guard is still not judging,
+// and a judgment that answers in time starts the count over. The judgment here is slow
+// rather than stuck, the shape a loaded machine gives every phase.
+func TestJudgeWithinDegradesAfterConsecutiveLapses(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+	req := Request{Input: "touch notes.txt", Host: "claude-code", Session: "s1"}
+	slowLoad := func(ctx context.Context) Verdict {
+		_, _, _ = TimeRuleLoad(ctx, func() (int, error) {
+			time.Sleep(time.Second)
+			return 0, nil
+		})
+		return Verdict{Decision: decisionPass}
+	}
+	lapse := func() Verdict {
+		short, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+		defer cancel()
+		return JudgeWithin(short, Dependencies{}, req, slowLoad)
+	}
+
+	for range lapsesBeforeDegrade {
+		assert.Equal(t, decisionDeny, lapse().Decision)
+	}
+	degraded := lapse()
+	assert.Equal(t, verdictWithRule("advise", string(advisoryUnfinished)), unworded(degraded))
+	assert.Contains(t, degraded.Context, "on 3 judgments in a row in this session, so this command ran with no rule judging it")
+	assert.Contains(t, degraded.Context, "This one stalled in its load_rules phase")
+	assert.Contains(t, degraded.Context, "`magus server status`")
+	again := lapse()
+	assert.Equal(t, decisionAdvise, again.Decision)
+	assert.Equal(t, "The guard is still not finishing in time (4 judgments in a row), so this command ran unjudged, as the notice before said.", again.Context)
+
+	onTime := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) Verdict { return Verdict{Decision: decisionPass} })
+	assert.Equal(t, decisionPass, onTime.Decision)
+	assert.Equal(t, decisionDeny, lapse().Decision, "an answer in time starts the count over")
+
+	rows := trailEvents(t, cacheDir, trail.KindAgentCommand)
+	require.NotEmpty(t, rows)
+	names := make([]string, len(rows[0].Phases))
+	for i, p := range rows[0].Phases {
+		names[i] = p.Name
+	}
+	assert.Equal(t, []string{phaseLoadRules, phaseAnswer, phaseJudge}, names, "the lapse row names the phase underway")
+	assert.True(t, rows[0].Phases[0].Lapsed)
+}
+
+// A lapse denies only a line that can change state: the pipeline of sed, grep and awk the
+// 10-13 lockout denied reads, and goes through with the note.
+func TestUnjudgedPassesAReadOnlyPipeline(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	ctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel()
+	release := make(chan struct{})
+	defer close(release)
+	req := Request{Input: `sed -n 340,360p f; sed -n 955,990p g; grep -n x g | awk -F: '{print $1}'`, Host: "claude-code", Session: "s1"}
+	v := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) Verdict {
+		<-release
+		return Verdict{}
+	})
+	assert.Equal(t, verdictWithRule("advise", string(advisoryUnfinished)), unworded(v))
+	assert.Equal(t, unjudgedNote, v.Context)
+}
+
+// A workspace open that never answers, the stall behind the 10-13 lockout, no longer holds a
+// write's judgment past its deadline: every rule that opens the workspace goes silent, the
+// first by its own bound and the rest at once, and the verdict is on time.
+func TestJudgeWithinAnswersAWriteWhoseWorkspaceOpenStalls(t *testing.T) {
+	ctx, root, _ := writeFixture(t)
+	release := make(chan struct{})
+	defer close(release)
+	var opens atomic.Int32
+	deps := Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) {
+		opens.Add(1)
+		<-release
+		return nil, errors.New("released")
+	}}
+	req := Request{Input: filepath.Join(root, "notes.txt"), IsPath: true, Host: "claude-code", Session: "s1"}
+	start := time.Now()
+	v := JudgeWithin(ctx, deps, req, func(ctx context.Context) Verdict { return Judge(ctx, deps, req) })
+	assert.Less(t, time.Since(start), hookBudget)
+	assert.NotEqual(t, string(advisoryUnfinished), v.Rule, "judged, not lapsed")
+	assert.Equal(t, int32(1), opens.Load(), "one stalled open per judgment")
 }

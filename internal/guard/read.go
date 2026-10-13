@@ -543,7 +543,8 @@ func buildFileMap(deps Dependencies, abs, rel string) (fileMap, bool) {
 }
 
 // generatedOutput reports a path the workspace declares as a target's output. A caller
-// that cannot classify leaves the map to speak for itself.
+// that cannot classify, the workspace not opening within inspectBudget included, leaves the
+// map to speak for itself.
 func generatedOutput(deps Dependencies, rel string) bool {
 	ctx := context.Background()
 	ws, err := deps.inspect(ctx, "")

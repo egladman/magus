@@ -340,9 +340,8 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 		VCS: types.VCSOptions{
 			Enabled: globalCfg.VCS.Enabled, Name: globalCfg.VCS.Name, BaseRef: globalCfg.VCS.BaseRef,
 		},
-		BinaryVersion:   version,
-		RuleLoad:        loaded,
-		HostHookTimeout: hostHookTimeout(rootOverride),
+		BinaryVersion: version,
+		RuleLoad:      loaded,
 	}
 	// An unresolvable path leaves the trail row without one; the version still records.
 	deps.Binary, _ = runningBinaryPath()
@@ -381,24 +380,6 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 		return magus.LoadApprovedWriteRule(ctx, root)
 	}
 	return deps, nil
-}
-
-// hostHookTimeout reads a host's hook timeout off the harness spell the workspace wires for
-// it, which declares it in harness_limits. The guard's own load registers no harness, so this
-// opens the workspace, which is why the guard asks only about a judgment that ran long.
-func hostHookTimeout(rootOverride string) func(ctx context.Context, host string) (time.Duration, bool) {
-	return func(ctx context.Context, host string) (time.Duration, bool) {
-		m, err := loadMagus(ctx, rootOverride)
-		if err != nil {
-			return 0, false
-		}
-		wired := m.Harnesses()
-		d, _, err := agent.LoadHarness(agent.ContextWithWiredHarnesses(ctx, wired), m.Root(), host)
-		if err != nil || d.Limits.HookTimeoutMs <= 0 {
-			return 0, false
-		}
-		return time.Duration(d.Limits.HookTimeoutMs) * time.Millisecond, true
-	}
 }
 
 // guardCacheDir resolves a workspace's cache directory for the guard: root's own, read from

@@ -1840,33 +1840,15 @@ func TestApprovedRulesReadAnImportTheWorkingTreeDropped(t *testing.T) {
 	assert.Equal(t, types.GuardDeny, got.Decision)
 }
 
-// The hook timeout the guard reports an abandoned check against is the one the host's
-// harness declares, read through the hook's own dependencies, and nothing for a host the
-// workspace wires no harness for. The shipped spells' own declarations are the bindings'
-// test.
-func TestHostHookTimeoutIsTheHarnessDeclaration(t *testing.T) {
+// The hook does not ask a harness for its host's hook timeout: the answer opens the whole
+// workspace and loads the harness spell, and on a loaded machine that load alone ran every
+// judgment in a session past its budget.
+func TestHookDependenciesAskNoHarnessForAHookTimeout(t *testing.T) {
 	testkit.Isolate(t)
-	fixture.WireHarness(t, agent.HarnessDescriptor{
-		SchemaVersion: 2,
-		ID:            "limit-host",
-		Display:       agent.HarnessDisplay{Name: "Limit host"},
-		Skills:        agent.HarnessSkills{Form: agent.FormShort},
-		Config:        agent.HarnessConfig{Path: "hooks.json"},
-		Limits:        agent.HarnessLimits{HookTimeoutMs: 30000},
-	})
-	root := testkit.NewRepo(t, map[string]string{
-		"magus.yaml":                   "{}\n",
-		"magusfile.buzz":               "import \"magus\";\nimport \"spells/limit-host\" as host;\nmagus\\harness.provider(host);\n",
-		"spells/limit-host/spell.buzz": limitHostSpell,
-	}).Root()
+	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": "import \"magus\";\n"}).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
-	deps := guardDependencies(t.Context(), "")
-	require.NotNil(t, deps.HostHookTimeout)
-	got, ok := deps.HostHookTimeout(t.Context(), "limit-host")
-	assert.Equal(t, []any{30 * time.Second, true}, []any{got, ok})
-	_, ok = deps.HostHookTimeout(t.Context(), "codex")
-	assert.False(t, ok, "a host the workspace wires no harness for")
+	assert.Nil(t, guardDependencies(t.Context(), "").HostHookTimeout)
 }
 
 // A write to the root magusfile whose judgment ran out of time, its rules loaded through the

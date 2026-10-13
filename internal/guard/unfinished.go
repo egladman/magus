@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -178,6 +179,47 @@ func (m judgmentMark) abandoned(now time.Time, timeout hookTimeout) int {
 		}
 	}
 	return n
+}
+
+// lapseDir holds one file per session counting its judgments in a row that ran out of time,
+// one byte each: an append is atomic, so two lapsing at once both count.
+const lapseDir = "guard-lapses"
+
+// lapseTally is the session's lapse count file, keyed like its marks; "" for no mark.
+func (m judgmentMark) lapseTally() string {
+	if m.dir == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(filepath.Dir(m.dir)), lapseDir, filepath.Base(m.dir))
+}
+
+// lapsed counts this judgment as one more that ran out of time and returns how many have in
+// a row, this one included. Zero when the session has no mark or the count cannot be kept.
+func (m judgmentMark) lapsed() int {
+	tally := m.lapseTally()
+	if tally == "" || os.MkdirAll(filepath.Dir(tally), 0o755) != nil {
+		return 0
+	}
+	f, err := os.OpenFile(tally, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return 0
+	}
+	_, err = f.Write([]byte{'.'})
+	if err = errors.Join(err, f.Close()); err != nil {
+		return 0
+	}
+	info, err := os.Stat(tally)
+	if err != nil {
+		return 0
+	}
+	return int(info.Size())
+}
+
+// answeredInTime ends the session's run of lapses.
+func (m judgmentMark) answeredInTime() {
+	if tally := m.lapseTally(); tally != "" {
+		_ = os.Remove(tally)
+	}
 }
 
 // unfinishedNote tells a session how many of its earlier guard checks its host gave up on.
