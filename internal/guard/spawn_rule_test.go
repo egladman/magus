@@ -89,14 +89,14 @@ func TestSpawnRuleSeesEveryHostsEnvelope(t *testing.T) {
 				Kind: types.SpawnKindSpawn, Host: "claude-code", Session: "8f2c6a1e", Model: "sonnet",
 				AgentType: "general-purpose", Description: "orchestrator/brisk-heron/implement adr 0002",
 				Name: "brisk-heron", Prompt: "Implement ADR 0002. Run one plain command per call.", Background: true, Isolated: true,
-				Role: types.AgentRoleRoot,
+				Role: types.AgentRoleRoot, Thread: types.AgentThreadMain,
 			},
 		},
 		{
 			name: "claude-code continue", host: "claude-code", event: claudeContinueEnvelope,
 			want: types.SpawnRequest{
 				Kind: types.SpawnKindContinue, Host: "claude-code", Session: "8f2c6a1e",
-				Prompt: "Now fix the review comments.", Role: types.AgentRoleRoot,
+				Prompt: "Now fix the review comments.", Role: types.AgentRoleRoot, Thread: types.AgentThreadMain,
 				Target: &types.SpawnTarget{Agent: "brisk-heron"},
 			},
 		},
@@ -104,21 +104,21 @@ func TestSpawnRuleSeesEveryHostsEnvelope(t *testing.T) {
 			name: "cursor through its glue", host: "cursor", event: cursorGlueEnvelope,
 			want: types.SpawnRequest{
 				Kind: types.SpawnKindSpawn, Host: "cursor", Session: "conv-parent", AgentType: "explore",
-				Prompt: "Audit internal/job", Role: types.AgentRoleRoot,
+				Prompt: "Audit internal/job", Role: types.AgentRoleRoot, Thread: types.AgentThreadMain,
 			},
 		},
 		{
 			name: "cursor raw", host: "cursor", event: cursorRawEnvelope,
 			want: types.SpawnRequest{
 				Kind: types.SpawnKindSpawn, Host: "cursor", Session: "conv-parent", AgentType: "explore",
-				Prompt: "Audit internal/job", Role: types.AgentRoleRoot,
+				Prompt: "Audit internal/job", Role: types.AgentRoleRoot, Thread: types.AgentThreadMain,
 			},
 		},
 		{
 			name: "codex-shaped", host: "codex", event: codexShapedEnvelope,
 			want: types.SpawnRequest{
 				Kind: types.SpawnKindSpawn, Host: "codex", Session: "codex-s",
-				Prompt: "Audit internal/job", Role: types.AgentRoleRoot,
+				Prompt: "Audit internal/job", Role: types.AgentRoleRoot, Thread: types.AgentThreadMain,
 			},
 		},
 	}
@@ -495,12 +495,14 @@ func TestSpawnRuleSeesTheHostsSubagentID(t *testing.T) {
 	Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 	require.Len(t, probe.asked, 2)
 	assert.Equal(t, types.SpawnRequest{
-		Kind:    types.SpawnKindSpawn,
-		Host:    "claude-code",
-		Session: probe.asked[1].Session,
-		Prompt:  "x",
-		Agent:   "never-seen",
-		Role:    types.AgentRoleRoot,
+		Kind:        types.SpawnKindSpawn,
+		Host:        "claude-code",
+		Session:     probe.asked[1].Session,
+		Prompt:      "x",
+		Agent:       "never-seen",
+		Role:        types.AgentRoleRoot,
+		Thread:      types.AgentThreadSub,
+		ThreadKnown: true,
 	}, probe.asked[0], "the subagent reports the main session's id; magus never saw it spawned, so no Parent")
 	assert.Empty(t, probe.asked[1].Agent, "the main agent carries no subagent id")
 }
