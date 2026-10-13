@@ -76,7 +76,10 @@ export fun decideHost(programs: [helpers\Program], reads: Reads) > GuardVerdict 
     foreach (p in programs) {
         final path = capturePath(p);
         if (path != "" and reads.binary()) {
-            return magus\guard.deny(denialFor(path, reads: reads));
+            final denial = denialFor(path, reads: reads);
+            if (denial != "") {
+                return magus\guard.deny(denial);
+            }
         }
         if (touchesTerminals(p)) {
             return magus\guard.deny(terminalsDenial);
@@ -85,9 +88,11 @@ export fun decideHost(programs: [helpers\Program], reads: Reads) > GuardVerdict 
     return magus\guard.allow();
 }
 
-// denialFor is the capture denial for path. A task capture is read for the refs and
-// invocation ids it printed, so the verdict names the run's own ref; a run log, or a
-// capture holding neither, gets the generic text and how to find an invocation id.
+// denialFor is the capture denial for path, "" for none. A task capture is read for the
+// refs and invocation ids it printed, so the verdict names the run's own ref. A capture
+// holding neither is the output of some other command a host backgrounded, which has no
+// ref to read instead, so it is not denied; a run log always has one, and gets the
+// generic text and how to find an invocation id.
 fun denialFor(path: str, reads: Reads) > str {
     if (!slashed(path).endsWith(".output")) {
         return captureDenial;
@@ -120,8 +125,7 @@ fun denialFor(path: str, reads: Reads) > str {
         return "this capture prints no output ref; read the whole run: `magus query invocation {invocations[0]}`.\n"
             + "The invocation lists each failed target and its cause. Reading the capture by cat or by a range keeps a slice.";
     }
-    return captureDenial + "\nIf the capture names an `inv<id>`, `magus query invocation <id>` reads the whole run; "
-        + "`magus session -o name` lists the recent invocations.";
+    return "";
 }
 
 // distinct is the first element of each match, once, in order of appearance.
@@ -357,7 +361,7 @@ test "a range read, a grep and a cat of a run log are denied, naming query outpu
         ["grep", "cause:", "tasks/266090.output"],
         ["head", "-n", "15", ".magus/logs/abc.log"],
     ]) {
-        final v = judged(helpers\request([argv]));
+        final v = judgedWith(helpers\request([argv]), reads: fakeReads({"tasks/266090.output": "output: out0123456789ab"}, binary: true));
         std\assert(v.decision == "deny", message: argv.join(" "));
         std\assert(v.reason.indexOf("magus query output") != null, message: "names the ref read");
     }
@@ -419,14 +423,11 @@ test "a capture with an invocation id and no ref names query invocation on the v
     std\assert(v.reason.split("\n")[0].indexOf("`magus query invocation inv1a2b3c4d5`") != null, message: v.reason);
 }
 
-test "a capture with neither, an unreadable one and a word that only starts with inv fall back to the generic text" {
+test "a capture naming no ref and no invocation is some other command's output, and is read" {
     final path = "tasks/9.output";
-    foreach (text in ["", "exit 1\ninvalidate the cache\ninvoke\n", "out12345 short\nxout0123456789abx\n"]) {
+    foreach (text in ["", "go version go1.26 darwin/arm64\n", "exit 1\ninvalidate the cache\ninvoke\n", "out12345 short\nxout0123456789abx\n"]) {
         final v = judgedWith(capture(path), reads: fakeReads({path: text}, binary: true));
-        std\assert(v.decision == "deny", message: text);
-        std\assert(v.reason.indexOf("magus query output <ref>") != null, message: "still names query output: " + v.reason);
-        std\assert(v.reason.indexOf("`magus query invocation <id>`") != null, message: "names query invocation: " + v.reason);
-        std\assert(v.reason.indexOf("magus session -o name") != null, message: "how to find the id: " + v.reason);
+        std\assert(v.decision == "allow", message: text);
     }
 }
 
