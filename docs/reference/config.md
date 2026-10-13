@@ -71,6 +71,7 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `jobs.default_timeout` | `MAGUS_JOBS_DEFAULT_TIMEOUT` | `--jobs-default-timeout` | duration |
 | `jobs.max_depth`       | `MAGUS_JOBS_MAX_DEPTH`       | `--jobs-max-depth`       | int      |
 | `jobs.max_live`        | `MAGUS_JOBS_MAX_LIVE`        | `--jobs-max-live`        | int      |
+| `jobs.retain`          | `MAGUS_JOBS_RETAIN`          | `--jobs-retain`          | duration |
 | `jobs.stale_after`     | `MAGUS_JOBS_STALE_AFTER`     | `--jobs-stale-after`     | duration |
 
 ## knowledge
