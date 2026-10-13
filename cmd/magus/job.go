@@ -853,7 +853,9 @@ type describeJobOutput struct {
 // verdict a fact. It is the same value `magus vcs checkpoint -o name` prints, from the
 // same function, so the token a person cites and the token exec records cannot differ.
 func checkoutBaseToken(ctx context.Context, root string) (string, error) {
-	ws, err := inspectWorkspace(ctx, root)
+	// loadMagus, not inspectWorkspace: the fork's notes open the workspace next, and an
+	// inspection first would be a second load, which an open one later reuses.
+	ws, err := loadMagus(ctx, root)
 	if err != nil {
 		return "", err
 	}
@@ -1111,7 +1113,8 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if err := job.RefuseNarrowedTests(store, probe); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
-	if err := job.RefuseDeniedCheck(ctx, store, probe); err != nil {
+	// The guard grades the check against the rows just swept rather than sweep them again.
+	if err := job.RefuseDeniedCheck(job.WithSnapshot(ctx, job.Snapshot{Rows: plan}), store, probe); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
 	proof := store.WriteProof(plan, probe)
@@ -2058,7 +2061,11 @@ func jobRefusesTheGate(ctx context.Context, root string, row types.Job) error {
 // that cannot be inspected also reports nothing: this rule must not be the reason a brief
 // is unavailable.
 func validationReachesGate(ctx context.Context, root, validation string) []string {
-	ws, err := inspectWorkspace(ctx, root)
+	if strings.TrimSpace(validation) == "" {
+		return nil
+	}
+	// The boundary loads the full workspace next; an inspection first would load it twice.
+	ws, err := loadMagus(ctx, root)
 	if err != nil {
 		return nil
 	}

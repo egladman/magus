@@ -1997,6 +1997,11 @@ func withJobStoreRows(ctx context.Context, at location) context.Context {
 	if at.cacheDir == "" {
 		return ctx
 	}
+	// A caller that already swept the store, as a fork grading its check has, pins its
+	// rows rather than have the judgment decode and sweep the same file again.
+	if job.HasSnapshot(ctx) {
+		return ctx
+	}
 	log := judgmentPhases(ctx)
 	if log.lapsed(phaseJobRows) {
 		return job.WithSnapshot(ctx, job.Snapshot{Err: context.DeadlineExceeded})

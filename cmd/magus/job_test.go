@@ -36,6 +36,36 @@ func leaseRow(id, parent string) types.Job {
 	return types.Job{ID: id, Parent: parent, State: types.StateRunning, Model: "standard"}
 }
 
+// A job verb, `ls jobs` and `describe job` read the job store first and open the workspace
+// themselves where a section needs it, so startup neither preloads it nor forwards: the
+// preload put a magusfile evaluation in front of every fork and exit. The other nouns of
+// ls and describe still list the workspace.
+func TestJobReadsSkipTheWorkspacePreload(t *testing.T) {
+	t.Parallel()
+
+	configOnly := dispatchProfile{needsConfig: true}
+	preload := dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true}
+	for _, tc := range []struct {
+		sub  string
+		args []string
+		want dispatchProfile
+	}{
+		{"job", []string{"fork", "a", "--write-paths", "x"}, configOnly},
+		{"job", []string{"exit", "a"}, configOnly},
+		{"job", []string{"wait", "a"}, configOnly},
+		{"job", []string{"run", "sync-graph"}, configOnly},
+		{"ls", []string{"jobs"}, configOnly},
+		{"ls", []string{"-o", "json", "job"}, configOnly},
+		{"ls", []string{"targets", "jobs-dir"}, preload},
+		{"ls", nil, preload},
+		{"describe", []string{"job", "a"}, configOnly},
+		{"describe", []string{"jobs", "a"}, configOnly},
+		{"describe", []string{"project", "."}, preload},
+	} {
+		assert.Equal(t, tc.want, resolveProfile(tc.sub, tc.args), "%s %v", tc.sub, tc.args)
+	}
+}
+
 func TestLedgerTreeOrderNestsChildrenUnderTheirParent(t *testing.T) {
 	t.Parallel()
 

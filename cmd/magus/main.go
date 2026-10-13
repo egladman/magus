@@ -448,14 +448,26 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	case "status":
 		return dispatchProfile{needsConfig: true, needsForward: true}
 	case "job":
-		// `job run` submits one of the server's OWN jobs and is called from a VCS hook,
-		// where it promises to be a silent no-op when no server answers. Loading the
-		// workspace to make that promise is work nobody asked for, and it breaks the
-		// promise out loud: a checkout carrying one unparsable local spell logs the load
-		// error on every hook. It resolves the server socket itself, exactly as
-		// `magus job run` did before this verb replaced it. Every other job verb reads the
-		// workspace and takes the default.
-		if len(subArgs) > 0 && subArgs[0] == hint.JobRun.Leaf() {
+		// Never forwarded, never preloaded. The job store answers most of what a job verb
+		// asks, the server adopts none of them, and the verbs that need the workspace (a
+		// fork's notes, a wait's gates) open it themselves through loadMagus, so a fork
+		// or an exit that reads only the store no longer waits on a magusfile evaluation.
+		//
+		// `job run` is the sharpest case: it submits one of the server's OWN jobs from a
+		// VCS hook, where it promises to be a silent no-op when no server answers, and a
+		// checkout carrying one unparsable local spell would log the load error on every
+		// hook.
+		return dispatchProfile{needsConfig: true}
+	case "ls":
+		// `ls jobs` reads the job store alone; the other nouns list the workspace.
+		if i := slices.IndexFunc(subArgs, func(a string) bool { return slices.Contains(lsNouns, a) }); i >= 0 && strings.HasPrefix(subArgs[i], "job") {
+			return dispatchProfile{needsConfig: true}
+		}
+		return dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true}
+	case "describe":
+		// As `job`: `describe job` opens the workspace and the knowledge graph itself, only
+		// for the sections that read them.
+		if len(subArgs) > 0 && describeAlias[subArgs[0]] == "job" {
 			return dispatchProfile{needsConfig: true}
 		}
 		return dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true}
