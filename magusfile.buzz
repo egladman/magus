@@ -172,8 +172,11 @@ magus\project({
         "release": {"skip_cache": "mutates go.mod and creates VCS tags, an order-sensitive side effect"},
         // memory_mb: -race shadow memory in every test binary exhausts a 16GB runner.
         // Linux pipepeer tests read their children's /proc entries.
+        // The raced suite measured 13m21s of its own work on a loaded 8-core machine, with
+        // vcs, cmd/magus and internal/guard each over five minutes: the hg and sl parity
+        // tests alone spend about seven minutes spawning those tools.
         "test": {
-            "timeout": "15m",
+            "timeout": "25m",
             "memory_mb": 10240,
             "sandbox": {"allow": if (os\platform()[0] == "linux") [{"path": "/proc", "mode": "ro"}] else []},
         },
