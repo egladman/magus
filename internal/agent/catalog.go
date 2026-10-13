@@ -988,8 +988,8 @@ func (c *Catalog) RenderedSkills(form Form) ([]AgentSkill, error) {
 		// full twin when the acting lease says a delegated worker is running, and the
 		// session brief names it for the same reason. A description cannot route; a
 		// verdict that has read the lease can.
-		full.Description = "Full reference copy of " + def.Name + ", same scope with the worked examples kept. " +
-			"Load it instead of " + def.Name + " when magus names it, or when that skill left a step underspecified."
+		full.Description = "Full copy of " + def.Name + " with worked examples. " +
+			"Load it when magus names it or when " + def.Name + " left a step underspecified."
 		skills = append(skills, full)
 	}
 	return skills, nil

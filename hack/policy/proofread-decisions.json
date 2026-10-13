@@ -36,6 +36,7 @@
     "compact-line": "advise",
     "compact-duplicate": "advise",
     "skill-description-budget": "advise",
+    "skill-set-description-budget": "advise",
     "instruction-position": "advise"
   }
 }

@@ -62,9 +62,9 @@ export fun reads() > [str] {
 }
 
 // HAND_WRITTEN are .markdownlintignore entries that are not generated: the changelog
-// fragments and the AGENTS.md section open below an H1, and .claude/ is listed for the
-// other checkouts under it, which the runner already prunes.
-final HAND_WRITTEN = ["changes/unreleased/", "internal/agent/agents-section.md", ".claude/"];
+// fragments and the AGENTS.md section open below an H1, a skill body is a template, and
+// .claude/ is listed for the other checkouts under it, which the runner already prunes.
+final HAND_WRITTEN = ["changes/unreleased/", "internal/agent/agents-section.md", "internal/agent/skills/*/SKILL.md", ".claude/"];
 
 // ALLOW are the capitalized words a heading may carry after its first: proper nouns and
 // acronyms, each mined from the headings already in the tree. A word with a digit, a dot,

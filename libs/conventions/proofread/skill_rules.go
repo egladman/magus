@@ -3,6 +3,7 @@ package proofread
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -11,6 +12,9 @@ const (
 	// a word budget, and a full form's description that mostly repeats the
 	// short form's.
 	RuleSkillDescriptionBudget Rule = "skill-description-budget"
+	// RuleSkillSetDescriptionBudget reports an installed set of skills whose
+	// descriptions, both forms of each counted, sum past a word budget.
+	RuleSkillSetDescriptionBudget Rule = "skill-set-description-budget"
 	// RuleInstructionPosition reports a long full form of a skill whose first
 	// "must" or "never" sits past the middle of its body.
 	RuleInstructionPosition Rule = "instruction-position"
@@ -18,12 +22,13 @@ const (
 
 var skillKind = []Kind{KindSkillTemplate}
 
-// Neither check has a judge: each reads both renders of a skill body, which
+// No check here has a judge: each reads both renders of a skill body, which
 // only [judgeSkillSource] holds.
 var (
-	descriptionCheck = check{rule: RuleSkillDescriptionBudget, on: skillKind, advise: skillKind}
-	positionCheck    = check{rule: RuleInstructionPosition, on: skillKind, advise: skillKind}
-	skillChecks      = []check{descriptionCheck, positionCheck}
+	descriptionCheck    = check{rule: RuleSkillDescriptionBudget, on: skillKind, advise: skillKind}
+	setDescriptionCheck = check{rule: RuleSkillSetDescriptionBudget, on: skillKind, advise: skillKind}
+	positionCheck       = check{rule: RuleInstructionPosition, on: skillKind, advise: skillKind}
+	skillChecks         = []check{descriptionCheck, setDescriptionCheck, positionCheck}
 )
 
 var skillTexts = map[Rule]ruleText{
@@ -42,6 +47,17 @@ var skillTexts = map[Rule]ruleText{
 			"(back-references included), and each sibling's restated description plus a sentence shares 84 " +
 			"to 92%, so the line sits between them at 75%.",
 	},
+	RuleSkillSetDescriptionBudget: {
+		code:      "PRF7022",
+		dimension: DimensionEconomy,
+		catches: fmt.Sprintf("an installed set of skills whose descriptions sum past %d words, each skill's short "+
+			"and full form counted", maxSetDescriptionWords),
+		why: "A per-skill budget passes a set that grows one skill at a time, yet the host loads every " +
+			"description of the set into every session. Measured 2026-10-13 over the 16 skills magus ships " +
+			"with their full twins: 1780 words of short descriptions, back-references included, and 320 of " +
+			"twins at 20 words each, 2100 in all. The budget is that total, a ratchet: a skill added or a " +
+			"description grown advises until another description is cut to make room.",
+	},
 	RuleInstructionPosition: {
 		code:      "PRF7021",
 		dimension: DimensionStructure,
@@ -57,28 +73,47 @@ var skillTexts = map[Rule]ruleText{
 }
 
 // maxDescriptionWords and maxTwinRepeat are the budgets RuleSkillDescriptionBudget's
-// why measures.
+// why measures, and maxSetDescriptionWords RuleSkillSetDescriptionBudget's.
 const (
-	maxDescriptionWords = 100
-	maxTwinRepeat       = 0.75
+	maxDescriptionWords    = 100
+	maxTwinRepeat          = 0.75
+	maxSetDescriptionWords = 2100
 )
 
-// description is the frontmatter description of a render and the line of the
-// render it sits on, or "" when the render opens with no frontmatter or none
-// is given on one line.
-func (f skillForm) description() (string, int) {
-	lines := strings.Split(f.text, "\n")
-	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
-		return "", 0
-	}
+// skillEntry is one frontmatter block of a render: the skill it names, its
+// one-line description, and the line of the render the description sits on.
+type skillEntry struct {
+	name, description string
+	line              int
+}
 
-	for i := 1; i < len(lines) && strings.TrimSpace(lines[i]) != "---"; i++ {
-		if v := descriptionValue(lines[i]); v != "" {
-			return v, i + 1
+// entries are the frontmatter blocks a render opens with, back to back: one
+// for a skill body, one per skill for a listing of an installed set. A block
+// with no one-line description is left out.
+func (f skillForm) entries() []skillEntry {
+	lines := strings.Split(f.text, "\n")
+
+	var out []skillEntry
+
+	for i := 0; i < len(lines) && strings.TrimSpace(lines[i]) == "---"; i++ {
+		var e skillEntry
+
+		for i++; i < len(lines) && strings.TrimSpace(lines[i]) != "---"; i++ {
+			if v, ok := strings.CutPrefix(lines[i], "name:"); ok {
+				e.name = strings.TrimSpace(v)
+			}
+
+			if v := descriptionValue(lines[i]); v != "" && e.line == 0 {
+				e.description, e.line = v, i+1
+			}
+		}
+
+		if e.line > 0 {
+			out = append(out, e)
 		}
 	}
 
-	return "", 0
+	return out
 }
 
 // sourceLine is the line of the source that line of the render reads from.
@@ -90,24 +125,44 @@ func (f skillForm) sourceLine(line int) int {
 	return line
 }
 
+// judgeDescriptions judges each skill's descriptions in forms, and then the
+// set they make together.
 func judgeDescriptions(forms [2]skillForm, o options) []Finding {
-	d := o.decide(descriptionCheck, KindSkillTemplate)
-	if d == DecisionOff {
-		return nil
-	}
-
 	var out []Finding
 
-	short, shortLine := forms[0].description()
-	full, fullLine := forms[1].description()
+	if d := o.decide(descriptionCheck, KindSkillTemplate); d != DecisionOff {
+		shorts, fulls := forms[0].entries(), forms[1].entries()
 
-	for i, desc := range []string{short, full} {
-		line := forms[i].sourceLine([]int{shortLine, fullLine}[i])
-		if n := len(strings.Fields(desc)); n > maxDescriptionWords && (i == 0 || desc != short) {
+		for i := range max(len(shorts), len(fulls)) {
+			var pair [2]skillEntry
+			if i < len(shorts) {
+				pair[0] = shorts[i]
+			}
+
+			if i < len(fulls) {
+				pair[1] = fulls[i]
+			}
+
+			out = append(out, judgeDescription(forms, pair, d, o)...)
+		}
+	}
+
+	return append(out, judgeSetDescriptions(forms, o)...)
+}
+
+// judgeDescription judges one skill's short and full descriptions, pair[0]
+// read from forms[0] and pair[1] from forms[1].
+func judgeDescription(forms [2]skillForm, pair [2]skillEntry, d Decision, o options) []Finding {
+	var out []Finding
+
+	short, full := pair[0].description, pair[1].description
+
+	for i, e := range pair {
+		if n := len(strings.Fields(e.description)); n > maxDescriptionWords && (i == 0 || e.description != short) {
 			out = append(out, o.settle(descriptionCheck, Finding{
 				Message: fmt.Sprintf("Cut the description to %d words (it has %d): it loads into every session "+
 					"whether or not the skill is used.", maxDescriptionWords, n),
-				Line: line,
+				Line: forms[i].sourceLine(e.line),
 			}, d))
 		}
 	}
@@ -126,11 +181,66 @@ func judgeDescriptions(forms [2]skillForm, o options) []Finding {
 		out = append(out, o.settle(descriptionCheck, Finding{
 			Message: fmt.Sprintf("Give the full form a description of its own: %d%% of its words repeat the short "+
 				"form's, and both load into every session.", int(repeat*100)),
-			Line: forms[1].sourceLine(fullLine),
+			Line: forms[1].sourceLine(pair[1].line),
 		}, d))
 	}
 
 	return out
+}
+
+// judgeSetDescriptions sums the description words of every skill in forms,
+// the short form's and the full form's both, since an install of both forms
+// lists each skill twice.
+func judgeSetDescriptions(forms [2]skillForm, o options) []Finding {
+	d := o.decide(setDescriptionCheck, KindSkillTemplate)
+	if d == DecisionOff {
+		return nil
+	}
+
+	words := map[string]int{}
+
+	var names []string
+
+	total, twins := 0, 0
+
+	for i, form := range forms {
+		for _, e := range form.entries() {
+			n := len(strings.Fields(e.description))
+			total += n
+
+			if i == 1 {
+				twins += n
+			}
+
+			if _, ok := words[e.name]; !ok {
+				names = append(names, e.name)
+			}
+
+			words[e.name] += n
+		}
+	}
+
+	if total <= maxSetDescriptionWords {
+		return nil
+	}
+
+	slices.SortStableFunc(names, func(a, b string) int { return words[b] - words[a] })
+
+	largest := make([]string, 0, 3)
+	for _, name := range names[:min(3, len(names))] {
+		label := name
+		if label == "" {
+			label = "the unnamed skill"
+		}
+
+		largest = append(largest, fmt.Sprintf("%s %d", label, words[name]))
+	}
+
+	return []Finding{o.settle(setDescriptionCheck, Finding{
+		Message: fmt.Sprintf("Cut the set's descriptions to %d words (they have %d): every one loads into every "+
+			"session. The largest are %s; the full twins carry %d (%d%%).",
+			maxSetDescriptionWords, total, strings.Join(largest, ", "), twins, 100*twins/total),
+	}, d)}
 }
 
 // descriptionWords are the content words of a description, as
