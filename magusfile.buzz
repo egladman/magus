@@ -13,6 +13,7 @@ import "spells/git/hooks" as githooks;
 import "./hack/policy/guard" as agentpolicy;
 import "./hack/policy/builtins" as agentbuiltins;
 magus\guard.builtins(agentbuiltins\BUILTINS);
+magus\guard.profile("strict");
 magus\guard.command(agentpolicy\judge);
 magus\guard.spawn(agentpolicy\judgeSpawn);
 magus\guard.write(agentpolicy\judgeWrite);
