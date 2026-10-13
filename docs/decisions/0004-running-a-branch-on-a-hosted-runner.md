@@ -3,7 +3,7 @@ title: "ADR 0004: running a branch on a hosted runner"
 order: 4
 description: Whether a laptop can hand one magus invocation on a pushed commit to a GitHub-hosted runner, with no pull request, and read the answer back. Decides a dispatch-only workflow that runs the argv in the merge queue's box and a repository script that dispatches, answers once and forgets; states what "no record" can and cannot mean on a public repository; places it beside ADR 0003's --platform.
 tags: [adr, decision, ci, github-actions, remote, sandbox, queue, scope]
-status: proposed
+status: accepted
 date: 2026-09-26
 ---
 
