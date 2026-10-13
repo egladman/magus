@@ -27,7 +27,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/libs/conventions/internal/source"
-	"github.com/egladman/magus/libs/conventions/proofread"
+	"github.com/egladman/magus/libs/proofread"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/types/typeutil"
 )

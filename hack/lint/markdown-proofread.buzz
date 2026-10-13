@@ -8,7 +8,7 @@
 //   - Headings in sentence case: after the first word, a word is lowercase unless it is a
 //     proper noun or an identifier in ALLOW. Title Case and SHOUTING read as emphasis the
 //     heading does not mean, and sentence case is what the docs already write.
-//   - The writing rules of docs/conventions.md, which libs/conventions/cmd/proofread
+//   - The writing rules of docs/conventions.md, which libs/proofread/cmd/proofread
 //     judges in one run per kind over every file, under this repository's decisions table
 //     (hack/policy/proofread.buzz): no reply to a request or to a conversation the reader never
 //     saw, the present tense, no hedge on a claim, no credit to a tool, no filler, one
@@ -52,13 +52,13 @@ import "encoding/json";
 import "magus/lint";
 import "hack/lint/support" as support;
 import "hack/policy/proofread" as decisions;
-import "libs/conventions/proofread" as proofread;
+import "libs/proofread/proofread" as proofread;
 
 // reads names proofread's module apart: a tree glob stops at a nested project.
 export fun reads() > [str] {
     return ["**/*.md", "console/**/*.md", "docs/**/*.md", ".gitattributes", ".markdownlintignore",
-        "libs/conventions/go.mod", "libs/conventions/go.sum", "libs/conventions/**/*.go",
-        "libs/conventions/proofread.buzz"];
+        "libs/proofread/go.mod", "libs/proofread/go.sum", "libs/proofread/**/*.go",
+        "libs/proofread/proofread.buzz"];
 }
 
 // HAND_WRITTEN are .markdownlintignore entries that are not generated: the changelog

@@ -4,7 +4,7 @@
 // conversation (review-reply). COMMANDS says which command writes which kind, and through
 // which flags.
 //
-// The words are judged by libs/conventions/proofread under this repository's decisions table
+// The words are judged by libs/proofread under this repository's decisions table
 // (hack/policy/proofread.buzz), with any OUTSIDE_JUDGES beside it. A finding decided deny is
 // denied, every one listed with its rule; one decided advise is told once per pull request.
 // The pr-description CI step runs judgeText too, so the guard and CI reach one decision.
@@ -45,7 +45,7 @@ import "./hack/policy/commits" as subjects;
 import "./hack/policy/proofread" as decisions;
 import "./hack/magusfile/commits" as conventional;
 import "./hack/magusfile/changelog" as entries;
-import "./libs/conventions/proofread" as proofread;
+import "./libs/proofread/proofread" as proofread;
 
 final descriptionKind = "change-description";
 final summaryKind = "review-summary";
@@ -228,7 +228,7 @@ export object OutsideJudge {
     kinds: [str],
 }
 
-// OUTSIDE_JUDGES is empty here: libs/conventions/proofread is this repository's only judge.
+// OUTSIDE_JUDGES is empty here: libs/proofread is this repository's only judge.
 export final OUTSIDE_JUDGES = [<OutsideJudge>];
 
 // matchCommand is the row of COMMANDS p runs, or null.
@@ -669,7 +669,7 @@ export fun branchDiff(workspace: str) > fun (base: str) > Facts {
     };
 }
 
-// Judged is one finding of a judge, in the findings JSON libs/conventions/README.md
+// Judged is one finding of a judge, in the findings JSON libs/proofread/README.md
 // describes: line counts from the first line of the text judged, 0 when the finding has
 // none, and decision is "deny" or "advise".
 export object Judged {
@@ -681,7 +681,7 @@ export object Judged {
     url: str = "",
 }
 
-// judgeRunner returns a judge that runs the built libs/conventions/cmd/proofread over text
+// judgeRunner returns a judge that runs the built libs/proofread/cmd/proofread over text
 // of a kind, under this repository's decisions table, and then each of OUTSIDE_JUDGES that
 // judges the kind. The judge lives in Go, where the Markdown lint and the CI step reach the
 // same rules; a judge that is missing, stale or did not run is a finding, since silence
@@ -700,7 +700,7 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
             return [Judged{ rule = "judge", line = 0,
                 message = "proofread cannot run: its decisions file could not be written to a temp dir" }];
         }
-        // No dir: proc\exec resolves a relative cmd against dir, which names libs/conventions
+        // No dir: proc\exec resolves a relative cmd against dir, which names libs/proofread
         // twice when workspace is relative (the pr-description target passes "."), so the
         // judge must run from the path stale checked.
         final bin = "{dir}/{proofread\binary}";
@@ -1605,7 +1605,7 @@ fun facts(f: Facts) > fun (base: str) > Facts {
 }
 
 // passing is a judge that finds nothing, so a case sees only this rule's own verdicts;
-// libs/conventions/proofread tests proofread itself.
+// libs/proofread tests proofread itself.
 fun passing() > fun (text: str, kind: str) > [Judged] {
     return fun (text: str, kind: str) > [Judged] {
         return [<Judged>];
@@ -2022,12 +2022,11 @@ test "proofread runs from a relative workspace and its absence is a finding" {
     final ws = fs\tempDir("judge-runner") catch "";
     std\assert(ws != "", message: "a temp dir");
     final dir = "{ws}/{proofread\home}";
-    fs\mkdirAll("{dir}/proofread") catch void;
     fs\mkdirAll("{dir}/cmd/proofread") catch void;
     fs\mkdirAll("{dir}/gen") catch void;
     fs\writeFile("{dir}/go.mod", content: "module m\n") catch void;
     fs\writeFile("{dir}/go.sum", content: "") catch void;
-    fs\writeFile("{dir}/proofread/proofread.go", content: "package proofread\n") catch void;
+    fs\writeFile("{dir}/proofread.go", content: "package proofread\n") catch void;
     fs\writeFile("{dir}/cmd/proofread/main.go", content: "package main\n") catch void;
     final relative = path\rel(path\abs(".") catch ".", target: ws) catch ws;
     std\assert(!path\isAbs(relative), message: relative);
@@ -2148,7 +2147,7 @@ test "touchedAreas names projects and top-level packages, generated files and fr
     final files: [any] = [
         {"path": "internal/guard/dir.go", "project": ".", "role": "source"},
         {"path": "internal/guard/rules/x.go", "project": ".", "role": "source"},
-        {"path": "libs/conventions/proofread/voice.go", "project": "libs/conventions", "role": "source"},
+        {"path": "libs/conventions/diagmsg/analyzer.go", "project": "libs/conventions", "role": "source"},
         {"path": "magusfile.buzz", "project": ".", "role": "source"},
         {"path": "MAGUS.md", "project": ".", "role": "output"},
         {"path": ".gitattributes", "project": ".", "role": "maintained"},

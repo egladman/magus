@@ -24,7 +24,7 @@ import "magus";
 import "magus/lint";
 import "hack/lint/support" as support;
 import "hack/policy/proofread" as decisions;
-import "libs/conventions/proofread" as proofread;
+import "libs/proofread/proofread" as proofread;
 
 export final SKILLS = "internal/agent/skills";
 export final CATALOG = "internal/agent/catalog.go";
@@ -40,8 +40,9 @@ final JUDGE = "{proofread\home}/{proofread\command}";
 // reads keys lint-rules on the skill sources and on everything the judge is linked from. The
 // renders also read the Go of internal/agent, which lint-rules keys through **/*.go.
 export fun reads() > [str] {
-    return [CATALOG, "{SKILLS}/*/SKILL.md", "hack/policy/proofread.buzz", "libs/conventions/go.mod",
-        "libs/conventions/go.sum", "libs/conventions/**/*.go", "libs/conventions/proofread.buzz"];
+    return [CATALOG, "{SKILLS}/*/SKILL.md", "hack/policy/proofread.buzz", "libs/proofread/go.mod",
+        "libs/proofread/go.sum", "libs/proofread/**/*.go", "libs/proofread/proofread.buzz",
+        ".markdownlint.json"];
 }
 
 // Pair is one skill's two descriptions as the renders carry them, still YAML-escaped.

@@ -1,0 +1,106 @@
+namespace proofread;
+
+import "std";
+import "fs";
+import "crypto";
+
+// proofread as `magus run proofread-build libs/proofread` leaves it, relative to
+// home, the module it is built in: its main package, the linked binary, and the digest of
+// the sources it was linked from. A hook runs the binary rather than `go run`, whose compile
+// on a cold Go cache outlasts the rule timeout.
+export final home = "libs/proofread";
+export final command = "cmd/proofread";
+export final binary = "gen/proofread";
+export final inputsFile = "gen/proofread.inputs";
+export final build = "magus run proofread-build libs/proofread";
+
+// PACKAGES are the directories under home whose non-test Go the binary links. A directory
+// that does not exist lists nothing.
+final PACKAGES = [".", "postag", "postag/internal/feature", command];
+
+// sources lists every file proofread is linked from, relative to dir, the libs/proofread
+// module: its go.mod and go.sum, the non-test Go of the packages it builds, the tagger
+// model postag embeds, and the labeled cases the binary embeds for `proofread calibrate`.
+// proofread-build hashes this list and the guard rehashes it, so neither can drift from the other.
+export fun sources(dir: str) > [str] !> any {
+    final found = mut ["go.mod", "go.sum"];
+    foreach (pkg in PACKAGES) {
+        final prefix = if (pkg == ".") "" else "{pkg}/";
+        foreach (name in fs\listDir("{dir}/{pkg}")) {
+            if (name.endsWith(".go") and !name.endsWith("_test.go")) {
+                found.append("{prefix}{name}");
+            }
+        }
+    }
+    foreach (name in fs\listDir("{dir}/postag/gen")) {
+        if (name.endsWith(".gz")) {
+            found.append("postag/gen/{name}");
+        }
+    }
+    foreach (name in fs\listDir("{dir}/testdata/cases")) {
+        if (name.endsWith(".txtar")) {
+            found.append("testdata/cases/{name}");
+        }
+    }
+    return found;
+}
+
+// inputs digests sources by path and content, so an added or renamed file changes it as
+// much as an edit does. A file's mtime plays no part: a cached proofread-build replays an
+// identical binary without touching it.
+export fun inputs(dir: str) > str !> any {
+    final lines = mut [<str>];
+    foreach (path in sources(dir)) {
+        lines.append("{path} {crypto\sha256File("{dir}/{path}")}");
+    }
+    return crypto\sha256Hex(lines.join("\n"));
+}
+
+// whyStale says why the built proofread in dir must not run, or "" when it may: it is missing,
+// or the sources it was linked from are not the ones in the tree.
+export fun whyStale(dir: str) > str {
+    if (!(fs\isFile("{dir}/{binary}") catch false)) {
+        return "{home}/{binary} is not built";
+    }
+    final built = fs\readFile("{dir}/{inputsFile}") catch "";
+    final current = inputs(dir) catch "";
+    if (current == "") {
+        return "the sources of {home}/{binary} could not be read";
+    }
+    if (built.trim() != current) {
+        return "{home}/{binary} was linked from other sources than the tree holds";
+    }
+    return "";
+}
+
+test "a proofread that is missing or linked from other sources is stale" {
+    final dir = fs\tempDir("proofread") catch "";
+    std\assert(dir != "", message: "a temp dir");
+    foreach (sub in ["postag/internal/feature", "postag/gen", "cmd/proofread", "testdata/cases", "gen"]) {
+        fs\mkdirAll("{dir}/{sub}") catch void;
+    }
+    fs\writeFile("{dir}/go.mod", content: "module m\n") catch void;
+    fs\writeFile("{dir}/go.sum", content: "") catch void;
+    fs\writeFile("{dir}/proofread.go", content: "package proofread\n") catch void;
+    fs\writeFile("{dir}/proofread_test.go", content: "package proofread\n") catch void;
+    fs\writeFile("{dir}/postag/tag.go", content: "package postag\n") catch void;
+    fs\writeFile("{dir}/postag/internal/feature/feature.go", content: "package feature\n") catch void;
+    fs\writeFile("{dir}/postag/gen/model.gz", content: "model") catch void;
+    fs\writeFile("{dir}/cmd/proofread/main.go", content: "package main\n") catch void;
+    fs\writeFile("{dir}/testdata/cases/filler.txtar", content: "-- hit/reference --\nx\n") catch void;
+
+    std\assert((sources(dir) catch [<str>]).join(",") == "go.mod,go.sum,proofread.go,postag/tag.go,"
+        + "postag/internal/feature/feature.go,cmd/proofread/main.go,postag/gen/model.gz,testdata/cases/filler.txtar",
+        message: (sources(dir) catch [<str>]).join(","));
+    std\assert(whyStale(dir) == "libs/proofread/gen/proofread is not built", message: whyStale(dir));
+
+    fs\writeFile("{dir}/{binary}", content: "") catch void;
+    fs\writeFile("{dir}/{inputsFile}", content: (inputs(dir) catch "") + "\n") catch void;
+    std\assert(whyStale(dir) == "", message: whyStale(dir));
+
+    fs\writeFile("{dir}/proofread_test.go", content: "package proofread\n\nconst x = 1\n") catch void;
+    std\assert(whyStale(dir) == "", message: "a test is not linked in");
+    fs\writeFile("{dir}/postag/gen/model.gz", content: "retrained") catch void;
+    std\assert(whyStale(dir) == "libs/proofread/gen/proofread was linked from other sources than the tree holds", message: whyStale(dir));
+    fs\removeAll(dir) catch void;
+}

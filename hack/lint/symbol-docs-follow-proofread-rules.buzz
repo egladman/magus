@@ -8,7 +8,7 @@ import "encoding/json";
 import "magus";
 import "magus/lint";
 import "hack/policy/proofread" as decisions;
-import "libs/conventions/proofread" as proofread;
+import "libs/proofread/proofread" as proofread;
 
 // LANGUAGES are the indexes the rule judges. A language whose index judged no symbol is
 // reported, so an indexer that stops emitting docs cannot turn the rule into a pass.
@@ -23,10 +23,11 @@ final THIS = "hack/lint/symbol-docs-follow-proofread-rules.buzz";
 
 // reads keys lint-rules on every source the indexes cover: a tree glob stops at a nested
 // project, so each project holding Go or TypeScript is named. proto's Go is all generated.
-// The proofread rules are the Go of libs/conventions, so its module files key the rule too.
+// The proofread rules are the Go of libs/proofread, so its module files key the rule too.
 export fun reads() > [str] {
-    return ["**/*.go", "libs/conventions/go.mod", "libs/conventions/go.sum",
-        "libs/conventions/**/*.go", "libs/conventions/proofread.buzz", "hack/policy/proofread.buzz", "libs/diagnostics/**/*.go",
+    return ["**/*.go", "libs/proofread/go.mod", "libs/proofread/go.sum",
+        "libs/proofread/**/*.go", "libs/proofread/proofread.buzz",
+        "hack/policy/proofread.buzz", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
         "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go", "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go",
         "console/**/*.ts", "docs/**/*.ts", "docs/guides/integrations/agents/**/*.ts",
         "libs/textsearch/**/*.ts"];
@@ -34,7 +35,7 @@ export fun reads() > [str] {
 
 // check fails every proofread finding the decisions table in hack/policy/proofread.buzz denies and
 // SANCTIONED does not name. magus\symbols supplies the docs and the indexes; the judging runs
-// in libs/conventions/cmd/proofread, as lint-rules has proofread-build link it. A missing or
+// in libs/proofread/cmd/proofread, as lint-rules has proofread-build link it. A missing or
 // stale index, a language that judged nothing and a runner that fails are findings, never a
 // pass: a rule reading nothing finds nothing.
 export fun check(files: [Path]) > [Finding] !> any {

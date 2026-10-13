@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/libs/conventions/internal/sourcetest"
-	"github.com/egladman/magus/libs/conventions/proofread"
+	"github.com/egladman/magus/libs/proofread"
 	"golang.org/x/tools/go/analysis/analysistest"
 )
 

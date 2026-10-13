@@ -2,7 +2,7 @@
 // repository owner's comment budget: a block over its budget is advised, one over twice
 // its budget or above the package clause is denied. A write to a stylesheet that adds a
 // comment is judged the same way: a comment over twice the largest budget is denied, and
-// one proofread (libs/conventions) reports is advised. The first write of a session
+// one proofread (libs/proofread) reports is advised. The first write of a session
 // that adds comments to any other code file is advised to audit them against the comment
 // rule. The guard answers before the write lands, so the advice arrives with the write.
 namespace agentpolicy\comments;
@@ -14,7 +14,7 @@ import "magus";
 import "encoding/json";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
-import "./libs/conventions/proofread" as proofread;
+import "./libs/proofread/proofread" as proofread;
 import "./hack/policy/proofread" as decisions;
 
 final commentAdvice = "This write adds code comments. Audit each one: keep only the comments that say "
@@ -328,7 +328,7 @@ export object CssFinding {
     message: str,
 }
 
-// cssJudgeRunner returns a judge that runs the built libs/conventions/cmd/proofread as
+// cssJudgeRunner returns a judge that runs the built libs/proofread/cmd/proofread as
 // `proofread stylesheet` over a stylesheet's text, under this repository's decisions table,
 // which turns the house comment rules on. A judge that is missing, stale or did not run
 // returns null: the write then meets the generic advice rather than a block on a tool it

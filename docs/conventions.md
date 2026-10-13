@@ -384,7 +384,7 @@ Hand-written Markdown, every pull request's title and description, review replie
 comments and the text an agent loads read as plain technical writing: a reader
 understands each sentence without the request, the conversation or the tool behind it.
 The checks are a Go package, proofread, in
-[`libs/conventions/proofread`](https://github.com/egladman/magus/blob/main/libs/conventions/proofread);
+[`libs/proofread`](https://github.com/egladman/magus/blob/main/libs/proofread);
 the `proofread` command runs it. The guard's `pull-request-text` rule runs it on a
 pull request description and on a reply an agent posts, and the `pr-description` check
 runs it on every pull request, so the two cannot disagree. A person runs it on a draft

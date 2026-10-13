@@ -5,7 +5,7 @@ import "fs";
 import "path";
 import "encoding/json";
 
-// RULES is this repository's decisions table for libs/conventions/proofread: the house style the
+// RULES is this repository's decisions table for libs/proofread: the house style the
 // judge ships off, turned on here, each with what justified it. A rule left out keeps its
 // shipped default. history stays off: a doc that says what a symbol replaced is judged by a
 // reader, and the symbol-docs lint never held it.
@@ -120,7 +120,7 @@ export fun writeDecisions(files: [str]) > str !> any {
 }
 
 // decide is the decision this repository gives a finding of rule that a judge outside
-// libs/conventions reported as given: RULES wins, as it does for proofread.
+// libs/proofread reported as given: RULES wins, as it does for proofread.
 export fun decide(rule: str, given: str) > str {
     return RULES[rule] ?? given;
 }
