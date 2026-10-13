@@ -222,13 +222,18 @@ fun claude_entries() > [any] {
         {
             "path": ["hooks", "Stop"],
             "entries": [
+                // The guard reads the session's transcript for background tasks left running.
+                {
+                    "hooks": [claude_command_hook(claude_guard_command())],
+                },
                 {
                     "hooks": [claude_command_hook(claude_checkpoint_command())],
                 },
             ],
         },
         // A subagent's stop carries the path of its own transcript, whose last usage
-        // record is the context a later continue to it would resume. It judges nothing.
+        // record is the context a later continue to it would resume, and whose background
+        // tasks still running refuse the stop.
         {
             "path": ["hooks", "SubagentStop"],
             "entries": [
@@ -652,10 +657,11 @@ test "harness_entries covers PreToolUse PostToolUse SessionStart Stop SubagentSt
     assert\equal(start_entries[1]["matcher"] as? str, "compact", "rehydrate");
     final stop = entries[3];
     final stop_path = stop["path"] as [str];
-    assert\equal(stop_path[1], "Stop", "the checkpoint");
+    assert\equal(stop_path[1], "Stop", "background tasks, then the checkpoint");
     final stop_entries = stop["entries"] as [any];
-    assert\equal(stop_entries.len(), 1, "the checkpoint entry alone");
-    assert\equal("{(stop_entries[0]["hooks"] as [any])[0]["command"]}", claude_checkpoint_command(), "records where the work stands");
+    assert\equal(stop_entries.len(), 2, "the guard entry and the checkpoint entry");
+    assert\equal("{(stop_entries[0]["hooks"] as [any])[0]["command"]}", claude_guard_command(), "names background tasks left running");
+    assert\equal("{(stop_entries[1]["hooks"] as [any])[0]["command"]}", claude_checkpoint_command(), "records where the work stands");
     final subagent = entries[4];
     final subagent_path = subagent["path"] as [str];
     assert\equal(subagent_path[1], "SubagentStop", "a subagent's usage for a later continue");

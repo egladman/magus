@@ -191,6 +191,10 @@ final UPDATED_COMMAND = `{{toJson .}}`;
 final ADVISE_REWRITE = `{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}{{with index . "updated_command"}},"updatedInput":__MAGUS_UPDATED_INPUT__{{end}}}}`;
 final REWRITE_ONLY = `{{with index . "updated_command"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":__MAGUS_UPDATED_INPUT__}}{{end}}`;
 
+// A stop event reads no hookSpecificOutput: a block with a reason sends the agent back to
+// work, and a systemMessage shows the person a notice and lets the stop through.
+final STOP_REPLY = `{{if eq .decision "deny"}}{"decision":"block","reason":{{toJson .reason}}}{{else if eq .decision "advise"}}{"systemMessage":{{toJson .context}}}{{end}}`;
+
 final PERMISSION_NO_DECISION = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest"}}`;
 final PERMISSION_ALLOW = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}`;
 final PERMISSION_DENY_HEAD = `{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":{{toJson .reason}}}}}{{else if eq .decision "ask"}}`;
@@ -619,6 +623,8 @@ fun main(args: [str]) > void {
     if (response == "" and eventName == "PermissionRequest") {
         response = permissionResponse(pushRule);
         capabilities.append("--renders-ask");
+    } else if (response == "" and (eventName == "Stop" or eventName == "SubagentStop")) {
+        response = STOP_REPLY;
     } else if (response == "") {
         // Only a shell command the host itself will run can come back rewritten: a Read
         // restated as `cat` is not what the host runs, and a whole event is not a command.

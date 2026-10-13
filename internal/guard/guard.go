@@ -747,6 +747,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			if env.AgentTranscript != "" {
 				recordAgentUsage(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), who.Agent, env.AgentTranscript)
 			}
+			if v, ok := judgeStop(deps, input, time.Now()); ok {
+				return v
+			}
 			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 		}
 		input = env.Value
@@ -1163,6 +1166,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				if d := denyWorkerBackgroundRun(run, call); d.refused() {
 					refuseWith(denyRuleWorkerBackgroundRun, d)
 				}
+			}
+		}
+		// A watcher ends at its own expiry, so only a plain backgrounded call needs a bound.
+		if verdict.Decision != decisionDeny {
+			if d := denyUnboundedBackground(input, call.background && !env.IsWatch, shellD); d.refused() {
+				refuseWith(denyRuleBackgroundUnbounded, d)
 			}
 		}
 		// The focus rule. Its DENY outranks any advisory above it, because that one is

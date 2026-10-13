@@ -22,6 +22,8 @@ Rules for written text, such as pull request descriptions and docs, are the
 | Rule                                              | Catches                                                                                              |
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | [agent-sign-off](agent-sign-off.md)               | an agent stamping a read receipt or closing an attention request, which only a person may do         |
+| [background-left](background-left.md)             | an agent finishing while shell commands it ran in the background are still running                   |
+| [background-unbounded](background-unbounded.md)   | a shell command run in the background with nothing to end it                                         |
 | [backtick-substitution](backtick-substitution.md) | a backtick command substitution, which inside double quotes runs a command                           |
 | [cache-dir-write](cache-dir-write.md)             | a write into this checkout's magus cache dir, which magus alone owns                                 |
 | [claimed-declaration](claimed-declaration.md)     | a leased edit landing in a declaration another live job claims (`run.go#executeStages`)              |

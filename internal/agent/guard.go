@@ -212,7 +212,12 @@ var guardInputs = []string{"command", "path", "mcp"}
 // proofread-reply.buzz answers opencode. Under a config written for 25, a 24 copy reports
 // --reports-skills as unsupported, so a skill load goes unseen; and answers a Codex
 // PostToolUse in the PreToolUse shape, which the host discards.
-const GuardTemplateVersion = 25
+//
+// 26: magus-command.buzz answers Stop and SubagentStop with a block or a system message, so
+// background tasks left running refuse a stop, and cursor-hook.buzz no longer rewrites the
+// shell command. Under a config written for 26, a 25 copy leaves those stops unanswered and
+// still prepends its stdin and quiet-output prefix to every Cursor command.
+const GuardTemplateVersion = 26
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.
