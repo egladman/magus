@@ -545,45 +545,11 @@ func freeMagus(args []string) bool {
 	return magusProjection(args)
 }
 
-// magusSilent reports -s or --silent, which makes run and affected print a ref.
-func magusSilent(args []string) bool {
-	for _, a := range args {
-		if a == "--" {
-			return false
-		}
-		if a == "" || a[0] != '-' {
-			continue
-		}
-		name, value, _ := strings.Cut(strings.TrimLeft(a, "-"), "=")
-		if (name == "s" || name == "silent") && value != "false" {
-			return true
-		}
-	}
-	return false
-}
-
 // magusProjection reports an -o that asks for ids (name) or one template field: output
 // whose size does not grow with the workspace.
 func magusProjection(args []string) bool {
-	for i, a := range args {
-		if a == "--" {
-			return false
-		}
-		if a == "" || a[0] != '-' {
-			continue
-		}
-		name, value, hasValue := strings.Cut(strings.TrimLeft(a, "-"), "=")
-		if name != "o" && name != "output" {
-			continue
-		}
-		if !hasValue && i+1 < len(args) {
-			value = args[i+1]
-		}
-		if value == "name" || strings.HasPrefix(value, "template=") {
-			return true
-		}
-	}
-	return false
+	format := magusOutputFormat(args)
+	return format == "name" || strings.HasPrefix(format, "template=")
 }
 
 func invocationClass(c hint.Invocation) string {
