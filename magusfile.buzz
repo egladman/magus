@@ -2284,6 +2284,7 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "internal/agent/catalog.go", "internal/agent/skills/*/SKILL.md",
                    ".claude/skills/magus-skill-authoring/SKILL.md",
                    ".claude/skills/magus-local-development/SKILL.md",
+                   ".claude/skills/idiomatic-adrs/SKILL.md",
                    ".claude/skills/shepherd-pull-requests/SKILL.md",
                    "types/diagnostic.go",
                    ".github/workflows/*.yaml", ".github/actions/setup-magus/action.yml",
