@@ -15,7 +15,7 @@ aliases: [setup/windows]
 >
 > The Buzz JIT is also newly enabled on Windows and its machine-code path has never run on a
 > Windows machine here. If a magusfile gives a result that looks wrong, set `BUZZ_JIT=0` and
-> re-run: if the answer changes, that is a JIT bug and a valuable report.
+> re-run: if the answer changes, that is a JIT bug to report.
 >
 > See [platform support](../setup.md#platform-support) for the full matrix.
 

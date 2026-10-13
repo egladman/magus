@@ -52,7 +52,7 @@ you, which saves writing them, but the inference is only as good as the plugin's
 understanding of your setup. magus caches exactly what you declare: a spell's
 `needs` and a project's `depends_on` are the whole story, and under-declaring
 an input is the one way to get a stale cache hit (see
-[dependencies.md](../../concepts/dependencies.md#caching-interplay)). Nothing is inferred
+[dependencies.md](../../concepts/dependencies.md#caching-and-needs)). Nothing is inferred
 from source-code analysis.
 
 ### Caching is on by default; there is nothing to opt into

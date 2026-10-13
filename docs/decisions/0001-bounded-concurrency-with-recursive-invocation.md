@@ -92,7 +92,7 @@ first child; the last child hands it back. Same parallelism, no non-cancellable 
 no FIFO priority inversion where a parent that already owns work queues behind strangers,
 and a continuous hold record. This is GNU make's token rule ("every recursive invocation can
 always run at least one job"), which magus already adopted for the _machine_ budget as
-`freeSlot`. Both detectors stay. Small, and valuable even if the later stages never land.
+`freeSlot`. Both detectors stay. Small, and worth keeping even if the later stages never land.
 
 **Stage 2. Leaf acquisition inside the yielded regions.** A slot is taken where a subprocess
 starts or a CPU-bound operation runs, at the weight of **the target's own declaration, not
