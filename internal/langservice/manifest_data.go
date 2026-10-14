@@ -325,7 +325,7 @@ var modules = []Module{
 			{Name: "num_cpu", Doc: "Return the number of logical CPUs available, for sizing a command's own internal parallelism (see os\\with_slots).", Sig: "os\\numCpu() -> int"},
 			{Name: "hostname", Doc: "Return the host machine's name.", Sig: "os\\hostname() -> string"},
 			{Name: "executable", Doc: "Return the absolute path of the running magus binary. Pair it with fs\\stat inside a long-lived watch loop to detect that the binary was rebuilt or upgraded underneath the process, which means any output it goes on to generate would be stale.", Sig: "os\\executable() -> string"},
-			{Name: "retry", Doc: "Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}.", Sig: "os\\retry(max, fn, [opts]) -> any"},
+			{Name: "retry", Doc: "Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. An error typed non-retryable stops at once. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}; a wrongly typed or negative option raises.", Sig: "os\\retry(max, fn, [opts]) -> any"},
 		},
 	},
 	{

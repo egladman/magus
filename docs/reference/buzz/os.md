@@ -18,7 +18,7 @@ The machine and this process: platform triple, CPU count, hostname, the running 
 
 Add env vars to subprocesses `proc\exec` / `proc\shell` start inside callback. Never touches the process's own environment - a lookup like os\env inside callback does not see them.
 
-**Signature:** `os\withEnv(env, callback)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L541)
+**Signature:** `os\withEnv(env, callback)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L542)
 
 | Parameter  | Type                                                                        | Optional | Description |
 | ---------- | --------------------------------------------------------------------------- | -------- | ----------- |
@@ -29,7 +29,7 @@ Add env vars to subprocesses `proc\exec` / `proc\shell` start inside callback. N
 
 Return the Docker/OCI platform triple: (os, arch, variant).
 
-**Signature:** `os\platform() -> string, string, string` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L358)
+**Signature:** `os\platform() -> string, string, string` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L359)
 
 **Returns:** string, string, string
 
@@ -37,7 +37,7 @@ Return the Docker/OCI platform triple: (os, arch, variant).
 
 Abort the current run with the given exit code - typically after logging an error. Does NOT call os.Exit (that would kill a shared server); it raises, ending the target, and the code becomes magus's process exit status.
 
-**Signature:** `os\exit(code)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L349)
+**Signature:** `os\exit(code)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L350)
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
@@ -47,7 +47,7 @@ Abort the current run with the given exit code - typically after logging an erro
 
 Pause for the given number of milliseconds (fractional allowed), matching Buzz's os\sleep. Cancellable: if the run is interrupted it returns early with the cancellation error rather than blocking.
 
-**Signature:** `os\sleep(ms)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L325)
+**Signature:** `os\sleep(ms)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L326)
 
 | Parameter | Type      | Optional | Description |
 | --------- | --------- | -------- | ----------- |
@@ -57,7 +57,7 @@ Pause for the given number of milliseconds (fractional allowed), matching Buzz's
 
 Return the number of logical CPUs available, for sizing a command's own internal parallelism (see os\with_slots).
 
-**Signature:** `os\numCpu() -> int` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L261)
+**Signature:** `os\numCpu() -> int` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L262)
 
 **Returns:** int
 
@@ -65,7 +65,7 @@ Return the number of logical CPUs available, for sizing a command's own internal
 
 Return the host machine's name.
 
-**Signature:** `os\hostname() -> string` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L266)
+**Signature:** `os\hostname() -> string` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L267)
 
 **Returns:** string
 
@@ -73,15 +73,15 @@ Return the host machine's name.
 
 Return the absolute path of the running magus binary. Pair it with fs\stat inside a long-lived watch loop to detect that the binary was rebuilt or upgraded underneath the process, which means any output it goes on to generate would be stale.
 
-**Signature:** `os\executable() -> string` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L278)
+**Signature:** `os\executable() -> string` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L279)
 
 **Returns:** string
 
 ### retry
 
-Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}.
+Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. An error typed non-retryable stops at once. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}; a wrongly typed or negative option raises.
 
-**Signature:** `os\retry(max, fn, [opts]) -> any` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L557)
+**Signature:** `os\retry(max, fn, [opts]) -> any` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L566)
 
 | Parameter | Type                                                                        | Optional | Description |
 | --------- | --------------------------------------------------------------------------- | -------- | ----------- |
