@@ -730,7 +730,7 @@ func TestOverlapFootprintsReuseAnUnchangedCheckout(t *testing.T) {
 	a.Write("api/x.go", strings.Replace(twoFuncs, "func X() {\n\treturn", "func X() {\n\tpanic(1)", 1))
 	b.Write("api/x.go", strings.Replace(twoFuncs, "func Y() {\n\treturn", "func Y() {\n\tpanic(2)", 1))
 	driver := gitDriver(t, a.Root())
-	ctx := withFootprintCache(t.Context(), footprintCache{dir: t.TempDir()})
+	ctx := withFootprintCache(t.Context(), footprintCache{dir: t.TempDir(), build: testBuild})
 	uncached := func() []types.JobOverlap {
 		got := OverlapFootprints(t.Context(), driver, rows, overlaps)
 		driver.take()
@@ -773,8 +773,8 @@ func TestFootprintCacheMissesOnAnEditedFuncname(t *testing.T) {
 	a.Write("api/x.go", strings.Replace(twoFuncs, "func X() {\n\treturn", "func X() {\n\tpanic(1)", 1))
 	driver := gitDriver(t, root)
 	dir := t.TempDir()
-	regionsCtx := withFootprintCache(t.Context(), footprintCache{dir: dir}.forRow(types.Job{Checkpoint: rev}))
-	footprintCtx := withFootprintCache(t.Context(), footprintCache{dir: dir})
+	regionsCtx := withFootprintCache(t.Context(), footprintCache{dir: dir, build: testBuild}.forRow(types.Job{Checkpoint: rev}))
+	footprintCtx := withFootprintCache(t.Context(), footprintCache{dir: dir, build: testBuild})
 	regions := func(ctx context.Context) Observed { return changedSince(ctx, driver, "", root, rev) }
 
 	before := regions(t.Context())
@@ -812,7 +812,7 @@ func TestGradeGatesOfADryRunStoreCachesNothing(t *testing.T) {
 			rows[i].Registered, rows[i].Created, rows[i].Updated = now, now, now
 		}
 		plant(t, s, rows...)
-		s.dryRun = dryRun
+		s.dryRun, s.build = dryRun, testBuild
 
 		status, err := GradeGates(t.Context(), s, "a", CheckpointObserver(a.Root(), nil))
 		require.NoError(t, err)
@@ -822,6 +822,48 @@ func TestGradeGatesOfADryRunStoreCachesNothing(t *testing.T) {
 	}
 }
 
+const testBuild = "build-a"
+
+// BenchmarkFootprintKeyHash is the cost of starting one cache key, which every lookup pays:
+// the build is folded in, never re-read from the executable.
+func BenchmarkFootprintKeyHash(b *testing.B) {
+	c := footprintCache{dir: "footprints", revision: "abc123", build: testBuild}
+	for b.Loop() {
+		if _, ok := c.keyHash("footprint", "/checkout", "abc123"); !ok {
+			b.Fatal("keyed nothing")
+		}
+	}
+}
+
+// A key carries the build that wrote it, so a rebuilt binary under a long-lived daemon
+// misses; a Store that cannot name its build keys nothing.
+func TestFootprintCacheKeysOnTheBuild(t *testing.T) {
+	t.Parallel()
+
+	repo := testkit.NewRepo(t, map[string]string{"a.go": twoFuncs})
+	driver := gitDriver(t, repo.Root())
+	row := types.Job{ID: "a", Checkpoint: repo.Head(), CheckoutRoot: repo.Root()}
+	files := []types.FileChange{{Path: "a.go"}}
+	keys := func(build string) ([2]string, bool) {
+		cache := footprintCache{dir: t.TempDir(), build: build}.forRow(row)
+		regions, regionsOK := cache.regionsKey(t.Context(), driver, repo.Root(), repo.Head(), files)
+		footprint, footprintOK := cache.footprintKey(t.Context(), driver, row)
+		require.Equal(t, regionsOK, footprintOK)
+		return [2]string{regions, footprint}, regionsOK
+	}
+
+	a, ok := keys(testBuild)
+	require.True(t, ok)
+	again, _ := keys(testBuild)
+	assert.Equal(t, a, again, "the same build keys the same")
+	b, ok := keys("build-b")
+	require.True(t, ok)
+	assert.NotEqual(t, a[0], b[0], "regions")
+	assert.NotEqual(t, a[1], b[1], "footprint")
+	_, ok = keys("")
+	assert.False(t, ok, "no build, no key")
+}
+
 // A backend that cannot say what configuration its placement reads is never cached: an
 // edit to that configuration would answer from an entry placed under the old one.
 func TestFootprintCacheKeysNothingForABackendThatHidesItsConfig(t *testing.T) {
@@ -829,7 +871,7 @@ func TestFootprintCacheKeysNothingForABackendThatHidesItsConfig(t *testing.T) {
 
 	repo := testkit.NewRepo(t, map[string]string{"a.go": twoFuncs})
 	hidden := struct{ types.VCSDriver }{gitDriver(t, repo.Root()).VCSDriver}
-	cache := footprintCache{dir: t.TempDir()}.forRow(types.Job{Checkpoint: repo.Head()})
+	cache := footprintCache{dir: t.TempDir(), build: testBuild}.forRow(types.Job{Checkpoint: repo.Head()})
 	_, keyed := cache.regionsKey(t.Context(), hidden, repo.Root(), repo.Head(), []types.FileChange{{Path: "a.go"}})
 	assert.False(t, keyed)
 	_, keyed = cache.footprintKey(t.Context(), hidden, types.Job{ID: "a", Checkpoint: repo.Head(), CheckoutRoot: repo.Root()})
@@ -845,7 +887,7 @@ func TestFootprintCacheMissesOnAnEditedAttributeFileOutsideTheTree(t *testing.T)
 	global := filepath.Join(t.TempDir(), "attributes")
 	repo.Git("config", "core.attributesFile", global)
 	driver := gitDriver(t, repo.Root())
-	cache := footprintCache{dir: t.TempDir()}.forRow(types.Job{Checkpoint: repo.Head()})
+	cache := footprintCache{dir: t.TempDir(), build: testBuild}.forRow(types.Job{Checkpoint: repo.Head()})
 	row := types.Job{ID: "a", Checkpoint: repo.Head(), CheckoutRoot: repo.Root()}
 	keys := func() [2]string {
 		regions, keyed := cache.regionsKey(t.Context(), driver, repo.Root(), repo.Head(), []types.FileChange{{Path: "a.go"}})
@@ -877,7 +919,7 @@ func TestRegionsSinceReuseUnchangedFiles(t *testing.T) {
 	root, rev := repo.Root(), repo.Head()
 	repo.Write("api/x.go", strings.Replace(twoFuncs, "func X() {\n\treturn", "func X() {\n\tpanic(1)", 1))
 	driver := gitDriver(t, root)
-	ctx := withFootprintCache(t.Context(), footprintCache{dir: t.TempDir()}.forRow(types.Job{Checkpoint: rev}))
+	ctx := withFootprintCache(t.Context(), footprintCache{dir: t.TempDir(), build: testBuild}.forRow(types.Job{Checkpoint: rev}))
 	read := func(ctx context.Context) Observed { return changedSince(ctx, driver, "", root, rev) }
 
 	for _, edit := range []string{"", "func Y() {\n\tpanic(2)"} {
@@ -935,7 +977,7 @@ func TestReportOfADryRunStoreCachesNothing(t *testing.T) {
 			rows[i].Registered, rows[i].Created, rows[i].Updated = now, now, now
 		}
 		plant(t, s, rows...)
-		s.dryRun = dryRun
+		s.dryRun, s.build = dryRun, testBuild
 
 		list, err := s.Report(t.Context(), now, 2*time.Hour)
 		require.NoError(t, err)

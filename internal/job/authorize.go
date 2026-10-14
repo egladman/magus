@@ -85,6 +85,7 @@ func (s *Store) As(a Actor) *Store {
 	return &Store{
 		path: s.path, err: s.err, root: s.root, actor: &a, cacheDir: s.cacheDir,
 		clock: s.clock, staleAfter: s.staleAfter, notices: s.notices, outputs: s.outputs, landed: s.landed,
+		build: s.build,
 	}
 }
 

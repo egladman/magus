@@ -566,6 +566,8 @@ type footprintCache struct {
 	// revision is the checkpoint revision of the row being read; its entries go under it.
 	revision string
 	readOnly bool
+	// build is the running build's identity (see [Location.Build]); empty keys nothing.
+	build string
 }
 
 type footprintCacheKey struct{}
@@ -589,7 +591,7 @@ func (s *Store) footprintCache() footprintCache {
 	if s.err != nil || s.path == "" {
 		return footprintCache{}
 	}
-	return footprintCache{dir: footprintsDir(s.path), readOnly: s.dryRun}
+	return footprintCache{dir: footprintsDir(s.path), readOnly: s.dryRun, build: s.build}
 }
 
 // forRow is c filing its entries under row's checkpoint revision.
@@ -599,7 +601,7 @@ func (c footprintCache) forRow(row types.Job) footprintCache {
 }
 
 // regionsKey is what regions read over files since revision in root depend on: the
-// running binary, which carries the default funcname patterns, the checkout, its HEAD,
+// running build, which carries the default funcname patterns, the checkout, its HEAD,
 // which with revision fixes the merge base every file's base side is read at, the
 // configuration placement reads (see regionsConfig), and each file's name and working-tree
 // content. A .gitattributes that changed is among files. false when c is off or any of them
@@ -665,25 +667,16 @@ func regionsConfig(ctx context.Context, h hash.Hash, driver types.VCSDriver, roo
 	return true
 }
 
-// keyHash starts a key of kind with the running binary's identity (its path, size and
-// modification time, as the knowledge graph's stamps take it) and fields.
+// keyHash starts a key of kind with the running build's identity and fields. The build is
+// read once per process by whoever opened the Store, not stat'ed here per key (see
+// BenchmarkFootprintKeyHash): a file rebuilt underneath the process must not speak for the
+// code it loaded.
 func (c footprintCache) keyHash(kind string, fields ...string) (hash.Hash, bool) {
-	if c.dir == "" || c.revision == "" {
-		return nil, false
-	}
-	exe, err := os.Executable()
-	if err != nil {
-		return nil, false
-	}
-	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
-		exe = resolved
-	}
-	info, err := os.Stat(exe)
-	if err != nil {
+	if c.dir == "" || c.revision == "" || c.build == "" {
 		return nil, false
 	}
 	h := sha256.New()
-	fmt.Fprintf(h, "%s/1\x00%s\x00%d\x00%d\x00", kind, exe, info.Size(), info.ModTime().UnixNano())
+	fmt.Fprintf(h, "%s/2\x00%s\x00", kind, c.build)
 	for _, f := range fields {
 		fmt.Fprintf(h, "%s\x00", f)
 	}

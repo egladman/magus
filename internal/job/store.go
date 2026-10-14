@@ -97,6 +97,8 @@ type Store struct {
 	grader CheckGrader
 	// dryRun is Location.DryRun.
 	dryRun bool
+	// build is Location.Build.
+	build string
 	// modelTiers and modelTierMatrix are Location's.
 	modelTiers      *types.ModelTierSet
 	modelTierMatrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error)
@@ -143,6 +145,11 @@ type Location struct {
 	// ended, and no row, notice, probe history or binding record is written. It governs
 	// reads only; a write method still writes.
 	DryRun bool
+	// Build identifies the running build (proc.BinaryBuild). It keys the footprint cache, so
+	// a rebuilt binary under a long-lived daemon never reads the old code's results as its
+	// own. Empty caches nothing: a Store that cannot name its build computes every
+	// footprint. It is a field because this package cannot import internal/proc.
+	Build string
 	// ModelTiers is the workspace's model tier declaration. With it, a write that creates a
 	// row or changes its Model assigns the row's tier (see [AssignModelTier]); nil assigns
 	// nothing, as does a Store a dry run reads.
@@ -169,7 +176,7 @@ type Location struct {
 // A resolution failure is held rather than returned: every operation reports it, so a
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
-	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, outputs: loc.Outputs, grader: loc.Grader, dryRun: loc.DryRun,
+	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, outputs: loc.Outputs, grader: loc.Grader, dryRun: loc.DryRun, build: loc.Build,
 		modelTiers: loc.ModelTiers, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners}
 	s.path, s.err = jobsPath(loc)
 	return s
