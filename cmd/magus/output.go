@@ -6,8 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -342,10 +344,21 @@ func writeTemplate(w io.Writer, v any, body string) error {
 		// Names the contract AND the exact way to see it. A template error that only
 		// says "no entry for key" leaves the reader guessing at casing, which is the
 		// state this whole path was in when it rendered nothing and exited 0.
-		return fmt.Errorf("execute template: template fields are the -o json names, not the Go field names (.name, not .Name), "+
-			"to list every field this command exposes, rerun it with a bare -o template (no '=' and no body): %w", err)
+		return fmt.Errorf("execute template: template fields are the -o json names, not the Go field names (.name, not .Name); "+
+			"%sto list every field this command exposes, rerun it with a bare -o template (no '=' and no body): %w", topLevelFields(shaped), err)
 	}
 	return nil
+}
+
+// topLevelFields names the keys the template ran against, as a clause ending in "; ".
+// It is empty when the record is not an object (a list has no field names to offer).
+// A field the record omits (omitempty) is not listed, because the template cannot read it.
+func topLevelFields(shaped any) string {
+	record, ok := shaped.(map[string]any)
+	if !ok || len(record) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("this record's top-level fields are %s; ", strings.Join(slices.Sorted(maps.Keys(record)), ", "))
 }
 
 // jsonShape round-trips v through the codec so the result is the plain-any mirror of

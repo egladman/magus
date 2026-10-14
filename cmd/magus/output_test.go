@@ -99,6 +99,37 @@ func TestWriteTemplateBadSyntax(t *testing.T) {
 	assert.Contains(t, err.Error(), "parse template")
 }
 
+func TestWriteTemplateMissingFieldListsRecordFields(t *testing.T) {
+	record := struct {
+		Workspace string `json:"workspace"`
+		Count     int    `json:"count"`
+		Target    string `json:"target"`
+	}{}
+
+	cases := []struct {
+		name string
+		v    any
+		want string
+	}{
+		{"object lists its sorted fields", record, "this record's top-level fields are count, target, workspace; "},
+		{"a list has no fields to offer", []string{"a"}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			err := writeTemplate(&buf, tc.v, "{{.Workspace}}")
+
+			require.Error(t, err)
+			if tc.want == "" {
+				assert.NotContains(t, err.Error(), "top-level fields")
+			} else {
+				assert.Contains(t, err.Error(), tc.want)
+			}
+			assert.Contains(t, err.Error(), "bare -o template")
+		})
+	}
+}
+
 func TestWriteTemplateSprigHelpers(t *testing.T) {
 	type item struct {
 		Name string   `json:"name"`
