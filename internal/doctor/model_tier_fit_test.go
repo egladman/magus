@@ -42,7 +42,11 @@ func tierOutcomes(tier string, kind types.JobKind, source types.ModelTierSource,
 		if i >= passed {
 			state = types.StateFail
 		}
-		out = append(out, types.JobOutcome{Job: tier + "-job", ModelTier: tier, Kind: kind, Source: source, Reason: reason, State: state})
+		o := types.JobOutcome{Job: tier + "-job", ModelTier: tier, Kind: kind, Source: source, Reason: reason, State: state}
+		if source == types.ModelTierSourceMatrix {
+			o.Site = "magusfile.buzz:40"
+		}
+		out = append(out, o)
 	}
 	return out
 }
@@ -77,7 +81,7 @@ func TestModelTierFitNamesTheLineThatRoutedAFailingTier(t *testing.T) {
 	detail := got.Details[0]
 	assert.Contains(t, detail, "economy on symbol jobs: 3 of 10 passed")
 	assert.Contains(t, detail, "2 took the declared default: change the default in the model tier declaration at magusfile.buzz:3")
-	assert.Contains(t, detail, `8 were routed here by the function registered with magus\job.modelTier (most often "small and checked")`)
+	assert.Contains(t, detail, `8 were routed here by the function registered with magus\job.modelTier at magusfile.buzz:40 (most often "small and checked")`)
 }
 
 func TestModelTierFitIsQuietUntilAPairHasEnoughJobs(t *testing.T) {

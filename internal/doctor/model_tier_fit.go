@@ -104,7 +104,7 @@ func modelTierFitDetail(rec types.ModelTierRecord, set *types.ModelTierSet, outc
 		rec.ModelTier, rec.Kind, rec.Pass, rec.Jobs, rec.PassLower, rec.ChecksPerJob, rec.ReworkPerJob, rec.WideningsPerJob)
 
 	chose := map[types.ModelTierSource]int{}
-	reasons := map[string]int{}
+	reasons, sites := map[string]int{}, map[string]int{}
 	for _, o := range outcomes {
 		if o.ModelTier != rec.ModelTier || o.Kind != rec.Kind || !o.State.Terminal() {
 			continue
@@ -112,6 +112,9 @@ func modelTierFitDetail(rec types.ModelTierRecord, set *types.ModelTierSet, outc
 		chose[o.Source]++
 		if o.Source == types.ModelTierSourceMatrix {
 			reasons[o.Reason]++
+			if o.Site != "" {
+				sites[o.Site]++
+			}
 		}
 	}
 	var fixes []string
@@ -119,8 +122,12 @@ func modelTierFitDetail(rec types.ModelTierRecord, set *types.ModelTierSet, outc
 		fixes = append(fixes, fmt.Sprintf("%d took the declared default: change the default in the model tier declaration at %s", n, set.Site()))
 	}
 	if n := chose[types.ModelTierSourceMatrix]; n > 0 {
-		fixes = append(fixes, fmt.Sprintf("%d were routed here by the function registered with magus\\job.modelTier (most often %q): route %s jobs to another tier there",
-			n, commonest(reasons), rec.Kind))
+		matrix := "the function registered with magus\\job.modelTier"
+		if site := commonest(sites); site != "" {
+			matrix += " at " + site
+		}
+		fixes = append(fixes, fmt.Sprintf("%d were routed here by %s (most often %q): route %s jobs to another tier there",
+			n, matrix, commonest(reasons), rec.Kind))
 	}
 	if n := chose[types.ModelTierSourceRow]; n > 0 {
 		fixes = append(fixes, fmt.Sprintf("%d named the tier or model themselves: fork them with another --model", n))
