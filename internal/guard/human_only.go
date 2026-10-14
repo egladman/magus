@@ -3,8 +3,10 @@ package guard
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path"
+	"slices"
 	"strings"
 	"time"
 
@@ -26,6 +28,9 @@ type humanOnlyPair struct {
 	// composed is a target some run reaches through another target's ctx.needs chain
 	// rather than by naming it.
 	composed bool
+	// unread is a target a run the guard could not read may reach: an MCP client script
+	// whose magus\run argv it computes, or that does not parse.
+	unread bool
 }
 
 func (p humanOnlyPair) ref() string { return p.project + ":" + p.target }
@@ -53,11 +58,23 @@ func gradeHumanOnly(ctx context.Context, deps Dependencies, actingLease, command
 		return "", ""
 	}
 	line := elideCommand(command)
-	var composed []humanOnlyPair
+	var composed, unread []humanOnlyPair
 	for _, p := range pairs {
-		if p.composed {
+		switch {
+		case p.unread:
+			unread = append(unread, p)
+		case p.composed:
 			composed = append(composed, p)
 		}
+	}
+	if len(unread) > 0 {
+		var b strings.Builder
+		b.WriteString("a magus client script whose runs the guard cannot read may run a target a person runs; pass magus\\run its argv as literals.\n")
+		for _, p := range unread {
+			fmt.Fprintf(&b, "- %s: %s\n", p.ref(), p.reason)
+		}
+		b.WriteString("An argv the script computes, or a script that does not parse, could name any of these, so the call is refused rather than asked about.")
+		return decisionDeny, b.String()
 	}
 	if len(composed) > 0 {
 		var b strings.Builder
@@ -99,7 +116,22 @@ func humanOnlyReach(ctx context.Context, deps Dependencies, root string, runs []
 	}
 	var out []humanOnlyPair
 	index := map[string]int{}
+	unreadSeen := false
 	for _, r := range runs {
+		if r.target == unreadValue || slices.Contains(r.projects, unreadValue) {
+			if unreadSeen {
+				continue
+			}
+			unreadSeen = true
+			for _, p := range ws.All() {
+				for _, name := range slices.Sorted(maps.Keys(p.TargetPolicies)) {
+					if pol := p.TargetPolicies[name]; pol.HumanOnly {
+						out = append(out, humanOnlyPair{project: p.Path, target: name, reason: pol.HumanOnlyReason, unread: true})
+					}
+				}
+			}
+			continue
+		}
 		name := targetName(r.target)
 		for _, p := range runProjects(ws, r) {
 			_ = types.WalkChain(p, name, ws.Get, func(v types.ChainVisit) error {

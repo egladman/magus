@@ -109,6 +109,40 @@ func TestHumanOnlyVerdicts(t *testing.T) {
 	}
 }
 
+// TestHumanOnlyJudgesAClientScript pins the MCP door: a client script's literal run is
+// asked about as the shell line would be, and a run the guard cannot read is refused
+// wherever a human-only target is declared.
+func TestHumanOnlyJudgesAClientScript(t *testing.T) {
+	client := func(t *testing.T, script string) string {
+		return hookJSON(t, map[string]any{"session_id": "s", "hook_event_name": "PreToolUse",
+			"tool_name": "mcp__magus__client", "tool_input": map[string]any{"script": `import "magus"; ` + script}})
+	}
+	for _, tt := range []struct {
+		name, script, want, contains string
+	}{
+		{"a literal run", `magus\run(["agent-bench-run", "."]);`, "ask", "is run by a person: " + benchReason},
+		{"a literal affected", `magus\cmd("affected", ["agent-bench-run"]);`, "ask", "is run by a person: " + benchReason},
+		{"a computed argv", `final a = ["agent-bench-run"]; magus\run(a);`, "deny", "- .:agent-bench-run: " + benchReason},
+		{"a script that does not parse", `magus\run(`, "deny", "- evals:grade: spends model tokens per case"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := fleetFixture(t)
+			v := Judge(ctx, benchWorkspace(t), Request{Input: client(t, tt.script), Host: "claude-code", RendersAsk: true})
+			assert.Equal(t, verdictWithRule(tt.want, string(denyRuleHumanOnly)), unworded(v))
+			full := v.Reason
+			if tt.want == "deny" {
+				full = storedVerdict(t, hookLocation(ctx, Dependencies{}).cacheDir, v.Reason)
+				assert.Contains(t, full, "cannot read")
+			}
+			assert.Contains(t, full, tt.contains)
+		})
+	}
+
+	ctx, _ := fleetFixture(t)
+	v := Judge(ctx, benchWorkspace(t), Request{Input: client(t, `magus\run(["test", "."]);`), Host: "claude-code", RendersAsk: true})
+	assert.NotEqual(t, string(denyRuleHumanOnly), v.Rule, "a run reaching no human-only target is left alone")
+}
+
 // TestHumanOnlyLeavesOtherRunsAlone pins that the rule fires only on a declared target a
 // parsed run reaches: another target, a report about the run, and a project that does not
 // declare it all pass.

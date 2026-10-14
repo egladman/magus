@@ -126,7 +126,7 @@ func TestBuildCallCoversTools(t *testing.T) {
 // ci is not a run of it, and what the parse cannot settle reads as the refusing answer.
 func TestBuildCall(t *testing.T) {
 	const imp = `import "magus"; `
-	unread := "magus run ci\nclient op=unread"
+	unread := "magus run ci %unread%\nclient op=unread"
 	for name, tc := range map[string]struct {
 		input map[string]any
 		want  string
@@ -137,13 +137,15 @@ func TestBuildCall(t *testing.T) {
 		"an uppercase gate":            {clientScript(imp + `magus\run(["CI"]);`), "magus run CI"},
 		"a shard plan":                 {clientScript(imp + `magus\cmd("affected", ["ci", "--plan"]);`), "client"},
 		"a plan flag in comment":       {clientScript(imp + "// --plan\nmagus\\run([\"ci\"]);"), "magus run ci"},
-		"a computed argv":              {clientScript(imp + `final a = ["c" + "i"]; magus\run(a);`), "magus run ci"},
-		"a computed target":            {clientScript(imp + `magus\run(["c" + "i"]);`), "magus run ci"},
+		"a computed argv":              {clientScript(imp + `final a = ["c" + "i"]; magus\run(a);`), "magus run ci %unread%"},
+		"a computed target":            {clientScript(imp + `magus\run(["c" + "i"]);`), "magus run ci %unread%"},
 		"a stored member":              {clientScript(imp + `final r = magus\run; r(["ci"]);`), unread},
 		"an aliased import":            {clientScript(`import "magus" as m; m\run(["ci"]);`), "magus run ci"},
 		"a flat import":                {clientScript(`import "magus" as _; run(["ci"]);`), "magus run ci"},
 		"another tool's ci":            {clientScript(imp + `import "proc"; proc\run(["echo", "ci"]);`), "client"},
-		"an unrelated run":             {clientScript(imp + `magus\run(["test", "."]);`), "client"},
+		"another target's run":         {clientScript(imp + `magus\run(["agent-bench-run", "."]);`), "magus run agent-bench-run ."},
+		"another target's affected":    {clientScript(imp + `magus\cmd("affected", ["agent-bench-run"]);`), "magus affected agent-bench-run"},
+		"a report on another target":   {clientScript(imp + `magus\run(["agent-bench-run", "--dry-run"]);`), "client"},
 		"no script":                    {map[string]any{"op": "list"}, "client"},
 		"a script with no calls":       {clientScript("fun main(args: [str]) > int { return 1; }"), "client"},
 		"a script that does not parse": {clientScript("fun ("), unread},
