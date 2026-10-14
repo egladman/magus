@@ -389,7 +389,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 			return refsByPath[project]
 		},
 		runIndex: func(ctx context.Context, ref indexRef) error {
-			err := m.Run(ctx, []types.Target{{Path: ref.project, Name: ref.op}})
+			err := m.runTargets(ctx, []types.Target{{Path: ref.project, Name: ref.op}}, run{})
 			if err == nil {
 				if gerr := m.WriteGuardIndex(ctx); gerr != nil {
 					slog.With(attr.Component("magus")).DebugContext(ctx, "guard index not written", attr.Error(gerr))
@@ -626,7 +626,7 @@ func (m *Magus) ReindexSymbols(ctx context.Context) (int, error) {
 	var errs []error
 	done := 0
 	for _, idx := range m.workspaceIndexes() {
-		if err := m.Run(ctx, []types.Target{{Path: idx.project.Path, Name: idx.op}}); err != nil {
+		if err := m.runTargets(ctx, []types.Target{{Path: idx.project.Path, Name: idx.op}}, run{}); err != nil {
 			errs = append(errs, symbolRunError(idx.projectRef(), idx.language, err))
 			continue
 		}
@@ -739,7 +739,7 @@ func (m *Magus) buildSymbolIndex(ctx context.Context, idx projectIndex, step cac
 	if ran, err := interp.CrossDispatchFromContext(ctx).DispatchStep(ctx, idx.project, step); ran {
 		return err
 	}
-	return m.Run(ctx, []types.Target{{Path: idx.project.Path, Name: idx.op}})
+	return m.runTargets(ctx, []types.Target{{Path: idx.project.Path, Name: idx.op}}, run{})
 }
 
 // installedIndexes drops each index whose indexer is not installed, as long as its project

@@ -47,7 +47,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// RunOption configures a [Magus.Run], [Magus.RunCI], or [Magus.RunAffected] invocation.
+// RunOption configures a [Magus.Run], [Magus.RunCI], [Magus.RunAffected] or [Magus.RunGate]
+// invocation.
 type RunOption func(*run)
 
 // run is the accumulated state of a Run/CI/RunAffected call.
@@ -68,6 +69,7 @@ type run struct {
 	Gate              bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
 	narrowing         *project.OpNarrowing
 	stdio             *ProcessStdio
+	session           string // the host session the guard judges the run for; see WithSession
 }
 
 // out is the sink the run reports through.
@@ -125,6 +127,11 @@ func WithNoCache() RunOption { return func(o *run) { o.NoCache = true } }
 // about the run changes, and every non-gate invocation queues as before.
 func WithGate() RunOption { return func(o *run) { o.Gate = true } }
 
+// WithSession names the agent host session the run is made for, so the guard judges it
+// against what that session did before: its fire-once advice, its spawn records, the lease
+// it acts under. Without it the run is judged as a caller no host named.
+func WithSession(session string) RunOption { return func(o *run) { o.session = session } }
+
 func applyRunOpts(opts []RunOption) run {
 	var o run
 	for _, opt := range opts {
@@ -136,11 +143,30 @@ func applyRunOpts(opts []RunOption) run {
 // Run executes targets against their projects. Independent pairs run concurrently
 // up to the limiter budget. "ci" is an ordinary magusfile target (compose its
 // pipeline with magus.needs); magus no longer hardcodes a CI chain.
+//
+// Before anything runs, the guard judges each target as `magus run <target> <project>`,
+// with ` -- <args>` for WithExtraArgs, the line the CLI would be judged by. A deny returns
+// a *types.GuardDeniedError and runs nothing; a judgment that cannot be made returns its
+// error. A ctx the CLI marked with guard.WithHostJudged is not judged again.
 func (m *Magus) Run(ctx context.Context, targets []types.Target, opts ...RunOption) error {
+	o := applyRunOpts(opts)
+	lines, err := runLines(targets, o.ExtraArgs)
+	if err != nil {
+		return err
+	}
+	if err := m.judgeRun(ctx, o, lines); err != nil {
+		return err
+	}
+	return m.runTargets(ctx, targets, o)
+}
+
+// runTargets is Run without the guard's judgment, for a run magus makes on its own behalf
+// inside a call that was already judged.
+func (m *Magus) runTargets(ctx context.Context, targets []types.Target, o run) error {
 	if len(targets) == 0 {
 		return nil
 	}
-	return m.redactError(m.runResolved(ctx, targets, applyRunOpts(opts)))
+	return m.redactError(m.runResolved(ctx, targets, o))
 }
 
 // undeclaredScopeEvent builds the run's scope event when any selected project was
@@ -260,8 +286,18 @@ func CharmsForCI(charms []string) []string {
 // magusfile-defined target; magus keeps it only as the affected-set anchor,
 // not a hardcoded preflight...test chain. The magusfile composes the pipeline
 // order via magus.needs.
+//
+// It is judged as Run is, each target as `magus run <target> <project>`: `magus run ci`
+// is the verb that reaches it.
 func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOption) error {
 	o := applyRunOpts(opts)
+	lines, err := runLines(targets, o.ExtraArgs)
+	if err != nil {
+		return err
+	}
+	if err := m.judgeRun(ctx, o, lines); err != nil {
+		return err
+	}
 	// Both write-granting charms come off: rw so check-only targets stay check-only,
 	// and update so a ci run verifies the pinned upstream state rather than refreshing
 	// it against whatever the registry or the feed serves today.
@@ -353,8 +389,18 @@ func anyProjectDeclaresCI(projects []*types.Project) (bool, error) {
 }
 
 // RunAffected computes the VCS-diff target set and runs target on it.
+//
+// It is judged as Run is, once, as `magus affected <target>`, with ` --base <ref>` for
+// WithBaseRef.
 func (m *Magus) RunAffected(ctx context.Context, target string, opts ...RunOption) error {
 	o := applyRunOpts(opts)
+	lines, err := affectedLine(target, o.BaseRef)
+	if err != nil {
+		return err
+	}
+	if err := m.judgeRun(ctx, o, lines); err != nil {
+		return err
+	}
 	targets, source, fellBack, err := m.ExpandAffected(ctx, target, o.BaseRef)
 	if err != nil {
 		return err
