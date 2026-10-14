@@ -111,6 +111,7 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 				Jobs: 12, Pass: 9, Fail: 2, NoReturn: 1,
 				PassLower: 0.48, ChecksPerJob: 1.5, ForksPerID: 1.1, ReworkPerJob: 0.25, WideningsPerJob: 0.5,
 				MeanCostUSD: 0.07, MedianTokens: 41_000,
+				FirstAttempts: 10, FirstPass: 7, FirstPassLower: 0.39, NotRetryable: 2,
 			}},
 		},
 		Conform: &types.ConformOutput{
@@ -212,6 +213,7 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 				Jobs: 12, Pass: 9, Fail: 2, NoReturn: 1,
 				PassLower: 0.48, ChecksPerJob: 1.5, ForksPerId: 1.1, ReworkPerJob: 0.25, WideningsPerJob: 0.5,
 				MeanCostUsd: 0.07, MedianTokens: 41_000,
+				FirstAttempts: 10, FirstPass: 7, FirstPassLower: 0.39, NotRetryable: 2,
 			}},
 		},
 		Conform: &insightv1.ConformOutput{

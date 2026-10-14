@@ -168,6 +168,10 @@ func modelTiersToProto(o *types.ModelTierOutput) *insightv1.ModelTierOutput {
 				WideningsPerJob: r.WideningsPerJob,
 				MeanCostUsd:     r.MeanCostUSD,
 				MedianTokens:    r.MedianTokens,
+				FirstAttempts:   int32(r.FirstAttempts),
+				FirstPass:       int32(r.FirstPass),
+				FirstPassLower:  r.FirstPassLower,
+				NotRetryable:    int32(r.NotRetryable),
 			}
 		}),
 	}

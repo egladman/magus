@@ -230,6 +230,13 @@ message ModelTierRecord {
   double widenings_per_job = 12;
   double mean_cost_usd = 13;
   int64 median_tokens = 14;
+  // first_attempts counts the endings of a job's first attempt and first_pass those that
+  // passed; first_pass_lower is their Wilson lower bound, as pass_lower is for every ending.
+  // not_retryable counts the endings classified as needing a change before another attempt.
+  int32 first_attempts = 15;
+  int32 first_pass = 16;
+  double first_pass_lower = 17;
+  int32 not_retryable = 18;
 }
 
 // ConformOutput is the code-shape lens: one row per metric and population, judged against the
