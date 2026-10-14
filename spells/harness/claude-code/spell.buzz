@@ -355,16 +355,17 @@ fun claude_yaml_quote(text: str) > str {
 }
 
 // claude_agent renders one shipped agent as a Claude Code subagent file. A read-only agent
-// is limited to the tools that cannot change the workspace, and the economy class runs on
-// Claude Code's cheapest model alias.
+// is limited to the tools that cannot change the workspace. An agent carrying a model runs
+// on that alias; one without leaves the host default.
 fun claude_agent(agent: {str: any}) > {str: any} {
     final name = "{agent["name"]}";
     var content = "---\nname: " + claude_yaml_quote(name) + "\ndescription: " + claude_yaml_quote("{agent["description"]}") + "\n";
     if (agent["read_only"] == true) {
         content = content + "tools: Read, Grep, Glob, Bash\n";
     }
-    if ("{agent["class"]}" == "economy") {
-        content = content + "model: haiku\n";
+    final model = agent["model"];
+    if (model != null and "{model}" != "") {
+        content = content + "model: {model}\n";
     }
     content = content + "---\n\n" + "{agent["instructions"]}".trim() + "\n";
     return {
@@ -390,29 +391,34 @@ export fun harness_agents(target: Target, cb: fun(any)) > [any] {
     return claude_agents(agents as [any]);
 }
 
-fun claude_scout_fixture(read_only: bool, class: str) > {str: any} {
+fun claude_scout_fixture(read_only: bool, model: str) > {str: any} {
     return {
         "name": "magus-scout",
         "description": "Answers lookups: read-only, \"quoted\" and \\ escaped.",
         "instructions": "First line.\n\nSecond line.\n",
         "read_only": read_only,
-        "class": class,
+        "model": model,
     };
 }
 
-test "harness_agents renders a read-only economy agent with limited tools and the cheap model" {
-    final file = claude_agent(claude_scout_fixture(true, class: "economy"));
+test "harness_agents renders a read-only agent with limited tools and the model it carries" {
+    final file = claude_agent(claude_scout_fixture(true, model: "cheap-alias"));
     assert\equal("{file["path"]}", ".claude/agents/magus-scout.md", "Claude Code reads .claude/agents");
     assert\equal(
         "{file["content"]}",
-        "---\nname: \"magus-scout\"\ndescription: \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\ntools: Read, Grep, Glob, Bash\nmodel: haiku\n---\n\nFirst line.\n\nSecond line.\n",
+        "---\nname: \"magus-scout\"\ndescription: \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\ntools: Read, Grep, Glob, Bash\nmodel: cheap-alias\n---\n\nFirst line.\n\nSecond line.\n",
         "frontmatter then the instructions",
     );
 }
 
-test "harness_agents leaves tools and model unset for a writable agent of another class" {
-    final content = "{claude_agent(claude_scout_fixture(false, class: "standard"))["content"]}";
+test "harness_agents leaves tools and model unset for a writable agent with an empty model" {
+    final content = "{claude_agent(claude_scout_fixture(false, model: ""))["content"]}";
     assert\isTrue(content.indexOf("tools:") == null, "no tool restriction");
+    assert\isTrue(content.indexOf("model:") == null, "the host default model applies");
+}
+
+test "harness_agents leaves the model unset when the agent carries none" {
+    final content = "{claude_agent({"name": "magus-scout", "description": "d", "instructions": "i", "read_only": true})["content"]}";
     assert\isTrue(content.indexOf("model:") == null, "the host default model applies");
 }
 
@@ -423,7 +429,7 @@ test "harness_agents renders nothing when the call carries no agents" {
 }
 
 test "claude_agents renders one file per agent, in order" {
-    final files = claude_agents([claude_scout_fixture(true, class: "economy"), claude_scout_fixture(false, class: "standard")]);
+    final files = claude_agents([claude_scout_fixture(true, model: "cheap-alias"), claude_scout_fixture(false, model: "")]);
     assert\equal(files.len(), 2, "one file per agent");
     assert\equal("{files[1]["path"]}", ".claude/agents/magus-scout.md", "path");
 }

@@ -160,7 +160,6 @@ test "harness_agents renders a read-only subagent that denies edits and sets no 
         "description": "Answers lookups: read-only, \"quoted\" and \\ escaped.",
         "instructions": "First line.\n\nSecond line.\n",
         "read_only": true,
-        "class": "economy",
     });
     assert\equal("{file["path"]}", ".opencode/agents/magus-scout.md", "OpenCode reads .opencode/agents");
     assert\equal(
@@ -177,7 +176,6 @@ test "harness_agents leaves permissions alone for a writable subagent" {
         "description": "Edits files.",
         "instructions": "First line.\n",
         "read_only": false,
-        "class": "standard",
     });
     assert\isTrue("{file["content"]}".indexOf("permission") == null, "the session's permissions apply");
 }

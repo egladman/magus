@@ -256,7 +256,6 @@ fun cursor_scout_fixture(read_only: bool) > {str: any} {
         "description": "Answers lookups: read-only, \"quoted\" and \\ escaped.",
         "instructions": "First line.\n\nSecond line.\n",
         "read_only": read_only,
-        "class": "economy",
     };
 }
 

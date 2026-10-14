@@ -360,7 +360,6 @@ fun codex_scout_fixture(instructions: str) > {str: any} {
         "description": "Answers lookups: read-only, \"quoted\" and \\ escaped.",
         "instructions": instructions,
         "read_only": true,
-        "class": "economy",
     };
 }
 
@@ -381,7 +380,6 @@ test "harness_agents leaves the sandbox alone for a writable agent" {
         "description": "Edits files.",
         "instructions": "First line.\n",
         "read_only": false,
-        "class": "standard",
     };
     final content = "{codex_agent(writable)["content"]}";
     assert\isTrue(content.indexOf("sandbox_mode") == null, "the person's default sandbox applies");
