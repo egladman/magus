@@ -427,8 +427,17 @@ func guardModelTiers(ctx context.Context, rootOverride string) func() *types.Mod
 	if _, err := magus.FindRoot(rootOverride); err != nil {
 		return nil
 	}
+	return workspaceModelTiers(ctx, func(ctx context.Context) (types.WorkspaceRepository, error) {
+		return inspectWorkspace(ctx, rootOverride)
+	})
+}
+
+// workspaceModelTiers is the lazy reader of the model tiers the workspace inspect opens
+// declares. The first call opens it and the answer is kept, so a judgment that never asks
+// pays for nothing. A workspace that does not load or declares no tiers yields nil.
+func workspaceModelTiers(ctx context.Context, inspect func(context.Context) (types.WorkspaceRepository, error)) func() *types.ModelTierSet {
 	return sync.OnceValue(func() *types.ModelTierSet {
-		ws, err := inspectWorkspace(ctx, rootOverride)
+		ws, err := inspect(ctx)
 		if err != nil {
 			return nil
 		}
