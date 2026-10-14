@@ -50,6 +50,10 @@ func (s *session) Upvalues(level int) map[string]engine.Value {
 func (s *session) CallDepth() int { return s.core.CallDepth() }
 
 func (s *session) SetStepHook(mask engine.StepMask, cb func(engine.StepEvent, engine.Frame)) {
+	if cb == nil {
+		s.core.ClearStepHook()
+		return
+	}
 	s.core.SetStepHook(fromEngineMask(mask), func(ev vm.StepEvent, f vm.DebugFrame) {
 		cb(toEngineEvent(ev), engine.Frame{
 			Source:      f.Source,
@@ -60,8 +64,6 @@ func (s *session) SetStepHook(mask engine.StepMask, cb func(engine.StepEvent, en
 		})
 	})
 }
-
-func (s *session) ClearStepHook() { s.core.ClearStepHook() }
 
 func toEngineMap(m map[string]vm.Value) map[string]engine.Value {
 	if len(m) == 0 {

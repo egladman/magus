@@ -60,10 +60,9 @@ type DebugReader interface {
 // SetStepHook installs cb to fire on the next event matching mask. cb is
 // invoked synchronously on the script execution goroutine and may re-enter
 // the pry REPL (the pry loop is re-entrant). After cb returns, execution
-// resumes. ClearStepHook removes any installed hook.
+// resumes. A nil cb removes any installed hook.
 type Stepper interface {
 	SetStepHook(mask StepMask, cb func(StepEvent, Frame))
-	ClearStepHook()
 }
 
 // ReplDriver is an optional interface sessions expose to allow the shared

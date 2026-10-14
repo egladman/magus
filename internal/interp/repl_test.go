@@ -356,7 +356,6 @@ type stepperSession struct {
 }
 
 func (s *stepperSession) SetStepHook(engine.StepMask, func(engine.StepEvent, engine.Frame)) {}
-func (s *stepperSession) ClearStepHook()                                                    {}
 
 func TestPry_StepCommandsSupported(t *testing.T) {
 	// The three step verbs share one dispatch path; they differ only in the command

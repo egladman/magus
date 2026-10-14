@@ -2687,9 +2687,6 @@ func (vm *VM) ClearStepHook() {
 // concurrently with Exec.
 func (vm *VM) SetFaultHook(cb func(FaultKind)) { vm.faultHook = cb }
 
-// ClearFaultHook removes any installed fault hook.
-func (vm *VM) ClearFaultHook() { vm.faultHook = nil }
-
 // DebugFrames returns the active call stack, innermost first.
 func (vm *VM) DebugFrames() []DebugFrame {
 	out := make([]DebugFrame, len(vm.frames))

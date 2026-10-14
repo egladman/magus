@@ -104,7 +104,7 @@ func buzzInstallStepHook(ctx context.Context, esess engine.Session, resume inter
 			}
 		}
 		// Suspend stepping while the REPL is open so nested evals don't re-fire.
-		stepper.ClearStepHook()
+		stepper.SetStepHook(0, nil)
 		next, err := interp.Pry(ctx, esess, buzzPryContext(esess), opts)
 		if err != nil {
 			warnPry(ctx, err)
