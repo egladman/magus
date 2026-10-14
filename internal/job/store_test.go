@@ -76,6 +76,10 @@ func stamped(want, got types.Job) types.Job {
 func TestStoreRoundTrip(t *testing.T) {
 	t.Parallel()
 
+	stamped := func(row types.Job, generation int) types.Job {
+		row.Generation, row.Attempts = generation, 1
+		return row
+	}
 	tests := []struct {
 		name string
 		puts []types.Job
@@ -87,7 +91,7 @@ func TestStoreRoundTrip(t *testing.T) {
 		{
 			name: "rows come back in the order they were first recorded",
 			puts: []types.Job{lease("a"), lease("b"), lease("c")},
-			want: []types.Job{lease("a"), lease("b"), lease("c")},
+			want: []types.Job{stamped(lease("a"), 1), stamped(lease("b"), 1), stamped(lease("c"), 1)},
 		},
 		{
 			name: "a second put on the same id replaces the row in place",
@@ -99,21 +103,21 @@ func TestStoreRoundTrip(t *testing.T) {
 				// The replacement carries no write paths, so the row's paths were
 				// released by it; see TestStorePutRecordsReleasedPaths.
 				{
-					ID: "a", Criteria: "revised", State: types.StatePass,
+					ID: "a", Criteria: "revised", State: types.StatePass, Generation: 2, Attempts: 1,
 					Releases: []types.JobRelease{{Path: "internal/a", Digest: types.DigestAbsent}},
 				},
-				lease("b"),
+				stamped(lease("b"), 1),
 			},
 		},
 		{
 			name: "a read-only row carries no paths by design",
 			puts: []types.Job{{ID: "scout", Criteria: "inventory", ReadOnly: true, State: types.StateRunning}},
-			want: []types.Job{{ID: "scout", Criteria: "inventory", ReadOnly: true, State: types.StateRunning}},
+			want: []types.Job{{ID: "scout", Criteria: "inventory", ReadOnly: true, State: types.StateRunning, Generation: 1, Attempts: 1}},
 		},
 		{
 			name: "no_return is stored as its own terminal state",
 			puts: []types.Job{{ID: "a", State: types.StateNoReturn}},
-			want: []types.Job{{ID: "a", State: types.StateNoReturn}},
+			want: []types.Job{{ID: "a", State: types.StateNoReturn, Generation: 1, Attempts: 1}},
 		},
 	}
 

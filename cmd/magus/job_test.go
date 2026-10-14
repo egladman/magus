@@ -668,7 +668,7 @@ func TestJobExitResolvesARefInTheJobsCheckout(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, &types.JobAttempt{
 		Found: true, Ref: recorded.Ref, Project: ".", Target: "test",
-		AttemptID: recorded.Attempt, DurationMs: 1500, Revision: "abc123", Dirty: true,
+		AttemptID: recorded.Attempt, DurationMs: 1500, Revision: "abc123", Dirty: true, ObservedGeneration: 1,
 	}, stored.Attempt, "the attempt carries what freshness is judged by: the execution, its start and the tree it read")
 }
 
