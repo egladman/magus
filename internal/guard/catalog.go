@@ -877,22 +877,33 @@ var ruleDocGuardUnfinished = adviseDoc(types.RuleDoc{ //nolint:unused // read th
 		"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns a guard check of its own judged nothing.",
 }, false)
 
-var ruleDocRootContextBudget = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+var ruleDocOrchestratorGroundwork = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+	Name:    string(denyRuleOrchestratorGroundwork),
+	Catches: "a session that hands out work doing its own groundwork: reads, searches, edits, runs",
+	Why: "A session that hands out work keeps to planning, coordinating and integrating. Reading and searching source, editing it and running checks belong to the workers it spawns, at any context size: a worker starts small and returns its findings, while every result the orchestrator reads itself stays in the context each later call re-sends. " +
+		"magus judges the role from what it recorded, never from the context's size or the guard level. A session is proven to orchestrate once its host reported its main thread and it spawned a worker whose title names a live job row, or ran `magus job fork` (or magus\\job.put) for a row the job store then showed live; it is inferred from a spawn bound to no row, a loaded magus-multi-agent skill, or proof on a thread its host did not report. Proof lasts the session. " +
+		"Proven, its groundwork is refused; inferred, it is advised once per kind of work. A session with no record, a leased worker, a subagent and a person are never judged, and the off level leaves the rule on. " +
+		"Groundwork is a recursive search, a read of a file inside a checkout of the repository (Markdown included, except AGENTS.md, MAGUS.md, CLAUDE.md and SKILL.md), a full diff, a target run with or without `-s`, a `magus buzz` script that reaches beyond magus\\job, a fetch, and a write inside a checkout. " +
+		"Orchestration work passes: the job verbs, graph reads (`magus query`, `explain`, `refs`, `path`, `describe`, `affected --plan`), integration (`git cherry-pick`, `add`, `commit`, `switch` and `worktree`, the build of ./magus, the generate targets, the final gate, the check of a live row the session forked, `git push`, `gh pr`), `magus query output` of a guard verdict or of a row's recorded check output, short status, and reads and writes outside every checkout, such as a plan or a memory. " +
+		"A write while its checkout is midway through a merge or a cherry-pick is advised and never refused, since resolving a conflict is integration. Set to advise, proof is advised too.",
+})
+
+var ruleDocRootContextBudget = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
 	Name:    string(denyRuleRootContextBudget),
 	Catches: "a session's main thread whose context has grown past its level's size",
 	Why: "Every call of a session re-sends its whole context, mostly as cache reads, so its cost grows with the square of its length, and a main thread that does its own reading pays for each result on every call after it. " +
-		"The size is the last usage the main transcript recorded, read after each call. At light it advises once at half the model's window, and says nothing for a model the table does not know; at standard it advises once at a fixed size, lower when the account bills per token than on a subscription quota; at strict it advises lower still and refuses the delegable commands (a recursive search, a whole-file read of source, a full diff, a target run, a web fetch) past a second size. " +
-		"A tokens parameter replaces the level's sizes with one, at the rule's decision. It judges only the unleased main thread, and a thread magus inferred rather than one its host named is only advised. " +
+		"The size is the last usage the main transcript recorded, read after each call. At light it advises once at half the model's window, and says nothing for a model the table does not know; at standard it advises once at a fixed size, and at strict at a lower one, each lower when the account bills per token than on a subscription quota. The advice names `magus job fork` and a spawn. " +
+		"It never refuses: size tunes how often a session hears this, never whether its work is refused, which orchestrator-groundwork decides by the session's role. A tokens parameter replaces the level's sizes. It judges only the unleased main thread. " +
 		"A call whose output is a ref or one line is never judged by this rule, so a main thread past its budget can still build ./magus and file its work: the bootstrap build command, `magus run` or `magus affected` with `-s` or `--silent`, `magus run go-build` or `go::go-build`, `magus job fork`, `exit`, `apply` and `wait`, `magus query output --identity`, any magus command asked for `-o name` or `-o template=`, `git commit`, `cherry-pick` and `branch`, `git status -s`, and `git log --oneline` with a count (`-n`, `--max-count` or `-N`). A line that changes directory first is judged by the rest of it.",
-})
+}, false)
 
-var ruleDocRootHeavyCommand = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+var ruleDocRootHeavyCommand = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
 	Name:    string(denyRuleRootHeavyCommand),
 	Catches: "a main thread running delegable commands one after another without spawning",
 	Why: "A recursive search, a whole-file read of source, a full diff, a target run or a web fetch is work a subagent does from a small context, returning only what matters. " +
-		"Each delegable call since the main thread last spawned or continued a subagent counts; at standard it advises once at the eighth, and at strict it advises at the fifth and refuses from the eighth. " +
+		"Each delegable call since the main thread last spawned or continued a subagent counts; at standard it advises once at the eighth, and at strict at the fifth. It never refuses, and it judges only a session with no record of handing work out: it is the nudge to start, and a session already orchestrating is judged by orchestrator-groundwork. " +
 		"Spawning, the final gate, loading a skill, reading Markdown and editing never count, and neither does a command whose output is a ref or one line: the bootstrap build command, `magus run` or `magus affected` with `-s` or `--silent`, `magus run go-build` or `go::go-build`, `magus job fork`, `exit`, `apply` and `wait`, `magus query output --identity`, any magus command asked for `-o name` or `-o template=`, `git commit`, `cherry-pick` and `branch`, `git status -s`, and `git log --oneline` with a count (`-n`, `--max-count` or `-N`). Reading a run's whole output with `magus query output` does count. A calls parameter replaces the level's count.",
-})
+}, false)
 
 var ruleDocRootResultCap = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
 	Name:    string(denyRuleRootResultCap),
@@ -901,12 +912,12 @@ var ruleDocRootResultCap = adviseDoc(types.RuleDoc{ //nolint:unused // read thro
 		"It never refuses, since the result has already arrived. A chars parameter replaces the level's size.",
 }, false)
 
-var ruleDocRootRepeat = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+var ruleDocRootRepeat = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
 	Name:    string(denyRuleRootRepeat),
 	Catches: "a main thread running the same delegable command again with no write since",
 	Why: "An identical search, read, diff, run or fetch with no file written since returns what the context already holds. " +
-		"At standard the second run is advised once; at strict it is advised and the third is refused. A file write starts the count over. A calls parameter replaces the level's count.",
-})
+		"At standard and strict the second run is advised once, and a file write starts the count over. It never refuses, and it skips a session that hands out work: there every repeat is groundwork, which orchestrator-groundwork judges. A calls parameter replaces the level's count.",
+}, false)
 
 var ruleDocSpawnNamesModel = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
 	Name:    string(denyRuleSpawnNamesModel),

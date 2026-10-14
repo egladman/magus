@@ -62,7 +62,7 @@ type commandRuleInput struct {
 // The cost and stall rules are graded first: they too only add, and they read the
 // verdict every compiled rule reached.
 func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict types.GuardJudgment, in commandRuleInput, who hookAttribution, at location) (types.GuardJudgment, workspaceRuleRecord) {
-	verdict = gradeStall(deps, gradeMainCommand(deps, verdict, in, who, at), in.lease, at)
+	verdict = gradeStall(deps, gradeMainCommand(ctx, deps, verdict, in, who, at), in.lease, at)
 	if deps.CommandRule == nil && deps.ApprovedCommandRule == nil && deps.LoadFailure == nil {
 		return verdict, workspaceRuleRecord{}
 	}
@@ -174,20 +174,21 @@ func commandRequest(ctx context.Context, in commandRuleInput, who hookAttributio
 	role, lease := actingRole(ctx, at, in.lease)
 	thread, from, window := callerCost(at, who, in.lease, facts)
 	return types.CommandRequest{
-		Thread:      thread,
-		ThreadFrom:  from,
-		Window:      window,
-		Host:        who.Host,
-		Session:     who.Session,
-		Command:     in.command,
-		Description: in.description,
-		Commands:    commandInvocations(in.command, in.dialect, at.dir),
-		Agent:       who.Agent,
-		Parent:      spawnedAs(facts, who.Agent),
-		Role:        role,
-		Lease:       lease,
-		Dir:         at.dir,
-		Workspace:   at.workspace,
+		Thread:        thread,
+		ThreadFrom:    from,
+		Orchestration: callerOrchestration(at, who, thread, from, in.lease),
+		Window:        window,
+		Host:          who.Host,
+		Session:       who.Session,
+		Command:       in.command,
+		Description:   in.description,
+		Commands:      commandInvocations(in.command, in.dialect, at.dir),
+		Agent:         who.Agent,
+		Parent:        spawnedAs(facts, who.Agent),
+		Role:          role,
+		Lease:         lease,
+		Dir:           at.dir,
+		Workspace:     at.workspace,
 	}
 }
 

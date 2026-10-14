@@ -194,7 +194,11 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 			recordRework(ctx, at, facts, env.Target)
 		}
 		markAgentSeen(facts, env)
-		noteMainSpawn(at, who, actingLease)
+		bound := false
+		if env.IsSpawn {
+			_, bound = titled()
+		}
+		noteMainSpawn(at, who, actingLease, bound)
 		if env.IsSpawn {
 			recordPendingSpawn(facts, env, actingLease, time.Now())
 		}
@@ -265,6 +269,7 @@ func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at 
 	lease, _ := resolveActingLease(who, at, explicitLease)
 	req.Role, req.Lease = actingRole(ctx, at, lease)
 	req.Thread, req.ThreadFrom, req.Window = callerCost(at, who, lease, facts)
+	req.Orchestration = callerOrchestration(at, who, req.Thread, req.ThreadFrom, lease)
 	return req
 }
 

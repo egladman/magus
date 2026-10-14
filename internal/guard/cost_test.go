@@ -4,8 +4,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/gen/mocks"
 	"github.com/egladman/magus/types"
@@ -349,8 +352,244 @@ func TestObserveCallRecordsAJudgedCallOnce(t *testing.T) {
 	assert.Equal(t, 1, readCostState(hint.NewGate(cache, who.factsKey())).Streak, "a refused call never ran")
 	observeCall(ctx, at, "/r/a.go", who, hookToolWrite, "", types.GuardJudgment{Decision: decisionPass})
 	assert.Empty(t, readCostState(hint.NewGate(cache, who.factsKey())).Repeats, "a write starts the repeats over")
-	noteMainSpawn(at, who, "")
+	noteMainSpawn(at, who, "", false)
 	assert.Zero(t, readCostState(hint.NewGate(cache, who.factsKey())).Streak, "a spawn starts the streak over")
+}
+
+// Each record a session leaves proves or suggests that it orchestrates; proof counts only
+// on a main thread its host reported, and the record only rises.
+func TestOrchestrationByEvidence(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		st   costState
+		from types.ThreadSource
+		want types.Orchestration
+	}{
+		{"no record", costState{Streak: 9}, types.ThreadReported, ""},
+		{"a spawn bound to no row", costState{Orchestrates: types.OrchestrationInferred}, types.ThreadReported, types.OrchestrationInferred},
+		{"a bound spawn or a confirmed fork", costState{Orchestrates: types.OrchestrationProven}, types.ThreadReported, types.OrchestrationProven},
+		{"proof on a thread the host did not report", costState{Orchestrates: types.OrchestrationProven}, types.ThreadInferred, types.OrchestrationInferred},
+		{"a fork the store has not shown", costState{Forks: map[string]int64{"a1": 1}}, types.ThreadReported, ""},
+	} {
+		assert.Equal(t, tc.want, orchestration(tc.st, tc.from), tc.name)
+	}
+
+	st := costState{Orchestrates: types.OrchestrationProven}
+	st.raise(types.OrchestrationInferred)
+	assert.Equal(t, types.OrchestrationProven, st.Orchestrates, "proof is never lowered")
+}
+
+// A spawn bound to a live row proves the session orchestrates, one bound to none suggests
+// it, and either starts the streak over. A leased caller and a subagent record nothing.
+func TestNoteMainSpawnRecordsOrchestration(t *testing.T) {
+	ctx, cache := spawnFixture(t)
+	at := hookLocation(ctx, Dependencies{})
+	who := hookAttribution{Host: "claude-code", Session: "s"}
+	hostGate(cache, who.Host).MarkFired(hostAgentsKind)
+	facts := hint.NewGate(cache, who.factsKey())
+
+	noteMainSpawn(at, who, "", false)
+	assert.Equal(t, types.OrchestrationInferred, readCostState(facts).Orchestrates)
+	writeCostState(facts, costState{Streak: 4, Orchestrates: types.OrchestrationInferred})
+	noteMainSpawn(at, who, "", true)
+	st := readCostState(facts)
+	assert.Equal(t, types.OrchestrationProven, st.Orchestrates)
+	assert.Zero(t, st.Streak)
+	noteMainSpawn(at, who, "", false)
+	assert.Equal(t, types.OrchestrationProven, readCostState(facts).Orchestrates, "proof lasts the session")
+
+	worker := hookAttribution{Host: "claude-code", Session: "w"}
+	noteMainSpawn(at, worker, "job-a", true)
+	assert.Empty(t, readCostState(hint.NewGate(cache, worker.factsKey())).Orchestrates, "a leased caller is a worker")
+	sub := hookAttribution{Host: "claude-code", Session: "u", Agent: "a1"}
+	noteMainSpawn(at, sub, "", true)
+	assert.Empty(t, readCostState(hint.NewGate(cache, sub.factsKey())).Orchestrates, "a subagent is never an orchestrator")
+}
+
+// A fork is filed from each shape that writes a row: the CLI verb, its record on stdin, a
+// magus\job.put rendered from an MCP call, and either one inside a `magus buzz` script.
+func TestNoteForkReadsEveryShape(t *testing.T) {
+	t.Parallel()
+	now := time.Unix(1_700_000_000, 0)
+	for _, tc := range []struct {
+		line string
+		want []string
+	}{
+		{"./magus job fork a1 --parent root --write-paths x.go", []string{"a1"}},
+		{"cd /r && ./magus job fork a1", []string{"a1"}},
+		{"./magus job fork --stdin <<'EOF'\n{\"schema_version\": " + strconv.Itoa(types.JobSchemaVersion) + ", \"id\": \"a2\", \"read_only\": true}\nEOF", []string{"a2"}},
+		{`client op=put id="a3" parent="root"`, []string{"a3"}},
+		{`./magus buzz -e 'import "magus"; magus\job.put("a4", opts: {"parent": "root"});'`, []string{"a4"}},
+		{"./magus job wait a1", nil},
+		{"./magus job exit a1 --stdin", nil},
+		{`client op=register id="a1"`, nil},
+		{"rg -n fork", nil},
+	} {
+		var st costState
+		noteFork(&st, tc.line, now)
+		var got []string
+		for id, at := range st.Forks {
+			got = append(got, id)
+			assert.Equal(t, now.UnixNano(), at, tc.line)
+		}
+		assert.ElementsMatch(t, tc.want, got, tc.line)
+	}
+}
+
+// A fork proves nothing until the store shows its row live, created no earlier than the
+// call that ran it; one the store never shows is dropped after the window.
+func TestForkConfirmedOnlyAfterTheStoreShowsTheRow(t *testing.T) {
+	t.Parallel()
+	judged := time.Unix(1_700_000_000, 0)
+	rows := map[string]types.Job{}
+	live := func(id string) (types.Job, bool) {
+		row, ok := rows[id]
+		return row, ok
+	}
+	st := costState{Forks: map[string]int64{"a1": judged.UnixNano(), "old": judged.UnixNano()}}
+
+	confirmForks(&st, live, judged.Add(time.Second))
+	assert.Empty(t, st.Orchestrates, "the store shows no row yet")
+	assert.Len(t, st.Forks, 2)
+
+	rows["old"] = types.Job{ID: "old", State: types.StateRunning, Created: judged.Unix() - 60}
+	rows["a1"] = types.Job{ID: "a1", State: types.StateDeclared, Created: judged.Unix()}
+	confirmForks(&st, live, judged.Add(2*time.Second))
+	assert.Equal(t, types.OrchestrationProven, st.Orchestrates)
+	assert.Equal(t, []string{"a1"}, st.Forked)
+	assert.Equal(t, map[string]int64{"old": judged.UnixNano()}, st.Forks, "a row created before the fork was not this fork's")
+
+	confirmForks(&st, live, judged.Add(forkConfirmWindow+time.Second))
+	assert.Nil(t, st.Forks, "an unconfirmed fork is dropped after the window")
+	assert.Equal(t, []string{"a1"}, st.Forked)
+}
+
+// orchestratorFixture is a checkout of a git repository and a notes directory outside it,
+// located at the checkout.
+func orchestratorFixture(t *testing.T) (at location, notes string) {
+	t.Helper()
+	root := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o755))
+	return location{cacheDir: t.TempDir(), workspace: root, dir: root}, t.TempDir()
+}
+
+// orchestrationLines are calls a session that hands out work makes as orchestration.
+func orchestrationLines(notes string) []string {
+	return []string{
+		"./magus job fork a1 --parent root",
+		"./magus job wait a1",
+		"./magus job apply a1",
+		"./magus describe job a1",
+		"./magus ls jobs",
+		"./magus query 'kind=spell'",
+		"./magus explain internal/guard",
+		"./magus refs costState --occurrences",
+		"./magus path internal/guard internal/job",
+		"./magus describe file internal/guard/root.go",
+		"./magus affected --plan",
+		"./magus graph stats",
+		"./magus graph diff",
+		"./magus diff --impact",
+		"./magus status",
+		"./magus run go-build . -s",
+		"./magus run go::go-build .",
+		"./magus run generate:rw .",
+		"./magus run content-generate docs",
+		"./magus affected ci",
+		"./magus query output grd0123456789ab",
+		"./magus query output out1 --identity",
+		`./magus buzz -e 'import "magus"; magus\job.put("a1", opts: {"parent": "root"});'`,
+		"git cherry-pick abc123",
+		"git cherry-pick --continue",
+		"git add internal/guard/root.go",
+		"git commit -m x",
+		"git branch x",
+		"git switch x",
+		"git worktree add ../w main",
+		"git push origin x",
+		"gh pr create --fill",
+		"git status -s",
+		"git log --oneline -n 20",
+		"git diff --stat",
+		"git diff --name-only main...HEAD",
+		"cat AGENTS.md",
+		"cat internal/agent/skills/x/SKILL.md",
+		"cat " + filepath.Join(notes, "plan.md"),
+		"sed -n 1,40p " + filepath.Join(notes, "memory.md"),
+	}
+}
+
+// groundworkLines are the calls a session that hands out work leaves to its workers.
+var groundworkLines = []struct {
+	line  string
+	class types.DelegableClass
+}{
+	{"rg -n Judge internal", types.DelegableSearch},
+	{"grep -rn Judge internal", types.DelegableSearch},
+	{"find . -name '*.go'", types.DelegableSearch},
+	{"fd root.go", types.DelegableSearch},
+	{"cd internal && rg -l Verdict .", types.DelegableSearch},
+	{"cat internal/guard/root.go", types.DelegableRead},
+	{"sed -n 1,40p internal/guard/root.go", types.DelegableRead},
+	{"cat docs/guide.md", types.DelegableRead},
+	{"./magus query output out1", types.DelegableRead},
+	{"git diff", types.DelegableDiff},
+	{"git show HEAD", types.DelegableDiff},
+	{"git log -p -3", types.DelegableDiff},
+	{"./magus diff", types.DelegableDiff},
+	{"./magus run go-test . -s", types.DelegableRun},
+	{"./magus run lint docs", types.DelegableRun},
+	{"./magus affected test --silent", types.DelegableRun},
+	{`./magus buzz -e 'import "fs"; print(fs\readFile("a"));'`, types.DelegableRun},
+	{`./magus buzz -e 'import "magus"; magus\run(["test", "."]);'`, types.DelegableRun},
+	{"curl -sS https://example.com/x", types.DelegableFetch},
+}
+
+func TestRootWorkClass(t *testing.T) {
+	t.Parallel()
+	at, notes := orchestratorFixture(t)
+	for _, line := range orchestrationLines(notes) {
+		assert.Empty(t, rootWorkClass(line, at), line)
+	}
+	for _, g := range groundworkLines {
+		assert.Equal(t, g.class, rootWorkClass(g.line, at), g.line)
+	}
+}
+
+func TestNotesPath(t *testing.T) {
+	t.Parallel()
+	at, notes := orchestratorFixture(t)
+	worktree := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(worktree, ".git"), []byte("gitdir: "+filepath.Join(at.workspace, ".git", "worktrees", "w")+"\n"), 0o644))
+
+	assert.True(t, notesPath(filepath.Join(notes, "plan.md"), at), "outside every checkout")
+	assert.True(t, notesPath(filepath.Join(at.workspace, "AGENTS.md"), at))
+	assert.True(t, notesPath(filepath.Join(worktree, "internal", "x", "SKILL.md"), at))
+	assert.False(t, notesPath(filepath.Join(at.workspace, "internal", "new", "a.go"), at), "a file in a directory not created yet")
+	assert.False(t, notesPath("docs/guide.md", at), "relative to the call")
+	assert.False(t, notesPath(filepath.Join(worktree, "a.go"), at), "another checkout of the same repository")
+}
+
+// The check of a live row the thread forked is the orchestrator's to run, and any row's
+// recorded check output its to read; anything else stays groundwork.
+func TestMainWorkClearsTheForkedRowsCheck(t *testing.T) {
+	t.Parallel()
+	at, _ := orchestratorFixture(t)
+	rows := []types.Job{
+		{ID: "a1", State: types.StateRunning, Check: &types.LeaseCheck{Target: "go-test", Project: "."}},
+		{ID: "a2", State: types.StatePass, Check: &types.LeaseCheck{Target: "lint", Project: "docs"},
+			Result: &types.JobResult{Validation: types.JobResultValidation{OutputRef: "out9"}}},
+	}
+	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: rows})
+	forked := costState{Forked: []string{"a1", "a2"}}
+
+	assert.Empty(t, mainWork(ctx, at, forked, "./magus run go-test . -s"))
+	assert.Equal(t, types.DelegableRun, mainWork(ctx, at, costState{}, "./magus run go-test . -s"), "a row another session forked")
+	assert.Equal(t, types.DelegableRun, mainWork(ctx, at, forked, "./magus run lint docs"), "a row that ended")
+	assert.Equal(t, types.DelegableRun, mainWork(ctx, at, forked, "./magus run go-test internal/guard"), "another project")
+	assert.Empty(t, mainWork(ctx, at, costState{}, "./magus query output out9"))
+	assert.Equal(t, types.DelegableRead, mainWork(ctx, at, forked, "./magus query output out1"))
 }
 
 // The request a workspace rule is handed carries the caller's thread and context.

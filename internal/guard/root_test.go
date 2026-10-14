@@ -2,6 +2,9 @@ package guard
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,32 +18,31 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func TestSettingLadder(t *testing.T) {
+func TestSettingFigure(t *testing.T) {
 	t.Parallel()
-	strict := builtin.Setting{Decision: builtin.Deny, Profile: types.GuardProfileStrict}
-	assert.Equal(t, ladder{advise: 5, deny: 8}, settingLadder(strict, 0, heavyFigures))
-	assert.Equal(t, ladder{advise: 8}, settingLadder(builtin.Setting{Decision: builtin.Advise, Profile: types.GuardProfileStandard}, 0, heavyFigures))
-	assert.Equal(t, ladder{advise: 5}, settingLadder(builtin.Setting{Decision: builtin.Advise, Profile: types.GuardProfileStrict}, 0, heavyFigures),
-		"a strict level set to advise advises from its first figure and never refuses")
-	assert.Equal(t, ladder{deny: 6}, settingLadder(builtin.Setting{Decision: builtin.Deny, Calls: 6}, 6, heavyFigures), "a stated figure replaces the level's")
-	assert.Equal(t, ladder{advise: 5, deny: 8}, settingLadder(builtin.Setting{Decision: builtin.Deny}, 0, heavyFigures), "a deny with no level reads strict's")
-	assert.Equal(t, ladder{advise: 8}, settingLadder(builtin.Setting{Decision: builtin.Advise}, 0, heavyFigures), "an advise with no level reads standard's")
-	assert.Equal(t, ladder{}, settingLadder(builtin.Setting{Decision: builtin.Off, Profile: types.GuardProfileStrict}, 0, heavyFigures))
+	assert.Equal(t, 5, settingFigure(builtin.Setting{Decision: builtin.Advise, Profile: types.GuardProfileStrict}, 0, heavyFigures))
+	assert.Equal(t, 8, settingFigure(builtin.Setting{Decision: builtin.Advise, Profile: types.GuardProfileStandard}, 0, heavyFigures))
+	assert.Equal(t, 6, settingFigure(builtin.Setting{Decision: builtin.Advise, Calls: 6, Profile: types.GuardProfileStrict}, 6, heavyFigures),
+		"a stated figure replaces the level's")
+	assert.Equal(t, 8, settingFigure(builtin.Setting{Decision: builtin.Advise}, 0, heavyFigures), "an advise with no level reads standard's")
+	assert.Zero(t, settingFigure(builtin.Setting{Decision: builtin.Off, Profile: types.GuardProfileStrict}, 0, heavyFigures))
+	assert.Zero(t, settingFigure(builtin.Setting{Decision: builtin.Deny, Profile: types.GuardProfileStrict}, 0, heavyFigures),
+		"a meter only advises, and Resolve refuses a deny declared for one")
 }
 
 func TestBudgetFiguresFollowBilling(t *testing.T) {
 	t.Parallel()
-	for billing, want := range map[types.AgentBilling][2]ladder{
-		types.AgentBillingMetered: {{advise: 250_000}, {advise: 150_000, deny: 300_000}},
-		types.AgentBillingQuota:   {{advise: 400_000}, {advise: 250_000, deny: 450_000}},
-		"":                        {{advise: 300_000}, {advise: 200_000, deny: 350_000}},
+	for billing, want := range map[types.AgentBilling][2]int{
+		types.AgentBillingMetered: {250_000, 150_000},
+		types.AgentBillingQuota:   {400_000, 250_000},
+		"":                        {300_000, 200_000},
 	} {
 		figures := budgetFigures(billing, 1_000_000)
 		assert.Equal(t, want[0], figures(types.GuardProfileStandard), billing)
 		assert.Equal(t, want[1], figures(types.GuardProfileStrict), billing)
-		assert.Equal(t, ladder{advise: 500_000}, figures(types.GuardProfileLight), "half the window")
+		assert.Equal(t, 500_000, figures(types.GuardProfileLight), "half the window")
 	}
-	assert.Equal(t, ladder{}, budgetFigures("", 0)(types.GuardProfileLight), "no window, no window-relative figure")
+	assert.Zero(t, budgetFigures("", 0)(types.GuardProfileLight), "no window, no window-relative figure")
 }
 
 // levelSetting is each level's resolved settings, as a workspace that declared only the
@@ -76,11 +78,11 @@ func TestMainFindingsByLevel(t *testing.T) {
 		denyRuleRootResultCap:     false,
 	}, rulesOf(mainFindings(levelSetting(types.GuardProfileStandard), st, diff)))
 	assert.Equal(t, map[denyRuleName]bool{
-		denyRuleRootContextBudget: true,
-		denyRuleRootHeavyCommand:  true,
-		denyRuleRootRepeat:        true,
+		denyRuleRootContextBudget: false,
+		denyRuleRootHeavyCommand:  false,
+		denyRuleRootRepeat:        false,
 		denyRuleRootResultCap:     false,
-	}, rulesOf(mainFindings(levelSetting(types.GuardProfileStrict), st, diff)))
+	}, rulesOf(mainFindings(levelSetting(types.GuardProfileStrict), st, diff)), "a strict session with no record of orchestrating is only advised")
 
 	assert.Equal(t, map[denyRuleName]bool{
 		denyRuleRootContextBudget: false,
@@ -111,8 +113,8 @@ func TestFreeCallsEscapeTheBudgetRules(t *testing.T) {
 			continue
 		}
 		rules := rulesOf(mainFindings(levelSetting(types.GuardProfileStrict), st, call(line)))
-		assert.True(t, rules[denyRuleRootContextBudget], line)
-		assert.True(t, rules[denyRuleRootHeavyCommand], line)
+		assert.Contains(t, rules, denyRuleRootContextBudget, line)
+		assert.Contains(t, rules, denyRuleRootHeavyCommand, line)
 	}
 	for _, line := range []string{"./magus describe job a1 -o json", "git status"} {
 		rules := rulesOf(mainFindings(levelSetting(types.GuardProfileStandard), st, call(line)))
@@ -121,7 +123,8 @@ func TestFreeCallsEscapeTheBudgetRules(t *testing.T) {
 }
 
 // A worker may not build ./magus, so the main thread past its budget must still be able to.
-// Judged whole, the quiet calls pass the budget rules and the reads do not.
+// Judged whole, the quiet calls pass the budget rules and the reads are advised, never
+// refused: size alone refuses nothing.
 func TestMainThreadPastTheBudgetStillBuilds(t *testing.T) {
 	ctx, cache := spawnFixture(t)
 	deps := strictDeps(t)
@@ -138,11 +141,10 @@ func TestMainThreadPastTheBudgetStillBuilds(t *testing.T) {
 	for _, line := range []string{"./magus run go-build . -s", "git status --short", "./magus job wait a1", "./magus describe job a1 -o name"} {
 		assert.False(t, budgetRule(judge(line)), line)
 	}
-	for _, line := range []string{"git diff", "git show HEAD"} {
-		v := judge(line)
-		assert.Equal(t, decisionDeny, v.Decision, line)
-		assert.Equal(t, string(denyRuleRootContextBudget), v.Rule, line)
-	}
+	v := judge("git diff")
+	assert.Equal(t, decisionAdvise, v.Decision)
+	assert.Contains(t, v.Context, "magus workspace: this session's context is 900k tokens")
+	assert.NotEqual(t, decisionDeny, judge("git show HEAD").Decision)
 }
 
 // Handing work to a subagent is what the budget rules ask for, so a spawn is never refused
@@ -184,7 +186,7 @@ func TestResultCapKeys(t *testing.T) {
 func TestApplyFindingsSaysAnInferredRefusalAsAdvice(t *testing.T) {
 	t.Parallel()
 	markers := hint.NewGate(t.TempDir(), "s")
-	refusal := []costFinding{{rule: denyRuleRootHeavyCommand, deny: true, key: "k", say: "first line.\nwhy."}}
+	refusal := []costFinding{{rule: denyRuleOrchestratorGroundwork, deny: true, key: "k", say: "first line.\nwhy."}}
 	pass := types.GuardJudgment{Decision: decisionPass}
 
 	v := applyFindings(markers, pass, refusal, types.ThreadReported)
@@ -194,7 +196,7 @@ func TestApplyFindingsSaysAnInferredRefusalAsAdvice(t *testing.T) {
 	v = applyFindings(markers, pass, refusal, types.ThreadInferred)
 	assert.Equal(t, decisionAdvise, v.Decision)
 	assert.Equal(t, "first line.", v.Context, "advice carries the verdict line")
-	assert.Equal(t, string(denyRuleRootHeavyCommand), v.Rule)
+	assert.Equal(t, string(denyRuleOrchestratorGroundwork), v.Rule)
 	assert.Equal(t, decisionPass, applyFindings(markers, pass, refusal, types.ThreadInferred).Decision, "once a session")
 
 	advised := types.GuardJudgment{Decision: decisionAdvise, Context: "earlier", Rule: "graph-stale"}
@@ -206,15 +208,131 @@ func TestApplyFindingsSaysAnInferredRefusalAsAdvice(t *testing.T) {
 func TestShadowVerdicts(t *testing.T) {
 	t.Parallel()
 	st := costState{Tokens: 400_000, Streak: 9}
-	got := shadowVerdicts(st, mainCall{from: types.ThreadReported, window: 1_000_000, class: types.DelegableSearch, line: "rg x"})
+	call := mainCall{from: types.ThreadReported, window: 1_000_000, class: types.DelegableSearch, line: "rg x", work: types.DelegableSearch}
 	assert.Equal(t, map[types.GuardProfile]types.GuardDecision{
 		types.GuardProfileOff:      types.GuardAllow,
 		types.GuardProfileLight:    types.GuardAllow,
 		types.GuardProfileStandard: types.GuardAdvise,
+		types.GuardProfileStrict:   types.GuardAdvise,
+	}, shadowVerdicts(st, call), "with no record of orchestrating, no level refuses")
+
+	call.orchestration = types.OrchestrationProven
+	assert.Equal(t, map[types.GuardProfile]types.GuardDecision{
+		types.GuardProfileOff:      types.GuardDeny,
+		types.GuardProfileLight:    types.GuardDeny,
+		types.GuardProfileStandard: types.GuardDeny,
 		types.GuardProfileStrict:   types.GuardDeny,
-	}, got)
-	inferred := shadowVerdicts(st, mainCall{window: 1_000_000, class: types.DelegableSearch, line: "rg x"})
-	assert.Equal(t, types.GuardAdvise, inferred[types.GuardProfileStrict], "an inferred thread is never refused")
+	}, shadowVerdicts(st, call), "orchestrator-groundwork refuses proof at every level, off included")
+
+	call.from, call.orchestration = types.ThreadInferred, types.OrchestrationInferred
+	for level, decision := range shadowVerdicts(st, call) {
+		assert.Equal(t, types.GuardAdvise, decision, "an inferred thread is never refused, at %s", level)
+	}
+}
+
+// A proven orchestrator at strict passes every orchestration call and is refused every
+// piece of groundwork; a strict session with no record of orchestrating is only advised.
+func TestOrchestratorGroundworkByRole(t *testing.T) {
+	t.Parallel()
+	at, notes := orchestratorFixture(t)
+	st := costState{Tokens: 900_000, Streak: 20}
+	call := func(line string, o types.Orchestration) mainCall {
+		return mainCall{from: types.ThreadReported, window: 1_000_000, class: delegableClass(line), free: costFree(line), line: line,
+			orchestration: o, work: rootWorkClass(line, at)}
+	}
+	strict := levelSetting(types.GuardProfileStrict)
+	refuses := func(findings []costFinding) bool {
+		return slices.ContainsFunc(findings, func(f costFinding) bool { return f.deny })
+	}
+	for _, line := range orchestrationLines(notes) {
+		findings := mainFindings(strict, st, call(line, types.OrchestrationProven))
+		assert.NotContains(t, rulesOf(findings), denyRuleOrchestratorGroundwork, line)
+		assert.False(t, refuses(findings), line)
+	}
+	for _, g := range groundworkLines {
+		rules := rulesOf(mainFindings(strict, st, call(g.line, types.OrchestrationProven)))
+		assert.True(t, rules[denyRuleOrchestratorGroundwork], g.line)
+		assert.NotContains(t, rules, denyRuleRootHeavyCommand, "an orchestrator is past the nudge: %s", g.line)
+		assert.NotContains(t, rules, denyRuleRootRepeat, g.line)
+
+		rules = rulesOf(mainFindings(levelSetting(types.GuardProfileOff), costState{}, call(g.line, types.OrchestrationProven)))
+		assert.True(t, rules[denyRuleOrchestratorGroundwork], "at any size and level, off included: %s", g.line)
+
+		findings := mainFindings(strict, st, call(g.line, types.OrchestrationInferred))
+		assert.Contains(t, rulesOf(findings), denyRuleOrchestratorGroundwork, g.line)
+		assert.False(t, refuses(findings), "an inferred record is only advised: %s", g.line)
+
+		findings = mainFindings(strict, st, call(g.line, ""))
+		assert.NotContains(t, rulesOf(findings), denyRuleOrchestratorGroundwork, g.line)
+		assert.False(t, refuses(findings), "a strict session with no record is only advised: %s", g.line)
+	}
+
+	advise := builtin.Setting{Decision: builtin.Advise}
+	f, ok := groundworkFinding(advise, call("git diff", types.OrchestrationProven))
+	require.True(t, ok)
+	assert.False(t, f.deny, "a workspace that sets the rule to advise is advised")
+	_, ok = groundworkFinding(builtin.Setting{Decision: builtin.Off}, call("git diff", types.OrchestrationProven))
+	assert.False(t, ok)
+	inferred, _ := groundworkFinding(advise, call("git diff", types.OrchestrationInferred))
+	search, _ := groundworkFinding(advise, call("rg x", types.OrchestrationInferred))
+	assert.NotEqual(t, inferred.key, search.key, "advised once per kind of work")
+}
+
+// Proof is the session's from its first bound spawn: its groundwork is refused from the
+// next call, its graph reads pass, and a subagent of the same session is never judged.
+func TestOrchestratorGroundworkAfterABoundSpawn(t *testing.T) {
+	ctx, _ := fleetFixture(t, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+	deps := levelDeps(t, types.GuardProfileLight)
+	at := hookLocation(ctx, deps)
+	hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
+	judge := func(line, agent string) types.GuardJudgment {
+		return Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "s", Agent: agent})
+	}
+
+	require.NotEqual(t, string(denyRuleOrchestratorGroundwork), judge("git diff", "").Rule, "no record yet")
+	require.NotEqual(t, decisionDeny, judgeSpawn(ctx, t, deps, "haiku").Decision)
+
+	v := judge("git show HEAD", "")
+	assert.Equal(t, decisionDeny, v.Decision)
+	assert.Equal(t, string(denyRuleOrchestratorGroundwork), v.Rule)
+	assert.NotEqual(t, string(denyRuleOrchestratorGroundwork), judge("./magus explain internal/guard", "").Rule)
+	assert.NotEqual(t, string(denyRuleOrchestratorGroundwork), judge("git show HEAD", "a1").Rule, "a subagent's diff is its job")
+}
+
+// A proven orchestrator's write inside a checkout is refused, but advised while the
+// checkout is midway through a cherry-pick; notes, a leased caller and a session with no
+// record are never judged.
+func TestGradeMainWrite(t *testing.T) {
+	t.Parallel()
+	deps := strictDeps(t)
+	who := hookAttribution{Host: "claude-code", Session: "s"}
+	grade := func(orchestrates types.Orchestration, path, lease string, prepare func(at location)) types.GuardJudgment {
+		at, _ := orchestratorFixture(t)
+		hostGate(at.cacheDir, who.Host).MarkFired(hostAgentsKind)
+		writeCostState(hint.NewGate(at.cacheDir, who.factsKey()), costState{Orchestrates: orchestrates})
+		if prepare != nil {
+			prepare(at)
+		}
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(at.workspace, path)
+		}
+		return gradeMainWrite(deps, types.GuardJudgment{Decision: decisionPass}, path, lease, who, at)
+	}
+
+	v := grade(types.OrchestrationProven, "internal/a.go", "", nil)
+	assert.Equal(t, decisionDeny, v.Decision)
+	assert.Equal(t, string(denyRuleOrchestratorGroundwork), v.Rule)
+
+	v = grade(types.OrchestrationProven, "internal/a.go", "", func(at location) {
+		require.NoError(t, os.WriteFile(filepath.Join(at.workspace, ".git", "CHERRY_PICK_HEAD"), []byte("abc\n"), 0o644))
+	})
+	assert.Equal(t, decisionAdvise, v.Decision, "resolving a conflict is integration")
+
+	assert.Equal(t, decisionAdvise, grade(types.OrchestrationInferred, "internal/a.go", "", nil).Decision)
+	assert.Equal(t, decisionPass, grade(types.OrchestrationProven, "AGENTS.md", "", nil).Decision)
+	assert.Equal(t, decisionPass, grade(types.OrchestrationProven, filepath.Join(t.TempDir(), "plan.md"), "", nil).Decision)
+	assert.Equal(t, decisionPass, grade(types.OrchestrationProven, "internal/a.go", "job-a", nil).Decision)
+	assert.Equal(t, decisionPass, grade("", "internal/a.go", "", nil).Decision)
 }
 
 // strictDeps is a workspace at the strict level with nothing else declared.
@@ -223,8 +341,8 @@ func strictDeps(t *testing.T) Dependencies {
 	return levelDeps(t, types.GuardProfileStrict)
 }
 
-// The cost rules judge the main thread only, refuse it only where its host named it, and
-// leave a subagent's calls alone.
+// The meters judge the main thread only, advise it at any level, and leave a subagent's
+// calls alone.
 func TestMainThreadCommandsAreJudgedByTheCostRules(t *testing.T) {
 	ctx, cache := spawnFixture(t)
 	deps := strictDeps(t)
@@ -241,9 +359,7 @@ func TestMainThreadCommandsAreJudgedByTheCostRules(t *testing.T) {
 	assert.NotEqual(t, decisionDeny, judge("a1").Decision, "a subagent's diff is its job")
 	assert.NotEqual(t, decisionDeny, judge("a1").Decision)
 
-	known := judge("")
-	assert.Equal(t, decisionDeny, known.Decision, "the host has now named a subagent")
-	assert.Equal(t, string(denyRuleRootHeavyCommand), known.Rule)
+	assert.NotEqual(t, decisionDeny, judge("").Decision, "the host has now named a subagent, and a strict meter still only advises")
 }
 
 // A spawn naming no model is refused at strict. A row forked with no model tier has no tier
@@ -334,7 +450,7 @@ func TestSpawnAboveModelTierAdvisesByRank(t *testing.T) {
 // misdeclaration on the main thread's commands; with no table there is nothing to bound it.
 func TestBudgetTokensPastEveryWindowIsRefused(t *testing.T) {
 	deps := strictDeps(t)
-	deps.Builtins[string(denyRuleRootContextBudget)] = builtin.Setting{Decision: builtin.Deny, Tokens: 2_000_000}
+	deps.Builtins[string(denyRuleRootContextBudget)] = builtin.Setting{Decision: builtin.Advise, Tokens: 2_000_000}
 	judge := func(rows bool) types.GuardJudgment {
 		ctx, cache := spawnFixture(t)
 		d := deps

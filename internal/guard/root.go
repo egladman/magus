@@ -2,11 +2,13 @@ package guard
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/guard/builtin"
@@ -16,52 +18,40 @@ import (
 
 // The cost rules judge the main thread of a session: the context every one of its calls
 // re-sends, and the work it does that a subagent could do from a far smaller context. A
-// level (magus\guard.profile) sets each rule's decision, and the figure it fires at comes
-// from the level and the account's billing unless the workspace states one.
+// session magus recorded handing its work out is judged by its role
+// (orchestrator-groundwork), at any size. The root-* meters only advise: a level
+// (magus\guard.profile) turns each on, and the figure it fires at comes from the level and
+// the account's billing unless the workspace states one.
 const (
-	denyRuleRootContextBudget   denyRuleName = "root-context-budget"
-	denyRuleRootHeavyCommand    denyRuleName = "root-heavy-command"
-	denyRuleRootResultCap       denyRuleName = "root-result-cap"
-	denyRuleRootRepeat          denyRuleName = "root-repeat"
-	denyRuleSpawnNamesModel     denyRuleName = "spawn-names-model"
-	denyRuleSpawnAboveModelTier denyRuleName = "spawn-above-model-tier"
+	denyRuleOrchestratorGroundwork denyRuleName = "orchestrator-groundwork"
+	denyRuleRootContextBudget      denyRuleName = "root-context-budget"
+	denyRuleRootHeavyCommand       denyRuleName = "root-heavy-command"
+	denyRuleRootResultCap          denyRuleName = "root-result-cap"
+	denyRuleRootRepeat             denyRuleName = "root-repeat"
+	denyRuleSpawnNamesModel        denyRuleName = "spawn-names-model"
+	denyRuleSpawnAboveModelTier    denyRuleName = "spawn-above-model-tier"
 )
 
-// ladder is where a rule starts to advise and where it starts to refuse; 0 is never.
-type ladder struct{ advise, deny int }
-
-// settingLadder is the ladder s sets: param alone at s's decision when the workspace
-// stated one, else the figures of the level s came from. A setting with no level reads
-// standard's figures to advise and strict's to refuse.
-func settingLadder(s builtin.Setting, param int, figures func(types.GuardProfile) ladder) ladder {
+// settingFigure is the figure s advises at: param when the workspace stated one, else the
+// figure of the level s came from, standard's for a setting with no level. 0 is never,
+// which every setting but advise is: the meters only advise.
+func settingFigure(s builtin.Setting, param int, figures func(types.GuardProfile) int) int {
 	switch {
-	case s.Decision != builtin.Advise && s.Decision != builtin.Deny:
-		return ladder{}
-	case param > 0 && s.Decision == builtin.Deny:
-		return ladder{deny: param}
+	case s.Decision != builtin.Advise:
+		return 0
 	case param > 0:
-		return ladder{advise: param}
+		return param
 	}
 	level := s.Profile
 	if level == "" || level == types.GuardProfileOff {
 		level = types.GuardProfileStandard
-		if s.Decision == builtin.Deny {
-			level = types.GuardProfileStrict
-		}
 	}
-	l := figures(level)
-	switch {
-	case s.Decision == builtin.Advise:
-		return ladder{advise: cmp.Or(l.advise, l.deny)}
-	case l.deny == 0:
-		return ladder{deny: l.advise}
-	}
-	return l
+	return figures(level)
 }
 
-// budgetFigures are root-context-budget's figures: half the window at light, and fixed
-// sizes above it, higher on a quota that resets than on a per-token bill.
-func budgetFigures(billing types.AgentBilling, window int64) func(types.GuardProfile) ladder {
+// budgetFigures are root-context-budget's sizes: half the window at light, and fixed sizes
+// above it, higher on a quota that resets than on a per-token bill.
+func budgetFigures(billing types.AgentBilling, window int64) func(types.GuardProfile) int {
 	by := func(metered, quota, unknown int) int {
 		switch billing {
 		case types.AgentBillingMetered:
@@ -71,41 +61,36 @@ func budgetFigures(billing types.AgentBilling, window int64) func(types.GuardPro
 		}
 		return unknown
 	}
-	return func(level types.GuardProfile) ladder {
+	return func(level types.GuardProfile) int {
 		switch level {
 		case types.GuardProfileLight:
-			return ladder{advise: int(window / 2)}
+			return int(window / 2)
 		case types.GuardProfileStandard:
-			return ladder{advise: by(250_000, 400_000, 300_000)}
+			return by(250_000, 400_000, 300_000)
 		case types.GuardProfileStrict:
-			return ladder{advise: by(150_000, 250_000, 200_000), deny: by(300_000, 450_000, 350_000)}
+			return by(150_000, 250_000, 200_000)
 		}
-		return ladder{}
+		return 0
 	}
 }
 
-func heavyFigures(level types.GuardProfile) ladder {
+func heavyFigures(level types.GuardProfile) int {
 	if level == types.GuardProfileStrict {
-		return ladder{advise: 5, deny: 8}
+		return 5
 	}
-	return ladder{advise: 8}
+	return 8
 }
 
-func repeatFigures(level types.GuardProfile) ladder {
-	if level == types.GuardProfileStrict {
-		return ladder{advise: 2, deny: 3}
-	}
-	return ladder{advise: 2}
-}
+func repeatFigures(types.GuardProfile) int { return 2 }
 
-func resultFigures(level types.GuardProfile) ladder {
+func resultFigures(level types.GuardProfile) int {
 	switch level {
 	case types.GuardProfileLight:
-		return ladder{advise: 40_000}
+		return 40_000
 	case types.GuardProfileStrict:
-		return ladder{advise: 10_000}
+		return 10_000
 	}
-	return ladder{advise: 20_000}
+	return 20_000
 }
 
 // mainCall is one main-thread call as the cost rules read it.
@@ -121,6 +106,11 @@ type mainCall struct {
 	// nothing the budget rules exist to keep out of the context.
 	free bool
 	line string
+	// orchestration is how surely the session hands its work out, "" with no evidence.
+	orchestration types.Orchestration
+	// work is the groundwork the call does as an orchestrator is judged for it, "" for
+	// orchestration work.
+	work types.DelegableClass
 }
 
 // costFinding is one cost rule matching a call: a refusal, or advice said once per
@@ -134,53 +124,37 @@ type costFinding struct {
 
 // mainFindings is every cost rule matching c, given what magus recorded about its thread.
 // It reads and spends nothing, so a level not in force can be asked the same question.
+//
+// orchestrator-groundwork judges a session by its role, and the meters only advise. The
+// streak and repeat meters nudge a session toward delegating, so one already orchestrating
+// skips them: its every repeat is groundwork, which the role rule judges.
 func mainFindings(setting func(string) builtin.Setting, st costState, c mainCall) []costFinding {
 	var out []costFinding
-	s := setting(string(denyRuleRootContextBudget))
-	if l := settingLadder(s, s.Tokens, budgetFigures(c.billing, c.window)); st.Tokens > 0 && !c.free {
-		switch {
-		case l.deny > 0 && st.Tokens >= int64(l.deny) && c.class != "":
-			out = append(out, costFinding{rule: denyRuleRootContextBudget, deny: true, key: hint.MarkerKind(denyRuleRootContextBudget),
-				say: fmt.Sprintf("magus workspace: this session's context is %s tokens, past the %s at which this workspace hands %s work to a subagent; spawn one and read its report.\n", kTokens(st.Tokens), kTokens(int64(l.deny)), c.class) +
-					"Every call re-sends the whole context, so work done here costs its size on each call after it, while a subagent starts small and returns only its findings."})
-		case l.advise > 0 && st.Tokens >= int64(l.advise):
-			out = append(out, costFinding{rule: denyRuleRootContextBudget, key: hint.MarkerKind(fmt.Sprintf("%s-%d", denyRuleRootContextBudget, l.advise)),
-				say: fmt.Sprintf("magus workspace: this session's context is %s tokens and every call re-sends all of it; hand searches, reads, diffs and runs to a subagent and keep its report.", kTokens(st.Tokens))})
-		}
+	if f, ok := groundworkFinding(setting(string(denyRuleOrchestratorGroundwork)), c); ok {
+		out = append(out, f)
 	}
-	if c.class != "" {
+	s := setting(string(denyRuleRootContextBudget))
+	if at := settingFigure(s, s.Tokens, budgetFigures(c.billing, c.window)); at > 0 && st.Tokens >= int64(at) && !c.free {
+		out = append(out, costFinding{rule: denyRuleRootContextBudget, key: hint.MarkerKind(fmt.Sprintf("%s-%d", denyRuleRootContextBudget, at)),
+			say: fmt.Sprintf("magus workspace: this session's context is %s tokens and every call re-sends all of it; fork a job (`magus job fork`) for the searches, reads, diffs and runs, spawn a worker on it, and keep its report.", kTokens(st.Tokens))})
+	}
+	if c.class != "" && c.orchestration == "" {
 		s = setting(string(denyRuleRootHeavyCommand))
-		n := st.Streak + 1
-		switch l := settingLadder(s, s.Calls, heavyFigures); {
-		case l.deny > 0 && n >= l.deny:
-			out = append(out, costFinding{rule: denyRuleRootHeavyCommand, deny: true, key: hint.MarkerKind(denyRuleRootHeavyCommand),
-				say: fmt.Sprintf("magus workspace: this is the session's %s delegable call since it last spawned a subagent; spawn one for this %s work and read its report.\n", ordinal(n), c.class) +
-					"Each result lands in the context every later call re-sends; a subagent pays for it once, from a small context."})
-		case l.advise > 0 && n >= l.advise:
+		if at, n := settingFigure(s, s.Calls, heavyFigures), st.Streak+1; at > 0 && n >= at {
 			out = append(out, costFinding{rule: denyRuleRootHeavyCommand, key: hint.MarkerKind(denyRuleRootHeavyCommand),
 				say: fmt.Sprintf("magus workspace: %d searches, reads, diffs or runs in a row since the last spawn; a subagent does this work from a small context and returns only what matters.", n)})
 		}
 		s = setting(string(denyRuleRootRepeat))
-		n = st.Repeats[lineDigest(c.line)] + 1
-		switch l := settingLadder(s, s.Calls, repeatFigures); {
-		case l.deny > 0 && n >= l.deny:
-			out = append(out, costFinding{rule: denyRuleRootRepeat, deny: true, key: hint.MarkerKind(denyRuleRootRepeat),
-				say: fmt.Sprintf("magus workspace: this session already ran this exact command %d times with no write since; its output is in the context already.\n", n-1) +
-					"Read the earlier result, or spawn a subagent to watch for a change."})
-		case l.advise > 0 && n >= l.advise:
+		if at, n := settingFigure(s, s.Calls, repeatFigures), st.Repeats[lineDigest(c.line)]+1; at > 0 && n >= at {
 			out = append(out, costFinding{rule: denyRuleRootRepeat, key: hint.MarkerKind(denyRuleRootRepeat),
 				say: "magus workspace: this session ran this exact command before with no write since, and its output is still in the context."})
 		}
 	}
 	s = setting(string(denyRuleRootResultCap))
-	l := settingLadder(s, s.Chars, resultFigures)
-	if l.advise == 0 {
-		l.advise = l.deny
-	}
-	if l.advise > 0 {
+	if at := settingFigure(s, s.Chars, resultFigures); at > 0 {
 		for _, tool := range slices.Sorted(maps.Keys(st.Results)) {
 			chars := st.Results[tool]
-			if chars < l.advise {
+			if chars < at {
 				continue
 			}
 			key := hint.MarkerKind(denyRuleRootResultCap)
@@ -194,22 +168,35 @@ func mainFindings(setting func(string) builtin.Setting, st costState, c mainCall
 	return out
 }
 
+// groundworkWork names each groundwork class as orchestrator-groundwork says it.
+var groundworkWork = map[types.DelegableClass]string{
+	types.DelegableSearch: "a search",
+	types.DelegableRead:   "a read of a file in the checkout",
+	types.DelegableDiff:   "a diff read",
+	types.DelegableRun:    "a run",
+	types.DelegableFetch:  "a fetch",
+	types.DelegableEdit:   "an edit in the checkout",
+}
+
+// groundworkFinding is orchestrator-groundwork's finding on c: groundwork by a session
+// with a record of handing its work out. Proof under a deny setting refuses; an inferred
+// record, or an advise setting, advises once per class. A session with no record is never
+// judged, at any context size or level.
+func groundworkFinding(s builtin.Setting, c mainCall) (costFinding, bool) {
+	if c.work == "" || c.orchestration == "" || (s.Decision != builtin.Advise && s.Decision != builtin.Deny) {
+		return costFinding{}, false
+	}
+	return costFinding{
+		rule: denyRuleOrchestratorGroundwork,
+		deny: s.Decision == builtin.Deny && c.orchestration == types.OrchestrationProven,
+		key:  hint.MarkerKind(fmt.Sprintf("%s-%s", denyRuleOrchestratorGroundwork, c.work)),
+		say: fmt.Sprintf("magus workspace: this session hands out work, and %s is groundwork; fork a job for it (a read-only scout for a question) and spawn a worker on it.\n", cmp.Or(groundworkWork[c.work], string(c.work))) +
+			"The session that orchestrates plans from the graph, moves jobs and integrates; reading and searching source, editing it and running checks belong to the workers it spawns, at any context size.",
+	}, true
+}
+
 // kTokens renders a token count in thousands.
 func kTokens(n int64) string { return fmt.Sprintf("%dk", n/1000) }
-
-func ordinal(n int) string {
-	switch {
-	case n%100 >= 11 && n%100 <= 13:
-		return fmt.Sprintf("%dth", n)
-	case n%10 == 1:
-		return fmt.Sprintf("%dst", n)
-	case n%10 == 2:
-		return fmt.Sprintf("%dnd", n)
-	case n%10 == 3:
-		return fmt.Sprintf("%drd", n)
-	}
-	return fmt.Sprintf("%dth", n)
-}
 
 // applyFindings puts findings on verdict: the first refusal replaces it when the host
 // reported the thread, and every other finding advises once per session, appended to
@@ -246,11 +233,10 @@ func (d Dependencies) settingOf(rule string) builtin.Setting {
 
 // gradeMainCommand judges a shell command of a session's unleased main thread by the cost
 // rules. A served next is magus's own suggestion and is left alone.
-func gradeMainCommand(deps Dependencies, verdict types.GuardJudgment, in commandRuleInput, who hookAttribution, at location) types.GuardJudgment {
+func gradeMainCommand(ctx context.Context, deps Dependencies, verdict types.GuardJudgment, in commandRuleInput, who hookAttribution, at location) types.GuardJudgment {
 	if verdict.Decision == decisionDeny || in.preauth != "" || in.lease != "" || at.cacheDir == "" {
 		return verdict
 	}
-	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	thread, from := callerThread(at.cacheDir, who, in.lease)
 	if thread != types.AgentThreadMain {
 		return verdict
@@ -259,9 +245,37 @@ func gradeMainCommand(deps Dependencies, verdict types.GuardJudgment, in command
 	if f, misdeclared := budgetPastEveryWindow(deps.settingOf(string(denyRuleRootContextBudget)), at.modelTable); misdeclared {
 		return applyFindings(gate, verdict, []costFinding{f}, from)
 	}
-	st := readCostState(facts)
-	call := mainCall{from: from, billing: accountAt(at.workspace).billing, window: contextWindow(st, at), class: delegableClass(in.command), free: costFree(in.command), line: in.command}
+	st := sessionCostState(at, who, liveRowLookup(ctx, at), time.Now())
+	call := mainCall{from: from, billing: accountAt(at.workspace).billing, window: contextWindow(st, at), class: delegableClass(in.command), free: costFree(in.command), line: in.command,
+		orchestration: orchestration(st, from)}
+	if call.orchestration != "" {
+		call.work = mainWork(ctx, at, st, in.command)
+	}
 	return applyFindings(gate, verdict, mainFindings(deps.settingOf, st, call), from)
+}
+
+// gradeMainWrite judges a write by a session's unleased main thread inside a checkout of
+// the workspace's repository by orchestrator-groundwork. A write while the checkout is
+// midway through a merge or a cherry-pick may resolve a conflict, which is integration, so
+// it is advised and never refused there. A notes path is never judged.
+func gradeMainWrite(deps Dependencies, verdict types.GuardJudgment, path string, lease string, who hookAttribution, at location) types.GuardJudgment {
+	if verdict.Decision == decisionDeny || lease != "" || at.cacheDir == "" || notesPath(path, at) {
+		return verdict
+	}
+	thread, from := callerThread(at.cacheDir, who, lease)
+	if thread != types.AgentThreadMain {
+		return verdict
+	}
+	st := sessionCostState(at, who, nil, time.Now())
+	f, ok := groundworkFinding(deps.settingOf(string(denyRuleOrchestratorGroundwork)),
+		mainCall{from: from, line: path, orchestration: orchestration(st, from), work: types.DelegableEdit})
+	if !ok {
+		return verdict
+	}
+	if f.deny && integrating(path, at) {
+		f.deny = false
+	}
+	return applyFindings(hint.NewGate(at.cacheDir, who.callerKey()), verdict, []costFinding{f}, from)
 }
 
 // budgetPastEveryWindow is the refusal of a root-context-budget tokens figure above the

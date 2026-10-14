@@ -48,16 +48,17 @@ type Setting struct {
 }
 
 const (
-	compatMarker        = "compat-marker"
-	modelTierContextCap = "model-tier-context-cap"
-	readNavigation      = "read-navigation"
-	rootContextBudget   = "root-context-budget"
-	rootHeavyCommand    = "root-heavy-command"
-	rootResultCap       = "root-result-cap"
-	rootRepeat          = "root-repeat"
-	spawnNamesModel     = "spawn-names-model"
-	spawnAboveModelTier = "spawn-above-model-tier"
-	stall               = "stall"
+	compatMarker           = "compat-marker"
+	modelTierContextCap    = "model-tier-context-cap"
+	orchestratorGroundwork = "orchestrator-groundwork"
+	readNavigation         = "read-navigation"
+	rootContextBudget      = "root-context-budget"
+	rootHeavyCommand       = "root-heavy-command"
+	rootResultCap          = "root-result-cap"
+	rootRepeat             = "root-repeat"
+	spawnNamesModel        = "spawn-names-model"
+	spawnAboveModelTier    = "spawn-above-model-tier"
+	stall                  = "stall"
 )
 
 // paramSpec is one numeric parameter: its name as magus\guard.builtins spells it, the
@@ -105,6 +106,9 @@ var params = map[string][]string{
 // misdeclaration rather than a refusal nobody would see.
 var neverDeny = map[string]string{
 	compatMarker:        "whether code stays for an old caller is the root's call, and refusing the write would not ask it",
+	rootContextBudget:   "size only tunes advice; refusing a session's groundwork is orchestrator-groundwork's, by its role",
+	rootHeavyCommand:    "it nudges a session that has handed out no work; refusing an orchestrator's groundwork is orchestrator-groundwork's",
+	rootRepeat:          "a repeat is advice to a session that has handed out no work; an orchestrator's repeat is groundwork, which orchestrator-groundwork refuses",
 	rootResultCap:       "it reads a result the call already returned",
 	spawnAboveModelTier: "work can outgrow the tier its row was forked at, and only the root can tell when it has",
 	stall:               "it routes a block to the root and refuses nothing itself",
@@ -131,10 +135,10 @@ var profiles = map[types.GuardProfile]map[string]Setting{
 		stall:               {Decision: Advise},
 	},
 	types.GuardProfileStrict: {
-		rootContextBudget:   {Decision: Deny},
-		rootHeavyCommand:    {Decision: Deny},
+		rootContextBudget:   {Decision: Advise},
+		rootHeavyCommand:    {Decision: Advise},
 		rootResultCap:       {Decision: Advise},
-		rootRepeat:          {Decision: Deny},
+		rootRepeat:          {Decision: Advise},
 		spawnNamesModel:     {Decision: Deny},
 		spawnAboveModelTier: {Decision: Advise},
 		stall:               {Decision: Advise},
@@ -252,6 +256,11 @@ var defaults = map[string]Decision{
 	"stage-classify":      Advise,
 	"timed-magus":         Advise,
 	"unleased-write":      Advise,
+
+	// A session's role, not its size or level, decides whether its groundwork is refused,
+	// so no level names this rule and the off level leaves it on. It judges only a session
+	// magus recorded handing out work: proof refuses, an inference advises.
+	orchestratorGroundwork: Deny,
 
 	// The cost rules and the stall rule are off until a level turns them on, and the
 	// level a workspace gets when it declares none is light.

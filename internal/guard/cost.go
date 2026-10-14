@@ -2,6 +2,7 @@ package guard
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -10,9 +11,15 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
+
+	"mvdan.cc/sh/v3/syntax"
+
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/ast"
 
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/config"
@@ -189,6 +196,22 @@ type costState struct {
 	// Pending maps a tool call the transcript shows started to its tool and delegable
 	// class, until its result arrives.
 	Pending map[string]pendingCall `json:"pending,omitempty"`
+	// Orchestrates is how surely the thread hands its work to workers. It only rises, so
+	// it lasts the session.
+	Orchestrates types.Orchestration `json:"orchestrates,omitempty"`
+	// Forks maps each job id the thread ran a fork of to when that call was judged, in
+	// unix nanoseconds, until the store shows the row or forkConfirmWindow passes.
+	Forks map[string]int64 `json:"forks,omitempty"`
+	// Forked are the ids the store confirmed the thread forked: the rows whose check it
+	// may run itself.
+	Forked []string `json:"forked,omitempty"`
+}
+
+// raise lifts Orchestrates to o when o is the surer of the two.
+func (st *costState) raise(o types.Orchestration) {
+	if slices.Index(o.Values(), string(o)) > slices.Index(o.Values(), string(st.Orchestrates)) {
+		st.Orchestrates = o
+	}
 }
 
 type pendingCall struct {
@@ -631,9 +654,22 @@ func observeCall(ctx context.Context, at location, input string, who hookAttribu
 	ran := verdict.Decision == decisionPass || verdict.Decision == decisionAdvise
 	var results []toolResult
 	if thread == types.AgentThreadMain && lease == "" {
-		st := readCostState(facts)
-		out.Shadow = shadowVerdicts(st, mainCall{from: from, billing: out.Billing, window: contextWindow(st, at), class: out.DelegableClass, free: free, line: input})
+		now := time.Now()
+		st := sessionCostState(at, who, liveRowLookup(ctx, at), now)
+		out.Orchestration = orchestration(st, from)
+		call := mainCall{from: from, billing: out.Billing, window: contextWindow(st, at), class: out.DelegableClass, free: free, line: input, orchestration: out.Orchestration}
+		switch {
+		case out.Orchestration == "":
+		case tool == hookToolCommand:
+			call.work = mainWork(ctx, at, st, input)
+		case tool == hookToolWrite && !notesPath(input, at):
+			call.work = types.DelegableEdit
+		}
+		out.Shadow = shadowVerdicts(st, call)
 		results = st.readTranscript(who.Transcript)
+		if ran && tool == hookToolCommand {
+			noteFork(&st, input, now)
+		}
 		switch {
 		case ran && tool == hookToolCommand && out.DelegableClass != "":
 			st.Streak++
@@ -684,8 +720,10 @@ func recordAgentCalls(ctx context.Context, f types.AgentFacts, results []toolRes
 	}
 }
 
-// noteMainSpawn restarts the main thread's streak of delegable calls: it handed work out.
-func noteMainSpawn(at location, who hookAttribution, lease string) {
+// noteMainSpawn restarts the main thread's streak of delegable calls, since it handed work
+// out, and records that as orchestration: proven when the spawn's title bound it to a live
+// job row, inferred otherwise.
+func noteMainSpawn(at location, who hookAttribution, lease string, bound bool) {
 	if lease != "" || at.cacheDir == "" {
 		return
 	}
@@ -694,11 +732,377 @@ func noteMainSpawn(at location, who hookAttribution, lease string) {
 		return
 	}
 	st := readCostState(facts)
-	if st.Streak == 0 {
+	streak, was := st.Streak, st.Orchestrates
+	st.Streak = 0
+	if bound {
+		st.raise(types.OrchestrationProven)
+	} else {
+		st.raise(types.OrchestrationInferred)
+	}
+	if streak == 0 && st.Orchestrates == was {
 		return
 	}
-	st.Streak = 0
 	writeCostState(facts, st)
+}
+
+// orchestration is how surely the thread st records hands its work to workers. Proof
+// counts only on a main thread its host reported: where root and worker look alike, the
+// same record is inferred, and a rule reading it only advises.
+func orchestration(st costState, from types.ThreadSource) types.Orchestration {
+	switch {
+	case st.Orchestrates == types.OrchestrationProven && from == types.ThreadReported:
+		return types.OrchestrationProven
+	case st.Orchestrates != "":
+		return types.OrchestrationInferred
+	}
+	return ""
+}
+
+// sessionCostState is who's main-thread record as of now: each fork the store has shown
+// since confirmed, and a loaded multi-agent skill counted as inferred orchestration. A nil
+// live confirms nothing. It writes nothing; observeCall files what it returns.
+func sessionCostState(at location, who hookAttribution, live func(id string) (types.Job, bool), now time.Time) costState {
+	st := readCostState(hint.NewGate(at.cacheDir, who.factsKey()))
+	if live != nil && len(st.Forks) > 0 {
+		confirmForks(&st, live, now)
+	}
+	if skillLoaded(hint.NewGate(at.cacheDir, who.skillsKey()), multiAgentSkill) {
+		st.raise(types.OrchestrationInferred)
+	}
+	return st
+}
+
+// callerOrchestration is orchestration for a rule request's caller, "" for any caller but
+// an unleased main thread.
+func callerOrchestration(at location, who hookAttribution, thread types.AgentThread, from types.ThreadSource, lease string) types.Orchestration {
+	if thread != types.AgentThreadMain || lease != "" || at.cacheDir == "" {
+		return ""
+	}
+	return orchestration(sessionCostState(at, who, nil, time.Now()), from)
+}
+
+// forkConfirmWindow is how long a fork the thread ran waits for the store to show its row.
+// A fork the store never shows, refused or failed, proves nothing.
+const forkConfirmWindow = 10 * time.Minute
+
+// noteFork files in st.Forks each job id line forks, at now: a `magus job fork`, a
+// magus\job.put rendered from an MCP call, and either one inside a `magus buzz` script the
+// line carries.
+func noteFork(st *costState, line string, now time.Time) {
+	for _, id := range forkedIDs(line) {
+		if id == "" || id == unreadValue {
+			continue
+		}
+		if st.Forks == nil {
+			st.Forks = map[string]int64{}
+		}
+		st.Forks[id] = now.UnixNano()
+	}
+}
+
+func forkedIDs(line string) []string {
+	f, err := parseFile(line, DialectBash)
+	if err != nil {
+		return nil
+	}
+	var ids []string
+	syntax.Walk(f, func(n syntax.Node) bool {
+		s, ok := n.(*syntax.Stmt)
+		if !ok {
+			return true
+		}
+		for _, c := range stmtCommands(s, DialectBash) {
+			switch {
+			case c.Name == hint.ToolClient.String():
+				if p := mcpParams(c.Args); p["op"] == jobOpPut {
+					ids = append(ids, strings.TrimSpace(p["id"]))
+				}
+			case !isMagusInvocation(c):
+			case hint.JobFork.MatchedBy(magusSubcommandWords(c.Args)):
+				ids = append(ids, cliFork(c.Args, stdinRecord(s)).id)
+			default:
+				if script, ok := inlineBuzz(c.Args, stdinRecord(s)); ok {
+					if lines, ok := clientScriptLines(script); ok {
+						ids = append(ids, forkedIDs(strings.Join(lines, "\n"))...)
+					}
+				}
+			}
+		}
+		return true
+	})
+	return ids
+}
+
+// confirmForks moves to st.Forked each fork the store now shows live, created no earlier
+// than the call that ran it, and raises st to proven for it. A fork older than
+// forkConfirmWindow that the store never showed is dropped.
+func confirmForks(st *costState, live func(id string) (types.Job, bool), now time.Time) {
+	for id, judged := range st.Forks {
+		at := time.Unix(0, judged)
+		if row, ok := live(id); ok && row.Created >= at.Unix() {
+			st.raise(types.OrchestrationProven)
+			if !slices.Contains(st.Forked, id) {
+				st.Forked = append(st.Forked, id)
+			}
+			delete(st.Forks, id)
+			continue
+		}
+		if now.Sub(at) > forkConfirmWindow {
+			delete(st.Forks, id)
+		}
+	}
+	if len(st.Forks) == 0 {
+		st.Forks = nil
+	}
+}
+
+// liveRowLookup finds a live row in the job store, read once however many ids it is asked
+// for. An unreadable store finds none.
+func liveRowLookup(ctx context.Context, at location) func(id string) (types.Job, bool) {
+	rows := sync.OnceValue(func() []types.Job {
+		rows, err := leaseRows(ctx, at)
+		if err != nil {
+			return nil
+		}
+		return rows
+	})
+	return func(id string) (types.Job, bool) {
+		for _, row := range rows() {
+			if row.ID == id && row.State.Live() {
+				return row, true
+			}
+		}
+		return types.Job{}, false
+	}
+}
+
+// rootWorkClass is the groundwork a shell line does, judged for a session that hands its
+// work out, "" for orchestration work: moving jobs, planning from the graph, integrating,
+// reading a guard verdict, the notes. Unlike delegableClass, a silent run is still a run,
+// and Markdown inside a checkout is still a read; only the instruction files are notes.
+// The checks of the rows a thread forked are mainWork's to clear.
+func rootWorkClass(line string, at location) types.DelegableClass {
+	f, err := parseFile(line, DialectBash)
+	if err != nil {
+		return ""
+	}
+	var class types.DelegableClass
+	syntax.Walk(f, func(n syntax.Node) bool {
+		if class != "" {
+			return false
+		}
+		s, ok := n.(*syntax.Stmt)
+		if !ok {
+			return true
+		}
+		for _, c := range stmtCommands(s, DialectBash) {
+			if class = invocationWork(c, stdinRecord(s), at); class != "" {
+				return false
+			}
+		}
+		return true
+	})
+	return class
+}
+
+func invocationWork(c hint.Invocation, stdin string, at location) types.DelegableClass {
+	if isCdInvocation(c) {
+		return ""
+	}
+	if reads := parseReadCalls(c); len(reads) > 0 {
+		for _, rc := range reads {
+			if !notesPath(rc.path, at) {
+				return types.DelegableRead
+			}
+		}
+		return ""
+	}
+	if !isMagusInvocation(c) {
+		return invocationClass(c)
+	}
+	words := magusSubcommandWords(c.Args)
+	if len(words) == 0 {
+		return ""
+	}
+	switch words[0] {
+	case "run", "affected":
+		if r, ok := parseTargetRun(c); ok && !isGateCommand(c.Args) && !integrationTarget(r.target) {
+			return types.DelegableRun
+		}
+	case "buzz":
+		if script, ok := inlineBuzz(c.Args, stdin); ok && !drivesOnlyJobs(script) {
+			return types.DelegableRun
+		}
+	case "query":
+		if hint.QueryOutput.MatchedBy(words) && !magusFlag(c.Args, "identity") &&
+			(len(words) < 3 || !strings.HasPrefix(words[2], verdictRefPrefix)) {
+			return types.DelegableRead
+		}
+	case "diff":
+		if !magusFlag(c.Args, "impact") {
+			return types.DelegableDiff
+		}
+	}
+	return ""
+}
+
+// integrationTarget reports a target an orchestrator runs to integrate its workers' work:
+// the build of ./magus, and regeneration.
+func integrationTarget(target string) bool {
+	if i := strings.LastIndex(target, "::"); i >= 0 {
+		target = target[i+2:]
+	}
+	t, err := types.ParseTarget(target)
+	if err != nil {
+		return false
+	}
+	return t.Name == "go-build" || t.Name == "generate" || strings.HasSuffix(t.Name, "-generate")
+}
+
+// drivesOnlyJobs reports a Buzz script whose every reach outside itself is magus\job: it
+// imports magus alone and names no other member of it. A script that does not parse
+// reaches anything.
+func drivesOnlyJobs(script string) bool {
+	prog, err := buzz.ParseEmbedded(script)
+	if err != nil || prog == nil {
+		return false
+	}
+	bound := map[string]bool{}
+	for _, stmt := range prog.Stmts {
+		imp, ok := stmt.(*ast.ImportStmt)
+		if !ok {
+			continue
+		}
+		switch {
+		case imp.Path != "magus" || imp.Alias == "_":
+			return false
+		case len(imp.Only) > 0:
+			if slices.ContainsFunc(imp.Only, func(n string) bool { return n != "job" }) {
+				return false
+			}
+		default:
+			bound[cmp.Or(imp.Alias, "magus")] = true
+		}
+	}
+	only := true
+	for _, stmt := range prog.Stmts {
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			m, ok := n.(*ast.MemberExpr)
+			if !ok {
+				return only
+			}
+			if id, ok := m.Object.(*ast.IdentExpr); ok && m.Namespaced && bound[id.Name] && m.Name != "job" {
+				only = false
+			}
+			return only
+		})
+	}
+	return only
+}
+
+// mainWork is rootWorkClass for line, less what an orchestrator owes the rows it forked:
+// running the check of a live row this thread forked, and reading any row's recorded check
+// output. The store is read only for a line that could be one of those.
+func mainWork(ctx context.Context, at location, st costState, line string) types.DelegableClass {
+	class := rootWorkClass(line, at)
+	if class != types.DelegableRun && class != types.DelegableRead {
+		return class
+	}
+	cmds, ok := ParseCommands(line)
+	if !ok {
+		return class
+	}
+	cmds = slices.DeleteFunc(cmds, isCdInvocation)
+	if len(cmds) != 1 || !isMagusInvocation(cmds[0]) {
+		return class
+	}
+	rows, err := leaseRows(ctx, at)
+	if err != nil {
+		return class
+	}
+	if r, ok := parseTargetRun(cmds[0]); ok {
+		for _, row := range rows {
+			if row.State.Live() && slices.Contains(st.Forked, row.ID) && runsCheck(row.Check, r) {
+				return ""
+			}
+		}
+		return class
+	}
+	if words := magusSubcommandWords(cmds[0].Args); hint.QueryOutput.MatchedBy(words) && len(words) > 2 {
+		for _, row := range rows {
+			if row.Result != nil && row.Result.Validation.OutputRef == words[2] {
+				return ""
+			}
+		}
+	}
+	return class
+}
+
+// runsCheck reports a run of check's target in check's project, "." when it names none.
+func runsCheck(check *types.LeaseCheck, r targetRun) bool {
+	if check == nil || check.Target == "" || r.verb != "run" || r.target != check.Target {
+		return false
+	}
+	project := cmp.Or(check.Project, ".")
+	return slices.Equal(r.projects, []string{project}) || (len(r.projects) == 0 && project == ".")
+}
+
+// instructionFiles are the files an orchestrator reads to orient, by base name, wherever
+// they sit.
+var instructionFiles = []string{"AGENTS.md", "MAGUS.md", "CLAUDE.md", "SKILL.md"}
+
+// notesPath reports a path an orchestrator reads or writes as notes rather than as work: an
+// instruction file, or anything outside every checkout of the workspace's repository (a
+// plan, a memory, a scratch file). A relative path is the call's. A workspace in no git
+// repository has one checkout, itself.
+func notesPath(p string, at location) bool {
+	if slices.Contains(instructionFiles, filepath.Base(p)) {
+		return true
+	}
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(cmp.Or(at.dir, at.workspace), p)
+	}
+	if at.workspace == "" {
+		return true
+	}
+	_, common, ok := gitCheckout(at.workspace)
+	if !ok {
+		return !within(p, at.workspace)
+	}
+	// realPath, so a file in a directory not created yet resolves its symlinks through the
+	// nearest one that exists, as the workspace's did.
+	_, pathCommon, ok := gitCheckout(realPath(filepath.Dir(p)))
+	return !ok || pathCommon != common
+}
+
+// integrating reports a checkout, the one holding p, that is midway through a merge or a
+// cherry-pick: an edit there may be the resolution of a conflict.
+func integrating(p string, at location) bool {
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(cmp.Or(at.dir, at.workspace), p)
+	}
+	root, _, ok := gitCheckout(realPath(filepath.Dir(p)))
+	if !ok {
+		return false
+	}
+	gitDir := filepath.Join(root, ".git")
+	if info, err := os.Stat(gitDir); err == nil && !info.IsDir() {
+		data, err := os.ReadFile(gitDir)
+		if err != nil {
+			return false
+		}
+		dir, ok := strings.CutPrefix(strings.TrimSpace(string(data)), "gitdir:")
+		if !ok {
+			return false
+		}
+		gitDir = resolveFrom(root, strings.TrimSpace(dir))
+	}
+	for _, head := range []string{"MERGE_HEAD", "CHERRY_PICK_HEAD"} {
+		if _, err := os.Stat(filepath.Join(gitDir, head)); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // contextWindow is the main thread's window: the host's, else the model table's, else 0.

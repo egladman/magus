@@ -10,7 +10,7 @@ import (
 
 func TestDefaults(t *testing.T) {
 	got := Defaults()
-	assert.Len(t, got, 110)
+	assert.Len(t, got, 111)
 	assert.NotContains(t, got, "stdin-closed")
 	assert.NotContains(t, got, "spawn-principal-for-economy")
 	want := map[string]Decision{
@@ -36,6 +36,8 @@ func TestDefaults(t *testing.T) {
 		"spawn-duplicate":      Deny,
 		"background-left":      Deny,
 		"background-unbounded": Deny,
+
+		"orchestrator-groundwork": Deny,
 
 		"root-context-budget":    Off,
 		"root-heavy-command":     Off,
@@ -261,7 +263,7 @@ func TestResolveChecksEachParameter(t *testing.T) {
 			`built-in rule "stage-all" takes no tokens parameter; only root-context-budget does`},
 		{"tokens below 1", rootContextBudget, Setting{Decision: Advise, Tokens: -1},
 			`built-in rule "root-context-budget": tokens is -1; give 1 or more, or leave it out`},
-		{"calls below 2", rootHeavyCommand, Setting{Decision: Deny, Calls: 1},
+		{"calls below 2", rootHeavyCommand, Setting{Decision: Advise, Calls: 1},
 			`built-in rule "root-heavy-command": calls is 1; give 2 or more, or leave it out`},
 		{"chars below 1000", rootResultCap, Setting{Decision: Advise, Chars: 999},
 			`built-in rule "root-result-cap": chars is 999; give 1000 or more, or leave it out`},
@@ -276,8 +278,8 @@ func TestResolveChecksEachParameter(t *testing.T) {
 	}
 
 	ok := map[string]Setting{
-		rootContextBudget: {Decision: Deny, Tokens: 1_000_000},
-		rootHeavyCommand:  {Decision: Deny, Calls: 2},
+		rootContextBudget: {Decision: Advise, Tokens: 1_000_000},
+		rootHeavyCommand:  {Decision: Advise, Calls: 2},
 		rootResultCap:     {Decision: Advise, Chars: 1000},
 	}
 	got, err := Resolve(ok)
@@ -330,7 +332,7 @@ func TestResolveNamesEveryTakerOfAParameter(t *testing.T) {
 
 // A rule that only ever explains cannot be declared to refuse.
 func TestResolveRefusesADenyOnARuleThatNeverDenies(t *testing.T) {
-	for _, name := range []string{"compat-marker", "root-result-cap", "spawn-above-model-tier", "stall"} {
+	for _, name := range []string{"compat-marker", "root-context-budget", "root-heavy-command", "root-repeat", "root-result-cap", "spawn-above-model-tier", "stall"} {
 		_, err := Resolve(map[string]Setting{name: {Decision: Deny}})
 		var de *types.DiagnosticError
 		require.ErrorAs(t, err, &de, name)
@@ -350,7 +352,9 @@ func TestVerdicts(t *testing.T) {
 	assert.Equal(t, adviseOnly, Verdicts("guard-unfinished"), "a fixed rule")
 	assert.Equal(t, both, Verdicts("stage-all"), "an advisory a workspace may raise")
 	assert.Equal(t, both, Verdicts("lease-write"), "a deny rule")
-	assert.Equal(t, both, Verdicts("root-repeat"), "an off rule a level raises to deny")
+	assert.Equal(t, adviseOnly, Verdicts("root-repeat"), "a meter only advises")
+	assert.Equal(t, both, Verdicts("spawn-names-model"), "an off rule a level raises to deny")
+	assert.Equal(t, both, Verdicts("orchestrator-groundwork"), "a rule no level names")
 }
 
 // At one decision each threshold takes the lower of the two, and an unset one yields:
@@ -400,7 +404,7 @@ func TestResolveProfileExpandsThenDeclared(t *testing.T) {
 	require.NoError(t, err)
 	got, err := Resolve(expanded)
 	require.NoError(t, err)
-	assert.Equal(t, Setting{Decision: Deny, Profile: types.GuardProfileStrict}, got[rootContextBudget], "a level stamps its rows")
+	assert.Equal(t, Setting{Decision: Advise, Profile: types.GuardProfileStrict}, got[rootContextBudget], "a level stamps its rows")
 	assert.Equal(t, Setting{Decision: Off}, got[rootRepeat], "the declaration overrides the profile")
 	assert.Equal(t, Setting{Decision: Advise}, got["raw-tool"], "a rule neither names keeps its default")
 	assert.Len(t, declared, 1, "ResolveProfile leaves declared alone")

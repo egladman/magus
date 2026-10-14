@@ -113,9 +113,12 @@ export final BUILTINS: {str: any} = {
 // transcripts 2026-10-01 to 2026-10-13, 26 root sessions and 569 subagents:
 //   root-context-budget: 9 of 26 roots reached about 960k tokens; the median peak was
 //     615k and a first call started at 79k, so strict's 200k advice is about twice the
-//     baseline and its 350k refusal half the median peak.
+//     baseline. The 350k refusal it carried is gone: a root that forked a row or spawned
+//     on one is refused its groundwork by orchestrator-groundwork at any size, and size
+//     only tunes the advice to a root with no record of handing work out.
 //   root-heavy-command: 105 streaks of 8 or more delegable root calls ran without a
-//     spawn; those classes were 63% of the root's tool-result characters.
+//     spawn; those classes were 63% of the root's tool-result characters. It now only
+//     advises, and only a root that has handed nothing out.
 //   spawn-above-model-tier: 164 Opus spawns carried a scout, read-only or research
 //     prompt, work a job row would fork at economy.
 //   stall: 3.0 to 5.1 runs of three or more failed calls per 1,000 calls on every model
