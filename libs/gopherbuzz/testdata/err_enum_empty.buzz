@@ -1,0 +1,4 @@
+// @error: must have at least one case
+// Upstream E20 (Parser.zig): "Enum must have at least one case."
+enum Nothing {}
+final __r = 0;
