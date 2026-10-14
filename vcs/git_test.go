@@ -3988,3 +3988,32 @@ func TestRegionsConfigFollowsDiffDriverPatterns(t *testing.T) {
 	r.Git("config", "diff.custom.funcname", "^sub ")
 	assert.NotEqual(t, xfuncname, read())
 }
+
+// RegionsConfig moves with the attribute files outside the tree that pick a file's diff
+// driver: the repository's info/attributes and core.attributesFile.
+func TestRegionsConfigFollowsAttributeFilesOutsideTheTree(t *testing.T) {
+	t.Parallel()
+
+	r := testkit.NewRepo(t, map[string]string{"a.go": "package a\n"})
+	ctx := t.Context()
+	read := func() string {
+		got, err := gitVCS{}.RegionsConfig(ctx, r.Root())
+		require.NoError(t, err)
+		return got
+	}
+
+	global := filepath.Join(t.TempDir(), "attributes")
+	r.Git("config", "core.attributesFile", global)
+	before := read()
+
+	require.NoError(t, os.MkdirAll(filepath.Join(r.Root(), ".git", "info"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(r.Root(), ".git", "info", "attributes"), []byte("*.go diff=golang\n"), 0o644))
+	local := read()
+	assert.NotEqual(t, before, local, "info/attributes")
+
+	require.NoError(t, os.WriteFile(global, []byte("*.go diff=golang\n"), 0o644))
+	written := read()
+	assert.NotEqual(t, local, written, "core.attributesFile")
+	require.NoError(t, os.WriteFile(global, []byte("*.go -diff\n"), 0o644))
+	assert.NotEqual(t, written, read(), "an edit to core.attributesFile")
+}

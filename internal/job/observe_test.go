@@ -836,6 +836,38 @@ func TestFootprintCacheKeysNothingForABackendThatHidesItsConfig(t *testing.T) {
 	assert.False(t, keyed)
 }
 
+// The attribute files outside the tree pick each file's diff driver, so an edit to either
+// one is a miss for the regions and the footprint alike.
+func TestFootprintCacheMissesOnAnEditedAttributeFileOutsideTheTree(t *testing.T) {
+	t.Parallel()
+
+	repo := testkit.NewRepo(t, map[string]string{"a.go": twoFuncs})
+	global := filepath.Join(t.TempDir(), "attributes")
+	repo.Git("config", "core.attributesFile", global)
+	driver := gitDriver(t, repo.Root())
+	cache := footprintCache{dir: t.TempDir()}.forRow(types.Job{Checkpoint: repo.Head()})
+	row := types.Job{ID: "a", Checkpoint: repo.Head(), CheckoutRoot: repo.Root()}
+	keys := func() [2]string {
+		regions, keyed := cache.regionsKey(t.Context(), driver, repo.Root(), repo.Head(), []types.FileChange{{Path: "a.go"}})
+		require.True(t, keyed)
+		footprint, keyed := cache.footprintKey(t.Context(), driver, row)
+		require.True(t, keyed)
+		return [2]string{regions, footprint}
+	}
+
+	before := keys()
+	assert.Equal(t, before, keys(), "unchanged")
+	require.NoError(t, os.MkdirAll(filepath.Join(repo.Root(), ".git", "info"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(repo.Root(), ".git", "info", "attributes"), []byte("*.go -diff\n"), 0o644))
+	local := keys()
+	assert.NotEqual(t, before[0], local[0], "info/attributes, regions")
+	assert.NotEqual(t, before[1], local[1], "info/attributes, footprint")
+	require.NoError(t, os.WriteFile(global, []byte("*.go -diff\n"), 0o644))
+	written := keys()
+	assert.NotEqual(t, local[0], written[0], "core.attributesFile, regions")
+	assert.NotEqual(t, local[1], written[1], "core.attributesFile, footprint")
+}
+
 // The regions a diff placed are reused while every changed file holds the content they were
 // read from, and read again once one does not.
 func TestRegionsSinceReuseUnchangedFiles(t *testing.T) {

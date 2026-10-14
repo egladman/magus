@@ -643,7 +643,8 @@ func (c footprintCache) footprintKey(ctx context.Context, driver types.VCSDriver
 }
 
 // regionsConfigReader is a backend that says what configuration its Regions reads besides
-// the files and revisions it is handed, such as git's diff.<driver>.xfuncname.
+// the files and revisions it is handed, such as git's diff.<driver>.xfuncname and the
+// attribute files outside the tree that pick each file's driver.
 type regionsConfigReader interface {
 	RegionsConfig(ctx context.Context, root string) (string, error)
 }

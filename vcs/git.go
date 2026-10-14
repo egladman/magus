@@ -2612,7 +2612,7 @@ func (v gitVCS) IgnoreSources(ctx context.Context, root string) ([]string, error
 	switch {
 	case err == nil:
 	case exitCode(err) == 1: // unset: git falls back to its XDG location
-		global, err = gitDefaultExcludesFile()
+		global, err = gitXDGConfigFile("ignore")
 		if err != nil {
 			return nil, err
 		}
@@ -2626,17 +2626,18 @@ func (v gitVCS) IgnoreSources(ctx context.Context, root string) ([]string, error
 	return out, nil
 }
 
-// gitDefaultExcludesFile is where git looks for global ignore rules when core.excludesFile
-// is unset: $XDG_CONFIG_HOME/git/ignore, or ~/.config/git/ignore.
-func gitDefaultExcludesFile() (string, error) {
+// gitXDGConfigFile is where git looks for its global file name when the config key naming
+// it (core.excludesFile for ignore, core.attributesFile for attributes) is unset:
+// $XDG_CONFIG_HOME/git/<name>, or ~/.config/git/<name>.
+func gitXDGConfigFile(name string) (string, error) {
 	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
-		return filepath.Join(x, "git", "ignore"), nil
+		return filepath.Join(x, "git", name), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", "git", "ignore"), nil
+	return filepath.Join(home, ".config", "git", name), nil
 }
 
 // gitRedirectVars are the environment variables that move git off the repository the
@@ -4119,13 +4120,55 @@ func (v gitVCS) Unbundle(ctx context.Context, root, file string) error {
 }
 
 // RegionsConfig is the configuration Regions places lines in root with besides the files and
-// revisions it is handed: every funcname pattern the placement runs with, magus's defaults
-// and each diff.<driver>.funcname and xfuncname the repository sees, NUL-separated, so a
-// cache of Regions can key on it.
+// revisions it is handed, so a cache of Regions can key on it: every funcname pattern the
+// placement runs with, magus's defaults and each diff.<driver>.funcname and xfuncname the
+// repository sees, then the path and content of each attribute file outside the tree that
+// picks a file's diff driver (see gitAttributeSources). A missing attribute file reads as
+// empty.
 func (gitVCS) RegionsConfig(ctx context.Context, root string) (string, error) {
 	args, err := gitFuncnameConfig(ctx, root)
 	if err != nil {
 		return "", err
 	}
-	return strings.Join(args, "\x00"), nil
+	sources, err := gitAttributeSources(ctx, root)
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	b.WriteString(strings.Join(args, "\x00"))
+	for _, path := range sources {
+		content, err := os.ReadFile(path)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return "", err
+		}
+		fmt.Fprintf(&b, "\x00%s\x00%d\x00%s", path, len(content), content)
+	}
+	return b.String(), nil
+}
+
+// gitAttributeSources lists the attribute files outside the working tree that git reads
+// besides the tree's .gitattributes: the repository's info/attributes, which a linked
+// worktree shares with its main checkout, and core.attributesFile, or git's XDG default when
+// that is unset. A listed file need not exist.
+func gitAttributeSources(ctx context.Context, root string) ([]string, error) {
+	local, err := gitOutput(ctx, root, gitOpts{}, "rev-parse", "--path-format=absolute", "--git-path", "info/attributes")
+	if err != nil {
+		return nil, fmt.Errorf("git rev-parse --git-path info/attributes: %w", err)
+	}
+	global, err := gitOutput(ctx, root, gitOpts{}, "config", "--path", "--get", "core.attributesFile")
+	switch {
+	case err == nil:
+	case exitCode(err) == 1: // unset: git falls back to its XDG location
+		global, err = gitXDGConfigFile("attributes")
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("git config core.attributesFile: %w", err)
+	}
+	out := []string{strings.TrimSpace(local)}
+	if g := strings.TrimSpace(global); g != "" {
+		out = append(out, g)
+	}
+	return out, nil
 }
