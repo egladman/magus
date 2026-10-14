@@ -789,6 +789,7 @@ export object Goal {
     check: LeaseCheck = LeaseCheck{},
     paths: [str] = [],
     symbols: [str] = [],
+    signature: str = "",
 }
 
 export object JobRelease {
@@ -1135,6 +1136,11 @@ export object JobStatus {
     footprintReason: str = "",
     footprintUnclaimed: [str] = [],
     entries: [JobEntry] = [],
+    linesAdded: int = 0,
+    linesDeleted: int = 0,
+    undeclaredExports: [str] = [],
+    leftUnreferenced: [str] = [],
+    symbolDeltaKnown: bool = false,
 }
 
 export object CharmDeclaration {

@@ -222,7 +222,6 @@ flag shell/observe
 flag shell/path
 flag shell/renders-ask
 flag shell/reports-skills
-flag shell/rewrites-input
 flag shell/session
 flag shell/transcript
 flag shell/transport

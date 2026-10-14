@@ -617,8 +617,6 @@ const (
 	FlagShellRendersAsk = "renders-ask"
 	// shell: --reports-skills
 	FlagShellReportsSkills = "reports-skills"
-	// shell: --rewrites-input
-	FlagShellRewritesInput = "rewrites-input"
 	// shell: --session
 	FlagShellSession = "session"
 	// shell: --transcript
@@ -1234,7 +1232,6 @@ type ShellFlags struct {
 	Event               string // --event
 	ReportsSkills       bool   // --reports-skills
 	RendersAsk          bool   // --renders-ask
-	RewritesInput       bool   // --rewrites-input
 	CallBackground      bool   // --call-background
 	CallTimeoutMs       int    // --call-timeout-ms
 	ForegroundDefaultMs int    // --foreground-default-ms
@@ -1256,7 +1253,6 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	fs.StringVar(&f.Event, FlagShellEvent, "", "The host's hook event name (e.g. PreToolUse)")
 	fs.BoolVar(&f.ReportsSkills, FlagShellReportsSkills, false, "This hook wiring reports when the host loads a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down")
 	fs.BoolVar(&f.RendersAsk, FlagShellRendersAsk, false, "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny")
-	fs.BoolVar(&f.RewritesInput, FlagShellRewritesInput, false, "The input is a shell command the host runs, and this wiring hands the host the verdict's updated_command in its place; with it a pass or advise returns the command with stdin closed")
 	fs.BoolVar(&f.CallBackground, FlagShellCallBackground, false, "The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused")
 	fs.IntVar(&f.CallTimeoutMs, FlagShellCallTimeoutMs, 0, "The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default")
 	fs.IntVar(&f.ForegroundDefaultMs, FlagShellForegroundDefaultMs, 0, "The timeout in milliseconds the host gives a shell command that names none, declared by the wiring; without it the run-timeout advice stands down")

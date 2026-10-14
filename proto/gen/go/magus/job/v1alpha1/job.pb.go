@@ -1322,15 +1322,17 @@ func (x *JobOverlapFootprint) GetReason() string {
 // the command that runs it, the same way Job.check is - the wire never carries the unrendered
 // form, so a client needs no second parser for it.
 type CompletionGate struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	Kind          string                 `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
-	Expect        string                 `protobuf:"bytes,4,opt,name=expect,proto3" json:"expect,omitempty"`
-	Check         string                 `protobuf:"bytes,5,opt,name=check,proto3" json:"check,omitempty"`
-	Paths         []string               `protobuf:"bytes,6,rep,name=paths,proto3" json:"paths,omitempty"`
-	Symbols       []string               `protobuf:"bytes,7,rep,name=symbols,proto3" json:"symbols,omitempty"`
-	DependsOn     []string               `protobuf:"bytes,8,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Kind        string                 `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
+	Expect      string                 `protobuf:"bytes,4,opt,name=expect,proto3" json:"expect,omitempty"`
+	Check       string                 `protobuf:"bytes,5,opt,name=check,proto3" json:"check,omitempty"`
+	Paths       []string               `protobuf:"bytes,6,rep,name=paths,proto3" json:"paths,omitempty"`
+	Symbols     []string               `protobuf:"bytes,7,rep,name=symbols,proto3" json:"symbols,omitempty"`
+	DependsOn   []string               `protobuf:"bytes,8,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
+	// The declaration a `signature` goal holds its one symbol to, as the symbol index renders it.
+	Signature     string `protobuf:"bytes,9,opt,name=signature,proto3" json:"signature,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1419,6 +1421,13 @@ func (x *CompletionGate) GetDependsOn() []string {
 		return x.DependsOn
 	}
 	return nil
+}
+
+func (x *CompletionGate) GetSignature() string {
+	if x != nil {
+		return x.Signature
+	}
+	return ""
 }
 
 // JobResult is what a holder filed when it exited: the paths it changed, the risks it left
@@ -2206,7 +2215,7 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\x13JobOverlapFootprint\x12\x18\n" +
 	"\averdict\x18\x01 \x01(\tR\averdict\x12\x16\n" +
 	"\x06shared\x18\x02 \x03(\tR\x06shared\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xd3\x01\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xf1\x01\n" +
 	"\x0eCompletionGate\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +
@@ -2216,7 +2225,8 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\x05paths\x18\x06 \x03(\tR\x05paths\x12\x18\n" +
 	"\asymbols\x18\a \x03(\tR\asymbols\x12\x1d\n" +
 	"\n" +
-	"depends_on\x18\b \x03(\tR\tdependsOn\"\xaa\x02\n" +
+	"depends_on\x18\b \x03(\tR\tdependsOn\x12\x1c\n" +
+	"\tsignature\x18\t \x01(\tR\tsignature\"\xaa\x02\n" +
 	"\tJobResult\x12#\n" +
 	"\rchanged_paths\x18\x01 \x03(\tR\fchangedPaths\x12)\n" +
 	"\x10unresolved_risks\x18\x02 \x03(\tR\x0funresolvedRisks\x12 \n" +

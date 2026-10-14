@@ -1461,6 +1461,7 @@ github.com/egladman/magus/types.ExpectAbsent const GoalExpect = "absent"
 github.com/egladman/magus/types.ExpectChanged const GoalExpect = "changed"
 github.com/egladman/magus/types.ExpectPassed const GoalExpect = "passed"
 github.com/egladman/magus/types.ExpectPresent const GoalExpect = "present"
+github.com/egladman/magus/types.ExpectSignature const GoalExpect = "signature"
 github.com/egladman/magus/types.ExpectUnreferenced const GoalExpect = "unreferenced"
 github.com/egladman/magus/types.FanOut func(obs ...Observer) Observer
 github.com/egladman/magus/types.FeedbackAdvised const FeedbackSection = "advised"
@@ -1618,6 +1619,7 @@ github.com/egladman/magus/types.Goal.ID field string "json:\"id\"               
 github.com/egladman/magus/types.Goal.Kind field GoalKind "json:\"kind\" yaml:\"kind\""
 github.com/egladman/magus/types.Goal.Paths field []string "json:\"paths,omitempty\" yaml:\"paths,omitempty\""
 github.com/egladman/magus/types.Goal.Resolve method func() Goal
+github.com/egladman/magus/types.Goal.Signature field string "json:\"signature,omitempty\" yaml:\"signature,omitempty\""
 github.com/egladman/magus/types.Goal.Subject method func() []string
 github.com/egladman/magus/types.Goal.Symbols field []string "json:\"symbols,omitempty\" yaml:\"symbols,omitempty\""
 github.com/egladman/magus/types.Goal.Validate method func() error
@@ -2021,7 +2023,7 @@ github.com/egladman/magus/types.JobRun.Invocation field string "json:\"invocatio
 github.com/egladman/magus/types.JobRun.ItemsRemoved field int64 "json:\"items_removed,omitempty\"   yaml:\"items_removed,omitempty\""
 github.com/egladman/magus/types.JobRun.OK field bool "json:\"ok\"              yaml:\"ok\""
 github.com/egladman/magus/types.JobSchema var SchemaLedger
-github.com/egladman/magus/types.JobSchemaVersion const untyped int = 11
+github.com/egladman/magus/types.JobSchemaVersion const untyped int = 12
 github.com/egladman/magus/types.JobStaleAt func(rows []Job, row Job, now int64, after time.Duration) bool
 github.com/egladman/magus/types.JobState type string
 github.com/egladman/magus/types.JobState.Editing method func() bool
@@ -2038,8 +2040,13 @@ github.com/egladman/magus/types.JobStatus.FootprintReason field string "json:\"f
 github.com/egladman/magus/types.JobStatus.FootprintUnclaimed field []string "json:\"footprint_unclaimed,omitempty\" yaml:\"footprint_unclaimed,omitempty\""
 github.com/egladman/magus/types.JobStatus.Gates field []GateStatus "json:\"gates,omitempty\" yaml:\"gates,omitempty\""
 github.com/egladman/magus/types.JobStatus.Job field string "json:\"job\" yaml:\"job\""
+github.com/egladman/magus/types.JobStatus.LeftUnreferenced field []string "json:\"left_unreferenced,omitempty\" yaml:\"left_unreferenced,omitempty\""
+github.com/egladman/magus/types.JobStatus.LinesAdded field int "json:\"lines_added\" yaml:\"lines_added\""
+github.com/egladman/magus/types.JobStatus.LinesDeleted field int "json:\"lines_deleted\" yaml:\"lines_deleted\""
 github.com/egladman/magus/types.JobStatus.Risks field []string "json:\"unresolved_risks,omitempty\" yaml:\"unresolved_risks,omitempty\""
 github.com/egladman/magus/types.JobStatus.StaleIndexes field []string "json:\"stale_indexes,omitempty\" yaml:\"stale_indexes,omitempty\""
+github.com/egladman/magus/types.JobStatus.SymbolDeltaKnown field bool "json:\"symbol_delta_known\" yaml:\"symbol_delta_known\""
+github.com/egladman/magus/types.JobStatus.UndeclaredExports field []string "json:\"undeclared_exports,omitempty\" yaml:\"undeclared_exports,omitempty\""
 github.com/egladman/magus/types.JobStatus.Verified field bool "json:\"verified\" yaml:\"verified\""
 github.com/egladman/magus/types.JobStatus.Violations field []string "json:\"violations,omitempty\" yaml:\"violations,omitempty\""
 github.com/egladman/magus/types.JobUnattributedWrite type struct
@@ -2047,7 +2054,6 @@ github.com/egladman/magus/types.JobUnattributedWrite.At field int64 "json:\"at\"
 github.com/egladman/magus/types.JobUnattributedWrite.Digest field string "json:\"digest\" yaml:\"digest\""
 github.com/egladman/magus/types.JobUnattributedWrite.Path field string "json:\"path\"   yaml:\"path\""
 github.com/egladman/magus/types.JobWriteProof type string
-github.com/egladman/magus/types.JobWriteProofs func() []JobWriteProof
 github.com/egladman/magus/types.KindAuthor const untyped string = "author"
 github.com/egladman/magus/types.KindCharm const untyped string = "charm"
 github.com/egladman/magus/types.KindDiagnostic const untyped string = "diagnostic"

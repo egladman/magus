@@ -39,16 +39,17 @@ CompletionGate is one machine-verifiable condition a job's completion is checked
 
 Source: [job.proto:245](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L245).
 
-| Field         | Type            | # | Description |
-| ------------- | --------------- | - | ----------- |
-| `id`          | string          | 1 |             |
-| `description` | string          | 2 |             |
-| `kind`        | string          | 3 |             |
-| `expect`      | string          | 4 |             |
-| `check`       | string          | 5 |             |
-| `paths`       | repeated string | 6 |             |
-| `symbols`     | repeated string | 7 |             |
-| `depends_on`  | repeated string | 8 |             |
+| Field         | Type            | # | Description                                                                                 |
+| ------------- | --------------- | - | ------------------------------------------------------------------------------------------- |
+| `id`          | string          | 1 |                                                                                             |
+| `description` | string          | 2 |                                                                                             |
+| `kind`        | string          | 3 |                                                                                             |
+| `expect`      | string          | 4 |                                                                                             |
+| `check`       | string          | 5 |                                                                                             |
+| `paths`       | repeated string | 6 |                                                                                             |
+| `symbols`     | repeated string | 7 |                                                                                             |
+| `depends_on`  | repeated string | 8 |                                                                                             |
+| `signature`   | string          | 9 | The declaration a `signature` goal holds its one symbol to, as the symbol index renders it. |
 
 Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
 
@@ -172,7 +173,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 JobGateEvidence is the run a holder offered for one goal.
 
-Source: [job.proto:268](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L268).
+Source: [job.proto:270](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L270).
 
 | Field        | Type   | # | Description |
 | ------------ | ------ | - | ----------- |
@@ -235,7 +236,7 @@ JobOverlap is one pair of jobs whose declared write paths intersect. Derived on 
 
 Each side's intersecting declarations come separately, because the two are rarely the same string ("internal/job" and "internal/job/store.go" intersect) and a reader who cannot tell which job claimed which has nothing to act on.
 
-Source: [job.proto:292](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L292).
+Source: [job.proto:294](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L294).
 
 | Field       | Type                                        | # | Description                                                                                                                                                                                                                                                                                      |
 | ----------- | ------------------------------------------- | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -279,7 +280,7 @@ Used by: [ListJobs (response)](job.md#listjobs).
 
 JobRelease is a path a job gave up, and the version of it the next one inherits. The digest is the file's sha256 when there was a file; "absent" and "dir" are carried through as they are rather than turned into a hash-shaped lie.
 
-Source: [job.proto:276](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L276).
+Source: [job.proto:278](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L278).
 
 | Field         | Type   | # | Description                                                                                                                                                    |
 | ------------- | ------ | - | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -294,7 +295,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 JobResult is what a holder filed when it exited: the paths it changed, the risks it left unresolved, the jobs it spawned, and the runs it offered as evidence.
 
-Source: [job.proto:258](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L258).
+Source: [job.proto:260](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L260).
 
 | Field                   | Type                                         | # | Description                             |
 | ----------------------- | -------------------------------------------- | - | --------------------------------------- |
@@ -311,7 +312,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 JobRun is one completed execution of a job.
 
-Source: [job.proto:306](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L306).
+Source: [job.proto:308](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L308).
 
 | Field             | Type      | # | Description                                                                                                                                                                                                                                                           |
 | ----------------- | --------- | - | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -343,7 +344,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 Paginated by contract so growth never forces a breaking change, though the registry is a fixed handful today and one page always holds it.
 
-Source: [job.proto:336](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L336).
+Source: [job.proto:338](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L338).
 
 | Field        | Type   | # | Description                     |
 | ------------ | ------ | - | ------------------------------- |
@@ -354,7 +355,7 @@ Used by: [ListJobs (request)](job.md#listjobs).
 
 ### ListJobsResponse
 
-Source: [job.proto:343](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L343).
+Source: [job.proto:345](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L345).
 
 | Field             | Type                                 | # | Description                                                                                                                                            |
 | ----------------- | ------------------------------------ | - | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -373,7 +374,7 @@ Used by: [ListJobs (response)](job.md#listjobs).
 
 ResourceSize is the current magnitude of a job's target resource, for a caller to show how much there is to maintain (and to judge whether a rotate/clear is worth running).
 
-Source: [job.proto:322](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L322).
+Source: [job.proto:324](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L324).
 
 | Field        | Type  | # | Description                                                 |
 | ------------ | ----- | - | ----------------------------------------------------------- |
@@ -384,7 +385,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 ### RunJobRequest
 
-Source: [job.proto:327](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L327).
+Source: [job.proto:329](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L329).
 
 | Field  | Type   | # | Description                                                                                                                                                                                                                                                       |
 | ------ | ------ | - | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

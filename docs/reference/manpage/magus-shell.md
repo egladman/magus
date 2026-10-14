@@ -122,9 +122,6 @@ not block every tool call.
 **--reports-skills**
 : This hook wiring reports when the host loads a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down
 
-**--rewrites-input**
-: The input is a shell command the host runs, and this wiring hands the host the verdict's updated_command in its place; with it a pass or advise returns the command with stdin closed
-
 **--session** *string*
 : The host's own session id for this invocation
 

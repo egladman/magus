@@ -2789,6 +2789,7 @@ func ObjectGoal(v types.Goal) vm.Value {
 		itemsSymbols[indexSymbols] = vm.StrValue(v.Symbols[indexSymbols])
 	}
 	out.MapSet("symbols", vm.ListValue(itemsSymbols))
+	out.MapSet("signature", vm.StrValue(v.Signature))
 	return out
 }
 
@@ -3222,6 +3223,19 @@ func ObjectJobStatus(v types.JobStatus) vm.Value {
 		itemsEntries[indexEntries] = ObjectJobEntry(v.Entries[indexEntries])
 	}
 	out.MapSet("entries", vm.ListValue(itemsEntries))
+	out.MapSet("linesAdded", vm.IntValue(int64(v.LinesAdded)))
+	out.MapSet("linesDeleted", vm.IntValue(int64(v.LinesDeleted)))
+	itemsUndeclaredExports := make([]vm.Value, len(v.UndeclaredExports))
+	for indexUndeclaredExports := range v.UndeclaredExports {
+		itemsUndeclaredExports[indexUndeclaredExports] = vm.StrValue(v.UndeclaredExports[indexUndeclaredExports])
+	}
+	out.MapSet("undeclaredExports", vm.ListValue(itemsUndeclaredExports))
+	itemsLeftUnreferenced := make([]vm.Value, len(v.LeftUnreferenced))
+	for indexLeftUnreferenced := range v.LeftUnreferenced {
+		itemsLeftUnreferenced[indexLeftUnreferenced] = vm.StrValue(v.LeftUnreferenced[indexLeftUnreferenced])
+	}
+	out.MapSet("leftUnreferenced", vm.ListValue(itemsLeftUnreferenced))
+	out.MapSet("symbolDeltaKnown", vm.BoolValue(v.SymbolDeltaKnown))
 	return out
 }
 

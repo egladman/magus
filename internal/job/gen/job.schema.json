@@ -11,7 +11,7 @@
     "schema_version": {
       "type": "integer",
       "minimum": 1,
-      "maximum": 11,
+      "maximum": 12,
       "description": "Version is the newest schema any writer of this record used. A rewrite stamps the larger of the stored version and its own, so an older magus never relabels content a newer one wrote."
     },
     "requires": {
@@ -166,7 +166,7 @@
           },
           "expect": {
             "type": "string",
-            "enum": ["", "passed", "changed", "present", "absent", "unreferenced"],
+            "enum": ["", "passed", "changed", "present", "absent", "unreferenced", "signature"],
             "description": "Expect is optional and defaults to the kind's own: passed for check, changed for paths and symbol. The common goal names only its kind and its subject."
           },
           "check": {
@@ -213,6 +213,10 @@
               "type": "string"
             },
             "description": "Symbols are the names a GoalKindSymbol goal examines, as the knowledge graph resolves them. Zero on every other kind."
+          },
+          "signature": {
+            "type": "string",
+            "description": "Signature is the declaration an ExpectSignature goal holds its one symbol to, in the form the symbol index renders it. A fork that declares none records the indexed one, which is how a stub the root wrote becomes the contract. Zero on every other goal."
           }
         }
       },
