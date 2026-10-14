@@ -24,8 +24,9 @@ type PrecedentOptions struct {
 	// Generated holds the workspace-relative paths that are generated output. Generated and
 	// test code is never counted.
 	Generated map[string]bool
-	// Conform supplies the dep-fanout ceilings and the gates that make a row established. A
-	// layer with no configured or committed dep-fanout value gets no fan-out row.
+	// Conform supplies the dep-fanout ceilings and the gates that make a row established,
+	// taken as given. A layer with no configured or committed dep-fanout value gets no fan-out
+	// row.
 	Conform types.ConformOptions
 }
 
@@ -33,7 +34,7 @@ type PrecedentOptions struct {
 // back ordered by family, scope and key, so two runs over one graph agree byte for byte. A graph
 // with no symbols yields no rows, never an error.
 func (g *Graph) Precedents(o PrecedentOptions) []types.Precedent {
-	x := newNamingIndex(g, ConformanceChange{Generated: o.Generated, Gates: o.Conform.Gates})
+	x := newNamingIndex(g, ConformanceChange{Generated: o.Generated, Conform: o.Conform})
 	m := precedentMiner{g: g, x: x, conform: o.Conform, fileNS: g.fileNamespaces()}
 	pk := m.packages()
 	rows := slices.Concat(m.depDirection(pk), m.depFanout(pk), m.errSentinelName(), m.testPackageName(pk),

@@ -27,7 +27,8 @@ type LayoutChange struct {
 	// Generated holds the workspace-relative paths that are generated output. A generated file
 	// is neither counted nor able to make a directory old.
 	Generated map[string]bool
-	// Gates are the silence gates and the cap on findings, as in [ConformanceChange].
+	// Gates are knowledge.conform.gates as this run applies them, taken as given like
+	// [ConformanceChange]'s.
 	Gates types.ConformGates
 }
 
@@ -85,7 +86,7 @@ func (g *Graph) Layout(c LayoutChange) map[string][]types.Check {
 	if len(c.Added) == 0 {
 		return nil
 	}
-	gates := resolveGates(c.Gates)
+	gates := c.Gates
 	cohort, share := gates.MinCohort, gates.MinShare
 	skip := func(file string) bool {
 		if c.Generated[file] {

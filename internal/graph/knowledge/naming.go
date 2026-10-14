@@ -24,21 +24,6 @@ import (
 // convention it is then measured against.
 const conformanceExamples = 3
 
-// defaultGates fill the zero fields of a Gates value. They repeat the defaults of config's
-// knowledge.conform.gates, which the graph cannot import; TestDefaultGatesMatchConfig fails
-// when the two drift.
-var defaultGates = types.ConformGates{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5}
-
-// resolveGates fills each zero field of g from defaultGates.
-func resolveGates(g types.ConformGates) types.ConformGates {
-	return types.ConformGates{
-		MinCohort:   cmp.Or(g.MinCohort, defaultGates.MinCohort),
-		MinShare:    cmp.Or(g.MinShare, defaultGates.MinShare),
-		Bar:         cmp.Or(g.Bar, defaultGates.Bar),
-		MaxFindings: cmp.Or(g.MaxFindings, defaultGates.MaxFindings),
-	}
-}
-
 // ConformanceChange describes the change [Graph.Conformance] observes.
 type ConformanceChange struct {
 	// Subjects are the symbol node IDs the change adds, renames or re-signs.
@@ -53,11 +38,9 @@ type ConformanceChange struct {
 	// Read returns a workspace file's text as the change leaves it. nil skips the one check that
 	// searches text, for a renamed symbol's former name.
 	Read func(path string) (string, bool)
-	// Gates are the silence gates and the report bar and cap. A zero field takes the default of
-	// knowledge.conform.gates.
-	Gates types.ConformGates
-	// Conform is the threshold policy the threshold check judges subjects against. With no
-	// RatchetPath the check is silent.
+	// Conform is knowledge.conform as this run applies it. Its Gates are the silence gates and
+	// the report bar and cap, taken as given: a zero gate is zero, never a default. The
+	// threshold check judges subjects against its policy and is silent with no RatchetPath.
 	Conform types.ConformOptions
 	// RatchetBase is the ratchet record at the diff's base, nil when the base has none. The
 	// threshold check compares it with Conform.Ratchet to see what the change moves.
@@ -65,9 +48,9 @@ type ConformanceChange struct {
 }
 
 // Conformance runs every conformance check over the change and returns what clears the bar,
-// keyed by the subject each finding is about. At most Gates.MaxFindings are returned across the
-// change, strongest first, ties broken by check name, message and subject so two runs over one
-// graph agree byte for byte.
+// keyed by the subject each finding is about. At most Conform.Gates.MaxFindings are returned
+// across the change, strongest first, ties broken by check name, message and subject so two runs
+// over one graph agree byte for byte.
 //
 // Each finding is a [types.Check] with Status advice and Evidence inferred: a fact about the
 // index, never a rule. It reads only language-neutral facts (name, kind, scope, calls,
@@ -183,7 +166,7 @@ type namingIndex struct {
 }
 
 func newNamingIndex(g *Graph, c ConformanceChange) *namingIndex {
-	gates := resolveGates(c.Gates)
+	gates := c.Conform.Gates
 	x := &namingIndex{
 		g:      g,
 		change: c,

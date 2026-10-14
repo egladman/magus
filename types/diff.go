@@ -211,8 +211,9 @@ type DiffOptions struct {
 	// which fills DiffSymbol.Change and Diff.API; BaselineLabel names it for the reader.
 	Baseline      *KnowledgeGraphOutput `json:"-" yaml:"-"`
 	BaselineLabel string                `json:"-" yaml:"-"`
-	// MinCohort and MinShare are the conformance checks' silence gates: how many declarations
-	// a norm needs, and the share that must agree. Zero takes 5 and 0.8.
+	// MinCohort and MinShare override knowledge.conform.gates' silence gates for this review:
+	// how many declarations a norm needs, and the share that must agree. Zero keeps the
+	// configured gate.
 	MinCohort int     `json:"-" yaml:"-"`
 	MinShare  float64 `json:"-" yaml:"-"`
 	// SkipOrder leaves Diff.Order unset. A reader of the order asks for it; a thread brief reads

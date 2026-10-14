@@ -29,9 +29,11 @@ type diffConfig struct {
 	baselineLabel string
 	patch         string
 	patchGiven    bool
-	minCohort     int
-	minShare      float64
-	skipOrder     bool
+	// minCohort and minShare override knowledge.conform.gates for this review; zero keeps
+	// the configured gate.
+	minCohort int
+	minShare  float64
+	skipOrder bool
 }
 
 // DiffAgainst is [Magus.Diff] compared against base, a `magus graph export --symbols` of the
@@ -55,8 +57,7 @@ func (m *Magus) DiffWith(ctx context.Context, paths []string, opts types.DiffOpt
 	return m.diff(ctx, paths, diffConfig{
 		baseline: opts.Baseline, baselineLabel: opts.BaselineLabel,
 		patch: opts.Patch, patchGiven: opts.Patch != "",
-		minCohort: cmp.Or(opts.MinCohort, m.cfg.Knowledge.Conform.Gates.MinCohort),
-		minShare:  cmp.Or(opts.MinShare, m.cfg.Knowledge.Conform.Gates.MinShare),
+		minCohort: opts.MinCohort, minShare: opts.MinShare,
 		skipOrder: opts.SkipOrder,
 	})
 }
@@ -237,8 +238,10 @@ type conformanceInput struct {
 	patch     string
 	generated map[string]bool
 	read      func(path string) (string, bool)
-	minCohort int
-	minShare  float64
+	// conform and ratchetBase are what diffConform answers: the policy with its gates, and
+	// the ratchet record at the change's base.
+	conform     types.ConformOptions
+	ratchetBase *types.ConformRatchet
 }
 
 // attachConformance runs the conformance checks over the symbols the change adds, renames or
@@ -292,7 +295,7 @@ func attachConformance(byPath map[string]*types.DiffFile, head *knowledge.Graph,
 	}
 	found := head.Conformance(knowledge.ConformanceChange{
 		Subjects: subjects, Introduced: introduced, Generated: in.generated, Renamed: renamed,
-		Read: in.read, Gates: types.ConformGates{MinCohort: in.minCohort, MinShare: in.minShare},
+		Read: in.read, Conform: in.conform, RatchetBase: in.ratchetBase,
 	})
 	for _, id := range slices.Sorted(maps.Keys(found)) {
 		def, ok := defs[id]
@@ -314,6 +317,102 @@ func attachConformance(byPath map[string]*types.DiffFile, head *knowledge.Graph,
 		}
 		f.Symbols[i].Checks = found[id]
 	}
+}
+
+// diffConform is knowledge.conform as one review applies it: o with the review's gate
+// overrides, generated as its generated paths, and the ratchet record o.RatchetPath names, read
+// through read. base is that record before the change, rebuilt from patch: the head record when
+// the patch leaves the file alone, and nil when the patch adds it. A configured record that is
+// missing, does not parse or fails [types.ConformOptions.Validate] is an error. A base record
+// that does not parse is returned as note, and the change is then judged by its head alone.
+func diffConform(o types.ConformOptions, cfg diffConfig, patch string, generated map[string]bool,
+	read func(path string) (string, bool),
+) (conform types.ConformOptions, base *types.ConformRatchet, note string, err error) {
+	o.Gates.MinCohort = cmp.Or(cfg.minCohort, o.Gates.MinCohort)
+	o.Gates.MinShare = cmp.Or(cfg.minShare, o.Gates.MinShare)
+	o.Generated = generated
+	o, head, err := loadConform(o, read)
+	if err != nil || o.RatchetPath == "" {
+		return o, nil, "", err
+	}
+	before, existed := textBeforePatch(head, patch, o.RatchetPath)
+	if !existed {
+		return o, nil, "", nil
+	}
+	r, err := types.ReadConformRatchet([]byte(before))
+	if err != nil {
+		return o, nil, fmt.Sprintf("conform: %s before this change does not parse, so what the change moved in it is not judged: %v",
+			o.RatchetPath, err), nil
+	}
+	return o, &r, "", nil
+}
+
+// ConformOptions is the workspace's knowledge.conform as the graph reads it, with the ratchet
+// record knowledge.conform.ratchet names read from the working tree. Generated is left for the
+// caller. A configured record that is missing, does not parse or fails
+// [types.ConformOptions.Validate] is an error.
+func (m *Magus) ConformOptions() (types.ConformOptions, error) {
+	o, _, err := loadConform(m.cfg.Knowledge.Conform.Options(), func(path string) (string, bool) {
+		b, err := os.ReadFile(filepath.Join(m.ws.Root, filepath.FromSlash(path)))
+		return string(b), err == nil
+	})
+	return o, err
+}
+
+// loadConform fills o.Ratchet from the record o.RatchetPath names, read through read, and
+// validates the result; head is the record's text. With no RatchetPath it reads nothing.
+func loadConform(o types.ConformOptions, read func(path string) (string, bool)) (_ types.ConformOptions, head string, err error) {
+	if o.RatchetPath == "" {
+		return o, "", nil
+	}
+	head, ok := read(o.RatchetPath)
+	if !ok {
+		return o, "", fmt.Errorf("%s: knowledge.conform.ratchet names it, and the tree has no such file", o.RatchetPath)
+	}
+	if o.Ratchet, err = types.ReadConformRatchet([]byte(head)); err != nil {
+		return o, "", fmt.Errorf("%s: %w", o.RatchetPath, err)
+	}
+	if verr := o.Validate(); verr != nil {
+		return o, "", verr
+	}
+	return o, head, nil
+}
+
+// textBeforePatch rebuilds the text path had before patch from after, its text now: each hunk's
+// new lines give way to its old ones. A path the patch does not touch comes back as it is, and
+// existed is false when the patch added it. Line endings are kept only as far as the hunks
+// record them, so the answer serves a reader that parses the text, never one comparing bytes.
+func textBeforePatch(after, patch, path string) (before string, existed bool) {
+	files := changeset.Parse(patch)
+	i := slices.IndexFunc(files, func(f changeset.File) bool { return f.Path == path })
+	if i < 0 {
+		return after, true
+	}
+	if files[i].Status == changeset.StatusAdded {
+		return "", false
+	}
+	lines := strings.Split(after, "\n")
+	var out []string
+	next := 0
+	for _, h := range files[i].Hunks {
+		// A hunk adding nothing names the line before it.
+		at := h.NewStart - 1
+		if h.NewCount == 0 {
+			at = h.NewStart
+		}
+		at = min(max(at, next), len(lines))
+		out = append(out, lines[next:at]...)
+		for _, l := range h.Lines {
+			switch {
+			case l == "":
+				out = append(out, "")
+			case l[0] == ' ' || l[0] == '-':
+				out = append(out, l[1:])
+			}
+		}
+		next = min(at+h.NewCount, len(lines))
+	}
+	return strings.Join(append(out, lines[next:]...), "\n"), true
 }
 
 // pairRenames records, for each symbol a baseline classified as removed, the added symbol in the

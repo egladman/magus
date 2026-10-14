@@ -46,6 +46,7 @@ func thresholdOptions() types.ConformOptions {
 		Step:        0.05,
 		RatchetPath: thresholdPath,
 		Ratchet:     types.ConformRatchet{Schema: 1},
+		Gates:       testGates(),
 	}
 }
 
@@ -94,7 +95,7 @@ func TestThresholdCheckIsSilentWithoutARatchet(t *testing.T) {
 	o.RatchetPath = ""
 
 	assert.Empty(t, g.Conformance(ConformanceChange{Subjects: []string{id["Frobnicate"]}, Conform: o}))
-	assert.Empty(t, g.Conformance(ConformanceChange{Subjects: []string{id["Frobnicate"]}}), "no policy at all")
+	assert.Empty(t, g.Conformance(ConformanceChange{Subjects: []string{id["Frobnicate"]}, Conform: testConform()}), "no policy at all")
 }
 
 func TestThresholdCheckSkipsAKnownItem(t *testing.T) {
@@ -150,9 +151,9 @@ func TestThresholdCheckReportsASubjectThatPassesOnlyBecauseTheRatchetMoved(t *te
 func TestThresholdCheckHonorsTheFindingCap(t *testing.T) {
 	g, id := thresholdFixture()
 
-	got := g.Conformance(ConformanceChange{
-		Subjects: []string{id["Frobnicate"]}, Conform: thresholdOptions(), Gates: types.ConformGates{MaxFindings: 1},
-	})
+	o := thresholdOptions()
+	o.Gates.MaxFindings = 1
+	got := g.Conformance(ConformanceChange{Subjects: []string{id["Frobnicate"]}, Conform: o})
 
 	assert.Equal(t, []string{pastLines}, thresholdMessages(t, got[id["Frobnicate"]]))
 }

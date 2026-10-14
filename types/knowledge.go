@@ -1721,9 +1721,9 @@ type PrecedentKey struct {
 	// From and To are the layers a dep-direction precedent says imports run from and to.
 	From string `json:"from,omitempty"`
 	To   string `json:"to,omitempty"`
-	// MaxImports is the most packages under the layer a dep-fanout precedent says one package
-	// imports: the cohort's 95th percentile. Where to draw a ceiling is a decision the row
-	// does not make.
+	// MaxImports is the most packages under the layer a dep-fanout precedent lets one package
+	// import: the dep-fanout value knowledge.conform enforces for the layer, the committed
+	// one else the anchor, and never the cohort's own percentile.
 	MaxImports int `json:"max_imports,omitempty"`
 	// Prefix is the word an err-sentinel-name precedent says a name starts with, folded to
 	// lower case.

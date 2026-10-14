@@ -104,7 +104,7 @@ func TestConformanceFlagsEntryPointFrom(t *testing.T) {
 	subj := entryPointFrom()
 	g := namingGraph(t, append(fromContextFamily(), subj))
 
-	got := g.Conformance(ConformanceChange{Subjects: subjectIDs(subj), Introduced: introduced(subj)})
+	got := g.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(subj), Introduced: introduced(subj)})
 
 	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(types.CheckNamingAffix,
 		"`EntryPointFrom`: 8 of 9 functions shaped `func(ctx) value` that say From or Context are named `<X>FromContext`",
@@ -120,7 +120,7 @@ func TestConformanceSilentOnConformingAndUnrelatedNames(t *testing.T) {
 	predicate := goFunc("internal/job", "IsFromContext", "func IsFromContext(ctx context.Context) bool")
 	g := namingGraph(t, append(fromContextFamily(), conforming, unrelated, predicate))
 
-	got := g.Conformance(ConformanceChange{Subjects: subjectIDs(conforming, unrelated, predicate)})
+	got := g.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(conforming, unrelated, predicate)})
 
 	assert.Empty(t, got)
 }
@@ -143,10 +143,10 @@ func TestConformanceSilentOnSplitIdiom(t *testing.T) {
 	setters := contextSetters("ContextWithThing", 9, "internal/a")
 
 	split := namingGraph(t, append(append(setters, contextSetters("WithItem", 10, "internal/b")...), long, short))
-	assert.Empty(t, split.Conformance(ConformanceChange{Subjects: subjectIDs(long, short)}))
+	assert.Empty(t, split.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(long, short)}))
 
 	alone := namingGraph(t, append(setters, short))
-	got := alone.Conformance(ConformanceChange{Subjects: subjectIDs(short)})
+	got := alone.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(short)})
 	require.Len(t, got[symID(short)], 1)
 	assert.Equal(t, types.CheckNamingAffix, got[symID(short)][0].Name)
 }
@@ -173,12 +173,12 @@ func TestConformanceIgnoresGeneratedAndTestCode(t *testing.T) {
 	g := namingGraph(t, append(syms, subj))
 	generated := map[string]bool{"internal/p7/out.go": true}
 
-	got := g.Conformance(ConformanceChange{Subjects: subjectIDs(subj), Generated: generated})
+	got := g.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(subj), Generated: generated})
 	require.Len(t, got[symID(subj)], 1, "image_gen.go is the fifth carrier")
 	assert.Contains(t, got[symID(subj)][0].Message, "5 of 5 functions")
 
 	generated["internal/p6/image_gen.go"] = true
-	assert.Empty(t, g.Conformance(ConformanceChange{Subjects: subjectIDs(subj), Generated: generated}))
+	assert.Empty(t, g.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(subj), Generated: generated}))
 }
 
 func TestConformanceSilentOnATestFileSubject(t *testing.T) {
@@ -186,7 +186,7 @@ func TestConformanceSilentOnATestFileSubject(t *testing.T) {
 		"func LeaseFrom(ctx context.Context) *T", "internal/trail/x_test.go")
 	g := namingGraph(t, append(fromContextFamily(), subj))
 
-	assert.Empty(t, g.Conformance(ConformanceChange{Subjects: subjectIDs(subj)}), "eight carriers, and a test helper is not held to them")
+	assert.Empty(t, g.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(subj)}), "eight carriers, and a test helper is not held to them")
 }
 
 // A change cannot manufacture the convention it is measured against: its own new names count
@@ -197,6 +197,7 @@ func TestConformanceExcludesTheChangesOwnNames(t *testing.T) {
 	g := namingGraph(t, append(family, subj))
 
 	assert.Empty(t, g.Conformance(ConformanceChange{
+		Conform:    testConform(),
 		Subjects:   subjectIDs(subj),
 		Introduced: introduced(append(family[:4:4], subj)...),
 	}), "four of eight carriers arrive with the subject, leaving four")
@@ -207,7 +208,7 @@ func TestConformanceExcludesTheChangesOwnNames(t *testing.T) {
 	}
 	lone := entryPointFrom()
 	g = namingGraph(t, append(fresh, lone))
-	assert.Empty(t, g.Conformance(ConformanceChange{Subjects: subjectIDs(lone), Introduced: introduced(append(fresh, lone)...)}),
+	assert.Empty(t, g.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(lone), Introduced: introduced(append(fresh, lone)...)}),
 		"six carriers, every one of them new")
 }
 
@@ -220,7 +221,7 @@ func TestConformanceNamesAnEntityOfTheSameName(t *testing.T) {
 	opB := types.KnowledgeNode{ID: "op:node:format", Kind: types.KindOp, Label: "format"}
 	g := namingGraph(t, []types.KnowledgeSymbol{format, internal}, target, opA, opB)
 
-	got := g.Conformance(ConformanceChange{Subjects: subjectIDs(format, internal)})
+	got := g.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(format, internal)})
 
 	assert.Equal(t, map[string][]types.Check{symID(format): {advice(types.CheckNameCollision,
 		"`Format` is also the name of op `format`, target `.:format` in this workspace",
@@ -242,7 +243,7 @@ func TestConformanceNamesAnEntityOfTheSameNameInTypeScript(t *testing.T) {
 		types.KnowledgeNode{ID: "project:web", Kind: types.KindProject, Label: "web", Source: "web"},
 		types.KnowledgeNode{ID: "target:web:lint", Kind: types.KindTarget, Label: "lint", Source: "web"})
 
-	got := g.Conformance(ConformanceChange{Subjects: subjectIDs(top, nested)})
+	got := g.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(top, nested)})
 
 	assert.Equal(t, map[string][]types.Check{symID(top): {advice(types.CheckNameCollision,
 		"`lint` is also the name of target `web:lint` in this workspace", "target `web:lint`",
@@ -259,7 +260,7 @@ func TestConformanceSilentOnAWordCarryingOtherSenses(t *testing.T) {
 		"type captureTransport struct{ next http.RoundTripper }", "internal/proc/capture.go")
 	g := namingGraph(t, []types.KnowledgeSymbol{transport, retry, capture})
 
-	assert.Empty(t, g.Conformance(ConformanceChange{Subjects: subjectIDs(transport)}))
+	assert.Empty(t, g.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(transport)}))
 }
 
 // capability builds a types interface with n method specifications.
@@ -285,7 +286,7 @@ func TestConformanceFindsDriftInAnIndexWithNoSignatures(t *testing.T) {
 	inTest := tsSym("offset.test.ts", "cursorFrom", "function cursorFrom(e: KeyboardEvent): string")
 	g := namingGraph(t, append(syms, subj, inTest))
 
-	got := g.Conformance(ConformanceChange{Subjects: subjectIDs(subj, inTest)})
+	got := g.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(subj, inTest)})
 
 	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(types.CheckNamingAffix,
 		"`offsetFrom`: 6 of 7 functions shaped `function` that say From or Event are named `<X>FromEvent`",
@@ -313,7 +314,7 @@ func TestConformanceCapsFindingsPerChange(t *testing.T) {
 	}
 	g := namingGraph(t, syms)
 
-	got := g.Conformance(ConformanceChange{Subjects: subjectIDs(subjects...), Introduced: introduced(subjects...)})
+	got := g.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(subjects...), Introduced: introduced(subjects...)})
 
 	var kept []string
 	for _, s := range subjects {
@@ -336,7 +337,7 @@ func TestConformanceIsDeterministicOnTies(t *testing.T) {
 	}
 	subj := ctxReader("internal/c", "ReadFrom")
 	g := namingGraph(t, append(syms, subj))
-	change := ConformanceChange{Subjects: subjectIDs(subj)}
+	change := ConformanceChange{Conform: testConform(), Subjects: subjectIDs(subj)}
 
 	first := g.Conformance(change)
 	require.Len(t, first[symID(subj)], 2, "both families score 0.75")
@@ -636,7 +637,7 @@ func TestBuzzSymbolsGetTheNamingAndSentinelLenses(t *testing.T) {
 			{Node: labeled["errIndent"].id, Source: "hack/lib/doc.buzz:13"},
 		},
 		Departures: []types.Case{{Node: labeled["missingKey"].id, Source: "hack/lib/doc.buzz:16"}},
-	}, precedentRow(t, g.Precedents(PrecedentOptions{}), types.PrecedentErrSentinelName, types.PrecedentScope{Language: "buzz"}))
+	}, precedentRow(t, g.Precedents(PrecedentOptions{Conform: testConform()}), types.PrecedentErrSentinelName, types.PrecedentScope{Language: "buzz"}))
 }
 
 func TestParseDescriptors(t *testing.T) {
@@ -691,7 +692,7 @@ func conformanceFixture() (*Graph, []types.KnowledgeSymbol) {
 
 func BenchmarkConformance(b *testing.B) {
 	g, added := conformanceFixture()
-	change := ConformanceChange{Subjects: subjectIDs(added...), Introduced: introduced(added...), Read: files(nil)}
+	change := ConformanceChange{Conform: testConform(), Subjects: subjectIDs(added...), Introduced: introduced(added...), Read: files(nil)}
 	b.ReportAllocs()
 	for b.Loop() {
 		g.Conformance(change)
@@ -736,12 +737,12 @@ func TestConformanceMeasure(t *testing.T) {
 		}
 	}
 	slices.Sort(subjects)
-	x := newNamingIndex(g, ConformanceChange{Subjects: subjects, Generated: generated})
+	x := newNamingIndex(g, ConformanceChange{Conform: testConform(), Subjects: subjects, Generated: generated})
 	t.Logf("subjects: %d read of %d defined; callables %d", len(x.subjects), len(subjects), len(x.callables))
 	for _, chk := range conformanceChecks {
 		var kept []finding
 		for _, f := range chk.run(x) {
-			if f.score >= defaultGates.Bar {
+			if f.score >= x.gates.Bar {
 				kept = append(kept, f)
 			}
 		}
@@ -839,15 +840,18 @@ func TestConformanceMeasureRenames(t *testing.T) {
 		len(commits), candidates, renames, findings)
 }
 
-func TestDefaultGatesMatchConfig(t *testing.T) {
-	assert.Equal(t, config.Defaults().Knowledge.Conform.Options().Gates, defaultGates)
-}
+// testGates are the shipped knowledge.conform.gates, which every caller passes: the graph
+// keeps no copy of them.
+func testGates() types.ConformGates { return config.Defaults().Knowledge.Conform.Options().Gates }
 
-func TestResolveGatesFillsOnlyTheZeroFields(t *testing.T) {
-	got := resolveGates(types.ConformGates{MinCohort: 7, Bar: 0.9})
+func testConform() types.ConformOptions { return types.ConformOptions{Gates: testGates()} }
 
-	assert.Equal(t, types.ConformGates{
-		MinCohort: 7, MinShare: defaultGates.MinShare, Bar: 0.9, MaxFindings: defaultGates.MaxFindings,
-	}, got)
-	assert.Equal(t, defaultGates, resolveGates(types.ConformGates{}))
+func TestConformanceTakesTheGatesAsGiven(t *testing.T) {
+	g, id := thresholdFixture()
+	o := thresholdOptions()
+	require.NotEmpty(t, g.Conformance(ConformanceChange{Conform: o, Subjects: []string{id["Frobnicate"]}}))
+
+	o.Gates = types.ConformGates{}
+	assert.Empty(t, g.Conformance(ConformanceChange{Conform: o, Subjects: []string{id["Frobnicate"]}}),
+		"a zero cap reports nothing; no default fills it")
 }

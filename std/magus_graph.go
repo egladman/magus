@@ -257,17 +257,20 @@ func MagusImportGraph(ctx context.Context) (types.ImportGraph, error) {
 }
 
 // precedentWorkspace is the part of *magus.Magus magus\precedents and magus\symbols read beside
-// the graph: a freshen of every index, the freshness verdict `magus status` prints, and which
-// files are declared outputs.
+// the graph: a freshen of every index, the freshness verdict `magus status` prints, which
+// files are declared outputs, and knowledge.conform, whose gates and dep-fanout ceilings the
+// precedents are judged by.
 type precedentWorkspace interface {
 	FreshenSymbolIndexes(ctx context.Context) error
 	SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolIndexStatus
 	ClassifyFiles(ctx context.Context, paths []string) ([]types.FileEntry, error)
+	ConformOptions() (types.ConformOptions, error)
 }
 
-// indexedGraph is what a member judging the symbol indexes reads: the graph with its symbols,
-// each declared index's freshness, and the files that are declared outputs.
+// indexedGraph is what a member judging the symbol indexes reads: the workspace, the graph
+// with its symbols, each declared index's freshness, and the files that are declared outputs.
 type indexedGraph struct {
+	ws        precedentWorkspace
 	kg        *knowledge.Graph
 	indexes   []types.SymbolIndexStatus
 	generated map[string]bool
@@ -320,7 +323,7 @@ func judgedGraph(ctx context.Context, member string) (indexedGraph, error) {
 			generated[e.Path] = true
 		}
 	}
-	return indexedGraph{kg: kg, indexes: indexes, generated: generated}, nil
+	return indexedGraph{ws: pw, kg: kg, indexes: indexes, generated: generated}, nil
 }
 
 // reportMap is report as the map a Buzz caller reads, keyed as its JSON is: no Buzz object
@@ -337,16 +340,22 @@ func reportMap(report any) (map[string]any, error) {
 	return out, nil
 }
 
-// MagusPrecedents backs magus\precedents: the precedents the merged symbol indexes establish,
-// and each declared index's freshness, judged as judgedGraph describes. Generated files are
-// never counted. The answer is a PrecedentReport as a map.
+// MagusPrecedents backs magus\precedents: the precedents the merged symbol indexes establish
+// under knowledge.conform's gates and dep-fanout ceilings, and each declared index's
+// freshness, judged as judgedGraph describes. Generated files are never counted. The answer
+// is a PrecedentReport as a map.
 func MagusPrecedents(ctx context.Context) (map[string]any, error) {
 	ig, err := judgedGraph(ctx, "precedents")
 	if err != nil {
 		return nil, err
 	}
+	conform, err := ig.ws.ConformOptions()
+	if err != nil {
+		return nil, fmt.Errorf("magus\\precedents: %w", err)
+	}
+	conform.Generated = ig.generated
 	return reportMap(types.PrecedentReport{
-		Precedents: ig.kg.Precedents(knowledge.PrecedentOptions{Generated: ig.generated}),
+		Precedents: ig.kg.Precedents(knowledge.PrecedentOptions{Generated: ig.generated, Conform: conform}),
 		Indexes:    ig.indexes,
 	})
 }

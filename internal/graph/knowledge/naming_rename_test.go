@@ -37,7 +37,8 @@ func TestConformanceFindsARenameLeftover(t *testing.T) {
 	})
 
 	got := g.Conformance(ConformanceChange{
-		Subjects: subjectIDs(subj), Introduced: introduced(subj), Read: read,
+		Conform:  testConform(),
+		Subjects:subjectIDs(subj), Introduced: introduced(subj), Read: read,
 		Renamed: map[string]string{symID(subj): "TrackDependencyWait"},
 	})
 
@@ -56,7 +57,8 @@ func TestConformanceFindsARenameLeftoverInTypeScript(t *testing.T) {
 	})
 
 	got := g.Conformance(ConformanceChange{
-		Subjects: subjectIDs(subj), Read: read, Renamed: map[string]string{symID(subj): "landPlan"},
+		Conform:  testConform(),
+		Subjects:subjectIDs(subj), Read: read, Renamed: map[string]string{symID(subj): "landPlan"},
 	})
 
 	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(types.CheckRenameLeftover,
@@ -77,7 +79,8 @@ func TestConformanceSilentOnRenamesItCannotTellApart(t *testing.T) {
 	})
 
 	got := g.Conformance(ConformanceChange{
-		Subjects: subjectIDs(longer, oneWord, shared), Read: read,
+		Conform:  testConform(),
+		Subjects:subjectIDs(longer, oneWord, shared), Read: read,
 		Renamed: map[string]string{
 			symID(longer):  "EntryPointFrom", // every use of the new name spells the old one inside it
 			symID(oneWord): "Land",           // one word is a word everybody uses
@@ -86,6 +89,6 @@ func TestConformanceSilentOnRenamesItCannotTellApart(t *testing.T) {
 	})
 
 	assert.Empty(t, got)
-	assert.Empty(t, g.Conformance(ConformanceChange{Subjects: subjectIDs(longer), Renamed: map[string]string{symID(longer): "EntryPointFrom"}}),
+	assert.Empty(t, g.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(longer), Renamed: map[string]string{symID(longer): "EntryPointFrom"}}),
 		"no reader, no search")
 }

@@ -77,7 +77,7 @@ func TestLayoutFlagsANewOneFileUntestedDigitNamedPackage(t *testing.T) {
 	caller := layoutFile{path: "internal/pkga/c.go", refs: []string{merge.path}}
 	g := layoutGraph(t, append(siblings, merge, caller)...)
 
-	got := g.Layout(LayoutChange{Added: addedSet(merge, caller)})
+	got := g.Layout(LayoutChange{Gates: testGates(), Added: addedSet(merge, caller)})
 	evidence := "1 Go file, 0 test files and 1 importing directory"
 	assert.Equal(t, map[string][]types.Check{"internal/pkgb3": {
 		{
@@ -101,7 +101,7 @@ func TestLayoutNeverFlagsADirectoryThatAlreadyExisted(t *testing.T) {
 	added := layoutFile{path: "internal/merge3/diff.go"}
 	g := layoutGraph(t, append(siblings, old, added)...)
 
-	assert.Nil(t, g.Layout(LayoutChange{Added: addedSet(added)}), "a sibling file makes the directory old")
+	assert.Nil(t, g.Layout(LayoutChange{Gates: testGates(), Added: addedSet(added)}), "a sibling file makes the directory old")
 }
 
 func TestLayoutTreatsAnExistingSubdirectoryAsAnOldParent(t *testing.T) {
@@ -110,24 +110,26 @@ func TestLayoutTreatsAnExistingSubdirectoryAsAnOldParent(t *testing.T) {
 	added := layoutFile{path: "internal/graph/lens.go"}
 	g := layoutGraph(t, append(siblings, nested, added)...)
 
-	assert.Nil(t, g.Layout(LayoutChange{Added: addedSet(added)}), "a directory holding an older subdirectory is not new")
+	assert.Nil(t, g.Layout(LayoutChange{Gates: testGates(), Added: addedSet(added)}), "a directory holding an older subdirectory is not new")
 }
 
 func TestLayoutSilentBelowTheGates(t *testing.T) {
 	merge := layoutFile{path: "internal/merge3/merge.go"}
 	t.Run("cohort", func(t *testing.T) {
 		g := layoutGraph(t, append(goPackages("internal", 4), merge)...)
-		assert.Nil(t, g.Layout(LayoutChange{Added: addedSet(merge)}), "four siblings are a coincidence")
+		assert.Nil(t, g.Layout(LayoutChange{Gates: testGates(), Added: addedSet(merge)}), "four siblings are a coincidence")
 	})
 	t.Run("share", func(t *testing.T) {
 		files := append(goPackages("internal", 4),
 			layoutFile{path: "internal/singlea/x.go"}, layoutFile{path: "internal/singleb/x.go"})
 		g := layoutGraph(t, append(files, merge)...)
-		got := g.Layout(LayoutChange{Added: addedSet(merge)})
+		got := g.Layout(LayoutChange{Gates: testGates(), Added: addedSet(merge)})
 		// 4 of 6 hold two files and a test, which is a split; 6 of 6 carry no digit.
 		require.Len(t, got["internal/merge3"], 1)
 		assert.Equal(t, types.CheckPackageName, got["internal/merge3"][0].Name)
-		assert.Nil(t, g.Layout(LayoutChange{Added: addedSet(merge), Gates: types.ConformGates{MinCohort: 7}}), "a raised cohort gate holds it back")
+		raised := testGates()
+		raised.MinCohort = 7
+		assert.Nil(t, g.Layout(LayoutChange{Gates: raised, Added: addedSet(merge)}), "a raised cohort gate holds it back")
 	})
 }
 
@@ -136,7 +138,7 @@ func TestLayoutNamesTheOutliers(t *testing.T) {
 	added := layoutFile{path: "internal/zed/x.go"}
 	g := layoutGraph(t, append(files, added, layoutFile{path: "internal/zed/x_test.go"})...)
 
-	got := g.Layout(LayoutChange{Added: addedSet(added, layoutFile{path: "internal/zed/x_test.go"})})
+	got := g.Layout(LayoutChange{Gates: testGates(), Added: addedSet(added, layoutFile{path: "internal/zed/x_test.go"})})
 	require.Len(t, got["internal/zed"], 1)
 	// The message is pinned by substring below.
 	want := types.Check{
@@ -161,7 +163,7 @@ func TestLayoutComparesOnlyTheSameLanguage(t *testing.T) {
 	tsDir := layoutFile{path: "web/view/index.ts"}
 	g := layoutGraph(t, append(files, goDir, tsDir)...)
 
-	got := g.Layout(LayoutChange{Added: addedSet(goDir, tsDir)})
+	got := g.Layout(LayoutChange{Gates: testGates(), Added: addedSet(goDir, tsDir)})
 	assert.NotContains(t, got, "web/tool", "no Go directory beside it forms a norm")
 	require.Contains(t, got, "web/view")
 	assert.Contains(t, got["web/view"][0].Message, "1 TypeScript file, 0 test files")
@@ -177,7 +179,7 @@ func TestLayoutReadsTestFilesByTheirLanguagesConvention(t *testing.T) {
 	added := []layoutFile{{path: "web/new/a.ts"}, {path: "web/new/b.ts"}, {path: "web/new/store_test.ts"}}
 	g := layoutGraph(t, append(files, added...)...)
 
-	got := g.Layout(LayoutChange{Added: addedSet(added...)})
+	got := g.Layout(LayoutChange{Gates: testGates(), Added: addedSet(added...)})
 	require.Len(t, got["web/new"], 1)
 	assert.Equal(t, types.CheckPackageTests, got["web/new"][0].Name)
 	assert.Contains(t, got["web/new"][0].Message, "3 TypeScript files, 0 test files")
@@ -189,7 +191,7 @@ func TestLayoutIgnoresGeneratedAndFixtureDirectories(t *testing.T) {
 	fixture := layoutFile{path: "internal/pkgz/testdata/src/x.go"}
 	g := layoutGraph(t, append(siblings, gen, fixture)...)
 
-	assert.Nil(t, g.Layout(LayoutChange{Added: addedSet(gen, fixture), Generated: map[string]bool{gen.path: true}}))
+	assert.Nil(t, g.Layout(LayoutChange{Gates: testGates(), Added: addedSet(gen, fixture), Generated: map[string]bool{gen.path: true}}))
 }
 
 func TestLayoutIsDeterministicAndCapped(t *testing.T) {
@@ -200,15 +202,15 @@ func TestLayoutIsDeterministicAndCapped(t *testing.T) {
 	}
 	g := layoutGraph(t, append(files, added...)...)
 
-	first := g.Layout(LayoutChange{Added: addedSet(added...)})
+	first := g.Layout(LayoutChange{Gates: testGates(), Added: addedSet(added...)})
 	total := 0
 	for _, cs := range first {
 		total += len(cs)
 	}
-	assert.Equal(t, defaultGates.MaxFindings, total, "four new directories break three checks each")
+	assert.Equal(t, testGates().MaxFindings, total,"four new directories break three checks each")
 	assert.Equal(t, []string{"internal/new0", "internal/new1"}, slices.Sorted(maps.Keys(first)), "directory order, then check order")
 	for range 5 {
-		assert.Equal(t, first, g.Layout(LayoutChange{Added: addedSet(added...)}))
+		assert.Equal(t, first, g.Layout(LayoutChange{Gates: testGates(), Added: addedSet(added...)}))
 	}
 }
 
@@ -221,7 +223,9 @@ func TestLayoutCapComesFromTheGates(t *testing.T) {
 	g := layoutGraph(t, append(files, added...)...)
 
 	total := 0
-	for _, cs := range g.Layout(LayoutChange{Added: addedSet(added...), Gates: types.ConformGates{MaxFindings: 2}}) {
+	capped := testGates()
+	capped.MaxFindings = 2
+	for _, cs := range g.Layout(LayoutChange{Gates: capped, Added: addedSet(added...)}) {
 		total += len(cs)
 	}
 	assert.Equal(t, 2, total)
@@ -264,7 +268,7 @@ func TestLayoutMeasure(t *testing.T) {
 		for _, f := range byDir[dir] {
 			added[f] = true
 		}
-		for d, checks := range g.Layout(LayoutChange{Added: added, Generated: generated}) {
+		for d, checks := range g.Layout(LayoutChange{Gates: testGates(), Added: added, Generated: generated}) {
 			for _, c := range checks {
 				counts[c.Name]++
 				t.Logf("%s %s: %s %v", c.Name, d, c.Message, c.Details)

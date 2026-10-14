@@ -1591,7 +1591,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 			f.Coverage = &cov
 		}
 	}
-	in := conformanceInput{minCohort: cfg.minCohort, minShare: cfg.minShare, patch: patch}
+	in := conformanceInput{patch: patch}
 	if cfg.baseline != nil {
 		if indexed {
 			in.changes, in.removed = attachAPIDelta(&out, byPath, graph, cfg, m.externalReferents)
@@ -1826,6 +1826,18 @@ func (m *Magus) conformance(ctx context.Context, out *types.Diff, byPath map[str
 		b, err := os.ReadFile(filepath.Join(m.ws.Root, filepath.FromSlash(path)))
 		return string(b), err == nil
 	}
+	conform, base, note, err := diffConform(m.cfg.Knowledge.Conform.Options(), cfg, in.patch, generated, in.read)
+	if err != nil {
+		fail("knowledge.conform could not be read", err)
+		return
+	}
+	if patchErr != nil && conform.RatchetPath != "" {
+		base, note = nil, "conform: the patch could not be read, so what the change did to "+conform.RatchetPath+" is unknown"
+	}
+	if note != "" {
+		out.Notes = append(out.Notes, note)
+	}
+	in.conform, in.ratchetBase = conform, base
 	attachConformance(byPath, graph, in)
 }
 

@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project/impact"
@@ -310,7 +312,7 @@ func TestAttachConformanceFindsANewNameWithoutABaseline(t *testing.T) {
 	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
 	byPath := map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}
 
-	attachConformance(byPath, head, conformanceInput{patch: trailPatch})
+	attachConformance(byPath, head, conformanceInput{conform: shippedConform(),patch: trailPatch})
 
 	require.Len(t, out.Files[0].Symbols, 1, "Trail's definition line is unchanged, so only EntryPointFrom is a subject")
 	got := out.Files[0].Symbols[0]
@@ -350,7 +352,7 @@ func TestAttachConformanceSkipsAMovedSymbol(t *testing.T) {
 -func EntryPointFrom(ctx context.Context) *T { return nil }
 `
 
-	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, conformanceInput{patch: moved})
+	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, conformanceInput{conform: shippedConform(),patch: moved})
 
 	assert.Empty(t, out.Files[0].Symbols)
 }
@@ -360,10 +362,10 @@ func TestAttachConformanceFollowsTheBaselineClassification(t *testing.T) {
 	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
 	byPath := map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}
 
-	attachConformance(byPath, head, conformanceInput{changes: map[string]string{trailID("EntryPointFrom"): types.DiffChangeBody}})
+	attachConformance(byPath, head, conformanceInput{conform: shippedConform(),changes: map[string]string{trailID("EntryPointFrom"): types.DiffChangeBody}})
 	assert.Empty(t, out.Files[0].Symbols, "a body edit is not a naming decision")
 
-	attachConformance(byPath, head, conformanceInput{changes: map[string]string{trailID("EntryPointFrom"): types.DiffChangeAdded}})
+	attachConformance(byPath, head, conformanceInput{conform: shippedConform(),changes: map[string]string{trailID("EntryPointFrom"): types.DiffChangeAdded}})
 	require.Len(t, out.Files[0].Symbols, 1)
 	assert.Equal(t, types.DiffChangeAdded, out.Files[0].Symbols[0].Change)
 	assert.NotEmpty(t, out.Files[0].Symbols[0].Checks)
@@ -373,9 +375,125 @@ func TestAttachConformanceSkipsGeneratedFiles(t *testing.T) {
 	head := conformanceHead(map[string]int{"EntryPointFrom": 6})
 	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: ".", Role: types.DiffRoleOutput}}}
 
-	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, conformanceInput{patch: trailPatch})
+	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, conformanceInput{conform: shippedConform(),patch: trailPatch})
 
 	assert.Empty(t, out.Files[0].Symbols, "a regenerated file's names are the generator's decision")
+}
+
+// shippedConform is the knowledge.conform a workspace gets with none in its magus.yaml.
+func shippedConform() types.ConformOptions { return config.Defaults().Knowledge.Conform.Options() }
+
+func TestAttachConformanceAppliesTheBarAndCapItIsGiven(t *testing.T) {
+	head := conformanceHead(map[string]int{"EntryPointFrom": 6, "Trail": 3})
+	for name, gates := range map[string]func(*types.ConformGates){
+		"a zero cap":        func(g *types.ConformGates) { g.MaxFindings = 0 },
+		"a bar none clears": func(g *types.ConformGates) { g.Bar = 1.01 },
+	} {
+		out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
+		in := conformanceInput{conform: shippedConform(), patch: trailPatch}
+		gates(&in.conform.Gates)
+
+		attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, in)
+
+		assert.Empty(t, out.Files[0].Symbols, name)
+	}
+}
+
+// The threshold check runs only when a review hands it the policy and a ratchet path, so this
+// is what keeps it reachable from `magus diff`.
+func TestAttachConformanceRunsTheThresholdCheck(t *testing.T) {
+	ns := "gomod example.com/m `example.com/m/internal/trail`/"
+	long := types.KnowledgeSymbol{
+		Key: ns + "EntryPointFrom().", Label: "EntryPointFrom", Language: "go", SymbolKind: "Function", Namespace: ns,
+		Signature: "func EntryPointFrom(ctx context.Context) *T", Source: "internal/trail/trail.go:6",
+		DefEndLine: 25, Defs: []string{"internal/trail/trail.go"},
+	}
+	head := knowledge.NewGraph()
+	for _, sh := range knowledge.AssembleShards(knowledge.Inputs{
+		Graph:   types.TargetGraphOutput{Projects: []types.TargetGraphProject{{Path: "."}}},
+		Symbols: map[string][]types.KnowledgeSymbol{".": {long}},
+	}) {
+		head.Merge(sh.Nodes, sh.Edges)
+	}
+	conform := shippedConform()
+	conform.Limits = map[types.ConformKey]types.ConformLimit{
+		{Metric: types.ConformFuncLines, Population: types.ConformPopSource}: {Percentile: 99, Anchor: 8},
+	}
+	conform.RatchetPath, conform.Ratchet = "conform.json", types.ConformRatchet{Schema: 1}
+	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
+
+	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head,
+		conformanceInput{conform: conform, patch: trailPatch})
+
+	require.Len(t, out.Files[0].Symbols, 1)
+	var names []string
+	for _, c := range out.Files[0].Symbols[0].Checks {
+		names = append(names, c.Name)
+	}
+	assert.Contains(t, names, "conform-threshold")
+}
+
+const ratchetHead = `{"schema":1,"measured":{"rev":"r","date":"d"},
+"thresholds":[{"metric":"func-lines","population":"source","value":80,"n":40,"percentile":99,"why":"w"}],
+"known":[]}
+`
+
+func ratchetConform() types.ConformOptions {
+	o := shippedConform()
+	o.RatchetPath = "conform.json"
+	return o
+}
+
+func readRatchet(text string) func(string) (string, bool) {
+	return func(path string) (string, bool) { return text, path == "conform.json" && text != "" }
+}
+
+func TestDiffConformReadsTheRatchetAndItsBase(t *testing.T) {
+	loosened := `diff --git a/conform.json b/conform.json
+--- a/conform.json
++++ b/conform.json
+@@ -1,3 +1,3 @@
+ {"schema":1,"measured":{"rev":"r","date":"d"},
+-"thresholds":[{"metric":"func-lines","population":"source","value":70,"n":40,"percentile":99,"why":"w"}],
++"thresholds":[{"metric":"func-lines","population":"source","value":80,"n":40,"percentile":99,"why":"w"}],
+ "known":[]}
+`
+	generated := map[string]bool{"gen/x.go": true}
+	o, base, note, err := diffConform(ratchetConform(), diffConfig{minCohort: 7}, loosened, generated, readRatchet(ratchetHead))
+
+	require.NoError(t, err)
+	assert.Empty(t, note)
+	assert.Equal(t, 80, o.Ratchet.Thresholds[0].Value)
+	require.NotNil(t, base)
+	assert.Equal(t, 70, base.Thresholds[0].Value, "the base is the record before the patch")
+	assert.Equal(t, 7, o.Gates.MinCohort, "a review's override wins")
+	assert.Equal(t, shippedConform().Gates.MinShare, o.Gates.MinShare, "an unset override keeps the configured gate")
+	assert.Equal(t, generated, o.Generated)
+
+	_, base, _, err = diffConform(ratchetConform(), diffConfig{}, trailPatch, nil, readRatchet(ratchetHead))
+	require.NoError(t, err)
+	require.NotNil(t, base)
+	assert.Equal(t, 80, base.Thresholds[0].Value, "a patch that leaves the record alone has it as its base")
+
+	added := "diff --git a/conform.json b/conform.json\nnew file mode 100644\n--- /dev/null\n+++ b/conform.json\n@@ -0,0 +1,3 @@\n+" +
+		strings.ReplaceAll(strings.TrimSuffix(ratchetHead, "\n"), "\n", "\n+") + "\n"
+	_, base, _, err = diffConform(ratchetConform(), diffConfig{}, added, nil, readRatchet(ratchetHead))
+	require.NoError(t, err)
+	assert.Nil(t, base, "a record the change adds has no base")
+}
+
+func TestDiffConformRefusesAMissingOrInvalidRecord(t *testing.T) {
+	_, _, _, err := diffConform(ratchetConform(), diffConfig{}, "", nil, readRatchet(""))
+	require.ErrorContains(t, err, "conform.json")
+
+	_, _, _, err = diffConform(ratchetConform(), diffConfig{}, "", nil, readRatchet(`{"schema":2}`))
+	require.ErrorContains(t, err, "schema 2")
+
+	o, base, note, err := diffConform(shippedConform(), diffConfig{}, "", nil, readRatchet(""))
+	require.NoError(t, err, "no ratchet path configured reads nothing")
+	assert.Nil(t, base)
+	assert.Empty(t, note)
+	assert.Equal(t, shippedConform().Gates, o.Gates)
 }
 
 func TestPairRenames(t *testing.T) {

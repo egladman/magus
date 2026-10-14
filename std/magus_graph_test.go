@@ -8,6 +8,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
@@ -253,7 +254,8 @@ func TestRefsMemoizesPerSymbolScope(t *testing.T) {
 
 // precedentGraphs is a workspace whose indexes have the given freshness and whose declared
 // outputs are the given paths. Its freshen fails with freshenErr and records whether it ran
-// before the freshness was read.
+// before the freshness was read. Its knowledge.conform is the shipped one unless conform
+// names another, and conformErr fails reading it.
 type precedentGraphs struct {
 	*builtGraphWorkspace
 	indexes    []types.SymbolIndexStatus
@@ -261,6 +263,39 @@ type precedentGraphs struct {
 	freshenErr error
 	freshened  bool
 	readAfter  bool
+	conform    *types.ConformOptions
+	conformErr error
+}
+
+func (p *precedentGraphs) ConformOptions() (types.ConformOptions, error) {
+	if p.conform != nil {
+		return *p.conform, p.conformErr
+	}
+	return config.Defaults().Knowledge.Conform.Options(), p.conformErr
+}
+
+func TestPrecedentsAreJudgedByTheWorkspacesConform(t *testing.T) {
+	t.Parallel()
+	g := knowledge.NewGraph()
+	for i, name := range []string{"ErrA", "ErrB", "ErrC", "ErrD", "ErrE", "ErrF"} {
+		errValue(g, fmt.Sprintf("internal/a/e%d.go", i), 3, name)
+	}
+	raised := config.Defaults().Knowledge.Conform.Options()
+	raised.Gates.MinCohort = 7
+	ws := &precedentGraphs{builtGraphWorkspace: &builtGraphWorkspace{g: g, cacheDir: t.TempDir()}, conform: &raised}
+
+	got, err := MagusPrecedents(types.WithWorkspace(t.Context(), ws))
+	require.NoError(t, err)
+	b, err := json.Marshal(got)
+	require.NoError(t, err)
+	var report types.PrecedentReport
+	require.NoError(t, json.Unmarshal(b, &report))
+	require.Len(t, report.Precedents, 1)
+	assert.False(t, report.Precedents[0].Established, "six cases are under the workspace's cohort gate of seven")
+
+	ws.conformErr = errors.New("conform.json: line 1: schema 2: want 1")
+	_, err = MagusPrecedents(types.WithWorkspace(t.Context(), ws))
+	assert.ErrorContains(t, err, "schema 2", "a record that cannot be read is an error, never the shipped gates")
 }
 
 func (p *precedentGraphs) FreshenSymbolIndexes(context.Context) error {

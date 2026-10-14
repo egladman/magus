@@ -27,7 +27,7 @@ func TestConformanceFindsParameterOrderDrift(t *testing.T) {
 	subj := cmdFunc("jobWatchFiles", "ctx context.Context, out io.Writer, root string, plan func() []types.Job")
 	g := namingGraph(t, append(peers, subj))
 
-	got := g.Conformance(ConformanceChange{Subjects: subjectIDs(subj), Introduced: introduced(subj)})
+	got := g.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(subj), Introduced: introduced(subj)})
 
 	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(types.CheckParamOrder,
 		"`jobWatchFiles` takes `out` before `root`; 5 of 5 functions in its scope that take both take `root` first",
@@ -46,7 +46,7 @@ func TestConformanceFindsParameterOrderDriftInTypeScript(t *testing.T) {
 	subj := sym("drawBadge", "row: Row, host: HTMLElement")
 	g := namingGraph(t, append(syms, subj))
 
-	got := g.Conformance(ConformanceChange{Subjects: subjectIDs(subj)})
+	got := g.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(subj)})
 
 	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(types.CheckParamOrder,
 		"`drawBadge` takes `row` before `host`; 5 of 5 functions in its scope that take both take `host` first",
@@ -70,6 +70,6 @@ func TestConformanceSilentOnUndecidedParameterOrder(t *testing.T) {
 	other := cmdFunc("c2", "root string, out io.Writer")
 	g := namingGraph(t, append(peers, subj, other))
 
-	assert.Empty(t, g.Conformance(ConformanceChange{Subjects: subjectIDs(subj, other)}),
+	assert.Empty(t, g.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(subj, other)}),
 		"five one way and four the other is a workspace that has not decided")
 }
