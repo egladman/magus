@@ -1,7 +1,9 @@
 package job
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -260,7 +262,7 @@ func RefuseUnorderedFileShare(ctx context.Context, store *Store, rows []types.Jo
 				if !types.PathsIntersect(mine, theirs) {
 					continue
 				}
-				touched, unknown := touchedDeclarations(ctx, store, rows, holder.ID, file)
+				touched, unreadable := touchedDeclarations(ctx, store, rows, holder.ID, file)
 				if projectConfig(store.root, file) {
 					wanted := slices.DeleteFunc(slices.Clone(row.WritePaths), func(entry string) bool {
 						other, ok := literalClaimableFile(store.root, entry)
@@ -274,7 +276,7 @@ func RefuseUnorderedFileShare(ctx context.Context, store *Store, rows []types.Jo
 						" say otherwise. %s has touched %s in it so far. %s",
 					row.ID, mine, holder.ID, holder.State, updatedAgo(holder), theirs,
 					file,
-					holder.ID, describeTouched(touched, unknown),
+					holder.ID, describeTouched(touched, unreadable),
 					splitAdvice(ctx, store, row, holder, file, touched))
 			}
 		}
@@ -337,38 +339,35 @@ func dependsOnTransitively(combined []types.Job, from, on string) bool {
 }
 
 // touchedDeclarations are the declarations holder has changed inside file so far, sorted,
-// with "" standing for lines no declaration encloses. unknown says why they cannot be
-// read and is "" when they can. Reads the tree once per call; a fork the rule passes never
-// pays for it.
-func touchedDeclarations(ctx context.Context, store *Store, rows []types.Job, holder, file string) (decls []string, unknown string) {
+// with types.Preamble standing for lines no declaration encloses. The error says why they
+// cannot be read. Reads the tree once per call; a fork the rule passes never pays for it.
+func touchedDeclarations(ctx context.Context, store *Store, rows []types.Job, holder, file string) ([]string, error) {
 	driver, _ := resolveDriver(ctx, store.root)
 	fp := readFootprint(withFootprintCache(ctx, store.footprintCache()), driver, rows, holder)
 	if !fp.known {
-		if fp.reason == "" {
-			return nil, "its footprint could not be read"
-		}
-		return nil, fp.reason
+		return nil, errors.New(cmp.Or(fp.reason, "its footprint could not be read"))
 	}
+	var decls []string
 	for _, r := range fp.regions {
 		if loc := r.Location(); loc.Path == file {
-			decls = appendUnique(decls, loc.Declaration)
+			decls = appendUnique(decls, cmp.Or(loc.Declaration, types.Preamble))
 		}
 	}
 	slices.Sort(decls)
-	return decls, ""
+	return decls, nil
 }
 
 // describeTouched is touchedDeclarations as a refusal names it.
-func describeTouched(decls []string, unknown string) string {
-	if unknown != "" {
-		return fmt.Sprintf("unknown (%s)", unknown)
+func describeTouched(decls []string, unreadable error) string {
+	if unreadable != nil {
+		return fmt.Sprintf("unknown (%s)", unreadable)
 	}
 	if len(decls) == 0 {
 		return "none yet"
 	}
 	named := slices.Clone(decls)
 	for i, d := range named {
-		if d == "" {
+		if d == types.Preamble {
 			named[i] = "the top of the file"
 		}
 	}
@@ -390,7 +389,7 @@ func splitAdvice(ctx context.Context, store *Store, row, holder types.Job, file 
 	all, _ := declarationsOf(ctx, driver, store.root, file)
 	var theirs, mine []string
 	for _, d := range touched {
-		if d != "" {
+		if d != types.Preamble {
 			theirs = appendUnique(theirs, claimWord(d, all))
 		}
 	}

@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -331,7 +332,12 @@ func TestForkNotes(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, ForkNotes(ctx, s, nil, types.Job{ID: "B", WritePaths: tc.paths}))
+			got := ForkNotes(ctx, s, nil, types.Job{ID: "B", WritePaths: tc.paths})
+			if tc.want == nil {
+				assert.Empty(t, got, "a claim that needs no check owes its reader no note")
+				return
+			}
+			assert.Equal(t, tc.want, got)
 		})
 	}
 
@@ -383,4 +389,12 @@ func TestRefuseUnorderedFileShareTransitiveDependsOn(t *testing.T) {
 
 	candidate := types.Job{ID: "B", WritePaths: []string{"magusfile.buzz"}, DependsOn: []string{"M"}}
 	require.NoError(t, RefuseUnorderedFileShare(context.Background(), s, rows, candidate))
+}
+
+func TestDescribeTouched(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "none yet", describeTouched(nil, nil))
+	assert.Equal(t, "the top of the file, func A() {", describeTouched([]string{types.Preamble, "func A() {"}, nil))
+	assert.Equal(t, "unknown (its footprint could not be read)", describeTouched(nil, errors.New("its footprint could not be read")))
 }
