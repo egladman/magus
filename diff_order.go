@@ -128,7 +128,7 @@ func buildOrder(root, patch string, files []types.DiffFile, graph *knowledge.Gra
 		Files:      orderFiles(files, movedFiles(root, patch)),
 		Sites:      sites,
 		Implements: orderLinks(graph, files),
-		IsTest:     knowledge.IsTestPath,
+		IsTest:     types.IsTestPath,
 	})
 }
 

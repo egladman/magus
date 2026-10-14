@@ -280,7 +280,7 @@ func foldImports(symbols map[string][]types.KnowledgeSymbol) map[string]foldedIm
 				nsLang[sym.Key] = l
 			}
 			for _, def := range sym.Defs {
-				if IsTestPath(def) {
+				if types.IsTestPath(def) {
 					continue
 				}
 				if fileNS[def] == nil {
@@ -318,7 +318,7 @@ func foldImports(symbols map[string][]types.KnowledgeSymbol) map[string]foldedIm
 		for _, sym := range syms {
 			if sym.Key != "" && sym.Namespace == sym.Key {
 				for _, ref := range sym.Refs {
-					if IsTestPath(ref.Path) {
+					if types.IsTestPath(ref.Path) {
 						continue
 					}
 					for from := range fileNS[ref.Path] {
@@ -326,7 +326,7 @@ func foldImports(symbols map[string][]types.KnowledgeSymbol) map[string]foldedIm
 					}
 				}
 			}
-			if sym.Namespace == "" || IsTestPath(sym.Source) {
+			if sym.Namespace == "" || types.IsTestPath(sym.Source) {
 				continue
 			}
 			for _, c := range sym.Calls {
@@ -374,39 +374,11 @@ func foldImports(symbols map[string][]types.KnowledgeSymbol) map[string]foldedIm
 func testRefCount(refs []types.KnowledgeSymbolRef) int {
 	n := 0
 	for _, ref := range refs {
-		if IsTestPath(ref.Path) {
+		if types.IsTestPath(ref.Path) {
 			n++
 		}
 	}
 	return n
-}
-
-// testSuffixes and testPrefixes are the naming conventions that mark a file as a test in
-// the languages a SCIP indexer covers. By NAME, because the graph is language-agnostic and
-// a name is the one thing every language's convention agrees can carry it.
-var (
-	testSuffixes = []string{"_test.go", ".test.ts", ".test.tsx", ".test.js", ".spec.ts", ".spec.tsx", ".spec.js", "_test.py"}
-	testPrefixes = []string{"test_"}
-)
-
-// IsTestPath reports whether a path (or a symbol Source, "<path>:<line>") is a test file.
-// It recognizes Go (_test.go), TypeScript and JavaScript (.test and .spec), and Python
-// (test_*.py, *_test.py) by file name alone, which is what the symbol indexes cover. One
-// predicate for the lenses and the reading order, so they cannot drift apart.
-func IsTestPath(source string) bool {
-	path, _, _ := strings.Cut(source, ":")
-	base := path[strings.LastIndex(path, "/")+1:]
-	for _, s := range testSuffixes {
-		if strings.HasSuffix(base, s) {
-			return true
-		}
-	}
-	for _, p := range testPrefixes {
-		if strings.HasPrefix(base, p) && strings.HasSuffix(base, ".py") {
-			return true
-		}
-	}
-	return false
 }
 
 // refProvenance encodes a reference's occurrence count and capped line list into the

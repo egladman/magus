@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/types"
 )
 
@@ -31,7 +30,7 @@ func UnreferencedInPaths(row types.Job, unreferenced []types.UnreferencedEntry) 
 	}
 	var out []types.UnreferencedEntry
 	for _, e := range unreferenced {
-		if e.Kind == "Method" || e.Kind == "Field" || knowledge.IsTestPath(e.Source) {
+		if e.Kind == "Method" || e.Kind == "Field" || types.IsTestPath(e.Source) {
 			continue
 		}
 		file, _, _ := strings.Cut(e.Source, ":")

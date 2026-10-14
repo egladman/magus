@@ -52,7 +52,7 @@ func readSymbolDelta(ctx context.Context, root string, g *knowledge.Graph, drive
 	var delta symbolDelta
 	var goFiles []types.FileChange
 	for _, p := range changed {
-		if _, present := after[p]; present && strings.HasSuffix(p, ".go") && !knowledge.IsTestPath(p) {
+		if _, present := after[p]; present && strings.HasSuffix(p, ".go") && !types.IsTestPath(p) {
 			goFiles = append(goFiles, types.FileChange{Path: p})
 		}
 	}
@@ -94,7 +94,7 @@ func readSymbolDelta(ctx context.Context, root string, g *knowledge.Graph, drive
 		return false
 	}
 	for _, e := range g.Unreferenced() {
-		if knowledge.IsTestPath(e.Source) || len(descriptorNames(e.ID)) != 1 {
+		if types.IsTestPath(e.Source) || len(descriptorNames(e.ID)) != 1 {
 			continue
 		}
 		if held(before, e.Label) && !held(after, e.Label) {
