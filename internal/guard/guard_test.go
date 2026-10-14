@@ -606,6 +606,21 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		assert.NotContains(t, write("b.go", "package a\n\n// again\n").Context, rule, "once per session")
 	})
 
+	covered["host-cursor-rules"] = true
+	t.Run("host-cursor-rules", func(t *testing.T) {
+		ctx, ws, _ := writeFixture(t)
+		write := func(name string) Verdict {
+			return Judge(ctx, Dependencies{WriteRule: m.WriteRule()}, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
+				"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Write",
+				"tool_input": map[string]any{"file_path": filepath.Join(ws, name), "content": "{}\n"},
+			})})
+		}
+		v := write(".cursor/rules/x.mdc")
+		assert.Equal(t, verdictWithRule("deny", workspaceWriteRule), unworded(v), v.Reason)
+		assert.Contains(t, v.Reason, "docs/guides/integrations/agents/cursor.md")
+		assert.NotEqual(t, "deny", write(".cursor/hooks.json").Decision)
+	})
+
 	// The binary rules read the trees a line names, so each case builds its own.
 	judgeIn := func(t *testing.T, ws, command string) Verdict {
 		t.Helper()
