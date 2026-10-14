@@ -17,7 +17,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/service/console"
-	insightv1 "github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1"
+	graphv1 "github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1"
+	insightv1"github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1/insightv1alpha1connect"
 	"github.com/egladman/magus/types"
 )
@@ -53,8 +54,8 @@ func (s *Service) GetInsight(ctx context.Context, _ *connect.Request[insightv1.G
 }
 
 // insightToProto maps the domain view onto the wire. Every lens is always present; only
-// volatility and the model-tier lens are nilable, and a nil report stays nil so a reader can
-// tell "no run history recorded" from "no volatile targets".
+// volatility, the model-tier lens and conform are nilable, and a nil report stays nil so a
+// reader can tell "no run history recorded" from "no volatile targets".
 func insightToProto(v types.InsightView) *insightv1.Insight {
 	return &insightv1.Insight{
 		Hotspots: &insightv1.HotspotOutput{
@@ -84,6 +85,64 @@ func insightToProto(v types.InsightView) *insightv1.Insight {
 		},
 		Volatility: volatilityToProto(v.Volatility),
 		ModelTiers: modelTiersToProto(v.ModelTiers),
+		Conform:    conformToProto(v.Conform),
+	}
+}
+
+func conformToProto(o *types.ConformOutput) *insightv1.ConformOutput {
+	if o == nil {
+		return nil
+	}
+	return &insightv1.ConformOutput{
+		Definition: o.Definition,
+		Rows: mapSlice(o.Rows, func(r types.ConformRow) *insightv1.ConformRow {
+			return &insightv1.ConformRow{
+				Key: &insightv1.ConformKey{
+					Metric:     string(r.Key.Metric),
+					Population: string(r.Key.Population),
+					Scope:      r.Key.Scope,
+				},
+				N:          int32(r.N),
+				P50:        int32(r.P50),
+				P90:        int32(r.P90),
+				P95:        int32(r.P95),
+				P99:        int32(r.P99),
+				Live:       int32(r.Live),
+				Value:      int32(r.Value),
+				Anchor:     int32(r.Anchor),
+				Propose:    int32(r.Propose),
+				Known:      int32(r.Known),
+				Source:     string(r.Source),
+				Violations: mapSlice(r.Violations, conformItemToProto),
+			}
+		}),
+		Stale: mapSlice(o.Stale, func(k types.ConformKnown) *insightv1.ConformKnown {
+			return &insightv1.ConformKnown{Metric: string(k.Metric), Items: k.Items, Reason: k.Reason}
+		}),
+		Excluded: int32(o.Excluded),
+		Answer:   answerToProto(o.Answer),
+	}
+}
+
+func conformItemToProto(i types.ConformItem) *insightv1.ConformItem {
+	return &insightv1.ConformItem{Id: i.ID, Source: i.Source, Measure: int32(i.Measure)}
+}
+
+// answerToProto is the graph handler's mapping of a coverage verdict, kept beside its one
+// other use rather than exported from that package: each gap flattens to the two project
+// fields that go on the wire, and Dir, an absolute host path, never does.
+func answerToProto(a types.KnowledgeAnswer) *graphv1.Answer {
+	return &graphv1.Answer{
+		Verdict: string(a.Verdict),
+		Reason:  string(a.Reason),
+		Gaps: mapSlice(a.Gaps, func(g types.KnowledgeSymbolGap) *graphv1.SymbolGap {
+			return &graphv1.SymbolGap{
+				ProjectPath: g.Project.Path,
+				ProjectName: g.Project.Name,
+				State:       string(g.State),
+				Detail:      g.Detail,
+			}
+		}),
 	}
 }
 

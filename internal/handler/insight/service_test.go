@@ -12,7 +12,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/service/console"
-	insightv1 "github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1"
+	graphv1 "github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1"
+	insightv1"github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1"
 	"github.com/egladman/magus/types"
 )
 
@@ -112,6 +113,31 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 				MeanCostUSD: 0.07, MedianTokens: 41_000,
 			}},
 		},
+		Conform: &types.ConformOutput{
+			Definition: types.ConformDefinition,
+			Rows: []types.ConformRow{{
+				Key:        types.ConformKey{Metric: types.ConformDepFanout, Population: types.ConformPopSource, Scope: "cmd/magus"},
+				N:          1,
+				P50:        81,
+				P90:        82,
+				P95:        83,
+				P99:        84,
+				Live:       85,
+				Value:      120,
+				Anchor:     130,
+				Propose:    86,
+				Known:      1,
+				Source:     types.ConformFromRatchet,
+				Violations: []types.ConformItem{{ID: "cmd/magus", Source: "cmd/magus:1", Measure: 140}},
+			}},
+			Stale:    []types.ConformKnown{{Metric: types.ConformCloneTokens, Items: []string{"a.go#A"}, Reason: "twins"}},
+			Excluded: 3,
+			Answer: types.KnowledgeAnswer{
+				Verdict: types.VerdictUnknown,
+				Reason:  types.ReasonSymbolIndexMissing,
+				Gaps:    []types.KnowledgeSymbolGap{{Project: types.ProjectRef{Path: "libs/x", Name: "x", Dir: "/abs/libs/x"}, State: "stale", Detail: "behind"}},
+			},
+		},
 	}}
 
 	want := &insightv1.Insight{
@@ -188,6 +214,31 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 				MeanCostUsd: 0.07, MedianTokens: 41_000,
 			}},
 		},
+		Conform: &insightv1.ConformOutput{
+			Definition: types.ConformDefinition,
+			Rows: []*insightv1.ConformRow{{
+				Key:        &insightv1.ConformKey{Metric: "dep-fanout", Population: "source", Scope: "cmd/magus"},
+				N:          1,
+				P50:        81,
+				P90:        82,
+				P95:        83,
+				P99:        84,
+				Live:       85,
+				Value:      120,
+				Anchor:     130,
+				Propose:    86,
+				Known:      1,
+				Source:     "ratchet",
+				Violations: []*insightv1.ConformItem{{Id: "cmd/magus", Source: "cmd/magus:1", Measure: 140}},
+			}},
+			Stale:    []*insightv1.ConformKnown{{Metric: "clone-tokens", Items: []string{"a.go#A"}, Reason: "twins"}},
+			Excluded: 3,
+			Answer: &graphv1.Answer{
+				Verdict: "unknown",
+				Reason:  "symbol-index-missing",
+				Gaps:    []*graphv1.SymbolGap{{ProjectPath: "libs/x", ProjectName: "x", State: "stale", Detail: "behind"}},
+			},
+		},
 	}
 
 	got, err := get(t, src)
@@ -210,6 +261,7 @@ func TestGetInsight_NilVolatility(t *testing.T) {
 	require.True(t, proto.Equal(want, got), "wire mismatch:\ngot  %v\nwant %v", got, want)
 	require.Nil(t, got.GetVolatility(), "a nil report must stay absent on the wire")
 	require.Nil(t, got.GetModelTiers(), "so must a nil model-tier lens")
+	require.Nil(t, got.GetConform(), "and a conform lens the server never read")
 }
 
 // A zero time.Time is UNSET on the wire, not the year-0001 sentinel the JSON route emitted.

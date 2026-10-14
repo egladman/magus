@@ -13,12 +13,14 @@ syntax = "proto3";
 // this wire lives in the handler, so the domain type stays free of protobuf. buf-breaking
 // gates this file.
 //
-// It deliberately does NOT carry the knowledge-graph axis (types.InsightReport's graph_stats):
-// the console read never touches the knowledge graph, and folding it in here would make every
-// dashboard poll pay for a graph load.
+// It carries one knowledge-graph lens, conform, and no other (types.InsightReport's graph_stats,
+// unreferenced and duplication stay out): conform is the one that proposes a value for a
+// person to commit, so the dashboard shows it beside the history it is judged against. The
+// server computes it with the cached scan, so a burst of polls pays for one graph load.
 package magus.insight.v1alpha1;
 
 import "google/protobuf/timestamp.proto";
+import "magus/graph/v1alpha1/graph.proto";
 
 // InsightService serves the assembled lenses to the console dashboard. One read-only unary
 // RPC: the four git lenses come from a server-cached scan (~10s TTL) and volatility from a
@@ -33,7 +35,9 @@ message GetInsightRequest {}
 // Insight bundles the six lenses. volatility is absent (not an empty report) when the
 // workspace has no run-outcome history to score - the distinction matters to a reader, which
 // renders "no runs recorded yet" rather than "no volatile targets". model_tiers is absent
-// for the same reason when no job outcome was ever recorded.
+// for the same reason when no job outcome was ever recorded. conform is absent when the
+// server holds no workspace to read; a workspace without a symbol index sends it with an
+// unknown answer.
 message Insight {
   HotspotOutput hotspots = 1;
   AffinityOutput affinity = 2;
@@ -41,6 +45,7 @@ message Insight {
   TrendOutput trend = 4;
   VolatilityReport volatility = 5;
   ModelTierOutput model_tiers = 6;
+  ConformOutput conform = 7;
 }
 
 // Every git lens repeats definition/commits/since because each is independently renderable:
@@ -225,4 +230,63 @@ message ModelTierRecord {
   double widenings_per_job = 12;
   double mean_cost_usd = 13;
   int64 median_tokens = 14;
+}
+
+// ConformOutput is the code-shape lens: one row per metric and population, judged against the
+// value a check enforces. It reads the symbol graph, not git. It reports and proposes; a
+// person commits a proposed value to the ratchet record, and nothing here sets one. answer is
+// unknown, never a pass, when a symbol index is missing. excluded counts the files the
+// configured exclusions hid, so a widened exclusion stays visible.
+message ConformOutput {
+  string definition = 1;
+  repeated ConformRow rows = 2;
+  repeated ConformKnown stale = 3;
+  int32 excluded = 4;
+  magus.graph.v1alpha1.Answer answer = 5;
+}
+
+// ConformKey names one threshold: metric (file-lines, func-lines, type-methods, file-symbols,
+// dep-fanout, clone-tokens or export-scope), population (source, main or test) and, for
+// dep-fanout, the layer or package directory it covers.
+message ConformKey {
+  string metric = 1;
+  string population = 2;
+  string scope = 3;
+}
+
+// ConformRow is one key's distribution and verdict. live is the configured percentile today;
+// value and source (ratchet or anchor) are what a check enforces, and anchor is the shipped
+// bound no committed value may exceed. propose is zero, or a tighter value to commit; it is
+// never looser than value. known counts the accepted items past value, and violations are the
+// rest.
+message ConformRow {
+  ConformKey key = 1;
+  int32 n = 2;
+  int32 p50 = 3;
+  int32 p90 = 4;
+  int32 p95 = 5;
+  int32 p99 = 6;
+  int32 live = 7;
+  int32 value = 8;
+  int32 anchor = 9;
+  int32 propose = 10;
+  int32 known = 11;
+  string source = 12;
+  repeated ConformItem violations = 13;
+}
+
+// ConformItem is one file, symbol, package or clone group past its row's value and not known.
+// source is its path:line.
+message ConformItem {
+  string id = 1;
+  string source = 2;
+  int32 measure = 3;
+}
+
+// ConformKnown is a list of items already past a metric's value and accepted for a reason.
+// In ConformOutput.stale it names the entries that no longer violate and should be deleted.
+message ConformKnown {
+  string metric = 1;
+  repeated string items = 2;
+  string reason = 3;
 }

@@ -34,8 +34,10 @@ type insightEntry struct {
 // ownership, trend) come from one bounded git-log scan cached for insightTTL, so a burst of
 // dashboard polls does not re-shell git on every request. The fifth lens, volatility, and the
 // sixth, model tiers, ride fresh on every call: each is a cheap runtime-history file read that
-// changes on every run, so a TTL-stale copy would mislead the dashboard. The result is one
-// InsightView carrying every lens.
+// changes on every run, so a TTL-stale copy would mislead the dashboard. The conform lens
+// reads the symbol graph rather than history and rides the cached scan, since building the
+// graph is the cost the TTL exists to share. The result is one InsightView carrying every
+// lens.
 func (s *Service) Insight(ctx context.Context) (types.InsightView, error) {
 	view, err := s.cachedScan(ctx)
 	if err != nil {
@@ -113,7 +115,13 @@ func (s *Service) computeInsight(ctx context.Context) (types.InsightView, error)
 	if err != nil {
 		return types.InsightView{}, err
 	}
-	return types.InsightView{Hotspots: hot, Affinity: aff, Ownership: own, Trend: tr}, nil
+	// A configuration the lens cannot honor fails the read: the dashboard shows the error
+	// rather than a conform section that looks clean.
+	conform, err := s.magus.Conform(ctx)
+	if err != nil {
+		return types.InsightView{}, err
+	}
+	return types.InsightView{Hotspots: hot, Affinity: aff, Ownership: own, Trend: tr, Conform: &conform}, nil
 }
 
 // volatility reports per-(project, target) volatility read from the shared runtime-history file
