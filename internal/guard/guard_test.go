@@ -2,13 +2,11 @@ package guard
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -1023,82 +1021,6 @@ func TestEveryJudgedDecisionNamesItsRule(t *testing.T) {
 	assert.Greater(t, checked, 10, "found too few decisions; the walk stopped reaching Judge's arms")
 }
 
-// TestJudgeClosesStdinForAShellCommand: an agent's command inherits a stdin nobody writes
-// to, and a reader of it waits forever. Where the wiring can hand the host a rewrite, the
-// guard closes it, says so once per session, and records that it did.
-func TestJudgeClosesStdinForAShellCommand(t *testing.T) {
-	dir := t.TempDir()
-	ctx := WithLocation(t.Context(), dir, "/repo", "")
-	judge := func(input string, rewrites bool) Verdict {
-		return Judge(ctx, strict(Dependencies{}), Request{Input: input, Host: "test-host", Session: "s1", RewritesInput: rewrites})
-	}
-
-	first := judge("ls -la", true)
-	assert.Equal(t, Verdict{
-		SchemaVersion:  agent.GuardSchemaVersion,
-		Decision:       "advise",
-		Context:        stdinClosedNotice,
-		Rule:           string(advisoryStdinClosed),
-		UpdatedCommand: "exec </dev/null; ls -la",
-	}, first, "the first rewrite of a session says so")
-
-	again := judge("ls", true)
-	assert.Equal(t, Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass", UpdatedCommand: "exec </dev/null; ls"}, again,
-		"once per session, then the rewrite alone")
-
-	assert.Empty(t, judge("exec </dev/null; ls", true).UpdatedCommand, "a command that closes stdin itself is never prefixed twice")
-	assert.Empty(t, judge("ls", false).UpdatedCommand, "a wiring that cannot hand the host a rewrite gets none")
-
-	denied := judge("git add -A", true)
-	assert.Equal(t, "deny", denied.Decision)
-	assert.Empty(t, denied.UpdatedCommand, "a refused call is never rewritten")
-
-	events := trailEvents(t, dir, trail.KindAgentCommand)
-	require.Len(t, events, 5)
-	var closed []bool
-	for _, e := range events {
-		raw, err := trail.ReadBlob(dir, e.ResponseRef)
-		require.NoError(t, err)
-		var resp struct {
-			StdinClosed bool `json:"stdin_closed"`
-		}
-		require.NoError(t, json.Unmarshal(raw, &resp))
-		closed = append(closed, resp.StdinClosed)
-	}
-	assert.Equal(t, []bool{true, true, false, false, false}, closed, "the trail records each rewrite and nothing else")
-}
-
-// stdin-closed honors every decision a workspace may set: advise says so once a session,
-// off keeps the rewrite and drops the notice, and deny refuses every line that leaves
-// stdin open, without rewriting it.
-func TestJudgeStdinClosedHonorsEveryDecision(t *testing.T) {
-	refused := Verdict{Decision: "deny", Rule: string(advisoryStdinClosed)}
-	for _, tt := range []struct {
-		decision     builtin.Decision
-		first, again Verdict
-	}{
-		{builtin.Advise,
-			Verdict{Decision: "advise", Context: stdinClosedNotice, Rule: string(advisoryStdinClosed), UpdatedCommand: "exec </dev/null; ls -la"},
-			Verdict{Decision: "pass", UpdatedCommand: "exec </dev/null; ls"}},
-		{builtin.Off,
-			Verdict{Decision: "pass", UpdatedCommand: "exec </dev/null; ls -la"},
-			Verdict{Decision: "pass", UpdatedCommand: "exec </dev/null; ls"}},
-		{builtin.Deny, refused, refused},
-	} {
-		t.Run(string(tt.decision), func(t *testing.T) {
-			ctx := WithLocation(t.Context(), t.TempDir(), "/repo", "")
-			deps := withSetting(string(advisoryStdinClosed), tt.decision)
-			judge := func(input string) Verdict {
-				v := Judge(ctx, deps, Request{Input: input, Host: "test-host", Session: "s1", RewritesInput: true})
-				return Verdict{Decision: v.Decision, Context: v.Context, Rule: v.Rule, UpdatedCommand: v.UpdatedCommand}
-			}
-
-			assert.Equal(t, tt.first, judge("ls -la"))
-			assert.Equal(t, tt.again, judge("ls"))
-		})
-	}
-}
-
 // The notices about the acting lease itself honor every decision a workspace may set:
 // advise says so once a session, off says nothing, and deny refuses every call rather
 // than only the first.
@@ -1139,49 +1061,6 @@ func TestJudgeLeaseNoticesHonorEveryDecision(t *testing.T) {
 	}
 }
 
-// TestClosedStdinLineRunsAsWritten runs each rewritten line in bash with a stdin that has
-// bytes waiting, which is the case the prefix exists for: every reader must see
-// end-of-file, and the line must otherwise behave exactly as the agent wrote it.
-func TestClosedStdinLineRunsAsWritten(t *testing.T) {
-	t.Parallel()
-	bash, err := exec.LookPath("bash")
-	if err != nil {
-		t.Skip("bash is not installed")
-	}
-	for _, tc := range []struct {
-		name, line, out string
-		code            int
-	}{
-		{"a reader of stdin", `read -r x; echo "[$x] $?"`, "[] 1\n", 0},
-		{"a filter with no operand", "wc -c", "0\n", 0},
-		{"a heredoc", "cat <<'EOF'\nhello\nEOF", "hello\n", 0},
-		{"a pipe", "echo piped | cat", "piped\n", 0},
-		{"an explicit redirect", "cat < /dev/null; echo done", "done\n", 0},
-		{"a trailing comment", "echo hi # read this", "hi\n", 0},
-		{"a trailing ampersand", "echo bg &", "bg\n", 0},
-		{"several lines", "echo a\necho b", "a\nb\n", 0},
-		{"an exit status", "echo out; exit 3", "out\n", 3},
-	} {
-		line, closed := closeStdin(tc.line)
-		require.True(t, closed, tc.name)
-		again, rewrapped := closeStdin(line)
-		assert.False(t, rewrapped, "%s: a wrapped line is never wrapped twice", tc.name)
-		assert.Equal(t, line, again, tc.name)
-
-		cmd := exec.Command(bash, "-c", line)
-		cmd.Stdin = strings.NewReader("LEAKED\n")
-		out, err := cmd.Output()
-		code := 0
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			code = exitErr.ExitCode()
-		} else {
-			require.NoError(t, err, tc.name)
-		}
-		assert.Equal(t, tc.out, strings.TrimLeft(string(out), " "), "%s: %q", tc.name, line)
-		assert.Equal(t, tc.code, code, "%s: the line's own exit status", tc.name)
-	}
-}
 
 // The shell advisories that spoke with no name, each now naming a catalogued rule.
 func TestShellAdvisoriesNameACataloguedRule(t *testing.T) {

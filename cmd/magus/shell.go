@@ -223,9 +223,6 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		// Declared by the wiring for the same reason: only a glue that renders the host's
 		// approval prompt can say so, and one that predates ask renders it as an allow.
 		RendersAsk: sf.RendersAsk,
-		// And again: only a glue that renders updated_command into the host's reply can
-		// say the host will run it.
-		RewritesInput: sf.RewritesInput,
 		// The call's own word on how the host runs it, and the host's foreground limits
 		// as the wiring declares them; a flag left out leaves the rules that read it silent.
 		CallBackground:        sf.CallBackground,

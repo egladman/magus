@@ -1767,14 +1767,13 @@ func TestSpawnRuleSurvivesAVersionFloor(t *testing.T) {
 
 	v := judgeSpawnAt(t, root)
 	assert.Equal(t, guard.Verdict{
-		SchemaVersion:  v.SchemaVersion,
-		Decision:       "deny",
-		Reason:         "Name a model.",
-		Rule:           v.Rule, // the rule's catalogued name is pinned by the guard's own tests
-		Lease:          v.Lease,
-		LeaseFrom:      v.LeaseFrom,
-		Next:           v.Next,
-		UpdatedCommand: v.UpdatedCommand,
+		SchemaVersion: v.SchemaVersion,
+		Decision:      "deny",
+		Reason:        "Name a model.",
+		Rule:          v.Rule, // the rule's catalogued name is pinned by the guard's own tests
+		Lease:         v.Lease,
+		LeaseFrom:     v.LeaseFrom,
+		Next:          v.Next,
 	}, v)
 }
 
@@ -1797,14 +1796,13 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 	v = guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{Input: "ls -la", Host: "claude-code"})
 	assert.Contains(t, v.Reason, "Not in this repository.")
 	assert.Equal(t, guard.Verdict{
-		SchemaVersion:  v.SchemaVersion,
-		Decision:       "deny",
-		Reason:         v.Reason, // checked above
-		Rule:           "workspace:command",
-		Lease:          v.Lease,
-		LeaseFrom:      v.LeaseFrom,
-		Next:           v.Next,
-		UpdatedCommand: v.UpdatedCommand,
+		SchemaVersion: v.SchemaVersion,
+		Decision:      "deny",
+		Reason:        v.Reason, // checked above
+		Rule:          "workspace:command",
+		Lease:         v.Lease,
+		LeaseFrom:     v.LeaseFrom,
+		Next:          v.Next,
 	}, v)
 }
 

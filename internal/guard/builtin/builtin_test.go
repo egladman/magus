@@ -10,7 +10,8 @@ import (
 
 func TestDefaults(t *testing.T) {
 	got := Defaults()
-	assert.Len(t, got, 110)
+	assert.Len(t, got, 109)
+	assert.NotContains(t, got, "stdin-closed")
 	want := map[string]Decision{
 		"compat-marker":        Advise,
 		"read-navigation":      Advise,
@@ -132,6 +133,8 @@ func TestResolveRefusesMisdeclarations(t *testing.T) {
 			coded{types.GuardRuleMisdeclared, `unknown built-in rule "read-navigaton"; did you mean "read-navigation"?`}},
 		{"unknown name with nothing near", map[string]Setting{"frobnicate": {Decision: Deny}},
 			coded{types.GuardRuleMisdeclared, "unknown built-in rule \"frobnicate\"; `magus describe rules` lists every name"}},
+		{"removed rule", map[string]Setting{"stdin-closed": {Decision: Deny}},
+			coded{types.GuardRuleMisdeclared, `built-in rule "stdin-closed" was removed; delete it from the declaration`}},
 		{"bad decision", map[string]Setting{"stage-all": {Decision: "block"}},
 			coded{types.GuardRuleMisdeclared, `built-in rule "stage-all": decision "block" is not off, advise or deny`}},
 		{"empty decision", map[string]Setting{"stage-all": {}},

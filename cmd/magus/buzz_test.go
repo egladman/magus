@@ -722,8 +722,6 @@ var glueVerdicts = []map[string]any{
 	{"decision": "pass"},
 	{"decision": "ask", "reason": `pushing abc1234, which no passing gate covers: "quoted" & <angled>`},
 	{"decision": "maybe", "reason": "a decision no template knows"},
-	{"decision": "pass", "updated_command": "exec </dev/null; git push"},
-	{"decision": "advise", "context": "magus runs your shell commands with stdin at end-of-file; pipe or redirect input explicitly.", "updated_command": "exec </dev/null; git push"},
 }
 
 // glueArrangement is one way a host reaches the shared glue: the host its wiring names,
@@ -965,59 +963,32 @@ func TestGlueLeavesAHumanOnlyRunToCodexsPrompt(t *testing.T) {
 	})
 }
 
-// TestGlueHandsBackTheRewrittenCommand pins the stdin rewrite per host. Claude Code's
-// updatedInput replaces the whole tool input, so every other field comes back with only
-// the command replaced; Codex applies updatedInput only beside an explicit allow, and a
-// restated Read is not the command the host runs, so neither is handed one.
-func TestGlueHandsBackTheRewrittenCommand(t *testing.T) {
+// TestGlueNeverRewritesTheCommand pins that no host is handed updatedInput: a pass renders
+// nothing and an advise renders its context alone, whatever the host or the tool. Claude
+// Code and Cursor already give a shell command a closed stdin, Codex never did, and a
+// rewrite would take a command out of reach of the person's own permission rules.
+func TestGlueNeverRewritesTheCommand(t *testing.T) {
 	funcs := templateFuncs()
 	const input = `{"command":"git push","description":"push it","timeout":60000,"run_in_background":true}`
-	const rewritten = `{"command":"exec </dev/null; git push","description":"push it","timeout":60000,"run_in_background":true}`
-	for _, tc := range []struct {
-		label, host, event string
-		want               map[string]string // decision -> reply; "" renders nothing
-	}{
-		{"claude-code", "claude-code",
-			`{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":` + input + `}`,
-			map[string]string{
-				"pass":   `{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":` + rewritten + `}}`,
-				"advise": `{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"said once","updatedInput":` + rewritten + `}}`,
-			}},
-		{"codex", "codex",
-			`{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":` + input + `}`,
-			map[string]string{
-				"pass":   "",
-				"advise": `{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"said once"}}`,
-			}},
-		{"a restated read", "claude-code",
-			`{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Read","tool_input":{"file_path":"README.md"}}`,
-			map[string]string{
-				"pass":   "",
-				"advise": `{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"said once"}}`,
-			}},
+	for _, tc := range []struct{ label, host, event string }{
+		{"claude-code", "claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":` + input + `}`},
+		{"codex", "codex", `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":` + input + `}`},
+		{"a restated read", "claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Read","tool_input":{"file_path":"README.md"}}`},
 	} {
 		t.Run(tc.label, func(t *testing.T) {
 			body, _ := runGlue(t, "magus-command.buzz", glueArrangement{label: tc.label, host: tc.host, event: tc.event, codex: tc.host == "codex"})
-			// magus renders with missingkey=error, and a verdict with no rewrite has no key.
 			tmpl, err := template.New(tc.label).Funcs(funcs).Option("missingkey=error").Parse(body)
 			require.NoError(t, err)
-			for decision, want := range tc.want {
-				verdict := map[string]any{"decision": decision, "updated_command": "exec </dev/null; git push"}
-				if decision == "advise" {
-					verdict["context"] = "said once"
-				}
-				var out strings.Builder
-				require.NoError(t, tmpl.Execute(&out, verdict), "%s on a %s", tc.label, decision)
-				if want == "" {
-					assert.Empty(t, out.String(), "%s on a %s", tc.label, decision)
-					continue
-				}
-				assert.JSONEq(t, want, out.String(), "%s on a %s", tc.label, decision)
-				require.NoError(t, glueLoadSchema(t, glueHostOutputSchema[tc.host]).Validate(glueDecode(t, tc.label, out.String())))
-			}
-			var plain strings.Builder
-			require.NoError(t, tmpl.Execute(&plain, map[string]any{"decision": "pass"}), "a pass with no rewrite has no updated_command key")
-			assert.Empty(t, plain.String())
+
+			var pass strings.Builder
+			require.NoError(t, tmpl.Execute(&pass, map[string]any{"decision": "pass"}))
+			assert.Empty(t, pass.String(), "a pass renders nothing")
+
+			var advise strings.Builder
+			require.NoError(t, tmpl.Execute(&advise, map[string]any{"decision": "advise", "context": "said once"}))
+			assert.JSONEq(t, `{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"said once"}}`, advise.String())
+			assert.NotContains(t, advise.String(), "updatedInput")
+			require.NoError(t, glueLoadSchema(t, glueHostOutputSchema[tc.host]).Validate(glueDecode(t, tc.label, advise.String())))
 		})
 	}
 }

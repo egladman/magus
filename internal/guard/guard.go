@@ -530,11 +530,6 @@ type Request struct {
 	// False is the safe answer: rules that need it stand down, which is what keeps them
 	// from denying forever on a host that can never satisfy them.
 	ReportsSkills bool
-	// RewritesInput is the third capability: the input is a shell command the host runs,
-	// and the wiring's reply hands the host Verdict.UpdatedCommand to run in its place.
-	// Without it the guard closes no stdin, since a host that never receives the
-	// rewrite would run the command with stdin open while the trail says otherwise.
-	RewritesInput bool
 	// RendersAsk is the second capability: the wiring puts an ask verdict in front of the
 	// person through the host's own prompt. Without it an ask is returned as a deny,
 	// because a glue that predates the decision renders it as nothing and its host reads
@@ -583,42 +578,6 @@ type Verdict struct {
 	// Next is a deny's remedy, served only when it passes the guard for the acting
 	// lease, and pre-authorized for the calls after it. Reason renders it too.
 	Next []hint.Next `json:"next,omitempty"`
-	// UpdatedCommand is the command the host should run instead of the one it asked
-	// about: that command with stdin closed. Set only on a pass or advise for a request
-	// with RewritesInput, and never on a line that already starts by closing it.
-	UpdatedCommand string `json:"updated_command,omitempty"`
-}
-
-// stdinClosedPrefix makes every command in the line read end-of-file from stdin. An agent's
-// shell inherits a stdin nobody writes to, so a stray reader (grep with no file operand,
-// read, a prompt, ssh, a pager) waits forever, and a host that times the call out
-// backgrounds it instead of killing it. A heredoc, a pipe or a `<` still feed their own
-// command, since each sets stdin for that command alone.
-//
-// A prefix rather than a `{ <line>\n} </dev/null` group. One host's isolation check for
-// worktree agents judges the rewritten line; measured 2026-09-29, it refused the group as
-// too complex even around `stat` or `git status`, and refuses the prefix only on a line it
-// already found borderline (runtime-computed values beside a redirect).
-const stdinClosedPrefix = "exec </dev/null; "
-
-// advisoryStdinClosed tells a session once that its commands run with stdin closed.
-const advisoryStdinClosed hint.MarkerKind = "stdin-closed"
-
-const stdinClosedNotice = "magus runs your shell commands with stdin at end-of-file; pipe or redirect input explicitly."
-
-// stdinClosedDeny refuses a line that leaves stdin open, for a workspace that raised
-// stdin-closed to deny; stdinClosedDenyWhy is its rationale.
-const (
-	stdinClosedDeny    = "magus workspace: this line leaves stdin open; start it with `" + stdinClosedPrefix + "`."
-	stdinClosedDenyWhy = "This workspace refuses a shell command that leaves stdin open, since a stray reader of it waits forever. Pipe or redirect input explicitly."
-)
-
-// closeStdin is line with stdin closed, and false when line already starts by closing it.
-func closeStdin(line string) (string, bool) {
-	if strings.HasPrefix(line, stdinClosedPrefix) {
-		return line, false
-	}
-	return stdinClosedPrefix + line, true
 }
 
 // hostUnnamed refuses a call from installed hook glue that did not say which agent host
@@ -1361,30 +1320,6 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			continue
 		}
 		verdict.Decision, verdict.Context, verdict.Rule = decisionAdvise, held, string(kind)
-	}
-	// The one rewrite the guard makes, after every rule has spoken and never on a deny or
-	// an ask: a refused call does not run, and a person approves the command as typed.
-	if req.RewritesInput && tool == hookToolCommand && hasInput && (verdict.Decision == decisionPass || verdict.Decision == decisionAdvise) {
-		if line, closed := closeStdin(input); closed {
-			verdict.UpdatedCommand = line
-			// Turning the rule off silences the notice; the rewrite stands. Raised, the rule
-			// refuses the line instead, and a refused call is never rewritten.
-			notice := ""
-			switch g := deps.grade(ShellVerdict{Context: stdinClosedNotice, Kind: advisoryStdinClosed}); {
-			case g.Deny != "":
-				verdict.Decision, verdict.Reason, verdict.Context, verdict.Rule, verdict.UpdatedCommand = decisionDeny, stdinClosedDeny, "", string(advisoryStdinClosed), ""
-				whys[stdinClosedDeny] = stdinClosedDenyWhy
-			case g.Context != "":
-				notice = markers.Once(advisoryStdinClosed, stdinClosedNotice)
-			}
-			if notice != "" {
-				if verdict.Decision == decisionAdvise {
-					verdict.Context += "\n\n" + notice
-				} else {
-					verdict.Decision, verdict.Context, verdict.Rule = decisionAdvise, notice, string(advisoryStdinClosed)
-				}
-			}
-		}
 	}
 	// Graded by nothing: the notice is fixed, since it is how a session learns its own
 	// checks were skipped.
@@ -2316,7 +2251,6 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 		Reason:          verdict.Reason,
 		Context:         verdict.Context,
 		Rule:            verdict.Rule,
-		StdinClosed:     verdict.UpdatedCommand != "",
 		VerdictRef:      verdictRef,
 		Binary:          by.binary,
 		BinaryVersion:   by.version,

@@ -171,26 +171,6 @@ final UNKNOWN_DECISION = `{{else}}{"hookSpecificOutput":{"hookEventName":"PreToo
 final DENY_HEAD = `{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}`;
 final PASS_AND_ADVISE_TAIL = `{{else if eq .decision "advise"}}{{else if eq .decision "pass"}}`;
 
-// The stdin rewrite. magus sets updated_command on a pass or an advise when it closed the
-// command's stdin, and the reply hands the host its whole tool input back with that
-// command in place: Claude Code's updatedInput REPLACES the input, so a field left out
-// (description, timeout, run_in_background) would be dropped. No permissionDecision rides
-// with it, so the rewritten call still meets the host's own permission rules.
-//
-// Read through `index`: magus renders with missingkey=error, and the key is absent from
-// every verdict that carries no rewrite.
-//
-// Codex is never handed one, for two reasons. It closes a command's stdin itself, so the
-// rewrite buys nothing there. And the prefix moves the command out of reach of the person's
-// own prefix_rule: `exec </dev/null; echo x` ran under a rule that forbids `echo x`. Its
-// PreToolUse also applies updatedInput only beside permissionDecision "allow", and marks
-// the hook failed on any other shape, which would turn every guard pass into an approval
-// that skips Codex's own prompt.
-final UPDATED_INPUT_SLOT = "__MAGUS_UPDATED_INPUT__";
-final UPDATED_COMMAND = `{{toJson .}}`;
-final ADVISE_REWRITE = `{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}{{with index . "updated_command"}},"updatedInput":__MAGUS_UPDATED_INPUT__{{end}}}}`;
-final REWRITE_ONLY = `{{with index . "updated_command"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":__MAGUS_UPDATED_INPUT__}}{{end}}`;
-
 // A stop event reads no hookSpecificOutput: a block with a reason sends the agent back to
 // work, and a systemMessage shows the person a notice and lets the stop through.
 final STOP_REPLY = `{{if eq .decision "deny"}}{"decision":"block","reason":{{toJson .reason}}}{{else if eq .decision "advise"}}{"systemMessage":{{toJson .context}}}{{end}}`;
@@ -557,23 +537,13 @@ fun askBranch(event: any?, codex: bool, rule: str?) > str {
     return ASK_CODEX_BLOCKED.replace(BLOCKER_SLOT, with: blocker);
 }
 
-// adviseBranch is the advise arm; updatedInput is the host's tool input with the command's
-// template action in place, "" when this reply carries no rewrite.
-fun adviseBranch(updatedInput: str) > str {
+// adviseBranch is the advise arm.
+fun adviseBranch() > str {
     final suppressed = env\get("__MAGUS_NO_ADVISE") catch "";
     if (suppressed != "") { return ""; }
     final declared = env\get("HOST_ADVISE_BRANCH") catch "";
     if (declared != "") { return declared; }
-    if (updatedInput == "") { return ADVISE_DEFAULT; }
-    return ADVISE_REWRITE.replace(UPDATED_INPUT_SLOT, with: updatedInput);
-}
-
-// passAndAdviseTail renders a pass as nothing, and as the rewrite alone when it carries
-// one. The advise arm here is reached only when adviseBranch rendered none.
-fun passAndAdviseTail(updatedInput: str) > str {
-    if (updatedInput == "") { return PASS_AND_ADVISE_TAIL; }
-    final only = REWRITE_ONLY.replace(UPDATED_INPUT_SLOT, with: updatedInput);
-    return `{{else if eq .decision "advise"}}` + only + `{{else if eq .decision "pass"}}` + only;
+    return ADVISE_DEFAULT;
 }
 
 // permissionResponse answers the approval request Codex raises just before its own
@@ -634,24 +604,15 @@ fun main(args: [str]) > void {
 
     var response = env\get("HOST_RESPONSE") catch "";
     var capabilities = mut [<str>];
-    var rewrites = false;
     if (response == "" and eventName == "PermissionRequest") {
         response = permissionResponse(event, rule: promptRule);
         capabilities.append("--renders-ask");
     } else if (response == "" and (eventName == "Stop" or eventName == "SubagentStop")) {
         response = STOP_REPLY;
     } else if (response == "") {
-        // Only a shell command the host itself will run can come back rewritten: a Read
-        // restated as `cat` is not what the host runs, and a whole event is not a command.
-        // Codex gets none; the note on UPDATED_INPUT_SLOT says why.
-        var updatedInput = "";
-        if (!codex and !rawEvent and read == "" and eventName == "PreToolUse") {
-            updatedInput = hook\objectWith(event, dotPath: "tool_input", key: "command", raw: UPDATED_COMMAND) ?? "";
-        }
         response = DENY_HEAD + askBranch(event, codex: codex, rule: promptRule)
-            + adviseBranch(updatedInput) + passAndAdviseTail(updatedInput) + UNKNOWN_DECISION;
+            + adviseBranch() + PASS_AND_ADVISE_TAIL + UNKNOWN_DECISION;
         capabilities.append("--renders-ask");
-        rewrites = updatedInput != "";
     }
 
     final cwd = hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
@@ -697,9 +658,9 @@ fun main(args: [str]) > void {
     // --renders-ask rides the attributed call only. A binary too old for it is too old to
     // ask, so the retry dropping it loses nothing.
     //
-    // --rewrites-input, the call facts and the foreground limits are newer than the rest,
-    // so a binary that rejects one is asked again with everything else before it is asked
-    // with nothing: dropping them must not also drop the attribution and the ask.
+    // The call facts and the foreground limits are newer than the rest, so a binary that
+    // rejects one is asked again with everything else before it is asked with nothing:
+    // dropping them must not also drop the attribution and the ask.
     //
     // --transport buzz names this glue as the caller. magus keeps a deny's full text and
     // its once-per-session notices per host, transport and session.
@@ -710,7 +671,6 @@ fun main(args: [str]) > void {
     }
     foreach (flag in capabilities) { attributed.append(flag); }
     final newest = mut [<str>];
-    if (rewrites) { newest.append("--rewrites-input"); }
     // Only a shell command the host runs has a background or a timeout to report.
     if (!rawEvent and read == "") {
         foreach (word in callFlags(event)) { newest.append(word); }

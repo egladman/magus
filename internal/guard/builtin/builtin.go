@@ -220,7 +220,6 @@ var defaults = map[string]Decision{
 	"spawn-nested-waiter": Advise,
 	"split-run":           Advise,
 	"stage-classify":      Advise,
-	"stdin-closed":        Advise,
 	"timed-magus":         Advise,
 	"unleased-write":      Advise,
 
@@ -254,6 +253,15 @@ var fixed = map[string]string{
 	"workspace-command-failed": "a command rule",
 	"workspace-spawn-failed":   "a spawn rule",
 	"workspace-write-failed":   "a write rule",
+}
+
+// removed maps each rule the guard no longer has to why. A workspace that still names one
+// gets that reason rather than a guess at the nearest live name.
+//
+// compat(until: no workspace's guard.builtins still names a removed rule): the entry
+// exists only to name the removal in the load error.
+var removed = map[string]string{
+	"stdin-closed": "the guard no longer rewrites a shell command to close its stdin, since the hosts that need it already do",
 }
 
 // Fixed reports whether name is a rule a workspace may not set.
@@ -299,6 +307,10 @@ func Resolve(declared map[string]Setting) (map[string]Setting, error) {
 
 func validate(name string, s Setting) error {
 	if _, ok := defaults[name]; !ok {
+		if why, gone := removed[name]; gone {
+			return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+				"built-in rule %q was removed; delete it from the declaration", name).WithWhy(why)
+		}
 		if near := nearest(name); near != "" {
 			return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 				"unknown built-in rule %q; did you mean %q?", name, near)
