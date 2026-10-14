@@ -80,10 +80,11 @@ Téléchargez l'archive.
 updated fr/install, still running:
   write_paths +docs/fr/install.md#Installer -docs/fr/install.md
 created fr/upgrading, declared, with 1 write path(s)
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 -- ls.out --
-JOB           HOLDER  STATE    MODEL  PATHS  PROOF     CHECK
-fr/install    ana     running  -      1      alone     magus run lint .
-fr/upgrading  ben     running  -      1      disjoint  magus run lint .
+JOB           HOLDER  STATE    MODEL     PATHS  PROOF     CHECK
+fr/install    ana     running  standard  1      alone     magus run lint .
+fr/upgrading  ben     running  standard  1      disjoint  magus run lint .
 
 overlaps
   fr/install and fr/upgrading claim common ground

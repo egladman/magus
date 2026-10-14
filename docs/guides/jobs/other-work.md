@@ -38,7 +38,9 @@ $ magus job apply -f - <<'EOF'
 {"schema_version": 11, "id": "upgrade/web", "criteria": "web runs left-pad 1.3", "write_paths": ["web/deps.txt"], "check": {"target": "test", "project": "web"}}
 EOF
 created upgrade/api, declared, with 1 write path(s)
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 created upgrade/web, declared, with 1 write path(s)
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 ```
 
 Each job's check is that project's own test, so `api` passing says nothing about
@@ -80,9 +82,9 @@ done
 
 ```console
 $ magus ls jobs
-JOB          HOLDER  STATE  MODEL  PATHS  PROOF     CHECK
-upgrade/api  ana     pass   -      1      alone     magus run test api
-upgrade/web  ben     pass   -      1      disjoint  magus run test web
+JOB          HOLDER  STATE  MODEL     PATHS  PROOF     CHECK
+upgrade/api  ana     pass   standard  1      alone     magus run test api
+upgrade/web  ben     pass   standard  1      disjoint  magus run test web
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
@@ -126,6 +128,7 @@ EOF
 updated fr/install, still running:
   write_paths +docs/fr/install.md#Installer -docs/fr/install.md
 created fr/upgrading, declared, with 1 write path(s)
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 ```
 
 The part after `#` names a heading the diff driver matches. Once Ben takes his job,
@@ -135,9 +138,9 @@ the board shows the shared page and why it is not a conflict:
 
 ```console
 $ magus ls jobs
-JOB           HOLDER  STATE    MODEL  PATHS  PROOF     CHECK
-fr/install    ana     running  -      1      alone     magus run lint .
-fr/upgrading  ben     running  -      1      disjoint  magus run lint .
+JOB           HOLDER  STATE    MODEL     PATHS  PROOF     CHECK
+fr/install    ana     running  standard  1      alone     magus run lint .
+fr/upgrading  ben     running  standard  1      disjoint  magus run lint .
 
 overlaps
   fr/install and fr/upgrading claim common ground
@@ -165,7 +168,9 @@ $ magus job apply -f - <<'EOF'
 {"schema_version": 11, "id": "release-1.3/notes", "criteria": "release notes exist for 1.3", "write_paths": ["notes/1.3.md"], "goals": [{"id": "notes", "kind": "paths", "expect": "present", "paths": ["notes/1.3.md"]}]}
 EOF
 created release-1.3/changelog, declared, with 1 write path(s)
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 created release-1.3/notes, declared, with 1 write path(s)
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 ```
 
 Two people take an item each in their own worktree. The changelog gets written. The
@@ -187,9 +192,9 @@ The board says both items came back, and nothing more:
 
 ```console
 $ magus ls jobs
-JOB                    HOLDER     STATE   MODEL  PATHS  PROOF     CHECK
-release-1.3/changelog  changelog  exited  -      1      alone     -
-release-1.3/notes      notes      exited  -      1      disjoint  -
+JOB                    HOLDER     STATE   MODEL     PATHS  PROOF     CHECK
+release-1.3/changelog  changelog  exited  standard  1      alone     -
+release-1.3/notes      notes      exited  standard  1      disjoint  -
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
@@ -227,9 +232,9 @@ reads it. The board is the checklist:
 
 ```console
 $ magus ls jobs
-JOB                    HOLDER     STATE   MODEL  PATHS  PROOF     CHECK
-release-1.3/changelog  changelog  pass    -      1      alone     -
-release-1.3/notes      notes      exited  -      1      disjoint  -
+JOB                    HOLDER     STATE   MODEL     PATHS  PROOF     CHECK
+release-1.3/changelog  changelog  pass    standard  1      alone     -
+release-1.3/notes      notes      exited  standard  1      disjoint  -
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```

@@ -42,7 +42,9 @@ stdout '^wave/new$'
 -- code.go --
 package pkg
 -- console.buzz --
-export fun build() > void {}
+import "magus";
+
+export fun build(ctx: magus\Context, args: [str]) > void {}
 -- root.json --
 {"schema_version": 11, "id": "wave/root", "write_paths": ["."],
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["src/pkg/code.go"]}]}

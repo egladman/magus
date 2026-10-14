@@ -97,10 +97,11 @@ total() { echo $(( $1 + $2 )); }
  "unresolved_risks": []}
 -- fork.out --
 forked refactor/pricing, declared, with 1 write path(s). Its holder reads the terms with `magus describe job refactor/pricing` and takes it with `magus job exec refactor/pricing`
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 -- ls-declared.out --
-JOB               HOLDER  STATE     MODEL  PATHS  PROOF     CHECK
-refactor/pricing  -       declared  -      1      alone     magus run test .
-refactor/tax      -       declared  -      1      disjoint  magus run test .
+JOB               HOLDER  STATE     MODEL     PATHS  PROOF     CHECK
+refactor/pricing  -       declared  standard  1      alone     magus run test .
+refactor/tax      -       declared  standard  1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 -- exec.out --
@@ -108,6 +109,8 @@ recorded job refactor/pricing's base as a1d513296908525d76f16e0f80c672c5ec69acbb
 took refactor/pricing in ~/src/shop-pricing; read the terms with `magus describe job refactor/pricing`
 -- describe.out --
 job: refactor/pricing
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+skills: short
 
 criteria
 totals are computed in cents
@@ -141,8 +144,8 @@ goal check: verified (out<hex>)
 footprint: where its diff since the checkpoint landed
   pricing/total.sh:1-1
 -- ls-done.out --
-JOB               HOLDER        STATE      MODEL  PATHS  PROOF     CHECK
-refactor/pricing  shop-pricing  pass       -      1      alone     magus run test .
-refactor/tax      shop-tax      no_return  -      1      disjoint  magus run test .
+JOB               HOLDER        STATE      MODEL     PATHS  PROOF     CHECK
+refactor/pricing  shop-pricing  pass       standard  1      alone     magus run test .
+refactor/tax      shop-tax      no_return  standard  1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes

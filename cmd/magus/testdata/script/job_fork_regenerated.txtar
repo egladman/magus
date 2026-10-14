@@ -40,6 +40,7 @@ stdout '^  cli/testdata/api\.lock \(\.:man-generate\)$'
 
 -- fork.out --
 forked flags/shell, declared, with 2 write path(s). Its holder reads the terms with `magus describe job flags/shell` and takes it with `magus job exec flags/shell`
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 regenerated outside the write paths, from sources inside them
   docs/manpage/*.md (docs:content-generate)
   cli/testdata/api.lock (.:man-generate)

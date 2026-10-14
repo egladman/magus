@@ -82,6 +82,7 @@ She declares a job per half, from her main checkout:
 ```console
 $ magus job fork refactor/pricing --criteria 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .'
 forked refactor/pricing, declared, with 1 write path(s). Its holder reads the terms with `magus describe job refactor/pricing` and takes it with `magus job exec refactor/pricing`
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 ```
 
 ```sh
@@ -97,9 +98,9 @@ board:
 
 ```console
 $ magus ls jobs
-JOB               HOLDER  STATE     MODEL  PATHS  PROOF     CHECK
-refactor/pricing  -       declared  -      1      alone     magus run test .
-refactor/tax      -       declared  -      1      disjoint  magus run test .
+JOB               HOLDER  STATE     MODEL     PATHS  PROOF     CHECK
+refactor/pricing  -       declared  standard  1      alone     magus run test .
+refactor/tax      -       declared  standard  1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
@@ -130,6 +131,8 @@ it anyway: a divergence is a fact for the record, not a refusal. The terms:
 ```console
 $ magus describe job refactor/pricing
 job: refactor/pricing
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+skills: short
 
 criteria
 totals are computed in cents
@@ -222,9 +225,9 @@ call; wait checks what is mechanical.
 
 ```console
 $ magus ls jobs
-JOB               HOLDER        STATE      MODEL  PATHS  PROOF     CHECK
-refactor/pricing  shop-pricing  pass       -      1      alone     magus run test .
-refactor/tax      shop-tax      no_return  -      1      disjoint  magus run test .
+JOB               HOLDER        STATE      MODEL     PATHS  PROOF     CHECK
+refactor/pricing  shop-pricing  pass       standard  1      alone     magus run test .
+refactor/tax      shop-tax      no_return  standard  1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
@@ -246,6 +249,7 @@ Ben's change needs `format.sh` too, and he declares it anyway:
 ```console
 $ magus job fork currency --criteria 'prices carry a currency code' --write-paths pricing/format.sh,checkout/tax.sh --check 'test .'
 forked currency, declared, with 2 write path(s). Its holder reads the terms with `magus describe job currency` and takes it with `magus job exec currency`
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 ```
 
 The store accepted the claim and recorded the overlap. For a file with a diff driver,
@@ -277,9 +281,9 @@ Ben takes his job, and the board shows the shared ground:
 
 ```console
 $ magus ls jobs
-JOB       HOLDER  STATE    MODEL  PATHS  PROOF  CHECK
-cents     ana     running  -      2      alone  magus run test .
-currency  ben     running  -      2      alone  magus run test .
+JOB       HOLDER  STATE    MODEL     PATHS  PROOF  CHECK
+cents     ana     running  standard  2      alone  magus run test .
+currency  ben     running  standard  2      alone  magus run test .
 
 overlaps
   cents and currency claim common ground
@@ -316,9 +320,9 @@ the file Ana left. The overlap is gone:
 
 ```console
 $ magus ls jobs
-JOB       HOLDER  STATE    MODEL  PATHS  PROOF  CHECK
-cents     ana     running  -      1      alone  magus run test .
-currency  ben     running  -      2      alone  magus run test .
+JOB       HOLDER  STATE    MODEL     PATHS  PROOF  CHECK
+cents     ana     running  standard  1      alone  magus run test .
+currency  ben     running  standard  2      alone  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
@@ -330,6 +334,8 @@ and Ben's terms now list only `total.sh` as Ana's:
 ```console
 $ magus describe job currency
 job: currency
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+skills: short
 
 criteria
 prices carry a currency code
@@ -415,7 +421,9 @@ done
 ```console
 $ magus job apply -f ci/jobs.jsonl
 created release/pricing, declared, with 1 write path(s)
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 created release/tax, declared, with 1 write path(s)
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 ```
 
 <!-- golden: job_people_ci.txtar pass.out -->
@@ -434,9 +442,9 @@ not move:
 
 ```console
 $ magus ls jobs
-JOB              HOLDER  STATE     MODEL  PATHS  PROOF     CHECK
-release/pricing  -       declared  -      1      alone     magus run test .
-release/tax      -       declared  -      1      disjoint  magus run test .
+JOB              HOLDER  STATE     MODEL     PATHS  PROOF     CHECK
+release/pricing  -       declared  standard  1      alone     magus run test .
+release/tax      -       declared  standard  1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
