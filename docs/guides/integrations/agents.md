@@ -181,13 +181,14 @@ installed vendor client discovers configuration or dispatches a real hook.
 The Go suite in `internal/hoste2e` proves that part. It sits behind the `e2e`
 build tag, so a normal `go test` never compiles it, and it spends model tokens
 and the local logins of every host it drives. Run it on demand through the
-`go-test` target:
+`hoste2e-test` target:
 
 ```sh
-magus run go-test . -- -tags e2e -run TestHosts -count=1 -v
+magus run hoste2e-test .
 ```
 
-It is not part of `ci` or `magus affected ci`. For each of Claude Code, Codex,
+The target is declared `human_only`, so an agent's run of it asks you first,
+and a leased worker's is refused. It is not part of `ci` or `magus affected ci`. For each of Claude Code, Codex,
 Cursor and OpenCode it finds the installed CLI, builds a temporary workspace
 the way a user wires one (the harness spell, the shipped hook templates, the
 merge `magus describe harness` prints, the skills), and drives the host
