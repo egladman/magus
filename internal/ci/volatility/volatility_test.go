@@ -96,6 +96,16 @@ func TestScore_WilsonMath(t *testing.T) {
 	assert.InDelta(t, 0.115, got, 0.02)
 }
 
+// TestWilsonLower pins the exported bound the model-tier lens scores pass rates with to the
+// value the volatility score uses, and its two edges: no trials, and no hits.
+func TestWilsonLower(t *testing.T) {
+	t.Parallel()
+	assert.InDelta(t, 0.115, WilsonLower(3, 10), 0.02, "the same interval Score reads")
+	assert.Zero(t, WilsonLower(0, 0), "no trials is not a NaN")
+	assert.Zero(t, WilsonLower(0, 10), "no hits never goes negative")
+	assert.Greater(t, WilsonLower(100, 100), WilsonLower(10, 10), "more trials tighten the same rate")
+}
+
 // TestScore_ColdStart verifies that Score returns 0 below MinSamples.
 func TestScore_ColdStart(t *testing.T) {
 	t.Parallel()

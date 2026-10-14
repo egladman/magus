@@ -74,21 +74,22 @@ func score(s forecast.Stats, cfg Config) float64 {
 	if total < cfg.MinSamples {
 		return 0
 	}
-	if total == 0 {
-		// With MinSamples==0 the guard above lets an empty history through; avoid a 0/0 NaN.
+	return WilsonLower(s.VolatileCount, total)
+}
+
+// WilsonLower is the lower bound of the Wilson score interval (z=1.96, 95% CI) for hits
+// out of total trials: 0 for no trials, and never negative.
+func WilsonLower(hits, total int) float64 {
+	if total <= 0 {
 		return 0
 	}
-	p := float64(s.VolatileCount) / float64(total)
+	p := float64(hits) / float64(total)
 	n := float64(total)
 	const z = 1.96
 	z2 := z * z
 	numerator := p + z2/(2*n) - z*math.Sqrt((p*(1-p)+z2/(4*n))/n)
 	denominator := 1 + z2/n
-	lb := numerator / denominator
-	if lb < 0 {
-		return 0
-	}
-	return lb
+	return max(numerator/denominator, 0)
 }
 
 func isSuspectedRegression(s forecast.Stats, cfg Config) bool {
