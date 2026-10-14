@@ -200,7 +200,7 @@ func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
 func TestHostUnnamedRefusesWithTheCodeAndTheRemedy(t *testing.T) {
 	t.Parallel()
 	got := hostUnnamed()
-	assert.Equal(t, Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: got.Reason}, got)
+	assert.Equal(t, Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: got.Reason}, got)
 	assert.Contains(t, got.Reason, string(types.HookHostUnnamed))
 	assert.Contains(t, got.Reason, "--agent-name")
 	assert.Contains(t, got.Reason, "magus describe harness")
@@ -223,7 +223,7 @@ func TestJudgeRefusesInstalledGlueThatNamesNoHost(t *testing.T) {
 func TestJudgeLeavesCallersWithoutAFormAlone(t *testing.T) {
 	t.Parallel()
 	got := Judge(context.Background(), testDependencies(), Request{Input: ""})
-	assert.Equal(t, "pass", got.Decision, "an empty input from a person passes")
+	assert.Equal(t, decisionPass, got.Decision, "an empty input from a person passes")
 	assert.NotContains(t, got.Reason, string(types.HookHostUnnamed))
 }
 
@@ -302,68 +302,68 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 	require.NotNil(t, m.WriteRule(), "and a write rule")
 
 	cases := []policyCase{
-		{rule: "ci-watch", name: "gh pr checks --watch", input: bash("gh pr checks 183 --watch"), decision: "deny", reason: "GREEN CHANGES NOTHING"},
-		{rule: "ci-watch", name: "a while loop over gh pr checks", input: bash("while true; do gh pr checks 183; sleep 30; done"), decision: "deny", reason: "GREEN CHANGES NOTHING"},
-		{rule: "ci-watch", name: "a for loop that sleeps over gh pr checks", input: bash("for i in $(seq 1 20); do gh pr checks 183; sleep 30; done"), decision: "deny", reason: "GREEN CHANGES NOTHING"},
-		{rule: "ci-watch", name: "gh run watch behind env and timeout", input: bash("GH_TOKEN=x timeout 600 gh run watch 34069443069"), decision: "deny", reason: "GREEN CHANGES NOTHING"},
-		{rule: "ci-batch-poll", name: "one pull request's checks", input: bash("gh pr checks 183"), decision: "advise", reason: "gh pr list --state open"},
-		{rule: "queue-poll", name: "the queue's runs", input: bash("gh run list --workflow queue.yaml --limit 5"), decision: "advise", reason: "magus queue ls"},
-		{rule: "admin-merge", name: "gh pr merge --admin", input: bash("gh pr merge 12 --squash --admin"), decision: "deny", reason: "--auto --squash"},
-		{rule: "auto-merge", name: "gh pr merge --auto", input: bash("gh pr merge 12 --squash --auto"), decision: "deny", reason: "a person enables auto-merge"},
+		{rule: "ci-watch", name: "gh pr checks --watch", input: bash("gh pr checks 183 --watch"), decision: decisionDeny, reason: "GREEN CHANGES NOTHING"},
+		{rule: "ci-watch", name: "a while loop over gh pr checks", input: bash("while true; do gh pr checks 183; sleep 30; done"), decision: decisionDeny, reason: "GREEN CHANGES NOTHING"},
+		{rule: "ci-watch", name: "a for loop that sleeps over gh pr checks", input: bash("for i in $(seq 1 20); do gh pr checks 183; sleep 30; done"), decision: decisionDeny, reason: "GREEN CHANGES NOTHING"},
+		{rule: "ci-watch", name: "gh run watch behind env and timeout", input: bash("GH_TOKEN=x timeout 600 gh run watch 34069443069"), decision: decisionDeny, reason: "GREEN CHANGES NOTHING"},
+		{rule: "ci-batch-poll", name: "one pull request's checks", input: bash("gh pr checks 183"), decision: decisionAdvise, reason: "gh pr list --state open"},
+		{rule: "queue-poll", name: "the queue's runs", input: bash("gh run list --workflow queue.yaml --limit 5"), decision: decisionAdvise, reason: "magus queue ls"},
+		{rule: "admin-merge", name: "gh pr merge --admin", input: bash("gh pr merge 12 --squash --admin"), decision: decisionDeny, reason: "--auto --squash"},
+		{rule: "auto-merge", name: "gh pr merge --auto", input: bash("gh pr merge 12 --squash --auto"), decision: decisionDeny, reason: "a person enables auto-merge"},
 		{rule: "auto-merge", name: "the enablePullRequestAutoMerge mutation through gh api", input: bash(`gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: "PR_x"}) { clientMutationId } }'`),
-			decision: "deny", reason: "a person enables auto-merge"},
-		{rule: "auto-merge", name: "gh pr merge --disable-auto", input: bash("gh pr merge 12 --disable-auto"), decision: "pass"},
-		{rule: "pr-watch", name: "a for loop that sleeps over a pull request's state", input: bash("for i in 1 2 3; do gh pr view 300 --json state,autoMergeRequest; sleep 60; done"), decision: "deny", reason: "CI monitor"},
-		{rule: "pr-watch", name: "a while loop over the pulls endpoint", input: bash(`while true; do gh api repos/egladman/magus/pulls/300 --jq .merged; sleep 60; done`), decision: "deny", reason: "CI monitor"},
-		{rule: "pr-watch", name: "one read of a pull request's state", input: bash("gh pr view 300 --json state,autoMergeRequest"), decision: "pass"},
-		{rule: "worker-runs-gate", name: "a review worker runs the gate", input: bash("./magus affected ci --no-default-charms"), worker: "root/review footprint", decision: "deny", reason: "integrate"},
-		{rule: "worker-runs-gate", name: "an integrate worker runs the gate", input: bash("./magus affected ci --no-default-charms"), worker: "root/integrate footprint", decision: "pass"},
+			decision: decisionDeny, reason: "a person enables auto-merge"},
+		{rule: "auto-merge", name: "gh pr merge --disable-auto", input: bash("gh pr merge 12 --disable-auto"), decision: decisionPass},
+		{rule: "pr-watch", name: "a for loop that sleeps over a pull request's state", input: bash("for i in 1 2 3; do gh pr view 300 --json state,autoMergeRequest; sleep 60; done"), decision: decisionDeny, reason: "CI monitor"},
+		{rule: "pr-watch", name: "a while loop over the pulls endpoint", input: bash(`while true; do gh api repos/egladman/magus/pulls/300 --jq .merged; sleep 60; done`), decision: decisionDeny, reason: "CI monitor"},
+		{rule: "pr-watch", name: "one read of a pull request's state", input: bash("gh pr view 300 --json state,autoMergeRequest"), decision: decisionPass},
+		{rule: "worker-runs-gate", name: "a review worker runs the gate", input: bash("./magus affected ci --no-default-charms"), worker: "root/review footprint", decision: decisionDeny, reason: "integrate"},
+		{rule: "worker-runs-gate", name: "an integrate worker runs the gate", input: bash("./magus affected ci --no-default-charms"), worker: "root/integrate footprint", decision: decisionPass},
 		{rule: "detached-push-unqualified", name: "a detached push to a new branch", input: bash("git push origin HEAD:guard-pr-polling"),
-			checkout: &types.CheckoutState{RemoteBranches: []string{"origin/main"}}, decision: "deny", reason: "HEAD:refs/heads/guard-pr-polling"},
+			checkout: &types.CheckoutState{RemoteBranches: []string{"origin/main"}}, decision: decisionDeny, reason: "HEAD:refs/heads/guard-pr-polling"},
 		{rule: "push-authority", name: "a subagent opens a pull request", input: bash(`gh pr create --title "fix: pin the key" --body "Pins it."`),
-			worker: "root/feat footprint", decision: "deny", reason: "only the main session pushes or opens a pull request"},
+			worker: "root/feat footprint", decision: decisionDeny, reason: "only the main session pushes or opens a pull request"},
 		{rule: "branch-name", name: "the main session pushes an uppercase, underscored name", input: bash("git push origin HEAD:Pin_Key"),
-			checkout: &types.CheckoutState{Branch: "pin-key", Base: "origin/main", RemoteBranches: []string{"origin/main"}}, decision: "deny", reason: "`Pin_Key` is not a branch name to publish"},
+			checkout: &types.CheckoutState{Branch: "pin-key", Base: "origin/main", RemoteBranches: []string{"origin/main"}}, decision: decisionDeny, reason: "`Pin_Key` is not a branch name to publish"},
 		{rule: "spawn-without-job-row", name: "a spawn titled for no job", input: agentSpawn(map[string]any{
 			"description": "audit the store", "prompt": "Audit it.", "model": "sonnet",
-		}), decision: "deny", reason: "magus job fork <job> --model sonnet"},
+		}), decision: decisionDeny, reason: "magus job fork <job> --model sonnet"},
 		{rule: "spawn-without-job-row", name: "a spawn naming a row the store lacks", input: agentSpawn(map[string]any{
 			"description": "root/review footprint", "prompt": "Review it.", "model": "sonnet",
-		}), decision: "deny", reason: "magus job fork footprint --parent root --model sonnet --read-only"},
+		}), decision: decisionDeny, reason: "magus job fork footprint --parent root --model sonnet --read-only"},
 		{rule: "spawn-without-job-row", name: "a spawn naming an ended row", input: agentSpawn(map[string]any{
 			"description": "root/review footprint", "prompt": "Review it.", "model": "sonnet",
-		}), jobs: []types.Job{{ID: "footprint", State: types.StatePass}}, decision: "deny", reason: "has ended (pass)"},
+		}), jobs: []types.Job{{ID: "footprint", State: types.StatePass}}, decision: decisionDeny, reason: "has ended (pass)"},
 		{rule: "spawn-without-job-row", name: "a spawn naming a live nested row", input: agentSpawn(map[string]any{
 			"description": "root/review footprint", "prompt": "Review it.", "model": "sonnet",
-		}), jobs: []types.Job{{ID: "root/footprint", Parent: "root", State: types.StateDeclared, ReadOnly: true}}, decision: "pass"},
+		}), jobs: []types.Job{{ID: "root/footprint", Parent: "root", State: types.StateDeclared, ReadOnly: true}}, decision: decisionPass},
 		{rule: "spawn-without-job-row", name: "a spawn while the store cannot be read", input: agentSpawn(map[string]any{
 			"description": "root/review footprint", "prompt": "Review it.", "model": "sonnet",
-		}), corruptStore: true, decision: "advise", reason: "went unchecked"},
+		}), corruptStore: true, decision: decisionAdvise, reason: "went unchecked"},
 		{rule: "change-role-spawn-not-isolated", name: "a feat worker sharing the checkout", input: agentSpawn(map[string]any{
 			"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet",
-		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "deny", reason: `isolation: "worktree"`},
+		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: decisionDeny, reason: `isolation: "worktree"`},
 		{rule: "change-role-spawn-not-isolated", name: "a feat worker in its own worktree", input: agentSpawn(map[string]any{
 			"description": "root/feat footprint", "prompt": "Build it. Run one plain command per call.", "model": "sonnet", "isolation": "worktree",
-		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "pass"},
+		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: decisionPass},
 		{rule: "worker-builds-magus", name: "a worker rebuilds the binary", input: bash("./magus run go-build ."),
-			lease: "footprint", jobs: []types.Job{{ID: "footprint", State: types.StateRunning}}, decision: "deny", reason: "a worker does not build magus"},
+			lease: "footprint", jobs: []types.Job{{ID: "footprint", State: types.StateRunning}}, decision: decisionDeny, reason: "a worker does not build magus"},
 		{rule: "worker-builds-magus", name: "a worker bootstraps the binary", input: bash("GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."),
-			lease: "footprint", jobs: []types.Job{{ID: "footprint", State: types.StateRunning}}, decision: "deny", reason: "ask the main session to place ./magus"},
-		{rule: "worker-builds-magus", name: "the orchestrator rebuilds the binary", input: bash("./magus run go-build ."), decision: "pass"},
+			lease: "footprint", jobs: []types.Job{{ID: "footprint", State: types.StateRunning}}, decision: decisionDeny, reason: "ask the main session to place ./magus"},
+		{rule: "worker-builds-magus", name: "the orchestrator rebuilds the binary", input: bash("./magus run go-build ."), decision: decisionPass},
 		{rule: "brief-builds-magus", name: "a brief tells its worker to build", input: agentSpawn(map[string]any{
 			"description": "root/feat footprint", "prompt": "Implement it, then run `./magus run go-build .` first.", "model": "sonnet", "isolation": "worktree",
-		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "deny", reason: "tells the worker to build magus"},
+		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: decisionDeny, reason: "tells the worker to build magus"},
 		{rule: "brief-builds-magus", name: "a brief that names the build only to forbid it", input: agentSpawn(map[string]any{
 			"description": "root/feat footprint", "prompt": "Never run `./magus run go-build .`; use the binary already placed. Run plain commands.", "model": "sonnet", "isolation": "worktree",
-		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "pass"},
+		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: decisionPass},
 		{rule: "worker-bootstrap", name: "a subagent runs the bootstrap", input: bash("go run -trimpath ./cmd/magus run go-build --no-cache ."),
-			worker: "root/feat footprint", decision: "deny", reason: "a worker does not build magus"},
-		{rule: "host-capture", name: "a cat of a run log", input: bash("cat .magus/logs/0123abcd.log"), binary: true, decision: "deny", reason: "magus query output"},
-		{rule: "host-capture", name: "a cat of a run log where the workspace has no ./magus", input: bash("cat .magus/logs/0123abcd.log"), decision: "pass"},
-		{rule: "host-terminals", name: "a mkdir of a terminals directory", input: bash("mkdir -p terminals"), decision: "deny", reason: "a directory named terminals is a host session folder, not a run"},
+			worker: "root/feat footprint", decision: decisionDeny, reason: "a worker does not build magus"},
+		{rule: "host-capture", name: "a cat of a run log", input: bash("cat .magus/logs/0123abcd.log"), binary: true, decision: decisionDeny, reason: "magus query output"},
+		{rule: "host-capture", name: "a cat of a run log where the workspace has no ./magus", input: bash("cat .magus/logs/0123abcd.log"), decision: decisionPass},
+		{rule: "host-terminals", name: "a mkdir of a terminals directory", input: bash("mkdir -p terminals"), decision: decisionDeny, reason: "a directory named terminals is a host session folder, not a run"},
 		{rule: "sealed-read", name: "a cat of a sealed proofread set", input: bash("cat ~/.cache/proofread/calibration/sealed/round5/candidates.jsonl"),
-			decision: "deny", reason: "stays sealed until its round is scored"},
-		{rule: "sealed-read", name: "a read of the open labels beside it", input: bash("cat ~/.cache/proofread/calibration/labels/round4/counts.json"), decision: "pass"},
+			decision: decisionDeny, reason: "stays sealed until its round is scored"},
+		{rule: "sealed-read", name: "a read of the open labels beside it", input: bash("cat ~/.cache/proofread/calibration/labels/round4/counts.json"), decision: decisionPass},
 	}
 
 	covered := map[string]bool{}
@@ -399,7 +399,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			}
 			v := Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, input), Lease: tc.lease})
 			assert.Equal(t, tc.decision, v.Decision, v.Reason)
-			if tc.decision != "pass" {
+			if tc.decision != decisionPass {
 				assert.Contains(t, []string{workspaceCommandRule, workspaceSpawnRule}, v.Rule, "the policy decided, not a built-in")
 			}
 			if tc.reason != "" {
@@ -447,7 +447,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		require.NoError(t, os.WriteFile(capture, []byte("[fail] magus run (ran, 3s)\n  output: out1afa17d04e90\n"), 0o644))
 
 		v := shellIn(t, "trim-key", ws)("cat " + capture)
-		assert.Equal(t, verdictWithRule("deny", workspaceCommandRule), unworded(v), "the policy decided, not a built-in: %s", v.Reason)
+		assert.Equal(t, verdictWithRule(decisionDeny, workspaceCommandRule), unworded(v), "the policy decided, not a built-in: %s", v.Reason)
 		assert.Contains(t, v.Reason, "`magus query output out1afa17d04e90`")
 
 		// A backgrounded command that is not a magus run leaves a capture with no ref, and
@@ -455,7 +455,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		plain := filepath.Join(tasks, "b7plain00.output")
 		require.NoError(t, os.WriteFile(plain, []byte("go version go1.26 darwin/arm64\n"), 0o644))
 		v = shellIn(t, "plain-capture", ws)("cat " + plain)
-		assert.NotEqual(t, "deny", v.Decision, v.Reason)
+		assert.NotEqual(t, decisionDeny, v.Decision, v.Reason)
 	})
 
 	covered["commit-subject"] = true
@@ -470,7 +470,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			`rg "git commit -m" docs`,
 		} {
 			v := run(line)
-			assert.NotEqual(t, "deny", v.Decision, line+": "+v.Reason)
+			assert.NotEqual(t, decisionDeny, v.Decision, line+": "+v.Reason)
 		}
 		for _, line := range []string{
 			`git -C . commit -m "Fix the port."`,
@@ -480,14 +480,14 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			`jj -R . describe -m "Fix the port."`,
 		} {
 			v := run(line)
-			assert.Equal(t, verdictWithRule("deny", workspaceCommandRule), unworded(v), line)
+			assert.Equal(t, verdictWithRule(decisionDeny, workspaceCommandRule), unworded(v), line)
 			assert.Contains(t, v.Reason, "a capitalized first word", line)
 			assert.Contains(t, v.Reason, "Write one subject line, lowercase and imperative", line)
 			assert.NotContains(t, v.Reason, "Skill(", line)
 		}
 
 		v := run("git add a.go && git commit -m \"$(cat <<'EOF'\nFix the port.\n\nCo-Authored-By: a <b@c>\nEOF\n)\"")
-		assert.Equal(t, "deny", v.Decision, v.Reason)
+		assert.Equal(t, decisionDeny, v.Decision, v.Reason)
 		for _, want := range []string{"a capitalized first word", "an attribution", "a line break"} {
 			assert.Contains(t, v.Reason, want)
 		}
@@ -501,10 +501,10 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			`jj describe -m "feat: add a commit-msg hook"`,
 		} {
 			v := run(line)
-			assert.NotEqual(t, "deny", v.Decision, line+": "+v.Reason)
+			assert.NotEqual(t, decisionDeny, v.Decision, line+": "+v.Reason)
 		}
 		v := run(`git commit -m "trim a fragment"`)
-		assert.Equal(t, "deny", v.Decision, v.Reason)
+		assert.Equal(t, decisionDeny, v.Decision, v.Reason)
 		assert.Contains(t, v.Reason, "A commit made on main lands as written")
 		assert.Contains(t, v.Reason, `"trim a fragment": no `+"`<type>: `"+` prefix`)
 	})
@@ -522,7 +522,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		run, cacheDir := shellAt(t, "trim-key", ws)
 		const describe = `gh pr create --title "fix(cache): pin the key" --body "Warm builds miss the cache because the key hashes its inputs in map order; sorting them pins one key per build."`
 		v := run(describe)
-		assert.Equal(t, "pass", v.Decision, "judged, not failed open: "+v.Reason+v.Context)
+		assert.Equal(t, decisionPass, v.Decision, "judged, not failed open: "+v.Reason+v.Context)
 
 		// A cited ref is looked up in the store of the checkout being judged.
 		store := cache.NewOutputStore(cacheDir)
@@ -536,28 +536,28 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			return `gh pr edit 9 --title "fix(cache): pin the key" --body "Warm builds hit the cache again because the key now sorts its inputs; TestKey passed (` + ref + `)."`
 		}
 		v = run(citing(passed.Ref))
-		assert.Equal(t, "pass", v.Decision, "a passing run this checkout holds: "+v.Reason+v.Context)
+		assert.Equal(t, decisionPass, v.Decision, "a passing run this checkout holds: "+v.Reason+v.Context)
 		v = run(citing(failed.Ref))
-		assert.Equal(t, verdictWithRule("deny", workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
+		assert.Equal(t, verdictWithRule(decisionDeny, workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason, "`"+failed.Ref+"` cites a failed run (libs/conventions:go-test)")
 		v = run(citing("outc3c3c3c3c3c3"))
-		assert.Equal(t, verdictWithRule("deny", workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
+		assert.Equal(t, verdictWithRule(decisionDeny, workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason, "`outc3c3c3c3c3c3` cites a run this checkout holds no record of")
 
 		// attribution ships off; this repository's decisions table turns it on.
 		v = run("gh pr create --title \"Pin the key\" --body \"$(cat <<'EOF'\nClaude pinned the key.\nEOF\n)\"")
-		assert.Equal(t, verdictWithRule("deny", workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
+		assert.Equal(t, verdictWithRule(decisionDeny, workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason, `pr-title: "Pin the key": no `+"`<type>: `"+` prefix`)
 		assert.Contains(t, v.Reason, "Drop 'Claude': describe the change, not who or what produced it. [attribution]")
 		assert.NotContains(t, v.Reason, "Skill(")
 
 		v = run(`gh pr edit 412 --title "fix(cache): pin the key" --body "Workers miss the skill rules because the guard reads a stale copy; it reads .claude/skills/x/SKILL.md instead."`)
-		assert.Equal(t, "pass", v.Decision, "a path spelling a tool's name credits no one: "+v.Reason+v.Context)
+		assert.Equal(t, decisionPass, v.Decision, "a path spelling a tool's name credits no one: "+v.Reason+v.Context)
 
 		v = run(`gh pr comment 412 --body "Good catch: the map is written from two goroutines, so it takes a lock now."`)
-		assert.NotEqual(t, "deny", v.Decision, "a reply is judged as a reply: "+v.Reason+v.Context)
+		assert.NotEqual(t, decisionDeny, v.Decision, "a reply is judged as a reply: "+v.Reason+v.Context)
 		v = run(`gh pr comment 412 --body "Let me delve into why the map is shared."`)
-		assert.Equal(t, verdictWithRule("deny", workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
+		assert.Equal(t, verdictWithRule(decisionDeny, workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason, "[buzzword]")
 
 		// The same sources with no gen/ dir: a judge never built denies, and never compiles.
@@ -568,7 +568,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			require.NoError(t, os.Symlink(filepath.Join(conventions, name), filepath.Join(mod, name)))
 		}
 		v = shellIn(t, "trim-key", unbuilt)(describe)
-		assert.Equal(t, "deny", v.Decision, v.Reason)
+		assert.Equal(t, decisionDeny, v.Decision, v.Reason)
 		assert.Contains(t, v.Reason, "libs/conventions/gen/proofread is not built; run `magus run proofread-build libs/conventions`")
 
 		// The built judge beside a source it was not linked from is as stale as none.
@@ -582,7 +582,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		}
 		require.NoError(t, os.WriteFile(filepath.Join(mod, "proofread", "zz.go"), []byte("package proofread\n"), 0o644))
 		v = shellIn(t, "trim-key", unbuilt)(describe)
-		assert.Equal(t, "deny", v.Decision, v.Reason)
+		assert.Equal(t, decisionDeny, v.Decision, v.Reason)
 		assert.Contains(t, v.Reason, "was linked from other sources than the tree holds; run `magus run proofread-build libs/conventions`")
 	})
 
@@ -598,7 +598,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		const rule = "keep only the comments that say what the code cannot"
 		assert.NotContains(t, write("notes.md", "# A heading\n").Context, rule, "prose is not code")
 		v := write("a.go", "package a\n\n// keyOf is stable across runs.\nfunc keyOf() {}\n")
-		assert.Equal(t, "advise", v.Decision, v.Reason)
+		assert.Equal(t, decisionAdvise, v.Decision, v.Reason)
 		assert.Contains(t, v.Reason+v.Context, rule)
 		assert.NotContains(t, v.Reason+v.Context, "Skill(")
 		assert.NotContains(t, write("b.go", "package a\n\n// again\n").Context, rule, "once per session")
@@ -614,9 +614,9 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			})})
 		}
 		v := write(".cursor/rules/x.mdc")
-		assert.Equal(t, verdictWithRule("deny", workspaceWriteRule), unworded(v), v.Reason)
+		assert.Equal(t, verdictWithRule(decisionDeny, workspaceWriteRule), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason, "docs/guides/integrations/agents/cursor.md")
-		assert.NotEqual(t, "deny", write(".cursor/hooks.json").Decision)
+		assert.NotEqual(t, decisionDeny, write(".cursor/hooks.json").Decision)
 	})
 
 	// The binary rules read the trees a line names, so each case builds its own.
@@ -644,7 +644,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 	t.Run("foreign-binary", func(t *testing.T) {
 		built, here := checkout(t, true), checkout(t, false)
 		v := judgeIn(t, here, filepath.Join(built, "magus")+" run lint .")
-		assert.Equal(t, verdictWithRule("deny", workspaceCommandRule), unworded(v), v.Reason)
+		assert.Equal(t, verdictWithRule(decisionDeny, workspaceCommandRule), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason, "another checkout of magus")
 	})
 
@@ -652,13 +652,13 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 	t.Run("go-into-checkout", func(t *testing.T) {
 		other := checkout(t, true)
 		v := judgeIn(t, checkout(t, false), "go -C "+other+" test ./...")
-		assert.Equal(t, verdictWithRule("deny", workspaceCommandRule), unworded(v), v.Reason)
+		assert.Equal(t, verdictWithRule(decisionDeny, workspaceCommandRule), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason, "runs a toolchain command in another checkout")
 
 		bare := checkout(t, false)
-		assert.Equal(t, "pass", judgeIn(t, checkout(t, false), "GOEXPERIMENT=jsonv2 go -C "+bare+" run -trimpath ./cmd/magus run go-build --no-cache .").Decision,
+		assert.Equal(t, decisionPass, judgeIn(t, checkout(t, false), "GOEXPERIMENT=jsonv2 go -C "+bare+" run -trimpath ./cmd/magus run go-build --no-cache .").Decision,
 			"the bootstrap into a checkout with no binary passes")
-		assert.Equal(t, "deny", judgeIn(t, checkout(t, false), "go -C "+bare+" build -o magus ./cmd/magus").Decision,
+		assert.Equal(t, decisionDeny, judgeIn(t, checkout(t, false), "go -C "+bare+" build -o magus ./cmd/magus").Decision,
 			"a bare link is not the bootstrap")
 	})
 
@@ -671,7 +671,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		ws := checkout(t, false)
 		require.NoError(t, os.Symlink(exe, filepath.Join(ws, "magus")))
 		v := judgeIn(t, ws, "ls")
-		assert.Equal(t, verdictWithRule("advise", workspaceCommandRule), unworded(v), v.Reason)
+		assert.Equal(t, verdictWithRule(decisionAdvise, workspaceCommandRule), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason+v.Context, "./magus run go-build .")
 	})
 
@@ -684,9 +684,9 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		ws := checkout(t, false)
 		require.NoError(t, os.Symlink(exe, filepath.Join(ws, "magus")))
 		v := judgeIn(t, ws, "./magus init --vcs git")
-		assert.Equal(t, verdictWithRule("deny", workspaceCommandRule), unworded(v), v.Reason)
+		assert.Equal(t, verdictWithRule(decisionDeny, workspaceCommandRule), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason, "no go-build stamp")
-		assert.Equal(t, "advise", judgeIn(t, ws, "./magus init --dry-run").Decision, "a dry run writes nothing")
+		assert.Equal(t, decisionAdvise, judgeIn(t, ws, "./magus init --dry-run").Decision, "a dry run writes nothing")
 	})
 
 	source, err := os.ReadFile(filepath.Join(root, "hack", "policy", "guard.buzz"))
@@ -709,9 +709,9 @@ func TestWriteOutsideTheWorkspaceIsAdvisedNothing(t *testing.T) {
 		return Judge(ctx, Dependencies{}, Request{Input: path, IsPath: true, Session: "s1", Host: "test-host"})
 	}
 
-	assert.Equal(t, "pass", write(elsewhere+"/CLAUDE.md").Decision)
+	assert.Equal(t, decisionPass, write(elsewhere+"/CLAUDE.md").Decision)
 	inside := write(root + "/CLAUDE.md")
-	assert.Equal(t, verdictWithRule("advise", string(advisoryInstruction)), unworded(inside))
+	assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryInstruction)), unworded(inside))
 }
 
 // driftWorkspace is focusFixture loaded as the hook's workspace. Only the reader half and
@@ -819,7 +819,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 				}
 				return WithLocation(t.Context(), cacheDir, "/ws", "/ws"), deps, Request{Input: "/ws/app/main.go", IsPath: true, Session: who.Session}
 			},
-			want: Verdict{Decision: "advise", Rule: string(advisoryScopeDrift)},
+			want: Verdict{Decision: decisionAdvise, Rule: string(advisoryScopeDrift)},
 		},
 		{
 			name: "a once-per-session notice",
@@ -827,7 +827,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 				ctx, _ := fleetFixture(t, types.Job{ID: "finished", State: types.StatePass})
 				return ctx, Dependencies{}, Request{Input: "ls", Lease: "finished", Session: "s1"}
 			},
-			want: Verdict{Decision: "advise", Rule: string(advisoryLeaseTerminal), Lease: "finished", LeaseFrom: types.LeaseSourceFlag},
+			want: Verdict{Decision: decisionAdvise, Rule: string(advisoryLeaseTerminal), Lease: "finished", LeaseFrom: types.LeaseSourceFlag},
 		},
 		{
 			name: "a denied command",
@@ -835,7 +835,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 				testkit.Isolate(t)
 				return WithLocation(t.Context(), t.TempDir(), "/ws", "/ws"), strict(Dependencies{}), Request{Input: "magus run ci | tail", Session: "s1"}
 			},
-			want: Verdict{Decision: "deny"},
+			want: Verdict{Decision: decisionDeny},
 		},
 		{
 			name: "an unregistered worker's first write",
@@ -845,7 +845,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 				commitCheckout(t, root)
 				return ctx, Dependencies{}, Request{Input: filepath.Join(root, "app", "main.go"), IsPath: true}
 			},
-			want: Verdict{Decision: "pass", Lease: "worker", LeaseFrom: types.LeaseSourceMarker},
+			want: Verdict{Decision: decisionPass, Lease: "worker", LeaseFrom: types.LeaseSourceMarker},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -874,7 +874,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 					assert.Equal(t, tc.want, got)
 					continue
 				}
-				if real.Decision == "deny" {
+				if real.Decision == decisionDeny {
 					real.Reason, preview.Reason = "", ""
 				}
 				assert.Equal(t, withoutVerdictRef(real), preview, "round %d", round)
@@ -889,7 +889,7 @@ func TestDryRunRefusesASpawn(t *testing.T) {
 	cacheDir := t.TempDir()
 	ctx := WithLocation(t.Context(), cacheDir, "/ws", "/ws")
 	v := Judge(ctx, Dependencies{}, Request{Input: claudeSpawnEnvelope, Host: "claude-code", DryRun: true})
-	assert.Equal(t, "deny", v.Decision)
+	assert.Equal(t, decisionDeny, v.Decision)
 	entries, err := os.ReadDir(cacheDir)
 	require.NoError(t, err)
 	assert.Empty(t, entries)
@@ -913,7 +913,7 @@ func TestJudgeServesADenyRemedyItThenPreauthorizes(t *testing.T) {
 	require.NotEmpty(t, ref, "the first firing cites its stored verdict")
 	require.Equal(t, Verdict{
 		SchemaVersion: agent.GuardSchemaVersion,
-		Decision:      "deny",
+		Decision:      decisionDeny,
 		Reason: "`ls jobs >f` keeps console text, which is not a format anything should parse." +
 			"\nnext:\n  magus ls jobs -o json --tee f" +
 			verdictRefLine + "magus query output " + ref,
@@ -924,7 +924,7 @@ func TestJudgeServesADenyRemedyItThenPreauthorizes(t *testing.T) {
 	}, v, "one line plus the next and the verdict ref")
 
 	assert.Equal(t, "deny-output-redirect", servedNextPreauthorizes(hint.NewGate(cacheDir, ""), want.Run))
-	assert.NotEqual(t, "deny", Judge(ctx, deps, Request{Input: want.Run}).Decision, "the served line passes")
+	assert.NotEqual(t, decisionDeny, Judge(ctx, deps, Request{Input: want.Run}).Decision, "the served line passes")
 }
 
 // TestJudgeDropsARemedyTheRoleMayNotRun pins the other half: a worker refused a piped gate
@@ -939,7 +939,7 @@ func TestJudgeDropsARemedyTheRoleMayNotRun(t *testing.T) {
 	leased := Judge(ctx, deps, Request{Input: piped, Lease: worker.ID})
 	require.Equal(t, Verdict{
 		SchemaVersion: agent.GuardSchemaVersion,
-		Decision:      "deny",
+		Decision:      decisionDeny,
 		Reason:        leased.Reason, // the prose is checked by substring below
 		Rule:          string(denyRuleOutputPipe),
 		Lease:         worker.ID,
@@ -955,7 +955,7 @@ func TestJudgeDropsARemedyTheRoleMayNotRun(t *testing.T) {
 
 // TestEveryJudgedDecisionNamesItsRule reads Judge itself: a statement setting a verdict to
 // deny, advise or ask must sit where a verdict.Rule assignment covers it, in its own block
-// or one around it. Measured 2026-09-29: 22,081 recorded verdicts carried no rule name, and
+// or one around it. Recorded verdicts once carried no rule name by the thousand, and
 // the recent ones all came from a site that set the decision and not the name.
 func TestEveryJudgedDecisionNamesItsRule(t *testing.T) {
 	t.Parallel()
@@ -1036,9 +1036,9 @@ func TestJudgeLeaseNoticesHonorEveryDecision(t *testing.T) {
 			decision     builtin.Decision
 			first, again string
 		}{
-			{builtin.Advise, "advise", "pass"},
-			{builtin.Off, "pass", "pass"},
-			{builtin.Deny, "deny", "deny"},
+			{decision: builtin.Advise, first: decisionAdvise, again: decisionPass},
+			{decision: builtin.Off, first: decisionPass, again: decisionPass},
+			{decision: builtin.Deny, first: decisionDeny, again: decisionDeny},
 		} {
 			t.Run(string(notice.rule)+"/"+string(tt.decision), func(t *testing.T) {
 				ctx, _ := fleetFixture(t, types.Job{ID: "finished", State: types.StatePass})
@@ -1048,8 +1048,8 @@ func TestJudgeLeaseNoticesHonorEveryDecision(t *testing.T) {
 					return Verdict{Decision: v.Decision, Rule: v.Rule}
 				}
 				want := func(decision string) Verdict {
-					if decision == "pass" {
-						return Verdict{Decision: "pass"}
+					if decision == decisionPass {
+						return Verdict{Decision: decisionPass}
 					}
 					return Verdict{Decision: decision, Rule: string(notice.rule)}
 				}

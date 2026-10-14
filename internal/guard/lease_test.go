@@ -228,7 +228,7 @@ func TestDenyRepeatGate(t *testing.T) {
 		assert.Contains(t, d.Why, "--plan", "and the command that sizes the risk")
 
 		raised := Judge(ctx, Dependencies{Builtins: map[string]builtin.Setting{string(advisoryGateRepeat): {Decision: builtin.Deny}}}, Request{Input: gate})
-		assert.Equal(t, "deny", raised.Decision, "Judge reaches the rule through the role-scoped list")
+		assert.Equal(t, decisionDeny, raised.Decision, "Judge reaches the rule through the role-scoped list")
 		assert.Equal(t, string(advisoryGateRepeat), raised.Rule)
 	})
 	t.Run("a file written after the verdict", func(t *testing.T) {
@@ -363,8 +363,7 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 	})
 }
 
-// figuresLease is a figure worker whose one check regenerates diagrams: the row shape the
-// 2026-09-29 incident ran under.
+// figuresLease is a figure worker whose one check regenerates diagrams.
 func figuresLease() types.Job {
 	return types.Job{
 		ID:         "figures/flow",
@@ -504,7 +503,7 @@ func TestWorkerRawTool(t *testing.T) {
 	deps := composingWorkspace(t)
 
 	v := Judge(ctx, Dependencies{Spells: spellCatalog}, Request{Input: bashCall(t, "s1", "a1", "go test ./internal/guard"), Host: "claude-code", Lease: row.ID})
-	assert.Equal(t, "deny", v.Decision, "Judge reaches the rule: %s", v.Reason)
+	assert.Equal(t, decisionDeny, v.Decision, "Judge reaches the rule: %s", v.Reason)
 	assert.Equal(t, string(denyRuleWorkerCheckOnly), v.Rule)
 
 	reason := denyWorkerRawTool(ctx, deps, row.ID, "go test ./internal/guard")
@@ -650,7 +649,7 @@ func TestIdentityLessCallersShareTheCheckoutRecord(t *testing.T) {
 	require.NoError(t, os.WriteFile(job.MarkerPath(base), []byte("not a lease id!\n"), 0o644))
 	v := Judge(ctx, Dependencies{}, Request{Input: "ls"})
 	assert.Equal(t, graded{}, graded{v.Lease, v.LeaseFrom}, "a record that does not read binds nobody")
-	assert.Equal(t, "pass", v.Decision)
+	assert.Equal(t, decisionPass, v.Decision)
 }
 
 // TestDenyLeaseScopedVCS pins that a WORKER lease, a row with a parent, is refused the
@@ -1307,9 +1306,9 @@ func TestATombstonedBindingIsRefusedUntilItRebinds(t *testing.T) {
 	judge := func(input string) outcome {
 		v := Judge(ctx, Dependencies{}, Request{Input: input, Host: who.Host})
 		reason = v.Reason
-		return outcome{v.Decision, v.Rule, v.Lease}
+		return outcome{Decision: v.Decision, Rule: v.Rule, Lease: v.Lease}
 	}
-	refused := outcome{"deny", string(denyRuleLeaseUndeclared), held.ID}
+	refused := outcome{Decision: decisionDeny, Rule: string(denyRuleLeaseUndeclared), Lease: held.ID}
 	edit := map[string]any{"file_path": filepath.Join(root, "internal", "held", "a.go"), "old_string": "a", "new_string": "b"}
 	write := hookJSON(t, map[string]any{"session_id": who.Session, "agent_id": who.Agent, "agent_type": "general-purpose", "cwd": root,
 		"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": edit})
@@ -1324,11 +1323,11 @@ func TestATombstonedBindingIsRefusedUntilItRebinds(t *testing.T) {
 	assert.Contains(t, string(stored), "A caller whose binding ended is refused rather than read as unbound", "the rationale is in the stored verdict")
 	assert.True(t, strings.HasSuffix(string(stored), "\nsee: https://eli.gladman.cc/magus/reference/rules/lease-undeclared/"), "with the rule's page")
 	assert.Equal(t, refused, judge(bashCall(t, who.Session, who.Agent, "./build.sh")), "a command")
-	assert.Equal(t, outcome{"advise", string(advisoryLeaseTerminal), held.ID}, judge(bashCall(t, who.Session, who.Agent, "ls")), "a reader")
+	assert.Equal(t, outcome{Decision: decisionAdvise, Rule: string(advisoryLeaseTerminal), Lease: held.ID}, judge(bashCall(t, who.Session, who.Agent, "ls")), "a reader")
 
-	assert.NotEqual(t, "deny", judge(bashCall(t, who.Session, who.Agent, "magus job exec "+next.ID)).Decision, "the remedy")
+	assert.NotEqual(t, decisionDeny, judge(bashCall(t, who.Session, who.Agent, "magus job exec "+next.ID)).Decision, "the remedy")
 	assert.Equal(t, job.Binding{Job: next.ID}, boundJob(who, at), "the exec rebinds over the tombstone")
-	assert.Equal(t, outcome{"pass", "", next.ID}, judge(bashCall(t, who.Session, who.Agent, "ls")))
+	assert.Equal(t, outcome{Decision: decisionPass, Rule: "", Lease: next.ID}, judge(bashCall(t, who.Session, who.Agent, "ls")))
 }
 
 // A caller whose job ends is unbound from then on: a binding nothing released graded it
@@ -1405,13 +1404,13 @@ func TestEndingYourOwnJobReleasesTheBinding(t *testing.T) {
 				by.Agent = ""
 			}
 			v := Judge(ctx, Dependencies{}, Request{Input: tc.call(t, by), Host: by.Host})
-			require.NotEqual(t, "deny", v.Decision, "ending the job: %s", v.Reason)
+			require.NotEqual(t, decisionDeny, v.Decision, "ending the job: %s", v.Reason)
 			store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
 			tc.ends(t, store, held.ID)
 
 			fork := judge("magus job fork next-job --parent other --read-only")
-			assert.Equal(t, tc.want == stillHeld, fork.Decision == "deny", "a fork outside the job's tree: %s", fork.Reason)
-			assert.NotEqual(t, "deny", judge("sed -n 1,5p x").Decision, "a read")
+			assert.Equal(t, tc.want == stillHeld, fork.Decision == decisionDeny, "a fork outside the job's tree: %s", fork.Reason)
+			assert.NotEqual(t, decisionDeny, judge("sed -n 1,5p x").Decision, "a read")
 			assert.Equal(t, tc.want, boundJob(who, at), "the holder's binding")
 			rows, err := store.List()
 			require.NoError(t, err)
@@ -1441,7 +1440,7 @@ func TestABindingToARemovedRowIsATombstone(t *testing.T) {
 	judge := func(command string) Verdict {
 		return Judge(ctx, Dependencies{}, Request{Input: bashCall(t, who.Session, who.Agent, command), Host: who.Host})
 	}
-	assert.NotEqual(t, "deny", judge("sed -n 1,5p x").Decision, "a read")
+	assert.NotEqual(t, decisionDeny, judge("sed -n 1,5p x").Decision, "a read")
 	assert.Equal(t, string(denyRuleLeaseUndeclared), judge("sed -i s/a/b/ x").Rule, "sed in place is work")
 	assert.Equal(t, string(denyRuleLeaseUndeclared), judge("./build.sh").Rule, "work")
 }
@@ -1886,7 +1885,7 @@ func TestDenyWriteOutsideLeaseCatchesEveryWriterForm(t *testing.T) {
 			tc.command)
 
 		onPath := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, tc.path))
-		require.Equal(t, "deny", onPath.Decision,
+		require.Equal(t, decisionDeny, onPath.Decision,
 			"the file-write rules passed %s, so this row is no longer testing two rule sets against one another", tc.path)
 		normalized = normalized || leaseAge.MatchString(onPath.Reason)
 		assert.Equal(t, withoutLeaseAge(onPath.Reason), withoutLeaseAge(onCommand),

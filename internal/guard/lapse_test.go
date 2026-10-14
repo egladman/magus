@@ -25,10 +25,10 @@ func lapseNow(ctx context.Context, t *testing.T, base Dependencies, req Request,
 	})
 }
 
-// The loop a worker ran on 10-13 while every judgment lapsed: it slept until a background
-// task's output file was non-empty, then printed it. The lines only read, so the lapse
-// ladder passed them unjudged; busy-wait now refuses them on every lapse, past the degrade
-// too, graded by the settings the judgment loaded before it stalled.
+// A worker's loop while every judgment lapses: it sleeps until a background task's output
+// file is non-empty, then prints it. The lines only read, so the lapse ladder would pass
+// them unjudged; busy-wait refuses them on every lapse, past the degrade too, graded by the
+// settings the judgment loaded before it stalled.
 func TestLapsedJudgmentStillRefusesAPollingLoop(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	capture := filepath.Join(t.TempDir(), "tasks", "bglno2daz.output")
@@ -41,7 +41,7 @@ func TestLapsedJudgmentStillRefusesAPollingLoop(t *testing.T) {
 	// One session, so the lapses count up past the degrade.
 	for i, line := range append(loops, loops[0]) {
 		v := lapseNow(ctx, t, Dependencies{}, Request{Input: line, Host: "claude-code", Session: "s1"}, settle)
-		assert.Equal(t, verdictWithRule("deny", string(denyRuleBusyWait)), unworded(v), "lapse %d: %s", i+1, line)
+		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRuleBusyWait)), unworded(v), "lapse %d: %s", i+1, line)
 	}
 }
 
@@ -57,7 +57,7 @@ func TestLapseBeforeTheLoadGradesByTheLastAppliedSettings(t *testing.T) {
 		"with no settings on record busy-wait only advises, as it does by default")
 
 	rememberSettings(cacheDir, strict(Dependencies{}).Builtins)
-	assert.Equal(t, verdictWithRule("deny", string(denyRuleBusyWait)), unworded(lapseNow(ctx, t, Dependencies{}, req, nothing)))
+	assert.Equal(t, verdictWithRule(decisionDeny, string(denyRuleBusyWait)), unworded(lapseNow(ctx, t, Dependencies{}, req, nothing)))
 }
 
 // A destructive VCS verb is refused by its own rule on a lapse, and a push is never
@@ -70,11 +70,11 @@ func TestLapseNeverDegradesADestructiveVerbOrAPush(t *testing.T) {
 	require.NotEmpty(t, want.Deny, "the destructive verb denies by default")
 	for range lapsesBeforeDegrade + 2 {
 		v := lapseNow(ctx, t, Dependencies{}, Request{Input: reset, Host: "claude-code", Session: "s1"}, nothing)
-		assert.Equal(t, verdictWithRule("deny", want.RuleName()), unworded(v))
+		assert.Equal(t, verdictWithRule(decisionDeny, want.RuleName()), unworded(v))
 	}
 	for i := range lapsesBeforeDegrade + 2 {
 		v := lapseNow(ctx, t, Dependencies{}, Request{Input: "git push origin topic", Host: "claude-code", Session: "s2"}, nothing)
-		assert.Equal(t, verdictWithRule("deny", string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
+		assert.Equal(t, verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
 	}
 }
 
