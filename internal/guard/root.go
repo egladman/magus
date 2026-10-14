@@ -2,7 +2,6 @@ package guard
 
 import (
 	"cmp"
-	"context"
 	"fmt"
 	"maps"
 	"slices"
@@ -326,7 +325,7 @@ func shadowVerdicts(st costState, c mainCall) map[types.GuardProfile]types.Guard
 // names a model, and whether that model is at the model tier its job was forked at. Tiers
 // compare by rank in the workspace's declaration, never by name or price; a spawn bound to
 // no row, or to a row forked with no declaration, has nothing to compare.
-func gradeMainSpawn(ctx context.Context, deps Dependencies, verdict Verdict, env hookRequest, who hookAttribution, at location, lease string) Verdict {
+func gradeMainSpawn(deps Dependencies, verdict Verdict, env hookRequest, who hookAttribution, at location, lease string, titled spawnTitle) Verdict {
 	if verdict.Decision == decisionDeny || !env.IsSpawn || lease != "" || at.cacheDir == "" {
 		return verdict
 	}
@@ -336,7 +335,7 @@ func gradeMainSpawn(ctx context.Context, deps Dependencies, verdict Verdict, env
 	}
 	var forked forkedTier
 	bound := false
-	if row, ok := spawnTitleJob(ctx, at, env.Spawn.Description); ok {
+	if row, ok := titled(); ok {
 		forked, bound = boundModelTier(deps, row)
 	}
 	host := types.HarnessKey{ID: who.Host}

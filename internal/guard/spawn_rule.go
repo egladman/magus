@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus/internal/agent"
@@ -131,8 +132,11 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		}
 	}
 	actingLease, _ := resolveActingLease(who, at, req.Lease)
+	titled := spawnTitle(sync.OnceValues(func() (types.Job, bool) {
+		return spawnTitleJob(ctx, at, env.Spawn.Description)
+	}))
 	if verdict.Decision != decisionDeny {
-		verdict = gradeMainSpawn(ctx, deps, verdict, env, who, at, actingLease)
+		verdict = gradeMainSpawn(deps, verdict, env, who, at, actingLease, titled)
 		if verdict.Decision != decisionPass && decided == "" {
 			decided = decidedByBuiltin
 		}
@@ -140,7 +144,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	// Strengthen only, and so asked only when there is something left to strengthen: a
 	// workspace allow can never lift a built-in deny.
 	if verdict.Decision != decisionDeny {
-		spawnReq := spawnRequest(ctx, env, who, at, facts, req.Lease)
+		spawnReq := spawnRequest(ctx, env, who, at, facts, req.Lease, titled)
 		bind := func(rule workspace.SpawnRule) ruleCall {
 			if rule == nil {
 				return nil
@@ -235,7 +239,7 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 
 // spawnRequest normalizes one spawn or continuation for the workspace rule. Every field is
 // read from the envelope or from what magus recorded; none is inferred from the host.
-func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at location, facts hint.Gate, explicitLease string) types.SpawnRequest {
+func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at location, facts hint.Gate, explicitLease string, titled spawnTitle) types.SpawnRequest {
 	req := types.SpawnRequest{
 		Kind:        types.SpawnKindSpawn,
 		Host:        who.Host,
@@ -253,7 +257,7 @@ func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at 
 	if env.IsContinue {
 		req.Kind = types.SpawnKindContinue
 		req.Target = continueTarget(ctx, at, facts, env.Target, time.Now())
-	} else if row, ok := spawnTitleJob(ctx, at, env.Spawn.Description); ok {
+	} else if row, ok := titled(); ok {
 		req.ModelTier = row.ModelTier
 	}
 	// The same resolution every lease-scoped rule uses, so the rule and the guard cannot
@@ -423,6 +427,9 @@ func spawnTitleJob(ctx context.Context, at location, title string) (types.Job, b
 	live := slices.DeleteFunc(slices.Clone(rows), func(row types.Job) bool { return !row.State.Live() })
 	return spawnTitleRow(live, title)
 }
+
+// spawnTitle is spawnTitleJob for one spawn, asked once however many rules read it.
+type spawnTitle func() (types.Job, bool)
 
 // spawnTitleRow is the row of rows a spawn title in the `<parent>/<role> <job>` form names,
 // tried as spawnTitleJob tries them, whatever the row's state.
