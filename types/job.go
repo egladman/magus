@@ -466,12 +466,14 @@ func ValidJobID(id string) bool {
 //
 // It moves only for a change an older reader would act on WRONGLY, and that version names
 // the feature in JobSchema.Requires, which the store stamps on each row whose content needs
-// it. 12 is the `signature` expectation on a symbol goal: an older binary would grade it as
-// `changed`. 11 is the `<path>#<declaration>` claim grammar in write_paths (see SplitClaim):
-// an older binary matches `run.go#RunCI` against no file and would stop grading the claim.
-// 10 is the field set that ends dead jobs.
+// it. 13 is generations and attempts: an older binary re-forking a row would leave
+// Generation behind the spec, so a stale result reads as current, and would ignore
+// MaxAttempts. 12 is the `signature` expectation on a symbol goal: an older binary would
+// grade it as `changed`. 11 is the `<path>#<declaration>` claim grammar in write_paths
+// (see SplitClaim): an older binary matches `run.go#RunCI` against no file and would stop
+// grading the claim. 10 is the field set that ends dead jobs.
 // TestSchemaLedgersEvolveAdditively fails a bump whose diff is only additive.
-const JobSchemaVersion = 12
+const JobSchemaVersion = 13
 
 // JobResultSchemaVersion is the version of the result shape a holder files, the newest the
 // decoder accepts. [JobResultSchema] is its ledger, under JobSchemaVersion's rules.
@@ -534,6 +536,9 @@ type JobResult struct {
 	GateEvidence    []GateEvidence      `json:"gate_evidence,omitempty" yaml:"gate_evidence,omitempty"`
 	Descendants     []string            `json:"descendants,omitempty" yaml:"descendants,omitempty"`
 	UnresolvedRisks []string            `json:"unresolved_risks" yaml:"unresolved_risks"`
+	// ObservedGeneration is the job's Generation when the result was filed, stamped by the
+	// store rather than taken from the holder.
+	ObservedGeneration int `json:"observed_generation,omitempty" yaml:"observed_generation,omitempty"`
 }
 
 // GateEvidence links a goal to captured Magus output.
@@ -586,6 +591,8 @@ type JobStatus struct {
 	UndeclaredExports []string `json:"undeclared_exports,omitempty" yaml:"undeclared_exports,omitempty"`
 	LeftUnreferenced  []string `json:"left_unreferenced,omitempty" yaml:"left_unreferenced,omitempty"`
 	SymbolDeltaKnown  bool     `json:"symbol_delta_known" yaml:"symbol_delta_known"`
+	// ObservedGeneration is the job's Generation when it was graded.
+	ObservedGeneration int `json:"observed_generation,omitempty" yaml:"observed_generation,omitempty"`
 }
 
 // Clean reports whether the holder's result left no risk unresolved.
@@ -624,6 +631,8 @@ type JobAttempt struct {
 	// ExtraArgs are the args the run forwarded after `--`. Nil when it forwarded none or the
 	// record predates the field, so only a non-nil value is compared with a check's args.
 	ExtraArgs []string `json:"extra_args,omitempty" yaml:"extra_args,omitempty"`
+	// ObservedGeneration is the job's Generation when the store recorded the run against it.
+	ObservedGeneration int `json:"observed_generation,omitempty" yaml:"observed_generation,omitempty"`
 }
 
 // JobGateAttempt is the stored output record for one goal.
@@ -731,6 +740,23 @@ type Job struct {
 	// stored one.
 	ReworkRounds int `json:"rework_rounds,omitempty" yaml:"rework_rounds,omitempty"`
 	Widenings    int `json:"widenings,omitempty"     yaml:"widenings,omitempty"`
+	// Generation counts changes to the declared spec, as Kubernetes' metadata.generation
+	// does: 1 when the row is declared, one more on each fork or apply that changes a
+	// declared field. Store-computed, and a store-written field never moves it. Each result,
+	// attempt and grade records the Generation it observed, so one taken against an earlier
+	// spec reads as stale rather than current; zero there is unknown.
+	Generation int `json:"generation,omitempty" yaml:"generation,omitempty"`
+	// MaxAttempts caps Attempts, as a Kubernetes Job's backoffLimit does; zero is no cap. It
+	// is checked only when the row is forked again: magus never retries a job on its own.
+	MaxAttempts int `json:"max_attempts,omitempty" yaml:"max_attempts,omitempty"`
+	// Attempts numbers the live attempt from 1; each fork of an ended row starts the next.
+	// Prior holds the attempts before it, newest last, at most three, as structured
+	// diagnostics and never a transcript. Rejection is the last `magus job wait` that
+	// refused the live attempt, which leaves State where it was. All three are
+	// store-computed.
+	Attempts  int            `json:"attempts,omitempty"  yaml:"attempts,omitempty"`
+	Prior     []PriorAttempt `json:"prior,omitempty"     yaml:"prior,omitempty"`
+	Rejection *JobRejection  `json:"rejection,omitempty" yaml:"rejection,omitempty"`
 	// Check is the one check this lease runs. See [LeaseCheck].
 	Check *LeaseCheck `json:"check,omitempty" yaml:"check,omitempty"`
 	// Validation is Check rendered as the command that runs it.
@@ -868,6 +894,51 @@ type JobIntegration struct {
 	At       int64        `json:"at" yaml:"at"`
 	Verified bool         `json:"verified" yaml:"verified"`
 	Gates    []GateStatus `json:"gates,omitempty" yaml:"gates,omitempty"`
+	// ObservedGeneration is the row's Generation when the grade was taken.
+	ObservedGeneration int `json:"observed_generation,omitempty" yaml:"observed_generation,omitempty"`
+}
+
+// JobRejection is a `magus job wait` that refused the live attempt, At unix seconds.
+type JobRejection struct {
+	Unmet              []GateStatus `json:"unmet,omitempty"               yaml:"unmet,omitempty"`
+	Violations         []string     `json:"violations,omitempty"          yaml:"violations,omitempty"`
+	At                 int64        `json:"at"                            yaml:"at"`
+	ObservedGeneration int          `json:"observed_generation,omitempty" yaml:"observed_generation,omitempty"`
+}
+
+// JobDenial is one guard denial of a job's holder, Ts unix seconds. VerdictRef reopens the
+// guard's verdict.
+type JobDenial struct {
+	Rule       string `json:"rule"                  yaml:"rule"`
+	Reason     string `json:"reason,omitempty"      yaml:"reason,omitempty"`
+	Action     string `json:"action,omitempty"      yaml:"action,omitempty"`
+	VerdictRef string `json:"verdict_ref,omitempty" yaml:"verdict_ref,omitempty"`
+	Ts         int64  `json:"ts"                    yaml:"ts"`
+}
+
+// PriorAttempt is an ended attempt of a job, folded onto the row when the job is forked
+// again, so the next holder reads what failed without a transcript. Ended is unix seconds.
+// DenialsKnown is false once the trail rotated past the attempt, so empty Denials then
+// means unknown rather than none.
+type PriorAttempt struct {
+	N                  int          `json:"n"                             yaml:"n"`
+	State              JobState     `json:"state"                         yaml:"state"`
+	ObservedGeneration int          `json:"observed_generation,omitempty" yaml:"observed_generation,omitempty"`
+	EndReason          string       `json:"end_reason,omitempty"          yaml:"end_reason,omitempty"`
+	ModelTier          string       `json:"model_tier,omitempty"          yaml:"model_tier,omitempty"`
+	Checkpoint         string       `json:"checkpoint,omitempty"          yaml:"checkpoint,omitempty"`
+	ReportedBase       string       `json:"reported_base,omitempty"       yaml:"reported_base,omitempty"`
+	Ended              int64        `json:"ended,omitempty"               yaml:"ended,omitempty"`
+	ReworkRounds       int          `json:"rework_rounds,omitempty"       yaml:"rework_rounds,omitempty"`
+	Widenings          int          `json:"widenings,omitempty"           yaml:"widenings,omitempty"`
+	Unmet              []GateStatus `json:"unmet,omitempty"               yaml:"unmet,omitempty"`
+	Violations         []string     `json:"violations,omitempty"          yaml:"violations,omitempty"`
+	UnresolvedRisks    []string     `json:"unresolved_risks,omitempty"    yaml:"unresolved_risks,omitempty"`
+	// FailingRefs are the output refs of the attempt's failed runs, to reopen.
+	FailingRefs  []string     `json:"failing_refs,omitempty" yaml:"failing_refs,omitempty"`
+	Denials      []JobDenial  `json:"denials,omitempty"      yaml:"denials,omitempty"`
+	DenialsKnown bool         `json:"denials_known"          yaml:"denials_known"`
+	Retry        RetryVerdict `json:"retry"                  yaml:"retry"`
 }
 
 // Declaration is the typed INPUT for one lease row: the fields a caller DECLARES, and nothing
@@ -953,6 +1024,9 @@ type Declaration struct {
 	// it writes the row, so a declaration carries a length and never an instant. Empty is no
 	// bound; there is no default here (a workspace may set jobs.default_timeout).
 	Timeout string `json:"timeout,omitempty"`
+	// MaxAttempts caps how many times the job may be forked, its first fork included; zero
+	// is no cap. See [Job.MaxAttempts].
+	MaxAttempts int `json:"max_attempts,omitempty"`
 	// Enter turns the record into an entry rather than a declaration: it acknowledges one
 	// write into this path, inside the write paths of the live job ID names, by somebody
 	// other than its holder. A record carrying it declares nothing else.
@@ -1011,6 +1085,9 @@ func (r Declaration) Validate() error {
 	}
 	if _, err := ParseJobTimeout(r.Timeout); err != nil {
 		return err
+	}
+	if r.MaxAttempts < 0 {
+		return fmt.Errorf("%w: max_attempts is %d, and it is a count of forks or 0 for no cap", errInvalidJob, r.MaxAttempts)
 	}
 	check, declared, err := r.check()
 	if err != nil {
@@ -1312,6 +1389,7 @@ func (r Declaration) Apply(u *Job) {
 	u.Goals = cloneGoals(r.Goals)
 	u.State = r.State
 	u.ReadOnly = r.ReadOnly
+	u.MaxAttempts = r.MaxAttempts
 }
 
 // ApplySpec writes this declaration's spec onto a row, for `magus job apply`: as Apply, but
@@ -1990,7 +2068,30 @@ func (u Job) Clone() Job {
 	}
 	c.Integration = cloneIntegration(u.Integration)
 	c.WaiterEvidence = cloneIntegration(u.WaiterEvidence)
+	c.Prior = slices.Clone(u.Prior)
+	for i, p := range c.Prior {
+		c.Prior[i].Unmet = cloneGateStatuses(p.Unmet)
+		c.Prior[i].Violations = slices.Clone(p.Violations)
+		c.Prior[i].UnresolvedRisks = slices.Clone(p.UnresolvedRisks)
+		c.Prior[i].FailingRefs = slices.Clone(p.FailingRefs)
+		c.Prior[i].Denials = slices.Clone(p.Denials)
+	}
+	if u.Rejection != nil {
+		r := *u.Rejection
+		r.Unmet = cloneGateStatuses(u.Rejection.Unmet)
+		r.Violations = slices.Clone(u.Rejection.Violations)
+		c.Rejection = &r
+	}
 	return c
+}
+
+// cloneGateStatuses is a deep copy of gates, nil for nil.
+func cloneGateStatuses(gates []GateStatus) []GateStatus {
+	out := slices.Clone(gates)
+	for i := range out {
+		out[i].Violations = slices.Clone(out[i].Violations)
+	}
+	return out
 }
 
 // cloneIntegration is a deep copy of g, nil for nil.
@@ -1999,9 +2100,6 @@ func cloneIntegration(g *JobIntegration) *JobIntegration {
 		return nil
 	}
 	c := *g
-	c.Gates = slices.Clone(g.Gates)
-	for i := range c.Gates {
-		c.Gates[i].Violations = slices.Clone(c.Gates[i].Violations)
-	}
+	c.Gates = cloneGateStatuses(g.Gates)
 	return &c
 }

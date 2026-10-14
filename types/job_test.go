@@ -363,6 +363,87 @@ func TestJobCloneCopiesAttemptArgs(t *testing.T) {
 	assert.Equal(t, []string{"-run", "TestOne"}, orig.GateAttempts[0].Attempt.ExtraArgs)
 }
 
+// The previous attempts and the rejection are the next holder's evidence, so a clone handed
+// out of the store must not alias the slices one level down. Asserted across two clones for
+// the reason TestJobCloneCopiesEverySliceField gives.
+func TestJobCloneCopiesPriorAttemptsAndRejection(t *testing.T) {
+	t.Parallel()
+
+	refs := func() []string { return append(make([]string, 0, 4), "out1") }
+	unmet := func() []GateStatus {
+		return append(make([]GateStatus, 0, 4), GateStatus{ID: "unit", Violations: refs()})
+	}
+	prior := func() PriorAttempt {
+		return PriorAttempt{
+			N:               1,
+			Unmet:           unmet(),
+			Violations:      refs(),
+			UnresolvedRisks: refs(),
+			FailingRefs:     refs(),
+			Denials:         append(make([]JobDenial, 0, 4), JobDenial{Rule: "lease-write"}),
+		}
+	}
+	orig := Job{
+		ID:        "a",
+		Prior:     append(make([]PriorAttempt, 0, 4), prior()),
+		Rejection: &JobRejection{Unmet: unmet(), Violations: refs()},
+	}
+
+	first, second := orig.Clone(), orig.Clone()
+	for i, c := range []Job{first, second} {
+		tag := fmt.Sprint(i)
+		p := &c.Prior[0]
+		p.Unmet[0].Violations = append(p.Unmet[0].Violations, tag)
+		p.Violations = append(p.Violations, tag)
+		p.UnresolvedRisks = append(p.UnresolvedRisks, tag)
+		p.FailingRefs = append(p.FailingRefs, tag)
+		p.Denials = append(p.Denials, JobDenial{Rule: tag})
+		c.Rejection.Unmet[0].Violations = append(c.Rejection.Unmet[0].Violations, tag)
+		c.Rejection.Violations = append(c.Rejection.Violations, tag)
+	}
+	first.Prior[0].FailingRefs[0] = "first"
+	first.Rejection.At = 9
+
+	assert.Equal(t, []string{"first", "0"}, first.Prior[0].FailingRefs)
+	assert.Equal(t, []string{"out1", "1"}, second.Prior[0].FailingRefs)
+	assert.Equal(t, []JobDenial{{Rule: "lease-write"}, {Rule: "1"}}, second.Prior[0].Denials)
+	assert.Equal(t, []string{"out1", "1"}, second.Rejection.Unmet[0].Violations)
+	assert.Equal(t, Job{ID: "a", Prior: []PriorAttempt{prior()}, Rejection: &JobRejection{Unmet: unmet(), Violations: refs()}}, orig)
+}
+
+// A cap on attempts is declared like the rest of the spec, so applying a record that omits
+// it clears it, and a negative cap is refused at the door.
+func TestDeclarationCarriesMaxAttempts(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, Declaration{ID: "worker", MaxAttempts: 3}.Validate())
+	assert.ErrorContains(t, Declaration{ID: "worker", MaxAttempts: -1}.Validate(), "max_attempts is -1")
+
+	var row Job
+	Declaration{ID: "worker", MaxAttempts: 3}.Apply(&row)
+	assert.Equal(t, 3, row.MaxAttempts)
+	Declaration{ID: "worker"}.ApplySpec(&row)
+	assert.Zero(t, row.MaxAttempts)
+}
+
+// The generation and the attempt record are the store's, so a declaration never writes
+// them: Apply leaves them where they were.
+func TestDeclarationApplyLeavesStoreComputedAttemptsAlone(t *testing.T) {
+	t.Parallel()
+
+	row := Job{
+		ID:         "worker",
+		Generation: 2,
+		Attempts:   2,
+		Prior:      []PriorAttempt{{N: 1, State: StateFail}},
+		Rejection:  &JobRejection{At: 1, ObservedGeneration: 2},
+	}
+	want := row
+	want.Criteria = "again"
+	Declaration{ID: "worker", Criteria: "again"}.Apply(&row)
+	assert.Equal(t, want, row)
+}
+
 // slices.Clone preserves nil, which is what keeps a row that stored null from coming back
 // as [] through the JSON door.
 func TestJobCloneKeepsNilSlicesNil(t *testing.T) {
