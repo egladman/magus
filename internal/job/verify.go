@@ -540,6 +540,12 @@ func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAtt
 	if why, ok := seen.Stale[attemptKey(attempt)]; ok {
 		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q predates the job's last write: it proves the work only if %s", status.OutputRef, why))
 	}
+	// An unleased run is accepted: the orchestrator runs a check under no lease, as
+	// `job wait --integration` does.
+	if attempt.Lease != "" && attempt.Lease != row.ID {
+		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q acted under lease %q, not this job's lease %q, so it is another job's evidence",
+			status.OutputRef, attempt.Lease, row.ID))
+	}
 	if !bindsTo(gate.Check, attempt, seen.DefaultCharms) {
 		status.Violations = append(status.Violations, fmt.Sprintf("output ref %q records `%s` and this goal's check runs `%s`, so the evidence is from a different run",
 			status.OutputRef, attempt, resolveCheck(gate.Check, seen.DefaultCharms)))
@@ -566,9 +572,14 @@ func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAtt
 // run` resolves it, defaults stacked under its own charms, before the sets are compared:
 // otherwise `magus run test .` records `test:rw` and can never satisfy its own check.
 //
-// The args past `--` are NOT compared: the output store records a run by spell, target and
-// project and holds no argv, so a rule keyed on them would reject every ref there is.
+// The args past `--` are compared when the attempt records them, so a run narrowed with
+// `-- -run TestOne` does not stand in for the whole check. Nil args are not compared: the
+// run forwarded none, or its record predates the field, and either way it narrowed nothing
+// it can show.
 func bindsTo(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
+	if a.ExtraArgs != nil && !slices.Equal(a.ExtraArgs, c.Args) {
+		return false
+	}
 	if c.Script != "" {
 		// `magus buzz --record` stores its run under `buzz <script>` in the workspace
 		// project, with no charms.

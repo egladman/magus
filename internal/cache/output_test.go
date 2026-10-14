@@ -5,9 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	json "github.com/egladman/magus/internal/json"
 	runPkg "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -137,6 +139,55 @@ func TestOutputStorePersistRevisionRoundTrip(t *testing.T) {
 		Key: "cafebabecafebabe", KeyVersion: KeyVersion,
 		Attempt: desc.Attempt, PersistedNs: desc.PersistedNs,
 	}, desc)
+}
+
+// A job row records the run behind an output ref through JobAttempt, so every field a
+// grader compares has to cross: the lease and args bind the run to the job and the check.
+func TestOutputDescriptorJobAttemptCarriesTheRunsIdentity(t *testing.T) {
+	t.Parallel()
+
+	d := OutputDescriptor{
+		Ref: "outdeadbeefcafe", Project: "api", Target: "test:rw", Spell: "go", Failed: true,
+		TimestampMs: 1_700_000_000_000, DurationMs: 900, Attempt: "outdeadbeefcafe-0a1b2c3d",
+		Revision: "abcdef0123456789abcdef0123456789abcdef01", Dirty: true,
+		Lease: "wave/api", ExtraArgs: []string{"-run", "TestOne"},
+		Inv: "inv1", ErrMsg: "exit 1", Platform: "linux/amd64",
+	}
+	got := d.JobAttempt("outdead")
+	assert.Equal(t, types.JobAttempt{
+		Found: true, Ref: "outdead", Project: "api", Target: "test:rw", Spell: "go", Failed: true,
+		TimestampMs: 1_700_000_000_000, DurationMs: 900, AttemptID: "outdeadbeefcafe-0a1b2c3d",
+		Revision: "abcdef0123456789abcdef0123456789abcdef01", Dirty: true,
+		Lease: "wave/api", ExtraArgs: []string{"-run", "TestOne"},
+	}, got)
+
+	got.ExtraArgs[0] = "-bench"
+	assert.Equal(t, "-run", d.ExtraArgs[0], "the attempt owns its args")
+	assert.Nil(t, OutputDescriptor{}.JobAttempt("outdead").ExtraArgs, "a run that recorded no args stays nil, which a grader does not compare")
+}
+
+// A run records the job lease it acted under, resolved as the sandbox resolves it: the
+// checkout's binding outranks the lease the environment claims.
+func TestRecordOutputStampsTheActingLease(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root, cdir, c := newMutableCache(t)
+	record := func() OutputDescriptor {
+		t.Helper()
+		ref := c.recordOutput(t.Context(), Step{ProjectPath: "api", Target: "test", WorkspaceRoot: root}, "deadbeefcafef00d", []byte("ok\n"), time.Second, nil, false)
+		require.NotEmpty(t, ref)
+		_, d, err := c.outputs.ByRef(ref)
+		require.NoError(t, err)
+		return d
+	}
+
+	t.Setenv(trail.EnvBaggage, "")
+	assert.Empty(t, record().Lease, "a run under no lease records none")
+
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=wave/api")
+	assert.Equal(t, "wave/api", record().Lease)
+
+	require.NoError(t, job.NewStore(job.Location{CacheDir: cdir}).Bind(job.Caller{}, "wave/bound"))
+	assert.Equal(t, "wave/bound", record().Lease, "the checkout's binding outranks the claim")
 }
 
 // TestOutputStoreV2DescriptorResolvesWithEmptyRevision pins backward compatibility for

@@ -251,6 +251,7 @@ func TestNewOutputDescriptorCarriesEveryField(t *testing.T) {
 		Key: "abc123", KeyVersion: 7, Attempt: "att1", MagusVersion: "v0.9.0",
 		Revision: "cafebabe", Dirty: true,
 		Spell: "go::go-build", ExtraArgs: []string{"-race"}, VCSName: "git", Platform: "darwin/arm64",
+		Lease: "wave/api",
 	})
 
 	assert.Equal(t, OutputDescriptor{
@@ -259,6 +260,7 @@ func TestNewOutputDescriptorCarriesEveryField(t *testing.T) {
 		Key: "abc123", KeyVersion: 7, Attempt: "att1", MagusVersion: "v0.9.0",
 		Revision: "cafebabe", Dirty: true,
 		Spell: "go::go-build", ExtraArgs: []string{"-race"}, VCSName: "git", Platform: "darwin/arm64",
+		Lease: "wave/api",
 	}, got)
 
 	assert.Equal(t, OutputDescriptor{}, newOutputDescriptor(cache.OutputDescriptor{}))

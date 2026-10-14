@@ -297,6 +297,59 @@ func TestVerifyReadsTheStoredRunsOutcome(t *testing.T) {
 	assert.Contains(t, v.Violations[0], "failed")
 }
 
+// A passing run of the same check by another lease, in a checkout the two share, proves
+// nothing about this job's work.
+func TestVerifyRefusesAnotherLeasesRun(t *testing.T) {
+	t.Parallel()
+
+	theirs := passingRun
+	theirs.Lease = "harness/other"
+	v := verifyClaim(acceptRow(), passingResult(), theirs, nil)
+	assert.False(t, v.Verified)
+	require.Len(t, v.Violations, 1)
+	assert.Contains(t, v.Violations[0], `"harness/other"`)
+	assert.Contains(t, v.Violations[0], `"harness/ledger-accept"`)
+}
+
+// The holder's own run is its evidence, and so is a run under no lease at all: the
+// orchestrator runs checks unleased, which is the run `job wait --integration` grades.
+func TestVerifyAcceptsTheHoldersRunAndAnUnleasedOne(t *testing.T) {
+	t.Parallel()
+
+	for name, lease := range map[string]string{"the holder's": "harness/ledger-accept", "an unleased": ""} {
+		att := passingRun
+		att.Lease = lease
+		v := verifyClaim(acceptRow(), passingResult(), att, nil)
+		assert.True(t, v.Verified, "%s run: %v", name, v.Violations)
+	}
+}
+
+// The args a run forwarded after `--` are part of what it ran: a run narrowed to another
+// test does not stand in for the check. A record with no args is not compared.
+func TestVerifyComparesTheRunsRecordedArgs(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		ok   bool
+	}{
+		{name: "the check's own args", args: []string{"-run", "Ledger"}, ok: true},
+		{name: "a record with none", args: nil, ok: true},
+		{name: "a run narrowed elsewhere", args: []string{"-run", "Other"}, ok: false},
+		{name: "a run with more args", args: []string{"-run", "Ledger", "-short"}, ok: false},
+	} {
+		att := passingRun
+		att.ExtraArgs = tc.args
+		v := verifyClaim(acceptRow(), passingResult(), att, nil)
+		assert.Equal(t, tc.ok, v.Verified, "%s: %v", tc.name, v.Violations)
+		if !tc.ok {
+			require.Len(t, v.Violations, 1, tc.name)
+			assert.Contains(t, v.Violations[0], "-- "+strings.Join(tc.args, " "), "the message shows the args the run forwarded")
+		}
+	}
+}
+
 // A row with no check has nothing to bind evidence to, and accepting it anyway is how a
 // ref from any run at all passes for evidence.
 func TestVerifyRefusesARowWithNoCheckToBindTo(t *testing.T) {
@@ -310,8 +363,8 @@ func TestVerifyRefusesARowWithNoCheckToBindTo(t *testing.T) {
 	assert.Contains(t, v.Violations[0], "declares no check and no goal")
 }
 
-// The binary's spelling and the args after `--` are ways of running one target, so
-// neither may decide whether the evidence binds.
+// The binary's spelling is a way of running one target, so it may not decide whether the
+// evidence binds; nor may a check's args when the run recorded none.
 func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 	t.Parallel()
 

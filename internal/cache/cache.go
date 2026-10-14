@@ -30,10 +30,12 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	runPkg "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -1013,6 +1015,14 @@ func (c *Cache) emitUnchangedFailureHint(ctx context.Context, hash string) strin
 	return HintUnchangedFailure
 }
 
+// actingLease is the job lease a run recorded here acts under, resolved the way the
+// sandbox resolves it: the checkout's binding outranks the environment's claim, which a
+// worker can rewrite from its own shell.
+func (c *Cache) actingLease() string {
+	lease, _ := job.ActingLease(c.dir, trail.LeaseFromEnv())
+	return lease
+}
+
 // recordOutput persists a step's captured output events under a per-execution
 // reference id and returns that ref for the result log event. It builds the target's
 // `result` record (status/duration/error), persists the output events plus that
@@ -1042,6 +1052,7 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 		ExtraArgs:   s.ExtraArgs,
 		VCSName:     s.VCSName,
 		Platform:    c.platform,
+		Lease:       c.actingLease(),
 	}
 	if runErr != nil {
 		d.ErrMsg = runErr.Error()

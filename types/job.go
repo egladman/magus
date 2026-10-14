@@ -615,6 +615,12 @@ type JobAttempt struct {
 	// the tree also held uncommitted changes then, so Revision alone does not name what it read.
 	Revision string `json:"revision,omitempty" yaml:"revision,omitempty"`
 	Dirty    bool   `json:"dirty,omitempty" yaml:"dirty,omitempty"`
+	// Lease is the job lease the run acted under, empty for a run under none, such as a
+	// check the orchestrator runs itself.
+	Lease string `json:"lease,omitempty" yaml:"lease,omitempty"`
+	// ExtraArgs are the args the run forwarded after `--`. Nil when it forwarded none or the
+	// record predates the field, so only a non-nil value is compared with a check's args.
+	ExtraArgs []string `json:"extra_args,omitempty" yaml:"extra_args,omitempty"`
 }
 
 // JobGateAttempt is the stored output record for one goal.
@@ -629,7 +635,7 @@ func (a JobAttempt) String() string {
 	if a.Spell != "" {
 		target = a.Spell + "::" + target
 	}
-	return LeaseCheck{Target: target, Project: a.Project}.String()
+	return LeaseCheck{Target: target, Project: a.Project, Args: a.ExtraArgs}.String()
 }
 
 // Job is one row of an orchestrating agent's lease ledger: what that
@@ -1968,9 +1974,13 @@ func (u Job) Clone() Job {
 	}
 	if u.Attempt != nil {
 		attempt := *u.Attempt
+		attempt.ExtraArgs = slices.Clone(u.Attempt.ExtraArgs)
 		c.Attempt = &attempt
 	}
 	c.GateAttempts = slices.Clone(u.GateAttempts)
+	for i := range c.GateAttempts {
+		c.GateAttempts[i].Attempt.ExtraArgs = slices.Clone(c.GateAttempts[i].Attempt.ExtraArgs)
+	}
 	if u.LastRun != nil {
 		run := *u.LastRun
 		c.LastRun = &run

@@ -130,6 +130,20 @@ type OutputDescriptor struct {
 	// cache.include.os/arch settings: those govern what keys a build, while this
 	// explains a refusal the guards perform regardless of them.
 	Platform string `json:"platform,omitempty"`
+	// Lease is the job lease the run acted under, "" for a run under none. It binds the run
+	// to the job whose evidence it may be: another lease's passing run of the same check
+	// in a shared checkout proves nothing about this job's work.
+	Lease string `json:"lease,omitempty"`
+}
+
+// JobAttempt is the descriptor as a job row records the run behind ref: the one copy
+// every reader of output evidence for a job goes through.
+func (d OutputDescriptor) JobAttempt(ref string) types.JobAttempt {
+	return types.JobAttempt{
+		Found: true, Ref: ref, Project: d.Project, Target: d.Target, Spell: d.Spell, Failed: d.Failed,
+		TimestampMs: d.TimestampMs, AttemptID: d.Attempt, DurationMs: d.DurationMs,
+		Revision: d.Revision, Dirty: d.Dirty, Lease: d.Lease, ExtraArgs: slices.Clone(d.ExtraArgs),
+	}
 }
 
 // AmbiguousRefError is returned by output lookup when a ref (or prefix) matches more

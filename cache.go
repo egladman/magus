@@ -337,6 +337,7 @@ func newOutputDescriptor(d cache.OutputDescriptor) OutputDescriptor {
 		Key: d.Key, KeyVersion: d.KeyVersion, Attempt: d.Attempt, MagusVersion: d.MagusVersion,
 		Revision: d.Revision, Dirty: d.Dirty,
 		Spell: d.Spell, ExtraArgs: d.ExtraArgs, VCSName: d.VCSName, Platform: d.Platform,
+		Lease: d.Lease,
 	}
 }
 
