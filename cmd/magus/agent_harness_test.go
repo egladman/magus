@@ -38,7 +38,7 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 	orphan := filepath.Join(root, dest, "magus-retired")
 	require.NoError(t, os.MkdirAll(orphan, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(orphan, "SKILL.md"),
-		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), agent.VariantShort), 0o644))
+		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), types.SkillVariantShort), 0o644))
 
 	log.Reset()
 	out := captureStdout(t, func() {
@@ -50,7 +50,7 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 	// A dry run names the same deletion and performs none of it.
 	require.NoError(t, os.MkdirAll(orphan, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(orphan, "SKILL.md"),
-		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), agent.VariantShort), 0o644))
+		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), types.SkillVariantShort), 0o644))
 	out = captureStdout(t, func() {
 		require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, agent.FormFull, true))
 	})

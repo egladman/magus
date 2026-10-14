@@ -374,7 +374,7 @@ func reportContextCost(ctx context.Context, dir string, written []string) {
 	// What the always-loaded set would cost if the long form were the one carried. Kept
 	// even though it is no longer a flag to choose between, because it is the number that
 	// justifies the split: without it the reader cannot see what the shorter form buys.
-	if alt, err := agentSkills.VariantSize(agent.VariantFull); err == nil && alt > installed {
+	if alt, err := agentSkills.VariantSize(types.SkillVariantFull); err == nil && alt > installed {
 		msg += fmt.Sprintf("; the full form would be %s", byteSize(alt))
 	}
 	if twins > 0 {

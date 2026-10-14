@@ -410,7 +410,7 @@ type AgentSkill struct {
 	// always-full twin (see fullTwinSuffix), and the twin's own stamp must say
 	// "full", never "short": StampSkill and friends key off this field, not
 	// the request. Meaningless on an unrendered definition from EmbeddedSkills.
-	Variant Variant
+	Variant types.SkillVariant
 	// Reference is the skill's reference file: the detail SKILL.md links one level deep, so
 	// SKILL.md stays under the host's line budget. Empty when the skill has none. Always
 	// rendered full, with a contents list, in both forms: a reader opens it for the detail.
@@ -427,66 +427,6 @@ type installedFile struct {
 	name string
 	body []byte
 }
-
-// Variant selects which form of a skill body to render.
-//
-// BOTH FORMS ARE CURATED, and that is the whole design. The short one is
-// not a summary, a truncation, or a model-generated paraphrase: there is exactly
-// one human-written body per skill, and its author brackets the spans that only
-// the full form keeps. So the two can never come to describe different
-// behavior, they share one content digest, and they version together, which is
-// the property a second hand-maintained file could not give.
-//
-// The reason to offer a shorter one at all: a skill is a bet about what the reader
-// cannot infer, and that bet ages. Models keep getting better at inferring the
-// why, so the rationale that earns its context today is the same text that is
-// dead weight in a year. Rather than let the skills quietly become bricks, the
-// choice is a flag, and re-asking "does this still earn its context?" is the
-// audit, not a rewrite.
-//
-// A {{if .Full}} branch alone caps how short the short form can get, because it
-// can only SUBTRACT. Short is "everything minus the full-only branches", so a
-// passage BOTH forms must express sits in the shared text at whatever length the
-// full form needs, and the only way to shorten it further is to drop it entirely
-// and lose the step. The {{else}} arm is the one construct that reaches it: full
-// keeps the long wording, short gets the terse one.
-//
-// Measured 2026-07-31 across the ten shipped skills: short came out 20.3%
-// smaller than full, on 137 full-only branches against only 28 {{else}} arms.
-// The most prose-heavy short forms are magus-run (82.6% prose) and magus-vcs-hygiene
-// (91.0% prose). The headroom is in the wording of the shared text, not in the
-// tables. An earlier version of this comment blamed the tables; that was wrong,
-// and it pointed authors at the one part of the page they should not touch.
-type Variant int
-
-// The words are SHORT and FULL, one each: the Go constants, the wire strings, the
-// installed stamp value, and the published pages. The shorter end had drifted to three
-// spellings across those places (simple, concise, short), which is one word per
-// place a reader looks, and nothing to tell them the three name one thing.
-//
-// Why these two words rather than any other pair: the full end cannot move at all.
-// `full` is the installed twin's directory name and the branch every skill body's
-// {{if .Full}} already takes, and short is its natural opposite.
-//
-// The `skill-variant:` stamp KEY keeps its own name on purpose: it records which body a
-// file holds, which is a Variant, not the Form an install was asked for.
-const (
-	// VariantShort sheds ENUMERATION and keeps JUDGMENT, for the most capable readers,
-	// not the least. A capable reader can re-derive the mechanical steps from the tools
-	// on its own; what it cannot re-derive is which failures are silent, what is
-	// load-bearing, and where a judgment call is being asked of it. So short is a bet ON
-	// the reader, not a lossy compression, which is why the split is a judgment an
-	// author records, and why anything a step cannot survive losing belongs in the
-	// unmarked core instead.
-	//
-	// The ZERO value, because it is what an install writes by default. Full used to hold
-	// that slot, so every caller wanting default behavior had to name the non-default
-	// constant to get it.
-	VariantShort Variant = iota
-	// VariantFull spells out every mechanical step, plus the rationale that says why each
-	// one is the right move and what goes wrong otherwise.
-	VariantFull
-)
 
 // fullTwinSuffix names the always-full twin [FormBoth] writes alongside each
 // skill's primary entry: <name>-full. The short form is a bet that the
@@ -506,37 +446,14 @@ func FullTwinName(base string) string { return base + fullTwinSuffix }
 // sees twins it would otherwise call unrecognized.
 func IsFullTwinName(name string) bool { return strings.HasSuffix(name, fullTwinSuffix) }
 
-func (v Variant) String() string {
-	if v == VariantFull {
-		return "full"
-	}
-	return "short"
-}
-
-// Full and Short let a skill body branch on the variant with {{if .Full}}. They
-// exist because text/template cannot reference a package constant, so the
-// predicate has to hang off the value being rendered.
-//
-// Full is the one authors reach for: it brackets rationale the short form drops.
-// Short brackets text ONLY the shorter reader sees, which is almost always
-// wrong (a step in that arm is one the better-briefed reader never gets), so
-// use it for wording, not for content.
-func (v Variant) Full() bool { return v == VariantFull }
-
-func (v Variant) Short() bool { return v == VariantShort }
-
-// Is reports whether v is the named variant, so a third form costs a constant
-// and a String case rather than a new pair of markers.
-func (v Variant) Is(name string) bool { return v.String() == name }
-
 // Form says which entries an installation writes. It is a user-owned
 // installation choice, not a claim about a host or model: magus cannot reliably
 // observe either one.
 //
-// It is a superset of [Variant] rather than the same type, because a Form may
-// name TWO bodies: FormBoth writes each skill short and its twin full. Every
+// It is a superset of [types.SkillVariant] rather than the same type, because a Form
+// may name TWO bodies: FormBoth writes each skill short and its twin full. Every
 // enumerator here takes a Form for that reason, and [Catalog.Render] takes a
-// Variant because one file holds one body.
+// SkillVariant because one file holds one body.
 type Form string
 
 const (
@@ -563,21 +480,13 @@ func ParseForm(s string) (Form, error) {
 
 // Variant returns the body this form's PRIMARY entries carry. FormBoth's twins
 // are full regardless; each twin's own Variant field records that.
-func (f Form) Variant() Variant {
+func (f Form) Variant() types.SkillVariant {
 	if f == FormFull {
-		return VariantFull
+		return types.SkillVariantFull
 	}
-	return VariantShort
+	return types.SkillVariantShort
 }
 
-// applyVariant renders body for v. The body is a text/template, so a form
-// is an ordinary {{if}} branch and a malformed one is a parse or execute error
-// rather than text that silently survives into an installed file.
-//
-// A skill body that needs to SHOW template syntax (magus-run documents the
-// `-o template` flag, magus-buzz-lang documents mustache) escapes it as a string
-// constant: {{"{{.Field}}"}}. That applies inside fenced code blocks too; the
-// template engine does not know what Markdown is.
 // skillFuncs is the template vocabulary a skill body may call.
 //
 // `cmd` renders a CLI path from the canonical registry rather than from the
@@ -699,7 +608,31 @@ var skillFuncs = template.FuncMap{
 	},
 }
 
-func applyVariant(name, body string, v Variant) (string, error) {
+// applyVariant renders body for v. The body is a text/template, so a form
+// is an ordinary {{if}} branch and a malformed one is a parse or execute error
+// rather than text that silently survives into an installed file.
+//
+// BOTH FORMS ARE CURATED. The short one is not a summary, a truncation, or a
+// model-generated paraphrase: there is exactly one human-written body per skill, and
+// its author brackets the spans only the full form keeps. So the two can never come
+// to describe different behavior, they share one content digest, and they version
+// together, which a second hand-maintained file could not give. Short exists because
+// a skill is a bet about what the reader cannot infer, and that bet ages: re-asking
+// "does this still earn its context?" is the audit, not a rewrite.
+//
+// A {{if .Full}} branch alone caps how short the short form can get, because it can
+// only SUBTRACT: a passage both forms must express sits in the shared text at the
+// length the full form needs. The {{else}} arm is the one construct that reaches it:
+// full keeps the long wording, short gets the terse one. Measured 2026-07-31 across
+// the ten shipped skills, short came out 20.3% smaller than full, on 137 full-only
+// branches against only 28 {{else}} arms; the headroom is in the wording of the
+// shared text, not in the tables.
+//
+// A skill body that needs to SHOW template syntax (magus-run documents the
+// `-o template` flag, magus-buzz-lang documents mustache) escapes it as a string
+// constant: {{"{{.Field}}"}}. That applies inside fenced code blocks too; the
+// template engine does not know what Markdown is.
+func applyVariant(name, body string, v types.SkillVariant) (string, error) {
 	t, err := template.New(name).Funcs(skillFuncs).Parse(body)
 	if err != nil {
 		return "", fmt.Errorf("skill %q: %w", name, err)
@@ -909,19 +842,19 @@ func (s skillSource) referencePath() string { return path.Join(path.Dir(s.bodyPa
 // never off an ambient caller-supplied variant, so a mixed batch (see
 // RenderedSkills) stamps every entry correctly regardless of what was
 // requested. def is not mutated.
-func (c *Catalog) Render(def AgentSkill, v Variant) (AgentSkill, error) {
+func (c *Catalog) Render(def AgentSkill, v types.SkillVariant) (AgentSkill, error) {
 	rendered, err := applyVariant(def.Name, def.Body, v)
 	if err != nil {
 		return AgentSkill{}, err
 	}
 	// The full form is the reference copy a reader opens partway through a task; the short
 	// form is read whole.
-	if v == VariantFull {
+	if v == types.SkillVariantFull {
 		rendered = md.WithContents(rendered)
 	}
 	var ref string
 	if def.Reference != "" {
-		if ref, err = applyVariant(def.Name+"/"+referenceFile, def.Reference, VariantFull); err != nil {
+		if ref, err = applyVariant(def.Name+"/"+referenceFile, def.Reference, types.SkillVariantFull); err != nil {
 			return AgentSkill{}, err
 		}
 		ref = md.WithContents(ref)
@@ -967,7 +900,7 @@ func (c *Catalog) RenderedSkills(form Form) ([]AgentSkill, error) {
 		if form != FormBoth {
 			continue
 		}
-		full, err := c.Render(def, VariantFull)
+		full, err := c.Render(def, types.SkillVariantFull)
 		if err != nil {
 			return nil, err
 		}
@@ -1308,11 +1241,11 @@ func (c *Catalog) AgentsBlock(routingIndex bool) string {
 	return c.agentsSectionBegin() + "\n\n" + strings.TrimSpace(section) + "\n\n" + agentsSectionEnd + "\n"
 }
 
-func (c *Catalog) provenance(name string, v Variant) string {
+func (c *Catalog) provenance(name string, v types.SkillVariant) string {
 	return fmt.Sprintf("license: %s\ncompatibility: any-agent\nmetadata:\n  source: magus\n  agent-skill-version: %d\n  knowledge-schema-version: %d\n  skill-content: %s\n  skill-variant: %s\n", skillLicense, SkillVersion, c.schemaVersion, c.SkillDigest(name), v)
 }
 
-func (c *Catalog) footer(name string, v Variant) string {
+func (c *Catalog) footer(name string, v types.SkillVariant) string {
 	return fmt.Sprintf("\n<!-- generated by: magus agent install; agent-skill-version: %d; knowledge-schema-version: %d; skill-content: %s; skill-variant: %s; do not edit, re-run to update -->\n", SkillVersion, c.schemaVersion, c.SkillDigest(name), v)
 }
 
@@ -1322,12 +1255,12 @@ func (c *Catalog) footer(name string, v Variant) string {
 // both forms come from one body, so they must report the same digest and go
 // stale together. A per-variant digest would let a simple install look current
 // against a source its full sibling had already outgrown.
-func (c *Catalog) StampSkill(name string, body []byte, v Variant) []byte {
+func (c *Catalog) StampSkill(name string, body []byte, v types.SkillVariant) []byte {
 	body = c.injectProvenance(name, body, v)
 	return append([]byte(strings.TrimRight(string(body), "\n")+"\n"), c.footer(name, v)...)
 }
 
-func (c *Catalog) injectProvenance(name string, body []byte, v Variant) []byte {
+func (c *Catalog) injectProvenance(name string, body []byte, v types.SkillVariant) []byte {
 	s := string(body)
 	if !strings.HasPrefix(s, "---\n") {
 		return body
@@ -1749,11 +1682,11 @@ func (c *Catalog) Section() string { return c.agentsSection }
 // in v, stamp included, so a caller can state the context cost of an install
 // without performing one. Deliberately excludes RenderedSkills' full twins:
 // reportContextCost uses this to compare "what you have" against "what the other
-// variant would be", and a twin-inclusive total would make VariantSize(VariantShort)
-// larger than VariantSize(VariantFull) precisely because FormBoth installs more
+// variant would be", and a twin-inclusive total would make VariantSize(types.SkillVariantShort)
+// larger than VariantSize(types.SkillVariantFull) precisely because FormBoth installs more
 // files, silently inverting the comparison it exists to answer ("what does the
 // short form buy").
-func (c *Catalog) VariantSize(v Variant) (int64, error) {
+func (c *Catalog) VariantSize(v types.SkillVariant) (int64, error) {
 	defs, err := c.EmbeddedSkills()
 	if err != nil {
 		return 0, err
@@ -1859,7 +1792,7 @@ func (c *Catalog) offeredShipped(root string, locations []HarnessSkillLocation, 
 	}
 	var out []types.Skill
 	for _, def := range defs {
-		for _, v := range []Variant{VariantShort, VariantFull} {
+		for _, v := range []types.SkillVariant{types.SkillVariantShort, types.SkillVariantFull} {
 			if form != FormBoth && form.Variant() != v {
 				continue
 			}
@@ -1882,7 +1815,7 @@ func (c *Catalog) offeredShipped(root string, locations []HarnessSkillLocation, 
 
 // installedCurrent reports whether at least one install carries name in variant v and
 // every one that does holds exactly what install would write.
-func (c *Catalog) installedCurrent(root string, installs map[HarnessSkillLocation][]AgentSkill, name string, v Variant) bool {
+func (c *Catalog) installedCurrent(root string, installs map[HarnessSkillLocation][]AgentSkill, name string, v types.SkillVariant) bool {
 	carried := false
 	for loc, rendered := range installs {
 		for _, entry := range rendered {
@@ -1943,7 +1876,7 @@ func (c *Catalog) offeredLocal(root string, locations []HarnessSkillLocation) ([
 				Name:        name,
 				Description: fm.Description,
 				Source:      skillSourceLocal,
-				Form:        VariantFull.String(),
+				Form:        types.SkillVariantFull.String(),
 				Body:        skillBody(raw),
 				Current:     true,
 			})
