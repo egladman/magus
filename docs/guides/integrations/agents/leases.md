@@ -567,7 +567,9 @@ Both tiers resolve the acting lease the same way, in this order: an explicit
 spawn attribution or its `magus job exec`), the checkout's record for a caller
 that reports neither id, then the `BAGGAGE` a worker inherited. A process that is
 not a hook, the sandbox's included, knows no caller id and reads only the
-checkout's record and its claim. Every tier but the last is a record; `BAGGAGE`
+checkout's record and its claim. A run [the daemon](../server.md) adopts claims
+the lease its client forwarded, and none when the client sent none: the daemon's
+own `BAGGAGE` names nobody it serves. Every tier but the last is a record; `BAGGAGE`
 is the worker's claim about itself, so it answers only when no record does, and
 a record that disagrees with it wins. The verdict names the tier that answered as
 `lease_from`: `flag`, `agent` (the caller's record, session-only callers

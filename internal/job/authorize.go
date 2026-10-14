@@ -63,12 +63,13 @@ func ActingActor(cacheDir string) Actor {
 }
 
 // RunLease is the lease [ActingLease] resolves for work running on ctx. The claim is the
-// lease of the process that asked for the work: the one [types.JobLeaseFromContext]
-// carries when the daemon runs it for a client, since the daemon's own environment names
-// nobody's lease, and this process's BAGGAGE otherwise.
+// lease of the process that asked for the work, which ctx carries whenever an entry point
+// stamped it: the CLI stamps its BAGGAGE, and the daemon stamps a client's lease, or the
+// client's lack of one, so a client run never reads the daemon's own environment. Only a
+// ctx no entry point stamped, such as an embedding Go program's, falls back to BAGGAGE.
 func RunLease(ctx context.Context, cacheDir string) (string, types.LeaseSource) {
-	claim := types.JobLeaseFromContext(ctx)
-	if claim == "" {
+	claim, ok := types.LookupJobLease(ctx)
+	if !ok {
 		claim = trail.LeaseFromEnv()
 	}
 	return ActingLease(cacheDir, claim)

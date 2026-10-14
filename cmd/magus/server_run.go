@@ -107,6 +107,9 @@ func serverInfo(sock string) *types.StatusServer {
 // run. Its workspaces share one broker client, which dials only when an adopted run takes
 // a claim, so an idle server never keeps the broker awake.
 func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
+	// The BAGGAGE of whoever started the daemon names nobody it serves. Every run it
+	// adopts restamps its client's lease, and work no client stamped acts under none.
+	ctx = types.WithJobLease(ctx, "")
 	serverStarted = time.Now()
 	knowledge.SetReadCacheLimit(serverReadCacheBytes)
 	n := cfg.Concurrency

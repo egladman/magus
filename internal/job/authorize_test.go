@@ -550,24 +550,27 @@ func TestAuthorizeGradesAHoldersVerdict(t *testing.T) {
 	}
 }
 
-// The lease a forwarded call carries is the claim of the process that asked, so it beats the
-// daemon's own BAGGAGE; with none forwarded BAGGAGE answers, and the checkout's record
-// outranks both.
-func TestRunLeaseResolvesTheForwardedLeaseBeforeTheEnvironment(t *testing.T) {
+// The lease a ctx carries is the claim of the process that asked, so it beats the
+// environment; a ctx stamped with no lease, as the daemon stamps a client that sent none,
+// never falls back to the daemon's own BAGGAGE. Only an unstamped ctx reads BAGGAGE, and
+// the checkout's record outranks every claim.
+func TestRunLeaseResolvesTheStampedLeaseBeforeTheEnvironment(t *testing.T) {
 	type answer struct {
 		Lease string
 		From  types.LeaseSource
 	}
 	for name, tc := range map[string]struct {
+		unstamped                 bool
 		forwarded, baggage, bound string
 		want                      answer
 	}{
-		"nothing":                          {},
-		"the environment":                  {baggage: "fleet/env", want: answer{"fleet/env", types.LeaseSourceEnv}},
-		"the forwarded lease":              {forwarded: "fleet/client", want: answer{"fleet/client", types.LeaseSourceEnv}},
-		"the forwarded lease over BAGGAGE": {forwarded: "fleet/client", baggage: "fleet/env", want: answer{"fleet/client", types.LeaseSourceEnv}},
-		"an invalid forwarded lease":       {forwarded: "not a lease id", baggage: "fleet/env", want: answer{"fleet/env", types.LeaseSourceEnv}},
-		"the record over a claim":          {forwarded: "fleet/client", bound: "fleet/bound", want: answer{"fleet/bound", types.LeaseSourceContested}},
+		"nothing":                              {unstamped: true},
+		"an unstamped ctx reads BAGGAGE":       {unstamped: true, baggage: "fleet/env", want: answer{"fleet/env", types.LeaseSourceEnv}},
+		"a stamped absence over BAGGAGE":       {baggage: "fleet/env"},
+		"the forwarded lease":                  {forwarded: "fleet/client", want: answer{"fleet/client", types.LeaseSourceEnv}},
+		"the forwarded lease over BAGGAGE":     {forwarded: "fleet/client", baggage: "fleet/env", want: answer{"fleet/client", types.LeaseSourceEnv}},
+		"an invalid forwarded lease is absent": {forwarded: "not a lease id", baggage: "fleet/env"},
+		"the record over a claim":              {forwarded: "fleet/client", bound: "fleet/bound", want: answer{"fleet/bound", types.LeaseSourceContested}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv(trail.EnvBaggage, "")
@@ -579,7 +582,11 @@ func TestRunLeaseResolvesTheForwardedLeaseBeforeTheEnvironment(t *testing.T) {
 				require.NoError(t, NewStore(Location{CacheDir: cacheDir}).Bind(Caller{}, tc.bound))
 			}
 
-			lease, from := RunLease(types.WithJobLease(t.Context(), tc.forwarded), cacheDir)
+			ctx := t.Context()
+			if !tc.unstamped {
+				ctx = types.WithJobLease(ctx, tc.forwarded)
+			}
+			lease, from := RunLease(ctx, cacheDir)
 			assert.Equal(t, tc.want, answer{lease, from})
 		})
 	}
