@@ -302,6 +302,7 @@ func delegatedJob(row types.Job) *jobv1.Job {
 		DenyPaths:  row.DenyPaths,
 		ReadPaths:  row.ReadPaths,
 		DependsOn:  row.DependsOn,
+		Breaks:     row.Breaks,
 		ReadOnly:   row.ReadOnly,
 		Checkpoint: row.Checkpoint,
 		Created:    row.Created,

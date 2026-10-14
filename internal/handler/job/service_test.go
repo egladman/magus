@@ -371,9 +371,11 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	}
 	row.Version = 11
 	row.Requires = []string{"claims"}
+	row.Breaks = []string{"--old-flag", "api.Open"}
 
 	got := delegatedJob(row)
 
+	require.Equal(t, []string{"--old-flag", "api.Open"}, got.Breaks)
 	require.Equal(t, "its checkout no longer exists", got.EndReason)
 	require.Equal(t, "disjoint", got.WriteProof)
 	require.Equal(t, "94d434ac0", got.ReportedBase)
