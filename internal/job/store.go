@@ -569,6 +569,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 
 	actor := s.Actor()
 	var stored types.Job
+	var outcomeAt string
 	err := s.update(ctx, func(f *jobsFile) error {
 		i := slices.IndexFunc(f.Jobs, func(e types.Job) bool { return e.ID == id })
 		var prev types.Job
@@ -653,11 +654,29 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		row.Requires = requiredFeatures(row)
 		row.ModelTier = prev.ModelTier
 		if s.modelTiers != nil && (i < 0 || prev.Model != row.Model) {
-			assigned, aerr := s.assignModelTier(ctx, row, f.Jobs)
+			assigned, aerr := s.assignModelTierWithHistory(ctx, row, f.Jobs)
 			if aerr != nil {
 				return aerr
 			}
 			row.ModelTier = &assigned
+		}
+		// The counters are the store's: a whole-row write cannot set them, and only a
+		// write that adds write paths to a row its holder already took counts a widening.
+		row.Widenings = prev.Widenings
+		if kind != asObservation {
+			row.ReworkRounds = prev.ReworkRounds
+		}
+		if i >= 0 && (prev.State == types.StateRunning || prev.State == types.StateExited) &&
+			slices.ContainsFunc(row.WritePaths, func(p string) bool { return !slices.Contains(prev.WritePaths, p) }) {
+			row.Widenings++
+		}
+		outcomeAt = ""
+		if i >= 0 && !prev.State.Terminal() && row.State.Terminal() {
+			path, perr := s.outcomeHistoryPath(row)
+			if perr != nil {
+				return perr
+			}
+			outcomeAt = path
 		}
 		if kind != asNarrowing {
 			row.Releases = s.releases(ctx, prev, row, now, prev.Registered != 0 && actor.Lease != id)
@@ -675,6 +694,11 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 	})
 	if err != nil {
 		return types.Job{}, err
+	}
+	if outcomeAt != "" {
+		if err := recordOutcome(ctx, outcomeAt, NewJobOutcome(stored, time.Now().UnixMilli())); err != nil {
+			return stored, err
+		}
 	}
 	return stored, nil
 }
