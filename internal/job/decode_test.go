@@ -195,6 +195,19 @@ func TestDecodeDeclarationsReadsEveryShapeAndNamesABadRecord(t *testing.T) {
 	require.ErrorContains(t, err, "a is record 1 too")
 }
 
+// A member added to types.Job alone becomes one apply silently drops. The list pins that,
+// so the field's author decides whether the store computes it or a declaration carries it.
+func TestStoreStampedIsWhatJobHasAndDeclarationLacks(t *testing.T) {
+	t.Parallel()
+
+	assert.ElementsMatch(t, []string{
+		"holder", "releases", "unattributed", "entries", "write_proof", "reported_base",
+		"base_verdict", "registered_by", "registered", "checkout_root", "end_reason", "created",
+		"updated", "deadline", "result", "attempt", "gate_attempts", "last_run", "integration",
+		"waiter_evidence", "model_tier", "rework_rounds", "widenings",
+	}, storeStamped)
+}
+
 // The edit loop hands `magus describe job -o json` back to apply. The store's members ride
 // along and are ignored; fork's decoder still refuses them (see
 // TestDecodeDeclarationRefusesTheStoresOwnFields), and a misspelled member is an error here.

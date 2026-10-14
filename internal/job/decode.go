@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -130,11 +131,28 @@ func DecodeDeclaration(r io.Reader) (types.Declaration, error) {
 // them rather than refusing the loop at its second step. [DecodeDeclaration] still refuses
 // them, as `magus job fork` should: a caller declaring a creation time is wrong, while one
 // re-applying a record it read back is not. Any other unknown member is an error in both.
-var storeStamped = []string{
-	"holder", "releases", "unattributed", "entries", "write_proof", "reported_base",
-	"base_verdict", "registered_by", "registered", "checkout_root", "end_reason", "created",
-	"updated", "deadline", "result", "attempt", "gate_attempts", "last_run", "integration",
-	"waiter_evidence", "model_tier", "rework_rounds", "widenings",
+var storeStamped = jobOnlyMembers()
+
+// jobOnlyMembers are the JSON members [types.Job] serializes that [types.Declaration]
+// does not: a field added to Job alone is the store's by construction.
+func jobOnlyMembers() []string {
+	declared := jsonMembers(reflect.TypeFor[types.Declaration]())
+	return slices.DeleteFunc(jsonMembers(reflect.TypeFor[types.Job]()), func(name string) bool {
+		return slices.Contains(declared, name)
+	})
+}
+
+// jsonMembers are the names t serializes its fields under, promoted ones included.
+func jsonMembers(t reflect.Type) []string {
+	var out []string
+	for _, f := range reflect.VisibleFields(t) {
+		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+		if f.Anonymous || !f.IsExported() || name == "" || name == "-" {
+			continue
+		}
+		out = append(out, name)
+	}
+	return out
 }
 
 // dropStoreStamped is raw without the members in storeStamped; without `state`, the
