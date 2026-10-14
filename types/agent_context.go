@@ -139,9 +139,6 @@ const (
 	DelegableFetch DelegableClass = "fetch"
 	// DelegableEdit is a write or edit of a file inside a checkout of the repository.
 	DelegableEdit DelegableClass = "edit"
-	// DelegableIntegrate is integration a checkout's integrator owns: a cherry-pick, a
-	// build of ./magus, a regeneration, staging or a commit.
-	DelegableIntegrate DelegableClass = "integrate"
 )
 
 // Orchestration is how surely a session hands its work to workers. Empty means magus

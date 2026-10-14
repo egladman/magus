@@ -170,13 +170,13 @@ func mainFindings(setting func(string) builtin.Setting, st costState, c mainCall
 
 // groundworkWork names each groundwork class as orchestrator-groundwork says it.
 var groundworkWork = map[types.DelegableClass]string{
-	types.DelegableSearch:    "a search",
-	types.DelegableRead:      "a read of a file in the checkout",
-	types.DelegableDiff:      "a diff read",
-	types.DelegableRun:       "a run",
-	types.DelegableFetch:     "a fetch",
-	types.DelegableEdit:      "an edit in the checkout",
-	types.DelegableIntegrate: "integration (a cherry-pick, a build of ./magus, a regeneration, staging or a commit)",
+	types.DelegableSearch: "a search",
+	types.DelegableRead:   "a read of a file in the checkout",
+	types.DelegableDiff:   "a diff read",
+	types.DelegableRun:    "a run",
+	types.DelegableFetch:  "a fetch",
+	types.DelegableEdit:   "an edit in the checkout",
+	delegableIntegrate:    "integration (a cherry-pick, a build of ./magus, a regeneration, staging or a commit)",
 }
 
 // groundworkFinding is orchestrator-groundwork's finding on c: groundwork by a session
