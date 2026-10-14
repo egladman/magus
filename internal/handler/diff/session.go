@@ -646,7 +646,11 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 	case "resolve":
 		sess = h.Sessions.ResolveComment(h.Root, req.ID, req.On)
 	case "answer":
-		sess = h.Sessions.AnswerSuggestion(h.Root, req.ID, req.On)
+		status := types.SuggestionDeclined
+		if req.On {
+			status = types.SuggestionAccepted
+		}
+		sess = h.Sessions.AnswerSuggestion(h.Root, req.ID, status)
 	default:
 		handler.Refuse(w, r, rpcerr.Invalid("unknown op "+req.Op+" (one of: cursor, viewed, comment, seen, reading, publish, reply, discard, resolve, answer)"))
 		return

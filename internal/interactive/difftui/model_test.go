@@ -271,7 +271,7 @@ func TestCommentsAndPendingSuggestionsSitUnderTheirHunk(t *testing.T) {
 		},
 		Suggestions: []types.DiffSuggestion{
 			{ID: "s1", Path: "a.go", Hunk: 1, Reason: "look here"},
-			{ID: "s2", Path: "b.go", Hunk: 0, Reason: "already answered", Declined: true},
+			{ID: "s2", Path: "b.go", Hunk: 0, Reason: "already answered", Status: types.SuggestionDeclined},
 		},
 	})
 

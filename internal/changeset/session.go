@@ -444,7 +444,7 @@ func (s *Store) MarkPublished(root, id string) *types.DiffReview {
 func (s *Store) Suggest(root string, sug types.DiffSuggestion) *types.DiffReview {
 	return s.mutate(root, func(sess *types.DiffReview) {
 		sug.ID = fmt.Sprintf("s%d", len(sess.Suggestions)+1)
-		sug.Accepted, sug.Declined = false, false
+		sug.Status = types.SuggestionPending
 		sess.Suggestions = append(sess.Suggestions, sug)
 	})
 }
@@ -455,15 +455,14 @@ func (s *Store) Suggest(root string, sug types.DiffSuggestion) *types.DiffReview
 //
 // Declining is recorded rather than discarded so an agent can tell "not yet seen" from "seen
 // and declined" and stop repeating itself.
-func (s *Store) AnswerSuggestion(root, id string, accept bool) *types.DiffReview {
+func (s *Store) AnswerSuggestion(root, id string, status types.SuggestionStatus) *types.DiffReview {
 	return s.mutate(root, func(sess *types.DiffReview) {
 		for i := range sess.Suggestions {
 			if sess.Suggestions[i].ID != id {
 				continue
 			}
-			sess.Suggestions[i].Accepted = accept
-			sess.Suggestions[i].Declined = !accept
-			if accept {
+			sess.Suggestions[i].Status = status
+			if status == types.SuggestionAccepted {
 				sess.Cursor = types.DiffCursor{Path: sess.Suggestions[i].Path, Hunk: sess.Suggestions[i].Hunk}
 			}
 			return

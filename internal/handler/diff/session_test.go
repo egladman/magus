@@ -316,6 +316,24 @@ func TestPublishFailsLoudlyWithNoProvider(t *testing.T) {
 	}
 }
 
+// The answer op's `on` flag is the web client's accept or decline; the store records which.
+func TestAnswerOpRecordsTheSuggestionStatus(t *testing.T) {
+	root := t.TempDir()
+	store := changeset.NewStore("")
+	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
+	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
+	store.Suggest(root, types.DiffSuggestion{Path: "a.go", Reason: "one"})
+	store.Suggest(root, types.DiffSuggestion{Path: "b.go", Reason: "two"})
+
+	require.Equal(t, http.StatusOK, post(t, h, `{"op":"answer","id":"s1","on":true}`).Code)
+	require.Equal(t, http.StatusOK, post(t, h, `{"op":"answer","id":"s2"}`).Code)
+
+	got := store.Get(root).Suggestions
+	require.Len(t, got, 2)
+	assert.Equal(t, types.SuggestionAccepted, got[0].Status)
+	assert.Equal(t, types.SuggestionDeclined, got[1].Status)
+}
+
 // Nothing drafted is not a failure. A reader who publishes twice, or who has drafted nothing,
 // made no mistake and gets the session back unchanged.
 func TestPublishingNothingIsNotAnError(t *testing.T) {

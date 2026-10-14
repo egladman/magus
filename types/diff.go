@@ -974,11 +974,22 @@ type DiffSuggestion struct {
 	AgentName string `json:"agent_name,omitempty" yaml:"agent_name,omitempty"`
 	// Reason is the one line shown beside the affordance. It has to earn the interruption.
 	Reason string `json:"reason" yaml:"reason"`
-	// Accepted records that the human took it, so the agent can tell "not yet seen" from
+	// Status records whether the human took it, so the agent can tell "not yet seen" from
 	// "seen and declined" instead of repeating itself.
-	Accepted bool `json:"accepted" yaml:"accepted"`
-	Declined bool `json:"declined" yaml:"declined"`
+	Status SuggestionStatus `json:"status,omitempty" yaml:"status,omitempty"`
 }
+
+// SuggestionStatus is where a DiffSuggestion stands with the human.
+type SuggestionStatus string
+
+const (
+	// SuggestionPending is the zero value: the human has not answered.
+	SuggestionPending SuggestionStatus = ""
+	// SuggestionAccepted means the human took it and the cursor moved.
+	SuggestionAccepted SuggestionStatus = "accepted"
+	// SuggestionDeclined means the human saw it and passed.
+	SuggestionDeclined SuggestionStatus = "declined"
+)
 
 // DiffOutline is what an agent thinks a review thread turns on, in a few topics, held for the
 // person to read before they type their reply.

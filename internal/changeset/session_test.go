@@ -157,7 +157,7 @@ func TestSuggestDoesNotMoveTheCursor(t *testing.T) {
 	assert.Equal(t, types.DiffCursor{Path: "where/i/was.go", Hunk: 2}, got.Cursor,
 		"an agent suggesting must never move the reader's viewport")
 	require.Len(t, got.Suggestions, 1)
-	assert.False(t, got.Suggestions[0].Accepted)
+	assert.Equal(t, types.SuggestionPending, got.Suggestions[0].Status)
 }
 
 func TestAcceptingASuggestionIsWhatMovesTheCursor(t *testing.T) {
@@ -166,10 +166,10 @@ func TestAcceptingASuggestionIsWhatMovesTheCursor(t *testing.T) {
 	s.SetCursor("/w", types.DiffCursor{Path: "a.go", Hunk: 0})
 	s.Suggest("/w", types.DiffSuggestion{Path: "b.go", Hunk: 3, Reason: "look"})
 
-	got := s.AnswerSuggestion("/w", "s1", true)
+	got := s.AnswerSuggestion("/w", "s1", types.SuggestionAccepted)
 	assert.Equal(t, types.DiffCursor{Path: "b.go", Hunk: 3}, got.Cursor,
 		"the human accepting is the only path to the viewport")
-	assert.True(t, got.Suggestions[0].Accepted)
+	assert.Equal(t, types.SuggestionAccepted, got.Suggestions[0].Status)
 }
 
 // Declining is recorded, not discarded, so an agent can stop repeating itself.
@@ -179,10 +179,9 @@ func TestDecliningIsRecordedAndLeavesTheCursorAlone(t *testing.T) {
 	s.SetCursor("/w", types.DiffCursor{Path: "a.go", Hunk: 0})
 	s.Suggest("/w", types.DiffSuggestion{Path: "b.go", Hunk: 3, Reason: "look"})
 
-	got := s.AnswerSuggestion("/w", "s1", false)
+	got := s.AnswerSuggestion("/w", "s1", types.SuggestionDeclined)
 	assert.Equal(t, "a.go", got.Cursor.Path)
-	assert.True(t, got.Suggestions[0].Declined)
-	assert.False(t, got.Suggestions[0].Accepted)
+	assert.Equal(t, types.SuggestionDeclined, got.Suggestions[0].Status)
 }
 
 func TestResolveComment(t *testing.T) {
