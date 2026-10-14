@@ -231,6 +231,13 @@ export fun harness_mcp(target: Target, cb: fun(any)) > {str: any} {
 
 fun codex_rules_path() > str { return ".codex/rules/magus.rules"; }
 
+// codex_toml_basic renders text as a TOML basic string on one line. Starlark reads the same
+// escapes, so a rules file quotes with it too.
+fun codex_toml_basic(text: str) > str {
+    final escaped = text.replace("\\", with: "\\\\").replace("\"", with: "\\\"").replace("\n", with: "\\n").replace("\r", with: "\\r").replace("\t", with: "\\t");
+    return "\"" + escaped + "\"";
+}
+
 // codex_rules makes Codex ask before every git push. Codex hooks cannot ask (a hook ask is
 // parsed, reported as a failure, and the call continues), so the prompt is the rule's, and
 // the PermissionRequest hook above decides whether it reaches the person.
@@ -242,38 +249,65 @@ fun codex_push_rule(pattern: str) > str {
         + ")\n";
 }
 
+// codex_human_only_rule makes Codex ask before a run whose argv starts with pattern, quoting
+// what the target costs.
+fun codex_human_only_rule(pattern: str, reason: str) > str {
+    return "prefix_rule(\n"
+        + "    pattern = [{pattern}],\n"
+        + "    decision = \"prompt\",\n"
+        + "    justification = " + codex_toml_basic("magus: a person runs this target: " + reason) + ",\n"
+        + ")\n";
+}
+
 // One rule per backend magus drives, since each publishes through its own verb. `sl push
-// --to` is the Sapling push by prefix.
-fun codex_rules() > str {
-    return "# Printed by magus describe harness codex. Delete this file to drop these prompts.\n"
+// --to` is the Sapling push by prefix. Then one rule per spelling of a run of each
+// human_only target; a spelling no prefix catches, such as a flag before the target, is
+// refused rather than asked.
+fun codex_rules(humanOnly: {str: str}) > str {
+    var rules = "# Printed by magus describe harness codex. Delete this file to drop these prompts.\n"
         + "#\n"
         + "# Every push raises an approval request, through git, Mercurial, Sapling or Jujutsu. The\n"
         + "# magus PermissionRequest hook answers it: a push a passing gate covers is approved\n"
         + "# without asking, an ungated push is left to the person, and a push from a leased worker\n"
-        + "# is refused.\n"
+        + "# is refused. A run of each target the workspace declares human_only raises one too.\n"
         + codex_push_rule("\"git\", \"push\"")
         + codex_push_rule("\"hg\", \"push\"")
         + codex_push_rule("\"sl\", \"push\"")
         + codex_push_rule("\"jj\", \"git\", \"push\"");
+    final names = humanOnly.keys().cloneMutable();
+    names.sort(fun (left: str, right: str) > bool => left < right);
+    foreach (name in names) {
+        foreach (bin in ["magus", "./magus"]) {
+            foreach (verb in ["run", "affected"]) {
+                rules = rules + codex_human_only_rule("\"{bin}\", \"{verb}\", \"{name}\"", reason: humanOnly[name] ?? "");
+            }
+        }
+    }
+    return rules;
 }
 
-fun codex_prompts() > [any] {
+fun codex_prompts(humanOnly: {str: str}) > [any] {
     return [
         {
             "path": codex_rules_path(),
-            "content": codex_rules(),
+            "content": codex_rules(humanOnly),
         },
     ];
 }
 
+// The request's human_only maps each target the workspace declares human_only to its
+// reason; a request without one prompts for pushes alone.
 export fun harness_prompts(target: Target, cb: fun(any)) > [any] {
-    return codex_prompts();
-}
-
-// codex_toml_basic renders text as a TOML basic string on one line.
-fun codex_toml_basic(text: str) > str {
-    final escaped = text.replace("\\", with: "\\\\").replace("\"", with: "\\\"").replace("\n", with: "\\n").replace("\r", with: "\\r").replace("\t", with: "\\t");
-    return "\"" + escaped + "\"";
+    final req = {<str: any>};
+    cb(req);
+    final reasons = mut {<str: str>};
+    final humanOnly = req["human_only"];
+    if (humanOnly != null) {
+        foreach (name, reason in humanOnly as {str: any}) {
+            reasons[name] = "{reason}";
+        }
+    }
+    return codex_prompts(reasons);
 }
 
 // codex_toml_multiline renders text as a TOML multiline literal string, which reads every
@@ -404,15 +438,31 @@ test "guard commands name the Buzz glue as a plain argv" {
 }
 
 test "harness_prompts keeps the git push prompt rule the shared template looks for" {
-    final prompts = codex_prompts();
+    final none = {<str: str>};
+    final prompts = codex_prompts(none);
     assert\equal(prompts.len(), 1, "one rules file");
     assert\equal("{prompts[0]["path"]}", ".codex/rules/magus.rules", "project-local Codex rules");
-    assert\isTrue(codex_rules().indexOf("[\"git\", \"push\"]") != null, "magus-command.buzz looks for this exact pattern");
-    assert\isTrue(codex_rules().indexOf("decision = \"prompt\"") != null, "the rule prompts rather than forbids");
+    assert\isTrue(codex_rules(none).indexOf("[\"git\", \"push\"]") != null, "magus-command.buzz looks for this exact pattern");
+    assert\isTrue(codex_rules(none).indexOf("decision = \"prompt\"") != null, "the rule prompts rather than forbids");
+    assert\isTrue(codex_rules(none).indexOf("\"run\"") == null, "no human-only target, no run prompt");
+}
+
+test "harness_prompts prompts for every spelling of a human-only target's run" {
+    final rules = codex_rules({"agent-bench-run": "launches \"paid\" sessions"});
+    foreach (pattern in [
+        "[\"magus\", \"run\", \"agent-bench-run\"]",
+        "[\"./magus\", \"run\", \"agent-bench-run\"]",
+        "[\"magus\", \"affected\", \"agent-bench-run\"]",
+        "[\"./magus\", \"affected\", \"agent-bench-run\"]",
+    ]) {
+        assert\isTrue(rules.indexOf(pattern) != null, "prefix {pattern}");
+    }
+    assert\isTrue(rules.indexOf("justification = \"magus: a person runs this target: launches \\\"paid\\\" sessions\"") != null,
+        "the justification quotes the reason, escaped");
 }
 
 test "harness_prompts prompts for every backend's push" {
-    final rules = codex_rules();
+    final rules = codex_rules({<str: str>});
     assert\isTrue(rules.indexOf("[\"hg\", \"push\"]") != null, "Mercurial push");
     assert\isTrue(rules.indexOf("[\"sl\", \"push\"]") != null, "Sapling push, --to included by prefix");
     assert\isTrue(rules.indexOf("[\"jj\", \"git\", \"push\"]") != null, "Jujutsu push");
