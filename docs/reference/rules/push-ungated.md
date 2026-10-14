@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [push-ungated]: ...
+advise [push-ungated]: ...
 ```
 
 `magus describe rule push-ungated` prints the same entry at a terminal, and

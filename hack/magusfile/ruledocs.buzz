@@ -20,8 +20,19 @@ fun describe(r: magus\Rule) > str {
     return "An advisory by default: it explains, and blocks nothing, on " + r.catches + ".";
 }
 
+// settable is every decision a workspace may give the rule, most refusing first: each
+// verdict the rule can give, then off.
+fun settable(r: magus\Rule) > [str] {
+    final choices = mut [<str>];
+    foreach (d in ["deny", "advise"]) {
+        if (r.verdicts.indexOf(d) != null) { choices.append(d); }
+    }
+    choices.append("off");
+    return choices;
+}
+
 // override is the section naming a rule's compiled default and the one call that changes
-// it, showing the decision the rule does not already take.
+// it, showing a decision the rule does not already take and can be given.
 fun override(r: magus\Rule) > str {
     if (r.fixed) {
         return "## Default and override\n\n"
@@ -29,17 +40,32 @@ fun override(r: magus\Rule) > str {
             + "naming it in magus\\guard.builtins fails to load, because the rule is how a workspace\n"
             + "learns that a rule of its own judged nothing.\n\n";
     }
-    var other = "deny";
-    if (r.decision == "deny") {
-        other = "advise";
+    final choices = settable(r);
+    var other = "off";
+    foreach (d in choices) {
+        if (d != r.decision) {
+            other = d;
+            break;
+        }
     }
+    final quoted = choices.map(fun (index: int, d: str) > str => "`" + d + "`");
     return "## Default and override\n\n"
         + "By default this rule takes the decision `" + r.decision + "`. A workspace sets it by name, in its root\n"
-        + "magusfile, to `deny`, `advise` or `off`:\n\n"
+        + "magusfile, to " + quoted.sub(0, len: quoted.len() - 1).join(", ") + " or " + quoted[quoted.len() - 1] + ":\n\n"
         + "```buzz\n"
         + "magus\\guard.builtins(\{\"" + r.name + "\": \"" + other + "\"})\n"
         + "```\n\n"
         + "A loosening takes effect once it is committed; a tightening applies at once.\n\n";
+}
+
+// verdictLines is one example verdict line per verdict the rule can give, most refusing
+// first: an off rule prints nothing, and a rule that never refuses never prints deny.
+fun verdictLines(r: magus\Rule) > str {
+    final lines = mut [<str>];
+    foreach (d in ["deny", "advise"]) {
+        if (r.verdicts.indexOf(d) != null) { lines.append(d + " [" + r.name + "]: ...\n"); }
+    }
+    return lines.join("");
 }
 
 // upperFirst capitalizes only a leading ASCII letter: several rules open with a
@@ -66,7 +92,7 @@ export fun renderRule(r: magus\Rule) > str {
     return page + override(r) + "## Seeing it\n\n"
         + "A verdict names its rule in brackets, which is how you got here:\n\n"
         + "```text\n"
-        + r.decision + " [" + r.name + "]: ...\n"
+        + verdictLines(r)
         + "```\n\n"
         + "`magus describe rule " + r.name + "` prints the same entry at a terminal, and\n"
         + "`magus describe rules` lists every rule this workspace enforces.\n\n"
@@ -469,11 +495,20 @@ export fun writeProofread(dir: str, raw: str) > void !> any {
 }
 
 fun sleepRule() > magus\Rule {
-    return magus\Rule{ name = "sleep-loop", decision = "deny", catches = "a loop that only sleeps", why = "It holds a tool slot." };
+    return magus\Rule{ name = "sleep-loop", decision = "deny", catches = "a loop that only sleeps", why = "It holds a tool slot.", verdicts = ["advise", "deny"] };
 }
 
 fun pipeRule() > magus\Rule {
-    return magus\Rule{ name = "raw-pipe", decision = "advise", catches = "`a | b` piped \"raw\"", why = "" };
+    return magus\Rule{ name = "raw-pipe", decision = "advise", catches = "`a | b` piped \"raw\"", why = "", verdicts = ["advise", "deny"] };
+}
+
+test "a rule that never refuses offers no deny" {
+    final r = magus\Rule{ name = "stall", decision = "off", catches = "a blocked worker", why = "", verdicts = ["advise"] };
+    final page = renderRule(r);
+    std\assert(page.indexOf("to `advise` or `off`:") != null, message: page);
+    std\assert(page.indexOf("magus\\guard.builtins(\{\"stall\": \"advise\"})") != null, message: page);
+    std\assert(page.indexOf("```text\nadvise [stall]: ...\n```") != null, message: page);
+    std\assert(page.indexOf("deny [stall]") == null and page.indexOf("off [stall]") == null, message: page);
 }
 
 test "a fixed rule says a workspace cannot set it" {
@@ -519,6 +554,7 @@ test "a deny rule with a why renders its page" {
         + "\n"
         + "```text\n"
         + "deny [sleep-loop]: ...\n"
+        + "advise [sleep-loop]: ...\n"
         + "```\n"
         + "\n"
         + "`magus describe rule sleep-loop` prints the same entry at a terminal, and\n"

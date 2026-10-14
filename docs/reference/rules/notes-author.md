@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [notes-author]: ...
+advise [notes-author]: ...
 ```
 
 `magus describe rule notes-author` prints the same entry at a terminal, and

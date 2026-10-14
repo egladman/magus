@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [conflict-rewrite]: ...
+advise [conflict-rewrite]: ...
 ```
 
 `magus describe rule conflict-rewrite` prints the same entry at a terminal, and

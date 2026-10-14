@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [background-left]: ...
+advise [background-left]: ...
 ```
 
 `magus describe rule background-left` prints the same entry at a terminal, and

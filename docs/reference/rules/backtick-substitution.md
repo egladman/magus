@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [backtick-substitution]: ...
+advise [backtick-substitution]: ...
 ```
 
 `magus describe rule backtick-substitution` prints the same entry at a terminal, and

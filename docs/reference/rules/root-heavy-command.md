@@ -32,7 +32,8 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-off [root-heavy-command]: ...
+deny [root-heavy-command]: ...
+advise [root-heavy-command]: ...
 ```
 
 `magus describe rule root-heavy-command` prints the same entry at a terminal, and

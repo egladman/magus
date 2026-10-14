@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [human-only]: ...
+advise [human-only]: ...
 ```
 
 `magus describe rule human-only` prints the same entry at a terminal, and

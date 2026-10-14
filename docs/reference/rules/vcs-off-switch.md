@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [vcs-off-switch]: ...
+advise [vcs-off-switch]: ...
 ```
 
 `magus describe rule vcs-off-switch` prints the same entry at a terminal, and

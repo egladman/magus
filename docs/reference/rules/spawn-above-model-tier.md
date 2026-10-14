@@ -19,10 +19,10 @@ A job row records the model tier it was forked at and why. A spawn of a model th
 ## Default and override
 
 By default this rule takes the decision `off`. A workspace sets it by name, in its root
-magusfile, to `deny`, `advise` or `off`:
+magusfile, to `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"spawn-above-model-tier": "deny"})
+magus\guard.builtins({"spawn-above-model-tier": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,7 +32,7 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-off [spawn-above-model-tier]: ...
+advise [spawn-above-model-tier]: ...
 ```
 
 `magus describe rule spawn-above-model-tier` prints the same entry at a terminal, and

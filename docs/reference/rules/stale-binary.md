@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [stale-binary]: ...
+advise [stale-binary]: ...
 ```
 
 `magus describe rule stale-binary` prints the same entry at a terminal, and

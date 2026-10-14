@@ -32,7 +32,8 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-off [spawn-names-model]: ...
+deny [spawn-names-model]: ...
+advise [spawn-names-model]: ...
 ```
 
 `magus describe rule spawn-names-model` prints the same entry at a terminal, and

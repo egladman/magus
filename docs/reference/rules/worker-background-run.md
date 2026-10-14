@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [worker-background-run]: ...
+advise [worker-background-run]: ...
 ```
 
 `magus describe rule worker-background-run` prints the same entry at a terminal, and

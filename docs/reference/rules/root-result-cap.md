@@ -19,10 +19,10 @@ A tool result stays in the context every later call re-sends. The main transcrip
 ## Default and override
 
 By default this rule takes the decision `off`. A workspace sets it by name, in its root
-magusfile, to `deny`, `advise` or `off`:
+magusfile, to `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"root-result-cap": "deny"})
+magus\guard.builtins({"root-result-cap": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,7 +32,7 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-off [root-result-cap]: ...
+advise [root-result-cap]: ...
 ```
 
 `magus describe rule root-result-cap` prints the same entry at a terminal, and

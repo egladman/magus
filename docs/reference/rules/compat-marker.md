@@ -19,10 +19,10 @@ Whether code stays for an old caller is a judgment about who still consumes the 
 ## Default and override
 
 By default this rule takes the decision `advise`. A workspace sets it by name, in its root
-magusfile, to `deny`, `advise` or `off`:
+magusfile, to `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"compat-marker": "deny"})
+magus\guard.builtins({"compat-marker": "off"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.

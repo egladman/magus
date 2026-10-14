@@ -29,6 +29,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [lease-harness]: ...
+advise [lease-harness]: ...
 ```
 
 `magus describe rule lease-harness` prints the same entry at a terminal, and

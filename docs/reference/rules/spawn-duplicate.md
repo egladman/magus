@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [spawn-duplicate]: ...
+advise [spawn-duplicate]: ...
 ```
 
 `magus describe rule spawn-duplicate` prints the same entry at a terminal, and

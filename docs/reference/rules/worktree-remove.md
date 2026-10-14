@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [worktree-remove]: ...
+advise [worktree-remove]: ...
 ```
 
 `magus describe rule worktree-remove` prints the same entry at a terminal, and

@@ -314,6 +314,16 @@ func Fixed(name string) bool {
 	return ok
 }
 
+// Verdicts returns the verdicts rule name can give under any setting a workspace may
+// declare, least refusing first: advise alone for a rule that never refuses or that a
+// workspace may not set, advise and deny for any other.
+func Verdicts(name string) []types.GuardDecision {
+	if _, never := neverDeny[name]; never || Fixed(name) {
+		return []types.GuardDecision{types.GuardAdvise}
+	}
+	return []types.GuardDecision{types.GuardAdvise, types.GuardDeny}
+}
+
 // Defaults returns every compiled rule's name mapped to the decision it takes when the
 // workspace declares nothing for it. The map is the caller's to modify.
 func Defaults() map[string]Decision {

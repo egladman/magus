@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [worker-check-only]: ...
+advise [worker-check-only]: ...
 ```
 
 `magus describe rule worker-check-only` prints the same entry at a terminal, and

@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [policy-unloaded]: ...
+advise [policy-unloaded]: ...
 ```
 
 `magus describe rule policy-unloaded` prints the same entry at a terminal, and

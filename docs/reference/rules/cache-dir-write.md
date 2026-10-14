@@ -29,6 +29,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [cache-dir-write]: ...
+advise [cache-dir-write]: ...
 ```
 
 `magus describe rule cache-dir-write` prints the same entry at a terminal, and

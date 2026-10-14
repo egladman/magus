@@ -2610,6 +2610,11 @@ func ObjectRuleDoc(v types.RuleDoc) vm.Value {
 	out.MapSet("decision", vm.StrValue(v.Decision))
 	out.MapSet("workspace", vm.StrValue(v.Workspace))
 	out.MapSet("fixed", vm.BoolValue(v.Fixed))
+	itemsVerdicts := make([]vm.Value, len(v.Verdicts))
+	for indexVerdicts := range v.Verdicts {
+		itemsVerdicts[indexVerdicts] = vm.StrValue(string(v.Verdicts[indexVerdicts]))
+	}
+	out.MapSet("verdicts", vm.ListValue(itemsVerdicts))
 	out.MapSet("catches", vm.StrValue(v.Catches))
 	out.MapSet("why", vm.StrValue(v.Why))
 	return out

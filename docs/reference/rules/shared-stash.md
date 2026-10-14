@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [shared-stash]: ...
+advise [shared-stash]: ...
 ```
 
 `magus describe rule shared-stash` prints the same entry at a terminal, and

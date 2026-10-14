@@ -32,7 +32,8 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-off [root-repeat]: ...
+deny [root-repeat]: ...
+advise [root-repeat]: ...
 ```
 
 `magus describe rule root-repeat` prints the same entry at a terminal, and

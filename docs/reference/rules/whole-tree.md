@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [whole-tree]: ...
+advise [whole-tree]: ...
 ```
 
 `magus describe rule whole-tree` prints the same entry at a terminal, and

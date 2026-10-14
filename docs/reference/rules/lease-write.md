@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [lease-write]: ...
+advise [lease-write]: ...
 ```
 
 `magus describe rule lease-write` prints the same entry at a terminal, and

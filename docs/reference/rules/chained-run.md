@@ -32,6 +32,7 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
+deny [chained-run]: ...
 advise [chained-run]: ...
 ```
 

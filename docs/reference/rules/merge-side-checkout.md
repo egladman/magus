@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [merge-side-checkout]: ...
+advise [merge-side-checkout]: ...
 ```
 
 `magus describe rule merge-side-checkout` prints the same entry at a terminal, and

@@ -29,6 +29,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [hook-wiring-write]: ...
+advise [hook-wiring-write]: ...
 ```
 
 `magus describe rule hook-wiring-write` prints the same entry at a terminal, and

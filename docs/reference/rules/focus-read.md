@@ -29,6 +29,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [focus-read]: ...
+advise [focus-read]: ...
 ```
 
 `magus describe rule focus-read` prints the same entry at a terminal, and

@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [heredoc-write]: ...
+advise [heredoc-write]: ...
 ```
 
 `magus describe rule heredoc-write` prints the same entry at a terminal, and

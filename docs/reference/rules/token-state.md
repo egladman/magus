@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [token-state]: ...
+advise [token-state]: ...
 ```
 
 `magus describe rule token-state` prints the same entry at a terminal, and

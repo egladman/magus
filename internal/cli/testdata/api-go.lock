@@ -3314,6 +3314,7 @@ github.com/egladman/magus/types.RuleDoc.Catches field string "json:\"catches\""
 github.com/egladman/magus/types.RuleDoc.Decision field string "json:\"decision\""
 github.com/egladman/magus/types.RuleDoc.Fixed field bool "json:\"fixed,omitempty\""
 github.com/egladman/magus/types.RuleDoc.Name field string "json:\"name\""
+github.com/egladman/magus/types.RuleDoc.Verdicts field []GuardDecision "json:\"verdicts\""
 github.com/egladman/magus/types.RuleDoc.Why field string "json:\"why,omitempty\""
 github.com/egladman/magus/types.RuleDoc.Workspace field string "json:\"workspace,omitempty\""
 github.com/egladman/magus/types.SameLeaseCheck func(a *LeaseCheck, b *LeaseCheck) bool

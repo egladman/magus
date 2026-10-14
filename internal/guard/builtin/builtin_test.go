@@ -343,6 +343,16 @@ func TestResolveRefusesADenyOnARuleThatNeverDenies(t *testing.T) {
 	}
 }
 
+func TestVerdicts(t *testing.T) {
+	adviseOnly := []types.GuardDecision{types.GuardAdvise}
+	both := []types.GuardDecision{types.GuardAdvise, types.GuardDeny}
+	assert.Equal(t, adviseOnly, Verdicts("stall"), "a rule that never refuses")
+	assert.Equal(t, adviseOnly, Verdicts("guard-unfinished"), "a fixed rule")
+	assert.Equal(t, both, Verdicts("stage-all"), "an advisory a workspace may raise")
+	assert.Equal(t, both, Verdicts("lease-write"), "a deny rule")
+	assert.Equal(t, both, Verdicts("root-repeat"), "an off rule a level raises to deny")
+}
+
 // At one decision each threshold takes the lower of the two, and an unset one yields:
 // unset defers to the rule's own figure, which neither side stated.
 func TestStricterMergesThresholds(t *testing.T) {

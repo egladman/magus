@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [inline-alias]: ...
+advise [inline-alias]: ...
 ```
 
 `magus describe rule inline-alias` prints the same entry at a terminal, and

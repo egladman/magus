@@ -17,6 +17,9 @@ type RuleDoc struct {
 	// Fixed reports that magus\guard.builtins refuses to set the rule: it is how a workspace
 	// learns something about its own policy, so it can be neither silenced nor promoted.
 	Fixed bool `json:"fixed,omitempty"`
+	// Verdicts are the verdicts the rule can give under any setting a workspace may
+	// declare, least refusing first. A rule that never refuses lists advise alone.
+	Verdicts []GuardDecision `json:"verdicts"`
 	// Catches says what the rule fires on, in one line, in the reader's terms.
 	Catches string `json:"catches"`
 	// Why is the reasoning behind the rule, for a reader who wants to disagree with it

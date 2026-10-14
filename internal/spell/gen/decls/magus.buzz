@@ -1518,6 +1518,7 @@ export object Rule {
     decision: str = "",
     workspace: str = "",
     fixed: bool = false,
+    verdicts: [str] = [],
     catches: str = "",
     why: str = "",
 }

@@ -33,6 +33,7 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [hooks-off]: ...
+advise [hooks-off]: ...
 ```
 
 `magus describe rule hooks-off` prints the same entry at a terminal, and
