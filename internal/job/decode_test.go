@@ -319,6 +319,19 @@ func TestGoalExpectIsOptionalInSchemaAndDecoder(t *testing.T) {
 	assert.Equal(t, types.ExpectChanged, row.Goals[1].Expect)
 }
 
+func TestDecodeDeclarationCarriesBreaksAndRefusesABlankEntry(t *testing.T) {
+	t.Parallel()
+
+	decl, err := DecodeDeclaration(declaration(`"id":"adj/store"`, `"breaks":["--old-flag","api.Open"]`))
+	require.NoError(t, err)
+	var row types.Job
+	decl.Apply(&row)
+	assert.Equal(t, []string{"--old-flag", "api.Open"}, row.Breaks)
+
+	_, err = DecodeDeclaration(declaration(`"id":"adj/store"`, `"breaks":["--old-flag",""]`))
+	assert.ErrorContains(t, err, "breaks[1] is blank")
+}
+
 // The two write doors accept the same CURRENT fields or a row declared on one is not the
 // row the other would have recorded. ParseMerge is the MCP tool's decoder and
 // types.Declaration is the CLI's. types.Declaration alone still carries the pre-rename
@@ -340,7 +353,7 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 		}
 		var value any = "declared"
 		switch field {
-		case "write_paths", "deny_paths", "read_paths", "depends_on":
+		case "write_paths", "deny_paths", "read_paths", "depends_on", "breaks":
 			value = []any{"internal/job"}
 		case "read_only":
 			value = true

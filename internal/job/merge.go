@@ -58,6 +58,7 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 	list("deny_paths", func(u *types.Job, v []string) { u.DenyPaths = v })
 	list("read_paths", func(u *types.Job, v []string) { u.ReadPaths = v })
 	list("depends_on", func(u *types.Job, v []string) { u.DependsOn = v })
+	list("breaks", func(u *types.Job, v []string) { u.Breaks = v })
 	str("model", func(u *types.Job, v string) { u.Model = strings.TrimSpace(v) })
 	if goals, ok, e := mergeGoals(params, "goals"); e != nil {
 		err = errors.Join(err, e)

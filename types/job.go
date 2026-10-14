@@ -703,6 +703,10 @@ type Job struct {
 	// DependsOn are the ids of leases that must land before this one, so a reader can
 	// see the ordering the orchestrator committed to.
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+	// Breaks are the flags, JSON keys, exported symbols or stored formats the root approved
+	// this job breaking. Empty means the job breaks nothing on its own authority: a break
+	// outside the list is a finding for the root, not a decision for the worker.
+	Breaks []string `json:"breaks,omitempty" yaml:"breaks,omitempty"`
 	// Model is the model or effort tier the work was matched to (principal, standard,
 	// economy in the skill's table). A free string: hosts name their models differently
 	// and a closed set here would force a lie for the ones that do not fit.
@@ -886,6 +890,9 @@ type Declaration struct {
 	ReadPaths []string `json:"read_paths,omitempty"`
 	// DependsOn names the lease ids that must land before this one.
 	DependsOn []string `json:"depends_on,omitempty"`
+	// Breaks are the flags, JSON keys, exported symbols or stored formats the root approved
+	// this job breaking; empty means it breaks nothing on its own authority. See [Job.Breaks].
+	Breaks []string `json:"breaks,omitempty"`
 	// Model is the model or effort tier the work was matched to, a free string because
 	// hosts name their models differently.
 	Model string `json:"model,omitempty"`
@@ -988,6 +995,11 @@ func (r Declaration) Validate() error {
 	check, declared, err := r.check()
 	if err != nil {
 		return err
+	}
+	for i, b := range r.Breaks {
+		if strings.TrimSpace(b) == "" {
+			return fmt.Errorf("%w: breaks[%d] is blank, and an entry names the flag, key, symbol or format the job may break", errInvalidJob, i)
+		}
 	}
 	seen := map[string]bool{}
 	if declared {
@@ -1268,6 +1280,7 @@ func (r Declaration) Apply(u *Job) {
 	u.DenyPaths = trimmedNonEmpty(r.DenyPaths)
 	u.ReadPaths = trimmedNonEmpty(r.ReadPaths)
 	u.DependsOn = trimmedNonEmpty(r.DependsOn)
+	u.Breaks = trimmedNonEmpty(r.Breaks)
 	u.Model = strings.TrimSpace(r.Model)
 	// Validate refused an unparsable check before the row reached a store, so the error
 	// here cannot fire; the rendered line is written from the record so the two agree.
@@ -1924,6 +1937,7 @@ func (u Job) Clone() Job {
 	c.DenyPaths = slices.Clone(u.DenyPaths)
 	c.ReadPaths = slices.Clone(u.ReadPaths)
 	c.DependsOn = slices.Clone(u.DependsOn)
+	c.Breaks = slices.Clone(u.Breaks)
 	c.Goals = cloneGoals(u.Goals)
 	c.Releases = slices.Clone(u.Releases)
 	c.Unattributed = slices.Clone(u.Unattributed)

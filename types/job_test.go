@@ -283,6 +283,7 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 		WritePaths:   append(make([]string, 0, 4), "types/"),
 		DenyPaths:    append(make([]string, 0, 4), "gen/"),
 		DependsOn:    append(make([]string, 0, 4), "b"),
+		Breaks:       append(make([]string, 0, 4), "--old-flag"),
 		Goals:        append(make([]Goal, 0, 4), Goal{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check"}}),
 		GateAttempts: append(make([]JobGateAttempt, 0, 4), JobGateAttempt{GateID: "unit", Attempt: JobAttempt{Ref: "out1"}}),
 		Releases:     append(make([]JobRelease, 0, 4), JobRelease{Path: "types/x.go"}),
@@ -293,6 +294,7 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	first.WritePaths = append(first.WritePaths, "first/")
 	first.DenyPaths = append(first.DenyPaths, "first/")
 	first.DependsOn = append(first.DependsOn, "first")
+	first.Breaks = append(first.Breaks, "first")
 	first.Goals[0].DependsOn = append(first.Goals[0].DependsOn, "first")
 	first.GateAttempts = append(first.GateAttempts, JobGateAttempt{GateID: "first"})
 	first.Releases = append(first.Releases, JobRelease{Path: "first/z.go"})
@@ -301,6 +303,7 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	second.WritePaths = append(second.WritePaths, "second/")
 	second.DenyPaths = append(second.DenyPaths, "second/")
 	second.DependsOn = append(second.DependsOn, "second")
+	second.Breaks = append(second.Breaks, "second")
 	second.Goals[0].DependsOn = append(second.Goals[0].DependsOn, "second")
 	second.GateAttempts = append(second.GateAttempts, JobGateAttempt{GateID: "second"})
 	second.Releases = append(second.Releases, JobRelease{Path: "second/z.go"})
@@ -312,6 +315,7 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 		WritePaths:   []string{"types/", "first/"},
 		DenyPaths:    []string{"gen/", "first/"},
 		DependsOn:    []string{"b", "first"},
+		Breaks:       []string{"--old-flag", "first"},
 		Goals:        []Goal{{ID: "unit", Kind: GoalKindCheck, Expect: ExpectPassed, Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check", "first"}}},
 		GateAttempts: []JobGateAttempt{{GateID: "unit", Attempt: JobAttempt{Ref: "out1"}}, {GateID: "first"}},
 		Releases:     []JobRelease{{Path: "types/x.go"}, {Path: "first/z.go"}},
@@ -325,6 +329,7 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 		WritePaths:   []string{"types/"},
 		DenyPaths:    []string{"gen/"},
 		DependsOn:    []string{"b"},
+		Breaks:       []string{"--old-flag"},
 		Goals:        []Goal{{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check"}}},
 		GateAttempts: []JobGateAttempt{{GateID: "unit", Attempt: JobAttempt{Ref: "out1"}}},
 		Releases:     []JobRelease{{Path: "types/x.go"}},
@@ -426,6 +431,28 @@ func TestAnOlderReaderKeepsEntries(t *testing.T) {
 		State:   StatePass,
 		Entries: in.Entries,
 	}, back)
+}
+
+func TestDeclarationRefusesABlankBreaksEntry(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, Declaration{ID: "worker", Breaks: []string{"--old-flag", "api.Open"}}.Validate())
+	err := Declaration{ID: "worker", Breaks: []string{"--old-flag", "  "}}.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "breaks[1] is blank")
+}
+
+// The record is the whole spec, so applying one that omits breaks clears them: a job
+// keeps the right to break something only while its declaration says so.
+func TestDeclarationApplyCopiesBreaksAndClearsAnOmittedOne(t *testing.T) {
+	t.Parallel()
+
+	var row Job
+	Declaration{ID: "worker", Breaks: []string{" --old-flag ", "", "api.Open"}}.Apply(&row)
+	assert.Equal(t, []string{"--old-flag", "api.Open"}, row.Breaks)
+
+	Declaration{ID: "worker"}.ApplySpec(&row)
+	assert.Empty(t, row.Breaks)
 }
 
 func TestDeclarationCarryingEnterDeclaresNothingElse(t *testing.T) {
