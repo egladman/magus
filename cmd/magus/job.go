@@ -839,16 +839,19 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	facts := leaseBoundary(ctx, root, row, leases)
+	// A read: the symbol goals, their delta and the deletion candidates take the graph as
+	// built, and none while a symbol index is stale (see jobGraph).
+	graph := newJobGraph(root, false)
+	facts := leaseBoundary(ctx, root, row, leases, graph)
 	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, root, row.WritePaths)
 	brief := job.NewTerms(row, facts)
 
-	status, err := job.GradeGates(ctx, store, row.ID, jobObserver(root))
+	status, err := job.GradeGates(ctx, store, row.ID, jobObserver(root, graph))
 	if err != nil {
 		return usagef("magus describe job: %s", err)
 	}
 	if gradesSymbols(leases, row.ID) {
-		status.StaleIndexes = staleIndexProjects(ctx, root)
+		status.StaleIndexes = types.StaleIndexProjects(graph.staleIndexes(ctx))
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -1140,8 +1143,10 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if row.Checkpoint, err = store.DeclaredCheckpoint(ctx, plan, row.ID, row.Checkpoint); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
-	// The reader loads the graph only when a gate names a symbol.
-	symbols := jobSymbolReader(root)
+	// The reader loads the graph only when a gate names a symbol, or when the deletion
+	// candidates ask for it, and the two share one load.
+	graph := newJobGraph(root, true)
+	symbols := graphSymbolReader(graph.load)
 	if err := job.RefuseAmbiguousSymbols(ctx, row.Goals, symbols); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
@@ -1204,6 +1209,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if stored.ModelTier != nil {
 			fmt.Printf("model tier: %s\n", stored.ModelTier)
 		}
+		printClaimNotes(os.Stdout, job.ForkNotes(ctx, store, plan, stored))
 		if len(derived) > 0 {
 			fmt.Printf("its symbol goals claimed %d declaration(s) its write paths did not cover:\n", len(derived))
 			for _, claim := range derived {
@@ -1213,7 +1219,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		notes := jobNotes(ctx, root, []types.Job{stored})[stored.ID]
 		job.RenderRegenerated(os.Stdout, notes.RegeneratedOutside)
 		job.RenderUnrunGates(os.Stdout, notes.UnrunGates)
-		job.RenderDeletionCandidates(os.Stdout, deletionCandidates(ctx, root, stored))
+		job.RenderDeletionCandidates(os.Stdout, deletionCandidates(ctx, graph.load, stored))
 		job.RenderForegroundOverrun(os.Stdout, notes.ForegroundOverrun)
 		pointAtConsole(ctx, stored.ID)
 		return nil
@@ -1222,10 +1228,18 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return emitFormatted(opts, forkReport{
 			forkOutput{
 				Job: stored, RegeneratedOutside: notes.RegeneratedOutside, UnrunGates: notes.UnrunGates,
-				DeletionCandidates: deletionCandidates(ctx, root, stored), ForegroundOverrun: notes.ForegroundOverrun,
+				DeletionCandidates: deletionCandidates(ctx, graph.load, stored), ForegroundOverrun: notes.ForegroundOverrun,
+				ClaimNotes: job.ForkNotes(ctx, store, plan, stored),
 			},
 			derived,
 		})
+	}
+}
+
+// printClaimNotes prints each of a fork's claim notes on a line of its own.
+func printClaimNotes(out io.Writer, notes []string) {
+	for _, n := range notes {
+		fmt.Fprintf(out, "note: %s\n", n)
 	}
 }
 
@@ -1239,11 +1253,11 @@ type forkReport struct {
 // deletionCandidates is the unreferenced symbols in row's write paths, or nil when the
 // symbol index is not there to ask: no index is not the same as nothing to delete, and the
 // fork must not fail for it.
-func deletionCandidates(ctx context.Context, root string, row types.Job) []types.UnreferencedEntry {
+func deletionCandidates(ctx context.Context, load func(context.Context) *knowledge.Graph, row types.Job) []types.UnreferencedEntry {
 	if row.ReadOnly || len(row.WritePaths) == 0 {
 		return nil
 	}
-	g := knowledgeOnce(root)(ctx)
+	g := load(ctx)
 	if g == nil {
 		return nil
 	}
@@ -1738,7 +1752,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	if len(evidence) > 0 && (stdin || integration) {
 		return usagef("magus job wait: --evidence starts from the result filed with the job, so it takes neither --stdin nor --integration")
 	}
-	status, err := job.Wait(ctx, store, pos[0], result, storedAttempts(root), jobObserver(root), evidence)
+	status, err := job.Wait(ctx, store, pos[0], result, storedAttempts(root), jobObserver(root, newJobGraph(root, true)), evidence)
 	if err != nil {
 		return usagef("magus job wait: %s", err)
 	}
@@ -1775,7 +1789,7 @@ func jobWaitIntegration(ctx context.Context, store *job.Store, root, id string, 
 	if err != nil {
 		return err
 	}
-	grade, err := job.WaitIntegration(ctx, store, id, result, storedAttempts(root), checkout, jobSymbolReader(root))
+	grade, err := job.WaitIntegration(ctx, store, id, result, storedAttempts(root), checkout, jobSymbolReader(root, true))
 	if err != nil {
 		return usagef("magus job wait: %s", err)
 	}
@@ -2084,7 +2098,7 @@ const leaseAffinityCommits = 200
 // A workspace that will not load DEGRADES rather than failing, the way the graph evidence
 // already does: the row alone carries the criteria, the boundary and the check, and a worker
 // in a tree whose magusfile is mid-edit is exactly who needs to read them.
-func leaseBoundary(ctx context.Context, root string, row types.Job, leases []types.Job) job.TermsFacts {
+func leaseBoundary(ctx context.Context, root string, row types.Job, leases []types.Job, graph *jobGraph) job.TermsFacts {
 	if len(row.WritePaths) == 0 {
 		return job.TermsFacts{}
 	}
@@ -2107,7 +2121,7 @@ func leaseBoundary(ctx context.Context, root string, row types.Job, leases []typ
 		UnrunGates:         notes.UnrunGates,
 		Affinity:           leaseAffinity(ctx, m, affected.Seed),
 		Stage:              workspaceStage(ctx, m),
-		DeletionCandidates: deletionCandidates(ctx, root, row),
+		DeletionCandidates: deletionCandidates(ctx, graph.load, row),
 	}
 }
 
@@ -2396,9 +2410,10 @@ func pathEvidence(g *knowledge.Graph, declared string) (job.TermsEvidence, bool)
 // Lazy and memoized because a verification reads several names and the graph is the
 // expensive part; loading per name would reopen it once per symbol. A load failure is
 // remembered too, so a verification does not retry a graph that is not there once per
-// gate and report the same failure five times.
-func jobSymbolReader(root string) job.SymbolReader {
-	return graphSymbolReader(knowledgeOnce(root))
+// gate and report the same failure five times. Without rebuild, a stale symbol index
+// answers no name at all (see jobGraph).
+func jobSymbolReader(root string, rebuild bool) job.SymbolReader {
+	return graphSymbolReader(newJobGraph(root, rebuild).load)
 }
 
 func graphSymbolReader(load func(context.Context) *knowledge.Graph) job.SymbolReader {
@@ -2411,35 +2426,65 @@ func graphSymbolReader(load func(context.Context) *knowledge.Graph) job.SymbolRe
 	}
 }
 
-// knowledgeOnce loads root's knowledge graph on first use and hands every later caller the
-// same graph, or the same nil when the load failed.
-func knowledgeOnce(root string) func(context.Context) *knowledge.Graph {
-	var (
-		once sync.Once
-		g    *knowledge.Graph
-	)
-	return func(ctx context.Context) *knowledge.Graph {
-		once.Do(func() {
-			if loaded, err := loadKnowledgeGraphForRefs(ctx, root, false, ""); err == nil {
-				g = loaded
-			}
-		})
-		return g
+// jobGraph is one command's knowledge graph, loaded on first use and handed to every later
+// caller, or the same nil when the load failed.
+//
+// A read that must not build (rebuild false, which is `describe job`) asks first whether
+// any symbol index is stale, and while one is it loads nothing: bringing the graph up to
+// date is a build of seconds, and the symbol goals graded against it would answer from an
+// index older than the sources anyway. They print as not graded, beside the stale-index
+// line that names the rebuild. With every index current it reads the graph as built, so it
+// and `job wait` grade alike.
+type jobGraph struct {
+	rebuild bool
+	stale   func(context.Context) []types.KnowledgeStaleIndex
+	build   func(context.Context) (*knowledge.Graph, error)
+
+	staleOnce sync.Once
+	staleIdx  []types.KnowledgeStaleIndex
+	once      sync.Once
+	g         *knowledge.Graph
+}
+
+func newJobGraph(root string, rebuild bool) *jobGraph {
+	return &jobGraph{
+		rebuild: rebuild,
+		stale:   func(ctx context.Context) []types.KnowledgeStaleIndex { return staleIndexes(ctx, root) },
+		build: func(ctx context.Context) (*knowledge.Graph, error) {
+			return loadKnowledgeGraphForRefs(ctx, root, false, "")
+		},
 	}
+}
+
+// staleIndexes is the stale symbol indexes, asked once.
+func (r *jobGraph) staleIndexes(ctx context.Context) []types.KnowledgeStaleIndex {
+	r.staleOnce.Do(func() { r.staleIdx = r.stale(ctx) })
+	return r.staleIdx
+}
+
+func (r *jobGraph) load(ctx context.Context) *knowledge.Graph {
+	r.once.Do(func() {
+		if !r.rebuild && len(r.staleIndexes(ctx)) > 0 {
+			return
+		}
+		if loaded, err := r.build(ctx); err == nil {
+			r.g = loaded
+		}
+	})
+	return r.g
 }
 
 // jobObserver is the checkpoint observer plus the symbol delta of the job's diff and, for a
 // job with a check gate on ci, the newest green ci gate on this checkout's branch and the
 // tier of the change since it. One graph load serves the symbol goals and the delta.
-func jobObserver(root string) job.Observer {
-	load := knowledgeOnce(root)
-	checkpoint := job.CheckpointObserver(root, graphSymbolReader(load))
+func jobObserver(root string, graph *jobGraph) job.Observer {
+	checkpoint := job.CheckpointObserver(root, graphSymbolReader(graph.load))
 	return func(ctx context.Context, row types.Job) (job.Observed, error) {
 		seen, err := checkpoint(ctx, row)
 		if err != nil {
 			return seen, err
 		}
-		if delta, ok := observeSymbolDelta(ctx, root, row, seen, load); ok {
+		if delta, ok := observeSymbolDelta(ctx, root, row, seen, graph); ok {
 			seen.AddedExports, seen.LeftUnreferenced, seen.SymbolDeltaKnown = delta.Added, delta.Left, true
 		}
 		if root == "" || !gatesOnCI(row) {
@@ -2453,8 +2498,8 @@ func jobObserver(root string) job.Observer {
 // observeSymbolDelta reads the delta of the diff seen was graded on, in the checkout that
 // diff was read in. A holder's other checkout gets its own graph, since lines of its files
 // placed against this one's would name the wrong symbols; one that will not load leaves
-// the delta unknown.
-func observeSymbolDelta(ctx context.Context, root string, row types.Job, seen job.Observed, load func(context.Context) *knowledge.Graph) (symbolDelta, bool) {
+// the delta unknown, as does a stale index there when graph must not build.
+func observeSymbolDelta(ctx context.Context, root string, row types.Job, seen job.Observed, graph *jobGraph) (symbolDelta, bool) {
 	if row.ReadOnly || root == "" || !seen.ChangedKnown || seen.ChangedRevision == "" {
 		return symbolDelta{}, false
 	}
@@ -2467,8 +2512,9 @@ func observeSymbolDelta(ctx context.Context, root string, row types.Job, seen jo
 	}
 	var g *knowledge.Graph
 	if filepath.Clean(tree) == filepath.Clean(root) {
-		g = load(ctx)
-	} else if ws, err := magus.Inspect(ctx, tree, magus.WithLoadedConfig(globalCfg), magus.WithVersion(version)); err == nil {
+		g = graph.load(ctx)
+	} else if ws, err := magus.Inspect(ctx, tree, magus.WithLoadedConfig(globalCfg), magus.WithVersion(version)); err == nil &&
+		(graph.rebuild || len(findStaleIndexes(ctx, ws)) == 0) {
 		g, _ = loadRefsGraph(ctx, ws, globalCfg, false, "")
 	}
 	res, err := vcs.Resolve(ctx, tree, "", types.VCSOptions{})
@@ -2666,7 +2712,15 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	root = resolveRootOrEmpty(root)
 	opener := openForkJobs
 	if globalCfg.DryRun {
-		opener = func(_ context.Context, root string) (*job.Store, error) { return openJobs(root) }
+		// A dry-run store's reads write nothing either: no sweep, no cached footprint.
+		opener = func(_ context.Context, root string) (*job.Store, error) {
+			loc, err := jobLocation(root)
+			if err != nil {
+				return nil, err
+			}
+			loc.DryRun = true
+			return job.NewStore(loc), nil
+		}
 	}
 	store, err := opener(ctx, root)
 	if err != nil {
@@ -2676,7 +2730,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		token, _ := checkoutBaseToken(ctx, root)
 		return token
 	}
-	applied, err := job.Apply(ctx, store, records, globalCfg.Jobs, jobSymbolReader(root), checkpoint, globalCfg.DryRun)
+	applied, err := job.Apply(ctx, store, records, globalCfg.Jobs, jobSymbolReader(root, true), checkpoint, globalCfg.DryRun)
 	if err != nil {
 		return usagef("magus job apply: %s", err)
 	}
@@ -2699,8 +2753,9 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		}
 	}
 	notes := jobNotes(ctx, root, reshaped)
+	claims := applyClaimNotes(ctx, store, applied)
 	if opts.Format == outputText {
-		printJobApply(os.Stdout, applied, notes, globalCfg.DryRun)
+		printJobApply(os.Stdout, applied, notes, claims, globalCfg.DryRun)
 		if len(applied) == 1 && !globalCfg.DryRun {
 			pointAtConsole(ctx, applied[0].Next.ID)
 		}
@@ -2708,9 +2763,33 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	}
 	report := applyReport{DryRun: globalCfg.DryRun}
 	for _, a := range applied {
-		report.Jobs = append(report.Jobs, applyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed, RegeneratedOutside: notes[a.Next.ID].RegeneratedOutside, UnrunGates: notes[a.Next.ID].UnrunGates})
+		report.Jobs = append(report.Jobs, applyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed, RegeneratedOutside: notes[a.Next.ID].RegeneratedOutside, UnrunGates: notes[a.Next.ID].UnrunGates, ClaimNotes: claims[a.Next.ID]})
 	}
 	return emitFormatted(opts, report)
+}
+
+// applyClaimNotes is job.ForkNotes for each applied row, keyed by job id, against the plan
+// as the apply leaves it, so two rows of one apply note each other. A dry run's rows are
+// read as they would be written.
+func applyClaimNotes(ctx context.Context, store *job.Store, applied []job.Applied) map[string][]string {
+	rows, err := store.List()
+	if err != nil {
+		return nil
+	}
+	for _, a := range applied {
+		if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == a.Next.ID }); i >= 0 {
+			rows[i] = a.Next
+		} else {
+			rows = append(rows, a.Next)
+		}
+	}
+	out := map[string][]string{}
+	for _, a := range applied {
+		if notes := job.ForkNotes(ctx, store, rows, a.Next); len(notes) > 0 {
+			out[a.Next.ID] = notes
+		}
+	}
+	return out
 }
 
 // applyReport is `job apply`'s structured output: each row as written, or as it would be.
@@ -2727,10 +2806,12 @@ type applyEntry struct {
 	RegeneratedOutside []job.RegeneratedOutput `json:"regenerated_outside,omitempty" yaml:"regenerated_outside,omitempty"`
 	// UnrunGates is computed beside it, for the same rows.
 	UnrunGates []job.UnrunGate `json:"unrun_gates,omitempty" yaml:"unrun_gates,omitempty"`
+	// ClaimNotes is forkOutput's, for every applied row.
+	ClaimNotes []string `json:"claim_notes,omitempty" yaml:"claim_notes,omitempty"`
 }
 
 // printJobApply prints each row's change, then what the workspace notes for it.
-func printJobApply(out io.Writer, applied []job.Applied, notes map[string]rowNotes, dryRun bool) {
+func printJobApply(out io.Writer, applied []job.Applied, notes map[string]rowNotes, claims map[string][]string, dryRun bool) {
 	for _, a := range applied {
 		switch {
 		case a.Created && dryRun:
@@ -2752,6 +2833,7 @@ func printJobApply(out io.Writer, applied []job.Applied, notes map[string]rowNot
 				fmt.Fprintf(out, "  %s\n", specChange(field, a.Prev, a.Next))
 			}
 		}
+		printClaimNotes(out, claims[a.Next.ID])
 		job.RenderRegenerated(out, notes[a.Next.ID].RegeneratedOutside)
 		job.RenderUnrunGates(out, notes[a.Next.ID].UnrunGates)
 	}
