@@ -7,13 +7,11 @@ tags: [buf, spell, protobuf, codegen, lint, tools]
 
 # buf
 
-The `buf` spell forks the `buf` CLI to build, lint, format, and generate from Protobuf sources. It declares `gen/**` as its outputs so magus caches generated code correctly.
+The `buf` spell forks the `buf` CLI to build, lint, format, and generate from Protobuf sources. It declares no outputs of its own: the target that runs `buf-generate` declares where buf writes.
 
 **Runtime name:** `buf` (source `spells/buf/`)
 
 **Version probe (buf):** `buf --version`
-
-**Provides:** `gen/**`
 
 ## Passing arguments to ops
 
