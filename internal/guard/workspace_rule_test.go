@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -279,10 +280,19 @@ func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
 	})
 }
 
+// spellNotShipped stands in for the spell bindings' refusal of an import naming a spell the
+// build does not ship; TestSpellImportSuggestionOnParse pins that a real load carries one.
+type spellNotShipped string
+
+func (s spellNotShipped) Error() string {
+	return `no spell "` + string(s) + `" to import as "magus/spell/` + string(s) + `"`
+}
+
+func (s spellNotShipped) UnknownSpell() string { return string(s) }
+
 // skewedSpellLoad is what a ./magus built after the vale spell was removed reported for a
 // tree that still imported it.
-var skewedSpellLoad = errors.New(`magusfile: magusfile: magusfile.buzz: no spell "vale" to import as "magus/spell/vale", ` +
-	`did you mean "bash" (import "magus/spell/bash") (built-in spells: bash, buf, buzz)`)
+var skewedSpellLoad = fmt.Errorf("magusfile: magusfile: magusfile.buzz: %w", spellNotShipped("vale"))
 
 // The two skews seen in the wild, a ./magus built on either side of the commit that removed
 // the vale spell and added magus\guard.builtins, are an error on every call: a call that
@@ -306,7 +316,7 @@ func TestSkewedBinaryIsAWorkspaceRuleErrorEveryCall(t *testing.T) {
 			errMissingMember, staleOwnSay, "Fix: rebuild ./magus with `./magus run go-build .`.",
 		},
 		"a misspelled spell import": {
-			errors.New(`magusfile: magusfile.buzz: no spell "vlae" to import as "magus/spell/vlae"`), "", "",
+			fmt.Errorf("magusfile: magusfile.buzz: %w", spellNotShipped("vlae")), "", "",
 		},
 	}
 	for name, c := range cases {

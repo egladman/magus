@@ -7,7 +7,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -308,9 +307,9 @@ func denyUnloaded(asked *rulesAnswer, call judgedCall, at location) bool {
 	return true
 }
 
-// unknownSpellImport matches the refusal of an import naming a spell this build does not
-// ship. It carries no diagnostic code, so the sentence is the only handle.
-var unknownSpellImport = regexp.MustCompile(`no spell "([^"]+)" to import as "magus/spell/`)
+// unknownSpellImport is the refusal of an import naming a spell this build does not ship,
+// as the spell bindings raise it.
+type unknownSpellImport interface{ UnknownSpell() string }
 
 // skewedSpell names the spell loadFailure says this build does not ship when root, a
 // checkout of magus itself, carries that spell's sources: the judging ./magus was built from
@@ -321,14 +320,15 @@ func skewedSpell(loadFailure error, root string) string {
 	if loadFailure == nil || root == "" || !ownSourceRoot(root) {
 		return ""
 	}
-	m := unknownSpellImport.FindStringSubmatch(loadFailure.Error())
-	if m == nil {
+	var unknown unknownSpellImport
+	if !errors.As(loadFailure, &unknown) {
 		return ""
 	}
-	if info, err := os.Stat(filepath.Join(root, "spells", m[1])); err != nil || !info.IsDir() {
+	name := unknown.UnknownSpell()
+	if info, err := os.Stat(filepath.Join(root, "spells", name)); err != nil || !info.IsDir() {
 		return ""
 	}
-	return m[1]
+	return name
 }
 
 // failureLines renders each failure as the side and the head of its error. An error

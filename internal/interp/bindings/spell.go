@@ -833,10 +833,20 @@ func checkSpellImports(handles []string) error {
 		if isRegisteredSpell(h) {
 			continue
 		}
-		return errors.New(unknownSpellMessage(h))
+		return unknownSpellError{name: h}
 	}
 	return nil
 }
+
+// unknownSpellError refuses an import naming a spell this build does not ship. The guard
+// reads the name through UnknownSpell, with errors.As, to tell a ./magus built on the other
+// side of a spell's addition or removal from a misspelled import.
+type unknownSpellError struct{ name string }
+
+func (e unknownSpellError) Error() string { return unknownSpellMessage(e.name) }
+
+// UnknownSpell is the handle the import named.
+func (e unknownSpellError) UnknownSpell() string { return e.name }
 
 // isRegisteredSpell reports whether name is a handle reachable as
 // `import "magus/spell/<name>"`: a compiled built-in or a host-registered spell.
