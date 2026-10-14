@@ -528,3 +528,56 @@ func TestOpenRefusesABrokerItWouldNotUse(t *testing.T) {
 		})
 	}
 }
+
+// The push gate needs a passing `ci`, so a human_only target anywhere in its chain makes
+// every agent push unclearable; the load refuses it rather than the push.
+func TestRefuseHumanOnlyInGate(t *testing.T) {
+	bench := types.Target{HumanOnly: true, HumanOnlyReason: "launches paid sessions"}
+	proj := func(path string, chains map[string][]types.ChainStep, policies map[string]types.Target) *types.Project {
+		return &types.Project{Path: path, TargetChains: chains, TargetPolicies: policies}
+	}
+	benchPolicy := map[string]types.Target{"bench": bench}
+	gateOnBench := map[string][]types.ChainStep{"ci": {{Target: "test"}}, "test": {{Target: "bench"}}}
+	gateOnTest := map[string][]types.ChainStep{"ci": {{Target: "test"}}}
+	gateOnEvals := map[string][]types.ChainStep{"ci": {{Project: "evals", Target: "grade"}}}
+	cases := map[string]struct {
+		projects []*types.Project
+		wantErr  []string
+	}{
+		"ci itself": {
+			projects: []*types.Project{proj(".", nil, map[string]types.Target{"ci": bench})},
+			wantErr:  []string{"project \".\" declares its `ci` human_only"},
+		},
+		"a member ci reaches": {
+			projects: []*types.Project{proj(".", gateOnBench, benchPolicy)},
+			wantErr:  []string{"`ci` in project \".\" reaches human_only target .:bench", "run `magus run bench .` as its own CI step"},
+		},
+		"a member in another project": {
+			projects: []*types.Project{proj(".", gateOnEvals, nil), proj("evals", nil, map[string]types.Target{"grade": bench})},
+			wantErr:  []string{"`ci` in project \".\" reaches human_only target evals:grade"},
+		},
+		"a target outside the gate": {
+			projects: []*types.Project{proj(".", gateOnTest, benchPolicy)},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			lookup := func(path string) *types.Project {
+				for _, p := range tc.projects {
+					if p.Path == path {
+						return p
+					}
+				}
+				return nil
+			}
+			err := refuseHumanOnlyInGate(tc.projects, lookup)
+			if len(tc.wantErr) == 0 {
+				require.NoError(t, err)
+				return
+			}
+			for _, want := range tc.wantErr {
+				assert.ErrorContains(t, err, want)
+			}
+		})
+	}
+}

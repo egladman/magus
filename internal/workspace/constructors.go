@@ -365,6 +365,14 @@ func Advisory(reason string) TargetOption {
 	return func(t *types.Target) { t.Advisory = true; t.AdvisoryReason = reason }
 }
 
+// HumanOnly returns a TargetOption that marks the target as one a person starts: the
+// guard asks before an unbound agent session's run reaches it and refuses a leased
+// worker's. reason states what running it costs, and is required for the same reason
+// SkipCache's is.
+func HumanOnly(reason string) TargetOption {
+	return func(t *types.Target) { t.HumanOnly = true; t.HumanOnlyReason = reason }
+}
+
 // Slots returns a TargetOption that makes the target hold n concurrency slots
 // while it runs, throttling parallel work around a resource-heavy step. n is
 // clamped to the run's total slot budget at schedule time; n >= the budget makes

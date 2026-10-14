@@ -228,6 +228,15 @@ type Target struct {
 	// here does not mean the change is wrong, and a bare `true` leaves the next reader
 	// no way to tell that claim from a gate somebody switched off after a bad week.
 	AdvisoryReason string `json:"advisory_reason,omitempty" buzz:"advisory_reason"`
+	// HumanOnly marks a target a person starts and an agent never runs unasked: the
+	// guard asks the person before an unbound session's run reaches it and refuses a
+	// leased worker's. A person's own shell never meets the guard, so it changes nothing
+	// there. No gate may reach one, since the push gate would then be unclearable.
+	HumanOnly bool `json:"human_only,omitempty" buzz:"human_only"`
+	// HumanOnlyReason is what running the target costs, in the magusfile's own words,
+	// required for the reason SkipCacheReason is. The guard quotes it to the agent and
+	// to the person approving the run, so it carries any figure the author knows.
+	HumanOnlyReason string `json:"human_only_reason,omitempty" buzz:"human_only_reason"`
 	// IncludeOS and IncludeArch override cache.include.*.enabled for this target.
 	// nil inherits the workspace answer, which is what an undeclared target gets.
 	//

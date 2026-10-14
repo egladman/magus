@@ -152,6 +152,11 @@ func Drift(policy types.DriftPolicy, reason string) TargetOption {
 // name still fails. reason states why a failure here does not mean the change is wrong.
 func Advisory(reason string) TargetOption { return workspace.Advisory(reason) }
 
+// HumanOnly marks this target as one a person starts: an agent's run reaching it asks the
+// person through the host's prompt, and a leased worker's is refused. reason states what
+// running it costs.
+func HumanOnly(reason string) TargetOption { return workspace.HumanOnly(reason) }
+
 // IncludeOS and IncludeArch override cache.include.*.enabled for one target, for a
 // target whose artifact varies along one axis but not the other.
 func IncludeOS(v bool) TargetOption   { return workspace.IncludeOS(v) }

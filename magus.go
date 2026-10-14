@@ -434,8 +434,40 @@ func (m *Magus) load(ctx context.Context) error {
 	if err := m.applyTargetDepsAndFootprint(ctx); err != nil {
 		return err
 	}
+	if err := refuseHumanOnlyInGate(m.All(), m.Get); err != nil {
+		return err
+	}
 	m.autobindMagusfileSpell()
 	return m.spellShadows()
+}
+
+// refuseHumanOnlyInGate errors when a project's `ci`, or a target its ctx.needs chain
+// reaches, is human_only. The push gate needs a passing `ci`, so an agent could never
+// clear it; a paid suite runs as its own CI step instead.
+func refuseHumanOnlyInGate(projects []*types.Project, lookup func(path string) *types.Project) error {
+	gate := string(types.TargetCI)
+	seen := map[string]bool{}
+	var errs []error
+	for _, p := range projects {
+		_ = types.WalkChain(p, gate, lookup, func(v types.ChainVisit) error {
+			if !v.Project.TargetPolicies[v.Target].HumanOnly {
+				return nil
+			}
+			if seen[v.Key()] {
+				return types.ErrSkipChain
+			}
+			seen[v.Key()] = true
+			what := fmt.Sprintf("`%s` in project %q reaches human_only target %s:%s", gate, p.Path, v.Project.Path, v.Target)
+			if v.Depth == 0 {
+				what = fmt.Sprintf("project %q declares its `%s` human_only", p.Path, gate)
+			}
+			errs = append(errs, fmt.Errorf(
+				"magus: %s, so no agent could pass the gate a push needs; take it out of the gate and run `%s` as its own CI step",
+				what, hint.Run.With(v.Target, v.Project.Path)))
+			return types.ErrSkipChain
+		})
+	}
+	return errors.Join(errs...)
 }
 
 // SpellImports returns the spells magus.yaml declares, as this workspace's load resolved

@@ -424,6 +424,20 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 				}
 				opts = append(opts, workspace.WithTarget(name, workspace.Advisory(reason)))
 			}
+			// The guard quotes this reason to the agent it stops and to the person asked
+			// to approve the run, so a bare `true` would leave both asking why.
+			if hv, ok := pv.MapGet("human_only"); ok {
+				var reason string
+				if hv.IsStr() {
+					reason = strings.TrimSpace(hv.AsString())
+				}
+				if reason == "" {
+					return nil, fmt.Errorf(
+						"magus.project: targets[%q].human_only needs a reason string saying what running this target costs, e.g. \"launches paid model sessions, up to $4 each\", "+
+							"the guard quotes it to the agent it stops and to the person it asks", name)
+				}
+				opts = append(opts, workspace.WithTarget(name, workspace.HumanOnly(reason)))
+			}
 			// drift says what happens when this target's declared output moves under a
 			// read-only run. Absent means the default, which already gates a target that
 			// declares output, so this key exists to downgrade or switch off, not to

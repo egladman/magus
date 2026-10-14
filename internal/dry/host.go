@@ -843,6 +843,17 @@ func (r *Tracer) traceProject(ctx context.Context, path string, opts vm.Value) e
 					}
 					p.NoCache = append(p.NoCache, name)
 				}
+				if hv, ok := pv.MapGet("human_only"); ok {
+					var reason string
+					if hv.IsStr() {
+						reason = strings.TrimSpace(hv.AsString())
+					}
+					if reason == "" {
+						return fmt.Errorf(
+							"magus.project: targets[%q].human_only needs a reason string saying what running this target costs, e.g. \"launches paid model sessions, up to $4 each\", "+
+								"the guard quotes it to the agent it stops and to the person it asks", rawName)
+					}
+				}
 				if sv, ok := pv.MapGet("slots"); ok {
 					if !sv.IsInt() {
 						return fmt.Errorf(
