@@ -172,7 +172,8 @@ ADVISED, and every uncertainty fails open: a seatbelt, not a sandbox.
 
 So a denied worker COORDINATES and never works around. A worker refused a build, a
 regeneration or a target outside its check names it in its result: the checkout's
-integrator runs those, never the worker and never the root. Ask the orchestrator to
+integrator, the subagent spawned `<parent>/integrate <job>` in that checkout, runs those, never
+the worker and never the root. Ask the orchestrator to
 re-partition, or have the owning job release the path, then retry{{if .Full}}. Editing
 anyway from an un-enrolled shell, or dropping the lease id to buy advisory
 treatment, turns a denial you could have acted on into a collision nobody sees

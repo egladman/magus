@@ -461,8 +461,8 @@ only when it needs to know. Never message a worker to ask how it is going, only 
 
 ## Integrate and verify
 
-The root never builds: an integrator forked in the landing checkout with `--check 'ci .'`
-cherry-picks, builds ./magus, regenerates and commits. As jobs finish:
+The root never builds. The integrator is a role, never a check: spawned `<parent>/integrate
+<job>` unisolated in the landing checkout, it cherry-picks, builds, regenerates and commits. As jobs finish:
 
 1. Compare the store against the ACTUAL diff since each job's checkpoint, not the
    paths it reported (`{{cmd "graph diff"}} --rev <revision>` for the domain). A differing

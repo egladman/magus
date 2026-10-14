@@ -233,8 +233,8 @@ someone else pays for the reasoning.
 A session that hands out work keeps to planning and coordinating. Reading and
 searching source, editing it, and running checks belong to the workers it
 spawns, at any context size. Integration (cherry-picks, the build of magus,
-regeneration and commits) belongs to the checkout's integrator, a job whose
-check is the gate; the root coordinates and never builds. Size and cost never decide whether;
+regeneration and commits) belongs to the checkout's integrator, the subagent
+spawned `<parent>/integrate <job>` in that checkout; the root coordinates and never builds. Size and cost never decide whether;
 they only tune the advice given to a session that has handed nothing out.
 magus knows a session orchestrates from what it recorded, a job row it forked
 or a spawn bound to one; without that record the guard advises and never

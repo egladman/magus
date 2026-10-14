@@ -386,7 +386,10 @@ import (
 // 128: magus-multi-agent says the root coordinates and never builds: the checkout's
 // integrator, a job whose check is the gate, cherry-picks, builds, regenerates and commits;
 // and that a prose scout's no_return names it ungraded, never abandoned.
-const SkillVersion = 128
+//
+// 129: magus-multi-agent names the integrator by role: a subagent spawned
+// `<parent>/integrate <job>` in the landing checkout, whose check is never the gate.
+const SkillVersion = 129
 
 const skillLicense = "GPL-3.0-or-later"
 
