@@ -39,8 +39,8 @@ verification, and never hands those out. Above the root is the human in the loop
 what lands, what is published and what a round may spend are the person's calls, so
 the root reports to them and does not decide them. From its first call the root does no
 groundwork: no reading, searching or editing of source, no test or lint runs of its own.
-It plans from the graph, moves jobs and integrates; groundwork it needs, a read-only
-scout included, is a job. The guard enforces this by role, at any context size.
+It plans from the graph and moves jobs; groundwork it needs, a read-only scout
+included, is a job, and so is integration. The guard enforces this by role.
 
 ## Coalesce what the write sets allow
 
@@ -80,7 +80,7 @@ the loop's partition and collision decisions, and does not replace the loop. Run
 4. Hand out work, within any cap the user set.
 5. Observe agents and Magus processes through their separate control planes.
 6. Evaluate evidence and revise ownership or ordering until the criteria pass.
-7. Integrate centrally and run the release gate.
+7. Hand integration and the release gate to the checkout's integrator.
 
 Acceptance evidence is an output ref the root reopens (`{{cmd "query output"}} <ref>`),
 never a worker's prose. A worker that ran a filtered subset, or quietly restated its
@@ -263,9 +263,9 @@ private ownership map.
   write paths.
 - A cap the user sets applies to the whole tree, not once per parent.
 
-Keep one integration owner at the root, however deep the job tree. A child
-coordinates its descendants but may not accept changes outside its own job or relax
-the root's criteria.
+Keep one integration owner per landing checkout, the integrator, never the root. A
+child coordinates its descendants but may not accept changes outside its own job or
+relax the root's criteria.
 
 ## Seed the partition with magus
 
@@ -461,7 +461,8 @@ only when it needs to know. Never message a worker to ask how it is going, only 
 
 ## Integrate and verify
 
-As jobs finish:
+The root never builds: an integrator forked in the landing checkout with `--check 'ci .'`
+cherry-picks, builds ./magus, regenerates and commits. As jobs finish:
 
 1. Compare the store against the ACTUAL diff since each job's checkpoint, not the
    paths it reported (`{{cmd "graph diff"}} --rev <revision>` for the domain). A differing

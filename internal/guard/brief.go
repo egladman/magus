@@ -346,7 +346,7 @@ func briefOffCheckDeny(row types.Job, line, target string) string {
 		names[i] = "`" + c.String() + "`"
 	}
 	return fmt.Sprintf("this brief tells job %s's worker to run `%s`, not its check %s [%s]; fix the brief.\nThe line: %q\n"+
-		"A worker runs only its row's check and the targets that regenerate its write paths; the orchestrator runs the rest serially, in its own tree, after it integrates the units. A line that names it to forbid it (\"never run ...\") is not graded.",
+		"A worker runs only its row's check and the targets that regenerate its write paths; the checkout's integrator, a row whose check is the gate, runs the rest serially, in its own tree, after it integrates the units. A line that names it to forbid it (\"never run ...\") is not graded.",
 		row.ID, target, strings.Join(names, " or "), denyRuleWorkerCheckOnly, elideCommand(strings.TrimSpace(line)))
 }
 

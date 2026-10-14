@@ -170,12 +170,13 @@ func mainFindings(setting func(string) builtin.Setting, st costState, c mainCall
 
 // groundworkWork names each groundwork class as orchestrator-groundwork says it.
 var groundworkWork = map[types.DelegableClass]string{
-	types.DelegableSearch: "a search",
-	types.DelegableRead:   "a read of a file in the checkout",
-	types.DelegableDiff:   "a diff read",
-	types.DelegableRun:    "a run",
-	types.DelegableFetch:  "a fetch",
-	types.DelegableEdit:   "an edit in the checkout",
+	types.DelegableSearch:    "a search",
+	types.DelegableRead:      "a read of a file in the checkout",
+	types.DelegableDiff:      "a diff read",
+	types.DelegableRun:       "a run",
+	types.DelegableFetch:     "a fetch",
+	types.DelegableEdit:      "an edit in the checkout",
+	types.DelegableIntegrate: "integration (a cherry-pick, a build of ./magus, a regeneration, staging or a commit)",
 }
 
 // groundworkFinding is orchestrator-groundwork's finding on c: groundwork by a session
@@ -191,7 +192,7 @@ func groundworkFinding(s builtin.Setting, c mainCall) (costFinding, bool) {
 		deny: s.Decision == builtin.Deny && c.orchestration == types.OrchestrationProven,
 		key:  hint.MarkerKind(fmt.Sprintf("%s-%s", denyRuleOrchestratorGroundwork, c.work)),
 		say: fmt.Sprintf("magus workspace: this session hands out work, and %s is groundwork; fork a job for it (a read-only scout for a question) and spawn a worker on it.\n", cmp.Or(groundworkWork[c.work], string(c.work))) +
-			"The session that orchestrates plans from the graph, moves jobs and integrates; reading and searching source, editing it and running checks belong to the workers it spawns, at any context size.",
+			"The session that orchestrates plans from the graph and moves jobs; reading and searching source, editing it and running checks belong to the workers it spawns, and cherry-picks, builds, regeneration and commits to the checkout's integrator, a job whose check is the gate, at any context size.",
 	}, true
 }
 

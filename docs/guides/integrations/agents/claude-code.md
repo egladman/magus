@@ -227,10 +227,11 @@ The denial names the cause and the one likeliest fix; the fallbacks sit behind i
 verdict:` ref. The workspace needs only to show a guard rule in its magusfile for this,
 so a fresh worktree is covered before any policy has loaded in its cache.
 
-The fix depends on who is asking. The main session or a person rebuilds with `./magus
-run go-build .`, or bootstraps with the command the denial prints where the checkout has
-no binary. A worker holding a lease never builds one: there is one binary per base, and
-the main session builds it and places a copy in the worker's checkout with
+The fix depends on who is asking. The checkout's integrator (a job whose check is the
+gate) or a person rebuilds with `./magus run go-build .`, or bootstraps with the command
+the denial prints where the checkout has no binary. An orchestrating main session never
+builds, and a worker holding a lease never builds one: there is one binary per base, and
+the integrator builds it and a copy is placed in the worker's checkout with
 `hack/dev/bootstrap-worktree.buzz`, so the denial tells the worker to ask for that. A
 worktree session with no `./magus` is an error, where it used to run open on whatever
 PATH held; `SessionStart` says so once per session, naming one command, whenever the

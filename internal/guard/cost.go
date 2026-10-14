@@ -877,8 +877,8 @@ func liveRowLookup(ctx context.Context, at location) func(id string) (types.Job,
 }
 
 // rootWorkClass is the groundwork a shell line does, judged for a session that hands its
-// work out, "" for orchestration work: moving jobs, planning from the graph, integrating,
-// reading a guard verdict, the notes. Unlike delegableClass, a silent run is still a run,
+// work out, "" for orchestration work: moving jobs, planning from the graph, reading a
+// guard verdict, the notes. Integration is the checkout's integrator's, never the root's. Unlike delegableClass, a silent run is still a run,
 // and Markdown inside a checkout is still a read; only the instruction files, and a read or a
 // search of nothing but paths outside every checkout, are notes.
 // The checks of the rows a thread forked are mainWork's to clear.
@@ -919,6 +919,9 @@ func invocationWork(c hint.Invocation, stdin string, at location) types.Delegabl
 		return ""
 	}
 	if !isMagusInvocation(c) {
+		if v := vcsInvocation(c); v != nil && integrationVerbs[v.Subcommand] {
+			return types.DelegableIntegrate
+		}
 		class := invocationClass(c)
 		// A search with no path searches the call's directory, which is in the checkout.
 		if paths := invocationPaths(c); class == types.DelegableSearch && len(paths) > 0 &&
@@ -933,8 +936,15 @@ func invocationWork(c hint.Invocation, stdin string, at location) types.Delegabl
 	}
 	switch words[0] {
 	case "run", "affected":
-		if r, ok := parseTargetRun(c); ok && !isGateCommand(c.Args) && !integrationTarget(r.target) {
+		if r, ok := parseTargetRun(c); ok && !isGateCommand(c.Args) {
+			if integrationTarget(r.target) {
+				return types.DelegableIntegrate
+			}
 			return types.DelegableRun
+		}
+	case "vcs":
+		if len(words) > 1 && integrationVerbs[words[1]] {
+			return types.DelegableIntegrate
 		}
 	case "buzz":
 		if script, ok := inlineBuzz(c.Args, stdin); ok && !drivesOnlyJobs(script) {
@@ -953,8 +963,12 @@ func invocationWork(c hint.Invocation, stdin string, at location) types.Delegabl
 	return ""
 }
 
-// integrationTarget reports a target an orchestrator runs to integrate its workers' work:
-// the build of ./magus, and regeneration.
+// integrationVerbs are the VCS subcommands that land work in a checkout, which its
+// integrator runs and an orchestrator never does.
+var integrationVerbs = map[string]bool{"add": true, "commit": true, "cherry-pick": true, "graft": true}
+
+// integrationTarget reports a target a checkout's integrator runs to integrate work: the
+// build of ./magus, and regeneration.
 func integrationTarget(target string) bool {
 	if i := strings.LastIndex(target, "::"); i >= 0 {
 		target = target[i+2:]

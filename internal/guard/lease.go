@@ -364,11 +364,11 @@ func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command 
 	if !ok || LeaseOwnsGate(me) {
 		return denial{}
 	}
-	const gated = "The orchestrator gates once, in its own tree, after every unit lands."
+	const gated = "The checkout's integrator, a row whose check is the gate, gates once, in its own tree, after every unit lands."
 	checks := rowChecks(me)
 	if len(checks) == 0 && me.Validation == "" {
 		return denial{
-			Say: fmt.Sprintf("magus workspace: `%s` is the orchestrator's gate, and lease %s declares no check; run the narrowest target covering your paths.",
+			Say: fmt.Sprintf("magus workspace: `%s` is the integrator's gate, and lease %s declares no check; run the narrowest target covering your paths.",
 				elideCommand(command), me.ID),
 			Why: gated + " Report what that target said, and that this row names no check: " + leaseActorClause("record a check on this row") + "\n" + leaseActorWhy,
 		}
@@ -378,7 +378,7 @@ func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command 
 		check = checkCommand(checks[0])
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `%s` is the orchestrator's gate; run your check: `%s`.", elideCommand(command), check),
+		Say: fmt.Sprintf("magus workspace: `%s` is the integrator's gate; run your check: `%s`.", elideCommand(command), check),
 		Why: fmt.Sprintf("%s `%s` runs the `%s` gate, and the check on lease %s's row, %q, does not name it. If the unit needs the gate, %s\n%s",
 			gated, elideCommand(command), types.TargetCI, me.ID, check, leaseActorClause("widen that check"), leaseActorWhy),
 	}
@@ -445,13 +445,13 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 			return denial{
 				Say: fmt.Sprintf("magus workspace: `%s` builds ./magus, the binary judging lease %s's calls; %s.", r.target, me.ID, workerBuildVerdict),
 				Why: onePerBase + "\n" +
-					"When this unit's own changes have to reach that binary, the orchestrator builds ./magus in its checkout at this branch's commit and places it here with `" +
+					"When this unit's own changes have to reach that binary, the checkout's integrator, a row whose check is the gate, builds ./magus at this branch's commit and places it here with `" +
 					strings.Join(placementArgv(me.ID), " ") + "`. Until then the unit is held to " + commands[0] + ", and a need for the new binary goes in your result's unresolved risks.",
 			}
 		}
 		return denial{
 			Say: fmt.Sprintf("magus workspace: `%s` is not lease %s's check; run %s.", r.target, me.ID, commands[0]),
-			Why: fmt.Sprintf("Lease %s's checks: %s. The orchestrator runs every other target serially, in its own tree, after it integrates the units.\n"+
+			Why: fmt.Sprintf("Lease %s's checks: %s. The checkout's integrator, a row whose check is the gate, runs every other target serially, in its own tree, after it integrates the units.\n"+
 				"`%s` runs `%s`, which is neither that check nor a target declaring an output in lease %s's write paths. Another worktree's run of it shares no cache key with this one, so it replays nothing here and holds the machine. Name the target in your result's unresolved risks if the unit needs it.",
 				me.ID, strings.Join(commands, ", "), elideCommand(command), r.target, me.ID),
 		}
@@ -560,8 +560,8 @@ func verbFlagTakesValue(verb, name string) bool {
 
 // allowed reports whether a bound worker may make this run: its row's check, or a target
 // declaring an output in its write paths. A rebuild of magus's own binary is never on the
-// list: there is one binary per base, the orchestrator builds it in the root and places a
-// copy in each worker checkout, so a worker's own build is a second binary for the same base.
+// list: there is one binary per base, the integrator builds it and a copy is placed in each
+// worker checkout, so a worker's own build is a second binary for the same base.
 //
 // `affected` is never a check: it picks its projects from the diff, and a check names one.
 func (r targetRun) allowed(checks []types.LeaseCheck, produces lazyProducers) bool {

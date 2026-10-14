@@ -382,7 +382,10 @@ import (
 // previous attempt `describe job` prints, that an attempt not retryable names what
 // changes first, and that a goal applied after an exit needs the check run again, which
 // `job wait` prints.
-const SkillVersion = 127
+//
+// 128: magus-multi-agent says the root coordinates and never builds: the checkout's
+// integrator, a job whose check is the gate, cherry-picks, builds, regenerates and commits.
+const SkillVersion = 128
 
 const skillLicense = "GPL-3.0-or-later"
 

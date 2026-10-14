@@ -298,7 +298,7 @@ func TestDenyLeaseScopedGate(t *testing.T) {
 	} {
 		reason := denyLeaseScopedGate(ctx, Dependencies{}, "harness/lease-scoped-deny", command)
 		require.NotEmpty(t, reason, "%q", command)
-		assert.Equal(t, "magus workspace: `"+command+"` is the orchestrator's gate; run your check: `magus run go::go-test . -- ./internal/ledger/`.", reason.Say,
+		assert.Equal(t, "magus workspace: `"+command+"` is the integrator's gate; run your check: `magus run go::go-test . -- ./internal/ledger/`.", reason.Say,
 			"the verdict names what it refused and hands back the check to run instead")
 		assert.Contains(t, reason.Why, "harness/lease-scoped-deny", "the rationale must name the lease")
 		assert.Contains(t, reason.Why, "the check on lease", "the rationale must name the field that decided it")
@@ -568,7 +568,7 @@ func TestWorkerCheckOnly(t *testing.T) {
 		require.NotEmpty(t, reason, tt.name)
 		assert.NotContains(t, reason.Say, "\n", "%s: the verdict is one line", tt.name)
 		assert.Contains(t, reason.Say, "run diagrams_generate docs`.", "%s: the verdict ends in the check's command", tt.name)
-		assert.Contains(t, reason.Why, "The orchestrator runs every other target serially", tt.name)
+		assert.Contains(t, reason.Why, "The checkout's integrator, a row whose check is the gate, runs every other target serially", tt.name)
 	}
 
 	assert.NotEmpty(t, denyLeaseScopedGate(ctx, deps, row.ID, "./magus run lint docs"), "the role-scoped entry reaches this rule")
