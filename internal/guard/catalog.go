@@ -206,7 +206,7 @@ var ruleDocPushUngated = denyDoc(types.RuleDoc{ //nolint:unused // read through 
 
 var ruleDocHumanOnly = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
 	Name:    string(denyRuleHumanOnly),
-	Catches: "an agent's magus run reaching a target the workspace declares human_only: the person is asked, a leased worker refused",
+	Catches: "a magus run reaching a human_only target: the person is asked, a leased worker refused",
 	Why: "Some targets cost what only a person may decide to spend: a benchmark against a paid model API, a suite that drives real hosts on real logins. " +
 		"A magusfile marks one with `human_only` and a reason saying what a run costs. Each `magus run` and `magus affected` on the line is expanded the way the engine would run it: over the projects it names, or every project for `affected` or a run naming none, and down each target's ctx.needs chain. " +
 		"A run naming a human-only target itself, from a session no job lease binds, gets the verdict `ask`: the host's own approval prompt shows the reason, the target's recorded p75 and run count and whether it is cached, and approving runs it once. A hook that cannot put an ask in front of the person refuses instead. " +
