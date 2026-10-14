@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -156,6 +157,30 @@ func TestDuplicationHistoryCountsFilesChangingTogether(t *testing.T) {
 
 	sameFile := types.DuplicationGroup{Members: []types.DuplicationSite{{Source: "a.go:1"}, {Source: "a.go:40"}}}
 	assert.Nil(t, duplicationHistory(sameFile, scan))
+}
+
+// TestModelTierLensReportsWhatTheJobHistoryHolds pins the lens against the history file the
+// job store writes: no file is an empty lens that still carries its definition, and a
+// recorded outcome is one row.
+func TestModelTierLensReportsWhatTheJobHistoryHolds(t *testing.T) {
+	t.Parallel()
+	m := &Magus{}
+	m.cfg.HistoryPath = filepath.Join(t.TempDir(), "history.json")
+
+	empty, err := m.ModelTierLens(t.Context())
+	require.NoError(t, err, "a workspace that never ran a job has nothing to report, not a failure")
+	assert.Equal(t, types.ModelTierOutput{Definition: types.ModelTiersDefinition, Rows: []types.ModelTierRecord{}}, empty)
+
+	require.NoError(t, forecast.UpdateHistory(t.Context(), m.cfg.HistoryPath, func(h *forecast.History) error {
+		h.RecordJob(types.JobOutcome{Job: "a", ModelTier: "economy", Kind: types.JobKindCheck, State: types.StatePass, ChecksRun: 2})
+		return nil
+	}))
+	got, err := m.ModelTierLens(t.Context())
+	require.NoError(t, err)
+	require.Len(t, got.Rows, 1)
+	assert.Equal(t, "economy", got.Rows[0].ModelTier)
+	assert.Equal(t, -1, got.Rows[0].Rank, "a workspace with no declaration ranks nothing")
+	assert.InDelta(t, 2, got.Rows[0].ChecksPerJob, 0)
 }
 
 // TestProjectDisplayName resolves the label the insight lenses attach to a scanned

@@ -224,6 +224,10 @@ var boundaryTypes = []boundaryType{
 	{Name: "DuplicationGroup", Type: reflect.TypeFor[types.DuplicationGroup](), RuntimeObject: true},
 	{Name: "DuplicationHistory", Type: reflect.TypeFor[types.DuplicationHistory](), RuntimeObject: true},
 	{Name: "Duplication", Type: reflect.TypeFor[types.DuplicationOutput](), RuntimeObject: true},
+	// The model-tier lens: InsightReport.modelTiers is a ModelTierOutput, a list of records.
+	// There is deliberately no ModelTier object: that name is the workspace's own Buzz enum.
+	{Name: "ModelTierRecord", Type: reflect.TypeFor[types.ModelTierRecord](), RuntimeObject: true},
+	{Name: "ModelTierOutput", Type: reflect.TypeFor[types.ModelTierOutput](), RuntimeObject: true},
 	{Name: "InsightReport", Type: reflect.TypeFor[types.InsightReport](), RuntimeObject: true},
 	{Name: "ImpactCoverage", Type: reflect.TypeFor[types.ImpactCoverage](), RuntimeObject: true},
 	{Name: "ImpactSymbol", Type: reflect.TypeFor[types.ImpactSymbol](), RuntimeObject: true},
@@ -259,7 +263,6 @@ var boundaryTypes = []boundaryType{
 	{Name: "ModelTierBounds", Type: reflect.TypeFor[types.ModelTierBounds]()},
 	{Name: "HarnessKey", Type: reflect.TypeFor[types.HarnessKey]()},
 	{Name: "JobModelTier", Type: reflect.TypeFor[types.JobModelTier](), RuntimeObject: true},
-	{Name: "ModelTierRecord", Type: reflect.TypeFor[types.ModelTierRecord](), RuntimeObject: true},
 	{Name: "ModelTierRequest", Type: reflect.TypeFor[types.ModelTierRequest](), RuntimeObject: true},
 	{Name: "Job", Type: reflect.TypeFor[types.Job](), RuntimeObject: true},
 	// Declaration is Job's INPUT twin: a magusfile can construct one, but nothing hands one

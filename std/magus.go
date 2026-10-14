@@ -1634,7 +1634,15 @@ func MagusInsight(ctx context.Context, opts map[string]any) (types.InsightReport
 	if err != nil {
 		return types.InsightReport{}, err
 	}
-	return buildInsightReport(ctx, a, iopts)
+	report, err := buildInsightReport(ctx, a, iopts)
+	if err != nil {
+		return types.InsightReport{}, err
+	}
+	// Best effort like volatility: a history file that does not read omits the section.
+	if tiers, terr := a.ModelTierLens(ctx); terr == nil {
+		report.ModelTiers = tiers
+	}
+	return report, nil
 }
 
 // insightAnalyzer resolves the workspace that will answer the lenses.

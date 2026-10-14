@@ -12,7 +12,8 @@ const InsightDefinition = "Insight shows where a codebase's attention and risk c
 	"ownership (author concentration and bus factor), and trend (rising vs cooling activity). " +
 	"A fifth lens, volatility, reads run-outcome history instead: targets whose pass/fail record " +
 	"flaps (a Wilson-scored flakiness signal). A sixth, unreferenced, reads the knowledge graph: " +
-	"code symbols nothing else in the workspace names."
+	"code symbols nothing else in the workspace names. A model-tier lens reads job history: what " +
+	"each model tier achieved on each kind of job."
 
 // InsightOptions configures an insight scan. One scan of recent history feeds every
 // lens; Dir scopes it to a subtree, Since bounds it by date, Files switches the
@@ -38,6 +39,11 @@ const (
 	VolatilityDefinition = "Volatility reads run-outcome history, not git: each (project, target) " +
 		"pair's recent pass/fail/volatile record scored by its Wilson lower bound. A pair at or above " +
 		"the configured threshold is flagged volatile - a flakiness signal, the prime stabilization targets."
+	ModelTiersDefinition = "Model tiers reads job history, not git: each (model tier, job kind) pair's " +
+		"recorded outcomes. A tier's pass rate is scored by its Wilson lower bound, set beside how " +
+		"many checks, re-forks, rework rounds (a worker sent more work after it handed back) and " +
+		"widenings (write paths added to a taken job) its jobs took, and what they cost. It reports " +
+		"what each tier achieved; changing a tier is a person editing the declaration or matrix it names."
 	UnreferencedDefinition = "Unreferenced lists code symbols the workspace defines and nothing " +
 		"in it names: no call from another symbol, and no file outside the one defining them. It reads " +
 		"the SCIP-backed knowledge graph, not git. This is a measurement, not a verdict - reflection, " +
@@ -337,6 +343,9 @@ type InsightView struct {
 	// declares the field non-optional so a magusfile reaches .volatility.targets
 	// without a nil guard.
 	Volatility *VolatilityReport `json:"volatility" yaml:"volatility"`
+	// ModelTiers is a pointer for the reason Volatility is: nil means no job outcome was
+	// ever recorded, an empty list means none of them ran at a tier.
+	ModelTiers *ModelTierOutput `json:"model_tiers" yaml:"model_tiers"`
 }
 
 // InsightReport bundles every lens for the combined report (the committable
@@ -360,6 +369,17 @@ type InsightReport struct {
 	Unreferenced UnreferencedOutput `json:"unreferenced" yaml:"unreferenced"`
 	// Duplication is the other knowledge-graph axis, a value for the same reason.
 	Duplication DuplicationOutput `json:"duplication" yaml:"duplication"`
+	// ModelTiers is the job-history axis, a value like the rest: no recorded outcome is an
+	// empty list carrying the definition.
+	ModelTiers ModelTierOutput `json:"model_tiers" yaml:"model_tiers"`
+}
+
+// ModelTierOutput is the model-tier lens: one row per (tier, job kind) the recorded job
+// outcomes cover, ranked against the current declaration. A tier the declaration no longer
+// names keeps its row at rank -1. It reports; nothing in it changes a tier.
+type ModelTierOutput struct {
+	Definition string            `json:"definition" yaml:"definition"`
+	Rows       []ModelTierRecord `json:"rows"       yaml:"rows"`
 }
 
 // InsightAnalyzer is the optional capability a workspace implements to answer the
@@ -372,7 +392,7 @@ type InsightReport struct {
 // forked a whole magus (a process spawn, a second workspace load, a JSON encode and
 // a Buzz-side parse) to reach methods the calling process already had.
 //
-// Volatility and Unreferenced take no options because they read their whole source
+// Volatility, ModelTierLens and Unreferenced take no options because they read their whole source
 // workspace-wide: the run-history file and the symbol index have no commit window to
 // narrow, which is the distinction the lens docs draw for a reader too.
 type InsightAnalyzer interface {
@@ -383,4 +403,5 @@ type InsightAnalyzer interface {
 	Volatility(ctx context.Context) (VolatilityReport, error)
 	Unreferenced(ctx context.Context) (UnreferencedOutput, error)
 	Duplication(ctx context.Context) (DuplicationOutput, error)
+	ModelTierLens(ctx context.Context) (ModelTierOutput, error)
 }

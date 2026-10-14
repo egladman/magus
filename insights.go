@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -145,6 +146,25 @@ func (m *Magus) Ownership(ctx context.Context, opts types.InsightOptions) (types
 // not a commit scan, so it is workspace-wide and takes no InsightOptions window.
 func (m *Magus) Volatility(ctx context.Context) (types.VolatilityReport, error) {
 	return volatility.BuildReport(ctx, m.cfg.HistoryPath, m.volatilityConfig())
+}
+
+// ModelTierLens is the job-history lens: what each model tier achieved on each kind of job,
+// from the outcomes the job store recorded in the history file. It reports; a person
+// changes a tier by editing the declaration or matrix the doctor check names.
+//
+// Not named ModelTiers, which is the accessor for the workspace's declaration. A workspace
+// with no recorded outcome gets no rows and the definition, not an error.
+func (m *Magus) ModelTierLens(ctx context.Context) (types.ModelTierOutput, error) {
+	out := types.ModelTierOutput{Definition: types.ModelTiersDefinition, Rows: []types.ModelTierRecord{}}
+	if m.cfg.HistoryPath == "" {
+		return out, nil
+	}
+	var hist forecast.History
+	if err := hist.Load(ctx, m.cfg.HistoryPath); err != nil {
+		return types.ModelTierOutput{}, err
+	}
+	out.Rows = job.ModelTierRecords(hist.Jobs, m.ModelTiers())
+	return out, nil
 }
 
 // Unreferenced is the knowledge-graph lens: code symbols this workspace defines that

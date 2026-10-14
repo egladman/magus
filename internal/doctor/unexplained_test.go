@@ -52,6 +52,10 @@ func (h hotWorkspace) Duplication(context.Context) (types.DuplicationOutput, err
 	return types.DuplicationOutput{}, nil
 }
 
+func (h hotWorkspace) ModelTierLens(context.Context) (types.ModelTierOutput, error) {
+	return types.ModelTierOutput{}, nil
+}
+
 func hot(paths ...string) []types.FileHotspot {
 	out := make([]types.FileHotspot, 0, len(paths))
 	for _, p := range paths {
