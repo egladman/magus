@@ -21,8 +21,9 @@ type Agents struct {
 	// magus\guard.profile declares, never lower it, and of the tiers that set it the
 	// highest applies.
 	Profile types.GuardProfile `json:"profile" yaml:"profile" validate:"omitempty,oneof=off light standard strict"`
-	// Models adds or overrides rows of the model table magus ships, keyed by model id,
-	// for a model released after the binary or a price that changed.
+	// Models adds or overrides rows of the model table the workspace's harnesses publish,
+	// keyed by model id, for a model released after the harness spell or a price that
+	// changed.
 	Models map[string]AgentModel `json:"models" yaml:"models" validate:"dive"`
 }
 
@@ -30,6 +31,13 @@ type Agents struct {
 type AgentModel struct {
 	// Window is the model's context window in tokens.
 	Window int64 `json:"window" yaml:"window" validate:"gte=1"`
+	// Input and Output are the prices of an input and an output token.
+	Input  float64 `json:"input" yaml:"input" validate:"gte=0"`
+	Output float64 `json:"output" yaml:"output" validate:"gte=0"`
+	// CacheWrite5m and CacheWrite1h are the prices of a cache write with the five-minute
+	// and the one-hour lifetime.
+	CacheWrite5m float64 `json:"cache_write_5m" yaml:"cache_write_5m" validate:"gte=0"`
+	CacheWrite1h float64 `json:"cache_write_1h" yaml:"cache_write_1h" validate:"gte=0"`
 	// CacheRead is the price of a cache read.
 	CacheRead float64 `json:"cache_read" yaml:"cache_read" validate:"gte=0"`
 	// PriceStep is the prompt size in tokens above which every price is multiplied by
@@ -44,7 +52,10 @@ func (a Agents) ModelOverrides() []types.ModelFacts {
 	out := make([]types.ModelFacts, 0, len(a.Models))
 	for _, id := range slices.Sorted(maps.Keys(a.Models)) {
 		m := a.Models[id]
-		out = append(out, types.ModelFacts{ID: id, Window: m.Window, CacheRead: m.CacheRead, PriceStep: m.PriceStep, StepFactor: m.StepFactor})
+		out = append(out, types.ModelFacts{
+			ID: id, Window: m.Window, Input: m.Input, Output: m.Output, CacheWrite5m: m.CacheWrite5m,
+			CacheWrite1h: m.CacheWrite1h, CacheRead: m.CacheRead, PriceStep: m.PriceStep, StepFactor: m.StepFactor,
+		})
 	}
 	return out
 }

@@ -24,13 +24,14 @@ func TestAgentsDecodesAndValidates(t *testing.T) {
   billing: metered
   profile: strict
   models:
-    claude-next-1: {window: 2000000, cache_read: 0.3, price_step: 200000, step_factor: 2}
+    claude-next-1: {window: 2000000, input: 3, output: 15, cache_write_5m: 3.75, cache_write_1h: 6, cache_read: 0.3, price_step: 200000, step_factor: 2}
 `)
 	cfg, err := LoadFile(path, true)
 	require.NoError(t, err)
 	assert.Equal(t, types.AgentBillingMetered, cfg.Agents.Billing)
 	assert.Equal(t, types.GuardProfileStrict, cfg.Agents.Profile)
-	assert.Equal(t, []types.ModelFacts{{ID: "claude-next-1", Window: 2_000_000, CacheRead: 0.3, PriceStep: 200_000, StepFactor: 2}},
+	assert.Equal(t, []types.ModelFacts{{ID: "claude-next-1", Window: 2_000_000, Input: 3, Output: 15, CacheWrite5m: 3.75,
+		CacheWrite1h: 6, CacheRead: 0.3, PriceStep: 200_000, StepFactor: 2}},
 		cfg.Agents.ModelOverrides())
 }
 
@@ -45,9 +46,11 @@ func TestAgentsMisconfigurationIsAnError(t *testing.T) {
 		{"unknown billing", "agents:\n  billing: oauth\n", "oauth"},
 		{"unknown profile", "agents:\n  profile: max\n", "max"},
 		{"unknown key", "agents:\n  budget: 5\n", "budget"},
-		{"unknown model key", "agents:\n  models:\n    m: {window: 1000, input: 3}\n", "input"},
+		{"unknown model key", "agents:\n  models:\n    m: {window: 1000, aliases: [x]}\n", "aliases"},
 		{"window missing", "agents:\n  models:\n    m: {cache_read: 0.1}\n", "agents.models[m].window: must be >= 1 (got 0)"},
 		{"window negative", "agents:\n  models:\n    m: {window: -1}\n", "agents.models[m].window: must be >= 1 (got -1)"},
+		{"negative input price", "agents:\n  models:\n    m: {window: 1000, input: -1}\n", "agents.models[m].input: must be >= 0"},
+		{"negative cache write price", "agents:\n  models:\n    m: {window: 1000, cache_write_1h: -1}\n", "agents.models[m].cache_write_1h: must be >= 0"},
 		{"negative price", "agents:\n  models:\n    m: {window: 1000, cache_read: -0.1}\n", "agents.models[m].cache_read: must be >= 0"},
 		{"step without factor", "agents:\n  models:\n    m: {window: 1000, price_step: 100}\n", "agents.models[m].step_factor: failed required_with"},
 		{"factor below 1", "agents:\n  models:\n    m: {window: 1000, price_step: 100, step_factor: 0.5}\n", "agents.models[m].step_factor: must be >= 1"},
