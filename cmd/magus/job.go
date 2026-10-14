@@ -2042,9 +2042,9 @@ func printJobStatus(out io.Writer, s job.Status) {
 	}
 	printJobFootprint(out, s)
 	printJobEntries(out, s.Entries)
-	if len(s.Risks) > 0 {
+	if !s.Clean() {
 		fmt.Fprintln(out, "unresolved risks its holder reported")
-		for _, risk := range s.Risks {
+		for _, risk := range s.UnresolvedRisks {
 			fmt.Fprintf(out, "  %s\n", risk)
 		}
 	}

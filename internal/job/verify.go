@@ -283,7 +283,7 @@ func (o Observed) covering(declared string, paths []string) bool {
 // observed of the tree; nothing here resolves either, so no IO runs under the store's lock.
 func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateAttempts []types.JobGateAttempt, declared []types.Job, seen Observed) Status {
 	v := Status{
-		Job: row.ID, Risks: rep.UnresolvedRisks, Command: rep.Validation.Command,
+		Job: row.ID, UnresolvedRisks: rep.UnresolvedRisks, Command: rep.Validation.Command,
 		Footprint: seen.Regions, FootprintKnown: seen.RegionsKnown, FootprintReason: seen.RegionsReason,
 		FootprintUnclaimed: unclaimedFootprint(row, seen.Regions),
 		SymbolDeltaKnown:   seen.SymbolDeltaKnown,

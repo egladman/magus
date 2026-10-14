@@ -550,12 +550,12 @@ type JobResultValidation struct {
 
 // JobStatus reports the result of verifying a job.
 type JobStatus struct {
-	Job        string       `json:"job" yaml:"job"`
-	Verified   bool         `json:"verified" yaml:"verified"`
-	Violations []string     `json:"violations,omitempty" yaml:"violations,omitempty"`
-	Risks      []string     `json:"unresolved_risks,omitempty" yaml:"unresolved_risks,omitempty"`
-	Command    string       `json:"command,omitempty" yaml:"command,omitempty"`
-	Gates      []GateStatus `json:"gates,omitempty" yaml:"gates,omitempty"`
+	Job             string       `json:"job" yaml:"job"`
+	Verified        bool         `json:"verified" yaml:"verified"`
+	Violations      []string     `json:"violations,omitempty" yaml:"violations,omitempty"`
+	UnresolvedRisks []string     `json:"unresolved_risks,omitempty" yaml:"unresolved_risks,omitempty"`
+	Command         string       `json:"command,omitempty" yaml:"command,omitempty"`
+	Gates           []GateStatus `json:"gates,omitempty" yaml:"gates,omitempty"`
 	// StaleIndexes are the projects whose symbol index was older than their sources when the
 	// job was described, so its symbol goals were not graded.
 	StaleIndexes []string `json:"stale_indexes,omitempty" yaml:"stale_indexes,omitempty"`
@@ -587,6 +587,9 @@ type JobStatus struct {
 	LeftUnreferenced  []string `json:"left_unreferenced,omitempty" yaml:"left_unreferenced,omitempty"`
 	SymbolDeltaKnown  bool     `json:"symbol_delta_known" yaml:"symbol_delta_known"`
 }
+
+// Clean reports whether the holder's result left no risk unresolved.
+func (s JobStatus) Clean() bool { return len(s.UnresolvedRisks) == 0 }
 
 // GateStatus reports verification of one goal.
 type GateStatus struct {

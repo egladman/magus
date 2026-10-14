@@ -88,14 +88,16 @@ func goalAttempts() []types.JobGateAttempt {
 func TestVerifyTakesAResultInsideTheBoundary(t *testing.T) {
 	t.Parallel()
 
+	got := verifyClaim(acceptRow(), passingResult(), passingRun, nil)
+	assert.True(t, got.Clean(), "a verified job carries no risk")
+	got.UnresolvedRisks = nil
 	assert.Equal(t, Status{
 		Job:      "harness/ledger-accept",
 		Verified: true,
-		Risks:    []string{},
 		Command:  "magus run go::go-test . -- -run Ledger",
 		// The primary check reports as the gate it is. See the note in lifecycle_test.go.
 		Gates: []types.GateStatus{{ID: types.PrimaryGoalID, OutputRef: passingResult().Validation.OutputRef, Verified: true}},
-	}, verifyClaim(acceptRow(), passingResult(), passingRun, nil))
+	}, got)
 }
 
 func TestVerifyGoalsRequireEvidenceForEveryDeclaredGate(t *testing.T) {

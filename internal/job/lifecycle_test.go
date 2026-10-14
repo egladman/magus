@@ -52,10 +52,11 @@ func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 	require.NoError(t, err)
 	// The primary check is LISTED, like any other gate: it is one, and reporting it only
 	// when other gates existed is what let `describe job` say a check-only job had none.
+	assert.True(t, status.Clean(), "a verified job carries no risk")
+	status.UnresolvedRisks = nil
 	assert.Equal(t, types.JobStatus{
 		Job:      result.Job,
 		Verified: true,
-		Risks:    []string{},
 		Command:  result.Validation.Command,
 		Gates:    []types.GateStatus{{ID: types.PrimaryGoalID, OutputRef: result.Validation.OutputRef, Verified: true}},
 	}, status)
