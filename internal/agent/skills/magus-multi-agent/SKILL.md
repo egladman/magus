@@ -22,25 +22,26 @@ magus explain <node>                        # one node's edges and blast radius
 magus affected ci --plan --stdin            # plan PROPOSED paths, before editing
 ```
 
-You do not need to be asked to split work{{if .Full}}. "Split this across agents" is one way in;
-several disjoint write sets you can name is another{{else}}: several disjoint write sets
-you can name are reason enough{{end}}.
+You do not need to be asked to split work: several disjoint write sets you can name are
+reason enough.
 
 Fan-out is not inherently expensive{{if .Full}}. What costs is unbounded fan-out:
 workers that hand work on without a shrinking scope, jobs with no acceptance criteria
-so nobody can say when to stop, and a principal model assigned to mechanical edits.
-Each of those is a choice made below, not a property of fanning out{{end}}. Say what a round
+so nobody can say when to stop, and a principal model assigned to mechanical edits{{end}}. Say what a round
 costs when the user is deciding, and prefer the smallest fan-out that covers the work.
 
 Fan out only after the collision check below REPORTS the jobs disjoint; looking
 separate is not that check. With only one coherent write set, keep the work local.
-The root agent owns the goal, the budget, the topology, integration, and final
-verification, and never hands those out. Above the root is the human in the loop:
-what lands, what is published and what a round may spend are the person's calls, so
-the root reports to them and does not decide them. From its first call the root does no
-groundwork: no reading, searching or editing of source, no test or lint runs of its own.
-It plans from the graph and moves jobs; groundwork it needs, a read-only scout
-included, is a job, and so is integration. The guard enforces this by role.
+
+The root agent owns the goal, the budget, the topology, integration and final
+verification, and never hands those out. Above the root is the human in the loop. What
+lands, what is published and what a round may spend are the person's calls: the root
+reports to them and does not decide them.
+
+From its first call the root does no groundwork: no reading, searching or editing of
+source, no test or lint runs of its own. It plans from the graph and moves jobs.
+Groundwork it needs, a read-only scout included, is a job, and so is integration.
+The guard enforces this by role.
 
 ## Coalesce what the write sets allow
 
@@ -71,8 +72,8 @@ Apply these four in the order they bite:
 Prove it before you plan it. A claim a plan or brief rests on cites the output ref of
 a run that settled it. A guess nobody ran stays out of the plan.
 
-{{if .Full}}Graph engineering is a natural evolution of loop engineering: the graph improves
-the loop's partition and collision decisions, and does not replace the loop. Run it:
+{{if .Full}}The graph improves the loop's partition and collision decisions, and does not
+replace the loop. Run it:
 
 1. State the top-level goal, constraints, and observable acceptance criteria.
 2. Map the affected graph and propose collision-resistant edit jobs.
@@ -87,9 +88,8 @@ never a worker's prose. A worker that ran a filtered subset, or quietly restated
 criteria into something it did pass, reports success either way, and a
 transcript cannot tell you which happened.
 
-An agent may report that its edits are done, but no job is complete until its
-acceptance criteria and assigned check pass. The root agent, not a worker,
-decides whether the top-level goal is complete.{{else}}The loop: define, partition, hand out, observe, evaluate, course-correct, integrate.
+No job is complete until its criteria and assigned check pass. The root agent, not a
+worker, decides whether the top-level goal is complete.{{else}}The loop: define, partition, hand out, observe, evaluate, course-correct, integrate.
 
 - Acceptance evidence is an output ref the root reopens (`{{cmd "query output"}} <ref>`),
   never a worker's prose.
@@ -121,12 +121,12 @@ Then make the declaration gradeable, so the names are a contract, not a suggesti
 - `symbol` + `unreferenced` for each helper the shared API replaces.
 
 A job that adds or changes an exported API gets a `symbol` + `signature` goal by
-default: a stub job lands the stub, the root runs `{{cmd "graph build"}}`, and forks the
-`signature` goal empty, so the fork records the indexed stub as the contract, beside
-a `changed` goal on the same name.
+default. A stub job lands the stub, and the root runs `{{cmd "graph build"}}`. The root
+then forks the `signature` goal empty. The fork records the indexed stub as the
+contract, beside a `changed` goal on the same name.
 
 A job's `breaks` list names the flags, JSON keys, exported symbols or stored formats
-you approved it breaking; a worker that finds a break outside it stops and reports.
+you approved it breaking. A worker that finds a break outside it stops and reports.
 Each unreferenced symbol `{{cmd "job fork"}}` lists in the write paths
 (`deletion_candidates`) or `{{cmd "job wait"}}` reports is finished or deleted. Confirm
 first: the graph cannot see reflection, interface dispatch or outside consumers.
@@ -136,8 +136,7 @@ to more than one definition is graded against one of them, silently.
 
 This applies with zero workers. A solo change across several call sites is a one-job
 tree. Skipping the declaration because nothing is forked is the same failure{{if .Full}} without
-a fork to blame. Write the table in the conversation, check it with `{{cmd "refs"}}` when
-the edits land, and only then report the change done{{end}}.
+a fork to blame. Write the table in the conversation and check it when the edits land{{end}}.
 
 ## Set one topology boundary
 
@@ -176,10 +175,7 @@ writes. Mark that job's check ROOT-DEFERRED when you fork it:
 
 - the worker writes the tests, stops at the static checks its environment does run,
   and says so;
-- the root executes the job's target centrally before verifying.{{if .Full}} Leaving each worker to discover the wall
-  spends its budget on the discovery, once per worker, and its report then reads
-  "done" with nothing executed, which `{{cmd "job wait"}}` already refuses to record
-  as a pass.{{end}}
+- the root executes the job's target centrally before verifying.
 
 A worker may fork part of its own job. It may not hand it out without shrinking the
 problem{{if .Full}}; that is the shape that does not terminate, and
@@ -192,9 +188,14 @@ definitive end without capping depth:
   criteria plus its own. A job nobody can evaluate cannot end; that, not the nesting,
   makes depth dangerous.
 - **A retry is `{{cmd "job fork"}} <same id>`, never a new id.** The next holder reads the previous
-  attempt in `{{cmd "describe job"}}`, never a transcript. One marked not retryable names what changes
-  first (`{{cmd "job apply"}}` to widen, a config edit, or you): make it, or do the job locally; never
-  re-fork it unchanged. A goal unmet twice marks it so: the root re-scopes the job, or serializes it behind whatever keeps breaking it{{if .Full}}. Two jobs with an undeclared dependency each break the other's criteria, and re-forking the failing one satisfies every instruction above while alternating forever; the budget is what ends it{{end}}.
+  attempt in `{{cmd "describe job"}}`, never a transcript. One marked not retryable names
+  what changes first (`{{cmd "job apply"}}` to widen, a config edit, or you). Make it, or
+  do the job locally; never re-fork it unchanged.
+
+  A goal unmet twice marks it so: the root re-scopes the job, or serializes it behind
+  whatever keeps breaking it{{if .Full}}. Two jobs with an undeclared dependency each break
+  the other's criteria, and re-forking the failing one satisfies every instruction above
+  while alternating forever. The budget is what ends it{{end}}.
 - **Whatever the parent does not hand out, the parent still owns.** A strict subset
   leaks by construction. Split "no caller of X remains" into per-project jobs, and
   the callers in no project belong to nobody. Every job passes and the goal is
@@ -212,18 +213,14 @@ that names one.
 - Inheriting the parent's model ON PURPOSE is fine and often right{{if .Full}}. A hard review
   under a cheaper coordinator is exactly the case a weaker-only ordering would forbid{{end}}.
 - Inheriting it BY OMISSION is the failure. A host defaulting to "same as the parent"
-  makes every unnamed spawn the most expensive one, and records no choice{{if .Full}}. Measured 2026-09-15: nine
-  workers spawned in one session, every one inheriting the root's model, five of them
-  mechanical work a cheaper model does as well{{end}}.
+  makes every unnamed spawn the most expensive one, and records no choice.
 
 When the tier is unclear, start at economy. A job that fails its criteria there is
-re-forked one tier up, not retried at the same one.{{if .Full}} "Only ever spawn something
-weaker" was tried and withdrawn, because same-strength offload is legitimate, so this
-is a starting point and not a ceiling.{{end}}
+re-forked one tier up, not retried at the same one.
 
 Tiers are the workspace's: a magusfile enum (`magus\job.modelTiers`, shipped as economy,
 standard, principal) maps each to every harness's model alias. `--model` takes a tier or a
-model; the row records tier, rank, source (row, matrix, default) and why, and the guard
+model. The row records tier, rank, source (row, matrix, default) and why, and the guard
 compares a spawn's tier by rank. magus never picks a model live: re-fork to change a tier.
 
 | Shipped tier | Assign |
@@ -311,9 +308,9 @@ A read-only job has no write set, so it is outside this analysis.
 
 Two jobs may run together only when:
 
-- The combined classification reports no overlaps: source write sets and declared
-  outputs disjoint, or sharing a file by claiming DIFFERENT declarations of it
-  (`<file>#<declaration>`, the default; `--depends-on` is for the SAME one).
+- The combined classification reports no overlaps. Source write sets and declared
+  outputs are disjoint, or share a file by claiming DIFFERENT declarations of it
+  (`<file>#<declaration>`, the default). `--depends-on` is for the SAME one.
 - Neither consumes an API or generated artifact the other changes.
 - Shared manifests, lockfiles, schemas, and agent instructions have one owner. A
   magusfile or magus.yaml is shared by key claims (`magusfile.buzz#project.targets.test`).
@@ -455,8 +452,10 @@ each verifies. [reference.md](reference.md) has the table and the rename pattern
 
 Run workers non-blocking; block on one only when your next action needs its result.
 `{{cmd "status"}} --watch=15s` is for a person, never an agent's background task: an agent waits
-for its own run's completion notice. The root reads `{{cmd "describe job"}} <job>` or `{{cmd "job watch"}} <job>`
-only when it needs to know. Never message a worker to ask how it is going, only to CHANGE what it was handed.
+for its own run's completion notice.
+
+The root reads `{{cmd "describe job"}} <job>` or `{{cmd "job watch"}} <job>` only when it needs to know.
+Never message a worker to ask how it is going, only to CHANGE what it was handed.
 [reference.md](reference.md) covers blocked workers and auditing what a job ran.
 
 ## Integrate and verify
