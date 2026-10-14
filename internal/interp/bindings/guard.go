@@ -70,7 +70,7 @@ func buildGuard(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver
 //	});
 //
 // Each key names a compiled rule and each value sets its decision, off, advise or deny,
-// with lines, tokens, calls or chars where the rule takes that parameter. A named rule
+// with lines, tokens, calls, chars or markers where the rule takes that parameter. A named rule
 // overrides what magus\guard.profile's level sets for it. Every misdeclaration is MGS1045
 // and fails the load:
 // a rule the workspace believes it set and did not reads as enforced when it is not.
@@ -193,8 +193,20 @@ func parseBuiltinSetting(v vm.Value) (builtin.Setting, error) {
 			default:
 				s.Chars = n
 			}
+		case "markers":
+			// An empty list would reach Resolve as unset and take the rule's own markers,
+			// which is not what a workspace declaring none meant.
+			if !field.IsList() || len(field.ListItems()) == 0 {
+				return s, errors.New(`"markers" must be a list of one or more strings`)
+			}
+			for i, item := range field.ListItems() {
+				if !item.IsStr() {
+					return s, fmt.Errorf(`"markers"[%d] must be a string`, i)
+				}
+				s.Markers = append(s.Markers, item.AsString())
+			}
 		default:
-			return s, fmt.Errorf(`unknown field %q, a setting takes "decision", "lines", "tokens", "calls" and "chars"`, k)
+			return s, fmt.Errorf(`unknown field %q, a setting takes "decision", "lines", "tokens", "calls", "chars" and "markers"`, k)
 		}
 	}
 	if s.Decision == "" {

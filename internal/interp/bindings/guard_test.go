@@ -87,6 +87,21 @@ func TestBuildGuard(t *testing.T) {
 		}, reg.Builtins())
 	})
 
+	t.Run("builtins records declared markers", func(t *testing.T) {
+		reg := workspace.NewWorkspaceRegistry()
+		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil)
+
+		compat := vm.NewMap()
+		compat.MapSet("decision", vm.StrValue("advise"))
+		compat.MapSet("markers", vm.ListValue([]vm.Value{vm.StrValue("legacy:"), vm.StrValue("Deprecated:")}))
+		settings := vm.NewMap()
+		settings.MapSet("compat-marker", compat)
+		require.NoError(t, callVoidDirect(t, requireDirect(t, guard, "builtins"), settings))
+		assert.Equal(t, map[string]builtin.Setting{
+			"compat-marker": {Decision: builtin.Advise, Markers: []string{"legacy:", "Deprecated:"}},
+		}, reg.Builtins())
+	})
+
 	t.Run("bad decision is rejected", func(t *testing.T) {
 		guard := buildGuard(context.Background(), nil, nil)
 		rule := vm.NewMap()
@@ -146,6 +161,21 @@ func TestBuiltinsMisdeclarationIsCoded(t *testing.T) {
 		{"an unknown setting field", one("read-navigation", setting(map[string]vm.Value{
 			"decision": vm.StrValue("deny"), "limit": vm.IntValue(120),
 		})), `unknown field "limit"`},
+		{"markers on a rule that takes none", one("whole-tree", setting(map[string]vm.Value{
+			"decision": vm.StrValue("deny"), "markers": vm.ListValue([]vm.Value{vm.StrValue("x")}),
+		})), "takes no markers parameter; only compat-marker does"},
+		{"a blank marker", one("compat-marker", setting(map[string]vm.Value{
+			"decision": vm.StrValue("advise"), "markers": vm.ListValue([]vm.Value{vm.StrValue("legacy:"), vm.StrValue(" ")}),
+		})), "a marker is blank"},
+		{"markers that list nothing", one("compat-marker", setting(map[string]vm.Value{
+			"decision": vm.StrValue("advise"), "markers": vm.ListValue(nil),
+		})), `"markers" must be a list of one or more strings`},
+		{"markers that are not a list", one("compat-marker", setting(map[string]vm.Value{
+			"decision": vm.StrValue("advise"), "markers": vm.StrValue("legacy:"),
+		})), `"markers" must be a list`},
+		{"a marker that is not a string", one("compat-marker", setting(map[string]vm.Value{
+			"decision": vm.StrValue("advise"), "markers": vm.ListValue([]vm.Value{vm.IntValue(1)}),
+		})), `"markers"[0] must be a string`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
