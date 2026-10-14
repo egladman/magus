@@ -49,8 +49,8 @@ type CoverageFacts struct {
 // distinct files), and reads the coverage attrs the @coverage overlay merged onto the
 // file and symbol nodes. A file with no symbol node (no SCIP index ingested, or a
 // non-code file) yields the zero value. Callers must have merged the @symbols and
-// @coverage shards (KnowledgeGraphWithSymbols / MergeWorkspaceSymbols) first; on a
-// symbol-free graph every file yields the zero value.
+// @coverage shards first (a KnowledgeGraph request with Symbols: types.AllSymbols, or
+// MergeWorkspaceSymbols); on a symbol-free graph every file yields the zero value.
 func (g *Graph) FileFacts(relPath string) FileFacts {
 	g.ensureAdj()
 	var ff FileFacts
