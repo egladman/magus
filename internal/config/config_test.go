@@ -125,6 +125,10 @@ func TestConformDefaults(t *testing.T) {
 	assert.Equal(t, ConformLimitConfig{Percentile: 50, Anchor: 80}, c.Checks[types.ConformCloneTokens][types.ConformPopSource])
 	assert.Equal(t, ConformLimitConfig{Percentile: 95, Anchor: 62}, c.Checks[types.ConformDepFanout][types.ConformPopSource],
 		"a scope names one workspace's directory, so it ships in none")
+	assert.Equal(t, map[types.ConformPopulation]ConformLimitConfig{
+		types.ConformPopSource: {Percentile: 99, Anchor: 7},
+		types.ConformPopMain:   {Percentile: 99, Anchor: 7},
+	}, c.Checks[types.ConformCallSequence], "7 sits below the run of 8 that caught B1, B7 and B15; tests are never measured")
 }
 
 func TestConformDefaultsAreNotShared(t *testing.T) {

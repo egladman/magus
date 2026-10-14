@@ -129,7 +129,8 @@ func compareConformKeys(a, b types.ConformKey) int {
 // scope, each list in ID order. Generated and excluded files belong to no population. A
 // dep-fanout package is keyed by its own directory when a value is configured for that
 // directory, else by its layer. clone-tokens samples every callable with a shape, test
-// code in its own row; its violations are cloneGroups, not these samples.
+// code in its own row; its violations are cloneGroups, not these samples. call-sequence
+// samples are callSeqSamples'.
 func conformSamples(g *Graph, o types.ConformOptions) map[types.ConformKey][]types.ConformItem {
 	x := newConformIndex(g, o)
 	out := map[types.ConformKey][]types.ConformItem{}
@@ -143,6 +144,7 @@ func conformSamples(g *Graph, o types.ConformOptions) map[types.ConformKey][]typ
 	for _, e := range x.exports() {
 		add(types.ConformExportScope, e.pop, "", e.item)
 	}
+	maps.Copy(out, callSeqSamples(g, o))
 	for _, items := range out {
 		slices.SortFunc(items, func(a, b types.ConformItem) int { return cmp.Compare(a.ID, b.ID) })
 	}

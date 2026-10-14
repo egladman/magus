@@ -236,6 +236,12 @@ const (
 	// CheckParamOrder is a function taking two parameters in the reverse of the order most
 	// functions in its scope that take both do.
 	CheckParamOrder = "param-order"
+	// CheckCallSequence is a function calling the same workspace functions in the same order
+	// as another, past the call-sequence value knowledge.conform enforces.
+	CheckCallSequence = "call-sequence"
+	// CheckSiblingSprawl is a method or function joining a family of siblings whose names
+	// differ in one complementary word (Hit, Miss, Error).
+	CheckSiblingSprawl = "sibling-sprawl"
 	// CheckPackageFiles is a new directory holding one source file where most directories of
 	// its language beside it hold more.
 	CheckPackageFiles = "package-files"

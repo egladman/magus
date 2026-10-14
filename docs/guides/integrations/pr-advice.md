@@ -178,13 +178,15 @@ norm, and states a fact with its counts rather than a rule. The action's
 `conformance-min-cohort` and `conformance-min-share` inputs override those two gates for one
 run. The checks:
 
-| check               | it reports                                                                                                                          |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `naming-affix`      | a function or type missing the leading or trailing word pair most declarations of its shape that share a word with it carry         |
-| `name-collision`    | a name at a project's top level that a target, spell, op, charm or diagnostic already carries                                       |
-| `rename-leftover`   | a renamed symbol whose old two-word-or-longer name still appears in the files that reference it                                     |
-| `param-order`       | a function taking two parameters in the reverse of the order most functions in its scope that take both do                          |
-| `conform-threshold` | a symbol past the value `knowledge.conform` enforces, or past the base's because the change raised it or listed the symbol as known |
+| check               | it reports                                                                                                                                                                                                                       |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `naming-affix`      | a function or type missing the leading or trailing word pair most declarations of its shape that share a word with it carry                                                                                                      |
+| `name-collision`    | a name at a project's top level that a target, spell, op, charm or diagnostic already carries                                                                                                                                    |
+| `rename-leftover`   | a renamed symbol whose old two-word-or-longer name still appears in the files that reference it                                                                                                                                  |
+| `param-order`       | a function taking two parameters in the reverse of the order most functions in its scope that take both do                                                                                                                       |
+| `conform-threshold` | a symbol past the value `knowledge.conform` enforces, or past the base's because the change raised it or listed the symbol as known                                                                                              |
+| `call-sequence`     | a function calling the same workspace functions in the same order as another, over a run longer than the `call-sequence` value for its population: share the sequence in one function, or record a known entry with its reason   |
+| `sibling-sprawl`    | a method or function joining siblings whose names differ in one complementary word (`RecordCacheHit`, `RecordCacheMiss`); it weighs shared parameters, three types carrying the family, and a type past its `type-methods` value |
 
 The checks read what every language's index holds (names, kinds, scopes, references) and,
 where a language reports it, the declaration's shape: `param-order` needs a language whose
@@ -192,6 +194,17 @@ index renders parameter names (Go and TypeScript today). `conform-threshold` nee
 `knowledge.conform.ratchet` to name a committed record; without one it reports nothing. It
 judges against the committed value, else the configured anchor, never a percentile measured
 today.
+
+`call-sequence` and `sibling-sprawl` are on by default and stay advice. `call-sequence` reads
+the index's calls and the lines they sit on, so it needs a language whose index records calls.
+It drops a wrapper (a one-statement body three or more functions call) from every sequence,
+and leaves out two shapes that share callees by design: a builder calling mostly one type's
+methods, and two Go command verbs taking a `[]string` argument list. Its value is
+`knowledge.conform.checks.call-sequence`, 7 for `source` and `main` until the ratchet commits
+a tighter one. `sibling-sprawl` needs a family of three, or two that three types carry, with
+two members the change did not add; a lone family clears the bar only with one of its three
+weights. Folding the family into one member that takes the word as a value is the usual
+remedy.
 
 A directory the change creates gets three more checks, read from `magus diff`'s `layout` on
 the first changed file in it. A directory is new when every file the index places under it

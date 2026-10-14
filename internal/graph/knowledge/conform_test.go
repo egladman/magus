@@ -361,3 +361,31 @@ func TestModuleRoot(t *testing.T) {
 	assert.False(t, moduleRoot(symbolID(conformNS("/internal/a"))))
 	assert.False(t, moduleRoot(symbolID(conformNS("")+"Root().")))
 }
+
+// callSeqSamples feeds one call-sequence row per population: each callable's longest run
+// shared with another, judged against the anchor like any metric.
+func TestConformCallSequenceRow(t *testing.T) {
+	s, _, _ := pipelinePair(8, "internal/b/b.go")
+	g := s.graph()
+	o := callSeqOptions()
+	o.MinSample, o.Step = 1, 0.05
+
+	row := conformRowFor(t, g.Conform(o), types.ConformCallSequence, types.ConformPopSource, "")
+	assert.Equal(t, []int{3, 8, 7}, []int{row.N, row.Live, row.Value},
+		"A and B share eight steps, C shares one; the steps call nothing and the wrapper is no step")
+	assert.Equal(t, []types.ConformItem{
+		{ID: "internal/a/a.go#A", Source: "internal/a/a.go:1", Measure: 8},
+		{ID: "internal/b/b.go#B", Source: "internal/b/b.go:1", Measure: 8},
+	}, row.Violations)
+
+	o.Ratchet = types.ConformRatchet{Schema: 1, Known: []types.ConformKnown{
+		{Metric: types.ConformCallSequence, Items: []string{"internal/b/b.go#B", "internal/c/c.go#C"}, Reason: "fold pending", Line: 3},
+	}}
+	out := g.Conform(o)
+	row = conformRowFor(t, out, types.ConformCallSequence, types.ConformPopSource, "")
+	assert.Equal(t, 1, row.Known)
+	assert.Equal(t, []types.ConformItem{{ID: "internal/a/a.go#A", Source: "internal/a/a.go:1", Measure: 8}}, row.Violations)
+	assert.Equal(t, []types.ConformKnown{
+		{Metric: types.ConformCallSequence, Items: []string{"internal/c/c.go#C"}, Reason: "fold pending", Line: 3},
+	}, out.Stale, "C is under the value")
+}

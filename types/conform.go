@@ -31,6 +31,9 @@ const (
 	ConformCloneTokens ConformMetric = "clone-tokens"
 	// ConformExportScope counts exported symbols nothing outside their package uses.
 	ConformExportScope ConformMetric = "export-scope"
+	// ConformCallSequence is the longest ordered run of workspace callees a function shares
+	// with any other function.
+	ConformCallSequence ConformMetric = "call-sequence"
 )
 
 // ConformPopulation is the set of files a metric is measured over. Each is measured apart,

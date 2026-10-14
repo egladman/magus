@@ -822,10 +822,12 @@ func (c ConformConfig) Options() types.ConformOptions {
 //
 // An anchor is magus's own p99 at the measuring rev, rounded up to two significant
 // figures, except clone-tokens: its anchor is the smallest body worth one shared home,
-// just above the typical function (p50 58). The percentile is where a proposal
-// measures: p99 for test files and function lengths, since a long table test is
-// deliberate, p50 for clones, p95 elsewhere. They name no path: an exclusion or a scope
-// is one workspace's layout, so it lives in that workspace's magus.yaml.
+// just above the typical function (p50 58), and call-sequence: 7 is the run just below
+// maint-review's measured precision cut (a shared run of 8 callees caught B1, B7 and
+// B15), not a p99. The percentile is where a proposal measures: p99 for test files,
+// function lengths and call sequences, since a long table test is deliberate, p50 for
+// clones, p95 elsewhere. They name no path: an exclusion or a scope is one workspace's
+// layout, so it lives in that workspace's magus.yaml.
 func conformDefaults() ConformConfig {
 	limit := func(percentile float64, anchor int) ConformLimitConfig {
 		return ConformLimitConfig{Percentile: percentile, Anchor: anchor}
@@ -840,12 +842,13 @@ func conformDefaults() ConformConfig {
 		Step:      0.05,
 		Gates:     ConformGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
 		Checks: map[types.ConformMetric]map[types.ConformPopulation]ConformLimitConfig{
-			types.ConformFileLines:   {src: limit(95, 2200), main: limit(95, 3000), test: limit(99, 1900)},
-			types.ConformFuncLines:   {src: limit(99, 92), main: limit(99, 140), test: limit(99, 73)},
-			types.ConformTypeMethods: {src: limit(95, 49), main: limit(95, 22), test: limit(95, 32)},
-			types.ConformFileSymbols: {src: limit(95, 82)},
-			types.ConformCloneTokens: {src: limit(50, 80), main: limit(50, 80)},
-			types.ConformDepFanout:   {src: limit(95, 62)},
+			types.ConformFileLines:    {src: limit(95, 2200), main: limit(95, 3000), test: limit(99, 1900)},
+			types.ConformFuncLines:    {src: limit(99, 92), main: limit(99, 140), test: limit(99, 73)},
+			types.ConformTypeMethods:  {src: limit(95, 49), main: limit(95, 22), test: limit(95, 32)},
+			types.ConformFileSymbols:  {src: limit(95, 82)},
+			types.ConformCloneTokens:  {src: limit(50, 80), main: limit(50, 80)},
+			types.ConformDepFanout:    {src: limit(95, 62)},
+			types.ConformCallSequence: {src: limit(99, 7), main: limit(99, 7)},
 		},
 	}
 }
