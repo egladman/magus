@@ -27,7 +27,7 @@ Takes [GetInsightRequest](#getinsightrequest), returns [Insight](#insight).
 
 AffinityOutput reports projects that change together (temporal coupling).
 
-Source: [insight.proto:106](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L106).
+Source: [insight.proto:108](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L108).
 
 | Field        | Type                           | # | Description |
 | ------------ | ------------------------------ | - | ----------- |
@@ -42,7 +42,7 @@ Used by: [GetInsight (response)](insight.md#getinsight).
 
 CoChange is a pair of projects that changed in the same commit, how often, and whether the coupling is hidden - no dependency edge connects them, which is the candidate architectural smell the lens exists to surface. a/b are the stable project paths; a\_name/b\_name are the declared display names, carried alongside rather than resolved into the path so a reader can label the pair without a second lookup.
 
-Source: [insight.proto:118](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L118).
+Source: [insight.proto:120](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L120).
 
 | Field    | Type   | # | Description |
 | -------- | ------ | - | ----------- |
@@ -59,7 +59,7 @@ Used by: [GetInsight (response)](insight.md#getinsight).
 
 FileHotspot is one file's hotspot score: edit frequency weighted by complexity. score is commits x complexity, sent rather than derived so a reader ranks by the same number the CLI printed even if the weighting changes.
 
-Source: [insight.proto:90](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L90).
+Source: [insight.proto:92](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L92).
 
 | Field              | Type      | # | Description                                                                                                                                                                                                                                                                                                                                                                 |
 | ------------------ | --------- | - | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -85,7 +85,7 @@ Used by: [GetInsight (request)](insight.md#getinsight).
 
 HotspotOutput ranks where churn meets complexity - the canonical "fix this first" view. nodes is the project-level heatmap; files is the per-file ranking, populated only when the scan ran at file granularity.
 
-Source: [insight.proto:55](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L55).
+Source: [insight.proto:57](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L57).
 
 | Field        | Type                                 | # | Description |
 | ------------ | ------------------------------------ | - | ----------- |
@@ -99,17 +99,56 @@ Used by: [GetInsight (response)](insight.md#getinsight).
 
 ### Insight
 
-Insight bundles the five lenses. volatility is absent (not an empty report) when the workspace has no run-outcome history to score - the distinction matters to a reader, which renders "no runs recorded yet" rather than "no volatile targets".
+Insight bundles the six lenses. volatility is absent (not an empty report) when the workspace has no run-outcome history to score - the distinction matters to a reader, which renders "no runs recorded yet" rather than "no volatile targets". model\_tiers is absent for the same reason when no job outcome was ever recorded.
 
-Source: [insight.proto:36](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L36).
+Source: [insight.proto:37](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L37).
 
-| Field        | Type                                  | # | Description |
-| ------------ | ------------------------------------- | - | ----------- |
-| `hotspots`   | [HotspotOutput](#hotspotoutput)       | 1 |             |
-| `affinity`   | [AffinityOutput](#affinityoutput)     | 2 |             |
-| `ownership`  | [OwnershipOutput](#ownershipoutput)   | 3 |             |
-| `trend`      | [TrendOutput](#trendoutput)           | 4 |             |
-| `volatility` | [VolatilityReport](#volatilityreport) | 5 |             |
+| Field         | Type                                  | # | Description |
+| ------------- | ------------------------------------- | - | ----------- |
+| `hotspots`    | [HotspotOutput](#hotspotoutput)       | 1 |             |
+| `affinity`    | [AffinityOutput](#affinityoutput)     | 2 |             |
+| `ownership`   | [OwnershipOutput](#ownershipoutput)   | 3 |             |
+| `trend`       | [TrendOutput](#trendoutput)           | 4 |             |
+| `volatility`  | [VolatilityReport](#volatilityreport) | 5 |             |
+| `model_tiers` | [ModelTierOutput](#modeltieroutput)   | 6 |             |
+
+Used by: [GetInsight (response)](insight.md#getinsight).
+
+### ModelTierOutput
+
+ModelTierOutput is the job-history lens: what each model tier achieved on each kind of job. It reads the outcomes the job store recorded, not git, and it reports only: changing a tier is a person editing the declaration or matrix the doctor check names.
+
+Source: [insight.proto:202](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L202).
+
+| Field        | Type                                         | # | Description |
+| ------------ | -------------------------------------------- | - | ----------- |
+| `definition` | string                                       | 1 |             |
+| `rows`       | [repeated ModelTierRecord](#modeltierrecord) | 2 |             |
+
+Used by: [GetInsight (response)](insight.md#getinsight).
+
+### ModelTierRecord
+
+ModelTierRecord is the recorded outcome of the jobs that ran at one tier and job kind. rank is the tier's place in the current declaration, -1 for one it no longer names. pass\_lower is the Wilson lower bound of the pass rate; the per-job fields are means, so a reader sets pass rate beside the work a pass cost: checks run, re-forks of one id, rework rounds (a worker sent more work after handing back) and widenings (write paths added to a taken job).
+
+Source: [insight.proto:213](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L213).
+
+| Field               | Type   | #  | Description                           |
+| ------------------- | ------ | -- | ------------------------------------- |
+| `rank`              | int32  | 1  |                                       |
+| `model_tier`        | string | 2  |                                       |
+| `kind`              | string | 3  | check, symbol, paths, script or prose |
+| `jobs`              | int32  | 4  |                                       |
+| `pass`              | int32  | 5  |                                       |
+| `fail`              | int32  | 6  |                                       |
+| `no_return`         | int32  | 7  |                                       |
+| `pass_lower`        | double | 8  |                                       |
+| `checks_per_job`    | double | 9  |                                       |
+| `forks_per_id`      | double | 10 |                                       |
+| `rework_per_job`    | double | 11 |                                       |
+| `widenings_per_job` | double | 12 |                                       |
+| `mean_cost_usd`     | double | 13 |                                       |
+| `median_tokens`     | int64  | 14 |                                       |
 
 Used by: [GetInsight (response)](insight.md#getinsight).
 
@@ -117,7 +156,7 @@ Used by: [GetInsight (response)](insight.md#getinsight).
 
 Ownership is one project's authorship. bus\_factor\_1 and stale are the two risk flags the server decides (single author; no commits in the recent half of the window) - they ride the wire rather than being recomputed by a reader so the console and the CLI cannot disagree about what counts as abandoned.
 
-Source: [insight.proto:139](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L139).
+Source: [insight.proto:141](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L141).
 
 | Field              | Type      | # | Description                      |
 | ------------------ | --------- | - | -------------------------------- |
@@ -137,7 +176,7 @@ Used by: [GetInsight (response)](insight.md#getinsight).
 
 OwnershipOutput reports author concentration per project - the knowledge-risk view.
 
-Source: [insight.proto:128](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L128).
+Source: [insight.proto:130](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L130).
 
 | Field        | Type                             | # | Description |
 | ------------ | -------------------------------- | - | ----------- |
@@ -154,7 +193,7 @@ ProjectNode is one project in the heatmap. It mirrors types.Node, the dependency
 
 churn, authors and last\_commit\_time are the heatmap overlay and are absent on a plain dependency graph; blast\_radius and duration\_ms come from the graph itself.
 
-Source: [insight.proto:71](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L71).
+Source: [insight.proto:73](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L73).
 
 | Field              | Type            | #  | Description                                                     |
 | ------------------ | --------------- | -- | --------------------------------------------------------------- |
@@ -177,7 +216,7 @@ Used by: [GetInsight (response)](insight.md#getinsight).
 
 Trend is one project's churn across the window's two halves. delta is recent - earlier, sent explicitly because it is the sort key and a reader should not have to know the sign convention (positive is rising).
 
-Source: [insight.proto:163](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L163).
+Source: [insight.proto:165](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L165).
 
 | Field     | Type   | # | Description |
 | --------- | ------ | - | ----------- |
@@ -193,7 +232,7 @@ Used by: [GetInsight (response)](insight.md#getinsight).
 
 TrendOutput ranks projects by whether their activity is rising or cooling: the window is split at its midpoint and the halves compared.
 
-Source: [insight.proto:153](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L153).
+Source: [insight.proto:155](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L155).
 
 | Field        | Type                     | # | Description |
 | ------------ | ------------------------ | - | ----------- |
@@ -208,7 +247,7 @@ Used by: [GetInsight (response)](insight.md#getinsight).
 
 VolatilityReport is the run-outcome lens: the one lens that does not read git. It is computed from the shared runtime-history file, so it is present even in a workspace with no VCS history, and absent in one that has never recorded a run.
 
-Source: [insight.proto:174](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L174).
+Source: [insight.proto:176](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L176).
 
 | Field       | Type                                           | # | Description                                                                                                                                                      |
 | ----------- | ---------------------------------------------- | - | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -221,7 +260,7 @@ Used by: [GetInsight (response)](insight.md#getinsight).
 
 VolatilityTarget is one (project, target) pair's recorded flakiness: the Wilson lower-bound score against the report's threshold, plus the tallies it was computed from. pass/fail/ volatile\_count count the retained window and samples is how many outcomes that window holds, so a reader can tell a genuinely stable target from one with two runs on record.
 
-Source: [insight.proto:185](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L185).
+Source: [insight.proto:187](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L187).
 
 | Field            | Type      | # | Description                                   |
 | ---------------- | --------- | - | --------------------------------------------- |

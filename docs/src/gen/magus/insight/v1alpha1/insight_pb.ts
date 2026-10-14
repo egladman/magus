@@ -3,12 +3,12 @@
 /* eslint-disable */
 
 // Package magus.insight.v1alpha1 is the versioned wire contract for magus insight: where a
-// codebase's attention and risk concentrate. Five lenses ride one message - four read VCS
+// codebase's attention and risk concentrate. Six lenses ride one message - four read VCS
 // history (hotspots, affinity, ownership, trend) from a single bounded git-log scan the
-// server caches, and volatility reads run-outcome history instead. They travel together
-// because the dashboard renders them as one board; splitting them into five RPCs would cost
-// five round trips for one paint and would let the four git lenses disagree about the window
-// they were scanned over.
+// server caches, volatility reads run-outcome history instead, and model_tiers reads the
+// outcomes of finished jobs. They travel together because the dashboard renders them as one
+// board; splitting them into six RPCs would cost six round trips for one paint and would let
+// the four git lenses disagree about the window they were scanned over.
 //
 // It is a sibling of the other console tool-page contracts (magus.status.v1alpha1, magus.activity.v1alpha1,
 // magus.metrics.v1alpha1). It mirrors types.InsightView, which the CLI also renders; the mapping to
@@ -29,7 +29,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/insight/v1alpha1/insight.proto.
  */
 export const file_magus_insight_v1alpha1_insight: GenFile = /*@__PURE__*/
-  fileDesc("CiRtYWd1cy9pbnNpZ2h0L3YxYWxwaGExL2luc2lnaHQucHJvdG8SFm1hZ3VzLmluc2lnaHQudjFhbHBoYTEiEwoRR2V0SW5zaWdodFJlcXVlc3QiqgIKB0luc2lnaHQSNwoIaG90c3BvdHMYASABKAsyJS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkhvdHNwb3RPdXRwdXQSOAoIYWZmaW5pdHkYAiABKAsyJi5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkFmZmluaXR5T3V0cHV0EjoKCW93bmVyc2hpcBgDIAEoCzInLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuT3duZXJzaGlwT3V0cHV0EjIKBXRyZW5kGAQgASgLMiMubWFndXMuaW5zaWdodC52MWFscGhhMS5UcmVuZE91dHB1dBI8Cgp2b2xhdGlsaXR5GAUgASgLMigubWFndXMuaW5zaWdodC52MWFscGhhMS5Wb2xhdGlsaXR5UmVwb3J0IqsBCg1Ib3RzcG90T3V0cHV0EhIKCmRlZmluaXRpb24YASABKAkSDwoHY29tbWl0cxgCIAEoBRINCgVzaW5jZRgDIAEoCRIyCgVub2RlcxgEIAMoCzIjLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuUHJvamVjdE5vZGUSMgoFZmlsZXMYBSADKAsyIy5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkZpbGVIb3RzcG90Iu4BCgtQcm9qZWN0Tm9kZRIMCgRwYXRoGAEgASgJEgwKBG5hbWUYAiABKAkSEgoKc3BlbGxfbmFtZRgDIAEoCRIQCghjaGlsZHJlbhgEIAMoCRILCgNkaXIYBSABKAkSFAoMYmxhc3RfcmFkaXVzGAcgASgFEhMKC2R1cmF0aW9uX21zGAggASgDEg0KBWNodXJuGAkgASgFEg8KB2F1dGhvcnMYCiABKAUSNAoQbGFzdF9jb21taXRfdGltZRgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBKBAgGEAdSCWV4Y2x1c2l2ZSKlAQoLRmlsZUhvdHNwb3QSDAoEcGF0aBgBIAEoCRIPCgdjb21taXRzGAIgASgFEhIKCmNvbXBsZXhpdHkYAyABKAUSDQoFc2NvcmUYBCABKAUSDwoHYXV0aG9ycxgFIAEoBRI0ChBsYXN0X2NvbW1pdF90aW1lGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBINCgVtb3ZlcxgHIAEoBSJ1Cg5BZmZpbml0eU91dHB1dBISCgpkZWZpbml0aW9uGAEgASgJEg8KB2NvbW1pdHMYAiABKAUSDQoFc2luY2UYAyABKAkSLwoFcGFpcnMYBCADKAsyIC5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkNvQ2hhbmdlIl8KCENvQ2hhbmdlEgkKAWEYASABKAkSDgoGYV9uYW1lGAIgASgJEgkKAWIYAyABKAkSDgoGYl9uYW1lGAQgASgJEg0KBWNvdW50GAUgASgFEg4KBmhpZGRlbhgGIAEoCCJ6Cg9Pd25lcnNoaXBPdXRwdXQSEgoKZGVmaW5pdGlvbhgBIAEoCRIPCgdjb21taXRzGAIgASgFEg0KBXNpbmNlGAMgASgJEjMKCHByb2plY3RzGAQgAygLMiEubWFndXMuaW5zaWdodC52MWFscGhhMS5Pd25lcnNoaXAizAEKCU93bmVyc2hpcBIMCgRwYXRoGAEgASgJEgwKBG5hbWUYAiABKAkSDwoHY29tbWl0cxgDIAEoBRIPCgdhdXRob3JzGAQgASgFEg8KB3ByaW1hcnkYBSABKAkSFQoNcHJpbWFyeV9zaGFyZRgGIAEoBRIUCgxidXNfZmFjdG9yXzEYByABKAgSDQoFc3RhbGUYCCABKAgSNAoQbGFzdF9jb21taXRfdGltZRgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAicgoLVHJlbmRPdXRwdXQSEgoKZGVmaW5pdGlvbhgBIAEoCRIPCgdjb21taXRzGAIgASgFEg0KBXNpbmNlGAMgASgJEi8KCHByb2plY3RzGAQgAygLMh0ubWFndXMuaW5zaWdodC52MWFscGhhMS5UcmVuZCJTCgVUcmVuZBIMCgRwYXRoGAEgASgJEgwKBG5hbWUYAiABKAkSDgoGcmVjZW50GAMgASgFEg8KB2VhcmxpZXIYBCABKAUSDQoFZGVsdGEYBSABKAUiYAoQVm9sYXRpbGl0eVJlcG9ydBIRCgl0aHJlc2hvbGQYASABKAESOQoHdGFyZ2V0cxgCIAMoCzIoLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuVm9sYXRpbGl0eVRhcmdldCLNAQoQVm9sYXRpbGl0eVRhcmdldBIPCgdwcm9qZWN0GAEgASgJEg4KBnRhcmdldBgCIAEoCRINCgVzY29yZRgDIAEoARIQCgh2b2xhdGlsZRgEIAEoCBIMCgRwYXNzGAUgASgFEgwKBGZhaWwYBiABKAUSFgoOdm9sYXRpbGVfY291bnQYByABKAUSDwoHc2FtcGxlcxgIIAEoBRIyCg5sYXN0X3Bhc3NfdGltZRgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAyagoOSW5zaWdodFNlcnZpY2USWAoKR2V0SW5zaWdodBIpLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuR2V0SW5zaWdodFJlcXVlc3QaHy5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkluc2lnaHRC8wEKGmNvbS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExQgxJbnNpZ2h0UHJvdG9QAVpNZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvaW5zaWdodC92MWFscGhhMTtpbnNpZ2h0djFhbHBoYTGiAgNNSViqAhZNYWd1cy5JbnNpZ2h0LlYxYWxwaGExygIWTWFndXNcSW5zaWdodFxWMWFscGhhMeICIk1hZ3VzXEluc2lnaHRcVjFhbHBoYTFcR1BCTWV0YWRhdGHqAhhNYWd1czo6SW5zaWdodDo6VjFhbHBoYTFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("CiRtYWd1cy9pbnNpZ2h0L3YxYWxwaGExL2luc2lnaHQucHJvdG8SFm1hZ3VzLmluc2lnaHQudjFhbHBoYTEiEwoRR2V0SW5zaWdodFJlcXVlc3Qi6AIKB0luc2lnaHQSNwoIaG90c3BvdHMYASABKAsyJS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkhvdHNwb3RPdXRwdXQSOAoIYWZmaW5pdHkYAiABKAsyJi5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkFmZmluaXR5T3V0cHV0EjoKCW93bmVyc2hpcBgDIAEoCzInLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuT3duZXJzaGlwT3V0cHV0EjIKBXRyZW5kGAQgASgLMiMubWFndXMuaW5zaWdodC52MWFscGhhMS5UcmVuZE91dHB1dBI8Cgp2b2xhdGlsaXR5GAUgASgLMigubWFndXMuaW5zaWdodC52MWFscGhhMS5Wb2xhdGlsaXR5UmVwb3J0EjwKC21vZGVsX3RpZXJzGAYgASgLMicubWFndXMuaW5zaWdodC52MWFscGhhMS5Nb2RlbFRpZXJPdXRwdXQiqwEKDUhvdHNwb3RPdXRwdXQSEgoKZGVmaW5pdGlvbhgBIAEoCRIPCgdjb21taXRzGAIgASgFEg0KBXNpbmNlGAMgASgJEjIKBW5vZGVzGAQgAygLMiMubWFndXMuaW5zaWdodC52MWFscGhhMS5Qcm9qZWN0Tm9kZRIyCgVmaWxlcxgFIAMoCzIjLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuRmlsZUhvdHNwb3Qi7gEKC1Byb2plY3ROb2RlEgwKBHBhdGgYASABKAkSDAoEbmFtZRgCIAEoCRISCgpzcGVsbF9uYW1lGAMgASgJEhAKCGNoaWxkcmVuGAQgAygJEgsKA2RpchgFIAEoCRIUCgxibGFzdF9yYWRpdXMYByABKAUSEwoLZHVyYXRpb25fbXMYCCABKAMSDQoFY2h1cm4YCSABKAUSDwoHYXV0aG9ycxgKIAEoBRI0ChBsYXN0X2NvbW1pdF90aW1lGAsgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEoECAYQB1IJZXhjbHVzaXZlIqUBCgtGaWxlSG90c3BvdBIMCgRwYXRoGAEgASgJEg8KB2NvbW1pdHMYAiABKAUSEgoKY29tcGxleGl0eRgDIAEoBRINCgVzY29yZRgEIAEoBRIPCgdhdXRob3JzGAUgASgFEjQKEGxhc3RfY29tbWl0X3RpbWUYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg0KBW1vdmVzGAcgASgFInUKDkFmZmluaXR5T3V0cHV0EhIKCmRlZmluaXRpb24YASABKAkSDwoHY29tbWl0cxgCIAEoBRINCgVzaW5jZRgDIAEoCRIvCgVwYWlycxgEIAMoCzIgLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuQ29DaGFuZ2UiXwoIQ29DaGFuZ2USCQoBYRgBIAEoCRIOCgZhX25hbWUYAiABKAkSCQoBYhgDIAEoCRIOCgZiX25hbWUYBCABKAkSDQoFY291bnQYBSABKAUSDgoGaGlkZGVuGAYgASgIInoKD093bmVyc2hpcE91dHB1dBISCgpkZWZpbml0aW9uGAEgASgJEg8KB2NvbW1pdHMYAiABKAUSDQoFc2luY2UYAyABKAkSMwoIcHJvamVjdHMYBCADKAsyIS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLk93bmVyc2hpcCLMAQoJT3duZXJzaGlwEgwKBHBhdGgYASABKAkSDAoEbmFtZRgCIAEoCRIPCgdjb21taXRzGAMgASgFEg8KB2F1dGhvcnMYBCABKAUSDwoHcHJpbWFyeRgFIAEoCRIVCg1wcmltYXJ5X3NoYXJlGAYgASgFEhQKDGJ1c19mYWN0b3JfMRgHIAEoCBINCgVzdGFsZRgIIAEoCBI0ChBsYXN0X2NvbW1pdF90aW1lGAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJyCgtUcmVuZE91dHB1dBISCgpkZWZpbml0aW9uGAEgASgJEg8KB2NvbW1pdHMYAiABKAUSDQoFc2luY2UYAyABKAkSLwoIcHJvamVjdHMYBCADKAsyHS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLlRyZW5kIlMKBVRyZW5kEgwKBHBhdGgYASABKAkSDAoEbmFtZRgCIAEoCRIOCgZyZWNlbnQYAyABKAUSDwoHZWFybGllchgEIAEoBRINCgVkZWx0YRgFIAEoBSJgChBWb2xhdGlsaXR5UmVwb3J0EhEKCXRocmVzaG9sZBgBIAEoARI5Cgd0YXJnZXRzGAIgAygLMigubWFndXMuaW5zaWdodC52MWFscGhhMS5Wb2xhdGlsaXR5VGFyZ2V0Is0BChBWb2xhdGlsaXR5VGFyZ2V0Eg8KB3Byb2plY3QYASABKAkSDgoGdGFyZ2V0GAIgASgJEg0KBXNjb3JlGAMgASgBEhAKCHZvbGF0aWxlGAQgASgIEgwKBHBhc3MYBSABKAUSDAoEZmFpbBgGIAEoBRIWCg52b2xhdGlsZV9jb3VudBgHIAEoBRIPCgdzYW1wbGVzGAggASgFEjIKDmxhc3RfcGFzc190aW1lGAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJcCg9Nb2RlbFRpZXJPdXRwdXQSEgoKZGVmaW5pdGlvbhgBIAEoCRI1CgRyb3dzGAIgAygLMicubWFndXMuaW5zaWdodC52MWFscGhhMS5Nb2RlbFRpZXJSZWNvcmQioQIKD01vZGVsVGllclJlY29yZBIMCgRyYW5rGAEgASgFEhIKCm1vZGVsX3RpZXIYAiABKAkSDAoEa2luZBgDIAEoCRIMCgRqb2JzGAQgASgFEgwKBHBhc3MYBSABKAUSDAoEZmFpbBgGIAEoBRIRCglub19yZXR1cm4YByABKAUSEgoKcGFzc19sb3dlchgIIAEoARIWCg5jaGVja3NfcGVyX2pvYhgJIAEoARIUCgxmb3Jrc19wZXJfaWQYCiABKAESFgoOcmV3b3JrX3Blcl9qb2IYCyABKAESGQoRd2lkZW5pbmdzX3Blcl9qb2IYDCABKAESFQoNbWVhbl9jb3N0X3VzZBgNIAEoARIVCg1tZWRpYW5fdG9rZW5zGA4gASgDMmoKDkluc2lnaHRTZXJ2aWNlElgKCkdldEluc2lnaHQSKS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkdldEluc2lnaHRSZXF1ZXN0Gh8ubWFndXMuaW5zaWdodC52MWFscGhhMS5JbnNpZ2h0QvMBChpjb20ubWFndXMuaW5zaWdodC52MWFscGhhMUIMSW5zaWdodFByb3RvUAFaTWdpdGh1Yi5jb20vZWdsYWRtYW4vbWFndXMvcHJvdG8vZ2VuL2dvL21hZ3VzL2luc2lnaHQvdjFhbHBoYTE7aW5zaWdodHYxYWxwaGExogIDTUlYqgIWTWFndXMuSW5zaWdodC5WMWFscGhhMcoCFk1hZ3VzXEluc2lnaHRcVjFhbHBoYTHiAiJNYWd1c1xJbnNpZ2h0XFYxYWxwaGExXEdQQk1ldGFkYXRh6gIYTWFndXM6Okluc2lnaHQ6OlYxYWxwaGExYgZwcm90bzM", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message magus.insight.v1alpha1.GetInsightRequest
@@ -45,9 +45,10 @@ export const GetInsightRequestSchema: GenMessage<GetInsightRequest> = /*@__PURE_
   messageDesc(file_magus_insight_v1alpha1_insight, 0);
 
 /**
- * Insight bundles the five lenses. volatility is absent (not an empty report) when the
+ * Insight bundles the six lenses. volatility is absent (not an empty report) when the
  * workspace has no run-outcome history to score - the distinction matters to a reader, which
- * renders "no runs recorded yet" rather than "no volatile targets".
+ * renders "no runs recorded yet" rather than "no volatile targets". model_tiers is absent
+ * for the same reason when no job outcome was ever recorded.
  *
  * @generated from message magus.insight.v1alpha1.Insight
  */
@@ -76,6 +77,11 @@ export type Insight = Message<"magus.insight.v1alpha1.Insight"> & {
    * @generated from field: magus.insight.v1alpha1.VolatilityReport volatility = 5;
    */
   volatility?: VolatilityReport;
+
+  /**
+   * @generated from field: magus.insight.v1alpha1.ModelTierOutput model_tiers = 6;
+   */
+  modelTiers?: ModelTierOutput;
 };
 
 /**
@@ -614,6 +620,123 @@ export type VolatilityTarget = Message<"magus.insight.v1alpha1.VolatilityTarget"
  */
 export const VolatilityTargetSchema: GenMessage<VolatilityTarget> = /*@__PURE__*/
   messageDesc(file_magus_insight_v1alpha1_insight, 12);
+
+/**
+ * ModelTierOutput is the job-history lens: what each model tier achieved on each kind of
+ * job. It reads the outcomes the job store recorded, not git, and it reports only: changing
+ * a tier is a person editing the declaration or matrix the doctor check names.
+ *
+ * @generated from message magus.insight.v1alpha1.ModelTierOutput
+ */
+export type ModelTierOutput = Message<"magus.insight.v1alpha1.ModelTierOutput"> & {
+  /**
+   * @generated from field: string definition = 1;
+   */
+  definition: string;
+
+  /**
+   * @generated from field: repeated magus.insight.v1alpha1.ModelTierRecord rows = 2;
+   */
+  rows: ModelTierRecord[];
+};
+
+/**
+ * Describes the message magus.insight.v1alpha1.ModelTierOutput.
+ * Use `create(ModelTierOutputSchema)` to create a new message.
+ */
+export const ModelTierOutputSchema: GenMessage<ModelTierOutput> = /*@__PURE__*/
+  messageDesc(file_magus_insight_v1alpha1_insight, 13);
+
+/**
+ * ModelTierRecord is the recorded outcome of the jobs that ran at one tier and job kind.
+ * rank is the tier's place in the current declaration, -1 for one it no longer names.
+ * pass_lower is the Wilson lower bound of the pass rate; the per-job fields are means, so a
+ * reader sets pass rate beside the work a pass cost: checks run, re-forks of one id, rework
+ * rounds (a worker sent more work after handing back) and widenings (write paths added to a
+ * taken job).
+ *
+ * @generated from message magus.insight.v1alpha1.ModelTierRecord
+ */
+export type ModelTierRecord = Message<"magus.insight.v1alpha1.ModelTierRecord"> & {
+  /**
+   * @generated from field: int32 rank = 1;
+   */
+  rank: number;
+
+  /**
+   * @generated from field: string model_tier = 2;
+   */
+  modelTier: string;
+
+  /**
+   * check, symbol, paths, script or prose
+   *
+   * @generated from field: string kind = 3;
+   */
+  kind: string;
+
+  /**
+   * @generated from field: int32 jobs = 4;
+   */
+  jobs: number;
+
+  /**
+   * @generated from field: int32 pass = 5;
+   */
+  pass: number;
+
+  /**
+   * @generated from field: int32 fail = 6;
+   */
+  fail: number;
+
+  /**
+   * @generated from field: int32 no_return = 7;
+   */
+  noReturn: number;
+
+  /**
+   * @generated from field: double pass_lower = 8;
+   */
+  passLower: number;
+
+  /**
+   * @generated from field: double checks_per_job = 9;
+   */
+  checksPerJob: number;
+
+  /**
+   * @generated from field: double forks_per_id = 10;
+   */
+  forksPerId: number;
+
+  /**
+   * @generated from field: double rework_per_job = 11;
+   */
+  reworkPerJob: number;
+
+  /**
+   * @generated from field: double widenings_per_job = 12;
+   */
+  wideningsPerJob: number;
+
+  /**
+   * @generated from field: double mean_cost_usd = 13;
+   */
+  meanCostUsd: number;
+
+  /**
+   * @generated from field: int64 median_tokens = 14;
+   */
+  medianTokens: bigint;
+};
+
+/**
+ * Describes the message magus.insight.v1alpha1.ModelTierRecord.
+ * Use `create(ModelTierRecordSchema)` to create a new message.
+ */
+export const ModelTierRecordSchema: GenMessage<ModelTierRecord> = /*@__PURE__*/
+  messageDesc(file_magus_insight_v1alpha1_insight, 14);
 
 /**
  * InsightService serves the assembled lenses to the console dashboard. One read-only unary
