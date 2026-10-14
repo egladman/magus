@@ -136,9 +136,10 @@ truncating it after the fact:
 {{end}}
 
 - `-s` / `--silent`: the default for every CLI run.{{if .Full}} Progress is dropped; a pass
-  is a few lines (result line + output ref), a failure keeps a bounded tail of
-  the failing project plus the ref to fetch the rest.{{else}} A pass prints a
-  result line plus an output ref; a failure adds a bounded tail.{{end}}
+  prints one line, `ref  <output ref>`, and a failure keeps a bounded tail of
+  the failing project plus the ref to fetch the rest. With `--tee <file>` a
+  structured record goes to the file alone.{{else}} A pass prints one `ref`
+  line; a failure adds a bounded tail.{{end}}
   DROP it when the question is what RAN versus what replayed. The per-target
   timings and the `(cached, 320ms)` / `(ran, 5m28s)` verdict print only without
   it.{{if .Full}} Reaching for shell `time` around a silent run measures the wall clock magus

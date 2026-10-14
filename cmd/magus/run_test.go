@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -788,5 +789,51 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 			project, target, gate, shard) {
 			assert.Equal(t, shardKeys[i].key, gateKeys[i].key)
 		}
+	}
+}
+
+func TestResultRefsLine(t *testing.T) {
+	cases := []struct {
+		name    string
+		events  []journal.Event
+		wantOut string
+	}{
+		{"no results prints nothing", nil, ""},
+		{
+			"one result prints its ref",
+			[]journal.Event{{Kind: journal.KindResult, Ref: "out1a2b3c4d5e6f"}},
+			"ref  out1a2b3c4d5e6f\n",
+		},
+		{
+			"several results print one line",
+			[]journal.Event{
+				{Kind: journal.KindResult, Ref: "out111111111111"},
+				{Kind: journal.KindResult, Ref: "out222222222222"},
+				{Kind: journal.KindResult, Ref: "out111111111111"},
+			},
+			"refs  out111111111111 out222222222222\n",
+		},
+		{
+			"events that are not results or carry no ref are skipped",
+			[]journal.Event{
+				{Kind: journal.KindOutput, Ref: "out333333333333"},
+				{Kind: journal.KindResult},
+			},
+			"",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			refs := &resultRefs{}
+			ctx := journal.WithLogger(context.Background(), journal.NewLogger(refs))
+			for _, e := range tc.events {
+				journal.Emit(ctx, e)
+			}
+
+			var out strings.Builder
+			printRefLine(&out, refs.list())
+
+			assert.Equal(t, tc.wantOut, out.String())
+		})
 	}
 }

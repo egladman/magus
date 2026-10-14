@@ -9,8 +9,10 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus"
@@ -385,6 +387,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// Durable invocation facts ride the same fan-out: one fact per target result, into a
 	// store every worktree of this repo shares (`magus session` reads it back).
 	captureHandlers = withInvocationJournal(ctx, captureHandlers, m.Root(), "run", args)
+	refs := &resultRefs{}
+	captureHandlers = append(captureHandlers, refs)
 	invCtx, endInvocation := m.BeginInvocation(ctx, journal.Command{
 		Arguments: append([]string{"run"}, args...), Cwd: cwd, Trigger: trigger,
 	}, version, captureHandlers...)
@@ -413,6 +417,9 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return err
 	}
 	emitConcurrencyNudge(ctx, sink, m, os.Args[1:])
+	if global.silent && opts.Format == outputText {
+		printRefLine(os.Stderr, refs.list())
+	}
 
 	sink.RecordValues(targetName, readReturns(targetName))
 	switch opts.Format {
@@ -423,6 +430,50 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return emitProjectNames(m, targets)
 	}
 	return nil
+}
+
+// resultRefs collects the output ref of every target result the invocation's journal
+// records, in the order the results arrive.
+type resultRefs struct {
+	mu   sync.Mutex
+	refs []string
+}
+
+func (c *resultRefs) Enabled(context.Context, slog.Level) bool { return true }
+
+func (c *resultRefs) Handle(_ context.Context, r slog.Record) error {
+	e, ok := journal.EventFromRecord(r)
+	if !ok || e.Kind != journal.KindResult || e.Ref == "" {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !slices.Contains(c.refs, e.Ref) {
+		c.refs = append(c.refs, e.Ref)
+	}
+	return nil
+}
+
+func (c *resultRefs) WithAttrs([]slog.Attr) slog.Handler { return c }
+func (c *resultRefs) WithGroup(string) slog.Handler      { return c }
+
+func (c *resultRefs) list() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.refs)
+}
+
+// printRefLine writes the one line a successful `-s` run prints: every other line of a
+// pass is dropped, and without the ref a caller reruns without -s just to learn it.
+// It mirrors the "ref  <id>" line a default run prints under each target.
+func printRefLine(w io.Writer, refs []string) {
+	switch len(refs) {
+	case 0:
+	case 1:
+		fmt.Fprintf(w, "ref  %s\n", refs[0])
+	default:
+		fmt.Fprintf(w, "refs  %s\n", strings.Join(refs, " "))
+	}
 }
 
 // emitProjectNames is `-o name` for a run: the projects the run covered, one path per
