@@ -211,7 +211,10 @@ func isGuardSource(deps Dependencies, at location, path string) bool {
 	if at.workspace == "" || path == "" {
 		return false
 	}
-	target := resolveFrom(cmp.Or(at.dir, at.workspace), path)
+	target, placed := placePath(path, cmp.Or(at.dir, at.workspace), userHome())
+	if !placed {
+		return false
+	}
 	if samePath(target, filepath.Join(at.workspace, "magusfile.buzz")) {
 		return true
 	}

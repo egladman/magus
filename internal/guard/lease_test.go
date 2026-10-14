@@ -2083,4 +2083,14 @@ func TestDenyWriteOutsideLeaseResolvesFromTheCallDir(t *testing.T) {
 	assert.Empty(t, denyWriteOutsideLease(ctx, from("cmd/magus"), "lease-b", "git rm a.go"))
 	assert.Empty(t, denyWriteOutsideLease(ctx, from("cmd/magus"), "lease-b", "rm -r sub"))
 	assert.Contains(t, denyWriteOutsideLease(ctx, from("cmd/magus"), "lease-b", "rm -r ../other"), "cmd/other is outside")
+
+	// A cd earlier on the line moves where a relative word lands.
+	assert.Contains(t, denyWriteOutsideLease(ctx, from("cmd/magus"), "lease-b", "cd ../../internal/ledger && rm store.go"), "lease-a")
+	assert.Empty(t, denyWriteOutsideLease(ctx, from("internal/ledger"), "lease-b", "cd "+t.TempDir()+" && rm store.go"),
+		"store.go after a cd out of the checkout is the scratch directory's")
+	assert.Empty(t, denyWriteOutsideLease(ctx, from("internal/ledger"), "lease-b", "cd ~ && rm store.go"))
+	assert.Empty(t, denyWriteOutsideLease(ctx, from("internal/ledger"), "lease-b", "cd $SOMEWHERE && rm store.go"),
+		"a cd the line does not determine places nothing")
+	assert.Empty(t, denyWriteOutsideLease(ctx, from("internal/ledger"), "lease-b", `cp x "${OUT}store.go"`),
+		"an expansion places the word nowhere rather than dropping the parameter")
 }

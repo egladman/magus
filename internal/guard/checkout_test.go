@@ -81,6 +81,21 @@ func TestDenySiblingCheckoutJudgesFromTheCallDirectory(t *testing.T) {
 		"a relative cd that leaves the session's checkout is still refused")
 }
 
+// A `~` or $HOME target was joined under the call directory as a literal directory, which
+// no checkout holds, so the deny was skipped.
+func TestDenySiblingCheckoutPlacesAHomeTarget(t *testing.T) {
+	main, wt := twoCheckouts(t)
+	t.Setenv("HOME", filepath.Dir(main))
+	for _, line := range []string{
+		"cd ~/repo && ./magus run lint .",
+		"cd $HOME/repo && ./magus run lint .",
+		`cd "${HOME}/repo" && ./magus run lint .`,
+		"cd ~ && cd repo && ./magus run lint .",
+	} {
+		assert.NotEmpty(t, denySiblingCheckout(wt, line, DialectBash), line)
+	}
+}
+
 // The boundary that keeps this shippable. A cd into a DIFFERENT repository is
 // legitimate in a multi-repo session; denying it would export a false positive to
 // every consumer of the guard to catch a mistake nobody makes. It still draws the

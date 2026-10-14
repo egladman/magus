@@ -887,6 +887,9 @@ func rootWorkClass(line string, at location) types.DelegableClass {
 	if err != nil {
 		return ""
 	}
+	// A relative path is read from where the line's cds have moved the call, so a root that
+	// cds into its plan folder reads its plan, not the checkout's file of that name.
+	dirs := stmtDirs(f, line, cmp.Or(at.dir, at.workspace), userHome())
 	var class types.DelegableClass
 	syntax.Walk(f, func(n syntax.Node) bool {
 		if class != "" {
@@ -896,8 +899,12 @@ func rootWorkClass(line string, at location) types.DelegableClass {
 		if !ok {
 			return true
 		}
+		here := at
+		if dir := dirs[s]; dir != "" {
+			here.dir = dir
+		}
 		for _, c := range stmtCommands(s, DialectBash) {
-			if class = invocationWork(c, stdinRecord(s), at); class != "" {
+			if class = invocationWork(c, stdinRecord(s), here); class != "" {
 				return false
 			}
 		}
@@ -920,12 +927,15 @@ func invocationWork(c hint.Invocation, stdin string, at location) types.Delegabl
 	}
 	if !isMagusInvocation(c) {
 		if v := vcsInvocation(c); v != nil && integrationVerbs[v.Subcommand] {
-			return types.DelegableIntegrate
+			return delegableIntegrate
 		}
 		class := invocationClass(c)
-		// A search with no path searches the call's directory, which is in the checkout.
-		if paths := invocationPaths(c); class == types.DelegableSearch && len(paths) > 0 &&
-			!slices.ContainsFunc(paths, func(p string) bool { return !notesPath(p, at) }) {
+		// A search with no path searches the directory it runs in.
+		paths := invocationPaths(c)
+		if len(paths) == 0 {
+			paths = []string{"."}
+		}
+		if class == types.DelegableSearch && !slices.ContainsFunc(paths, func(p string) bool { return !notesPath(p, at) }) {
 			return ""
 		}
 		return class
@@ -938,13 +948,13 @@ func invocationWork(c hint.Invocation, stdin string, at location) types.Delegabl
 	case "run", "affected":
 		if r, ok := parseTargetRun(c); ok && !isGateCommand(c.Args) {
 			if integrationTarget(r.target) {
-				return types.DelegableIntegrate
+				return delegableIntegrate
 			}
 			return types.DelegableRun
 		}
 	case "vcs":
 		if len(words) > 1 && integrationVerbs[words[1]] {
-			return types.DelegableIntegrate
+			return delegableIntegrate
 		}
 	case "buzz":
 		if script, ok := inlineBuzz(c.Args, stdin); ok && !drivesOnlyJobs(script) {
@@ -962,6 +972,11 @@ func invocationWork(c hint.Invocation, stdin string, at location) types.Delegabl
 	}
 	return ""
 }
+
+// delegableIntegrate is integration a checkout's integrator owns: a cherry-pick, a build of
+// ./magus, a regeneration, staging or a commit. Only orchestrator-groundwork names it, so it
+// is declared beside that rule rather than in types.
+const delegableIntegrate types.DelegableClass = "integrate"
 
 // integrationVerbs are the VCS subcommands that land work in a checkout, which its
 // integrator runs and an orchestrator never does.

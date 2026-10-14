@@ -1,9 +1,13 @@
 package guard
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 // TestAdvisoriesStayInsideTheWorkspace: observed in the 2026-09-24 audit, advisories fired
@@ -44,6 +48,17 @@ func TestAdvisoriesStayInsideTheWorkspace(t *testing.T) {
 	assert.NotEmpty(t, Evaluate(deps, "cd /tmp/copy && magus run lint .").Deny, "a deny is never scoped away")
 }
 
+// A relative word is the call directory's, after the line's cds: read-navigation and
+// symbol-search advised on `cat ../other-wt/main.go` and on a plan read after a cd.
+func TestScopePlacesFromTheCallDir(t *testing.T) {
+	scope := workspaceScope{root: "/work/repo", dir: "/work/repo", home: "/home/me"}
+	assert.True(t, scope.lineOutside("cat ../other-wt/main.go", DialectBash))
+	assert.True(t, scope.lineOutside("cd ~/.claude/plans && cat RESUME.md", DialectBash))
+	assert.False(t, scope.lineOutside("cd internal && cat x.go", DialectBash))
+	assert.False(t, scope.lineOutside("cd $X && cat x.go", DialectBash), "a cd the line does not determine keeps it in scope")
+	assert.False(t, scope.lineOutside(`cat "~/x"`, DialectBash), "a quoted ~ is a directory named ~ here")
+}
+
 func TestScopeOutside(t *testing.T) {
 	rooted := workspaceScope{root: "/work/repo", home: "/home/me"}
 	assert.True(t, rooted.outside("/work/other/x"))
@@ -81,4 +96,56 @@ func TestWorkspaceRelativePlacesAHomePathOutside(t *testing.T) {
 	assert.Equal(t, "/home/me", expandHome("~", "/home/me"))
 	assert.Equal(t, "~/x", expandHome("~/x", ""), "an unknown home leaves the word for the caller to place")
 	assert.Equal(t, "a/~/x", expandHome("a/~/x", "/home/me"))
+}
+
+// A lease taken in the main checkout matched `**/*.md` against a file in a worktree nested
+// under it at .claude/worktrees/<wt>: the other checkout counted as a subtree of this one.
+func TestWorkspaceRelativeRefusesANestedCheckout(t *testing.T) {
+	root := t.TempDir()
+	wt := filepath.Join(root, ".claude", "worktrees", "wt")
+	require.NoError(t, os.MkdirAll(filepath.Join(wt, "docs"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: "+filepath.Join(root, ".git", "worktrees", "wt")+"\n"), 0o644))
+
+	_, inside := workspaceRelative(root, filepath.Join(wt, "docs", "x.md"))
+	assert.False(t, inside, "a nested checkout's file is that checkout's")
+	_, inside = workspaceRelative(root, ".claude/worktrees/wt/docs/x.md")
+	assert.False(t, inside)
+	rel, inside := workspaceRelative(root, ".claude/notes.md")
+	assert.True(t, inside, "the directory holding the worktrees is still the root's")
+	assert.Equal(t, ".claude/notes.md", rel)
+	assert.True(t, workspaceScope{root: root}.outside(filepath.Join(wt, "docs", "x.md")))
+}
+
+// placePath places a word as the shell opens it, and refuses one the line does not determine.
+func TestPlacePath(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		word, cwd, want string
+		ok              bool
+	}{
+		{"a/b", "/w", "/w/a/b", true},
+		{"/abs/x", "", "/abs/x", true},
+		{"~/x", "", "/home/me/x", true},
+		{"~", "/w", "/home/me", true},
+		{"./~/x", "/w", "/w/~/x", true},
+		{"~other/x", "/w", "", false},
+		{"a/b", "", "", false},
+		{unresolved + "$D/x", "/w", "", false},
+	} {
+		got, ok := placePath(tt.word, tt.cwd, "/home/me")
+		assert.Equal(t, tt.ok, ok, tt.word)
+		assert.Equal(t, tt.want, got, tt.word)
+	}
+	_, ok := placePath("~/x", "/w", "")
+	assert.False(t, ok, "a ~ with the home unknown is placed nowhere")
+
+	f, err := parseFile(`cd ~/plans && cat a; cd sub && cat b; cd "$X" && cat c; cd /abs && cat d; cd - && cat e`, DialectBash)
+	require.NoError(t, err)
+	var got []string
+	dirs := stmtDirs(f, `cd ~/plans && cat a; cd sub && cat b; cd "$X" && cat c; cd /abs && cat d; cd - && cat e`, "/w", "/home/me")
+	for _, st := range f.Stmts {
+		bin := st.Cmd.(*syntax.BinaryCmd)
+		got = append(got, dirs[bin.Y])
+	}
+	assert.Equal(t, []string{"/home/me/plans", "/home/me/plans/sub", "", "/abs", ""}, got)
 }

@@ -509,6 +509,10 @@ func orchestrationLines(notes string) []string {
 		"cat AGENTS.md",
 		"cat internal/agent/skills/x/SKILL.md",
 		"cat " + filepath.Join(notes, "plan.md"),
+		// After a cd into the notes, a relative word is a note too.
+		"cd " + notes + " && rg attempts .",
+		"cd " + notes + " && cat RESUME.md",
+		"cd " + notes + " && rg attempts",
 		"sed -n 1,40p " + filepath.Join(notes, "memory.md"),
 	}
 }
@@ -537,16 +541,16 @@ var groundworkLines = []struct {
 	{`./magus buzz -e 'import "fs"; print(fs\readFile("a"));'`, types.DelegableRun},
 	{`./magus buzz -e 'import "magus"; magus\run(["test", "."]);'`, types.DelegableRun},
 	{"curl -sS https://example.com/x", types.DelegableFetch},
-	{"./magus run go-build . -s", types.DelegableIntegrate},
-	{"./magus run go::go-build .", types.DelegableIntegrate},
-	{"./magus run generate:rw .", types.DelegableIntegrate},
-	{"./magus run generate / -s", types.DelegableIntegrate},
-	{"./magus run content-generate docs", types.DelegableIntegrate},
-	{"./magus vcs add internal/guard/root.go", types.DelegableIntegrate},
-	{"git cherry-pick abc123", types.DelegableIntegrate},
-	{"git cherry-pick --continue", types.DelegableIntegrate},
-	{"git add internal/guard/root.go", types.DelegableIntegrate},
-	{"git commit -m x", types.DelegableIntegrate},
+	{"./magus run go-build . -s", delegableIntegrate},
+	{"./magus run go::go-build .", delegableIntegrate},
+	{"./magus run generate:rw .", delegableIntegrate},
+	{"./magus run generate / -s", delegableIntegrate},
+	{"./magus run content-generate docs", delegableIntegrate},
+	{"./magus vcs add internal/guard/root.go", delegableIntegrate},
+	{"git cherry-pick abc123", delegableIntegrate},
+	{"git cherry-pick --continue", delegableIntegrate},
+	{"git add internal/guard/root.go", delegableIntegrate},
+	{"git commit -m x", delegableIntegrate},
 }
 
 func TestRootWorkClass(t *testing.T) {

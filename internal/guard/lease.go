@@ -2525,23 +2525,28 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	dialect := effectiveDialect(deps.ShellDialect)
 	redirects := redirectTargets(command, 0, dialect)
 	// A relative word names a path under the directory the call runs in, which for a
-	// command run from a subdirectory is not the checkout's root.
+	// command run from a subdirectory is not the checkout's root, and the line's cds move it.
 	checkout := leaseCheckout(ctx, location, actingLease)
-	base := cmp.Or(deps.callDir, checkout)
-	resolve := func(word string) string {
-		if filepath.IsAbs(word) || strings.HasPrefix(word, "~") {
-			return word
-		}
-		return filepath.Join(base, word)
-	}
-	for _, candidate := range writeTargetCandidates(command, 0, dialect) {
+	start, home := cmp.Or(deps.callDir, checkout), userHome()
+	for _, candidate := range placedWriteCandidates(command, dialect, start, home) {
 		// A flag (`-p`, `-c`) or stdin's `-` names no file; a file spelled that way is
 		// written `./-p`, which still resolves.
-		if strings.HasPrefix(candidate, "-") {
+		if strings.HasPrefix(candidate.word, "-") {
 			continue
 		}
-		rel, inside := workspaceRelative(checkout, resolve(candidate))
+		target, placed := candidate.place(home)
+		if !placed {
+			continue
+		}
+		rel, inside := workspaceRelative(checkout, target)
 		if !inside {
+			// A checkout nested under this one is another checkout, which the file-write
+			// rules refuse a lease outright.
+			if nestedCheckout(checkout, target) {
+				if g := gradeLeasedWrite(ctx, deps, actingLease, target); g.Decision == decisionDeny {
+					return g.Reason
+				}
+			}
 			continue
 		}
 		declared, byCatchAll := declaredPath(live, rel)
@@ -2550,10 +2555,10 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 		}
 		// A catch-all covers every word, `print(1)` included, so under one only a
 		// redirect target or a word shaped like a file stands in for a path.
-		if byCatchAll && !slices.Contains(redirects, candidate) && !pathShaped(checkout, rel) {
+		if byCatchAll && !slices.Contains(redirects, candidate.word) && !pathShaped(checkout, rel) {
 			continue
 		}
-		if g := gradeLeasedWrite(ctx, deps, actingLease, resolve(candidate)); g.Decision == decisionDeny {
+		if g := gradeLeasedWrite(ctx, deps, actingLease, target); g.Decision == decisionDeny {
 			return g.Reason
 		}
 	}
@@ -2561,8 +2566,12 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	if !enrolled || len(me.WritePaths) == 0 {
 		return ""
 	}
-	for _, operand := range removedOrMovedOperands(command, 0, dialect) {
-		rel, inside := workspaceRelative(checkout, resolve(operand))
+	for _, operand := range removedOrMovedOperands(command, 0, dialect, start, home) {
+		target, placed := operand.place(home)
+		if !placed {
+			continue
+		}
+		rel, inside := workspaceRelative(checkout, target)
 		if !inside {
 			continue
 		}

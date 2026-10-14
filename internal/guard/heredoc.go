@@ -3,7 +3,6 @@ package guard
 import (
 	"context"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/egladman/magus/internal/json"
@@ -17,21 +16,25 @@ import (
 
 const denyRuleHeredocWrite denyRuleName = "heredoc-write"
 
-// heredocWrite is one file a line writes from a here-document.
+// heredocWrite is one file a line writes from a here-document: the target as written, and
+// where the shell opens it.
 type heredocWrite struct {
+	name string
 	path string
 	body string
 }
 
 // heredocWrites lists the files the line writes from a here-document whose body is literal
-// text: `cat > f <<EOF` and `tee [-a] f <<EOF`. A body that expands a parameter or runs a
+// text: `cat > f <<EOF` and `tee [-a] f <<EOF`, each placed from the directory its statement
+// runs in by the line's cds, starting at start. A body that expands a parameter or runs a
 // substitution is text no one can read before it runs, so it is skipped, as is a target
-// that is not a literal word, and one in /dev.
-func heredocWrites(command string, d Dialect) []heredocWrite {
+// placePath cannot place, and one in /dev.
+func heredocWrites(command string, d Dialect, start, home string) []heredocWrite {
 	f, err := parseFile(command, d)
 	if err != nil {
 		return nil
 	}
+	dirs := stmtDirs(f, command, start, home)
 	var out []heredocWrite
 	syntax.Walk(f, func(n syntax.Node) bool {
 		s, ok := n.(*syntax.Stmt)
@@ -43,35 +46,37 @@ func heredocWrites(command string, d Dialect) []heredocWrite {
 			return true
 		}
 		var body *syntax.Word
-		var targets []string
+		var targets []*syntax.Word
 		for _, r := range s.Redirs {
 			switch {
 			case (r.Op == syntax.Hdoc || r.Op == syntax.DashHdoc) && r.Hdoc != nil:
 				body = r.Hdoc
 			case (r.Op == syntax.RdrOut || r.Op == syntax.AppOut || r.Op == syntax.ClbOut) && (r.N == nil || r.N.Value == "1"):
-				if t, ok := redirectFile(command, r.Word); ok {
-					targets = append(targets, t)
-				}
+				targets = append(targets, r.Word)
 			}
 		}
 		text, literal := plainWord(body)
 		if body == nil || !literal {
 			return true
 		}
-		args := literalWords(call.Args)
-		switch path.Base(args[0]) {
+		switch name, _ := plainWord(call.Args[0]); path.Base(name) {
 		case "cat":
-			if len(args) > 1 {
+			if len(call.Args) > 1 {
 				return true
 			}
 		case "tee":
-			targets = append(targets, nonFlagArgs(args[1:])...)
+			for _, w := range call.Args[1:] {
+				if !strings.HasPrefix(placeableWord(command, w), "-") {
+					targets = append(targets, w)
+				}
+			}
 		default:
 			return true
 		}
 		for _, t := range targets {
-			if !strings.HasPrefix(t, "/dev/") {
-				out = append(out, heredocWrite{path: t, body: text})
+			name := placeableWord(command, t)
+			if p, ok := placePath(name, dirs[s], home); ok && !strings.HasPrefix(p, "/dev/") {
+				out = append(out, heredocWrite{name: name, path: p, body: text})
 			}
 		}
 		return true
@@ -105,27 +110,6 @@ func judgeFileWrite(ctx context.Context, deps Dependencies, req Request, who hoo
 		Host: req.Host, Form: req.Form, Session: who.Session, Agent: who.Agent, Window: req.Window,
 		ReportsSkills: req.ReportsSkills,
 	})
-}
-
-// redirectFile is a redirect target's text when the line determines it: a literal word, or
-// one that leads with $HOME or ${HOME}, spelled `~` for expandHome to place.
-func redirectFile(command string, w *syntax.Word) (string, bool) {
-	if w == nil || len(w.Parts) == 0 {
-		return "", false
-	}
-	parts := w.Parts
-	if q, ok := parts[0].(*syntax.DblQuoted); ok && len(parts) == 1 {
-		parts = q.Parts
-	}
-	if len(parts) > 0 {
-		if p, ok := parts[0].(*syntax.ParamExp); ok {
-			if src := command[p.Pos().Offset():p.End().Offset()]; src == "$HOME" || src == "${HOME}" {
-				rest, literal := plainWord(&syntax.Word{Parts: parts[1:]})
-				return "~" + rest, literal
-			}
-		}
-	}
-	return plainWord(w)
 }
 
 // plainWord is w's text when every part of it is literal: no parameter, substitution or
@@ -162,33 +146,24 @@ func plainWord(w *syntax.Word) (string, bool) {
 // The first refusal wins; otherwise the first advice. Ungraded: the caller grades it under
 // heredoc-write.
 func judgeHeredocWrites(ctx context.Context, deps Dependencies, req Request, who hookAttribution, callDir, lease, command string, d Dialect) ShellVerdict {
-	writes := heredocWrites(command, d)
+	writes := heredocWrites(command, d, callDir, userHome())
 	if len(writes) == 0 {
 		return ShellVerdict{}
 	}
 	var advised ShellVerdict
 	for _, w := range writes {
-		// The shell expands `~` before cat or tee opens the file, so it is never a directory
-		// under callDir; with the home unknown, the file is nowhere this can judge.
-		target := expandHome(w.path, userHome())
-		if strings.HasPrefix(target, "~") {
-			continue
-		}
-		if !filepath.IsAbs(target) && callDir != "" {
-			target = filepath.Join(callDir, target)
-		}
-		switch v := judgeFileWrite(ctx, deps, req, who, callDir, lease, target, w.body); v.Decision {
+		switch v := judgeFileWrite(ctx, deps, req, who, callDir, lease, w.path, w.body); v.Decision {
 		case decisionDeny:
 			first, _, _ := strings.Cut(v.Reason, "\n")
 			return ShellVerdict{
-				Deny: "this heredoc writes " + w.path + ", and that write is refused [" + v.Rule + "]: " + first,
+				Deny: "this heredoc writes " + w.name + ", and that write is refused [" + v.Rule + "]: " + first,
 				Why:  "A here-document into a file is a file write, judged by the rules the host's write tool meets.\n" + v.Reason,
 				Rule: denyRule{Name: denyRuleHeredocWrite, Arg: v.Rule},
 			}
 		case decisionAdvise:
 			if advised.Context == "" {
 				advised = ShellVerdict{
-					Context: "magus workspace: this heredoc writes " + w.path + ", judged as that write [" + v.Rule + "]: " + v.Context,
+					Context: "magus workspace: this heredoc writes " + w.name + ", judged as that write [" + v.Rule + "]: " + v.Context,
 					Rule:    denyRule{Name: denyRuleHeredocWrite, Arg: v.Rule},
 				}
 			}

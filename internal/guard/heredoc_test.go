@@ -15,18 +15,28 @@ import (
 
 func TestHeredocWritesReadsOnlyALiteralBodyIntoAFile(t *testing.T) {
 	t.Parallel()
+	const resume = "/home/me/.claude/p/RESUME.md"
 	for _, tt := range []struct {
 		line string
 		want []heredocWrite
 	}{
-		{"cat > notes.md <<'EOF'\nhello\nEOF", []heredocWrite{{"notes.md", "hello\n"}}},
-		{"cat >> notes.md <<EOF\nplain text\nEOF", []heredocWrite{{"notes.md", "plain text\n"}}},
-		{"tee -a a.go b.go >/dev/null <<'EOF'\npackage a\nEOF", []heredocWrite{{"a.go", "package a\n"}, {"b.go", "package a\n"}}},
-		// A home-relative target is kept as the shell will place it, never as a path here.
-		{"cat >> ~/.claude/p/RESUME.md <<'EOF'\nx\nEOF", []heredocWrite{{"~/.claude/p/RESUME.md", "x\n"}}},
-		{"cat >> $HOME/.claude/p/RESUME.md <<'EOF'\nx\nEOF", []heredocWrite{{"~/.claude/p/RESUME.md", "x\n"}}},
-		{"cat >> \"${HOME}/.claude/p/RESUME.md\" <<'EOF'\nx\nEOF", []heredocWrite{{"~/.claude/p/RESUME.md", "x\n"}}},
+		{"cat > notes.md <<'EOF'\nhello\nEOF", []heredocWrite{{"notes.md", "/w/notes.md", "hello\n"}}},
+		{"cat >> notes.md <<EOF\nplain text\nEOF", []heredocWrite{{"notes.md", "/w/notes.md", "plain text\n"}}},
+		{"tee -a a.go b.go >/dev/null <<'EOF'\npackage a\nEOF", []heredocWrite{{"a.go", "/w/a.go", "package a\n"}, {"b.go", "/w/b.go", "package a\n"}}},
+		// A home-relative target is the home's, never a directory named ~ here.
+		{"cat >> ~/.claude/p/RESUME.md <<'EOF'\nx\nEOF", []heredocWrite{{"~/.claude/p/RESUME.md", resume, "x\n"}}},
+		{"cat >> $HOME/.claude/p/RESUME.md <<'EOF'\nx\nEOF", []heredocWrite{{"~/.claude/p/RESUME.md", resume, "x\n"}}},
+		{"cat >> \"${HOME}/.claude/p/RESUME.md\" <<'EOF'\nx\nEOF", []heredocWrite{{"~/.claude/p/RESUME.md", resume, "x\n"}}},
+		{"tee -a \"$HOME/.claude/p/RESUME.md\" <<'EOF'\nx\nEOF", []heredocWrite{{"~/.claude/p/RESUME.md", resume, "x\n"}}},
+		// A cd earlier on the line moves where a relative target lands.
+		{"cd ~/.claude/p && cat >> RESUME.md <<'EOF'\nx\nEOF", []heredocWrite{{"RESUME.md", resume, "x\n"}}},
+		{"cd sub && cat > a.md <<'EOF'\nx\nEOF", []heredocWrite{{"a.md", "/w/sub/a.md", "x\n"}}},
+		// The shell leaves a quoted ~ a name, so the file is a directory called ~ here.
+		{"cat > \"~/x\" <<'EOF'\nx\nEOF", []heredocWrite{{"./~/x", "/w/~/x", "x\n"}}},
+		// Any other expansion places the target nowhere, rather than dropping the parameter.
 		{"cat >> $DIR/RESUME.md <<'EOF'\nx\nEOF", nil},
+		{"tee \"${D}R.md\" <<'EOF'\nx\nEOF", nil},
+		{"cd $D && cat > a.md <<'EOF'\nx\nEOF", nil},
 		// The body expands a parameter, so nobody can read it before it runs.
 		{"cat > notes.md <<EOF\nhome is $HOME\nEOF", nil},
 		// A heredoc feeding a command's stdin is no write.
@@ -35,7 +45,7 @@ func TestHeredocWritesReadsOnlyALiteralBodyIntoAFile(t *testing.T) {
 		{"cat 2> err.log <<'EOF'\nx\nEOF", nil},
 		{"grep x > out.txt <<'EOF'\nx\nEOF", nil},
 	} {
-		assert.Equal(t, tt.want, heredocWrites(tt.line, DialectBash), tt.line)
+		assert.Equal(t, tt.want, heredocWrites(tt.line, DialectBash, "/w", "/home/me"), tt.line)
 	}
 }
 
@@ -73,6 +83,7 @@ func TestHeredocWriteMeetsTheWriteRules(t *testing.T) {
 	for _, line := range []string{
 		"cat >> ~/.claude/plans/p/RESUME.md <<'EOF'\nan allowed word\nEOF",
 		"cat >> $HOME/.claude/plans/p/RESUME.md <<'EOF'\nan allowed word\nEOF",
+		"cd ~/.claude/plans/p && cat >> RESUME.md <<'EOF'\nan allowed word\nEOF",
 	} {
 		seen = nil
 		judge(line)

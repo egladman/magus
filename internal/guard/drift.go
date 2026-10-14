@@ -198,7 +198,7 @@ func leaseCoversWrite(ctx context.Context, actingLease string, location location
 	if actingLease == "" || !types.ValidJobID(actingLease) || location.cacheDir == "" {
 		return false
 	}
-	rel, inside := workspaceRelative(location.workspace, writePath)
+	rel, inside := workspaceRelative(leaseCheckout(ctx, location, actingLease), writePath)
 	if !inside {
 		return false
 	}

@@ -802,14 +802,14 @@ func TestAdviseAgentSourceWrite(t *testing.T) {
 		"internal/hint/mcp_tool.go",
 		"internal/hint/cli_command.go",
 	} {
-		got := adviseAgentSourceWrite(rel)
+		got := adviseAgentSourceWrite(".", rel)
 		assert.Contains(t, got.Say, "magus-skill-authoring", rel)
 		assert.Contains(t, got.Why, "SkillVersion", rel)
 	}
 
-	assert.Empty(t, adviseAgentSourceWrite("internal/handler/mcp/diff.go"), "one handler is not the registry")
-	assert.Empty(t, adviseAgentSourceWrite("internal/agent/catalog.go"))
-	assert.Empty(t, adviseAgentSourceWrite("cmd/magus/agent.go"))
+	assert.Empty(t, adviseAgentSourceWrite(".", "internal/handler/mcp/diff.go"), "one handler is not the registry")
+	assert.Empty(t, adviseAgentSourceWrite(".", "internal/agent/catalog.go"))
+	assert.Empty(t, adviseAgentSourceWrite(".", "cmd/magus/agent.go"))
 }
 
 // TestAdviseDescriptorWrite: the generator INPUT, not the generated output. The first is
@@ -819,15 +819,15 @@ func TestAdviseDescriptorWrite(t *testing.T) {
 	magusTreeFixture(t)
 
 	for _, rel := range []string{"proto/magus/v1/run.proto", "std/fs.go"} {
-		got := adviseDescriptorWrite(rel).Say
+		got := adviseDescriptorWrite(".", rel).Say
 		assert.Contains(t, got, "SAME commit", rel)
 		assert.Contains(t, got, "magus run generate .", rel)
 	}
 
-	assert.Empty(t, adviseDescriptorWrite("std/fs_test.go"), "a test beside a descriptor feeds no generator")
-	assert.Empty(t, adviseDescriptorWrite("std/http/client.go"), "a subdirectory is a module's implementation, not its API")
-	assert.Empty(t, adviseDescriptorWrite("proto/README.md"))
-	assert.Empty(t, adviseDescriptorWrite("internal/cache/cache.go"))
+	assert.Empty(t, adviseDescriptorWrite(".", "std/fs_test.go"), "a test beside a descriptor feeds no generator")
+	assert.Empty(t, adviseDescriptorWrite(".", "std/http/client.go"), "a subdirectory is a module's implementation, not its API")
+	assert.Empty(t, adviseDescriptorWrite(".", "proto/README.md"))
+	assert.Empty(t, adviseDescriptorWrite(".", "internal/cache/cache.go"))
 }
 
 // Both rules name paths and a target belonging to magus's OWN checkout, which a shipped
@@ -835,9 +835,9 @@ func TestAdviseDescriptorWrite(t *testing.T) {
 // worth pinning: in anybody else's workspace neither rule can fire at all.
 func TestMagusOwnSourceTreeGatesTheRepoScopedRules(t *testing.T) {
 	inWorkspace(t) // an ordinary workspace: no magusfile, no cmd/magus
-	assert.Empty(t, adviseAgentSourceWrite("internal/agent/skills/magus-run/SKILL.md"))
-	assert.Empty(t, adviseDescriptorWrite("std/fs.go"))
-	assert.Empty(t, adviseDescriptorWrite("proto/magus/v1/run.proto"))
+	assert.Empty(t, adviseAgentSourceWrite(".", "internal/agent/skills/magus-run/SKILL.md"))
+	assert.Empty(t, adviseDescriptorWrite(".", "std/fs.go"))
+	assert.Empty(t, adviseDescriptorWrite(".", "proto/magus/v1/run.proto"))
 }
 
 // The host sends an ABSOLUTE path, and this repository is routinely checked out under
@@ -852,9 +852,9 @@ func TestRepoScopedRulesHandleTheAbsolutePathTheHostSends(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(ws, "cmd", "magus"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(ws, "internal", "agent"), 0o755))
 
-	assert.Contains(t, adviseAgentSourceWrite(filepath.Join(ws, "internal", "agent", "skills", "magus-run", "SKILL.md")).Say, "magus-skill-authoring")
-	assert.Contains(t, adviseDescriptorWrite(filepath.Join(ws, "std", "fs.go")).Say, "SAME commit")
-	assert.Empty(t, adviseDescriptorWrite(filepath.Join(root, "elsewhere", "std", "fs.go")), "outside the workspace is not this workspace's business")
+	assert.Contains(t, adviseAgentSourceWrite(".", filepath.Join(ws, "internal", "agent", "skills", "magus-run", "SKILL.md")).Say, "magus-skill-authoring")
+	assert.Contains(t, adviseDescriptorWrite(".", filepath.Join(ws, "std", "fs.go")).Say, "SAME commit")
+	assert.Empty(t, adviseDescriptorWrite(".", filepath.Join(root, "elsewhere", "std", "fs.go")), "outside the workspace is not this workspace's business")
 }
 
 // wideningForms are the spellings of a command that widens a job's write paths. A

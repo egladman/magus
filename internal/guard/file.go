@@ -59,11 +59,14 @@ var nameSeps = []string{"_", "-"}
 // then writing a different basename took it. Below the 21% internal/hint/next.go
 // measured for an unhinted breadcrumb it teaches nobody, and the answer then is to
 // delete it rather than reword it.
-func adviseNewFileName(path string) advice {
+func adviseNewFileName(root, path string) advice {
 	clean := strings.TrimSpace(path)
-	dir, ok := workspaceRelativeDir(clean)
+	dir, ok := workspaceRelativeDir(root, clean)
 	if !ok {
 		return advice{}
+	}
+	if !filepath.IsAbs(clean) {
+		clean = filepath.Join(root, clean)
 	}
 	for _, seg := range strings.Split(dir, "/") {
 		if seg == "" || seg == "." {
@@ -78,7 +81,7 @@ func adviseNewFileName(path string) advice {
 	if _, err := os.Stat(clean); err == nil {
 		return advice{}
 	}
-	entries, err := os.ReadDir(filepath.FromSlash(dir))
+	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(dir)))
 	if err != nil {
 		return advice{} // an absent directory is adviseNewSourceDir's case; an unreadable one, nobody's
 	}

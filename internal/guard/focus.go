@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
+
+	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -102,16 +103,12 @@ func gradeFocusRead(ctx context.Context, deps Dependencies, actingLease, command
 	if strings.TrimSpace(command) == "" {
 		return focusGrade{}
 	}
-	cmds, ok := ParseCommands(command)
-	if !ok {
-		return focusGrade{}
-	}
-	operands := focusReadOperands(cmds)
-	if len(operands) == 0 {
-		return focusGrade{}
-	}
 	location := hookLocation(ctx, deps)
 	if location.workspace == "" {
+		return focusGrade{}
+	}
+	operands := focusReadPaths(command, focusDir(location), userHome())
+	if len(operands) == 0 {
 		return focusGrade{}
 	}
 	// Not the memoized inspect: the hook process is one command long, so
@@ -143,7 +140,11 @@ func gradeFocusRead(ctx context.Context, deps Dependencies, actingLease, command
 // files needs one explanation, not three.
 func focusVerdict(focus project.Focus, leaseID, root, dir string, paths []string) focusGrade {
 	for _, op := range paths {
-		rel, inside := workspaceRelative(root, focusResolve(dir, op))
+		abs, placed := placePath(op, dir, userHome())
+		if !placed {
+			continue
+		}
+		rel, inside := workspaceRelative(root, abs)
 		if !inside || focus.Contains(rel) {
 			continue
 		}
@@ -228,13 +229,29 @@ func focusReadOperands(cmds []hint.Invocation) []string {
 	return out
 }
 
-// focusResolve reads an operand the way the shell would: against the directory the
-// command runs in, not against the workspace root.
-func focusResolve(dir, op string) string {
-	if filepath.IsAbs(op) {
-		return op
+// focusReadPaths is focusReadOperands over the line's statements, each operand placed from
+// the directory its statement runs in by the line's cds, starting at start. An operand no
+// placer can place is left out.
+func focusReadPaths(command, start, home string) []string {
+	f, err := parseFile(command, DialectBash)
+	if err != nil {
+		return nil
 	}
-	return filepath.Join(dir, op)
+	dirs := stmtDirs(f, command, start, home)
+	var out []string
+	syntax.Walk(f, func(n syntax.Node) bool {
+		stmt, ok := n.(*syntax.Stmt)
+		if !ok {
+			return true
+		}
+		for _, op := range focusReadOperands(shellCommands(command, stmt, DialectBash, placeableWord)) {
+			if p, ok := placePath(op, dirs[stmt], home); ok && !slices.Contains(out, p) {
+				out = append(out, p)
+			}
+		}
+		return true
+	})
+	return out
 }
 
 // focusDir is where the command runs: the directory the host's envelope named, or

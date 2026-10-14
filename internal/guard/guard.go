@@ -900,7 +900,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			}
 		}
 		if verdict.Decision != decisionDeny {
-			if reason := denyArchitectureWithoutSkill(facts, skills, req.ReportsSkills, location.workspace, newSourceDir(input)); reason != "" {
+			if reason := denyArchitectureWithoutSkill(facts, skills, req.ReportsSkills, location.workspace, newSourceDir(location.workspace, input)); reason != "" {
 				refuse(denyArchitectureUnbriefed, reason)
 			}
 		}
@@ -948,13 +948,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		}
 		// Both of these are inert outside magus's own checkout; see magusOwnSourceTree.
 		if verdict.Decision == decisionPass && !spoken {
-			if a := adviseAgentSourceWrite(input); a.Say != "" {
+			if a := adviseAgentSourceWrite(location.workspace, input); a.Say != "" {
 				said, adviceKind, spoken = deps.heldBy(markers, string(advisorySkillSource)).Once(advisorySkillSource, a.Say), advisorySkillSource, true
 				whys[a.Say] = a.Why
 			}
 		}
 		if verdict.Decision == decisionPass && !spoken {
-			if a := adviseDescriptorWrite(input); a.Say != "" {
+			if a := adviseDescriptorWrite(location.workspace, input); a.Say != "" {
 				said, adviceKind, spoken = deps.heldBy(markers, string(advisoryRegenSource)).Once(advisoryRegenSource, a.Say), advisoryRegenSource, true
 				whys[a.Say] = a.Why
 			}
@@ -973,7 +973,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		// rule is not, because creating a file is ordinary work and creating a boundary
 		// is not (internal/guard/file.go).
 		if verdict.Decision == decisionPass && !spoken {
-			if a := adviseNewFileName(input); a.Say != "" {
+			if a := adviseNewFileName(location.workspace, input); a.Say != "" {
 				said, adviceKind, spoken = deps.heldBy(markers, string(advisoryNewFile)).Once(advisoryNewFile, a.Say), advisoryNewFile, true
 				whys[a.Say] = a.Why
 			}
@@ -986,7 +986,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		//
 		// Quiet for an agent whose host reported it loaded the skill this text sends it to.
 		if verdict.Decision == decisionPass && !spoken && (!req.ReportsSkills || !skillLoaded(skills, architectureSkill)) {
-			if a := adviseNewSourceDir(input); a.Say != "" {
+			if a := adviseNewSourceDir(location.workspace, input); a.Say != "" {
 				said, adviceKind = a.Say, advisoryNewSourceDir
 				whys[a.Say] = a.Why
 			}

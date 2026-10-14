@@ -854,6 +854,9 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 			setup: func(t *testing.T) (context.Context, Dependencies, Request) {
 				ctx, root := fleetFixture(t, types.Job{ID: "worker", State: types.StateRunning, WritePaths: []string{"app/**"}})
 				bindCaller(t, ctx, hookAttribution{}, "worker")
+				// An edit of a file already there, so no new-directory or new-file rule speaks.
+				require.NoError(t, os.MkdirAll(filepath.Join(root, "app"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(root, "app", "main.go"), []byte("package main\n"), 0o644))
 				commitCheckout(t, root)
 				return ctx, Dependencies{}, Request{Input: filepath.Join(root, "app", "main.go"), IsPath: true}
 			},

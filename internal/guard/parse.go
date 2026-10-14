@@ -331,10 +331,40 @@ var genericWriteVerbs = map[string]bool{
 	"find": true, "sort": true, "sed": true,
 }
 
+// placedWord is a word a line names, as placeableWord renders it, and the directory its statement
+// runs in by the line's cds, "" when the line does not say.
+type placedWord struct {
+	word string
+	dir  string
+}
+
+// place is where the shell opens w, false when the line does not determine it.
+func (w placedWord) place(home string) (string, bool) { return placePath(w.word, w.dir, home) }
+
+// nestedScript is a `sh -c` or `eval` payload and the directory it starts in.
+type nestedScript struct {
+	text string
+	dir  string
+}
+
+// shellCommands is the commands s runs, wrappers peeled, with each word rendered by render.
+func shellCommands(command string, s *syntax.Stmt, d Dialect, render func(string, *syntax.Word) string) []hint.Invocation {
+	call, ok := s.Cmd.(*syntax.CallExpr)
+	if !ok {
+		return nil
+	}
+	words := make([]string, len(call.Args))
+	for i, w := range call.Args {
+		words[i] = render(command, w)
+	}
+	return peelWrappers(words, d)
+}
+
 // removedOrMovedOperands names the path operands of the line's removes and moves (rm, rmdir,
-// mv, and git, hg and sl remove and move), nested scripts included. Each takes a directory
-// whole, so a boundary has to ask what one holds, not only what it is named.
-func removedOrMovedOperands(command string, depth int, d Dialect) []string {
+// mv, and git, hg and sl remove and move), nested scripts included, each with the directory
+// it runs in, starting at start. Each takes a directory whole, so a boundary has to ask what
+// one holds, not only what it is named.
+func removedOrMovedOperands(command string, depth int, d Dialect, start, home string) []placedWord {
 	if depth > writeScanDepth {
 		return nil
 	}
@@ -342,33 +372,25 @@ func removedOrMovedOperands(command string, depth int, d Dialect) []string {
 	if err != nil {
 		return nil
 	}
-	var out, nested []string
+	dirs := stmtDirs(f, command, start, home)
+	var out []placedWord
+	var nested []nestedScript
 	syntax.Walk(f, func(n syntax.Node) bool {
 		stmt, ok := n.(*syntax.Stmt)
 		if !ok {
 			return true
 		}
-		// A word the shell expands (`$TMPDIR/x`, `$(mktemp)`, `~/x`) renders as a fragment
-		// of the path it names, so where it lands is unknown and it is not graded.
-		expanded := map[string]bool{}
 		if call, ok := stmt.Cmd.(*syntax.CallExpr); ok {
 			if script, ok := shellPayload(literalWords(call.Args)); ok {
-				nested = append(nested, script)
-			}
-			for _, w := range call.Args {
-				if _, literal := literalArg(w.Parts); !literal {
-					expanded[literalWord(w.Parts)] = true
-				}
+				nested = append(nested, nestedScript{script, dirs[stmt]})
 			}
 		}
 		keep := func(ops []string) {
 			for _, op := range ops {
-				if !expanded[op] && !strings.HasPrefix(op, "~") {
-					out = append(out, op)
-				}
+				out = append(out, placedWord{op, dirs[stmt]})
 			}
 		}
-		for _, c := range stmtCommands(stmt, d) {
+		for _, c := range shellCommands(command, stmt, d, placeableWord) {
 			name := path.Base(c.Name)
 			if paths, ok := vcsPathOperands(name, c.Args); ok {
 				keep(paths)
@@ -383,8 +405,8 @@ func removedOrMovedOperands(command string, depth int, d Dialect) []string {
 		}
 		return true
 	})
-	for _, script := range nested {
-		out = append(out, removedOrMovedOperands(script, depth+1, d)...)
+	for _, s := range nested {
+		out = append(out, removedOrMovedOperands(s.text, depth+1, d, s.dir, home)...)
 	}
 	return out
 }
@@ -418,6 +440,20 @@ func mvOperands(args []string) []string {
 // the commands inside one, but a redirect there belongs to the inner parse tree and is
 // invisible to a walk of the outer one.
 func writeTargetCandidates(command string, depth int, d Dialect) []string {
+	var out []string
+	for _, p := range collectWriteCandidates(command, depth, d, "", "", func(_ string, w *syntax.Word) string { return literalWord(w.Parts) }) {
+		out = append(out, p.word)
+	}
+	return out
+}
+
+// placedWriteCandidates is writeTargetCandidates with each word as placeableWord renders it
+// and the directory its statement runs in, starting at start.
+func placedWriteCandidates(command string, d Dialect, start, home string) []placedWord {
+	return collectWriteCandidates(command, 0, d, start, home, placeableWord)
+}
+
+func collectWriteCandidates(command string, depth int, d Dialect, start, home string, render func(string, *syntax.Word) string) []placedWord {
 	if depth > writeScanDepth {
 		return nil
 	}
@@ -425,7 +461,9 @@ func writeTargetCandidates(command string, depth int, d Dialect) []string {
 	if err != nil {
 		return nil
 	}
-	var out, nested []string
+	dirs := stmtDirs(f, command, start, home)
+	var out []placedWord
+	var nested []nestedScript
 	syntax.Walk(f, func(n syntax.Node) bool {
 		stmt, ok := n.(*syntax.Stmt)
 		if !ok {
@@ -433,21 +471,23 @@ func writeTargetCandidates(command string, depth int, d Dialect) []string {
 		}
 		for _, r := range stmt.Redirs {
 			if writesToFile(r.Op) && !duplicatesDescriptor(r) {
-				out = append(out, literalWord(r.Word.Parts))
+				out = append(out, placedWord{render(command, r.Word), dirs[stmt]})
 			}
 		}
 		if call, ok := stmt.Cmd.(*syntax.CallExpr); ok {
 			if script, ok := shellPayload(literalWords(call.Args)); ok {
-				nested = append(nested, script)
+				nested = append(nested, nestedScript{script, dirs[stmt]})
 			}
 		}
-		for _, c := range stmtCommands(stmt, d) {
-			out = append(out, commandWriteCandidates(c, heredocText(stmt))...)
+		for _, c := range shellCommands(command, stmt, d, render) {
+			for _, w := range commandWriteCandidates(c, heredocText(stmt)) {
+				out = append(out, placedWord{w, dirs[stmt]})
+			}
 		}
 		return true
 	})
-	for _, script := range nested {
-		out = append(out, writeTargetCandidates(script, depth+1, d)...)
+	for _, s := range nested {
+		out = append(out, collectWriteCandidates(s.text, depth+1, d, s.dir, home, render)...)
 	}
 	return out
 }

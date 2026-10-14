@@ -1045,7 +1045,10 @@ var assignmentRe = regexp.MustCompile(`(?:^|[;&|]\s*|\s)([A-Za-z_]\w*)=("?)([^"'
 //
 // Empty when the line does not RUN magus, so a rule built on this cannot fire on
 // one that merely names a directory.
-func magusCdTargets(command string, d Dialect) []string {
+//
+// Each target is placed where the shell lands, from callDir and the cds before it, with `~`
+// and $HOME the home's; one that cannot be placed is left out.
+func magusCdTargets(command string, d Dialect, callDir, home string) []string {
 	if !mentionsMagusCommand(command, d) {
 		return nil
 	}
@@ -1058,12 +1061,25 @@ func magusCdTargets(command string, d Dialect) []string {
 		vars[m[1]] = m[3]
 	}
 	var out []string
+	cwd := callDir
 	syntax.Walk(f, func(n syntax.Node) bool {
 		call, ok := n.(*syntax.CallExpr)
 		if !ok || len(call.Args) < 2 || literalWord(call.Args[0].Parts) != "cd" {
 			return true
 		}
-		out = append(out, expandGuardVars(rawWord(command, call.Args[1]), vars))
+		word := placeableWord(command, call.Args[1])
+		if strings.HasPrefix(word, unresolved) {
+			if expanded := expandGuardVars(rawWord(command, call.Args[1]), vars); !strings.ContainsAny(expanded, "$`") {
+				word = expanded
+			}
+		}
+		dir, ok := placePath(word, cwd, home)
+		if !ok {
+			cwd = ""
+			return true
+		}
+		cwd = dir
+		out = append(out, dir)
 		return true
 	})
 	return out
@@ -1118,7 +1134,7 @@ func magusInThrowawayCopy(command string, d Dialect) bool {
 	if parsed && !slices.ContainsFunc(cmds, isMagusWork) {
 		return false
 	}
-	return slices.ContainsFunc(magusCdTargets(command, d), throwawayDirRe.MatchString)
+	return slices.ContainsFunc(magusCdTargets(command, d, "", userHome()), throwawayDirRe.MatchString)
 }
 
 // expandGuardVars substitutes $NAME and ${NAME} from assignments made earlier on

@@ -25,7 +25,7 @@ func TestAdviseNewFileNameListsTheSiblingsItWillJoin(t *testing.T) {
 	root := inWorkspace(t)
 	populate(t, root, filepath.Join("internal", "guard"), "advisory.go", "cache.go", "focus.go")
 
-	got := adviseNewFileName(filepath.Join("internal", "guard", "lease.go")).Say
+	got := adviseNewFileName(".", filepath.Join("internal", "guard", "lease.go")).Say
 
 	assert.Contains(t, got, "NEW FILE")
 	assert.Contains(t, got, "advisory.go, cache.go, focus.go", "the siblings ARE the advisory")
@@ -37,7 +37,7 @@ func TestAdviseNewFileNameIsSilentOnAnEdit(t *testing.T) {
 	root := inWorkspace(t)
 	populate(t, root, "pkg", "existing.go", "other.go")
 
-	assert.Empty(t, adviseNewFileName(filepath.Join("pkg", "existing.go")))
+	assert.Empty(t, adviseNewFileName(".", filepath.Join("pkg", "existing.go")))
 }
 
 // The empty directory belongs to adviseNewSourceDir, which asks the bigger question.
@@ -46,9 +46,9 @@ func TestAdviseNewFileNameLeavesTheEmptyDirectoryToTheBoundaryRule(t *testing.T)
 	root := inWorkspace(t)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal", "cache"), 0o755))
 
-	assert.Empty(t, adviseNewFileName(filepath.Join("newpkg", "thing.go")), "nothing there yet")
-	assert.Empty(t, adviseNewFileName(filepath.Join("internal", "helper.go")), "internal/ holds packages, not files")
-	assert.Contains(t, adviseNewSourceDir(filepath.Join("newpkg", "thing.go")).Say, "creates a NEW DIRECTORY",
+	assert.Empty(t, adviseNewFileName(".", filepath.Join("newpkg", "thing.go")), "nothing there yet")
+	assert.Empty(t, adviseNewFileName(".", filepath.Join("internal", "helper.go")), "internal/ holds packages, not files")
+	assert.Contains(t, adviseNewSourceDir(".", filepath.Join("newpkg", "thing.go")).Say, "creates a NEW DIRECTORY",
 		"the case this rule declines is the case that one takes")
 }
 
@@ -58,7 +58,7 @@ func TestAdviseNewFileNameIsSilentOnADerivedName(t *testing.T) {
 	root := inWorkspace(t)
 	populate(t, root, filepath.Join("internal", "guard"), "dir.go", "advisory.go")
 
-	assert.Empty(t, adviseNewFileName(filepath.Join("internal", "guard", "dir_test.go")))
+	assert.Empty(t, adviseNewFileName(".", filepath.Join("internal", "guard", "dir_test.go")))
 }
 
 // A name hung off the directory's EPONYMOUS file is one somebody picked, so the
@@ -67,7 +67,7 @@ func TestAdviseNewFileNameStillSpeaksForANameOffTheEponymousFile(t *testing.T) {
 	root := inWorkspace(t)
 	populate(t, root, filepath.Join("internal", "guard"), "guard.go", "advisory.go", "cache.go")
 
-	got := adviseNewFileName(filepath.Join("internal", "guard", "guard_thing.go")).Say
+	got := adviseNewFileName(".", filepath.Join("internal", "guard", "guard_thing.go")).Say
 
 	assert.Contains(t, got, "NEW FILE")
 	assert.Contains(t, got, "advisory.go, cache.go, guard.go", "the list is what names the convention")
@@ -84,7 +84,7 @@ func TestAdviseNewFileNameHandlesTheAbsolutePathTheHostSends(t *testing.T) {
 	t.Chdir(ws)
 	populate(t, ws, filepath.Join("internal", "guard"), "advisory.go")
 
-	assert.Contains(t, adviseNewFileName(filepath.Join(ws, "internal", "guard", "lease.go")).Say, "NEW FILE")
+	assert.Contains(t, adviseNewFileName(".", filepath.Join(ws, "internal", "guard", "lease.go")).Say, "NEW FILE")
 }
 
 // Fixtures, pruned trees and anything outside the workspace are not places anyone is
@@ -93,11 +93,11 @@ func TestAdviseNewFileNameIgnoresFixtureAndPrunedTrees(t *testing.T) {
 	root := inWorkspace(t)
 	for _, dir := range []string{"testdata", "fixtures", "__snapshots__", "gen", "vendor", "node_modules", ".hidden"} {
 		populate(t, root, filepath.Join(dir, "case"), "existing.json")
-		assert.Empty(t, adviseNewFileName(filepath.Join(dir, "case", "added.json")), dir)
+		assert.Empty(t, adviseNewFileName(".", filepath.Join(dir, "case", "added.json")), dir)
 	}
 	populate(t, root, ".", "main.go")
-	assert.Empty(t, adviseNewFileName("other.go"), "the workspace root is not a directory anyone is choosing")
-	assert.Empty(t, adviseNewFileName(filepath.Join("..", "sibling", "x.go")), "outside the tree is not this workspace's business")
+	assert.Empty(t, adviseNewFileName(".", "other.go"), "the workspace root is not a directory anyone is choosing")
+	assert.Empty(t, adviseNewFileName(".", filepath.Join("..", "sibling", "x.go")), "outside the tree is not this workspace's business")
 }
 
 // A wall of names is a wall nobody reads, and the advisory's whole cost is what it
@@ -110,7 +110,7 @@ func TestAdviseNewFileNameBoundsTheList(t *testing.T) {
 	}
 	populate(t, root, "wide", names...)
 
-	got := adviseNewFileName(filepath.Join("wide", "zzz.go")).Say
+	got := adviseNewFileName(".", filepath.Join("wide", "zzz.go")).Say
 
 	assert.Contains(t, got, "already holds 20")
 	assert.Contains(t, got, "and 8 more")

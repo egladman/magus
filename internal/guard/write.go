@@ -170,7 +170,7 @@ func denyNotesWrite(deps Dependencies, writePath string) string {
 	// declared store under one spelling and an incoming write under the other. Comparing
 	// them literally makes the rule silently pass: a deny that fails open is worse than
 	// no deny, because it looks enforced.
-	rel, err := filepath.Rel(resolveSymlinks(dir), resolveSymlinks(filepath.Clean(abs)))
+	rel, err := filepath.Rel(realPath(dir), realPath(filepath.Clean(abs)))
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return ""
 	}
@@ -180,24 +180,6 @@ func denyNotesWrite(deps Dependencies, writePath string) string {
 		Why: "A note is the one thing in the graph the repository cannot corroborate later, so its only provenance is the human who signed the commit.\n" +
 			"Read the store with `" + hint.NotesLs.String() + "` and `" + hint.NotesGet.With("<name>") + "`.",
 	}.full()
-}
-
-// resolveSymlinks canonicalizes as much of path as exists, returning it unchanged when
-// nothing can be resolved. The file being judged has not been written yet, so the deepest
-// EXISTING ancestor is what can be resolved; the remainder is appended verbatim.
-func resolveSymlinks(path string) string {
-	rest := ""
-	for cur := path; ; {
-		if real, err := filepath.EvalSymlinks(cur); err == nil {
-			return filepath.Join(real, rest)
-		}
-		parent := filepath.Dir(cur)
-		if parent == cur {
-			return path // nothing along the way exists; compare what we were given
-		}
-		rest = filepath.Join(filepath.Base(cur), rest)
-		cur = parent
-	}
 }
 
 // Where the acting lease's identity comes from. Both spellings name the same thing so a
@@ -679,7 +661,7 @@ func holderLastCall(deps Dependencies, at location, owner types.Job) (time.Time,
 		return time.Time{}, false
 	}
 	cacheDir := at.cacheDir
-	if resolveSymlinks(owner.CheckoutRoot) != resolveSymlinks(at.workspace) {
+	if realPath(owner.CheckoutRoot) != realPath(at.workspace) {
 		cacheDir = hookLocationAt(deps, owner.CheckoutRoot).cacheDir
 	}
 	events, err := trail.ReadRecent(cacheDir, holderTrailWindow)
@@ -900,23 +882,34 @@ func findMagusCheckout(dir string) string {
 //
 // A home-relative path resolves against the home directory, never the root, so a
 // workspace-relative glob such as `**/*.md` never matches `~/.claude/plan.md`; one whose
-// home is unknown is placed nowhere, and so outside.
+// home is unknown is placed nowhere, and so outside. A path in a checkout nested under the
+// root, such as a worktree in .claude/worktrees, is that checkout's and outside too, so no
+// glob of the root's leases matches it and denyOtherCheckout is what judges it.
 func workspaceRelative(root, p string) (string, bool) {
 	if root == "" {
 		return "", false
 	}
-	abs := expandHome(p, userHome())
-	if strings.HasPrefix(abs, "~") {
+	abs, ok := placePath(p, root, userHome())
+	if !ok {
 		return "", false
 	}
-	if !filepath.IsAbs(abs) {
-		abs = filepath.Join(root, abs)
-	}
-	rel, err := filepath.Rel(resolveSymlinks(root), resolveSymlinks(filepath.Clean(abs)))
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	rel, err := filepath.Rel(realPath(root), realPath(abs))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || nestedCheckout(root, abs) {
 		return "", false
 	}
 	return filepath.ToSlash(rel), true
+}
+
+// nestedCheckout reports an abs under root that lies in another git checkout inside it: a
+// directory between abs and root holding a .git entry, as a linked worktree's root does.
+func nestedCheckout(root, abs string) bool {
+	top := realPath(root)
+	for d := filepath.Dir(realPath(abs)); d != top && strings.HasPrefix(d, top+string(filepath.Separator)); d = filepath.Dir(d) {
+		if _, err := os.Lstat(filepath.Join(d, ".git")); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // criteriaLine is the lease's criteria reduced to its first line. Criteria holds what the
@@ -1049,8 +1042,8 @@ var agentSources = []string{
 // outside a branch changes both and a passage added inside one changes neither, and
 // nothing about the file says so. A content change without a SkillVersion bump leaves
 // every install reporting itself up to date while carrying the previous bytes.
-func adviseAgentSourceWrite(path string) advice {
-	rel, ok := workspaceRelativeFile(path)
+func adviseAgentSourceWrite(root, path string) advice {
+	rel, ok := workspaceRelativeFile(root, path)
 	if !ok || !magusOwnSourceTree() {
 		return advice{}
 	}
@@ -1075,8 +1068,8 @@ func adviseAgentSourceWrite(path string) advice {
 // that output stale, which is the omitted one. The failure is the same shape as every
 // other advisory here (silent), because a stale generated file looks exactly like a file
 // nobody had to touch, right up until CI runs generate as a drift gate.
-func adviseDescriptorWrite(path string) advice {
-	rel, ok := workspaceRelativeFile(path)
+func adviseDescriptorWrite(root, path string) advice {
+	rel, ok := workspaceRelativeFile(root, path)
 	if !ok || !magusOwnSourceTree() {
 		return advice{}
 	}
@@ -1096,28 +1089,26 @@ func adviseDescriptorWrite(path string) advice {
 	}
 }
 
-// workspaceRelativeFile returns path relative to the working directory, slash-separated,
-// and whether it lands inside it.
+// workspaceRelativeFile returns path relative to the workspace root, slash-separated, and
+// whether it lands strictly inside it. A relative path is the root's, and symlinks resolve on
+// both sides, so a path under /private/var names the file a root under /var holds.
 //
-// The file's sibling to workspaceRelativeDir, which the new-directory rule uses, and it
-// resolves the same way for the same reason: the host sends an absolute path and this
-// workspace is routinely checked out under a dot-directory, so a rule that matched the
-// absolute form would be silently disabled in the layout this repository's own workflow
-// uses.
-func workspaceRelativeFile(path string) (string, bool) {
+// Relative FIRST, then scanned: the host sends an absolute path and this workspace is
+// routinely checked out under a dot-directory, so a rule that matched the absolute form
+// would be silently disabled in the layout this repository's own workflow uses.
+func workspaceRelativeFile(root, path string) (string, bool) {
 	clean := strings.TrimSpace(path)
-	if clean == "" {
+	if clean == "" || root == "" {
 		return "", false
 	}
-	cwd, err := os.Getwd()
+	root, err := filepath.Abs(root)
 	if err != nil {
 		return "", false
 	}
-	abs := clean
-	if !filepath.IsAbs(abs) {
-		abs = filepath.Join(cwd, abs)
+	if !filepath.IsAbs(clean) {
+		clean = filepath.Join(root, clean)
 	}
-	rel, err := filepath.Rel(cwd, abs)
+	rel, err := filepath.Rel(realPath(root), realPath(clean))
 	if err != nil {
 		return "", false
 	}
@@ -1210,10 +1201,10 @@ func denyVCSOffSwitch(actingLease, writePath string, fields writeFields) writeGr
 	if !filepath.IsAbs(abs) {
 		abs = filepath.Join(root, abs)
 	}
-	real := resolveSymlinks(filepath.Clean(abs))
+	real := realPath(filepath.Clean(abs))
 	target := ""
 	for _, candidate := range vcsOffSwitchTargets(root) {
-		if resolveSymlinks(candidate) == real {
+		if realPath(candidate) == real {
 			target = candidate
 			break
 		}

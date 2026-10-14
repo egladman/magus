@@ -130,17 +130,17 @@ func namesTokenState(location location, candidate string) bool {
 		}
 		abs = filepath.Join(dir, abs)
 	}
-	abs = resolveSymlinks(abs)
+	abs = realPath(abs)
 	state, err := auth.StateDir()
 	if err != nil {
 		return false
 	}
 	operator, _ := auth.OperatorPath()
 	store, _ := auth.StoreDir()
-	if abs == resolveSymlinks(state) || abs == resolveSymlinks(operator) {
+	if abs == realPath(state) || abs == realPath(operator) {
 		return true
 	}
-	rel, err := filepath.Rel(resolveSymlinks(store), abs)
+	rel, err := filepath.Rel(realPath(store), abs)
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 

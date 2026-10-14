@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -108,6 +109,18 @@ func TestFocusVerdictStaysSilentInsideTheFocus(t *testing.T) {
 	} {
 		assert.Empty(t, focusVerdict(focus, "", "/ws", "/ws/app", []string{op}).Decision, op)
 	}
+}
+
+// A `~` operand read from a project outside the focus was joined under that project as a
+// directory named ~, and so read as that project's file.
+func TestFocusVerdictPlacesAHomePathOutsideTheWorkspace(t *testing.T) {
+	focus, ok := project.FocusForPaths(newFocusFixture(), []string{"app/**"})
+	require.True(t, ok)
+	assert.Empty(t, focusVerdict(focus, "lease-a", "/ws", "/ws/web", []string{"~/.claude/plans/p/RESUME.md"}).Decision)
+
+	home := t.TempDir()
+	assert.Equal(t, []string{filepath.Join(home, ".claude/plans/p/RESUME.md"), "/ws/web/x/y.go"},
+		focusReadPaths("cd ~/.claude/plans && cat p/RESUME.md; cd /ws/web && cat x/y.go", "/ws/app", home))
 }
 
 func TestFocusVerdictDeniesUnderALease(t *testing.T) {

@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -52,7 +53,8 @@ func rankSiblingCheckout(v ShellVerdict, reason string) ShellVerdict {
 // would export a false positive about sibling checkouts to every consumer of
 // this guard to catch a mistake nobody makes.
 func denySiblingCheckout(callDir, command string, d Dialect) string {
-	targets := magusCdTargets(command, d)
+	// No call directory is the process's own, which a relative path already resolves from.
+	targets := magusCdTargets(command, d, cmp.Or(callDir, "."), userHome())
 	if len(targets) == 0 {
 		return ""
 	}
@@ -61,7 +63,7 @@ func denySiblingCheckout(callDir, command string, d Dialect) string {
 		return ""
 	}
 	for _, t := range targets {
-		root, common, ok := gitCheckout(resolveFrom(callDir, t))
+		root, common, ok := gitCheckout(t)
 		if !ok || common != hereCommon || root == hereRoot {
 			continue
 		}
@@ -80,7 +82,7 @@ func siblingCheckoutRemedy(callDir, command string, d Dialect) (string, []types.
 	if !ok || len(cmds) != 2 || !isCdInvocation(cmds[0]) || len(cmds[0].Args) != 1 || !isMagusInvocation(cmds[1]) {
 		return "", nil
 	}
-	targets := magusCdTargets(command, d)
+	targets := magusCdTargets(command, d, cmp.Or(callDir, "."), userHome())
 	if len(targets) != 1 {
 		return "", nil
 	}
@@ -88,7 +90,7 @@ func siblingCheckoutRemedy(callDir, command string, d Dialect) (string, []types.
 	if !ok {
 		return "", nil
 	}
-	abs, err := filepath.Abs(resolveFrom(callDir, targets[0]))
+	abs, err := filepath.Abs(targets[0])
 	if err != nil {
 		return "", nil
 	}

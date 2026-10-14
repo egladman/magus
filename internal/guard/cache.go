@@ -72,7 +72,7 @@ func namesWorkspaceCacheDir(location location, candidate string) bool {
 	// tmpdir-rooted workspace yields the dir under one spelling and the incoming path
 	// under the other, and a deny that compares them literally looks enforced while
 	// passing everything.
-	rel, err := filepath.Rel(resolveSymlinks(location.cacheDir), resolveSymlinks(abs))
+	rel, err := filepath.Rel(realPath(location.cacheDir), realPath(abs))
 	if err != nil {
 		return false
 	}
