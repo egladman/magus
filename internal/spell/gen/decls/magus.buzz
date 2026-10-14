@@ -1130,6 +1130,7 @@ export object SpawnRequest {
     modelTier: JobModelTier? = null,
     thread: str = "",
     threadFrom: str = "",
+    orchestration: str = "",
     window: ContextWindow? = null,
     target: SpawnTarget? = null,
 }
@@ -1166,6 +1167,7 @@ export object CommandRequest {
     lease: Job? = null,
     thread: str = "",
     threadFrom: str = "",
+    orchestration: str = "",
     window: ContextWindow? = null,
     checkout: CheckoutState? = null,
     dir: str = "",
@@ -1181,6 +1183,7 @@ export object WriteRequest {
     lease: Job? = null,
     thread: str = "",
     threadFrom: str = "",
+    orchestration: str = "",
     window: ContextWindow? = null,
     path: str = "",
     workspace: str = "",

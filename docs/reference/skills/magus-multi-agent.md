@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 26372
-skill_short_bytes: 20669
+skill_full_bytes: 26667
+skill_short_bytes: 20966
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `125` |
+| `agent-skill-version` | `126` |
 | `knowledge-schema-version` | `19` |
-| `skill-content` | `ad9b6af72079` |
+| `skill-content` | `c2f17a551361` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -79,16 +79,18 @@ magus affected ci --plan --stdin            # plan PROPOSED paths, before editin
 You do not need to be asked to split work: several disjoint write sets
 you can name are reason enough.
 
-Fan-out is not inherently expensive. Say what a
-round costs when the user is deciding, and prefer the smallest fan-out that covers
-the work.
+Fan-out is not inherently expensive. Say what a round
+costs when the user is deciding, and prefer the smallest fan-out that covers the work.
 
 Fan out only after the collision check below REPORTS the jobs disjoint; looking
 separate is not that check. With only one coherent write set, keep the work local.
 The root agent owns the goal, the budget, the topology, integration, and final
 verification, and never hands those out. Above the root is the human in the loop:
 what lands, what is published and what a round may spend are the person's calls, so
-the root reports to them and does not decide them.
+the root reports to them and does not decide them. From its first call the root does no
+groundwork: no reading, searching or editing of source, no test or lint runs of its own.
+It plans from the graph, moves jobs and integrates; groundwork it needs, a read-only
+scout included, is a job. The guard enforces this by role, at any context size.
 
 ## Coalesce what the write sets allow
 
@@ -139,7 +141,7 @@ Then make the declaration gradeable, so the names are a contract, not a suggesti
 - `symbol` + `unreferenced` for each helper the shared API replaces.
 
 A job that adds or changes an exported API gets a `symbol` + `signature` goal by
-default: the root commits the stub, runs `magus graph build`, and forks the
+default: a stub job lands the stub, the root runs `magus graph build`, and forks the
 `signature` goal empty, so the fork records the indexed stub as the contract, beside
 a `changed` goal on the same name.
 
@@ -200,7 +202,7 @@ definitive end without capping depth:
 - **Every job carries acceptance criteria down.** A child inherits its parent's
   criteria plus its own. A job nobody can evaluate cannot end; that, not the nesting,
   makes depth dangerous.
-- **A job that fails its criteria twice is not re-issued.** The root does it locally,
+- **A job that fails its criteria twice is not re-issued.** The root re-scopes it,
   or serializes it behind whatever keeps breaking it.
 - **Whatever the parent does not hand out, the parent still owns.** A strict subset
   leaks by construction. Split "no caller of X remains" into per-project jobs, and
@@ -511,16 +513,18 @@ several disjoint write sets you can name is another.
 Fan-out is not inherently expensive. What costs is unbounded fan-out:
 workers that hand work on without a shrinking scope, jobs with no acceptance criteria
 so nobody can say when to stop, and a principal model assigned to mechanical edits.
-Each of those is a choice made below, not a property of fanning out. Say what a
-round costs when the user is deciding, and prefer the smallest fan-out that covers
-the work.
+Each of those is a choice made below, not a property of fanning out. Say what a round
+costs when the user is deciding, and prefer the smallest fan-out that covers the work.
 
 Fan out only after the collision check below REPORTS the jobs disjoint; looking
 separate is not that check. With only one coherent write set, keep the work local.
 The root agent owns the goal, the budget, the topology, integration, and final
 verification, and never hands those out. Above the root is the human in the loop:
 what lands, what is published and what a round may spend are the person's calls, so
-the root reports to them and does not decide them.
+the root reports to them and does not decide them. From its first call the root does no
+groundwork: no reading, searching or editing of source, no test or lint runs of its own.
+It plans from the graph, moves jobs and integrates; groundwork it needs, a read-only
+scout included, is a job. The guard enforces this by role, at any context size.
 
 ## Contents
 
@@ -608,7 +612,7 @@ Then make the declaration gradeable, so the names are a contract, not a suggesti
 - `symbol` + `unreferenced` for each helper the shared API replaces.
 
 A job that adds or changes an exported API gets a `symbol` + `signature` goal by
-default: the root commits the stub, runs `magus graph build`, and forks the
+default: a stub job lands the stub, the root runs `magus graph build`, and forks the
 `signature` goal empty, so the fork records the indexed stub as the contract, beside
 a `changed` goal on the same name.
 
@@ -623,9 +627,8 @@ to more than one definition is graded against one of them, silently.
 
 This applies with zero workers. A solo change across several call sites is a one-job
 tree. Skipping the declaration because nothing is forked is the same failure without
-a fork to blame. Write the table in the
-conversation, check it with `magus refs` when the edits land, and only then report
-the change done.
+a fork to blame. Write the table in the conversation, check it with `magus refs` when
+the edits land, and only then report the change done.
 
 ## Set one topology boundary
 
@@ -654,9 +657,8 @@ Assign the check from the pipeline the workspace composed, not from convention.
   omission.
 
 A job's check is that narrow target, never the gate. The root gates ONCE, in its own
-tree, after every unit lands, which is
-what stops seven fanned-out workers from each running the whole pipeline
-concurrently on one machine.
+tree, after every unit lands, which is what stops seven fanned-out workers from
+each running the whole pipeline concurrently on one machine.
 
 Decide each job's validation PLANE with its target. Some worker environments cannot
 execute magus at all. Examples are an isolated tree with no usable binary, or a guard
@@ -680,11 +682,10 @@ definitive end without capping depth:
 - **Every job carries acceptance criteria down.** A child inherits its parent's
   criteria plus its own. A job nobody can evaluate cannot end; that, not the nesting,
   makes depth dangerous.
-- **A job that fails its criteria twice is not re-issued.** The root does it locally,
-  or serializes it behind whatever keeps breaking it. Two jobs
-  with an undeclared dependency each break the other's criteria, and re-issuing
-  the failing one satisfies every instruction above while alternating forever; the budget
-  is what ends it.
+- **A job that fails its criteria twice is not re-issued.** The root re-scopes it,
+  or serializes it behind whatever keeps breaking it. Two jobs with an undeclared
+  dependency each break the other's criteria, and re-issuing the failing one satisfies
+  every instruction above while alternating forever; the budget is what ends it.
 - **Whatever the parent does not hand out, the parent still owns.** A strict subset
   leaks by construction. Split "no caller of X remains" into per-project jobs, and
   the callers in no project belong to nobody. Every job passes and the goal is

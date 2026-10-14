@@ -3594,6 +3594,7 @@ func ObjectSpawnRequest(v types.SpawnRequest, enums ffi.EnumCases) vm.Value {
 	out.MapSet("modelTier", optModelTier)
 	out.MapSet("thread", vm.StrValue(string(v.Thread)))
 	out.MapSet("threadFrom", vm.StrValue(string(v.ThreadFrom)))
+	out.MapSet("orchestration", vm.StrValue(string(v.Orchestration)))
 	optWindow := vm.Null
 	if v.Window != nil {
 		optWindow = ObjectContextWindow((*v.Window))
@@ -3670,6 +3671,7 @@ func ObjectCommandRequest(v types.CommandRequest, enums ffi.EnumCases) vm.Value 
 	out.MapSet("lease", optLease)
 	out.MapSet("thread", vm.StrValue(string(v.Thread)))
 	out.MapSet("threadFrom", vm.StrValue(string(v.ThreadFrom)))
+	out.MapSet("orchestration", vm.StrValue(string(v.Orchestration)))
 	optWindow := vm.Null
 	if v.Window != nil {
 		optWindow = ObjectContextWindow((*v.Window))
@@ -3699,6 +3701,7 @@ func ObjectWriteRequest(v types.WriteRequest, enums ffi.EnumCases) vm.Value {
 	out.MapSet("lease", optLease)
 	out.MapSet("thread", vm.StrValue(string(v.Thread)))
 	out.MapSet("threadFrom", vm.StrValue(string(v.ThreadFrom)))
+	out.MapSet("orchestration", vm.StrValue(string(v.Orchestration)))
 	optWindow := vm.Null
 	if v.Window != nil {
 		optWindow = ObjectContextWindow((*v.Window))

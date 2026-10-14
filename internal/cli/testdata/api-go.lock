@@ -445,6 +445,7 @@ github.com/egladman/magus/types.AgentFacts.Billing field AgentBilling "json:\"bi
 github.com/egladman/magus/types.AgentFacts.ContextModel field string "json:\"context_model,omitempty\""
 github.com/egladman/magus/types.AgentFacts.ContextTokens field int64 "json:\"context_tokens,omitzero\""
 github.com/egladman/magus/types.AgentFacts.DelegableClass field DelegableClass "json:\"delegable_class,omitempty\""
+github.com/egladman/magus/types.AgentFacts.Orchestration field Orchestration "json:\"orchestration,omitempty\""
 github.com/egladman/magus/types.AgentFacts.ResultChars field *int "json:\"result_chars,omitempty\""
 github.com/egladman/magus/types.AgentFacts.Shadow field map[GuardProfile]GuardDecision "json:\"shadow,omitempty\""
 github.com/egladman/magus/types.AgentFacts.Thread field AgentThread "json:\"thread,omitempty\""
@@ -741,6 +742,7 @@ github.com/egladman/magus/types.CommandRequest.Description field string
 github.com/egladman/magus/types.CommandRequest.Dir field string
 github.com/egladman/magus/types.CommandRequest.Host field string
 github.com/egladman/magus/types.CommandRequest.Lease field *Job
+github.com/egladman/magus/types.CommandRequest.Orchestration field Orchestration
 github.com/egladman/magus/types.CommandRequest.Parent field string
 github.com/egladman/magus/types.CommandRequest.Role field AgentRole
 github.com/egladman/magus/types.CommandRequest.Session field string
@@ -996,6 +998,7 @@ github.com/egladman/magus/types.DefinitionUnverified const KnowledgeDefinitionSt
 github.com/egladman/magus/types.DefinitionVerified const KnowledgeDefinitionStatus = "verified"
 github.com/egladman/magus/types.DelegableClass type string
 github.com/egladman/magus/types.DelegableDiff const DelegableClass = "diff"
+github.com/egladman/magus/types.DelegableEdit const DelegableClass = "edit"
 github.com/egladman/magus/types.DelegableFetch const DelegableClass = "fetch"
 github.com/egladman/magus/types.DelegableRead const DelegableClass = "read"
 github.com/egladman/magus/types.DelegableRun const DelegableClass = "run"
@@ -2981,6 +2984,13 @@ github.com/egladman/magus/types.OperationReporter type interface
 github.com/egladman/magus/types.OperationReporter.OperationInProgress imethod func(ctx context.Context, root string) (string, error)
 github.com/egladman/magus/types.OperationRevert const untyped string = "revert"
 github.com/egladman/magus/types.OperatorTokenFormat const DiagnosticCode = "MGS9016"
+github.com/egladman/magus/types.Orchestration type string
+github.com/egladman/magus/types.Orchestration.MarshalText method func() ([]byte, error)
+github.com/egladman/magus/types.Orchestration.UnmarshalText method(ptr) func(text []byte) error
+github.com/egladman/magus/types.Orchestration.Valid method func() bool
+github.com/egladman/magus/types.Orchestration.Values method func() []string
+github.com/egladman/magus/types.OrchestrationInferred const Orchestration = "inferred"
+github.com/egladman/magus/types.OrchestrationProven const Orchestration = "proven"
 github.com/egladman/magus/types.Origin type struct
 github.com/egladman/magus/types.Origin.Agent field string "json:\"agent,omitempty\" yaml:\"agent,omitempty\""
 github.com/egladman/magus/types.Origin.Credential field Credential "json:\"credential,omitzero\" yaml:\"credential,omitempty\""
@@ -3617,6 +3627,7 @@ github.com/egladman/magus/types.SpawnRequest.Lease field *Job
 github.com/egladman/magus/types.SpawnRequest.Model field string
 github.com/egladman/magus/types.SpawnRequest.ModelTier field *JobModelTier
 github.com/egladman/magus/types.SpawnRequest.Name field string
+github.com/egladman/magus/types.SpawnRequest.Orchestration field Orchestration
 github.com/egladman/magus/types.SpawnRequest.Parent field string
 github.com/egladman/magus/types.SpawnRequest.Prompt field string
 github.com/egladman/magus/types.SpawnRequest.Role field AgentRole
@@ -4418,6 +4429,7 @@ github.com/egladman/magus/types.WriteRequest.Host field string
 github.com/egladman/magus/types.WriteRequest.Lease field *Job
 github.com/egladman/magus/types.WriteRequest.NewText field string
 github.com/egladman/magus/types.WriteRequest.OldText field string
+github.com/egladman/magus/types.WriteRequest.Orchestration field Orchestration
 github.com/egladman/magus/types.WriteRequest.Parent field string
 github.com/egladman/magus/types.WriteRequest.Path field string
 github.com/egladman/magus/types.WriteRequest.Role field AgentRole
