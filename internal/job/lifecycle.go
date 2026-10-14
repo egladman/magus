@@ -76,10 +76,13 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 // check, and the value the run's output ref, which resolve must look up in this checkout
 // alone. Nil or empty grades the filed evidence. See [graded.withWaiterEvidence] for what
 // must hold first.
+//
+// observe reads store's footprint cache and fills it, unless store is a dry run's.
 func Wait(ctx context.Context, store *Store, id string, result *types.JobResult, resolve AttemptResolver, observe Observer, evidence map[string]string) (types.JobStatus, error) {
 	if len(evidence) > 0 && result != nil {
 		return types.JobStatus{}, errors.New("job: waiter evidence starts from the result filed with the job, and a supplied result is not that")
 	}
+	ctx = withFootprintCache(ctx, store.footprintCache())
 	jobs, err := store.List()
 	if err != nil {
 		return types.JobStatus{}, err
@@ -675,7 +678,10 @@ func (s *Store) acrossCheckouts(rows []types.Job, id string, resolve AttemptReso
 // new; for a job still in flight that is usually nothing. That is the point: the gates that
 // turn on evidence magus holds (files changed, symbols resolved) answer for a job that has
 // filed no result at all.
+//
+// observe reads store's footprint cache and fills it, unless store is a dry run's.
 func GradeGates(ctx context.Context, store *Store, id string, observe Observer) (types.JobStatus, error) {
+	ctx = withFootprintCache(ctx, store.footprintCache())
 	jobs, err := store.List()
 	if err != nil {
 		return types.JobStatus{}, err

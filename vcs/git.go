@@ -4117,3 +4117,15 @@ func (v gitVCS) Unbundle(ctx context.Context, root, file string) error {
 	}
 	return nil
 }
+
+// RegionsConfig is the configuration Regions places lines in root with besides the files and
+// revisions it is handed: every funcname pattern the placement runs with, magus's defaults
+// and each diff.<driver>.funcname and xfuncname the repository sees, NUL-separated, so a
+// cache of Regions can key on it.
+func (gitVCS) RegionsConfig(ctx context.Context, root string) (string, error) {
+	args, err := gitFuncnameConfig(ctx, root)
+	if err != nil {
+		return "", err
+	}
+	return strings.Join(args, "\x00"), nil
+}

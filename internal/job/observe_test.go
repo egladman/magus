@@ -689,6 +689,11 @@ func (d *countingDriver) DirtyDiff(ctx context.Context, dir string, paths []stri
 	return d.VCSDriver.DirtyDiff(ctx, dir, paths)
 }
 
+func (d *countingDriver) RegionsConfig(ctx context.Context, root string) (string, error) {
+	d.count("RegionsConfig")
+	return d.VCSDriver.(regionsConfigReader).RegionsConfig(ctx, root)
+}
+
 // gitDriver is a counting driver over root's real git.
 func gitDriver(t testing.TB, root string) *countingDriver {
 	t.Helper()
@@ -737,7 +742,7 @@ func TestOverlapFootprintsReuseAnUnchangedCheckout(t *testing.T) {
 	assert.Equal(t, want, OverlapFootprints(ctx, driver, rows, overlaps), "cold")
 	driver.take()
 	assert.Equal(t, want, OverlapFootprints(ctx, driver, rows, overlaps), "warm")
-	assert.Equal(t, map[string]int{"FindCommit": 2, "DirtyFiles": 2, "DirtyDiff": 2}, driver.take(),
+	assert.Equal(t, map[string]int{"FindCommit": 2, "DirtyFiles": 2, "DirtyDiff": 2, "RegionsConfig": 2}, driver.take(),
 		"a warm read probes each checkout and diffs nothing")
 
 	b.Write("api/x.go", strings.Replace(twoFuncs, "return", "panic(3)", 2))
@@ -756,6 +761,79 @@ func TestOverlapFootprintsReuseAnUnchangedCheckout(t *testing.T) {
 	want = uncached()
 	assert.Equal(t, want, OverlapFootprints(ctx, driver, rows, overlaps), "a row written again is a miss")
 	assert.Positive(t, driver.take()["ChangedFiles"])
+}
+
+// Placement reads the repository's funcname patterns, so an edit to one is a miss for a
+// row's whole footprint and for the regions of unchanged files alike.
+func TestFootprintCacheMissesOnAnEditedFuncname(t *testing.T) {
+	t.Parallel()
+
+	a, _, rows, overlaps := overlapCheckouts(t)
+	root, rev := a.Root(), a.Head()
+	a.Write("api/x.go", strings.Replace(twoFuncs, "func X() {\n\treturn", "func X() {\n\tpanic(1)", 1))
+	driver := gitDriver(t, root)
+	dir := t.TempDir()
+	regionsCtx := withFootprintCache(t.Context(), footprintCache{dir: dir}.forRow(types.Job{Checkpoint: rev}))
+	footprintCtx := withFootprintCache(t.Context(), footprintCache{dir: dir})
+	regions := func(ctx context.Context) Observed { return changedSince(ctx, driver, "", root, rev) }
+
+	before := regions(t.Context())
+	require.True(t, before.RegionsKnown, before.RegionsReason)
+	beforeOverlap := OverlapFootprints(t.Context(), driver, rows, overlaps)
+	assert.Equal(t, before, regions(regionsCtx), "cold")
+	assert.Equal(t, beforeOverlap, OverlapFootprints(footprintCtx, driver, rows, overlaps), "cold")
+	driver.take()
+	assert.Equal(t, before, regions(regionsCtx), "warm")
+	OverlapFootprints(footprintCtx, driver, rows, overlaps)
+	require.Zero(t, driver.take()["Regions"], "both reads are warm before the edit")
+
+	a.Git("config", "diff.golang.xfuncname", "^func Y.*$")
+	after := regions(t.Context())
+	require.NotEqual(t, before.Regions, after.Regions, "the pattern places the edit elsewhere")
+	afterOverlap := OverlapFootprints(t.Context(), driver, rows, overlaps)
+	driver.take()
+	assert.Equal(t, after, regions(regionsCtx), "the regions of an unchanged file")
+	assert.Equal(t, 1, driver.take()["Regions"])
+	assert.Equal(t, afterOverlap, OverlapFootprints(footprintCtx, driver, rows, overlaps), "a row's footprint")
+	assert.Positive(t, driver.take()["ChangedFiles"])
+}
+
+// Grading reads a dry-run store's footprint cache and writes none, as its report does.
+func TestGradeGatesOfADryRunStoreCachesNothing(t *testing.T) {
+	t.Parallel()
+
+	for _, dryRun := range []bool{true, false} {
+		a, _, rows, _ := overlapCheckouts(t)
+		a.Write("api/x.go", strings.Replace(twoFuncs, "return", "panic(1)", 1))
+		const now = int64(100_000)
+		s, _ := sweepStore(t, now, 2*time.Hour)
+		s.root = a.Root()
+		for i := range rows {
+			rows[i].Registered, rows[i].Created, rows[i].Updated = now, now, now
+		}
+		plant(t, s, rows...)
+		s.dryRun = dryRun
+
+		status, err := GradeGates(t.Context(), s, "a", CheckpointObserver(a.Root(), nil))
+		require.NoError(t, err)
+		assert.True(t, status.FootprintKnown, status.FootprintReason)
+		_, err = os.Stat(footprintsDir(s.path))
+		assert.Equal(t, dryRun, errors.Is(err, os.ErrNotExist), "dry run %v", dryRun)
+	}
+}
+
+// A backend that cannot say what configuration its placement reads is never cached: an
+// edit to that configuration would answer from an entry placed under the old one.
+func TestFootprintCacheKeysNothingForABackendThatHidesItsConfig(t *testing.T) {
+	t.Parallel()
+
+	repo := testkit.NewRepo(t, map[string]string{"a.go": twoFuncs})
+	hidden := struct{ types.VCSDriver }{gitDriver(t, repo.Root()).VCSDriver}
+	cache := footprintCache{dir: t.TempDir()}.forRow(types.Job{Checkpoint: repo.Head()})
+	_, keyed := cache.regionsKey(t.Context(), hidden, repo.Root(), repo.Head(), []types.FileChange{{Path: "a.go"}})
+	assert.False(t, keyed)
+	_, keyed = cache.footprintKey(t.Context(), hidden, types.Job{ID: "a", Checkpoint: repo.Head(), CheckoutRoot: repo.Root()})
+	assert.False(t, keyed)
 }
 
 // The regions a diff placed are reused while every changed file holds the content they were

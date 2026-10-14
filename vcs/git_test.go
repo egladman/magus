@@ -3962,3 +3962,29 @@ func TestGitIgnoreSources(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(realRepo, ".git", "info"), exclude, "a linked worktree shares its main checkout's exclude file")
 }
+
+// RegionsConfig moves with every funcname pattern the repository sets, and only with them.
+func TestRegionsConfigFollowsDiffDriverPatterns(t *testing.T) {
+	t.Parallel()
+
+	r := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "a.go": "package a\n"})
+	ctx := t.Context()
+	read := func() string {
+		got, err := gitVCS{}.RegionsConfig(ctx, r.Root())
+		require.NoError(t, err)
+		return got
+	}
+
+	defaults := read()
+	assert.NotEmpty(t, defaults, "magus's own patterns are always there")
+	r.Git("config", "user.name", "Someone Else")
+	assert.Equal(t, defaults, read(), "other configuration")
+
+	r.Git("config", "diff.golang.xfuncname", "^func .*$")
+	xfuncname := read()
+	assert.NotEqual(t, defaults, xfuncname)
+	assert.Contains(t, xfuncname, "diff.golang.xfuncname=^func .*$")
+
+	r.Git("config", "diff.custom.funcname", "^sub ")
+	assert.NotEqual(t, xfuncname, read())
+}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"hash"
@@ -18,6 +17,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -45,10 +45,12 @@ type SymbolReader func(ctx context.Context, name, signature string) (SymbolFact,
 // opposite of the guard's fail-open rule: a guard that cannot ask must not refuse a
 // person's own command, while a gate that cannot verify must not certify. Refusing costs
 // a re-run; certifying on an unread diff is the attestation the gate replaced.
+//
+// The regions a diff placed are cached in the footprint cache on ctx, which [Wait] and
+// [GradeGates] set to their store's, so a dry-run store's grading writes none.
 func CheckpointObserver(root string, symbols SymbolReader) Observer {
-	cache := footprintCacheAt(root)
 	return func(ctx context.Context, row types.Job) (Observed, error) {
-		ctx = withFootprintCache(ctx, cache.forRow(row))
+		ctx = withFootprintCache(ctx, footprintCacheIn(ctx).forRow(row))
 		tree := workTree(root, row)
 		var driver types.VCSDriver
 		unresolved := ""
@@ -199,7 +201,7 @@ func changedSince(ctx context.Context, driver types.VCSDriver, unresolved, root,
 // can fix by re-running.
 func regionsSince(ctx context.Context, driver types.VCSDriver, root, revision string, files []types.FileChange) ([]types.RegionChange, bool, string) {
 	cache := footprintCacheIn(ctx)
-	key, keyed := cache.regionsKey(root, revision, files)
+	key, keyed := cache.regionsKey(ctx, driver, root, revision, files)
 	if keyed {
 		if regions, ok := cache.read(key); ok {
 			return regions, true, ""
@@ -216,7 +218,7 @@ func regionsSince(ctx context.Context, driver types.VCSDriver, root, revision st
 	// A file rewritten while Regions read it would file these regions under content they
 	// were not read from.
 	if keyed {
-		if again, ok := cache.regionsKey(root, revision, files); ok && again == key {
+		if again, ok := cache.regionsKey(ctx, driver, root, revision, files); ok && again == key {
 			cache.write(key, regions)
 		}
 	}
@@ -590,20 +592,6 @@ func (s *Store) footprintCache() footprintCache {
 	return footprintCache{dir: footprintsDir(s.path), readOnly: s.dryRun}
 }
 
-// footprintCacheAt is the cache of the job store for root's repository, the one
-// [Store.footprintCache] names for a store opened at root; none when root is "" or the
-// store cannot be placed.
-func footprintCacheAt(root string) footprintCache {
-	if root == "" {
-		return footprintCache{}
-	}
-	ledger, err := jobsPath(Location{Root: root})
-	if err != nil {
-		return footprintCache{}
-	}
-	return footprintCache{dir: footprintsDir(ledger)}
-}
-
 // forRow is c filing its entries under row's checkpoint revision.
 func (c footprintCache) forRow(row types.Job) footprintCache {
 	c.revision = checkpointRevision(row.Checkpoint)
@@ -611,13 +599,22 @@ func (c footprintCache) forRow(row types.Job) footprintCache {
 }
 
 // regionsKey is what regions read over files since revision in root depend on: the
-// running binary, which carries the default funcname patterns, the checkout, the revision,
-// and each file's name and working-tree content. The revision fixes every file's base side,
-// and a .gitattributes that changed is among files. false when c is off or a file cannot
-// be digested.
-func (c footprintCache) regionsKey(root, revision string, files []types.FileChange) (string, bool) {
+// running binary, which carries the default funcname patterns, the checkout, its HEAD,
+// which with revision fixes the merge base every file's base side is read at, the
+// configuration placement reads (see regionsConfig), and each file's name and working-tree
+// content. A .gitattributes that changed is among files. false when c is off or any of them
+// cannot be read.
+func (c footprintCache) regionsKey(ctx context.Context, driver types.VCSDriver, root, revision string, files []types.FileChange) (string, bool) {
 	h, ok := c.keyHash("regions", root, revision)
-	if !ok {
+	if !ok || driver == nil {
+		return "", false
+	}
+	head, err := driver.FindCommit(ctx, root, "")
+	if err != nil || head.ID == "" {
+		return "", false
+	}
+	fmt.Fprintf(h, "%s\x00", head.ID)
+	if !regionsConfig(ctx, h, driver, root) {
 		return "", false
 	}
 	for _, f := range files {
@@ -629,19 +626,42 @@ func (c footprintCache) regionsKey(root, revision string, files []types.FileChan
 	return hex.EncodeToString(h.Sum(nil)), true
 }
 
-// footprintKey is what row's footprint depends on: the row as last written, its checkout
-// and that checkout's HEAD and uncommitted state (see checkoutState), read through driver.
-// false when c is off or the checkout cannot be read.
+// footprintKey is what row's footprint depends on: the row as last written, its checkout,
+// that checkout's HEAD and uncommitted state (see checkoutState) and the configuration
+// placement reads there (see regionsConfig), read through driver. false when c is off or
+// the checkout cannot be read.
 func (c footprintCache) footprintKey(ctx context.Context, driver types.VCSDriver, row types.Job) (string, bool) {
 	h, ok := c.keyHash("footprint", row.CheckoutRoot, row.Checkpoint)
 	if !ok || driver == nil {
 		return "", false
 	}
 	fmt.Fprintf(h, "%s\x00%d\x00%s\x00", row.ID, row.Updated, row.ReportedBase)
-	if !checkoutState(ctx, h, driver, row.CheckoutRoot) {
+	if !checkoutState(ctx, h, driver, row.CheckoutRoot) || !regionsConfig(ctx, h, driver, row.CheckoutRoot) {
 		return "", false
 	}
 	return hex.EncodeToString(h.Sum(nil)), true
+}
+
+// regionsConfigReader is a backend that says what configuration its Regions reads besides
+// the files and revisions it is handed, such as git's diff.<driver>.xfuncname.
+type regionsConfigReader interface {
+	RegionsConfig(ctx context.Context, root string) (string, error)
+}
+
+// regionsConfig folds into h the configuration driver places lines in root with. A backend
+// that cannot say what it reads keys nothing, since an edit to its configuration would then
+// answer from an entry placed under the old one.
+func regionsConfig(ctx context.Context, h hash.Hash, driver types.VCSDriver, root string) bool {
+	reader, ok := driver.(regionsConfigReader)
+	if !ok {
+		return false
+	}
+	cfg, err := reader.RegionsConfig(ctx, root)
+	if err != nil {
+		return false
+	}
+	fmt.Fprintf(h, "%d\x00%s", len(cfg), cfg)
+	return true
 }
 
 // keyHash starts a key of kind with the running binary's identity (its path, size and
