@@ -193,6 +193,25 @@ the lock target with `:update`, and your workspace fork is unaffected until you
 deliberately rebase it. Additive policy that is not host-shaped stays in
 `{{buzz "guard.shell"}}({...})`, not in the harness spell.{{end}}
 
+## Tightening a conformance threshold
+
+A workspace that commits a conformance ratchet (`knowledge.conform.ratchet`) enforces the
+committed value, and the code usually drifts tighter than it. Two readings name the slack:
+the rows of `{{buzz "conform"}}()` with `propose` above zero, and `{{cmd "doctor"}}`'s
+`conform-ratchet` check, which gives each row's ratchet `path:line`.
+
+1. Edit only the line doctor names. Copy the proposed `value`, the row's `n` and the
+   percentile, and put the measuring revision in `why`.
+2. Delete each known entry doctor reports as stale.
+3. Re-run doctor and read that the proposal is gone.
+4. Commit the ratchet alone. The commit is the review.
+
+Never pick a number, never loosen a value, and never add a known entry to pass a check:
+fix the code, or ask the person.{{if .Full}} The ratchet is the one place a measurement
+becomes policy, so a person reads every change to it. An agent that edits the record to
+make a red check green has moved the bar instead of the code, and the diff looks like a
+routine config change.{{end}}
+
 ## Prune on a schedule you already have
 
 Run the `{{skill "context-audit"}}` lens after every `{{cmd "agent install"}} --force`.
