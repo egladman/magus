@@ -181,8 +181,8 @@ func (_c *MockProvider_RecordAttentionDisposition_Call) RunAndReturn(run func(ct
 }
 
 // RecordBuzzCompile provides a mock function for the type MockProvider
-func (_mock *MockProvider) RecordBuzzCompile(ctx context.Context, secs float64, phase string, mode string) {
-	_mock.Called(ctx, secs, phase, mode)
+func (_mock *MockProvider) RecordBuzzCompile(ctx context.Context, c observability.BuzzCompile) {
+	_mock.Called(ctx, c)
 	return
 }
 
@@ -193,36 +193,24 @@ type MockProvider_RecordBuzzCompile_Call struct {
 
 // RecordBuzzCompile is a helper method to define mock.On call
 //   - ctx context.Context
-//   - secs float64
-//   - phase string
-//   - mode string
-func (_e *MockProvider_Expecter) RecordBuzzCompile(ctx interface{}, secs interface{}, phase interface{}, mode interface{}) *MockProvider_RecordBuzzCompile_Call {
-	return &MockProvider_RecordBuzzCompile_Call{Call: _e.mock.On("RecordBuzzCompile", ctx, secs, phase, mode)}
+//   - c observability.BuzzCompile
+func (_e *MockProvider_Expecter) RecordBuzzCompile(ctx interface{}, c interface{}) *MockProvider_RecordBuzzCompile_Call {
+	return &MockProvider_RecordBuzzCompile_Call{Call: _e.mock.On("RecordBuzzCompile", ctx, c)}
 }
 
-func (_c *MockProvider_RecordBuzzCompile_Call) Run(run func(ctx context.Context, secs float64, phase string, mode string)) *MockProvider_RecordBuzzCompile_Call {
+func (_c *MockProvider_RecordBuzzCompile_Call) Run(run func(ctx context.Context, c observability.BuzzCompile)) *MockProvider_RecordBuzzCompile_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 float64
+		var arg1 observability.BuzzCompile
 		if args[1] != nil {
-			arg1 = args[1].(float64)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		var arg3 string
-		if args[3] != nil {
-			arg3 = args[3].(string)
+			arg1 = args[1].(observability.BuzzCompile)
 		}
 		run(
 			arg0,
 			arg1,
-			arg2,
-			arg3,
 		)
 	})
 	return _c
@@ -233,14 +221,14 @@ func (_c *MockProvider_RecordBuzzCompile_Call) Return() *MockProvider_RecordBuzz
 	return _c
 }
 
-func (_c *MockProvider_RecordBuzzCompile_Call) RunAndReturn(run func(ctx context.Context, secs float64, phase string, mode string)) *MockProvider_RecordBuzzCompile_Call {
+func (_c *MockProvider_RecordBuzzCompile_Call) RunAndReturn(run func(ctx context.Context, c observability.BuzzCompile)) *MockProvider_RecordBuzzCompile_Call {
 	_c.Run(run)
 	return _c
 }
 
 // RecordBuzzExec provides a mock function for the type MockProvider
-func (_mock *MockProvider) RecordBuzzExec(ctx context.Context, secs float64, mode string, outcome string) {
-	_mock.Called(ctx, secs, mode, outcome)
+func (_mock *MockProvider) RecordBuzzExec(ctx context.Context, e observability.BuzzExec) {
+	_mock.Called(ctx, e)
 	return
 }
 
@@ -251,36 +239,24 @@ type MockProvider_RecordBuzzExec_Call struct {
 
 // RecordBuzzExec is a helper method to define mock.On call
 //   - ctx context.Context
-//   - secs float64
-//   - mode string
-//   - outcome string
-func (_e *MockProvider_Expecter) RecordBuzzExec(ctx interface{}, secs interface{}, mode interface{}, outcome interface{}) *MockProvider_RecordBuzzExec_Call {
-	return &MockProvider_RecordBuzzExec_Call{Call: _e.mock.On("RecordBuzzExec", ctx, secs, mode, outcome)}
+//   - e observability.BuzzExec
+func (_e *MockProvider_Expecter) RecordBuzzExec(ctx interface{}, e interface{}) *MockProvider_RecordBuzzExec_Call {
+	return &MockProvider_RecordBuzzExec_Call{Call: _e.mock.On("RecordBuzzExec", ctx, e)}
 }
 
-func (_c *MockProvider_RecordBuzzExec_Call) Run(run func(ctx context.Context, secs float64, mode string, outcome string)) *MockProvider_RecordBuzzExec_Call {
+func (_c *MockProvider_RecordBuzzExec_Call) Run(run func(ctx context.Context, e observability.BuzzExec)) *MockProvider_RecordBuzzExec_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 float64
+		var arg1 observability.BuzzExec
 		if args[1] != nil {
-			arg1 = args[1].(float64)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		var arg3 string
-		if args[3] != nil {
-			arg3 = args[3].(string)
+			arg1 = args[1].(observability.BuzzExec)
 		}
 		run(
 			arg0,
 			arg1,
-			arg2,
-			arg3,
 		)
 	})
 	return _c
@@ -291,7 +267,7 @@ func (_c *MockProvider_RecordBuzzExec_Call) Return() *MockProvider_RecordBuzzExe
 	return _c
 }
 
-func (_c *MockProvider_RecordBuzzExec_Call) RunAndReturn(run func(ctx context.Context, secs float64, mode string, outcome string)) *MockProvider_RecordBuzzExec_Call {
+func (_c *MockProvider_RecordBuzzExec_Call) RunAndReturn(run func(ctx context.Context, e observability.BuzzExec)) *MockProvider_RecordBuzzExec_Call {
 	_c.Run(run)
 	return _c
 }
@@ -343,8 +319,8 @@ func (_c *MockProvider_RecordBuzzHostCall_Call) RunAndReturn(run func(ctx contex
 }
 
 // RecordBuzzImport provides a mock function for the type MockProvider
-func (_mock *MockProvider) RecordBuzzImport(ctx context.Context, secs float64, kind string, outcome string) {
-	_mock.Called(ctx, secs, kind, outcome)
+func (_mock *MockProvider) RecordBuzzImport(ctx context.Context, i observability.BuzzImport) {
+	_mock.Called(ctx, i)
 	return
 }
 
@@ -355,36 +331,24 @@ type MockProvider_RecordBuzzImport_Call struct {
 
 // RecordBuzzImport is a helper method to define mock.On call
 //   - ctx context.Context
-//   - secs float64
-//   - kind string
-//   - outcome string
-func (_e *MockProvider_Expecter) RecordBuzzImport(ctx interface{}, secs interface{}, kind interface{}, outcome interface{}) *MockProvider_RecordBuzzImport_Call {
-	return &MockProvider_RecordBuzzImport_Call{Call: _e.mock.On("RecordBuzzImport", ctx, secs, kind, outcome)}
+//   - i observability.BuzzImport
+func (_e *MockProvider_Expecter) RecordBuzzImport(ctx interface{}, i interface{}) *MockProvider_RecordBuzzImport_Call {
+	return &MockProvider_RecordBuzzImport_Call{Call: _e.mock.On("RecordBuzzImport", ctx, i)}
 }
 
-func (_c *MockProvider_RecordBuzzImport_Call) Run(run func(ctx context.Context, secs float64, kind string, outcome string)) *MockProvider_RecordBuzzImport_Call {
+func (_c *MockProvider_RecordBuzzImport_Call) Run(run func(ctx context.Context, i observability.BuzzImport)) *MockProvider_RecordBuzzImport_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 float64
+		var arg1 observability.BuzzImport
 		if args[1] != nil {
-			arg1 = args[1].(float64)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		var arg3 string
-		if args[3] != nil {
-			arg3 = args[3].(string)
+			arg1 = args[1].(observability.BuzzImport)
 		}
 		run(
 			arg0,
 			arg1,
-			arg2,
-			arg3,
 		)
 	})
 	return _c
@@ -395,7 +359,7 @@ func (_c *MockProvider_RecordBuzzImport_Call) Return() *MockProvider_RecordBuzzI
 	return _c
 }
 
-func (_c *MockProvider_RecordBuzzImport_Call) RunAndReturn(run func(ctx context.Context, secs float64, kind string, outcome string)) *MockProvider_RecordBuzzImport_Call {
+func (_c *MockProvider_RecordBuzzImport_Call) RunAndReturn(run func(ctx context.Context, i observability.BuzzImport)) *MockProvider_RecordBuzzImport_Call {
 	_c.Run(run)
 	return _c
 }
@@ -440,33 +404,33 @@ func (_c *MockProvider_RecordBuzzJITRun_Call) RunAndReturn(run func(ctx context.
 	return _c
 }
 
-// RecordBuzzSessionEviction provides a mock function for the type MockProvider
-func (_mock *MockProvider) RecordBuzzSessionEviction(ctx context.Context, source string) {
-	_mock.Called(ctx, source)
+// RecordBuzzSessionPool provides a mock function for the type MockProvider
+func (_mock *MockProvider) RecordBuzzSessionPool(ctx context.Context, ev observability.SessionPoolEvent) {
+	_mock.Called(ctx, ev)
 	return
 }
 
-// MockProvider_RecordBuzzSessionEviction_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordBuzzSessionEviction'
-type MockProvider_RecordBuzzSessionEviction_Call struct {
+// MockProvider_RecordBuzzSessionPool_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordBuzzSessionPool'
+type MockProvider_RecordBuzzSessionPool_Call struct {
 	*mock.Call
 }
 
-// RecordBuzzSessionEviction is a helper method to define mock.On call
+// RecordBuzzSessionPool is a helper method to define mock.On call
 //   - ctx context.Context
-//   - source string
-func (_e *MockProvider_Expecter) RecordBuzzSessionEviction(ctx interface{}, source interface{}) *MockProvider_RecordBuzzSessionEviction_Call {
-	return &MockProvider_RecordBuzzSessionEviction_Call{Call: _e.mock.On("RecordBuzzSessionEviction", ctx, source)}
+//   - ev observability.SessionPoolEvent
+func (_e *MockProvider_Expecter) RecordBuzzSessionPool(ctx interface{}, ev interface{}) *MockProvider_RecordBuzzSessionPool_Call {
+	return &MockProvider_RecordBuzzSessionPool_Call{Call: _e.mock.On("RecordBuzzSessionPool", ctx, ev)}
 }
 
-func (_c *MockProvider_RecordBuzzSessionEviction_Call) Run(run func(ctx context.Context, source string)) *MockProvider_RecordBuzzSessionEviction_Call {
+func (_c *MockProvider_RecordBuzzSessionPool_Call) Run(run func(ctx context.Context, ev observability.SessionPoolEvent)) *MockProvider_RecordBuzzSessionPool_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 string
+		var arg1 observability.SessionPoolEvent
 		if args[1] != nil {
-			arg1 = args[1].(string)
+			arg1 = args[1].(observability.SessionPoolEvent)
 		}
 		run(
 			arg0,
@@ -476,104 +440,12 @@ func (_c *MockProvider_RecordBuzzSessionEviction_Call) Run(run func(ctx context.
 	return _c
 }
 
-func (_c *MockProvider_RecordBuzzSessionEviction_Call) Return() *MockProvider_RecordBuzzSessionEviction_Call {
+func (_c *MockProvider_RecordBuzzSessionPool_Call) Return() *MockProvider_RecordBuzzSessionPool_Call {
 	_c.Call.Return()
 	return _c
 }
 
-func (_c *MockProvider_RecordBuzzSessionEviction_Call) RunAndReturn(run func(ctx context.Context, source string)) *MockProvider_RecordBuzzSessionEviction_Call {
-	_c.Run(run)
-	return _c
-}
-
-// RecordBuzzSessionIdle provides a mock function for the type MockProvider
-func (_mock *MockProvider) RecordBuzzSessionIdle(ctx context.Context, delta int64) {
-	_mock.Called(ctx, delta)
-	return
-}
-
-// MockProvider_RecordBuzzSessionIdle_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordBuzzSessionIdle'
-type MockProvider_RecordBuzzSessionIdle_Call struct {
-	*mock.Call
-}
-
-// RecordBuzzSessionIdle is a helper method to define mock.On call
-//   - ctx context.Context
-//   - delta int64
-func (_e *MockProvider_Expecter) RecordBuzzSessionIdle(ctx interface{}, delta interface{}) *MockProvider_RecordBuzzSessionIdle_Call {
-	return &MockProvider_RecordBuzzSessionIdle_Call{Call: _e.mock.On("RecordBuzzSessionIdle", ctx, delta)}
-}
-
-func (_c *MockProvider_RecordBuzzSessionIdle_Call) Run(run func(ctx context.Context, delta int64)) *MockProvider_RecordBuzzSessionIdle_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 int64
-		if args[1] != nil {
-			arg1 = args[1].(int64)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockProvider_RecordBuzzSessionIdle_Call) Return() *MockProvider_RecordBuzzSessionIdle_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MockProvider_RecordBuzzSessionIdle_Call) RunAndReturn(run func(ctx context.Context, delta int64)) *MockProvider_RecordBuzzSessionIdle_Call {
-	_c.Run(run)
-	return _c
-}
-
-// RecordBuzzSessionReuse provides a mock function for the type MockProvider
-func (_mock *MockProvider) RecordBuzzSessionReuse(ctx context.Context, outcome string) {
-	_mock.Called(ctx, outcome)
-	return
-}
-
-// MockProvider_RecordBuzzSessionReuse_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordBuzzSessionReuse'
-type MockProvider_RecordBuzzSessionReuse_Call struct {
-	*mock.Call
-}
-
-// RecordBuzzSessionReuse is a helper method to define mock.On call
-//   - ctx context.Context
-//   - outcome string
-func (_e *MockProvider_Expecter) RecordBuzzSessionReuse(ctx interface{}, outcome interface{}) *MockProvider_RecordBuzzSessionReuse_Call {
-	return &MockProvider_RecordBuzzSessionReuse_Call{Call: _e.mock.On("RecordBuzzSessionReuse", ctx, outcome)}
-}
-
-func (_c *MockProvider_RecordBuzzSessionReuse_Call) Run(run func(ctx context.Context, outcome string)) *MockProvider_RecordBuzzSessionReuse_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockProvider_RecordBuzzSessionReuse_Call) Return() *MockProvider_RecordBuzzSessionReuse_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MockProvider_RecordBuzzSessionReuse_Call) RunAndReturn(run func(ctx context.Context, outcome string)) *MockProvider_RecordBuzzSessionReuse_Call {
+func (_c *MockProvider_RecordBuzzSessionPool_Call) RunAndReturn(run func(ctx context.Context, ev observability.SessionPoolEvent)) *MockProvider_RecordBuzzSessionPool_Call {
 	_c.Run(run)
 	return _c
 }
@@ -683,8 +555,8 @@ func (_c *MockProvider_RecordBuzzSpellBuiltinsWarm_Call) RunAndReturn(run func(c
 }
 
 // RecordBuzzSpellResolve provides a mock function for the type MockProvider
-func (_mock *MockProvider) RecordBuzzSpellResolve(ctx context.Context, secs float64, spell string, builtin string) {
-	_mock.Called(ctx, secs, spell, builtin)
+func (_mock *MockProvider) RecordBuzzSpellResolve(ctx context.Context, r observability.BuzzSpellResolve) {
+	_mock.Called(ctx, r)
 	return
 }
 
@@ -695,36 +567,24 @@ type MockProvider_RecordBuzzSpellResolve_Call struct {
 
 // RecordBuzzSpellResolve is a helper method to define mock.On call
 //   - ctx context.Context
-//   - secs float64
-//   - spell string
-//   - builtin string
-func (_e *MockProvider_Expecter) RecordBuzzSpellResolve(ctx interface{}, secs interface{}, spell interface{}, builtin interface{}) *MockProvider_RecordBuzzSpellResolve_Call {
-	return &MockProvider_RecordBuzzSpellResolve_Call{Call: _e.mock.On("RecordBuzzSpellResolve", ctx, secs, spell, builtin)}
+//   - r observability.BuzzSpellResolve
+func (_e *MockProvider_Expecter) RecordBuzzSpellResolve(ctx interface{}, r interface{}) *MockProvider_RecordBuzzSpellResolve_Call {
+	return &MockProvider_RecordBuzzSpellResolve_Call{Call: _e.mock.On("RecordBuzzSpellResolve", ctx, r)}
 }
 
-func (_c *MockProvider_RecordBuzzSpellResolve_Call) Run(run func(ctx context.Context, secs float64, spell string, builtin string)) *MockProvider_RecordBuzzSpellResolve_Call {
+func (_c *MockProvider_RecordBuzzSpellResolve_Call) Run(run func(ctx context.Context, r observability.BuzzSpellResolve)) *MockProvider_RecordBuzzSpellResolve_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 float64
+		var arg1 observability.BuzzSpellResolve
 		if args[1] != nil {
-			arg1 = args[1].(float64)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		var arg3 string
-		if args[3] != nil {
-			arg3 = args[3].(string)
+			arg1 = args[1].(observability.BuzzSpellResolve)
 		}
 		run(
 			arg0,
 			arg1,
-			arg2,
-			arg3,
 		)
 	})
 	return _c
@@ -735,7 +595,7 @@ func (_c *MockProvider_RecordBuzzSpellResolve_Call) Return() *MockProvider_Recor
 	return _c
 }
 
-func (_c *MockProvider_RecordBuzzSpellResolve_Call) RunAndReturn(run func(ctx context.Context, secs float64, spell string, builtin string)) *MockProvider_RecordBuzzSpellResolve_Call {
+func (_c *MockProvider_RecordBuzzSpellResolve_Call) RunAndReturn(run func(ctx context.Context, r observability.BuzzSpellResolve)) *MockProvider_RecordBuzzSpellResolve_Call {
 	_c.Run(run)
 	return _c
 }
@@ -787,13 +647,8 @@ func (_c *MockProvider_RecordBuzzVMFault_Call) RunAndReturn(run func(ctx context
 }
 
 // RecordCacheDuration provides a mock function for the type MockProvider
-func (_mock *MockProvider) RecordCacheDuration(ctx context.Context, secs float64, attrs ...observability.Attr) {
-	if len(attrs) > 0 {
-		_mock.Called(ctx, secs, attrs)
-	} else {
-		_mock.Called(ctx, secs)
-	}
-
+func (_mock *MockProvider) RecordCacheDuration(ctx context.Context, secs float64, result observability.CacheResult) {
+	_mock.Called(ctx, secs, result)
 	return
 }
 
@@ -805,13 +660,12 @@ type MockProvider_RecordCacheDuration_Call struct {
 // RecordCacheDuration is a helper method to define mock.On call
 //   - ctx context.Context
 //   - secs float64
-//   - attrs ...observability.Attr
-func (_e *MockProvider_Expecter) RecordCacheDuration(ctx interface{}, secs interface{}, attrs ...interface{}) *MockProvider_RecordCacheDuration_Call {
-	return &MockProvider_RecordCacheDuration_Call{Call: _e.mock.On("RecordCacheDuration",
-		append([]interface{}{ctx, secs}, attrs...)...)}
+//   - result observability.CacheResult
+func (_e *MockProvider_Expecter) RecordCacheDuration(ctx interface{}, secs interface{}, result interface{}) *MockProvider_RecordCacheDuration_Call {
+	return &MockProvider_RecordCacheDuration_Call{Call: _e.mock.On("RecordCacheDuration", ctx, secs, result)}
 }
 
-func (_c *MockProvider_RecordCacheDuration_Call) Run(run func(ctx context.Context, secs float64, attrs ...observability.Attr)) *MockProvider_RecordCacheDuration_Call {
+func (_c *MockProvider_RecordCacheDuration_Call) Run(run func(ctx context.Context, secs float64, result observability.CacheResult)) *MockProvider_RecordCacheDuration_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -820,6 +674,64 @@ func (_c *MockProvider_RecordCacheDuration_Call) Run(run func(ctx context.Contex
 		var arg1 float64
 		if args[1] != nil {
 			arg1 = args[1].(float64)
+		}
+		var arg2 observability.CacheResult
+		if args[2] != nil {
+			arg2 = args[2].(observability.CacheResult)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProvider_RecordCacheDuration_Call) Return() *MockProvider_RecordCacheDuration_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockProvider_RecordCacheDuration_Call) RunAndReturn(run func(ctx context.Context, secs float64, result observability.CacheResult)) *MockProvider_RecordCacheDuration_Call {
+	_c.Run(run)
+	return _c
+}
+
+// RecordCacheRead provides a mock function for the type MockProvider
+func (_mock *MockProvider) RecordCacheRead(ctx context.Context, result observability.CacheResult, attrs ...observability.Attr) {
+	if len(attrs) > 0 {
+		_mock.Called(ctx, result, attrs)
+	} else {
+		_mock.Called(ctx, result)
+	}
+
+	return
+}
+
+// MockProvider_RecordCacheRead_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordCacheRead'
+type MockProvider_RecordCacheRead_Call struct {
+	*mock.Call
+}
+
+// RecordCacheRead is a helper method to define mock.On call
+//   - ctx context.Context
+//   - result observability.CacheResult
+//   - attrs ...observability.Attr
+func (_e *MockProvider_Expecter) RecordCacheRead(ctx interface{}, result interface{}, attrs ...interface{}) *MockProvider_RecordCacheRead_Call {
+	return &MockProvider_RecordCacheRead_Call{Call: _e.mock.On("RecordCacheRead",
+		append([]interface{}{ctx, result}, attrs...)...)}
+}
+
+func (_c *MockProvider_RecordCacheRead_Call) Run(run func(ctx context.Context, result observability.CacheResult, attrs ...observability.Attr)) *MockProvider_RecordCacheRead_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 observability.CacheResult
+		if args[1] != nil {
+			arg1 = args[1].(observability.CacheResult)
 		}
 		var arg2 []observability.Attr
 		var variadicArgs []observability.Attr
@@ -836,174 +748,12 @@ func (_c *MockProvider_RecordCacheDuration_Call) Run(run func(ctx context.Contex
 	return _c
 }
 
-func (_c *MockProvider_RecordCacheDuration_Call) Return() *MockProvider_RecordCacheDuration_Call {
+func (_c *MockProvider_RecordCacheRead_Call) Return() *MockProvider_RecordCacheRead_Call {
 	_c.Call.Return()
 	return _c
 }
 
-func (_c *MockProvider_RecordCacheDuration_Call) RunAndReturn(run func(ctx context.Context, secs float64, attrs ...observability.Attr)) *MockProvider_RecordCacheDuration_Call {
-	_c.Run(run)
-	return _c
-}
-
-// RecordCacheError provides a mock function for the type MockProvider
-func (_mock *MockProvider) RecordCacheError(ctx context.Context, attrs ...observability.Attr) {
-	if len(attrs) > 0 {
-		_mock.Called(ctx, attrs)
-	} else {
-		_mock.Called(ctx)
-	}
-
-	return
-}
-
-// MockProvider_RecordCacheError_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordCacheError'
-type MockProvider_RecordCacheError_Call struct {
-	*mock.Call
-}
-
-// RecordCacheError is a helper method to define mock.On call
-//   - ctx context.Context
-//   - attrs ...observability.Attr
-func (_e *MockProvider_Expecter) RecordCacheError(ctx interface{}, attrs ...interface{}) *MockProvider_RecordCacheError_Call {
-	return &MockProvider_RecordCacheError_Call{Call: _e.mock.On("RecordCacheError",
-		append([]interface{}{ctx}, attrs...)...)}
-}
-
-func (_c *MockProvider_RecordCacheError_Call) Run(run func(ctx context.Context, attrs ...observability.Attr)) *MockProvider_RecordCacheError_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 []observability.Attr
-		var variadicArgs []observability.Attr
-		if len(args) > 1 {
-			variadicArgs = args[1].([]observability.Attr)
-		}
-		arg1 = variadicArgs
-		run(
-			arg0,
-			arg1...,
-		)
-	})
-	return _c
-}
-
-func (_c *MockProvider_RecordCacheError_Call) Return() *MockProvider_RecordCacheError_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MockProvider_RecordCacheError_Call) RunAndReturn(run func(ctx context.Context, attrs ...observability.Attr)) *MockProvider_RecordCacheError_Call {
-	_c.Run(run)
-	return _c
-}
-
-// RecordCacheHit provides a mock function for the type MockProvider
-func (_mock *MockProvider) RecordCacheHit(ctx context.Context, attrs ...observability.Attr) {
-	if len(attrs) > 0 {
-		_mock.Called(ctx, attrs)
-	} else {
-		_mock.Called(ctx)
-	}
-
-	return
-}
-
-// MockProvider_RecordCacheHit_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordCacheHit'
-type MockProvider_RecordCacheHit_Call struct {
-	*mock.Call
-}
-
-// RecordCacheHit is a helper method to define mock.On call
-//   - ctx context.Context
-//   - attrs ...observability.Attr
-func (_e *MockProvider_Expecter) RecordCacheHit(ctx interface{}, attrs ...interface{}) *MockProvider_RecordCacheHit_Call {
-	return &MockProvider_RecordCacheHit_Call{Call: _e.mock.On("RecordCacheHit",
-		append([]interface{}{ctx}, attrs...)...)}
-}
-
-func (_c *MockProvider_RecordCacheHit_Call) Run(run func(ctx context.Context, attrs ...observability.Attr)) *MockProvider_RecordCacheHit_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 []observability.Attr
-		var variadicArgs []observability.Attr
-		if len(args) > 1 {
-			variadicArgs = args[1].([]observability.Attr)
-		}
-		arg1 = variadicArgs
-		run(
-			arg0,
-			arg1...,
-		)
-	})
-	return _c
-}
-
-func (_c *MockProvider_RecordCacheHit_Call) Return() *MockProvider_RecordCacheHit_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MockProvider_RecordCacheHit_Call) RunAndReturn(run func(ctx context.Context, attrs ...observability.Attr)) *MockProvider_RecordCacheHit_Call {
-	_c.Run(run)
-	return _c
-}
-
-// RecordCacheMiss provides a mock function for the type MockProvider
-func (_mock *MockProvider) RecordCacheMiss(ctx context.Context, attrs ...observability.Attr) {
-	if len(attrs) > 0 {
-		_mock.Called(ctx, attrs)
-	} else {
-		_mock.Called(ctx)
-	}
-
-	return
-}
-
-// MockProvider_RecordCacheMiss_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordCacheMiss'
-type MockProvider_RecordCacheMiss_Call struct {
-	*mock.Call
-}
-
-// RecordCacheMiss is a helper method to define mock.On call
-//   - ctx context.Context
-//   - attrs ...observability.Attr
-func (_e *MockProvider_Expecter) RecordCacheMiss(ctx interface{}, attrs ...interface{}) *MockProvider_RecordCacheMiss_Call {
-	return &MockProvider_RecordCacheMiss_Call{Call: _e.mock.On("RecordCacheMiss",
-		append([]interface{}{ctx}, attrs...)...)}
-}
-
-func (_c *MockProvider_RecordCacheMiss_Call) Run(run func(ctx context.Context, attrs ...observability.Attr)) *MockProvider_RecordCacheMiss_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 []observability.Attr
-		var variadicArgs []observability.Attr
-		if len(args) > 1 {
-			variadicArgs = args[1].([]observability.Attr)
-		}
-		arg1 = variadicArgs
-		run(
-			arg0,
-			arg1...,
-		)
-	})
-	return _c
-}
-
-func (_c *MockProvider_RecordCacheMiss_Call) Return() *MockProvider_RecordCacheMiss_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MockProvider_RecordCacheMiss_Call) RunAndReturn(run func(ctx context.Context, attrs ...observability.Attr)) *MockProvider_RecordCacheMiss_Call {
+func (_c *MockProvider_RecordCacheRead_Call) RunAndReturn(run func(ctx context.Context, result observability.CacheResult, attrs ...observability.Attr)) *MockProvider_RecordCacheRead_Call {
 	_c.Run(run)
 	return _c
 }
@@ -1206,34 +956,34 @@ func (_c *MockProvider_RecordMCPCall_Call) RunAndReturn(run func(ctx context.Con
 	return _c
 }
 
-// RecordPoolAcquire provides a mock function for the type MockProvider
-func (_mock *MockProvider) RecordPoolAcquire(ctx context.Context, waitSecs float64, n int64) {
-	_mock.Called(ctx, waitSecs, n)
+// RecordPoolSlots provides a mock function for the type MockProvider
+func (_mock *MockProvider) RecordPoolSlots(ctx context.Context, state observability.PoolSlotState, delta int64) {
+	_mock.Called(ctx, state, delta)
 	return
 }
 
-// MockProvider_RecordPoolAcquire_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordPoolAcquire'
-type MockProvider_RecordPoolAcquire_Call struct {
+// MockProvider_RecordPoolSlots_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordPoolSlots'
+type MockProvider_RecordPoolSlots_Call struct {
 	*mock.Call
 }
 
-// RecordPoolAcquire is a helper method to define mock.On call
+// RecordPoolSlots is a helper method to define mock.On call
 //   - ctx context.Context
-//   - waitSecs float64
-//   - n int64
-func (_e *MockProvider_Expecter) RecordPoolAcquire(ctx interface{}, waitSecs interface{}, n interface{}) *MockProvider_RecordPoolAcquire_Call {
-	return &MockProvider_RecordPoolAcquire_Call{Call: _e.mock.On("RecordPoolAcquire", ctx, waitSecs, n)}
+//   - state observability.PoolSlotState
+//   - delta int64
+func (_e *MockProvider_Expecter) RecordPoolSlots(ctx interface{}, state interface{}, delta interface{}) *MockProvider_RecordPoolSlots_Call {
+	return &MockProvider_RecordPoolSlots_Call{Call: _e.mock.On("RecordPoolSlots", ctx, state, delta)}
 }
 
-func (_c *MockProvider_RecordPoolAcquire_Call) Run(run func(ctx context.Context, waitSecs float64, n int64)) *MockProvider_RecordPoolAcquire_Call {
+func (_c *MockProvider_RecordPoolSlots_Call) Run(run func(ctx context.Context, state observability.PoolSlotState, delta int64)) *MockProvider_RecordPoolSlots_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 float64
+		var arg1 observability.PoolSlotState
 		if args[1] != nil {
-			arg1 = args[1].(float64)
+			arg1 = args[1].(observability.PoolSlotState)
 		}
 		var arg2 int64
 		if args[2] != nil {
@@ -1248,43 +998,43 @@ func (_c *MockProvider_RecordPoolAcquire_Call) Run(run func(ctx context.Context,
 	return _c
 }
 
-func (_c *MockProvider_RecordPoolAcquire_Call) Return() *MockProvider_RecordPoolAcquire_Call {
+func (_c *MockProvider_RecordPoolSlots_Call) Return() *MockProvider_RecordPoolSlots_Call {
 	_c.Call.Return()
 	return _c
 }
 
-func (_c *MockProvider_RecordPoolAcquire_Call) RunAndReturn(run func(ctx context.Context, waitSecs float64, n int64)) *MockProvider_RecordPoolAcquire_Call {
+func (_c *MockProvider_RecordPoolSlots_Call) RunAndReturn(run func(ctx context.Context, state observability.PoolSlotState, delta int64)) *MockProvider_RecordPoolSlots_Call {
 	_c.Run(run)
 	return _c
 }
 
-// RecordPoolRelease provides a mock function for the type MockProvider
-func (_mock *MockProvider) RecordPoolRelease(ctx context.Context, n int64) {
-	_mock.Called(ctx, n)
+// RecordPoolWait provides a mock function for the type MockProvider
+func (_mock *MockProvider) RecordPoolWait(ctx context.Context, secs float64) {
+	_mock.Called(ctx, secs)
 	return
 }
 
-// MockProvider_RecordPoolRelease_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordPoolRelease'
-type MockProvider_RecordPoolRelease_Call struct {
+// MockProvider_RecordPoolWait_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordPoolWait'
+type MockProvider_RecordPoolWait_Call struct {
 	*mock.Call
 }
 
-// RecordPoolRelease is a helper method to define mock.On call
+// RecordPoolWait is a helper method to define mock.On call
 //   - ctx context.Context
-//   - n int64
-func (_e *MockProvider_Expecter) RecordPoolRelease(ctx interface{}, n interface{}) *MockProvider_RecordPoolRelease_Call {
-	return &MockProvider_RecordPoolRelease_Call{Call: _e.mock.On("RecordPoolRelease", ctx, n)}
+//   - secs float64
+func (_e *MockProvider_Expecter) RecordPoolWait(ctx interface{}, secs interface{}) *MockProvider_RecordPoolWait_Call {
+	return &MockProvider_RecordPoolWait_Call{Call: _e.mock.On("RecordPoolWait", ctx, secs)}
 }
 
-func (_c *MockProvider_RecordPoolRelease_Call) Run(run func(ctx context.Context, n int64)) *MockProvider_RecordPoolRelease_Call {
+func (_c *MockProvider_RecordPoolWait_Call) Run(run func(ctx context.Context, secs float64)) *MockProvider_RecordPoolWait_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 int64
+		var arg1 float64
 		if args[1] != nil {
-			arg1 = args[1].(int64)
+			arg1 = args[1].(float64)
 		}
 		run(
 			arg0,
@@ -1294,58 +1044,12 @@ func (_c *MockProvider_RecordPoolRelease_Call) Run(run func(ctx context.Context,
 	return _c
 }
 
-func (_c *MockProvider_RecordPoolRelease_Call) Return() *MockProvider_RecordPoolRelease_Call {
+func (_c *MockProvider_RecordPoolWait_Call) Return() *MockProvider_RecordPoolWait_Call {
 	_c.Call.Return()
 	return _c
 }
 
-func (_c *MockProvider_RecordPoolRelease_Call) RunAndReturn(run func(ctx context.Context, n int64)) *MockProvider_RecordPoolRelease_Call {
-	_c.Run(run)
-	return _c
-}
-
-// RecordPoolWaiting provides a mock function for the type MockProvider
-func (_mock *MockProvider) RecordPoolWaiting(ctx context.Context, delta int64) {
-	_mock.Called(ctx, delta)
-	return
-}
-
-// MockProvider_RecordPoolWaiting_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordPoolWaiting'
-type MockProvider_RecordPoolWaiting_Call struct {
-	*mock.Call
-}
-
-// RecordPoolWaiting is a helper method to define mock.On call
-//   - ctx context.Context
-//   - delta int64
-func (_e *MockProvider_Expecter) RecordPoolWaiting(ctx interface{}, delta interface{}) *MockProvider_RecordPoolWaiting_Call {
-	return &MockProvider_RecordPoolWaiting_Call{Call: _e.mock.On("RecordPoolWaiting", ctx, delta)}
-}
-
-func (_c *MockProvider_RecordPoolWaiting_Call) Run(run func(ctx context.Context, delta int64)) *MockProvider_RecordPoolWaiting_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 int64
-		if args[1] != nil {
-			arg1 = args[1].(int64)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockProvider_RecordPoolWaiting_Call) Return() *MockProvider_RecordPoolWaiting_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MockProvider_RecordPoolWaiting_Call) RunAndReturn(run func(ctx context.Context, delta int64)) *MockProvider_RecordPoolWaiting_Call {
+func (_c *MockProvider_RecordPoolWait_Call) RunAndReturn(run func(ctx context.Context, secs float64)) *MockProvider_RecordPoolWait_Call {
 	_c.Run(run)
 	return _c
 }

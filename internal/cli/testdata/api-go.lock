@@ -579,10 +579,6 @@ github.com/egladman/magus/types.BuildInfo.Date field string "json:\"date\" yaml:
 github.com/egladman/magus/types.BuildInfo.Fingerprint method func() string
 github.com/egladman/magus/types.BuildInfo.Version field string "json:\"version\" yaml:\"version\""
 github.com/egladman/magus/types.BuildSlotsDeadlocked const DiagnosticCode = "MGS3013"
-github.com/egladman/magus/types.BuildStats type struct
-github.com/egladman/magus/types.BuildStats.Duration field time.Duration
-github.com/egladman/magus/types.BuildStats.Edges field int
-github.com/egladman/magus/types.BuildStats.Nodes field int
 github.com/egladman/magus/types.BuildStatus type struct
 github.com/egladman/magus/types.BuildStatus.SelfUpdate field bool "json:\"selfupdate\" yaml:\"selfupdate\""
 github.com/egladman/magus/types.BundleRange type struct
@@ -1685,7 +1681,17 @@ github.com/egladman/magus/types.Graph.TopoSort method(ptr) func() []string
 github.com/egladman/magus/types.Graph.View method(ptr) func() GraphView
 github.com/egladman/magus/types.GraphConfig type struct
 github.com/egladman/magus/types.GraphConfig.Obs field Observer
+github.com/egladman/magus/types.GraphEvent type struct
+github.com/egladman/magus/types.GraphEvent.Duration field time.Duration
+github.com/egladman/magus/types.GraphEvent.Edges field int
+github.com/egladman/magus/types.GraphEvent.Err field error
+github.com/egladman/magus/types.GraphEvent.Nodes field int
+github.com/egladman/magus/types.GraphEvent.Op field string
+github.com/egladman/magus/types.GraphEvent.ResultCount field int
+github.com/egladman/magus/types.GraphEvent.Seeds field int
+github.com/egladman/magus/types.GraphEvent.Strategy field string
 github.com/egladman/magus/types.GraphObserverFromContext func(ctx context.Context) Observer
+github.com/egladman/magus/types.GraphOpBuild const untyped string = "build"
 github.com/egladman/magus/types.GraphOption type func(*GraphConfig)
 github.com/egladman/magus/types.GraphOutput type struct
 github.com/egladman/magus/types.GraphOutput.Direction field string "json:\"direction\" yaml:\"direction\""
@@ -2842,18 +2848,14 @@ github.com/egladman/magus/types.Node.Path field string "json:\"path\" yaml:\"pat
 github.com/egladman/magus/types.Node.SpellName field string "json:\"spell_name,omitempty\" yaml:\"spell_name,omitempty\""
 github.com/egladman/magus/types.NondeterministicOutput const DiagnosticCode = "MGS4003"
 github.com/egladman/magus/types.NoopObserver type struct
-github.com/egladman/magus/types.NoopObserver.OnBuild method func(BuildStats)
-github.com/egladman/magus/types.NoopObserver.OnError method func(error)
-github.com/egladman/magus/types.NoopObserver.OnQuery method func(QueryEvent)
+github.com/egladman/magus/types.NoopObserver.Observe method func(GraphEvent)
 github.com/egladman/magus/types.Normalize func(name string) string
 github.com/egladman/magus/types.NormalizeCharm func(name string) string
 github.com/egladman/magus/types.NormalizeExitCode func(code int) int
 github.com/egladman/magus/types.NotableRankCutoff const untyped int = 50
 github.com/egladman/magus/types.ObservationKeyedAsVersion const DiagnosticCode = "MGS1037"
 github.com/egladman/magus/types.Observer type interface
-github.com/egladman/magus/types.Observer.OnBuild imethod func(BuildStats)
-github.com/egladman/magus/types.Observer.OnError imethod func(error)
-github.com/egladman/magus/types.Observer.OnQuery imethod func(QueryEvent)
+github.com/egladman/magus/types.Observer.Observe imethod func(GraphEvent)
 github.com/egladman/magus/types.OperationCherryPick const untyped string = "cherry-pick"
 github.com/egladman/magus/types.OperationMerge const untyped string = "merge"
 github.com/egladman/magus/types.OperationRebase const untyped string = "rebase"
@@ -3131,13 +3133,6 @@ github.com/egladman/magus/types.PushStatusReporter type interface
 github.com/egladman/magus/types.PushStatusReporter.CommitPushed imethod func(ctx context.Context, dir string, id string) (pushed bool, ok bool, err error)
 github.com/egladman/magus/types.Pusher type interface
 github.com/egladman/magus/types.Pusher.Push imethod func(ctx context.Context, root string, p PushLease) error
-github.com/egladman/magus/types.QueryEvent type struct
-github.com/egladman/magus/types.QueryEvent.Duration field time.Duration
-github.com/egladman/magus/types.QueryEvent.Nodes field int
-github.com/egladman/magus/types.QueryEvent.Op field string
-github.com/egladman/magus/types.QueryEvent.ResultCount field int
-github.com/egladman/magus/types.QueryEvent.Seeds field int
-github.com/egladman/magus/types.QueryEvent.Strategy field string
 github.com/egladman/magus/types.QueueCredentialMismatch const DiagnosticCode = "MGS3019"
 github.com/egladman/magus/types.QueueHookNotACommand const DiagnosticCode = "MGS3026"
 github.com/egladman/magus/types.QueuePlanUnverified const DiagnosticCode = "MGS3028"
@@ -5005,62 +5000,28 @@ github.com/egladman/magus/types/gen/mocks.MockObserver.EXPECT method(ptr) func()
 github.com/egladman/magus/types/gen/mocks.MockObserver.IsMethodCallable method(ptr) func(t github.com/stretchr/testify/mock.TestingT, methodName string, arguments ...interface{}) bool
 github.com/egladman/magus/types/gen/mocks.MockObserver.MethodCalled method(ptr) func(methodName string, arguments ...interface{}) github.com/stretchr/testify/mock.Arguments
 github.com/egladman/magus/types/gen/mocks.MockObserver.Mock embedded github.com/stretchr/testify/mock.Mock
+github.com/egladman/magus/types/gen/mocks.MockObserver.Observe method(ptr) func(graphEvent github.com/egladman/magus/types.GraphEvent)
 github.com/egladman/magus/types/gen/mocks.MockObserver.On method(ptr) func(methodName string, arguments ...interface{}) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver.OnBuild method(ptr) func(buildStats github.com/egladman/magus/types.BuildStats)
-github.com/egladman/magus/types/gen/mocks.MockObserver.OnError method(ptr) func(err error)
-github.com/egladman/magus/types/gen/mocks.MockObserver.OnQuery method(ptr) func(queryEvent github.com/egladman/magus/types.QueryEvent)
 github.com/egladman/magus/types/gen/mocks.MockObserver.String method(ptr) func() string
 github.com/egladman/magus/types/gen/mocks.MockObserver.Test method(ptr) func(t github.com/stretchr/testify/mock.TestingT)
 github.com/egladman/magus/types/gen/mocks.MockObserver.TestData method(ptr) func() github.com/stretchr/objx.Map
 github.com/egladman/magus/types/gen/mocks.MockObserver_Expecter type struct
-github.com/egladman/magus/types/gen/mocks.MockObserver_Expecter.OnBuild method(ptr) func(buildStats interface{}) *MockObserver_OnBuild_Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_Expecter.OnError method(ptr) func(err interface{}) *MockObserver_OnError_Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_Expecter.OnQuery method(ptr) func(queryEvent interface{}) *MockObserver_OnQuery_Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnBuild_Call type struct
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnBuild_Call.After method func(d time.Duration) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnBuild_Call.Call embedded *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnBuild_Call.Maybe method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnBuild_Call.NotBefore method func(calls ...*github.com/stretchr/testify/mock.Call) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnBuild_Call.On method func(methodName string, arguments ...interface{}) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnBuild_Call.Once method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnBuild_Call.Panic method func(msg string) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnBuild_Call.Return method(ptr) func() *MockObserver_OnBuild_Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnBuild_Call.Run method(ptr) func(run func(buildStats github.com/egladman/magus/types.BuildStats)) *MockObserver_OnBuild_Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnBuild_Call.RunAndReturn method(ptr) func(run func(buildStats github.com/egladman/magus/types.BuildStats)) *MockObserver_OnBuild_Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnBuild_Call.Times method func(i int) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnBuild_Call.Twice method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnBuild_Call.Unset method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnBuild_Call.WaitUntil method func(w <-chan time.Time) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnError_Call type struct
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnError_Call.After method func(d time.Duration) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnError_Call.Call embedded *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnError_Call.Maybe method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnError_Call.NotBefore method func(calls ...*github.com/stretchr/testify/mock.Call) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnError_Call.On method func(methodName string, arguments ...interface{}) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnError_Call.Once method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnError_Call.Panic method func(msg string) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnError_Call.Return method(ptr) func() *MockObserver_OnError_Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnError_Call.Run method(ptr) func(run func(err error)) *MockObserver_OnError_Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnError_Call.RunAndReturn method(ptr) func(run func(err error)) *MockObserver_OnError_Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnError_Call.Times method func(i int) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnError_Call.Twice method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnError_Call.Unset method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnError_Call.WaitUntil method func(w <-chan time.Time) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnQuery_Call type struct
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnQuery_Call.After method func(d time.Duration) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnQuery_Call.Call embedded *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnQuery_Call.Maybe method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnQuery_Call.NotBefore method func(calls ...*github.com/stretchr/testify/mock.Call) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnQuery_Call.On method func(methodName string, arguments ...interface{}) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnQuery_Call.Once method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnQuery_Call.Panic method func(msg string) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnQuery_Call.Return method(ptr) func() *MockObserver_OnQuery_Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnQuery_Call.Run method(ptr) func(run func(queryEvent github.com/egladman/magus/types.QueryEvent)) *MockObserver_OnQuery_Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnQuery_Call.RunAndReturn method(ptr) func(run func(queryEvent github.com/egladman/magus/types.QueryEvent)) *MockObserver_OnQuery_Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnQuery_Call.Times method func(i int) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnQuery_Call.Twice method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnQuery_Call.Unset method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockObserver_OnQuery_Call.WaitUntil method func(w <-chan time.Time) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockObserver_Expecter.Observe method(ptr) func(graphEvent interface{}) *MockObserver_Observe_Call
+github.com/egladman/magus/types/gen/mocks.MockObserver_Observe_Call type struct
+github.com/egladman/magus/types/gen/mocks.MockObserver_Observe_Call.After method func(d time.Duration) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockObserver_Observe_Call.Call embedded *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockObserver_Observe_Call.Maybe method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockObserver_Observe_Call.NotBefore method func(calls ...*github.com/stretchr/testify/mock.Call) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockObserver_Observe_Call.On method func(methodName string, arguments ...interface{}) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockObserver_Observe_Call.Once method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockObserver_Observe_Call.Panic method func(msg string) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockObserver_Observe_Call.Return method(ptr) func() *MockObserver_Observe_Call
+github.com/egladman/magus/types/gen/mocks.MockObserver_Observe_Call.Run method(ptr) func(run func(graphEvent github.com/egladman/magus/types.GraphEvent)) *MockObserver_Observe_Call
+github.com/egladman/magus/types/gen/mocks.MockObserver_Observe_Call.RunAndReturn method(ptr) func(run func(graphEvent github.com/egladman/magus/types.GraphEvent)) *MockObserver_Observe_Call
+github.com/egladman/magus/types/gen/mocks.MockObserver_Observe_Call.Times method func(i int) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockObserver_Observe_Call.Twice method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockObserver_Observe_Call.Unset method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockObserver_Observe_Call.WaitUntil method func(w <-chan time.Time) *github.com/stretchr/testify/mock.Call
 github.com/egladman/magus/types/gen/mocks.MockRefreshHookInstaller type struct
 github.com/egladman/magus/types/gen/mocks.MockRefreshHookInstaller.AssertCalled method(ptr) func(t github.com/stretchr/testify/mock.TestingT, methodName string, arguments ...interface{}) bool
 github.com/egladman/magus/types/gen/mocks.MockRefreshHookInstaller.AssertExpectations method(ptr) func(t github.com/stretchr/testify/mock.TestingT) bool

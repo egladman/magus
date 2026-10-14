@@ -125,7 +125,7 @@ Used by: [GetMetrics (response)](metrics.md#getmetrics), [StreamMetrics (respons
 
 ### Remote
 
-Remote is the remote-cache instrument family: outcome tallies plus transfer latency and volume.
+Remote is the remote-cache instrument family: outcome tallies from magus.cache.remote.ops plus transfer latency and volume.
 
 Source: [metrics.proto:70](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L70).
 
@@ -190,18 +190,18 @@ Snapshot is the derived-metrics view at one instant: each OTel instrument family
 
 Source: [metrics.proto:38](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L38).
 
-| Field          | Type                                 | #  | Description                                                                                                                                                                                                                                    |
-| -------------- | ------------------------------------ | -- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `capture_time` | Timestamp                            | 1  |                                                                                                                                                                                                                                                |
-| `target`       | [Latency](#latency)                  | 2  | magus.target.duration + magus.target.runs                                                                                                                                                                                                      |
-| `cache`        | [Latency](#latency)                  | 3  | cache is the local Cache.Run family (magus.cache.duration + magus.cache.{hits,misses,errors}). Named "cache" (not "cache\_op") because "op" collides with the Operation glossary term and this family measures a Cache.Run, not a resolved op. |
-| `pool_wait`    | [Latency](#latency)                  | 4  | magus.pool.wait.duration                                                                                                                                                                                                                       |
-| `graph_query`  | [Latency](#latency)                  | 5  | magus.graph.query.duration + magus.graph.queries                                                                                                                                                                                               |
-| `remote`       | [Remote](#remote)                    | 6  | magus.cache.remote.*                                                                                                                                                                                                                           |
-| `target_stats` | [repeated TargetStat](#targetstat)   | 7  | per-target rollup of magus.target.{duration,runs}                                                                                                                                                                                              |
-| `mcp_tools`    | [repeated MCPToolStat](#mcptoolstat) | 8  | per-tool rollup of magus.mcp.tool.*                                                                                                                                                                                                            |
-| `buzz`         | [Buzz](#buzz)                        | 9  | magus.buzz.* families                                                                                                                                                                                                                          |
-| `sandbox`      | [Sandbox](#sandbox)                  | 10 | magus.sandbox.* filesystem families                                                                                                                                                                                                            |
+| Field          | Type                                 | #  | Description                                                                                                                                                                                                                     |
+| -------------- | ------------------------------------ | -- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `capture_time` | Timestamp                            | 1  |                                                                                                                                                                                                                                 |
+| `target`       | [Latency](#latency)                  | 2  | magus.target.duration                                                                                                                                                                                                           |
+| `cache`        | [Latency](#latency)                  | 3  | cache is the local Cache.Run family (magus.cache.duration + magus.cache.reads). Named "cache" (not "cache\_op") because "op" collides with the Operation glossary term and this family measures a Cache.Run, not a resolved op. |
+| `pool_wait`    | [Latency](#latency)                  | 4  | magus.pool.wait.duration                                                                                                                                                                                                        |
+| `graph_query`  | [Latency](#latency)                  | 5  | magus.graph.query.duration                                                                                                                                                                                                      |
+| `remote`       | [Remote](#remote)                    | 6  | magus.cache.remote.*                                                                                                                                                                                                            |
+| `target_stats` | [repeated TargetStat](#targetstat)   | 7  | per-target rollup of magus.target.duration                                                                                                                                                                                      |
+| `mcp_tools`    | [repeated MCPToolStat](#mcptoolstat) | 8  | per-tool rollup of magus.mcp.tool.*                                                                                                                                                                                             |
+| `buzz`         | [Buzz](#buzz)                        | 9  | magus.buzz.* families                                                                                                                                                                                                           |
+| `sandbox`      | [Sandbox](#sandbox)                  | 10 | magus.sandbox.* filesystem families                                                                                                                                                                                             |
 
 Used by: [GetMetrics (response)](metrics.md#getmetrics), [StreamMetrics (response)](metrics.md#streammetrics).
 
@@ -240,7 +240,7 @@ Source: [metrics.proto:83](https://github.com/egladman/magus/blob/main/proto/mag
 | `p95_seconds`    | double | 6  |                                                           |
 | `p99_seconds`    | double | 7  |                                                           |
 | `cache_hit_rate` | double | 8  | [0,1]; fraction of runs served from cache                 |
-| `success`        | int64  | 9  | runs with outcome=success                                 |
+| `success`        | int64  | 9  | runs with outcome=ok                                      |
 | `errors`         | int64  | 10 | runs with outcome=error                                   |
 
 Used by: [GetMetrics (response)](metrics.md#getmetrics), [StreamMetrics (response)](metrics.md#streammetrics).
