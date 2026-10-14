@@ -49,7 +49,7 @@ func heredocWrites(command string, d Dialect) []heredocWrite {
 			case (r.Op == syntax.Hdoc || r.Op == syntax.DashHdoc) && r.Hdoc != nil:
 				body = r.Hdoc
 			case (r.Op == syntax.RdrOut || r.Op == syntax.AppOut || r.Op == syntax.ClbOut) && (r.N == nil || r.N.Value == "1"):
-				if t, ok := plainWord(r.Word); ok {
+				if t, ok := redirectFile(command, r.Word); ok {
 					targets = append(targets, t)
 				}
 			}
@@ -107,6 +107,27 @@ func judgeFileWrite(ctx context.Context, deps Dependencies, req Request, who hoo
 	})
 }
 
+// redirectFile is a redirect target's text when the line determines it: a literal word, or
+// one that leads with $HOME or ${HOME}, spelled `~` for expandHome to place.
+func redirectFile(command string, w *syntax.Word) (string, bool) {
+	if w == nil || len(w.Parts) == 0 {
+		return "", false
+	}
+	parts := w.Parts
+	if q, ok := parts[0].(*syntax.DblQuoted); ok && len(parts) == 1 {
+		parts = q.Parts
+	}
+	if len(parts) > 0 {
+		if p, ok := parts[0].(*syntax.ParamExp); ok {
+			if src := command[p.Pos().Offset():p.End().Offset()]; src == "$HOME" || src == "${HOME}" {
+				rest, literal := plainWord(&syntax.Word{Parts: parts[1:]})
+				return "~" + rest, literal
+			}
+		}
+	}
+	return plainWord(w)
+}
+
 // plainWord is w's text when every part of it is literal: no parameter, substitution or
 // arithmetic for the shell to fill in.
 func plainWord(w *syntax.Word) (string, bool) {
@@ -147,7 +168,12 @@ func judgeHeredocWrites(ctx context.Context, deps Dependencies, req Request, who
 	}
 	var advised ShellVerdict
 	for _, w := range writes {
-		target := w.path
+		// The shell expands `~` before cat or tee opens the file, so it is never a directory
+		// under callDir; with the home unknown, the file is nowhere this can judge.
+		target := expandHome(w.path, userHome())
+		if strings.HasPrefix(target, "~") {
+			continue
+		}
 		if !filepath.IsAbs(target) && callDir != "" {
 			target = filepath.Join(callDir, target)
 		}

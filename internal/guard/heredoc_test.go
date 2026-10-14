@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,6 +22,11 @@ func TestHeredocWritesReadsOnlyALiteralBodyIntoAFile(t *testing.T) {
 		{"cat > notes.md <<'EOF'\nhello\nEOF", []heredocWrite{{"notes.md", "hello\n"}}},
 		{"cat >> notes.md <<EOF\nplain text\nEOF", []heredocWrite{{"notes.md", "plain text\n"}}},
 		{"tee -a a.go b.go >/dev/null <<'EOF'\npackage a\nEOF", []heredocWrite{{"a.go", "package a\n"}, {"b.go", "package a\n"}}},
+		// A home-relative target is kept as the shell will place it, never as a path here.
+		{"cat >> ~/.claude/p/RESUME.md <<'EOF'\nx\nEOF", []heredocWrite{{"~/.claude/p/RESUME.md", "x\n"}}},
+		{"cat >> $HOME/.claude/p/RESUME.md <<'EOF'\nx\nEOF", []heredocWrite{{"~/.claude/p/RESUME.md", "x\n"}}},
+		{"cat >> \"${HOME}/.claude/p/RESUME.md\" <<'EOF'\nx\nEOF", []heredocWrite{{"~/.claude/p/RESUME.md", "x\n"}}},
+		{"cat >> $DIR/RESUME.md <<'EOF'\nx\nEOF", nil},
 		// The body expands a parameter, so nobody can read it before it runs.
 		{"cat > notes.md <<EOF\nhome is $HOME\nEOF", nil},
 		// A heredoc feeding a command's stdin is no write.
@@ -60,6 +66,20 @@ func TestHeredocWriteMeetsTheWriteRules(t *testing.T) {
 
 	assert.NotEqual(t, "deny", judge("cat > notes.md <<'EOF'\nan allowed word\nEOF").Decision)
 	assert.NotEqual(t, "deny", judge("cat > notes.md <<EOF\n$forbidden\nEOF").Decision, "an expanding body is not judged")
+
+	// The root appending to its plan under ~/.claude writes the home's file, not ./~/.claude.
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+	for _, line := range []string{
+		"cat >> ~/.claude/plans/p/RESUME.md <<'EOF'\nan allowed word\nEOF",
+		"cat >> $HOME/.claude/plans/p/RESUME.md <<'EOF'\nan allowed word\nEOF",
+	} {
+		seen = nil
+		judge(line)
+		for _, req := range seen {
+			assert.Equal(t, filepath.Join(home, ".claude", "plans", "p", "RESUME.md"), req.Path, line)
+		}
+	}
 }
 
 // Every file a patch writes is judged, not only its first.
