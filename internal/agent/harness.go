@@ -581,12 +581,39 @@ func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, e
 	}
 	result, err := verifyHarnessConfig(ctx, root, d, source)
 	if err == nil {
-		verifyHarnessPrompts(root, d, &result)
-		verifyHarnessAgents(root, d, &result)
-		verifyHarnessSettings(root, d, &result)
+		merge := "; merge what `magus describe harness " + d.ID + "` prints"
+		result.Prompt = verifyEach(root, d.Prompts, planHarnessPrompt, func(p HarnessPrompt) string {
+			return "missing " + promptLocation(p) + ", so the host never asks the person before the call" + merge
+		})
+		result.Agent = verifyEach(root, d.Agents, func(root string, a HarnessAgentFile) (types.HarnessFile, error) {
+			return planWholeFile(root, a.Path, a.Content)
+		}, func(a HarnessAgentFile) string {
+			return a.Path + " is missing or differs from what the spell renders" + merge
+		})
+		result.Setting = verifyEach(root, d.Settings, planHarnessSetting, func(s HarnessSetting) string {
+			return "missing " + settingLocation(s) + merge
+		})
 		verifyHarnessPlugins(root, d, &result)
 	}
 	return result, err
+}
+
+// verifyEach plans every item a descriptor keeps and reports the first that fails to plan
+// or still needs changes, with missing naming it. No items leaves the check empty.
+func verifyEach[T any](root string, items []T, plan func(string, T) (types.HarnessFile, error), missing func(T) string) HarnessCheck {
+	if len(items) == 0 {
+		return HarnessCheck{}
+	}
+	for _, item := range items {
+		file, err := plan(root, item)
+		switch {
+		case err != nil:
+			return HarnessCheck{Status: HarnessUncovered, Reason: err.Error()}
+		case len(file.Changes) > 0:
+			return HarnessCheck{Status: HarnessUncovered, Reason: missing(item)}
+		}
+	}
+	return HarnessCheck{Status: HarnessVerified}
 }
 
 // verifyHarnessPlugins reports whether each plugin a descriptor's settings enable is
