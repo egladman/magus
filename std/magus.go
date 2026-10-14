@@ -1098,7 +1098,7 @@ var Magus = Module{
 						"Reads the trail of every checkout of this repository that changed inside the window, because a session's hooks record into the checkout they ran from. " +
 						"An unknown option or an unreadable time raises, and MGS1022 outside a workspace.",
 					Args:    []Arg{{Name: "opts", Type: TypeAnyMap, Optional: true}},
-					Returns: []Ret{{Type: TypeAny, Object: "FeedbackTrail"}},
+					Returns: []Ret{{Type: TypeAny, Object: "Trail"}},
 					Raises:  true,
 					Extern:  true,
 				},
@@ -1119,7 +1119,7 @@ var Magus = Module{
 				{
 					Name:    "marks",
 					Doc:     "Every verdict a person recorded on a trail row in this repository, oldest first; a later mark on an id supersedes an earlier one. Kept per repository identity, so every checkout reads the same marks. Raises on a store line that does not decode, and MGS1022 outside a workspace.",
-					Returns: []Ret{{Type: TypeAny, Object: "[FeedbackMark]"}},
+					Returns: []Ret{{Type: TypeAny, Object: "[TrailMark]"}},
 					Raises:  true,
 					Extern:  true,
 				},
@@ -1128,8 +1128,8 @@ var Magus = Module{
 					Doc: "Record a person's verdict on one trail row and return it as stored, its time stamped. " +
 						"id is the row's stable id (fb and 12 hex digits), section one of refused, advised, unguarded, next-not-taken, verdict one of should-deny, should-advise, wrong-deny, fine; key names the rule or shape the row groups by. " +
 						"Appends to the per-repository store and rewrites nothing. Raises on a malformed mark, an unwritable store, and MGS1022 outside a workspace.",
-					Args:    []Arg{{Name: "mark", Type: TypeAnyMap, Object: "FeedbackMark"}},
-					Returns: []Ret{{Type: TypeAny, Object: "FeedbackMark"}},
+					Args:    []Arg{{Name: "mark", Type: TypeAnyMap, Object: "TrailMark"}},
+					Returns: []Ret{{Type: TypeAny, Object: "TrailMark"}},
 					Raises:  true,
 					Extern:  true,
 				},

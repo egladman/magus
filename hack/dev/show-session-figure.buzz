@@ -56,7 +56,7 @@ fun shortSession(id: str) > str {
 //
 // The spawn edge into a job comes from its declared parent, else from whichever job the
 // spawning agent was working under when the trail recorded the spawn, else from the session.
-export fun tree(t: FeedbackTrail, jobs: [magus\Job], all: bool, start: int) > JobTree {
+export fun tree(t: Trail, jobs: [magus\Job], all: bool, start: int) > JobTree {
     final root = "session {shortSession(t.session)}";
     final byID = mut {<str: magus\Job>};
     final children = mut {<str: mut [str]>};
@@ -278,15 +278,15 @@ fun fixture() > JobTree !> any {
     }
     final trailText = fs\readFile("hack/testdata/feedback-trail.json");
     final t = json\parse(trailText);
-    final obs = mut [<FeedbackObservation>];
+    final obs = mut [<TrailObservation>];
     foreach (o in t["observations"]) {
-        obs.append(FeedbackObservation{ at = std\toInt(o["at"]), agent = o["agent"] ?? "", lease = o["lease"] ?? "" });
+        obs.append(TrailObservation{ at = std\toInt(o["at"]), agent = o["agent"] ?? "", lease = o["lease"] ?? "" });
     }
-    final spawns = mut [<FeedbackSpawn>];
+    final spawns = mut [<TrailSpawn>];
     foreach (s in t["spawns"]) {
-        spawns.append(FeedbackSpawn{ at = std\toInt(s["at"]), agent = s["agent"] ?? "", child = s["child"] ?? "", lease = s["lease"] ?? "" });
+        spawns.append(TrailSpawn{ at = std\toInt(s["at"]), agent = s["agent"] ?? "", child = s["child"] ?? "", lease = s["lease"] ?? "" });
     }
-    return tree(FeedbackTrail{ session = t["session"], observations = obs, spawns = spawns }, jobs: jobs, all: false, start: 0);
+    return tree(Trail{ session = t["session"], observations = obs, spawns = spawns }, jobs: jobs, all: false, start: 0);
 }
 
 test "the trail's leases select the jobs, with their parents and dependencies" {

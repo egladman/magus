@@ -5,29 +5,29 @@ import (
 	"strings"
 )
 
-// FeedbackSection is which part of a session's guard feedback a row belongs to. The
+// TrailSection is which part of a session's guard trail a row belongs to. The
 // letter is the row's label prefix, so a person writes C3 for the third unguarded shape.
-type FeedbackSection string
+type TrailSection string
 
 const (
-	// FeedbackRefused rows are rules that denied a call, keyed by rule.
-	FeedbackRefused FeedbackSection = "refused"
-	// FeedbackAdvised rows are rules that let a call through with advice, keyed by rule.
-	FeedbackAdvised FeedbackSection = "advised"
-	// FeedbackUnguarded rows are command shapes that passed with no rule, keyed by shape:
+	// TrailRefused rows are rules that denied a call, keyed by rule.
+	TrailRefused TrailSection = "refused"
+	// TrailAdvised rows are rules that let a call through with advice, keyed by rule.
+	TrailAdvised TrailSection = "advised"
+	// TrailUnguarded rows are command shapes that passed with no rule, keyed by shape:
 	// the guard candidates.
-	FeedbackUnguarded FeedbackSection = "unguarded"
-	// FeedbackNextNotTaken rows are commands a verdict served as `next` that the agent
+	TrailUnguarded TrailSection = "unguarded"
+	// TrailNextNotTaken rows are commands a verdict served as `next` that the agent
 	// never ran, keyed by rule and the served command's shape.
-	FeedbackNextNotTaken FeedbackSection = "next-not-taken"
+	TrailNextNotTaken TrailSection = "next-not-taken"
 )
 
-// FeedbackSections lists every section in label order: A, B, C, D.
-var FeedbackSections = []FeedbackSection{FeedbackRefused, FeedbackAdvised, FeedbackUnguarded, FeedbackNextNotTaken}
+// TrailSections lists every section in label order: A, B, C, D.
+var TrailSections = []TrailSection{TrailRefused, TrailAdvised, TrailUnguarded, TrailNextNotTaken}
 
 // Letter is the section's label prefix, "" for a value outside the set.
-func (s FeedbackSection) Letter() string {
-	for i, known := range FeedbackSections {
+func (s TrailSection) Letter() string {
+	for i, known := range TrailSections {
 		if s == known {
 			return string(rune('A' + i))
 		}
@@ -36,41 +36,41 @@ func (s FeedbackSection) Letter() string {
 }
 
 // Validate reports a section outside the set, naming the ones that exist.
-func (s FeedbackSection) Validate() error {
+func (s TrailSection) Validate() error {
 	if s.Letter() == "" {
-		return fmt.Errorf("feedback section %q is not one of %s", s, joinFeedback(FeedbackSections))
+		return fmt.Errorf("trail section %q is not one of %s", s, joinTrail(TrailSections))
 	}
 	return nil
 }
 
-// FeedbackVerdict is what a person said about a feedback row.
-type FeedbackVerdict string
+// TrailVerdict is what a person said about a trail row.
+type TrailVerdict string
 
 const (
-	// FeedbackShouldDeny says the row's calls should be refused next time.
-	FeedbackShouldDeny FeedbackVerdict = "should-deny"
-	// FeedbackShouldAdvise says the row's calls should draw advice next time.
-	FeedbackShouldAdvise FeedbackVerdict = "should-advise"
-	// FeedbackWrongDeny says the rule refused calls it should have let through.
-	FeedbackWrongDeny FeedbackVerdict = "wrong-deny"
-	// FeedbackFine says the row needs no change.
-	FeedbackFine FeedbackVerdict = "fine"
+	// TrailShouldDeny says the row's calls should be refused next time.
+	TrailShouldDeny TrailVerdict = "should-deny"
+	// TrailShouldAdvise says the row's calls should draw advice next time.
+	TrailShouldAdvise TrailVerdict = "should-advise"
+	// TrailWrongDeny says the rule refused calls it should have let through.
+	TrailWrongDeny TrailVerdict = "wrong-deny"
+	// TrailFine says the row needs no change.
+	TrailFine TrailVerdict = "fine"
 )
 
-// FeedbackVerdicts lists every verdict a mark may carry.
-var FeedbackVerdicts = []FeedbackVerdict{FeedbackShouldDeny, FeedbackShouldAdvise, FeedbackWrongDeny, FeedbackFine}
+// TrailVerdicts lists every verdict a mark may carry.
+var TrailVerdicts = []TrailVerdict{TrailShouldDeny, TrailShouldAdvise, TrailWrongDeny, TrailFine}
 
 // Validate reports a verdict outside the set, naming the ones that exist.
-func (v FeedbackVerdict) Validate() error {
-	for _, known := range FeedbackVerdicts {
+func (v TrailVerdict) Validate() error {
+	for _, known := range TrailVerdicts {
 		if v == known {
 			return nil
 		}
 	}
-	return fmt.Errorf("feedback verdict %q is not one of %s", v, joinFeedback(FeedbackVerdicts))
+	return fmt.Errorf("trail verdict %q is not one of %s", v, joinTrail(TrailVerdicts))
 }
 
-func joinFeedback[T ~string](values []T) string {
+func joinTrail[T ~string](values []T) string {
 	parts := make([]string, len(values))
 	for i, v := range values {
 		parts[i] = string(v)
@@ -78,10 +78,10 @@ func joinFeedback[T ~string](values []T) string {
 	return strings.Join(parts, ", ")
 }
 
-// FeedbackTrail is what the guard recorded about one session inside a window, as
+// Trail is what the guard recorded about one session inside a window, as
 // magus\trail.read returns it: every call it judged and every subagent the session
 // started.
-type FeedbackTrail struct {
+type Trail struct {
 	// Session is the host's session id the observations belong to.
 	Session string
 	// Host is the agent host that reported the session, empty when its hooks named none.
@@ -95,14 +95,14 @@ type FeedbackTrail struct {
 	// in whichever checkout they ran from.
 	Checkouts []string
 	// Observations are oldest first.
-	Observations []FeedbackObservation
+	Observations []TrailObservation
 	// Spawns are the subagents the session started, oldest first; continuations are left
 	// out.
-	Spawns []FeedbackSpawn
+	Spawns []TrailSpawn
 }
 
-// FeedbackObservation is one tool call the guard saw, and what it decided.
-type FeedbackObservation struct {
+// TrailObservation is one tool call the guard saw, and what it decided.
+type TrailObservation struct {
 	// At is unix milliseconds.
 	At int64
 	// Agent is the host's subagent id, empty for the main conversation.
@@ -134,8 +134,8 @@ type FeedbackObservation struct {
 	Shapes []string
 }
 
-// FeedbackSpawn is one subagent a session started.
-type FeedbackSpawn struct {
+// TrailSpawn is one subagent a session started.
+type TrailSpawn struct {
 	// At is unix milliseconds.
 	At int64
 	// Agent is the spawning subagent's id, empty when the main conversation spawned it.
@@ -149,21 +149,21 @@ type FeedbackSpawn struct {
 	Model string
 }
 
-// FeedbackMark is a person's verdict on one feedback row, kept per repository so every
+// TrailMark is a person's verdict on one trail row, kept per repository so every
 // checkout and every later session sees it.
-type FeedbackMark struct {
+type TrailMark struct {
 	// ID is the row's stable id: a digest of its section and key, so a mark outlives the
 	// page position it was made from.
 	ID string `json:"id"`
-	// Section is which part of the feedback the row came from.
-	Section FeedbackSection `json:"section"`
+	// Section is which part of the trail the row came from.
+	Section TrailSection `json:"section"`
 	// Key is what the row groups by: a rule for refused and advised rows, a command shape
 	// for unguarded ones, a rule and shape for next-not-taken ones.
 	Key string `json:"key"`
 	// Rule is the rule the row involves, empty for an unguarded shape.
 	Rule string `json:"rule,omitempty"`
 	// Verdict is what the person said.
-	Verdict FeedbackVerdict `json:"verdict"`
+	Verdict TrailVerdict `json:"verdict"`
 	// Note is the person's own words, empty when they wrote none.
 	Note string `json:"note,omitempty"`
 	// Session is the session the row was read from.

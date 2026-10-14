@@ -45,21 +45,21 @@ func TestFeedbackWindow(t *testing.T) {
 	}
 }
 
-func TestDecodeFeedbackMark(t *testing.T) {
-	m, err := decodeFeedbackMark(map[string]any{
+func TestDecodeTrailMark(t *testing.T) {
+	m, err := decodeTrailMark(map[string]any{
 		"id": "fb0123456789ab", "section": "unguarded", "key": "grep -rn <arg>",
 		"verdict": "should-deny", "note": "guard it", "session": "s1",
 		"examples": []any{"grep -rn a b"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, types.FeedbackMark{
-		ID: "fb0123456789ab", Section: types.FeedbackUnguarded, Key: "grep -rn <arg>",
-		Verdict: types.FeedbackShouldDeny, Note: "guard it", Session: "s1", Examples: []string{"grep -rn a b"},
+	assert.Equal(t, types.TrailMark{
+		ID: "fb0123456789ab", Section: types.TrailUnguarded, Key: "grep -rn <arg>",
+		Verdict: types.TrailShouldDeny, Note: "guard it", Session: "s1", Examples: []string{"grep -rn a b"},
 	}, m)
 
-	_, err = decodeFeedbackMark(map[string]any{"id": 7})
+	_, err = decodeTrailMark(map[string]any{"id": 7})
 	assert.Error(t, err, "a field of the wrong type raises rather than storing its zero value")
-	_, err = decodeFeedbackMark(map[string]any{"examples": []any{1}})
+	_, err = decodeTrailMark(map[string]any{"examples": []any{1}})
 	assert.Error(t, err)
 }
 

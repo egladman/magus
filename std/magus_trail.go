@@ -27,14 +27,14 @@ type cacheDirer interface {
 
 // MagusTrailRead backs magus\trail.read: one session's guard record from every checkout's
 // trail.
-func MagusTrailRead(ctx context.Context, opts map[string]any) (types.FeedbackTrail, error) {
+func MagusTrailRead(ctx context.Context, opts map[string]any) (types.Trail, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.FeedbackTrail{}, errNoWorkspace("trail.read")
+		return types.Trail{}, errNoWorkspace("trail.read")
 	}
 	w, err := feedbackWindow(opts, time.Now())
 	if err != nil {
-		return types.FeedbackTrail{}, err
+		return types.Trail{}, err
 	}
 	root := ws.Root()
 	cacheDir := filepath.Join(root, ".magus")
@@ -123,7 +123,7 @@ func feedbackWindow(opts map[string]any, now time.Time) (trail.FeedbackWindow, e
 }
 
 // MagusTrailMarks backs magus\trail.marks: this repository's marks, oldest first.
-func MagusTrailMarks(ctx context.Context) ([]types.FeedbackMark, error) {
+func MagusTrailMarks(ctx context.Context) ([]types.TrailMark, error) {
 	dir, err := feedbackMarksDir(ctx, "trail.marks")
 	if err != nil {
 		return nil, err
@@ -132,14 +132,14 @@ func MagusTrailMarks(ctx context.Context) ([]types.FeedbackMark, error) {
 }
 
 // MagusTrailMark backs magus\trail.mark: records one mark in this repository's store.
-func MagusTrailMark(ctx context.Context, mark map[string]any) (types.FeedbackMark, error) {
+func MagusTrailMark(ctx context.Context, mark map[string]any) (types.TrailMark, error) {
 	dir, err := feedbackMarksDir(ctx, "trail.mark")
 	if err != nil {
-		return types.FeedbackMark{}, err
+		return types.TrailMark{}, err
 	}
-	m, err := decodeFeedbackMark(mark)
+	m, err := decodeTrailMark(mark)
 	if err != nil {
-		return types.FeedbackMark{}, err
+		return types.TrailMark{}, err
 	}
 	return trail.AppendFeedbackMark(dir, m, time.Now())
 }
@@ -152,10 +152,10 @@ func feedbackMarksDir(ctx context.Context, member string) (string, error) {
 	return trail.FeedbackMarksDir(ws.Root())
 }
 
-// decodeFeedbackMark reads a FeedbackMark object, raising on a field of the wrong type
+// decodeTrailMark reads a TrailMark object, raising on a field of the wrong type
 // rather than storing its zero value.
-func decodeFeedbackMark(in map[string]any) (types.FeedbackMark, error) {
-	var m types.FeedbackMark
+func decodeTrailMark(in map[string]any) (types.TrailMark, error) {
+	var m types.TrailMark
 	str := func(k string) (string, error) {
 		v, ok := in[k]
 		if !ok || v == nil {
@@ -177,7 +177,7 @@ func decodeFeedbackMark(in map[string]any) (types.FeedbackMark, error) {
 			return m, err
 		}
 	}
-	m.Section, m.Verdict = types.FeedbackSection(section), types.FeedbackVerdict(verdict)
+	m.Section, m.Verdict = types.TrailSection(section), types.TrailVerdict(verdict)
 	switch ex := in["examples"].(type) {
 	case nil:
 	case []any:

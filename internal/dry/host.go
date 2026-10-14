@@ -556,7 +556,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// marks find no trail; mark echoes a zero row for the reason job.put does.
 	trail := vm.NewMap()
 	trail.MapSet("read", fn("magus.trail.read", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindinggen.ObjectFeedbackTrail(types.FeedbackTrail{}), nil
+		return bindinggen.ObjectTrail(types.Trail{}), nil
 	}))
 	trail.MapSet("shape", fn("magus.trail.shape", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.StrValue(""), nil
@@ -568,7 +568,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		return vm.ListValue(nil), nil
 	}))
 	trail.MapSet("mark", fn("magus.trail.mark", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindinggen.ObjectFeedbackMark(types.FeedbackMark{}), nil
+		return bindinggen.ObjectTrailMark(types.TrailMark{}), nil
 	}))
 	m.MapSet("trail", trail)
 
