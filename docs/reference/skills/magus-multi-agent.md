@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 26066
-skill_short_bytes: 19843
+skill_full_bytes: 26132
+skill_short_bytes: 19909
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `122` |
 | `knowledge-schema-version` | `17` |
-| `skill-content` | `0ee8580a130a` |
+| `skill-content` | `2f8afc0b09ad` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -305,8 +305,8 @@ Two jobs may run together only when:
   outputs disjoint, or sharing a file by claiming DIFFERENT declarations of it
   (`<file>#<declaration>`, the default; `--depends-on` is for the SAME one).
 - Neither consumes an API or generated artifact the other changes.
-- Shared manifests, lockfiles, schemas, workspace configuration, and agent
-  instructions have one owner.
+- Shared manifests, lockfiles, schemas, and agent instructions have one owner. A
+  magusfile or magus.yaml is shared by key claims (`magusfile.buzz#project.targets.test`).
 - Dependency and temporal-affinity evidence does not say they should move together.
 
 ONE WORKTREE PER WORKER wherever a write path touches workspace configuration: any
@@ -791,8 +791,8 @@ Two jobs may run together only when:
   outputs disjoint, or sharing a file by claiming DIFFERENT declarations of it
   (`<file>#<declaration>`, the default; `--depends-on` is for the SAME one).
 - Neither consumes an API or generated artifact the other changes.
-- Shared manifests, lockfiles, schemas, workspace configuration, and agent
-  instructions have one owner.
+- Shared manifests, lockfiles, schemas, and agent instructions have one owner. A
+  magusfile or magus.yaml is shared by key claims (`magusfile.buzz#project.targets.test`).
 - Dependency and temporal-affinity evidence does not say they should move together.
 
 ONE WORKTREE PER WORKER wherever a write path touches workspace configuration: any

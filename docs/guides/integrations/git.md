@@ -236,14 +236,16 @@ The same managed block opens with a diff driver for each source language magus r
 *.go diff=golang
 *.ts diff=typescript
 *.buzz diff=buzz
+*.yaml diff=yaml
+*.yml diff=yaml
 ```
 
 A diff driver's hunk-header pattern is how git names the declaration a change lands in,
 the text after the second `@@` of each hunk. A job's footprint reads those names to say
 which functions, types and tests a change touched, and `git diff` prints them for people
-too. `golang`, `python`, `rust` and `markdown` ship with git. `typescript` and `buzz` do
-not, so magus registers their patterns as `diff.typescript.xfuncname` and
-`diff.buzz.xfuncname` in git config, beside `merge.magus.driver` and in the same scope.
+too. `golang`, `python`, `rust` and `markdown` ship with git. `typescript`, `buzz` and `yaml`
+do not, so magus registers their patterns as `diff.typescript.xfuncname`,
+`diff.buzz.xfuncname` and `diff.yaml.xfuncname` in git config, beside `merge.magus.driver` and in the same scope.
 Each attribute resolves to the last line that sets it, and a driver line sets only `diff`,
 so a generated `.go` file keeps `merge=magus` and gains `diff=golang`. A workspace load
 restores a missing line or registration, and `magus doctor` fails its

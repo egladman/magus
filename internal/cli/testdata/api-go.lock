@@ -1031,8 +1031,8 @@ github.com/egladman/magus/types.DiffCursor.Hunk field int "json:\"hunk\" yaml:\"
 github.com/egladman/magus/types.DiffCursor.Path field string "json:\"path,omitempty\" yaml:\"path,omitempty\""
 github.com/egladman/magus/types.DiffDriver type struct
 github.com/egladman/magus/types.DiffDriver.Builtin field bool
+github.com/egladman/magus/types.DiffDriver.Conform method func(lines []string, decls []string)
 github.com/egladman/magus/types.DiffDriver.Declarations method func(lines []string) []string
-github.com/egladman/magus/types.DiffDriver.DropOpaque method func(lines []string, decls []string)
 github.com/egladman/magus/types.DiffDriver.Funcname field string
 github.com/egladman/magus/types.DiffDriver.Globs field []string
 github.com/egladman/magus/types.DiffDriver.Name field string
@@ -4051,6 +4051,7 @@ github.com/egladman/magus/types.WorkspaceState type string
 github.com/egladman/magus/types.WorkspaceStillLoading const DiagnosticCode = "MGS3017"
 github.com/egladman/magus/types.WrapDiagnostic func(c DiagnosticCode, cause error, format string, args ...any) *DiagnosticError
 github.com/egladman/magus/types.WritePathClaimUngradable const DiagnosticCode = "MGS3031"
+github.com/egladman/magus/types.WritePathConfigWholeFile const DiagnosticCode = "MGS3036"
 github.com/egladman/magus/types.WritePathFileShared const DiagnosticCode = "MGS3032"
 github.com/egladman/magus/types.WritePathIsDirectory const DiagnosticCode = "MGS3018"
 github.com/egladman/magus/types.WriteProofAlone const JobWriteProof = "alone"

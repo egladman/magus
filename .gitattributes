@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-187-g720ad04ed (commit 720ad04edc169b1c02ff543ec80a0ed638749995, 2026-10-11T20:24:55-04:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-214-g6201d3c17-dirty (commit 6201d3c17e541ad3c7263f513f424aaa7eca8f9b, 2026-10-13T21:50:18-04:00)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
