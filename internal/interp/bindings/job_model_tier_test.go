@@ -281,7 +281,7 @@ enum Other { a }
 magus\job.modelTier(fun (req: ModelTierRequest) > any !> any {
     `+tc.body+`
 });
-`)
+`, "claude-code")
 			require.NoError(t, err)
 			_, err = reg.ModelTierMatrix()(t.Context(), types.ModelTierRequest{})
 			require.ErrorContains(t, err, tc.want)
@@ -295,7 +295,7 @@ magus\job.modelTier(fun (req: ModelTierRequest) > any !> any {
     magus\job.put("smuggled", opts: {"criteria": "from a matrix"});
     return null;
 });
-`)
+`, "claude-code")
 	require.NoError(t, err)
 	_, err = reg.ModelTierMatrix()(t.Context(), types.ModelTierRequest{ID: "x"})
 	require.ErrorContains(t, err, "read-only")

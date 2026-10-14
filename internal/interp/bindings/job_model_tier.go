@@ -103,7 +103,7 @@ func registerModelTiers(ctx context.Context, sess *buzz.Session, obs buzz.Direct
 // leaves the declared default to decide. The function is kept, not called, here.
 func registerModelTierMatrix(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, jobMap vm.Value) {
 	registered := false
-	jobMap.MapSet("modelTier", directVal(obs, "magus.job.modelTier", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	jobMap.MapSet("modelTier", directVal(obs, "magus.job.modelTier", func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
 		reg, err := modelTierCallSite(ctx, modelTierMember, "the tier a job is assigned")
 		if err != nil {
 			return vm.Null, err
@@ -116,8 +116,12 @@ func registerModelTierMatrix(ctx context.Context, sess *buzz.Session, obs buzz.D
 			return vm.Null, modelTierUnusable(modelTierMember,
 				"already registered in this magusfile, and a workspace has one matrix; fold the second one into the first")
 		}
+		kinds, err := jobKindCases(callCtx, sess)
+		if err != nil {
+			return vm.Null, fmt.Errorf("%s: reading magus\\JobKind: %w", modelTierMember, err)
+		}
 		registered = true
-		reg.SetModelTierMatrix(buzzModelTierMatrix(sess, reg, args[0], modelTierSite(ctx)))
+		reg.SetModelTierMatrix(buzzModelTierMatrix(sess, reg, args[0], kinds, modelTierSite(ctx)))
 		// The fork calls it after this load has closed.
 		reg.Keep(sess.Keep())
 		return vm.Null, nil
@@ -388,7 +392,7 @@ func defaultModelTierSet(ctx context.Context) (*types.ModelTierSet, error) {
 
 // buzzModelTierMatrix checks the answer against the declaration in force when it is
 // called, since the modelTiers and modelTier calls may come in either order.
-func buzzModelTierMatrix(sess *buzz.Session, reg *workspace.WorkspaceRegistry, matrix vm.Value, site string) workspace.ModelTierMatrix {
+func buzzModelTierMatrix(sess *buzz.Session, reg *workspace.WorkspaceRegistry, matrix vm.Value, kinds map[string]vm.Value, site string) workspace.ModelTierMatrix {
 	return func(ctx context.Context, req types.ModelTierRequest) (choice *types.JobModelTier, err error) {
 		set := reg.ModelTiers()
 		if set == nil {
@@ -403,12 +407,68 @@ func buzzModelTierMatrix(sess *buzz.Session, reg *workspace.WorkspaceRegistry, m
 				choice, err = nil, fmt.Errorf("%s: the matrix faulted the interpreter: %v", modelTierMember, r)
 			}
 		}()
-		rv, err := sess.CallValue(ctx, matrix, []vm.Value{bindinggen.ObjectModelTierRequest(req)})
+		reqValue, err := modelTierRequestValue(req, kinds)
+		if err != nil {
+			return nil, err
+		}
+		rv, err := sess.CallValue(ctx, matrix, []vm.Value{reqValue})
 		if err != nil {
 			return nil, fmt.Errorf("%s: the matrix raised: %w", modelTierMember, err)
 		}
 		return decodeModelTierChoice(set, rv, site)
 	}
+}
+
+// modelTierRequestValue is req as the matrix reads it. The generated encoder writes
+// every kind as its str value, and ModelTierRequest declares a magus\JobKind, so each
+// is swapped for its case; an empty kind stays null.
+func modelTierRequestValue(req types.ModelTierRequest, kinds map[string]vm.Value) (vm.Value, error) {
+	kindValue := func(kind types.JobKind) (vm.Value, error) {
+		if kind == "" {
+			return vm.Null, nil
+		}
+		v, ok := kinds[string(kind)]
+		if !ok {
+			return vm.Null, fmt.Errorf("%s: job kind %q is not a case of magus\\JobKind", modelTierMember, kind)
+		}
+		return v, nil
+	}
+	out := bindinggen.ObjectModelTierRequest(req)
+	kind, err := kindValue(req.Kind)
+	if err != nil {
+		return vm.Null, err
+	}
+	out.MapSet("kind", kind)
+	history, _ := out.MapGet("history")
+	for i, record := range history.ListItems() {
+		if kind, err = kindValue(req.History[i].Kind); err != nil {
+			return vm.Null, err
+		}
+		record.MapSet("kind", kind)
+	}
+	return out, nil
+}
+
+// jobKindCases reads every magus\JobKind case in sess, keyed by its value.
+func jobKindCases(ctx context.Context, sess *buzz.Session) (map[string]vm.Value, error) {
+	def, err := sess.Eval(ctx, `import "magus"; return magus\JobKind;`)
+	if err != nil {
+		return nil, err
+	}
+	_, cases, ok := def.EnumDef()
+	if !ok {
+		return nil, fmt.Errorf("magus\\JobKind is a %s, not an enum", def.Kind())
+	}
+	values, err := enumCaseValues(ctx, sess, def, cases)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]vm.Value, len(values))
+	for _, v := range values {
+		backing, _ := v.EnumValue()
+		out[backing.AsString()] = v
+	}
+	return out, nil
 }
 
 func decodeModelTierChoice(set *types.ModelTierSet, v vm.Value, site string) (*types.JobModelTier, error) {

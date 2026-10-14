@@ -6,6 +6,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/workspace"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,14 +23,12 @@ func TestBuildHarness(t *testing.T) {
 	})
 
 	t.Run("provider returns the harness key", func(t *testing.T) {
-		reg := workspace.NewWorkspaceRegistry()
-		harness := buildHarness(workspace.ContextWithRegistry(context.Background(), reg), nil)
-		handle := vm.NewMap()
-		handle.MapSet("name", vm.StrValue("cursor"))
-		key, err := callSession(t).CallValue(context.Background(), requireDirect(t, harness, "provider"), []vm.Value{handle})
+		ctx := workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry())
+		sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+		t.Cleanup(func() { _ = sess.Close() })
+		registerAllBuzz(ctx, sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
+		id, err := sess.Eval(ctx, `import "magus"; return magus\harness.provider({"name": "cursor"}).id;`)
 		require.NoError(t, err)
-		id, ok := key.MapGet("id")
-		require.True(t, ok)
 		assert.Equal(t, "cursor", id.AsString())
 	})
 
