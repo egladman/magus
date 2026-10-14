@@ -17,7 +17,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// The decisions a Verdict carries. A workspace rule answers advise or deny, spelled by
+// The decisions a GuardJudgment carries. A workspace rule answers advise or deny, spelled by
 // types; pass and ask exist only on the wire.
 const (
 	decisionPass   = "pass"
@@ -83,7 +83,7 @@ type rulesAnswer struct {
 	// workspace rule's own.
 	rule denyRuleName
 	// next is the command denyUnloaded's deny serves, nil for none.
-	next []hint.Next
+	next []types.NextStep
 }
 
 // resolveShares is the approved resolve's weight against a rule call's one. Resolving runs a
@@ -382,7 +382,7 @@ func gatedCalls(seam functionSeam) string {
 //
 // seamRule is what an unnamed answer reports under; a named one reports as
 // workspace:<name>, the id magus\guard.shell rules already carry.
-func applyWorkspaceAnswer(verdict Verdict, decided string, asked rulesAnswer, seamRule string) (Verdict, string) {
+func applyWorkspaceAnswer(verdict types.GuardJudgment, decided string, asked rulesAnswer, seamRule string) (types.GuardJudgment, string) {
 	answer := asked.answer
 	rule := seamRule
 	switch {
@@ -393,9 +393,9 @@ func applyWorkspaceAnswer(verdict Verdict, decided string, asked rulesAnswer, se
 	}
 	switch {
 	case answer.Decision == types.GuardDeny:
-		return Verdict{SchemaVersion: verdict.SchemaVersion, Decision: decisionDeny, Reason: answer.Reason, Rule: rule, Lease: verdict.Lease, Next: asked.next}, asked.by
+		return types.GuardJudgment{SchemaVersion: verdict.SchemaVersion, Decision: decisionDeny, Reason: answer.Reason, Rule: rule, Lease: verdict.Lease, Next: asked.next}, asked.by
 	case answer.Decision == types.GuardAdvise && verdict.Decision == decisionPass:
-		return Verdict{SchemaVersion: verdict.SchemaVersion, Decision: decisionAdvise, Context: answer.Reason, Rule: rule, Lease: verdict.Lease}, asked.by
+		return types.GuardJudgment{SchemaVersion: verdict.SchemaVersion, Decision: decisionAdvise, Context: answer.Reason, Rule: rule, Lease: verdict.Lease}, asked.by
 	case answer.Decision == types.GuardAdvise && verdict.Decision == decisionAdvise:
 		// The built-in advice keeps its rule; the workspace's is added, never dropped.
 		verdict.Context += "\n\n" + answer.Reason
@@ -406,7 +406,7 @@ func applyWorkspaceAnswer(verdict Verdict, decided string, asked rulesAnswer, se
 
 // applyRuleFailureNote adds the note that a workspace rule judged nothing to every
 // verdict: a deny or an ask reached with a rule missing must say it was judged short.
-func applyRuleFailureNote(verdict Verdict, note string, kind hint.MarkerKind) Verdict {
+func applyRuleFailureNote(verdict types.GuardJudgment, note string, kind hint.MarkerKind) types.GuardJudgment {
 	switch {
 	case note == "":
 	case verdict.Decision == decisionDeny || verdict.Decision == decisionAsk:

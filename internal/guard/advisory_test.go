@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/types"
 )
 
 // TestSymbolSearchRefusesWhateverTheIndexState pins the condition the deny rests on. A
@@ -96,13 +97,13 @@ func requireAdvisedOnce(t *testing.T, v ShellVerdict, rule denyRuleName) {
 
 	held := heldAdvice{v: v}
 	gate := hint.NewGate(t.TempDir(), "s1")
-	first := Verdict{Decision: "pass"}
+	first := types.GuardJudgment{Decision: "pass"}
 	whys := map[string]string{}
 	held.speak(gate, &first, whys)
-	assert.Equal(t, Verdict{Decision: "advise", Rule: string(rule), Context: v.Context}, first)
+	assert.Equal(t, types.GuardJudgment{Decision: "advise", Rule: string(rule), Context: v.Context}, first)
 	assert.Equal(t, v.Why, whys[v.Context], "the rationale is noted for the stored advice")
 
-	again := Verdict{Decision: "pass"}
+	again := types.GuardJudgment{Decision: "pass"}
 	held.speak(gate, &again, whys)
 	assert.Equal(t, "pass", again.Decision, "once per session")
 }

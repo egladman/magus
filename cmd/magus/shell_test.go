@@ -186,7 +186,7 @@ func TestGuardDecisionsCoverEveryVerdictTheHookEmits(t *testing.T) {
 
 	for _, d := range agent.GuardDecisions() {
 		var out strings.Builder
-		require.NoError(t, writeGuardVerdict(&out, OutputOptions{Format: FormatText}, guard.Verdict{
+		require.NoError(t, writeGuardVerdict(&out, OutputOptions{Format: FormatText}, types.GuardJudgment{
 			SchemaVersion: agent.GuardSchemaVersion,
 			Decision:      d,
 			Reason:        "why",
@@ -783,33 +783,33 @@ func TestHookCmd_EnvelopeWithNothingToJudge(t *testing.T) {
 // command anyway: the guard looked installed and enforced nothing.
 func TestEnforceVerdictBlocksOnlyDeny(t *testing.T) {
 	text := OutputOptions{Format: FormatText}
-	err := enforceVerdict(text, guard.Verdict{Decision: "deny", Reason: "no"})
+	err := enforceVerdict(text, types.GuardJudgment{Decision: "deny", Reason: "no"})
 	require.Error(t, err, "a deny must exit non-zero or it blocks nothing")
 	var silent errSilent
 	require.ErrorAs(t, err, &silent)
 	assert.Equal(t, guardDenyExitCode, silent.exitCode)
 
-	require.NoError(t, enforceVerdict(text, guard.Verdict{Decision: "advise", Context: "fyi"}),
+	require.NoError(t, enforceVerdict(text, types.GuardJudgment{Decision: "advise", Context: "fyi"}),
 		"advice teaches and must never block")
-	require.NoError(t, enforceVerdict(text, guard.Verdict{Decision: "pass"}))
+	require.NoError(t, enforceVerdict(text, types.GuardJudgment{Decision: "pass"}))
 
 	// The exit code is the enforcement and does not depend on the rendering: a structured
 	// consumer that got a zero status would be told the same lie in a different shape.
-	require.Error(t, enforceVerdict(OutputOptions{Format: FormatJSON}, guard.Verdict{Decision: "deny", Reason: "no"}))
+	require.Error(t, enforceVerdict(OutputOptions{Format: FormatJSON}, types.GuardJudgment{Decision: "deny", Reason: "no"}))
 }
 
 // TestEnforceVerdictBlocksAnAsk pins that an ask stops the call wherever nothing renders the
 // host's prompt. A glue that reads only the exit status would otherwise take the person's
 // approval as already given. The shipped templates read stdout and exit 0 themselves.
 func TestEnforceVerdictBlocksAnAsk(t *testing.T) {
-	err := enforceVerdict(OutputOptions{Format: FormatText}, guard.Verdict{Decision: "ask", Reason: "publish?"})
+	err := enforceVerdict(OutputOptions{Format: FormatText}, types.GuardJudgment{Decision: "ask", Reason: "publish?"})
 	var silent errSilent
 	require.ErrorAs(t, err, &silent)
 	assert.Equal(t, guardDenyExitCode, silent.exitCode)
 
 	var stdout bytes.Buffer
 	require.NoError(t, writeGuardVerdict(&stdout, OutputOptions{Format: FormatText},
-		guard.Verdict{Decision: "ask", Rule: "push-ungated", Reason: "publish?"}))
+		types.GuardJudgment{Decision: "ask", Rule: "push-ungated", Reason: "publish?"}))
 	assert.Equal(t, "ask [push-ungated]: publish?\n", stdout.String())
 }
 
@@ -819,7 +819,7 @@ func TestEnforceVerdictBlocksAnAsk(t *testing.T) {
 // simply printed a kilobyte-plus reason twice to a terminal. A structured format renders no
 // prose, so there stderr is the only readable channel and keeps it.
 func TestGuardDenyPrintsItsReasonOnce(t *testing.T) {
-	deny := guard.Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: "because"}
+	deny := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: "because"}
 
 	var stdout bytes.Buffer
 	require.NoError(t, writeGuardVerdict(&stdout, OutputOptions{Format: FormatText}, deny))
@@ -1593,11 +1593,11 @@ func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
 	_, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 	require.NoError(t, err)
 	ctx := guard.WithLocation(t.Context(), cacheDir, root, "")
-	run := func(flags ...string) guard.Verdict {
+	run := func(flags ...string) types.GuardJudgment {
 		var out bytes.Buffer
 		args := append([]string{"--lease", row.ID, "-o", "json"}, flags...)
 		_ = shellStdin(ctx, strings.NewReader("magus run test ."), &out, args)
-		var v guard.Verdict
+		var v types.GuardJudgment
 		require.NoError(t, json.Unmarshal(out.Bytes(), &v), out.String())
 		return v
 	}
@@ -1717,7 +1717,7 @@ const spawnEnvelope = `{"session_id":"8f2c6a1e","hook_event_name":"PreToolUse","
 
 // judgeSpawnAt runs one spawn through the hook's own dependencies with the process sitting
 // in root, as the shipped hook does.
-func judgeSpawnAt(t *testing.T, root string) guard.Verdict {
+func judgeSpawnAt(t *testing.T, root string) types.GuardJudgment {
 	t.Helper()
 	testkit.Isolate(t)
 	t.Chdir(root)
@@ -1851,7 +1851,7 @@ func TestSpawnRuleSurvivesAVersionFloor(t *testing.T) {
 	globalCfg.RequiredVersion = ">= 99.0.0"
 
 	v := judgeSpawnAt(t, root)
-	assert.Equal(t, guard.Verdict{
+	assert.Equal(t, types.GuardJudgment{
 		SchemaVersion: v.SchemaVersion,
 		Decision:      "deny",
 		Reason:        "Name a model.",
@@ -1880,7 +1880,7 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 	ctx := guard.WithLocation(t.Context(), t.TempDir(), root, root)
 	v = guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{Input: "ls -la", Host: "claude-code"})
 	assert.Contains(t, v.Reason, "Not in this repository.")
-	assert.Equal(t, guard.Verdict{
+	assert.Equal(t, types.GuardJudgment{
 		SchemaVersion: v.SchemaVersion,
 		Decision:      "deny",
 		Reason:        v.Reason, // checked above
@@ -1934,7 +1934,7 @@ func TestLapsedPolicyWriteIsSparedOnlyWithNothingPending(t *testing.T) {
 	root := repo.Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
-	judge := func() guard.Verdict {
+	judge := func() types.GuardJudgment {
 		ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
 		defer cancel()
 		ctx = guard.WithLocation(ctx, t.TempDir(), root, root)
@@ -2013,7 +2013,7 @@ func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 
 	envelope := fmt.Sprintf(`{"session_id":"worktree-verdict","hook_event_name":"PreToolUse","cwd":%q,`+
 		`"tool_name":"Bash","tool_input":{"command":"magus run build > build.log"}}`, worktree)
-	judge := func() guard.Verdict {
+	judge := func() types.GuardJudgment {
 		ctx := t.Context()
 		return guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{Input: envelope, Host: "claude-code"})
 	}

@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 // scriptFixture writes a script under root and returns the entry the graph build would
@@ -43,7 +45,7 @@ func TestScriptsForServesTheIndexedScripts(t *testing.T) {
 
 	next, err := MatchScripts(cacheDir, "doctor:guard-wiring", nil)
 	require.NoError(t, err)
-	assert.Equal(t, []Next{
+	assert.Equal(t, []types.NextStep{
 		{
 			ID: "script-show-guard-health", Run: "magus buzz hack/dev/show-guard-health.buzz",
 			Argv: []string{"magus", "buzz", "hack/dev/show-guard-health.buzz"},
@@ -78,7 +80,7 @@ func TestScriptsForBindsPlaceholdersOrServesNothing(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, next, 2)
-	assert.Equal(t, Next{
+	assert.Equal(t, types.NextStep{
 		ID:    ScriptIDPrefix + "count-refusals",
 		Run:   `magus buzz hack/dev/count-refusals.buzz -- --rule=stage-all "--in=docs site"`,
 		Argv:  []string{"magus", "buzz", "hack/dev/count-refusals.buzz", "--", "--rule=stage-all", "--in=docs site"},
@@ -181,10 +183,10 @@ func TestServableToHonorsReadsForScriptsOnly(t *testing.T) {
 	notAScript.Reads = true
 	piped := NextForDenyRemedyPipeline("chained-run", [][]string{read.Argv, Clean.Argv()}, "why")
 	piped.Reads = true
-	all := []Next{read, write, notAScript, piped}
+	all := []types.NextStep{read, write, notAScript, piped}
 
-	assert.Equal(t, []Next{read, write, notAScript}, ServableTo(RoleUnbound, nil, all))
-	assert.Equal(t, []Next{read}, ServableTo(RoleReviewer, nil, all))
-	assert.Equal(t, []Next{read}, ServableTo(RoleWorker, []string{"hack/**"}, all))
+	assert.Equal(t, []types.NextStep{read, write, notAScript}, ServableTo(RoleUnbound, nil, all))
+	assert.Equal(t, []types.NextStep{read}, ServableTo(RoleReviewer, nil, all))
+	assert.Equal(t, []types.NextStep{read}, ServableTo(RoleWorker, []string{"hack/**"}, all))
 	assert.True(t, mutatesTree(write.Argv), "buzz stays off readCommands")
 }

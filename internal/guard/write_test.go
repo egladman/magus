@@ -1025,7 +1025,7 @@ func TestGradeLeasedWriteNamesHowToReleaseAnOwner(t *testing.T) {
 // second lease is a second fact, and a second session has heard nothing.
 func TestLeasedPathAdvisesOncePerSessionPerLease(t *testing.T) {
 	ctx, root := fleetFixture(t, fixture.FleetLeases()...)
-	write := func(session, rel string) Verdict {
+	write := func(session, rel string) types.GuardJudgment {
 		return Judge(ctx, Dependencies{}, Request{Input: filepath.Join(root, rel), IsPath: true, Session: session, Host: "test-host"})
 	}
 

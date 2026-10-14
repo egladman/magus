@@ -162,7 +162,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	// would disarm every rule for the session. --observe and --message carry no verdict to
 	// deny.
 	if refusal, _ := ctx.Value(envRefusalKey{}).(error); refusal != nil && !sf.Observe && !sf.Message {
-		verdict := guard.Verdict{
+		verdict := types.GuardJudgment{
 			SchemaVersion: agent.GuardSchemaVersion,
 			Decision:      "deny",
 			Reason: refusal.Error() + "\n" +
@@ -185,7 +185,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	// exempt because they carry no verdict: there is nothing to fail closed about, and
 	// the documented contract is that they always exit 0.
 	if readErr != nil && !sf.Observe && !sf.Message {
-		verdict := guard.Verdict{
+		verdict := types.GuardJudgment{
 			SchemaVersion: agent.GuardSchemaVersion,
 			Decision:      "deny",
 			// "from stdin" is accurate whichever way this command is called: an operand
@@ -239,7 +239,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	base.Binary, _ = runningBinaryPath()
 	// The rules load inside the bound too: a magusfile's imports parse to the end however
 	// long they take.
-	verdict := guard.JudgeWithin(ctx, base, req, func(ctx context.Context) guard.Verdict {
+	verdict := guard.JudgeWithin(ctx, base, req, func(ctx context.Context) types.GuardJudgment {
 		// The hook ignores --root and loads no workspace up front: the one it judges in is
 		// wherever the host runs it.
 		deps := guardDependencies(ctx, "")
@@ -796,11 +796,11 @@ const guardDenyExitCode = 2
 // i.e. every format but text. The guard templates read the verdict off stdout and
 // one discards stderr outright, so an unconditional copy printed a kilobyte-plus
 // reason twice to an audience with a context budget.
-func enforceVerdict(opts OutputOptions, verdict guard.Verdict) error {
+func enforceVerdict(opts OutputOptions, verdict types.GuardJudgment) error {
 	return enforceVerdictTo(os.Stderr, opts, verdict)
 }
 
-func enforceVerdictTo(errOut io.Writer, opts OutputOptions, verdict guard.Verdict) error {
+func enforceVerdictTo(errOut io.Writer, opts OutputOptions, verdict types.GuardJudgment) error {
 	if verdict.Decision != "deny" && verdict.Decision != "ask" {
 		return nil
 	}
@@ -811,7 +811,7 @@ func enforceVerdictTo(errOut io.Writer, opts OutputOptions, verdict guard.Verdic
 }
 
 // writeGuardVerdict renders a verdict through the standard output arm.
-func writeGuardVerdict(out io.Writer, opts OutputOptions, verdict guard.Verdict) error {
+func writeGuardVerdict(out io.Writer, opts OutputOptions, verdict types.GuardJudgment) error {
 	switch opts.Format {
 	case FormatText:
 		switch verdict.Decision {

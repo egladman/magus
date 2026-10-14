@@ -8,20 +8,22 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 // lapseNow judges req by a judgment that runs judge's setup and then never answers, past a
 // short deadline.
-func lapseNow(ctx context.Context, t *testing.T, base Dependencies, req Request, setup func(context.Context)) Verdict {
+func lapseNow(ctx context.Context, t *testing.T, base Dependencies, req Request, setup func(context.Context)) types.GuardJudgment {
 	t.Helper()
 	short, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancel()
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })
-	return JudgeWithin(short, base, req, func(ctx context.Context) Verdict {
+	return JudgeWithin(short, base, req, func(ctx context.Context) types.GuardJudgment {
 		setup(ctx)
 		<-release
-		return Verdict{Decision: decisionPass}
+		return types.GuardJudgment{Decision: decisionPass}
 	})
 }
 

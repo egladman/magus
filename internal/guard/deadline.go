@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 )
 
 // hookBudget bounds one hook judgment, from the moment magus starts judging to its verdict.
@@ -178,7 +179,7 @@ func boundedPhase[T any](ctx context.Context, phase string, call func(context.Co
 //
 // base resolves the trail's location, names the judging binary and carries the spell
 // catalog when judge has not answered; judge loads the rest itself, inside the bound.
-func JudgeWithin(ctx context.Context, base Dependencies, req Request, judge func(context.Context) Verdict) Verdict {
+func JudgeWithin(ctx context.Context, base Dependencies, req Request, judge func(context.Context) types.GuardJudgment) types.GuardJudgment {
 	if req.DryRun {
 		return judge(ctx)
 	}
@@ -190,7 +191,7 @@ func JudgeWithin(ctx context.Context, base Dependencies, req Request, judge func
 	log := &phaseLog{start: time.Now()}
 	ctx = context.WithValue(ctx, phaseLogKey{}, log)
 	deadline, _ := ctx.Deadline()
-	done := make(chan Verdict, 1)
+	done := make(chan types.GuardJudgment, 1)
 	go func() { done <- judge(ctx) }()
 	timer := time.NewTimer(time.Until(deadline) + judgeReserve)
 	defer timer.Stop()
@@ -253,9 +254,9 @@ func unjudgedNote() string {
 // too, with a notice naming the phase that stalled, unless it pushes; the first such notice
 // says why and what to check, the rest say only that the guard is still not judging. The
 // trail row records log's finished phases, the one underway, and the bound.
-func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog) Verdict {
+func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog) types.GuardJudgment {
 	elapsed := time.Since(log.start)
-	pass := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+	pass := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
 	input, isPath, callDir := req.Input, req.IsPath, ""
 	if filepath.IsAbs(req.Dir) {

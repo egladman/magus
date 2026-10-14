@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"sync/atomic"
+
+	"github.com/egladman/magus/types"
 )
 
 // How a rendered command spells the binary.
@@ -82,11 +84,11 @@ func BinaryName() string {
 // The server resolves its own argv0 once at startup, so a server started as
 // `./magus server start` would otherwise render `./magus ...` into every MCP reply,
 // which resolves against the CLIENT's working directory rather than the server's.
-func OnPath(next []Next) []Next {
+func OnPath(next []types.NextStep) []types.NextStep {
 	if BinaryName() == DefaultBinaryName {
 		return next
 	}
-	out := make([]Next, 0, len(next))
+	out := make([]types.NextStep, 0, len(next))
 	for _, n := range next {
 		n.Run = DefaultBinaryName + strings.TrimPrefix(n.Run, BinaryName())
 		if len(n.Argv) > 0 {

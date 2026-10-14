@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
 )
 
 func TestAddedMarkers(t *testing.T) {
@@ -126,7 +127,7 @@ func TestCompatMarkerStaysQuiet(t *testing.T) {
 func TestCompatMarkerThroughJudge(t *testing.T) {
 	testkit.Isolate(t)
 	ctx, root, file := compatFleet(t)
-	edit := func(lease string, dry bool) Verdict {
+	edit := func(lease string, dry bool) types.GuardJudgment {
 		return Judge(ctx, Dependencies{}, Request{Host: "claude-code", Lease: lease, DryRun: dry, Input: hookJSON(t, map[string]any{
 			"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Edit", "cwd": root,
 			"tool_input": map[string]any{"file_path": file, "old_string": addsCompat.OldText, "new_string": addsCompat.NewText},

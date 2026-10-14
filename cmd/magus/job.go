@@ -282,7 +282,7 @@ func gradeCheck(ctx context.Context, deps guard.Dependencies, root string, row t
 	if deps.LoadFailure != nil {
 		return job.CheckVerdict{NotGraded: "the workspace's rules did not load: " + deps.LoadFailure.Error()}
 	}
-	judge := func(pending types.Job) guard.Verdict {
+	judge := func(pending types.Job) types.GuardJudgment {
 		return guard.Judge(ctx, deps, guard.Request{
 			Input:      ownBinaryPrefix + pending.Check.String(),
 			DryRun:     true,

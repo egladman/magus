@@ -220,11 +220,11 @@ func TestEndStoppedSessionEndsTheJobOnlyWhenTheStopStands(t *testing.T) {
 	require.NoError(t, store.Bind(worker, "w"))
 	stop := subagentStop(t, worker.Agent, "/x/agent.jsonl")
 
-	ended, err := endStoppedSession(t.Context(), store, worker, stop, Verdict{Decision: decisionDeny})
+	ended, err := endStoppedSession(t.Context(), store, worker, stop, types.GuardJudgment{Decision: decisionDeny})
 	require.NoError(t, err)
 	assert.False(t, ended)
 
-	ended, err = endStoppedSession(t.Context(), store, worker, stop, Verdict{})
+	ended, err = endStoppedSession(t.Context(), store, worker, stop, types.GuardJudgment{})
 	require.NoError(t, err)
 	assert.True(t, ended)
 	rows, err := store.List()
@@ -237,7 +237,7 @@ func TestEndStoppedSessionEndsTheJobOnlyWhenTheStopStands(t *testing.T) {
 // judge that one, though it is unbounded too.
 func TestJudgeRefusesAnUnboundedBackgroundedCall(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	judge := func(line string) Verdict {
+	judge := func(line string) types.GuardJudgment {
 		return Judge(ctx, Dependencies{}, Request{Input: line, Session: "bg", Host: "claude-code", CallBackground: true})
 	}
 	v := judge("rsync -a src/ dst/")

@@ -1943,7 +1943,7 @@ func TestChainedRunDeniesTowardThePipe(t *testing.T) {
 		assert.Equal(t, denyRuleChainedRun, v.Rule.Name, tc.command)
 		require.Len(t, v.Next, 1, tc.command)
 		// Argv and Why are the remedy's stage-split form and its prose, which this test does not pin.
-		assert.Equal(t, hint.Next{ID: "deny-chained-run", Run: tc.pipe, Argv: v.Next[0].Argv, Why: v.Next[0].Why}, v.Next[0], tc.command)
+		assert.Equal(t, types.NextStep{ID: "deny-chained-run", Run: tc.pipe, Argv: v.Next[0].Argv, Why: v.Next[0].Why}, v.Next[0], tc.command)
 		assert.Contains(t, v.Deny, tc.pipe, "the full deny names the pipe when no next is served")
 		assert.Equal(t, "magus runs chained with `&&` or `;` run one at a time; pipe them instead.", v.Lead, tc.command)
 		assert.Contains(t, v.Why, "disjoint projects runs alongside and still finishes after an upstream fails", "the one way a pipe is not &&")
@@ -2646,7 +2646,7 @@ func TestRefsRenameIsNotAGraphRead(t *testing.T) {
 // and in a checkout where a lease is held, claiming none is refused rather than ungraded.
 func TestRefsRenameEditIsGradedUnderTheClaimedLease(t *testing.T) {
 	ctx, root := fleetFixture(t, fixture.FleetLeases()...)
-	edit := func(rel string) Verdict {
+	edit := func(rel string) types.GuardJudgment {
 		return JudgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), false)
 	}
 
@@ -2675,13 +2675,13 @@ func TestJudgeEditDryRunRecordsNothing(t *testing.T) {
 	ctx, root := fleetFixture(t, fixture.FleetLeases()...)
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
-	edit := func(rel string, dryRun bool) Verdict {
+	edit := func(rel string, dryRun bool) types.GuardJudgment {
 		return JudgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), dryRun)
 	}
 	// The two calls may straddle a second, and a lease-write reason says how long ago the
 	// owner was updated.
 	age := regexp.MustCompile(`updated \d+s ago`)
-	withoutAge := func(v Verdict) Verdict {
+	withoutAge := func(v types.GuardJudgment) types.GuardJudgment {
 		v.Reason = age.ReplaceAllString(v.Reason, "updated <age> ago")
 		return v
 	}

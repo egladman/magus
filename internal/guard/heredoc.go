@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -82,7 +83,7 @@ func heredocWrites(command string, d Dialect) []heredocWrite {
 // target, reached without recording anything: a write a call makes some other way than
 // through that tool is held to the same rules. content is "" when the call's text for the
 // file is unknown, which the write rules read as a write they judge by path alone.
-func judgeFileWrite(ctx context.Context, deps Dependencies, req Request, who hookAttribution, callDir, lease, target, content string) Verdict {
+func judgeFileWrite(ctx context.Context, deps Dependencies, req Request, who hookAttribution, callDir, lease, target, content string) types.GuardJudgment {
 	input := map[string]any{"file_path": target}
 	if content != "" {
 		input["content"] = content
@@ -94,7 +95,7 @@ func judgeFileWrite(ctx context.Context, deps Dependencies, req Request, who hoo
 		"tool_input": input,
 	})
 	if err != nil {
-		return Verdict{Decision: decisionPass}
+		return types.GuardJudgment{Decision: decisionPass}
 	}
 	// Judged as its own call, so it must not end the outer call's mark of a judgment in
 	// progress.

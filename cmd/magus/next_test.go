@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var nextFixture = []hint.Next{
+var nextFixture = []types.NextStep{
 	{ID: "query-explain", Run: "magus explain spell:go", Argv: []string{"magus", "explain", "spell:go"}, Why: "explain names a node's edges."},
 	{ID: "query-path", Run: "magus path spell:go spell:gomod", Argv: []string{"magus", "path", "spell:go", "spell:gomod"}, Why: "path prints the chain."},
 }
@@ -112,8 +112,8 @@ func TestServedJournalsEveryEntry(t *testing.T) {
 // A worker keeps a write inside its own write paths and loses the rest; a reviewer is served
 // no write at all. The regeneration is the one template that writes today.
 func TestServedFiltersWritesByRole(t *testing.T) {
-	regen := hint.Next{ID: "file-regenerate", Run: "magus run generate:rw docs", Argv: []string{"magus", "run", "generate:rw", "docs"}}
-	full := append(append([]hint.Next{}, nextFixture...), regen)
+	regen := types.NextStep{ID: "file-regenerate", Run: "magus run generate:rw docs", Argv: []string{"magus", "run", "generate:rw", "docs"}}
+	full := append(append([]types.NextStep{}, nextFixture...), regen)
 
 	for _, tc := range []struct {
 		name       string
@@ -187,7 +187,7 @@ type NextStreamable struct {
 func TestJSONLFindsAPrimaryInsideAnEmbeddedResultNext(t *testing.T) {
 	v := struct {
 		NextStreamable
-		Next []hint.Next `json:"next,omitempty"`
+		Next []types.NextStep `json:"next,omitempty"`
 	}{NextStreamable: NextStreamable{Rows: []string{"a", "b"}}, Next: nextFixture}
 
 	var buf bytes.Buffer

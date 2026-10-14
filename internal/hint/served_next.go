@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 )
 
 // The served-next journal: one line per breadcrumb actually put in front of a
@@ -72,7 +73,7 @@ func ServedNextPath(cacheDir string) string {
 //
 // No ctx, unlike trail.Append: the argv here is magus-minted from templates, so
 // there is nothing in it to redact.
-func AppendServedNext(cacheDir string, next []Next) {
+func AppendServedNext(cacheDir string, next []types.NextStep) {
 	journal := ServedNextPath(cacheDir)
 	if journal == "" || len(next) == 0 {
 		return

@@ -157,9 +157,9 @@ func TestJudgeWithinAnswersAStuckJudgmentByTheDeadline(t *testing.T) {
 			req.Host, req.Session = "claude-code", "s1"
 
 			start := time.Now()
-			v := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) Verdict {
+			v := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) types.GuardJudgment {
 				<-release
-				return Verdict{Decision: decisionPass}
+				return types.GuardJudgment{Decision: decisionPass}
 			})
 			assert.Less(t, time.Since(start), 2*time.Second)
 			assert.Equal(t, verdictWithRule(c.decision, string(advisoryUnfinished)), unworded(v))
@@ -191,13 +191,13 @@ func TestJudgeWithinAnswersAStuckJudgmentByTheDeadline(t *testing.T) {
 // A judgment that answers in time is the verdict, and a dry run is judged to the end.
 func TestJudgeWithinKeepsAJudgmentThatAnswersBeforeTheDeadline(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	want := Verdict{Decision: decisionAdvise, Context: "judged"}
-	judge := func(context.Context) Verdict { return want }
+	want := types.GuardJudgment{Decision: decisionAdvise, Context: "judged"}
+	judge := func(context.Context) types.GuardJudgment { return want }
 	assert.Equal(t, want, JudgeWithin(ctx, Dependencies{}, Request{Input: "ls", Host: "claude-code", Session: "s1"}, judge))
 
 	short, cancel := context.WithTimeout(ctx, time.Millisecond)
 	defer cancel()
-	slow := func(context.Context) Verdict {
+	slow := func(context.Context) types.GuardJudgment {
 		time.Sleep(700 * time.Millisecond)
 		return want
 	}
@@ -274,14 +274,14 @@ func TestDryRunLapseIsNotGraded(t *testing.T) {
 func TestJudgeWithinDegradesAfterConsecutiveLapses(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	req := Request{Input: "touch notes.txt", Host: "claude-code", Session: "s1"}
-	slowLoad := func(ctx context.Context) Verdict {
+	slowLoad := func(ctx context.Context) types.GuardJudgment {
 		_, _, _ = TimeRuleLoad(ctx, func() (int, error) {
 			time.Sleep(time.Second)
 			return 0, nil
 		})
-		return Verdict{Decision: decisionPass}
+		return types.GuardJudgment{Decision: decisionPass}
 	}
-	lapse := func() Verdict {
+	lapse := func() types.GuardJudgment {
 		short, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 		defer cancel()
 		return JudgeWithin(short, Dependencies{}, req, slowLoad)
@@ -299,7 +299,7 @@ func TestJudgeWithinDegradesAfterConsecutiveLapses(t *testing.T) {
 	assert.Equal(t, decisionAdvise, again.Decision)
 	assert.Equal(t, "The guard is still not finishing in time (4 judgments in a row), so this command ran unjudged, as the notice before said.", again.Context)
 
-	onTime := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) Verdict { return Verdict{Decision: decisionPass} })
+	onTime := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) types.GuardJudgment { return types.GuardJudgment{Decision: decisionPass} })
 	assert.Equal(t, decisionPass, onTime.Decision)
 	assert.Equal(t, decisionDeny, lapse().Decision, "an answer in time starts the count over")
 
@@ -338,9 +338,9 @@ func TestUnjudgedPassesAReadOnlyPipeline(t *testing.T) {
 	release := make(chan struct{})
 	defer close(release)
 	req := Request{Input: `sed -n 340,360p f; sed -n 955,990p g; grep -n x g | awk -F: '{print $1}'`, Host: "claude-code", Session: "s1"}
-	v := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) Verdict {
+	v := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) types.GuardJudgment {
 		<-release
-		return Verdict{}
+		return types.GuardJudgment{}
 	})
 	assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryUnfinished)), unworded(v))
 	assert.Equal(t, unjudgedNote(), v.Context)
@@ -361,7 +361,7 @@ func TestJudgeWithinAnswersAWriteWhoseWorkspaceOpenStalls(t *testing.T) {
 	}}
 	req := Request{Input: filepath.Join(root, "notes.txt"), IsPath: true, Host: "claude-code", Session: "s1"}
 	start := time.Now()
-	v := JudgeWithin(ctx, deps, req, func(ctx context.Context) Verdict { return Judge(ctx, deps, req) })
+	v := JudgeWithin(ctx, deps, req, func(ctx context.Context) types.GuardJudgment { return Judge(ctx, deps, req) })
 	assert.Less(t, time.Since(start), hookBudget)
 	assert.NotEqual(t, string(advisoryUnfinished), v.Rule, "judged, not lapsed")
 	assert.Equal(t, int32(1), opens.Load(), "one stalled open per judgment")

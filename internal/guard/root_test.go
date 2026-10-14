@@ -127,10 +127,10 @@ func TestMainThreadPastTheBudgetStillBuilds(t *testing.T) {
 	deps := strictDeps(t)
 	who := hookAttribution{Host: "claude-code", Session: "s"}
 	hostGate(cache, who.Host).MarkFired(hostAgentsKind)
-	budgetRule := func(v Verdict) bool {
+	budgetRule := func(v types.GuardJudgment) bool {
 		return v.Rule == string(denyRuleRootContextBudget) || v.Rule == string(denyRuleRootHeavyCommand)
 	}
-	judge := func(line string) Verdict {
+	judge := func(line string) types.GuardJudgment {
 		writeCostState(hint.NewGate(cache, who.factsKey()), costState{Tokens: 900_000, Streak: 20})
 		return Judge(ctx, deps, Request{Input: line, Host: who.Host, Session: who.Session})
 	}
@@ -185,7 +185,7 @@ func TestApplyFindingsSaysAnInferredRefusalAsAdvice(t *testing.T) {
 	t.Parallel()
 	markers := hint.NewGate(t.TempDir(), "s")
 	refusal := []costFinding{{rule: denyRuleRootHeavyCommand, deny: true, key: "k", say: "first line.\nwhy."}}
-	pass := Verdict{Decision: decisionPass}
+	pass := types.GuardJudgment{Decision: decisionPass}
 
 	v := applyFindings(markers, pass, refusal, types.ThreadReported)
 	assert.Equal(t, decisionDeny, v.Decision)
@@ -197,7 +197,7 @@ func TestApplyFindingsSaysAnInferredRefusalAsAdvice(t *testing.T) {
 	assert.Equal(t, string(denyRuleRootHeavyCommand), v.Rule)
 	assert.Equal(t, decisionPass, applyFindings(markers, pass, refusal, types.ThreadInferred).Decision, "once a session")
 
-	advised := Verdict{Decision: decisionAdvise, Context: "earlier", Rule: "graph-stale"}
+	advised := types.GuardJudgment{Decision: decisionAdvise, Context: "earlier", Rule: "graph-stale"}
 	v = applyFindings(hint.NewGate(t.TempDir(), "s"), advised, []costFinding{{rule: denyRuleRootRepeat, key: "r", say: "again."}}, types.ThreadReported)
 	assert.Equal(t, "earlier\n\nagain.", v.Context)
 	assert.Equal(t, "graph-stale", v.Rule, "added to the advice already there")
@@ -230,7 +230,7 @@ func TestMainThreadCommandsAreJudgedByTheCostRules(t *testing.T) {
 	deps := strictDeps(t)
 	main := hookAttribution{Host: "claude-code", Session: "s"}
 	writeCostState(hint.NewGate(cache, main.factsKey()), costState{Streak: 7})
-	judge := func(agent string) Verdict {
+	judge := func(agent string) types.GuardJudgment {
 		return Judge(ctx, deps, Request{Input: "git diff", Host: "claude-code", Session: "s", Agent: agent})
 	}
 
@@ -335,7 +335,7 @@ func TestSpawnAboveModelTierAdvisesByRank(t *testing.T) {
 func TestBudgetTokensPastEveryWindowIsRefused(t *testing.T) {
 	deps := strictDeps(t)
 	deps.Builtins[string(denyRuleRootContextBudget)] = builtin.Setting{Decision: builtin.Deny, Tokens: 2_000_000}
-	judge := func(rows bool) Verdict {
+	judge := func(rows bool) types.GuardJudgment {
 		ctx, cache := spawnFixture(t)
 		d := deps
 		if rows {
@@ -414,7 +414,7 @@ func tierFixture(t *testing.T, set *types.ModelTierSet, rows ...types.Job) conte
 }
 
 // judgeSpawn judges a Claude Code main-thread spawn of job scout on model, "" for none.
-func judgeSpawn(ctx context.Context, t *testing.T, deps Dependencies, model string) Verdict {
+func judgeSpawn(ctx context.Context, t *testing.T, deps Dependencies, model string) types.GuardJudgment {
 	t.Helper()
 	input := map[string]any{"description": "orchestrator/scout scout", "prompt": "Read internal/job and report."}
 	if model != "" {

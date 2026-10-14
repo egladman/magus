@@ -74,7 +74,7 @@ type removal struct {
 	verb, target string
 	failed       []string
 	lead         string
-	next         hint.Next
+	next         types.NextStep
 }
 
 // worktreeRemoveDenial names the first failed condition in the verdict and lists every one

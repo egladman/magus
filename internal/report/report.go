@@ -81,7 +81,7 @@ type TargetResult struct {
 	// The text a failing run prints is unchanged; this is the same suggestion as a
 	// field, because the printed line was measured converting at the rate of no hint
 	// at all.
-	Next []hint.Next `json:"next,omitempty"`
+	Next []types.NextStep `json:"next,omitempty"`
 }
 
 // TargetValue is what a target returned for one project, a str or a [str], once the run
@@ -407,7 +407,7 @@ func WriterFromContext(ctx context.Context) *Writer {
 // A parameter rather than a default, because a report written for a reader magus
 // cannot identify is not the same thing as one written for a bound worker, and the
 // serving side is where that has to be decided.
-type NextServer func(next []hint.Next) []hint.Next
+type NextServer func(next []types.NextStep) []types.NextStep
 
 // ServedIn serves a failing run's breadcrumbs the way every other door serves them:
 // filtered for the acting lease's role and journaled in this checkout's cache dir.
@@ -417,7 +417,7 @@ type NextServer func(next []hint.Next) []hint.Next
 // zero in `magus session hints`, and leave it the one suggestion the guard cannot
 // pre-authorize.
 func ServedIn(cacheDir, root string) NextServer {
-	return func(next []hint.Next) []hint.Next {
+	return func(next []types.NextStep) []types.NextStep {
 		role, writePaths := hint.RoleUnbound, []string(nil)
 		if id, _ := job.ActingLease(cacheDir, trail.LeaseFromEnv()); id != "" {
 			role = hint.RoleWorker

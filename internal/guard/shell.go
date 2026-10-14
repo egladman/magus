@@ -77,13 +77,13 @@ type ShellVerdict struct {
 	Kind    hint.MarkerKind
 	Brief   string
 	Rule    denyRule
-	Next    []hint.Next
+	Next    []types.NextStep
 	Lead    string
 	demoted bool
 }
 
 // withRemedy attaches next to a deny, or leaves v alone when the rule computed none.
-func (v ShellVerdict) withRemedy(lead string, next ...hint.Next) ShellVerdict {
+func (v ShellVerdict) withRemedy(lead string, next ...types.NextStep) ShellVerdict {
 	if len(next) == 0 || lead == "" {
 		return v
 	}
@@ -633,7 +633,7 @@ func renamesSymbol(args []string) bool {
 // Resolving none while live leases hold write paths in the checkout at root is a deny: a
 // worker bound only by its session would otherwise be graded by nobody. dryRun judges as
 // [Request.DryRun] does, writing nothing.
-func JudgeEdit(ctx context.Context, deps Dependencies, root, rel string, before, after []byte, dryRun bool) Verdict {
+func JudgeEdit(ctx context.Context, deps Dependencies, root, rel string, before, after []byte, dryRun bool) types.GuardJudgment {
 	envelope, _ := json.Marshal(map[string]any{
 		"cwd": root,
 		"tool_input": map[string]any{
@@ -2103,7 +2103,7 @@ func magusOutputFormat(args []string) string {
 // pipeRemedy is the piped magus command answering on its own: -s for a run trimmed to its
 // tail, else the projection pipeRewrite names, read out of its first quoted span so the
 // prose and the served command cannot drift apart.
-func pipeRemedy(p pipedMagus) (string, []hint.Next) {
+func pipeRemedy(p pipedMagus) (string, []types.NextStep) {
 	if p.bin == "" || magusOutputFormat(p.args) != "" {
 		return "", nil
 	}
@@ -2129,7 +2129,7 @@ func pipeRemedy(p pipedMagus) (string, []hint.Next) {
 	if len(flags) == 0 {
 		return "", nil
 	}
-	return lead, []hint.Next{hint.NextForDenyRemedy(string(denyRuleOutputPipe), magusWithFlags(p.args, flags...), why)}
+	return lead, []types.NextStep{hint.NextForDenyRemedy(string(denyRuleOutputPipe), magusWithFlags(p.args, flags...), why)}
 }
 
 // quotedFlags reads the flags out of prose's first backtick span, nil unless every word
@@ -2152,7 +2152,7 @@ func quotedFlags(prose string) []string {
 
 // redirectRemedy drops the redirect for the lever that does what it was for: --silent
 // for a discard, --tee for stdout kept in a file.
-func redirectRemedy(r redirectedMagus) (string, []hint.Next) {
+func redirectRemedy(r redirectedMagus) (string, []types.NextStep) {
 	if r.bin == "" {
 		return "", nil
 	}
@@ -2184,24 +2184,24 @@ func redirectRemedy(r redirectedMagus) (string, []hint.Next) {
 	default:
 		return "", nil
 	}
-	return lead, []hint.Next{hint.NextForDenyRemedy(string(denyRuleOutputRedirect), magusWithFlags(r.args, flags...), why)}
+	return lead, []types.NextStep{hint.NextForDenyRemedy(string(denyRuleOutputRedirect), magusWithFlags(r.args, flags...), why)}
 }
 
 // rawToolRemedy is the spell op run bare, when the typed command is the op's own. A
 // rewriting form is left to the prose: its charm belongs on the workspace's target.
-func rawToolRemedy(deps Dependencies, c hint.Invocation, match toolMatch) (string, []hint.Next) {
+func rawToolRemedy(deps Dependencies, c hint.Invocation, match toolMatch) (string, []types.NextStep) {
 	if !match.exact || match.rewrites || helpRequest(deps, c) {
 		return "", nil
 	}
 	lead := "magus guard denied `" + elideCommand(resolvedCommand(c)) + "`; the " + match.spell + " spell runs it cached, sandboxed and tracked by affected."
-	return lead, []hint.Next{hint.NextForDenyRemedy(string(denyRuleRawTool),
+	return lead, []types.NextStep{hint.NextForDenyRemedy(string(denyRuleRawTool),
 		hint.Run.Argv(match.spell+"::"+match.operation),
 		"the op runs the same command in the project you are in.")}
 }
 
 // stageAllRemedy stages the same paths through the workspace. `git add .` is left to the
 // prose: it stages the working directory's subtree, which no vcs add spelling equals.
-func stageAllRemedy(command string, d Dialect) (string, []hint.Next) {
+func stageAllRemedy(command string, d Dialect) (string, []types.NextStep) {
 	cmds, ok := ParseCommandsDialect(command, d)
 	if !ok {
 		return "", nil
@@ -2223,7 +2223,7 @@ func stageAllRemedy(command string, d Dialect) (string, []hint.Next) {
 			}
 		}
 		return "`git add` of everything sweeps outputs and other work you did not edit into the commit.",
-			[]hint.Next{hint.NextForDenyRemedy(string(denyRuleStageAll), hint.VCSAdd.Argv(paths...),
+			[]types.NextStep{hint.NextForDenyRemedy(string(denyRuleStageAll), hint.VCSAdd.Argv(paths...),
 				"vcs add stages a source change with the outputs it produced and reports anything undeclared.")}
 	}
 	return "", nil

@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
 )
 
 // claudeCodeBash is a Claude Code PreToolUse event for a Bash call, in the shape the
@@ -67,7 +68,7 @@ func TestSessionFactsAreSharedAcrossTransports(t *testing.T) {
 	skill := head + `"tool_name":"Skill","tool_input":{"skill":"` + multiAgentSkill.String() + `"},"tool_use_id":"toolu_01"}`
 	spawn := head + `"tool_name":"Task","tool_input":{"description":"Audit the store","prompt":"Audit internal/job",` +
 		`"subagent_type":"general-purpose"},"tool_use_id":"toolu_02"}`
-	judge := func(transport, event string) Verdict {
+	judge := func(transport, event string) types.GuardJudgment {
 		return Judge(ctx, strict(testDependencies()), Request{Input: event, Host: "claude-code", Form: transport, ReportsSkills: true})
 	}
 
@@ -120,7 +121,7 @@ func TestShapeDenyFallsBackToTheFullReason(t *testing.T) {
 	assert.Empty(t, ref)
 
 	gate := hint.NewGate(t.TempDir(), "s1")
-	remedy := []hint.Next{hint.NextForDenyRemedy("whole-tree", []string{"magus", "status"}, "reads it.")}
+	remedy := []types.NextStep{hint.NextForDenyRemedy("whole-tree", []string{"magus", "status"}, "reads it.")}
 	for _, rule := range []string{"a-workspace-rule", string(advisoryPushGate), workspaceCommandRule, workspaceWriteRule, workspaceSpawnRule} {
 		for range 2 {
 			got, ref, served := shapeDeny(t.Context(), gate, rule, "verdict.", "rationale.", note, remedy, false)
@@ -143,7 +144,7 @@ func TestShapeDenyKeepsTheRationaleInTheStoredVerdict(t *testing.T) {
 	const see = "\nsee: " + ruleDocsBase + "whole-tree/"
 	const note = "\nnothing ran (2 commands)"
 	cacheDir := t.TempDir()
-	remedy := []hint.Next{
+	remedy := []types.NextStep{
 		hint.NextForDenyRemedy(string(denyRuleWholeTree), []string{"magus", "status"}, "reads it."),
 		hint.NextForDenyRemedy(string(denyRuleWholeTree), []string{"magus", "vcs", "add"}, "stages it."),
 	}
@@ -181,7 +182,7 @@ func TestShapeDenyServesTheRemedyOnEveryFiring(t *testing.T) {
 	const see = "\nsee: " + ruleDocsBase + "output-pipe/"
 	cacheDir := t.TempDir()
 	gate := hint.NewGate(cacheDir, "s1")
-	remedy := []hint.Next{hint.NextForDenyRemedy(string(denyRuleOutputPipe),
+	remedy := []types.NextStep{hint.NextForDenyRemedy(string(denyRuleOutputPipe),
 		[]string{"./magus", "run", "go-build", ".", "-s"}, "-s stays quiet until something fails.")}
 
 	full := "one line.\nnext:\n  ./magus run go-build . -s\n      -s stays quiet until something fails."

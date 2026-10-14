@@ -45,7 +45,7 @@ func stallRowKind(rule string) hint.MarkerKind {
 //
 // The exit rides the verdict line rather than a next command: a worker is never served a
 // command that writes outside its write paths, and the job store is outside them.
-func gradeStall(deps Dependencies, verdict Verdict, lease string, at location) Verdict {
+func gradeStall(deps Dependencies, verdict types.GuardJudgment, lease string, at location) types.GuardJudgment {
 	if verdict.Decision != decisionDeny || lease == "" || !unclearable[verdict.Rule] {
 		return verdict
 	}
@@ -123,7 +123,7 @@ func stallLevel(rec stallRecord, rule string, s builtin.Setting) int {
 // observeStall moves a lease's gauge by one judged call, and files the lease's attention
 // row the first time a rule refuses it at level 3. The settings are the ones the judgment
 // recorded, since a trail write has none of its own.
-func observeStall(ctx context.Context, at location, who hookAttribution, lease string, verdict Verdict) {
+func observeStall(ctx context.Context, at location, who hookAttribution, lease string, verdict types.GuardJudgment) {
 	gate := stallGate(at.cacheDir, lease)
 	rec := readStall(gate)
 	s := recallSettings(at.cacheDir)[string(denyRuleStall)]
@@ -149,7 +149,7 @@ func observeStall(ctx context.Context, at location, who hookAttribution, lease s
 // fileStallRow opens the attention row for a lease blocked at level 3. It states the facts
 // a root decides on, the model the job ran on and how often it was refused, and names no
 // remedy.
-func fileStallRow(ctx context.Context, at location, who hookAttribution, lease string, verdict Verdict, rec stallRecord) {
+func fileStallRow(ctx context.Context, at location, who hookAttribution, lease string, verdict types.GuardJudgment, rec stallRecord) {
 	dir, err := sessions.Dir(at.workspace)
 	if err != nil {
 		return

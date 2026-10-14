@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// workspaceCommandRule is the Verdict.Rule an unnamed magus\guard.command answer carries, in the
+// workspaceCommandRule is the GuardJudgment.Rule an unnamed magus\guard.command answer carries, in the
 // namespace workspace shell rules already use so a reader can tell it from a built-in.
 const workspaceCommandRule = workspaceShellPrefix + "command"
 
@@ -61,7 +61,7 @@ type commandRuleInput struct {
 //
 // The cost and stall rules are graded first: they too only add, and they read the
 // verdict every compiled rule reached.
-func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdict, in commandRuleInput, who hookAttribution, at location) (Verdict, workspaceRuleRecord) {
+func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict types.GuardJudgment, in commandRuleInput, who hookAttribution, at location) (types.GuardJudgment, workspaceRuleRecord) {
 	verdict = gradeStall(deps, gradeMainCommand(deps, verdict, in, who, at), in.lease, at)
 	if deps.CommandRule == nil && deps.ApprovedCommandRule == nil && deps.LoadFailure == nil {
 		return verdict, workspaceRuleRecord{}

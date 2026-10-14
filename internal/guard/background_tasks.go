@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -63,14 +64,14 @@ func decodeStop(raw string) (stopEnvelope, bool) {
 //
 // The transcript is the host's record, read by shape; a host whose transcript records no
 // background task in that shape gets no answer, never a refusal.
-func judgeStop(deps Dependencies, raw string, now time.Time) (Verdict, bool) {
+func judgeStop(deps Dependencies, raw string, now time.Time) (types.GuardJudgment, bool) {
 	env, ok := decodeStop(raw)
 	if !ok {
-		return Verdict{}, false
+		return types.GuardJudgment{}, false
 	}
 	setting, ok := deps.setting(string(denyRuleBackgroundLeft))
 	if !ok || setting.Decision == builtin.Off {
-		return Verdict{}, false
+		return types.GuardJudgment{}, false
 	}
 	subagent := env.AgentID != ""
 	transcript := env.TranscriptPath
@@ -78,21 +79,21 @@ func judgeStop(deps Dependencies, raw string, now time.Time) (Verdict, bool) {
 		transcript = env.AgentTranscriptPath
 	}
 	if transcript == "" {
-		return Verdict{}, false
+		return types.GuardJudgment{}, false
 	}
 	tasks, err := liveBackgroundTasks(transcript, now)
 	if err != nil {
-		return Verdict{}, false
+		return types.GuardJudgment{}, false
 	}
 	if !subagent {
 		tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool { return now.Sub(t.Started) < rootBackgroundAge })
 	}
 	if len(tasks) == 0 {
-		return Verdict{}, false
+		return types.GuardJudgment{}, false
 	}
 	listing := describeTasks(tasks, now)
 	if subagent && setting.Decision == builtin.Deny {
-		return Verdict{
+		return types.GuardJudgment{
 			SchemaVersion: agent.GuardSchemaVersion,
 			Decision:      decisionDeny,
 			Rule:          string(denyRuleBackgroundLeft),
@@ -100,7 +101,7 @@ func judgeStop(deps Dependencies, raw string, now time.Time) (Verdict, bool) {
 				plural(len(tasks), "a shell command", "shell commands"), plural(len(tasks), "is", "are"), listing),
 		}, true
 	}
-	return Verdict{
+	return types.GuardJudgment{
 		SchemaVersion: agent.GuardSchemaVersion,
 		Decision:      decisionAdvise,
 		Rule:          string(denyRuleBackgroundLeft),
@@ -129,7 +130,7 @@ func sessionEnded(raw string) bool {
 
 // endStoppedSession ends the job caller c's session held when raw ends that session and
 // the guard did not refuse the stop: a refused stop leaves the agent running.
-func endStoppedSession(ctx context.Context, store *job.Store, c job.Caller, raw string, v Verdict) (bool, error) {
+func endStoppedSession(ctx context.Context, store *job.Store, c job.Caller, raw string, v types.GuardJudgment) (bool, error) {
 	if v.Decision == decisionDeny || !sessionEnded(raw) {
 		return false, nil
 	}

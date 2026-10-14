@@ -211,13 +211,13 @@ func TestGateStandsDownOnARevisionItCannotMatch(t *testing.T) {
 // judgePush runs one push through Judge in a workspace whose run log exists, so a gate
 // missing at HEAD is proven absent rather than unknown. gate, when set, records a finished
 // `affected ci` run with that status at HEAD first.
-func judgePush(t *testing.T, gate, lease string, leases ...types.Job) Verdict {
+func judgePush(t *testing.T, gate, lease string, leases ...types.Job) types.GuardJudgment {
 	t.Helper()
 	return judgePushFrom(t, true, gate, lease, leases...)
 }
 
 // judgePushFrom is judgePush for a caller that does or does not declare it renders ask.
-func judgePushFrom(t *testing.T, rendersAsk bool, gate, lease string, leases ...types.Job) Verdict {
+func judgePushFrom(t *testing.T, rendersAsk bool, gate, lease string, leases ...types.Job) types.GuardJudgment {
 	t.Helper()
 	ctx, _ := fleetFixture(t, leases...)
 	runs := filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, cache.RunsDir)
@@ -273,13 +273,13 @@ func TestUngatedPushAskStillAsksTheCommandRule(t *testing.T) {
 	line := "git push -q -u origin topic && gh pr merge topic --squash --admin"
 
 	v := Judge(ctx, deps, Request{Input: line, RendersAsk: true})
-	assert.Equal(t, Verdict{SchemaVersion: v.SchemaVersion, Decision: decisionDeny, Reason: "queue it", Rule: workspaceCommandRule, Lease: v.Lease, LeaseFrom: v.LeaseFrom}, v)
+	assert.Equal(t, types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: decisionDeny, Reason: "queue it", Rule: workspaceCommandRule, Lease: v.Lease, LeaseFrom: v.LeaseFrom}, v)
 	require.Len(t, probe.asked, 1)
 	assert.Equal(t, []string{"git", "gh"}, []string{probe.asked[0].Commands[0].Program, probe.asked[0].Commands[1].Program})
 
 	probe.answer = types.GuardVerdict{Decision: types.GuardAdvise, Reason: "batch it"}
 	v = Judge(ctx, deps, Request{Input: line, RendersAsk: true})
-	assert.Equal(t, Verdict{SchemaVersion: v.SchemaVersion, Decision: decisionAsk, Reason: v.Reason, Rule: string(denyRulePushUngated)}, v, "an advise leaves the ask as it stood")
+	assert.Equal(t, types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: decisionAsk, Reason: v.Reason, Rule: string(denyRulePushUngated)}, v, "an advise leaves the ask as it stood")
 	assert.NotContains(t, v.Reason, "batch it")
 }
 
@@ -436,7 +436,7 @@ func TestLocateCallsUnrollsALiteralLoop(t *testing.T) {
 // judgeRelocatedPush judges command, built from checkout B's path, in checkout A. A's HEAD
 // is abc1234 and B's is def5678; each holds a run log, with a green gate at its HEAD when
 // gated says so.
-func judgeRelocatedPush(t *testing.T, gatedA, gatedB bool, command func(b string) string) Verdict {
+func judgeRelocatedPush(t *testing.T, gatedA, gatedB bool, command func(b string) string) types.GuardJudgment {
 	t.Helper()
 	ctx, _ := fleetFixture(t)
 	runsA := filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, cache.RunsDir)

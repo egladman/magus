@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// workspaceWriteRule is the Verdict.Rule an unnamed magus\guard.write answer carries.
+// workspaceWriteRule is the GuardJudgment.Rule an unnamed magus\guard.write answer carries.
 const workspaceWriteRule = workspaceShellPrefix + "write"
 
 // advisoryWriteRuleFailed names the notice that a workspace write rule judged nothing.
@@ -44,7 +44,7 @@ type textEdit struct {
 // gradeWorkspaceWrite asks the workspace's magus\guard.write rule about a write the
 // built-in rules did not deny, strengthen only, the way gradeWorkspaceCommand asks about a
 // command.
-func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict, path string, fields writeFields, lease string, who hookAttribution, at location) (Verdict, workspaceRuleRecord) {
+func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict types.GuardJudgment, path string, fields writeFields, lease string, who hookAttribution, at location) (types.GuardJudgment, workspaceRuleRecord) {
 	verdict = gradeStall(deps, verdict, lease, at)
 	if deps.WriteRule == nil && deps.ApprovedWriteRule == nil && deps.LoadFailure == nil {
 		return verdict, workspaceRuleRecord{}

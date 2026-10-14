@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
 )
 
 func TestStallLevel(t *testing.T) {
@@ -30,7 +31,7 @@ func TestGradeStallNamesTheExitOnTheVerdictLine(t *testing.T) {
 	t.Parallel()
 	at := location{cacheDir: t.TempDir()}
 	on := withSetting(string(denyRuleStall), builtin.Advise)
-	blocked := Verdict{Decision: decisionDeny, Rule: string(denyRuleLeaseWrite), Reason: "outside the write paths.\nthe rationale"}
+	blocked := types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleLeaseWrite), Reason: "outside the write paths.\nthe rationale"}
 
 	v := gradeStall(on, blocked, "job-a", at)
 	assert.Equal(t, "outside the write paths. Only the root can clear this: exit with `"+hint.JobExit.With("job-a", "--stdin")+
@@ -53,7 +54,7 @@ func TestStallRoutesAnUnclearableBlockToTheRoot(t *testing.T) {
 	testkit.Isolate(t)
 	ctx, root := fleetFixture(t, fixture.FleetLeases()...)
 	deps := withSetting(string(denyRuleStall), builtin.Advise)
-	write := func() Verdict {
+	write := func() types.GuardJudgment {
 		return Judge(ctx, deps, Request{Input: filepath.Join(root, "README.md"), IsPath: true, Session: "s", Host: "test-host", Lease: "lease-b"})
 	}
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -58,7 +59,7 @@ func TestMonitorDuplicateAndPile(t *testing.T) {
 		string(denyRuleMonitorDuplicate): {Decision: builtin.Deny},
 		string(denyRuleMonitorPile):      {Decision: builtin.Deny},
 	}}
-	watch := func(agent, command string) Verdict {
+	watch := func(agent, command string) types.GuardJudgment {
 		return Judge(ctx, raised, Request{Input: monitorCall(t, agent, command), Host: "claude-code"})
 	}
 

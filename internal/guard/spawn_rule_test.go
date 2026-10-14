@@ -186,7 +186,7 @@ func TestSpawnDenyTrailRowCarriesTheVerdictRef(t *testing.T) {
 
 	rows := trailEvents(t, cacheDir, trail.KindAgentSpawn)
 	require.Len(t, rows, 2)
-	for i, shown := range []Verdict{first, repeat} {
+	for i, shown := range []types.GuardJudgment{first, repeat} {
 		ref := verdictRef.FindString(shown.Reason)
 		require.NotEmpty(t, ref, "the deny cites its stored verdict: %q", shown.Reason)
 		assert.Equal(t, ref, rows[i].VerdictRef, "row %d", i)
@@ -214,12 +214,12 @@ func TestSpawnRuleDenyAndAdviseReachTheVerdict(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	deny := &spawnRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "Name a model."}}
 	v := Judge(ctx, Dependencies{SpawnRule: deny.rule()}, Request{Input: claudeContinueEnvelope, Host: "claude-code"})
-	assert.Equal(t, Verdict{SchemaVersion: v.SchemaVersion, Decision: "deny", Reason: "Name a model.", Rule: workspaceSpawnRule}, v)
+	assert.Equal(t, types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: "deny", Reason: "Name a model.", Rule: workspaceSpawnRule}, v)
 
 	ctx, _ = spawnFixture(t)
 	advise := &spawnRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAdvise, Reason: "Add a Done when section."}}
 	v = Judge(ctx, Dependencies{SpawnRule: advise.rule()}, Request{Input: cursorGlueEnvelope, Host: "cursor"})
-	assert.Equal(t, Verdict{SchemaVersion: v.SchemaVersion, Decision: "advise", Context: "Add a Done when section.", Rule: workspaceSpawnRule}, v)
+	assert.Equal(t, types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: "advise", Context: "Add a Done when section.", Rule: workspaceSpawnRule}, v)
 }
 
 // A broken rule judges nothing, following guard.shell's fail-open stance on a workspace
@@ -893,7 +893,7 @@ func TestAWorkerInItsOwnWorktreeIsGradedUnderItsJob(t *testing.T) {
 
 	Judge(spawnerCtx, deps, Request{Input: finishedSpawn(t, "orchestrator/fix guard-facts", "guard-facts", "opus", "worktree", "a1b2c3"), Host: "claude-code"})
 
-	edit := func(rel string) Verdict {
+	edit := func(rel string) types.GuardJudgment {
 		target := filepath.Join(workerRoot, filepath.FromSlash(rel))
 		require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
 		require.NoError(t, os.WriteFile(target, []byte("package x\n"), 0o644))
@@ -1146,7 +1146,7 @@ func TestASpawnAttributesOnlyAJobItsSpawnerCanHandOut(t *testing.T) {
 		env := strings.Replace(finishedSpawn(t, title, "", "", "", child), `"session_id":"8f2c6a1e"`, `"session_id":"worker-session"`, 1)
 		Judge(ctx, Dependencies{}, Request{Input: env, Host: "claude-code"})
 	}
-	graded := func(child string) Verdict {
+	graded := func(child string) types.GuardJudgment {
 		return Judge(ctx, Dependencies{}, Request{Input: "ls", Host: "claude-code", Session: "worker-session", Agent: child})
 	}
 
@@ -1235,7 +1235,7 @@ type graded struct {
 	From   types.LeaseSource
 }
 
-func gradedAs(v Verdict) graded { return graded{v.Decision == "deny", v.Lease, v.LeaseFrom} }
+func gradedAs(v types.GuardJudgment) graded { return graded{v.Decision == "deny", v.Lease, v.LeaseFrom} }
 
 // TestASubagentsExecNeverBindsItsParent is the 2026-09-26 incident. An orchestrator spawned
 // a researcher in the foreground, so no spawn response attributed it while it ran, and the
@@ -1429,7 +1429,7 @@ func TestApprovedRuleAppliesAfterTheWorkingTreeDeletesIt(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	v := Judge(ctx, Dependencies{SpawnRule: m.SpawnRule(), ApprovedSpawnRule: m.ApprovedSpawnRule},
 		Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
-	assert.Equal(t, Verdict{SchemaVersion: v.SchemaVersion, Decision: "deny", Reason: "Name a model.", Rule: workspaceSpawnRule, Lease: v.Lease, LeaseFrom: v.LeaseFrom}, v)
+	assert.Equal(t, types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: "deny", Reason: "Name a model.", Rule: workspaceSpawnRule, Lease: v.Lease, LeaseFrom: v.LeaseFrom}, v)
 }
 
 // Resolving the approved rule is the one part of a spawn an agent can slow down, so running

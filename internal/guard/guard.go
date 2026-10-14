@@ -373,7 +373,7 @@ func (d Dependencies) grade(v ShellVerdict) ShellVerdict {
 }
 
 // gradeAdvice grades a hook verdict that advises; any other passes through.
-func (d Dependencies) gradeAdvice(v Verdict) Verdict {
+func (d Dependencies) gradeAdvice(v types.GuardJudgment) types.GuardJudgment {
 	if v.Decision != decisionAdvise {
 		return v
 	}
@@ -470,7 +470,7 @@ func (w matchWalk) rest() (ShellVerdict, bool) {
 // speak puts the held advice on verdict when nothing refused or asked, once per session
 // per rule. It replaces any advisory there, which it outranks, and notes the demoted deny's
 // rationale in whys for shapeAdvice.
-func (h heldAdvice) speak(markers hint.Gate, verdict *Verdict, whys map[string]string) {
+func (h heldAdvice) speak(markers hint.Gate, verdict *types.GuardJudgment, whys map[string]string) {
 	if !h.v.demoted || verdict.Decision == decisionDeny || verdict.Decision == decisionAsk {
 		return
 	}
@@ -553,44 +553,14 @@ type Request struct {
 	HostForegroundMax     time.Duration
 }
 
-// Verdict is the neutral result of evaluating one shell command: exactly
-// one decision, carrying the field that decision needs. This envelope is the
-// stable contract an agent host's hook config shapes with -o template (or
-// parses from -o json); the host-specific response dialects live in the
-// documentation, never in code.
-type Verdict struct {
-	SchemaVersion int    `json:"schema_version"`
-	Decision      string `json:"decision"`          // one of agent.GuardDecisions
-	Reason        string `json:"reason,omitempty"`  // deny: the block reason, written for the model
-	Context       string `json:"context,omitempty"` // advise: context to inject alongside the allowed call
-	// Rule names the catalogued rule or advisory that produced this verdict, and is set on
-	// every deny, advise and ask (a workspace rule's carries its workspace prefix). Host
-	// adapters still render Reason and Context; this is what a PERSON looks up, reports
-	// as a false positive, or greps a trail for, and the text arm prints it beside the
-	// decision for exactly that reason. Empty on a pass.
-	Rule string `json:"rule,omitempty"`
-	// Lease is the row this verdict was graded under, empty when the call named none.
-	//
-	// A session bound to a typo'd id, a session bound to a finished row, and a session
-	// nobody leased are otherwise indistinguishable, and two of the three run unguarded.
-	// An added optional field is not a schema bump: a glue that does not read it is
-	// unaffected, which is the rule agent.GuardSchemaVersion states.
-	Lease string `json:"lease,omitempty"`
-	// LeaseFrom is which source answered Lease; see types.LeaseSource.
-	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
-	// Next is a deny's remedy, served only when it passes the guard for the acting
-	// lease, and pre-authorized for the calls after it. Reason renders it too.
-	Next []hint.Next `json:"next,omitempty"`
-}
-
 // hostUnnamed refuses a call from installed hook glue that did not say which agent host
 // it answers. The glue picks the reply its host can parse from that name, so a call
 // without it cannot be answered correctly for any host, and defaulting to one would
 // hand another host a reply it drops, which on some hosts runs the call unguarded.
 //
 // The reason names no form, so the sh and Buzz forms of one template reply alike.
-func hostUnnamed() Verdict {
-	return Verdict{
+func hostUnnamed() types.GuardJudgment {
+	return types.GuardJudgment{
 		SchemaVersion: agent.GuardSchemaVersion,
 		Decision:      decisionDeny,
 		Reason: types.FormatDiagnostic(types.HookHostUnnamed,
@@ -617,7 +587,7 @@ func hostUnnamed() Verdict {
 //
 // A judgment mark BeginJudgment left on ctx is ended here; without one, Judge marks the
 // judgment itself once it has resolved the session.
-func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
+func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgment {
 	started := begunJudgment(ctx)
 	defer func() { started.end() }()
 	if req.Form != "" && strings.TrimSpace(req.Host) == "" {
@@ -640,7 +610,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if !req.DryRun {
 			recordMessageTopics(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), input)
 		}
-		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 	}
 	isPath := req.IsPath
 	// Where the call runs, which the bootstrap rule reads even when no workspace resolves
@@ -680,7 +650,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			who.Agent = env.Who.Agent
 		}
 		if req.DryRun && env.NothingToJudge {
-			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+			return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 		}
 		if env.LoadedSkill != "" && !req.DryRun {
 			// Recorded here, ahead of the arm below that returns. The gate is built here
@@ -703,7 +673,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			if v, ok := judgeStop(deps, input, time.Now()); ok {
 				return v
 			}
-			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+			return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 		}
 		input = env.Value
 		req.CallBackground = req.CallBackground || env.CallBackground
@@ -722,7 +692,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		}
 		if env.IsSpawn || env.IsContinue {
 			if req.DryRun {
-				return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny,
+				return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny,
 					Reason: "magus workspace: a spawn or continuation cannot be checked, since judging one records it."}
 			}
 			return judgeAgentEvent(ctx, deps, req, env, who)
@@ -790,7 +760,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	case isPath:
 		tool = hookToolWrite
 	}
-	verdict := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass, Lease: actingLease, LeaseFrom: leaseFrom}
+	verdict := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass, Lease: actingLease, LeaseFrom: leaseFrom}
 	// Where the acting lease STANDS, read once and before any rule. An id the job store does
 	// not carry is refused, because every lease-scoped rule below reads that row and
 	// finding nothing is how they all fall silent at once: the call would be graded by
@@ -1348,7 +1318,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		}
 		// Only while the deny that computed the remedy is still the one standing: a later
 		// rule's refusal is about something else.
-		var next []hint.Next
+		var next []types.NextStep
 		why := whys[verdict.Reason]
 		switch {
 		case len(remedy.Next) > 0 && verdict.Reason == remedy.Deny:
@@ -1456,14 +1426,14 @@ func oneString(rule func(context.Context, Dependencies, string, string) string) 
 //
 // A worker's placement of ./magus is kept whatever its write paths: it writes outside
 // every one by design, as the only way a worker gets its base's binary.
-func servableRemedy(ctx context.Context, deps Dependencies, at location, callDir string, standing leaseStanding, actingLease string, next []hint.Next) []hint.Next {
+func servableRemedy(ctx context.Context, deps Dependencies, at location, callDir string, standing leaseStanding, actingLease string, next []types.NextStep) []types.NextStep {
 	role, writePaths := hint.LeaseRole(standing.rows, actingLease)
 	d := effectiveDialect(deps.ShellDialect)
 	candidates := next
 	if len(next) != 1 || !placesBinary(next[0], actingLease) {
 		candidates = hint.ServableTo(role, writePaths, next)
 	}
-	var kept []hint.Next
+	var kept []types.NextStep
 	for _, n := range candidates {
 		if judgeShellLine(ctx, deps, at, callDir, n.Run, d).Deny != "" || denyUndeclaredLease(standing, actingLease, n.Run).refused() {
 			continue
@@ -2236,7 +2206,7 @@ func WithLocation(ctx context.Context, cacheDir, workspace, dir string) context.
 //
 // rule is how the workspace command or write rule judged, which alone knows whether its answer came
 // from the approved side or the working tree.
-func appendHookActivity(ctx context.Context, location location, input string, who hookAttribution, tool, lease, preauth, verdictRef, policyDigest string, verdict Verdict, rule workspaceRuleRecord, by judgeSource) {
+func appendHookActivity(ctx context.Context, location location, input string, who hookAttribution, tool, lease, preauth, verdictRef, policyDigest string, verdict types.GuardJudgment, rule workspaceRuleRecord, by judgeSource) {
 	if input == "" || location.cacheDir == "" {
 		return
 	}

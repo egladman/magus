@@ -33,14 +33,14 @@ func declareGuardRule(t *testing.T, root string) {
 }
 
 // judgeUnloaded judges line in a session of its own, so each deny is a first firing.
-func judgeUnloaded(ctx context.Context, deps Dependencies, line string) Verdict {
+func judgeUnloaded(ctx context.Context, deps Dependencies, line string) types.GuardJudgment {
 	return Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: line})
 }
 
 // shortDeny asserts the inline shape of a first firing under rule: the verdict opening
 // with say, nothing but the nothing-ran note between it and the ref, and no served next.
 // It returns the full verdict stored behind the ref.
-func shortDeny(t *testing.T, cacheDir string, v Verdict, rule denyRuleName, say string) string {
+func shortDeny(t *testing.T, cacheDir string, v types.GuardJudgment, rule denyRuleName, say string) string {
 	t.Helper()
 	assert.Equal(t, verdictWithRule(decisionDeny, string(rule)), unworded(v))
 	ref := verdictRef.FindString(v.Reason)
@@ -58,7 +58,7 @@ func shortDeny(t *testing.T, cacheDir string, v Verdict, rule denyRuleName, say 
 
 // servedDeny is shortDeny for a deny that serves next: the one command sits between the
 // verdict and the ref, and is the verdict's only served next.
-func servedDeny(t *testing.T, cacheDir string, v Verdict, rule denyRuleName, say string, next hint.Next) string {
+func servedDeny(t *testing.T, cacheDir string, v types.GuardJudgment, rule denyRuleName, say string, next types.NextStep) string {
 	t.Helper()
 	require.Len(t, v.Next, 1, v.Reason)
 	assert.Equal(t, next, v.Next[0])

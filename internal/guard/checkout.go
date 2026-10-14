@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/types"
 )
 
 // The sibling-checkout rule: a magus command aimed at a DIFFERENT CHECKOUT of the
@@ -74,7 +75,7 @@ func denySiblingCheckout(callDir, command string, d Dialect) string {
 //
 // Only a verb that selects no projects and names no relative path: both resolve against
 // the working directory, which the cd moved and the remedy does not.
-func siblingCheckoutRemedy(callDir, command string, d Dialect) (string, []hint.Next) {
+func siblingCheckoutRemedy(callDir, command string, d Dialect) (string, []types.NextStep) {
 	cmds, ok := ParseCommandsDialect(command, d)
 	if !ok || len(cmds) != 2 || !isCdInvocation(cmds[0]) || len(cmds[0].Args) != 1 || !isMagusInvocation(cmds[1]) {
 		return "", nil
@@ -115,7 +116,7 @@ func siblingCheckoutRemedy(callDir, command string, d Dialect) (string, []hint.N
 		return "", nil
 	}
 	return "`" + root + "` is another checkout of this repository, and only its own binary judges it.",
-		[]hint.Next{hint.NextForDenyRemedy(string(denyRuleSiblingCheckout), slices.Concat([]string{bin, "--root", root}, args),
+		[]types.NextStep{hint.NextForDenyRemedy(string(denyRuleSiblingCheckout), slices.Concat([]string{bin, "--root", root}, args),
 			"that tree's binary, rooted there, keeps its verdicts and its cache about that tree.")}
 }
 

@@ -46,7 +46,7 @@ func TestHeredocWriteMeetsTheWriteRules(t *testing.T) {
 		}
 		return types.GuardVerdict{Decision: types.GuardAllow}, nil
 	}}
-	judge := func(line string) Verdict {
+	judge := func(line string) types.GuardJudgment {
 		return Judge(ctx, deps, Request{Input: line, Session: "heredoc", Host: "claude-code", Dir: root})
 	}
 

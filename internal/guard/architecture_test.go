@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
 )
 
 // The phrasings these came from are messages people actually sent, verbatim where quoted.
@@ -82,11 +83,11 @@ func newArchSession(t *testing.T, deps Dependencies, observes bool) archSession 
 	}
 }
 
-func (s archSession) judge(event string) Verdict {
+func (s archSession) judge(event string) types.GuardJudgment {
 	return Judge(s.ctx, s.deps, Request{Input: event, Host: "claude-code", Form: "buzz", ReportsSkills: s.observes})
 }
 
-func (s archSession) message(text string) Verdict {
+func (s archSession) message(text string) types.GuardJudgment {
 	return Judge(s.ctx, s.deps, Request{Input: text, Message: true, Host: "claude-code", Form: "buzz", Session: s.session})
 }
 
@@ -98,11 +99,11 @@ func (s archSession) head(agentID string) string {
 	return head
 }
 
-func (s archSession) bash(agentID, command string) Verdict {
+func (s archSession) bash(agentID, command string) types.GuardJudgment {
 	return s.judge(s.head(agentID) + `"tool_name":"Bash","tool_input":{"command":"` + command + `"}}`)
 }
 
-func (s archSession) write(agentID, path string) Verdict {
+func (s archSession) write(agentID, path string) types.GuardJudgment {
 	return s.judge(s.head(agentID) + `"tool_name":"Write","tool_input":{"file_path":"` + path + `","content":"package x\n"}}`)
 }
 
@@ -113,7 +114,7 @@ func (s archSession) load(agentID, skill string) {
 
 // requireArchitectureDeny checks the decision and the rule. A repeat deny in one session is
 // shortened to a line and a ref, so the reason's text is checked once, on the first.
-func requireArchitectureDeny(t *testing.T, v Verdict, msgAndArgs ...any) {
+func requireArchitectureDeny(t *testing.T, v types.GuardJudgment, msgAndArgs ...any) {
 	t.Helper()
 	require.Equal(t, []string{"deny", string(denyArchitectureUnbriefed)}, []string{v.Decision, v.Rule}, msgAndArgs...)
 }

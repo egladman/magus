@@ -98,7 +98,7 @@ func TestGradeClaimedDeclarations(t *testing.T) {
 func TestJudgeDeniesAnEditIntoAnotherJobsDeclaration(t *testing.T) {
 	ctx, root := claimFixture(t)
 	run := filepath.Join(root, "run.go")
-	judge := func(toolInput map[string]any) Verdict {
+	judge := func(toolInput map[string]any) types.GuardJudgment {
 		return Judge(ctx, Dependencies{}, Request{Host: "claude-code", Lease: "own-b", Input: hookJSON(t, map[string]any{
 			"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Edit", "cwd": root,
 			"tool_input": toolInput,

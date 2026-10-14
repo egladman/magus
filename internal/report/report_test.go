@@ -425,7 +425,7 @@ func TestTargetResultCarriesNextOnlyOnAFailure(t *testing.T) {
 func TestServedInFiltersForTheActingRole(t *testing.T) {
 	testkit.Isolate(t)
 	cacheDir := t.TempDir()
-	next := []hint.Next{
+	next := []types.NextStep{
 		{ID: "run-output", Run: "magus query output out1a2b3c", Argv: []string{"magus", "query", "output", "out1a2b3c"}},
 		{ID: "fabricated-write", Run: "magus run generate:rw .", Argv: []string{"magus", "run", "generate:rw", "."}},
 	}

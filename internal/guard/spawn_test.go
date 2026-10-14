@@ -338,7 +338,7 @@ func TestAChildsStartJoinsItToTheSpawnBeforeIt(t *testing.T) {
 	target := filepath.Join(root, "internal", "guard", "guard.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
 	require.NoError(t, os.WriteFile(target, []byte("package guard\n"), 0o644))
-	codex := func(env map[string]any) Verdict {
+	codex := func(env map[string]any) types.GuardJudgment {
 		env["session_id"], env["cwd"] = "codex-s", root
 		return Judge(ctx, Dependencies{}, Request{Input: hookJSON(t, env), Host: "codex"})
 	}

@@ -1395,7 +1395,7 @@ func TestEndingYourOwnJobReleasesTheBinding(t *testing.T) {
 			at := hookLocation(ctx, Dependencies{})
 			who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
 			bindCaller(t, ctx, who, held.ID)
-			judge := func(command string) Verdict {
+			judge := func(command string) types.GuardJudgment {
 				return Judge(ctx, Dependencies{}, Request{Input: bashCall(t, who.Session, who.Agent, command), Host: who.Host})
 			}
 
@@ -1437,7 +1437,7 @@ func TestABindingToARemovedRowIsATombstone(t *testing.T) {
 
 	b := boundJob(who, at)
 	assert.Equal(t, []any{held.ID, true}, []any{b.Job, b.Gone}, "the sweep tombstoned the binding")
-	judge := func(command string) Verdict {
+	judge := func(command string) types.GuardJudgment {
 		return Judge(ctx, Dependencies{}, Request{Input: bashCall(t, who.Session, who.Agent, command), Host: who.Host})
 	}
 	assert.NotEqual(t, decisionDeny, judge("sed -n 1,5p x").Decision, "a read")

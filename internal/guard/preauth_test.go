@@ -159,7 +159,7 @@ var nextIDRe = regexp.MustCompile(`breadcrumb\("([a-z-]+)"`)
 func servedNextTemplates(t *testing.T) map[string]string {
 	t.Helper()
 	rendered := map[string]string{}
-	add := func(next []hint.Next) {
+	add := func(next []types.NextStep) {
 		for _, n := range next {
 			rendered[n.ID] = n.Run
 		}
@@ -185,7 +185,7 @@ func servedNextTemplates(t *testing.T) map[string]string {
 	}))
 	add(hint.NextForAffected("ci", []string{"docs"}))
 	add(hint.NextForFailure(".", "test", "out84fea3b6ae30"))
-	add([]hint.Next{hint.NextForDenial("grd84fea3b6ae30ab")})
+	add([]types.NextStep{hint.NextForDenial("grd84fea3b6ae30ab")})
 
 	declared, err := os.ReadFile("../../internal/hint/next.go")
 	require.NoError(t, err)
@@ -359,7 +359,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 		}
 		t.Run(role.name+"/scripts", func(t *testing.T) {
 			kind, writePaths := hint.LeaseRole([]types.Job{worker, reviewer}, role.lease)
-			served := hint.ServableTo(kind, writePaths, []hint.Next{readScript, writeScript})
+			served := hint.ServableTo(kind, writePaths, []types.NextStep{readScript, writeScript})
 			require.Contains(t, served, readScript, "a read script is served to every role")
 			if kind == hint.RoleReviewer {
 				assert.NotContains(t, served, writeScript, "a write script is never served to a reviewer")
@@ -396,7 +396,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 
 // scriptNexts serves one read and one write script out of an index written under root,
 // through the same lookup the serving sites use.
-func scriptNexts(t *testing.T, root string) (read, write hint.Next) {
+func scriptNexts(t *testing.T, root string) (read, write types.NextStep) {
 	t.Helper()
 	entry := func(rel, effect string, args ...string) hint.ScriptServe {
 		abs := filepath.Join(root, filepath.FromSlash(rel))

@@ -236,7 +236,7 @@ func TestCommandRuleStrengthensOnly(t *testing.T) {
 		ctx, _ := spawnFixture(t)
 		probe := &commandRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAdvise, Reason: "Batch-poll instead."}}
 		v := Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: "gh pr checks 1", Host: "claude-code"})
-		assert.Equal(t, Verdict{SchemaVersion: v.SchemaVersion, Decision: "advise", Context: "Batch-poll instead.", Rule: workspaceCommandRule}, v)
+		assert.Equal(t, types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: "advise", Context: "Batch-poll instead.", Rule: workspaceCommandRule}, v)
 	})
 	t.Run("an allow changes nothing", func(t *testing.T) {
 		ctx, _ := spawnFixture(t)
@@ -343,7 +343,7 @@ func TestApprovedCommandRuleTimeoutDeniesAChangeAndAdvisesARead(t *testing.T) {
 		<-ctx.Done()
 		return nil, nil
 	}}
-	judge := func(t *testing.T, command string) (Verdict, []trail.RuleFailure) {
+	judge := func(t *testing.T, command string) (types.GuardJudgment, []trail.RuleFailure) {
 		ctx, cacheDir := spawnFixture(t)
 		ctx, cancel := context.WithTimeout(ctx, judgeReserve+600*time.Millisecond)
 		defer cancel()
@@ -431,13 +431,13 @@ func TestCommandRuleAdviceStandsDownOnAServedCommand(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	probe := &commandRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAdvise, Reason: "Batch-poll instead."}}
 	v, rec := gradeWorkspaceCommand(ctx, Dependencies{CommandRule: probe.rule()},
-		Verdict{Decision: "pass"}, commandRuleInput{command: "gh pr checks 1", preauth: "next"}, hookAttribution{}, hookLocation(ctx, Dependencies{}))
+		types.GuardJudgment{Decision: "pass"}, commandRuleInput{command: "gh pr checks 1", preauth: "next"}, hookAttribution{}, hookLocation(ctx, Dependencies{}))
 	assert.Equal(t, "pass", v.Decision)
 	assert.Empty(t, rec.decidedBy)
 
 	probe.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: "no"}
 	v, _ = gradeWorkspaceCommand(ctx, Dependencies{CommandRule: probe.rule()},
-		Verdict{Decision: "pass"}, commandRuleInput{command: "gh pr checks 1", preauth: "next"}, hookAttribution{}, hookLocation(ctx, Dependencies{}))
+		types.GuardJudgment{Decision: "pass"}, commandRuleInput{command: "gh pr checks 1", preauth: "next"}, hookAttribution{}, hookLocation(ctx, Dependencies{}))
 	assert.Equal(t, "deny", v.Decision, "its deny still holds")
 }
 

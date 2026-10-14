@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/types"
 )
 
 // unloadKind is why the binary judging a call cannot read the tree's guard policy.
@@ -426,11 +427,11 @@ func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, 
 type binaryFix struct{ say, why, placeFor string }
 
 // next is the fix's command, served as the deny's next under rule.
-func (f binaryFix) next(rule denyRuleName) []hint.Next {
+func (f binaryFix) next(rule denyRuleName) []types.NextStep {
 	if f.placeFor == "" {
 		return nil
 	}
-	return []hint.Next{placementNext(rule, f.placeFor)}
+	return []types.NextStep{placementNext(rule, f.placeFor)}
 }
 
 // binaryRemedy is the fix for a binary that cannot load the tree, by who is asking. A
@@ -478,7 +479,7 @@ const workerBuildVerdict = "a worker does not build magus; ask the main session 
 
 // placementNext is the command that places the main checkout's ./magus in lease's checkout.
 // The main checkout stays a placeholder: a worker's checkout does not say which one it is.
-func placementNext(rule denyRuleName, lease string) hint.Next {
+func placementNext(rule denyRuleName, lease string) types.NextStep {
 	return hint.NextForDenyRemedy(string(rule), placementArgv(lease), "copies the main checkout's ./magus into this checkout.")
 }
 
@@ -488,7 +489,7 @@ func placementArgv(lease string) []string {
 }
 
 // placesBinary reports whether n is lease's placement of ./magus.
-func placesBinary(n hint.Next, lease string) bool {
+func placesBinary(n types.NextStep, lease string) bool {
 	return lease != "" && slices.Equal(n.Argv, placementArgv(lease))
 }
 

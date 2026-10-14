@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,7 +35,7 @@ func TestReadPagingRefusesTheThirdWindow(t *testing.T) {
 	root := hookLocation(ctx, Dependencies{}).workspace
 	pagedFile(t, root)
 	deps := withSetting(string(denyRuleReadPaging), builtin.Deny)
-	read := func(agent, line string) Verdict {
+	read := func(agent, line string) types.GuardJudgment {
 		return Judge(ctx, deps, Request{Input: line, Session: "paging", Agent: agent, Host: "claude-code", Dir: root})
 	}
 
@@ -54,7 +55,7 @@ func TestReadNavigationRefusesACallerOncePerFile(t *testing.T) {
 	root := hookLocation(ctx, Dependencies{}).workspace
 	pagedFile(t, root)
 	deps := withSetting(string(denyRuleReadNavigation), builtin.Deny)
-	read := func(agent string) Verdict {
+	read := func(agent string) types.GuardJudgment {
 		return Judge(ctx, deps, Request{Input: "cat paged.go", Session: "navigation", Agent: agent, Host: "claude-code", Dir: root})
 	}
 	first := read("a1")

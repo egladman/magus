@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/types"
 )
 
 // levelTrace mirrors config.LevelTrace (slog.LevelDebug-4); duplicated here
@@ -995,8 +996,8 @@ func (h *PrettyHandler) printNext(cmd string) {
 	if cmd == "" {
 		return
 	}
-	noWhy := func(hint.Next) string { return "" }
-	block := hint.Render([]hint.Next{{Run: cmd}}, noWhy)
+	noWhy := func(types.NextStep) string { return "" }
+	block := hint.Render([]types.NextStep{{Run: cmd}}, noWhy)
 	h.printf("%s", strings.TrimPrefix(block, "\n"))
 }
 

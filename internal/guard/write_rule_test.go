@@ -207,7 +207,7 @@ func TestLapsedJudgmentAdvisesAWriteToAPolicySource(t *testing.T) {
 			"slowed":      {LoadFailure: lapsedLoad.LoadFailure, RuleLoad: lapsedLoad.RuleLoad, ApprovedWriteRule: slowed},
 			"none to ask": {LoadFailure: lapsedLoad.LoadFailure, RuleLoad: lapsedLoad.RuleLoad},
 		}
-		judge := func(ctx context.Context, deps Dependencies, root string) Verdict {
+		judge := func(ctx context.Context, deps Dependencies, root string) types.GuardJudgment {
 			ctx, cancel := context.WithTimeout(ctx, time.Second)
 			defer cancel()
 			return Judge(ctx, deps, Request{Input: filepath.Join(root, "magusfile.buzz"), IsPath: true, Host: "claude-code", Session: "s1"})

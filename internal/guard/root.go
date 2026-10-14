@@ -214,10 +214,10 @@ func ordinal(n int) string {
 // applyFindings puts findings on verdict: the first refusal replaces it when the host
 // reported the thread, and every other finding advises once per session, appended to
 // advice already there. An inferred thread is told a refusal as advice.
-func applyFindings(markers hint.Gate, verdict Verdict, findings []costFinding, from types.ThreadSource) Verdict {
+func applyFindings(markers hint.Gate, verdict types.GuardJudgment, findings []costFinding, from types.ThreadSource) types.GuardJudgment {
 	for _, f := range findings {
 		if f.deny && from == types.ThreadReported {
-			return Verdict{SchemaVersion: verdict.SchemaVersion, Decision: decisionDeny, Reason: f.say, Rule: string(f.rule), Lease: verdict.Lease, LeaseFrom: verdict.LeaseFrom}
+			return types.GuardJudgment{SchemaVersion: verdict.SchemaVersion, Decision: decisionDeny, Reason: f.say, Rule: string(f.rule), Lease: verdict.Lease, LeaseFrom: verdict.LeaseFrom}
 		}
 	}
 	if verdict.Decision != decisionPass && verdict.Decision != decisionAdvise {
@@ -246,7 +246,7 @@ func (d Dependencies) settingOf(rule string) builtin.Setting {
 
 // gradeMainCommand judges a shell command of a session's unleased main thread by the cost
 // rules. A served next is magus's own suggestion and is left alone.
-func gradeMainCommand(deps Dependencies, verdict Verdict, in commandRuleInput, who hookAttribution, at location) Verdict {
+func gradeMainCommand(deps Dependencies, verdict types.GuardJudgment, in commandRuleInput, who hookAttribution, at location) types.GuardJudgment {
 	if verdict.Decision == decisionDeny || in.preauth != "" || in.lease != "" || at.cacheDir == "" {
 		return verdict
 	}
@@ -325,7 +325,7 @@ func shadowVerdicts(st costState, c mainCall) map[types.GuardProfile]types.Guard
 // names a model, and whether that model is at the model tier its job was forked at. Tiers
 // compare by rank in the workspace's declaration, never by name or price; a spawn bound to
 // no row, or to a row forked with no declaration, has nothing to compare.
-func gradeMainSpawn(deps Dependencies, verdict Verdict, env hookRequest, who hookAttribution, at location, lease string, titled spawnTitle) Verdict {
+func gradeMainSpawn(deps Dependencies, verdict types.GuardJudgment, env hookRequest, who hookAttribution, at location, lease string, titled spawnTitle) types.GuardJudgment {
 	if verdict.Decision == decisionDeny || !env.IsSpawn || lease != "" || at.cacheDir == "" {
 		return verdict
 	}

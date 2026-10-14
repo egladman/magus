@@ -612,7 +612,7 @@ func invocationClass(c hint.Invocation) types.DelegableClass {
 //
 // An observation is the same call another hook judges, so it records the thread alone and
 // nothing a metric counts: counting both would count the call twice.
-func observeCall(ctx context.Context, at location, input string, who hookAttribution, tool, lease string, verdict Verdict) types.AgentFacts {
+func observeCall(ctx context.Context, at location, input string, who hookAttribution, tool, lease string, verdict types.GuardJudgment) types.AgentFacts {
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	if who.Agent != "" && verdict.Decision != "" {
 		hostGate(at.cacheDir, who.Host).MarkFired(hostAgentsKind)

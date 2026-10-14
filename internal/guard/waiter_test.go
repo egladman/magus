@@ -89,7 +89,7 @@ func TestSpawnWaitsFires(t *testing.T) {
 // refused as a timer when the workspace raises sleep-poll, and each counts toward the pile.
 func TestBackgroundedSleepIsATimerAndCountsTowardThePile(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	judge := func(deps Dependencies, line string) Verdict {
+	judge := func(deps Dependencies, line string) types.GuardJudgment {
 		return Judge(ctx, deps, Request{Input: line, Session: "timers", Host: "claude-code", CallBackground: true})
 	}
 
@@ -155,7 +155,7 @@ func TestSpawnDuplicateRefusesASecondWorkerForAJob(t *testing.T) {
 
 func TestSpawnWaiterAndNestedWaiter(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	spawn := func(agent, description string) Verdict {
+	spawn := func(agent, description string) types.GuardJudgment {
 		env := map[string]any{
 			"session_id": "nested", "hook_event_name": "PreToolUse", "tool_name": "Agent",
 			"tool_input": map[string]any{"description": description, "prompt": "Carry it out."},
