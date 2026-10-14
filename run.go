@@ -2662,7 +2662,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	decision := volatility.Decision{}
 
 	if err != nil {
-		decision = rt.Decide(p.Path, volatileTarget, affected, eligible)
+		decision = rt.Decide(p.Path, volatileTarget, affected, eligible, err)
 		if decision.Retry {
 			resp2, err2 := s.Invoke(types.WithEvalMemo(ctx), req)
 			if err2 == nil {

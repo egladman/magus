@@ -39,6 +39,9 @@ const (
 	ReasonPredictedVolatile RetryReason = "predicted_volatile"
 	ReasonSkip              RetryReason = "skip"
 	ReasonDisabled          RetryReason = "disabled"
+	// ReasonNonRetryable is a failure [types.ClassifyRetry] calls non-retryable: running it
+	// again unchanged cannot clear it, whatever its history says.
+	ReasonNonRetryable RetryReason = "non_retryable"
 )
 
 // Decision is the output of Decide.
@@ -212,9 +215,15 @@ func (rt *Runtime) IsAffected(projectPath string) bool {
 // from the Runtime because the Runtime holds one answer for the whole run and the
 // policy is per target. Storing it here collapsed the two: opting `test` in made
 // every sibling under a composed `ci` retryable as well.
-func (rt *Runtime) Decide(projectPath, target string, affected, eligible bool) Decision {
+//
+// cause is the failure being decided on. One that [types.ClassifyRetry] calls
+// non-retryable is never re-run, however the history reads.
+func (rt *Runtime) Decide(projectPath, target string, affected, eligible bool, cause error) Decision {
 	if !rt.cfg.Enabled || !rt.retry || !eligible {
 		return Decision{Retry: false, Reason: ReasonDisabled}
+	}
+	if !types.ClassifyRetry(cause).Retryable {
+		return Decision{Retry: false, Reason: ReasonNonRetryable}
 	}
 	rt.mu.Lock()
 	s := rt.stats(projectPath, target)
