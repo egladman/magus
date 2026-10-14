@@ -978,6 +978,24 @@ var allDiagnosticCodes = []DiagnosticCode{
 	EngineNotLinked,
 }
 
+// retryTable is where a code declares itself not retryable, once, with what must change
+// first; ClassifyRetry reads it and no call site wraps. A code left out is retryable:
+// MGS3009 and MGS3017 clear on their own (exit 75, RetryInfo).
+var retryTable = map[DiagnosticCode]RetryChange{
+	TargetDependencyCycle:    RetryAfterConfig,
+	WorkspaceNeedsNewerMagus: RetryAfterUpgrade,
+	UnknownConfigKey:         RetryAfterConfig,
+	MisconfiguredEnvVar:      RetryAfterConfig,
+	PathWriteDenied:          RetryAfterWidening,
+	ToolTooOld:               RetryAfterUpgrade,
+	ToolTooNew:               RetryAfterUpgrade,
+	BuildSlotsDeadlocked:     RetryAfterConfig,
+	WritePathIsDirectory:     RetryAfterWidening,
+	PipeCycle:                RetryAfterConfig,
+	BearerRejected:           RetryAfterPerson,
+	NoAuthToken:              RetryAfterPerson,
+}
+
 // AllDiagnosticCodes returns every registered diagnostic code in ascending MGS
 // order. The returned slice is a copy; callers may mutate it freely.
 func AllDiagnosticCodes() []DiagnosticCode {
