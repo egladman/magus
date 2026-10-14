@@ -14,8 +14,7 @@
   `DelegableClass` and `ContextSource` are named types.
 - **Breaking for SDK callers: `types.GuardProfile` has `Effective` and `Stricter`.** They
   replace `Level` and `StricterProfile`. `String` renders the profile as written, empty
-  when unset, as `MarshalText` does. The root package's `GuardProfile` is
-  `EffectiveGuardProfile`.
+  when unset, as `MarshalText` does.
 - **Breaking for SDK callers: `config.Agents.ResolveBilling` returns only the mode.**
 - **Breaking for SDK callers: `types.ModelFacts` is `types.ModelPricing`.** Prices are
   `types.USDPerMTok`, `Factor` is `PriceMultiplier`, and `PriceStep` with `StepFactor` is
