@@ -202,38 +202,21 @@ func (d Dependencies) workingDir() (string, bool) {
 // path it takes for a workspace it could not open.
 var errNoDependency = errors.New("guard: the caller supplied no resolver for this fact")
 
-// inspect opens the workspace at root, "" for the one the hook runs in. An open costs
-// seconds on an idle machine and more on a loaded one, so the wait ends judgeReserve before
-// ctx does and never outlasts inspectBudget. A wait that ends first answers its error, which
-// every rule reads as a workspace it could not open, and once one open has run out in a
-// judgment the rest answer at once: each rule waiting its own budget on the same stalled
-// open would add up past the deadline. The open runs on without ctx's cancel, so a memoized
-// open is never cached as cancelled.
+// inspect opens the workspace at root, "" for the one the hook runs in, as a boundedPhase:
+// an open costs seconds on an idle machine and more on a loaded one. An open that does not
+// answer in time answers its error, which every rule reads as a workspace it could not open.
 func (d Dependencies) inspect(ctx context.Context, root string) (types.WorkspaceRepository, error) {
 	if d.Inspect == nil {
 		return nil, errNoDependency
 	}
-	log := judgmentPhases(ctx)
-	if log.lapsed(phaseInspect) {
-		return nil, context.DeadlineExceeded
-	}
-	log.begin(phaseInspect)
-	budget := inspectBudget
-	if deadline, ok := ctx.Deadline(); ok {
-		budget = min(budget, max(time.Until(deadline)-judgeReserve, 0))
-	}
-	wait, cancel := context.WithTimeout(ctx, budget)
-	defer cancel()
-	start := time.Now()
-	open := context.WithoutCancel(ctx)
-	ws, err := awaitDeadline(wait, func() (types.WorkspaceRepository, error) { return d.Inspect(open, root) })
-	log.record(timedPhase(phaseInspect, time.Since(start), budget, err != nil && wait.Err() != nil))
-	return ws, err
+	return boundedPhase(ctx, phaseInspect, func(open context.Context) (types.WorkspaceRepository, error) {
+		return d.Inspect(open, root)
+	})
 }
 
-// humanOnlyRecord is HumanOnlyRecord, timed as its own phase and bounded as inspect is: a
-// read that does not answer in time answers false, as does every later one in the
-// judgment, and the rule falls back to the open.
+// humanOnlyRecord is HumanOnlyRecord as a boundedPhase of its own: a read that does not
+// answer in time answers false, as does every later one in the judgment, and the rule falls
+// back to the open.
 func (d Dependencies) humanOnlyRecord(ctx context.Context, root string) (types.HumanOnlyIndex, bool) {
 	if d.HumanOnlyRecord == nil {
 		return types.HumanOnlyIndex{}, false
@@ -242,24 +225,10 @@ func (d Dependencies) humanOnlyRecord(ctx context.Context, root string) (types.H
 		ix types.HumanOnlyIndex
 		ok bool
 	}
-	log := judgmentPhases(ctx)
-	if log.lapsed(phaseHumanOnlyRecord) {
-		return types.HumanOnlyIndex{}, false
-	}
-	log.begin(phaseHumanOnlyRecord)
-	budget := inspectBudget
-	if deadline, ok := ctx.Deadline(); ok {
-		budget = min(budget, max(time.Until(deadline)-judgeReserve, 0))
-	}
-	wait, cancel := context.WithTimeout(ctx, budget)
-	defer cancel()
-	start := time.Now()
-	read := context.WithoutCancel(ctx)
-	a, err := awaitDeadline(wait, func() (answer, error) {
+	a, err := boundedPhase(ctx, phaseHumanOnlyRecord, func(read context.Context) (answer, error) {
 		ix, ok := d.HumanOnlyRecord(read, root)
 		return answer{ix, ok}, nil
 	})
-	log.record(timedPhase(phaseHumanOnlyRecord, time.Since(start), budget, err != nil))
 	return a.ix, err == nil && a.ok
 }
 

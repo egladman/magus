@@ -140,6 +140,32 @@ func awaitDeadline[T any](ctx context.Context, work func() (T, error)) (T, error
 	}
 }
 
+// boundedPhase runs call as phase of the judgment on ctx. The wait ends judgeReserve before
+// ctx does and never outlasts inspectBudget; a wait that ends first answers its error, and
+// once phase has lapsed in a judgment every later call answers context.DeadlineExceeded at
+// once, since each waiting its own budget on the same stall would add up past the deadline.
+// call runs without ctx's cancel, so a memoized answer is never cached as cancelled. The
+// phase is recorded lapsed when it answered an error after its wait ran out.
+func boundedPhase[T any](ctx context.Context, phase string, call func(context.Context) (T, error)) (T, error) {
+	log := judgmentPhases(ctx)
+	if log.lapsed(phase) {
+		var zero T
+		return zero, context.DeadlineExceeded
+	}
+	log.begin(phase)
+	budget := inspectBudget
+	if deadline, ok := ctx.Deadline(); ok {
+		budget = min(budget, max(time.Until(deadline)-judgeReserve, 0))
+	}
+	wait, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+	start := time.Now()
+	detached := context.WithoutCancel(ctx)
+	v, err := awaitDeadline(wait, func() (T, error) { return call(detached) })
+	log.record(timedPhase(phase, time.Since(start), budget, err != nil && wait.Err() != nil))
+	return v, err
+}
+
 // JudgeWithin runs judge, a hook judgment for req, and answers by the hook's deadline on
 // ctx plus judgeReserve whether or not judge has: past that it answers unjudged, recorded
 // on the trail with the judgment lapsed, and leaves judge running for the process exit to

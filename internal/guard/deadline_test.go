@@ -80,6 +80,56 @@ func TestTimeRuleLoadLapsesOnlyAFailurePastTheDeadline(t *testing.T) {
 	assert.Equal(t, trail.Phase{Name: phaseLoadRules, ElapsedMs: unbounded.ElapsedMs}, unbounded)
 }
 
+// A phase that runs out answers the deadline's error and is recorded lapsed, and every
+// later call of it in the judgment answers at once without running. The call itself never
+// sees ctx's cancel, so a memoized answer cannot be cached as cancelled.
+func TestBoundedPhaseLapsesOncePerJudgment(t *testing.T) {
+	ctx, cancel := context.WithTimeout(withPhaseLog(t.Context(), trail.Phase{}), judgeReserve+50*time.Millisecond)
+	defer cancel()
+	release := make(chan struct{})
+	defer close(release)
+	detached := make(chan bool, 1)
+
+	_, err := boundedPhase(ctx, phaseInspect, func(run context.Context) (string, error) {
+		detached <- run.Done() == nil
+		<-release
+		return "ws", nil
+	})
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.True(t, <-detached, "the call runs without ctx's cancel")
+	ran := false
+	_, err = boundedPhase(ctx, phaseInspect, func(context.Context) (string, error) {
+		ran = true
+		return "ws", nil
+	})
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.False(t, ran, "a lapsed phase is not waited on twice")
+	phases := judgmentPhases(ctx).finished()
+	require.Len(t, phases, 1)
+	assert.Equal(t, phaseInspect, phases[0].Name)
+	assert.True(t, phases[0].Lapsed)
+}
+
+// A phase that answers in time is not lapsed, an error included: only a wait that ran out
+// lapses it.
+func TestBoundedPhaseAnswersInTime(t *testing.T) {
+	ctx := withPhaseLog(t.Context(), trail.Phase{})
+	failed := errors.New("magusfile.buzz does not load")
+
+	got, err := boundedPhase(ctx, phaseInspect, func(context.Context) (string, error) { return "ws", nil })
+	require.NoError(t, err)
+	assert.Equal(t, "ws", got)
+	_, err = boundedPhase(ctx, phaseHumanOnlyRecord, func(context.Context) (string, error) { return "", failed })
+	require.ErrorIs(t, err, failed)
+
+	phases := judgmentPhases(ctx).finished()
+	require.Len(t, phases, 2)
+	assert.False(t, phases[0].Lapsed)
+	assert.False(t, phases[1].Lapsed, "an error answered in time is the call's own, not a lapse")
+	assert.Equal(t, inspectBudget.Milliseconds(), phases[0].BudgetMs, "no deadline leaves the inspect budget")
+}
+
 // A judgment stuck where no deadline reaches still answers in time: past the hook's bound a
 // call that changes state is denied, one that only reads goes through with a note, and the
 // trail records the judgment as lapsed. The host got its answer, so the mark is ended.
