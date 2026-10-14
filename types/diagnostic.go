@@ -803,6 +803,11 @@ const ReviewOpMissing DiagnosticCode = "MGS1102"
 // approve on the reader's behalf. Not knowing is not permission.
 const ReviewAuthorshipUnknown DiagnosticCode = "MGS1103"
 
+// EngineNotLinked fires when a program evaluates a magusfile without linking the Buzz engine.
+// Loading the workspace anyway would read as one with no custom targets, so the load fails and
+// names the package that links the engine.
+const EngineNotLinked DiagnosticCode = "MGS1104"
+
 // MGS3015 is retired and deliberately absent above; docs/decisions/0001 says why. The
 // number is not reused: a retired code that comes back means two different things in one
 // search of a log archive. MGS5004 is retired the same way: it refused --detach with no
@@ -970,6 +975,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	VCSCapabilityMissing,
 	ReviewOpMissing,
 	ReviewAuthorshipUnknown,
+	EngineNotLinked,
 }
 
 // AllDiagnosticCodes returns every registered diagnostic code in ascending MGS
