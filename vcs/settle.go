@@ -75,11 +75,6 @@ type HookOperation struct {
 	// CommitPending reports that git has not made the commit yet, so a path staged
 	// before the hook returns lands in it.
 	CommitPending bool
-	// Sequenced reports a commit concluding the stopped last pick of a cherry-pick or
-	// revert sequence. `git cherry-pick --continue` compares the index it read before
-	// running that commit with the HEAD the commit made, so a path a hook stages into it
-	// stops the sequence with "your local changes would be overwritten".
-	Sequenced bool
 	// indexFile is the index a stage writes; see HookEvent.IndexFile.
 	indexFile string
 	// gitDir is the worktree's git directory, absolute.
@@ -158,14 +153,17 @@ func GitHookOperation(ctx context.Context, root string, ev HookEvent) (HookOpera
 		default:
 			return HookOperation{}, false, nil
 		}
-		// A pick git stopped on, concluded with more to come: the last one settles them all.
-		pending, err := sequencerPending(gitDir)
-		if err != nil {
+		// A pick git stopped on inside a sequence is never settled here. With more to come,
+		// the last one settles them all. The last one itself is concluded by `git
+		// cherry-pick --continue`, which compares the index it read before running this
+		// commit with the HEAD the commit made, so a path staged into it stops the sequence
+		// half done; the hook's shell defers that settle to `magus vcs resolve` instead.
+		if pending, err := sequencerPending(gitDir); err != nil {
 			return HookOperation{}, false, err
-		} else if pending > 1 {
+		} else if pending > 0 {
 			return HookOperation{}, false, nil
 		}
-		op.CommitPending, op.Sequenced = true, pending == 1
+		op.CommitPending = true
 	case HookPostCommit:
 		switch {
 		case rebasing:

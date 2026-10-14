@@ -316,11 +316,20 @@ func TestSettleHooksStartMagusOnlyToSettle(t *testing.T) {
 	gitRun(t, dir, "add", "s6")
 	gitRun(t, dir, "commit", "-q", "-m", "clash")
 	starts()
+	sequenceStart := gitRun2(t, dir, "rev-parse", "HEAD")
 	stopped("cherry-pick", "side~6..side")
 	write("s6", "resolved\n")
 	gitRun(t, dir, "add", "s6")
 	gitRun(t, dir, "commit", "-q", "--no-edit")
-	assert.Equal(t, []string{"vcs resolve --hook pre-commit"}, starts(), "stopped on the last, concluded by git commit")
+	// git hands this commit's hook the same environment whether `git commit` or
+	// `cherry-pick --continue` runs it, and a regeneration staged into it stops
+	// --continue half done, so the settle is deferred to `magus vcs resolve`.
+	assert.Empty(t, starts(), "stopped on the last, concluded by git commit")
+	op, ok, err := DeferredSettle(ctx, dir)
+	require.NoError(t, err)
+	require.True(t, ok, "the stopped last pick leaves its settle deferred")
+	assert.Equal(t, sequenceStart, op.base, "from where the sequence started")
+	require.NoError(t, ClearDeferredSettle(ctx, dir))
 
 	for _, backend := range []string{"--merge", "--apply"} {
 		gitRun(t, dir, "checkout", "-q", "-b", "rebased"+backend, "side")
@@ -338,7 +347,7 @@ func TestSettleHooksStartMagusOnlyToSettle(t *testing.T) {
 	gitRun(t, dir, "-c", "magus.settle=defer", "cherry-pick", "side~6..side~3")
 	gitRun(t, dir, "-c", "magus.settle=defer", "cherry-pick", "side~3..side")
 	assert.Empty(t, starts(), "deferred")
-	op, ok, err := DeferredSettle(ctx, dir)
+	op, ok, err = DeferredSettle(ctx, dir)
 	require.NoError(t, err)
 	require.True(t, ok)
 	assert.Equal(t, main, op.base, "where the first batch started")
@@ -375,6 +384,11 @@ func TestGitHookOperationSettlesTheWholeSequence(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "p3"), []byte("p3\n"), 0o644))
 	gitRun(t, dir, "add", "p3")
+	_, ok, err = GitHookOperation(ctx, dir, HookEvent{Hook: HookPreCommit})
+	require.NoError(t, err)
+	assert.False(t, ok, "a stopped last pick: --continue refuses a commit its hook changed, so the hook's shell defers it")
+
+	require.NoError(t, os.Remove(todo))
 	op, ok, err = GitHookOperation(ctx, dir, HookEvent{Hook: HookPreCommit})
 	require.NoError(t, err)
 	require.True(t, ok)

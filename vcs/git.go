@@ -2293,9 +2293,17 @@ func gitSettleHookBody(name, command string) string {
 		settle += "elif [ $magus_rc -ne 0 ]; then\n  exit $magus_rc\n"
 	}
 	settle += "fi\n"
-	deferred := "magus_base=$(" + gitSettleBase(name) + ") && { [ -e \"$magus_git_dir/" + deferredSettleFile + "\" ] || echo \"$magus_base\" >\"$magus_git_dir/" + deferredSettleFile + "\"; }\n" +
-		"echo \"magus: magus.settle is defer, so this operation was not regenerated; '" + bin + " vcs resolve' regenerates everything deferred\" >&2\n"
-	body := "if [ \"$(git config --get magus.settle)\" = defer ]; then\n" + indentShell(deferred) + "else\n" + indentShell(settle) + "fi\n"
+	record := "magus_base=$(" + gitSettleBase(name) + ") && { [ -e \"$magus_git_dir/" + deferredSettleFile + "\" ] || echo \"$magus_base\" >\"$magus_git_dir/" + deferredSettleFile + "\"; }\n"
+	deferred := record + "echo \"magus: magus.settle is defer, so this operation was not regenerated; '" + bin + " vcs resolve' regenerates everything deferred\" >&2\n"
+	body := "if [ \"$(git config --get magus.settle)\" = defer ]; then\n" + indentShell(deferred)
+	if name == HookPreCommit {
+		// The commit concluding a sequence's stopped last pick: `--continue` compares the
+		// index it read before this commit with the HEAD it made, so staging into it would
+		// stop the sequence half done. GitHookOperation refuses it the same way.
+		sequenced := record + "echo \"magus: this commit concludes the last pick of a sequence, and its --continue stops when a hook changes that commit, so nothing was regenerated; once the sequence finishes, run '" + bin + " vcs resolve && git commit --amend --no-edit'\" >&2\n"
+		body += "elif [ -s \"$magus_git_dir/sequencer/todo\" ]; then\n" + indentShell(sequenced)
+	}
+	body += "else\n" + indentShell(settle) + "fi\n"
 	return "if magus_git_dir=$(git rev-parse --git-dir)" + gitSettleGuard(name) + "; then\n" + indentShell(body) + "fi\n"
 }
 

@@ -49,7 +49,7 @@ cp IN2.b.txt IN2.txt
 exec git add IN2.txt
 env GIT_EDITOR=true
 exec git cherry-pick --continue
-stderr 'nothing was regenerated; once the cherry-pick finishes, run `magus vcs resolve && git commit --amend --no-edit`'
+stderr 'nothing was regenerated; once the sequence finishes, run .*vcs resolve && git commit --amend --no-edit'
 ! stderr 'local changes would be overwritten'
 ! exists .git/CHERRY_PICK_HEAD
 ! exists .git/sequencer

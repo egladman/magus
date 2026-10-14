@@ -40,10 +40,6 @@ func Hook(ctx context.Context, m *magus.Magus, op vcs.HookOperation, defines fun
 	if len(o.Ran) == 0 {
 		return o, nil
 	}
-	if op.Sequenced {
-		o.Deferred = true
-		return o, vcs.DeferSettle(op)
-	}
 	for _, inv := range o.Ran {
 		if err := run(ctx, inv); err != nil {
 			o.recordOwed(ctx, m, files)
@@ -146,9 +142,6 @@ type Outcome struct {
 	Ran [][]string
 	// Staged are the regenerated files Hook staged.
 	Staged []string
-	// Deferred reports that Hook ran nothing and recorded the settle deferred, since
-	// the operation was Sequenced: Ran is what `magus vcs resolve` will run.
-	Deferred bool
 }
 
 // recordOwed leaves the runs that did not settle owed in the git dir, each with the
@@ -171,10 +164,6 @@ func (o Outcome) recordOwed(ctx context.Context, m *magus.Magus, files []types.F
 // Notice is the one line a settled hook prints: what changed, what ran, and what the
 // output's fate is. fold is FoldCommand's answer.
 func (o Outcome) Notice(hook, fold string) string {
-	if o.Deferred {
-		return fmt.Sprintf("magus: this %[1]s changed generator inputs, and `git %[1]s --continue` stops when a hook changes the commit concluding its last pick, so nothing was regenerated; once the %[1]s finishes, run `%[2]s && git commit --amend --no-edit`",
-			o.kind, hint.VCSResolve.String())
-	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "magus: this %s changed generator inputs; ran %s", o.kind, o.Command())
 	switch {
