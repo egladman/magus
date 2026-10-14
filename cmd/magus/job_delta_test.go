@@ -56,10 +56,18 @@ func TestReadSymbolDelta(t *testing.T) {
 	assert.Equal(t, symbolDelta{}, none, "an empty diff is read, and holds nothing")
 
 	for name, read := range map[string]func() (symbolDelta, bool){
-		"no graph":   func() (symbolDelta, bool) { return readSymbolDelta(t.Context(), repo.Root(), nil, res.VCS, base, []string{"api.go"}) },
-		"no vcs":     func() (symbolDelta, bool) { return readSymbolDelta(t.Context(), repo.Root(), g, nil, base, []string{"api.go"}) },
-		"no base":    func() (symbolDelta, bool) { return readSymbolDelta(t.Context(), repo.Root(), g, res.VCS, "", []string{"api.go"}) },
-		"no symbols": func() (symbolDelta, bool) { return readSymbolDelta(t.Context(), repo.Root(), knowledge.NewGraph(), res.VCS, base, []string{"api.go"}) },
+		"no graph": func() (symbolDelta, bool) {
+			return readSymbolDelta(t.Context(), repo.Root(), nil, res.VCS, base, []string{"api.go"})
+		},
+		"no vcs": func() (symbolDelta, bool) {
+			return readSymbolDelta(t.Context(), repo.Root(), g, nil, base, []string{"api.go"})
+		},
+		"no base": func() (symbolDelta, bool) {
+			return readSymbolDelta(t.Context(), repo.Root(), g, res.VCS, "", []string{"api.go"})
+		},
+		"no symbols": func() (symbolDelta, bool) {
+			return readSymbolDelta(t.Context(), repo.Root(), knowledge.NewGraph(), res.VCS, base, []string{"api.go"})
+		},
 	} {
 		_, ok := read()
 		assert.False(t, ok, "%s: a delta nobody could read is unknown, not empty", name)

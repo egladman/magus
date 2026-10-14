@@ -1236,7 +1236,9 @@ type graded struct {
 	From   types.LeaseSource
 }
 
-func gradedAs(v types.GuardJudgment) graded { return graded{v.Decision == "deny", v.Lease, v.LeaseFrom} }
+func gradedAs(v types.GuardJudgment) graded {
+	return graded{v.Decision == "deny", v.Lease, v.LeaseFrom}
+}
 
 // TestASubagentsExecNeverBindsItsParent is the 2026-09-26 incident. An orchestrator spawned
 // a researcher in the foreground, so no spawn response attributed it while it ran, and the

@@ -1925,6 +1925,60 @@ func TestRun_RetryIsAudibleOffCI(t *testing.T) {
 	assert.Contains(t, got, "reason=bootstrap")
 }
 
+// TestRun_NonRetryableFailureRecordsNotRetried pins the record a target opted into
+// retry_on_volatile leaves when its failure is typed non-retryable.
+func TestRun_NonRetryableFailureRecordsNotRetried(t *testing.T) {
+	var calls atomic.Int32
+	spellName := register.Spell(t, "zzz-not-retried-spell",
+		spells.WithTargets("refused"),
+		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
+			calls.Add(1)
+			return nil, types.NonRetryable(errors.New("hook is not a command"), types.RetryAfterConfig, "edit the hook")
+		}),
+	)
+
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".",
+		WithSpell(spellName),
+		WithTarget("refused", RetryOnVolatile("a fixture that races its own teardown")),
+	)
+	cfg := config.Defaults()
+	cfg.HistoryPath = filepath.Join(root, "history.json")
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(cfg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	var stream, notices bytes.Buffer
+	sink, err := NewSink(FormatJSONL, &stream, &notices)
+	require.NoError(t, err)
+	err = m.Run(t.Context(), []types.Target{{Path: ".", Name: "refused"}}, WithSink(sink))
+	require.NoError(t, sink.Close(), "flush the stream before reading it")
+	require.Error(t, err)
+	assert.Equal(t, int32(1), calls.Load(), "a non-retryable failure runs once")
+
+	var got []report.VolatilityCall
+	for line := range bytes.Lines(stream.Bytes()) {
+		var head struct {
+			Type string `json:"type"`
+		}
+		require.NoError(t, json.Unmarshal(line, &head))
+		if head.Type == report.TypeVolatility {
+			var v report.VolatilityCall
+			require.NoError(t, json.Unmarshal(line, &v))
+			got = append(got, v)
+		}
+	}
+	require.Len(t, got, 1, "stream:\n%s", stream.String())
+	assert.Equal(t, ".", got[0].Project)
+	assert.Equal(t, spellName+"/refused", got[0].Target)
+	assert.Equal(t, "not_retried", got[0].Status)
+	assert.Equal(t, 1, got[0].Attempts)
+	assert.Equal(t, "non_retryable", got[0].RetryReason)
+}
+
 // TestRun_MemoryClaimFollowsTheRunsShape pins both ends of shape-sized claims: a run
 // sizes its claim from the measured peaks of runs shaped like it, and records its own
 // outcome under that same shape for the next run to read.
