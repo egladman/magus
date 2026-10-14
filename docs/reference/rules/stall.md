@@ -1,12 +1,12 @@
 ---
 title: "stall: a leased worker refused by something only the root can clear"
-description: "An advisory by default: it explains, and blocks nothing, on a leased worker refused by something only the root can clear."
+description: "Off by default: once a workspace turns it on, it reports a leased worker refused by something only the root can clear."
 tags: [guard, rules, stall, off]
 ---
 
 # stall
 
-An advisory by default: it explains, and blocks nothing, on a leased worker refused by something only the root can clear.
+Off by default: once a workspace turns it on, it reports a leased worker refused by something only the root can clear.
 
 ## What it catches
 

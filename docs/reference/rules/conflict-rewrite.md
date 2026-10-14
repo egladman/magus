@@ -33,8 +33,9 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [conflict-rewrite]: ...
-advise [conflict-rewrite]: ...
 ```
+
+A workspace that sets this rule to `advise` sees `advise [conflict-rewrite]: ...` instead.
 
 `magus describe rule conflict-rewrite` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

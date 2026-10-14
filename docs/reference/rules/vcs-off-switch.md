@@ -33,8 +33,9 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [vcs-off-switch]: ...
-advise [vcs-off-switch]: ...
 ```
+
+A workspace that sets this rule to `advise` sees `advise [vcs-off-switch]: ...` instead.
 
 `magus describe rule vcs-off-switch` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

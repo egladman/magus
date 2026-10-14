@@ -1,12 +1,12 @@
 ---
 title: "root-result-cap: one tool result too large for a main thread's context, said on its next call"
-description: "An advisory by default: it explains, and blocks nothing, on one tool result too large for a main thread's context, said on its next call."
+description: "Off by default: once a workspace turns it on, it reports one tool result too large for a main thread's context, said on its next call."
 tags: [guard, rules, root-result-cap, off]
 ---
 
 # root-result-cap
 
-An advisory by default: it explains, and blocks nothing, on one tool result too large for a main thread's context, said on its next call.
+Off by default: once a workspace turns it on, it reports one tool result too large for a main thread's context, said on its next call.
 
 ## What it catches
 

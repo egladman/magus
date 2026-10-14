@@ -556,6 +556,7 @@ github.com/egladman/magus/types.BisectOptions.TestCmd field string
 github.com/egladman/magus/types.Bisector type interface
 github.com/egladman/magus/types.Bisector.Bisect imethod func(ctx context.Context, dir string, opts BisectOptions) (Culprit, error)
 github.com/egladman/magus/types.BodyDigest func(lines [][]byte, start int, end int) (digest string, ok bool)
+github.com/egladman/magus/types.BodyShape func(lines [][]byte, start int, end int, language string) (digest string, tokens int, ok bool)
 github.com/egladman/magus/types.BranchChange type struct
 github.com/egladman/magus/types.BranchChange.Local field bool "json:\"local,omitempty\""
 github.com/egladman/magus/types.BranchChange.Paths field []string "json:\"paths\""
@@ -855,6 +856,97 @@ github.com/egladman/magus/types.ConflictResolver.IgnoredPaths imethod func(ctx c
 github.com/egladman/magus/types.ConflictResolver.KeepIncoming imethod func(ctx context.Context, root string, paths []string) error
 github.com/egladman/magus/types.ConflictResolver.MarkResolved imethod func(ctx context.Context, root string, paths []string) error
 github.com/egladman/magus/types.ConflictResolver.RemoveConflicts imethod func(ctx context.Context, root string, paths []string) error
+github.com/egladman/magus/types.ConformCloneTokens const ConformMetric = "clone-tokens"
+github.com/egladman/magus/types.ConformDepFanout const ConformMetric = "dep-fanout"
+github.com/egladman/magus/types.ConformExportScope const ConformMetric = "export-scope"
+github.com/egladman/magus/types.ConformFileLines const ConformMetric = "file-lines"
+github.com/egladman/magus/types.ConformFileSymbols const ConformMetric = "file-symbols"
+github.com/egladman/magus/types.ConformFromAnchor const ConformSource = "anchor"
+github.com/egladman/magus/types.ConformFromRatchet const ConformSource = "ratchet"
+github.com/egladman/magus/types.ConformFuncLines const ConformMetric = "func-lines"
+github.com/egladman/magus/types.ConformGates type struct
+github.com/egladman/magus/types.ConformGates.Bar field float64
+github.com/egladman/magus/types.ConformGates.MaxFindings field int
+github.com/egladman/magus/types.ConformGates.MinCohort field int
+github.com/egladman/magus/types.ConformGates.MinShare field float64
+github.com/egladman/magus/types.ConformItem type struct
+github.com/egladman/magus/types.ConformItem.ID field string "json:\"id\"      yaml:\"id\""
+github.com/egladman/magus/types.ConformItem.Measure field int "json:\"measure\" yaml:\"measure\""
+github.com/egladman/magus/types.ConformItem.Source field string "json:\"source\"  yaml:\"source\""
+github.com/egladman/magus/types.ConformKey type struct
+github.com/egladman/magus/types.ConformKey.Metric field ConformMetric "json:\"metric\"          yaml:\"metric\""
+github.com/egladman/magus/types.ConformKey.Population field ConformPopulation "json:\"population\"      yaml:\"population\""
+github.com/egladman/magus/types.ConformKey.Scope field string "json:\"scope,omitempty\" yaml:\"scope,omitempty\""
+github.com/egladman/magus/types.ConformKnown type struct
+github.com/egladman/magus/types.ConformKnown.Items field []string "json:\"items\"  yaml:\"items\""
+github.com/egladman/magus/types.ConformKnown.Line field int "json:\"-\"      yaml:\"-\""
+github.com/egladman/magus/types.ConformKnown.Metric field ConformMetric "json:\"metric\" yaml:\"metric\""
+github.com/egladman/magus/types.ConformKnown.Reason field string "json:\"reason\" yaml:\"reason\""
+github.com/egladman/magus/types.ConformLimit type struct
+github.com/egladman/magus/types.ConformLimit.Anchor field int
+github.com/egladman/magus/types.ConformLimit.Percentile field float64
+github.com/egladman/magus/types.ConformMetric type string
+github.com/egladman/magus/types.ConformMetric.String method func() string
+github.com/egladman/magus/types.ConformMetric.Valid method func() bool
+github.com/egladman/magus/types.ConformMetric.Values method func() []string
+github.com/egladman/magus/types.ConformOptions type struct
+github.com/egladman/magus/types.ConformOptions.Effective method func(k ConformKey) (value int, src ConformSource)
+github.com/egladman/magus/types.ConformOptions.Exclude field []string
+github.com/egladman/magus/types.ConformOptions.Gates field ConformGates
+github.com/egladman/magus/types.ConformOptions.Generated field map[string]bool
+github.com/egladman/magus/types.ConformOptions.Limits field map[ConformKey]ConformLimit
+github.com/egladman/magus/types.ConformOptions.MinSample field int
+github.com/egladman/magus/types.ConformOptions.Ratchet field ConformRatchet
+github.com/egladman/magus/types.ConformOptions.RatchetPath field string
+github.com/egladman/magus/types.ConformOptions.Step field float64
+github.com/egladman/magus/types.ConformOptions.Validate method func() error
+github.com/egladman/magus/types.ConformOutput type struct
+github.com/egladman/magus/types.ConformOutput.Answer field KnowledgeAnswer "json:\"answer\"     yaml:\"answer\""
+github.com/egladman/magus/types.ConformOutput.Definition field string "json:\"definition\" yaml:\"definition\""
+github.com/egladman/magus/types.ConformOutput.Excluded field int "json:\"excluded\"   yaml:\"excluded\""
+github.com/egladman/magus/types.ConformOutput.Rows field []ConformRow "json:\"rows\"       yaml:\"rows\""
+github.com/egladman/magus/types.ConformOutput.Stale field []ConformKnown "json:\"stale\"      yaml:\"stale\""
+github.com/egladman/magus/types.ConformPopMain const ConformPopulation = "main"
+github.com/egladman/magus/types.ConformPopSource const ConformPopulation = "source"
+github.com/egladman/magus/types.ConformPopTest const ConformPopulation = "test"
+github.com/egladman/magus/types.ConformPopulation type string
+github.com/egladman/magus/types.ConformPopulation.String method func() string
+github.com/egladman/magus/types.ConformPopulation.Valid method func() bool
+github.com/egladman/magus/types.ConformPopulation.Values method func() []string
+github.com/egladman/magus/types.ConformProvenance type struct
+github.com/egladman/magus/types.ConformProvenance.Date field string "json:\"date\""
+github.com/egladman/magus/types.ConformProvenance.Rev field string "json:\"rev\""
+github.com/egladman/magus/types.ConformRatchet type struct
+github.com/egladman/magus/types.ConformRatchet.Known field []ConformKnown "json:\"known\""
+github.com/egladman/magus/types.ConformRatchet.Measured field ConformProvenance "json:\"measured\""
+github.com/egladman/magus/types.ConformRatchet.Schema field int "json:\"schema\""
+github.com/egladman/magus/types.ConformRatchet.Thresholds field []ConformThreshold "json:\"thresholds\""
+github.com/egladman/magus/types.ConformRow type struct
+github.com/egladman/magus/types.ConformRow.Anchor field int "json:\"anchor\"     yaml:\"anchor\""
+github.com/egladman/magus/types.ConformRow.Key field ConformKey "json:\"key\"        yaml:\"key\""
+github.com/egladman/magus/types.ConformRow.Known field int "json:\"known\"      yaml:\"known\""
+github.com/egladman/magus/types.ConformRow.Live field int "json:\"live\"       yaml:\"live\""
+github.com/egladman/magus/types.ConformRow.N field int "json:\"n\"          yaml:\"n\""
+github.com/egladman/magus/types.ConformRow.P50 field int "json:\"p50\"        yaml:\"p50\""
+github.com/egladman/magus/types.ConformRow.P90 field int "json:\"p90\"        yaml:\"p90\""
+github.com/egladman/magus/types.ConformRow.P95 field int "json:\"p95\"        yaml:\"p95\""
+github.com/egladman/magus/types.ConformRow.P99 field int "json:\"p99\"        yaml:\"p99\""
+github.com/egladman/magus/types.ConformRow.Propose field int "json:\"propose\"    yaml:\"propose\""
+github.com/egladman/magus/types.ConformRow.Source field ConformSource "json:\"source\"     yaml:\"source\""
+github.com/egladman/magus/types.ConformRow.Value field int "json:\"value\"      yaml:\"value\""
+github.com/egladman/magus/types.ConformRow.Violations field []ConformItem "json:\"violations\" yaml:\"violations\""
+github.com/egladman/magus/types.ConformSource type string
+github.com/egladman/magus/types.ConformSource.String method func() string
+github.com/egladman/magus/types.ConformSource.Valid method func() bool
+github.com/egladman/magus/types.ConformSource.Values method func() []string
+github.com/egladman/magus/types.ConformThreshold type struct
+github.com/egladman/magus/types.ConformThreshold.ConformKey embedded ConformKey
+github.com/egladman/magus/types.ConformThreshold.Line field int "json:\"-\""
+github.com/egladman/magus/types.ConformThreshold.N field int "json:\"n\""
+github.com/egladman/magus/types.ConformThreshold.Percentile field float64 "json:\"percentile\""
+github.com/egladman/magus/types.ConformThreshold.Value field int "json:\"value\""
+github.com/egladman/magus/types.ConformThreshold.Why field string "json:\"why\""
+github.com/egladman/magus/types.ConformTypeMethods const ConformMetric = "type-methods"
 github.com/egladman/magus/types.ConsoleFileWithheld const DiagnosticCode = "MGS9010"
 github.com/egladman/magus/types.ConsoleNotBuilt const DiagnosticCode = "MGS9013"
 github.com/egladman/magus/types.ConsoleStatus type struct
@@ -1845,6 +1937,7 @@ github.com/egladman/magus/types.ImportGraph type struct
 github.com/egladman/magus/types.ImportGraph.Indexed field bool "json:\"indexed\""
 github.com/egladman/magus/types.ImportGraph.Languages field map[string]string "json:\"languages\""
 github.com/egladman/magus/types.ImportGraph.Packages field map[string][]string "json:\"packages\""
+github.com/egladman/magus/types.IndexHumanOnly func(ws WorkspaceReader) HumanOnlyIndex
 github.com/egladman/magus/types.InflightAttention type string
 github.com/egladman/magus/types.InflightChange type struct
 github.com/egladman/magus/types.InflightChange.Attention field InflightAttention "json:\"attention\" yaml:\"attention\""
@@ -2437,7 +2530,7 @@ github.com/egladman/magus/types.KnowledgeRoutingProject type struct
 github.com/egladman/magus/types.KnowledgeRoutingProject.KeyTargets field []string "json:\"key_targets,omitempty\" yaml:\"key_targets,omitempty\""
 github.com/egladman/magus/types.KnowledgeRoutingProject.Path field string "json:\"path\"                  yaml:\"path\""
 github.com/egladman/magus/types.KnowledgeRoutingProject.TargetCount field int "json:\"target_count\"          yaml:\"target_count\""
-github.com/egladman/magus/types.KnowledgeSchemaVersion const untyped int = 17
+github.com/egladman/magus/types.KnowledgeSchemaVersion const untyped int = 18
 github.com/egladman/magus/types.KnowledgeStaleIndex type struct
 github.com/egladman/magus/types.KnowledgeStaleIndex.CouldHold method func(language string) bool
 github.com/egladman/magus/types.KnowledgeStaleIndex.Describe method func() string
@@ -2457,6 +2550,8 @@ github.com/egladman/magus/types.KnowledgeStats.Orphans field []KnowledgeOrphan "
 github.com/egladman/magus/types.KnowledgeStatsDefinition const untyped string = "Graph stats reads the knowledge graph to show where the workspace concentrates and where it is neglected: god nodes (the most connected spells, modules, and targets - the structural risk), connectivity (how fragmented the graph is - components and isolated nodes the builder never linked), orphans (isolated nodes and spells nothing uses), and doc coverage (the share of diagnostics, spells, and modules that have a doc). It is the structural companion to insight's git-history lenses."
 github.com/egladman/magus/types.KnowledgeSymbol type struct
 github.com/egladman/magus/types.KnowledgeSymbol.BodyDigest field string
+github.com/egladman/magus/types.KnowledgeSymbol.BodyShape field string
+github.com/egladman/magus/types.KnowledgeSymbol.BodyTokens field int
 github.com/egladman/magus/types.KnowledgeSymbol.Calls field []KnowledgeSymbolCall
 github.com/egladman/magus/types.KnowledgeSymbol.DefEndLine field int
 github.com/egladman/magus/types.KnowledgeSymbol.Definitions field []KnowledgeSymbolDefinition
@@ -2706,17 +2801,16 @@ github.com/egladman/magus/types.MergeThreeWayMarkers func(base []byte, ours []by
 github.com/egladman/magus/types.MethodNotAllowed const DiagnosticCode = "MGS9012"
 github.com/egladman/magus/types.MisconfiguredEnvVar const DiagnosticCode = "MGS1046"
 github.com/egladman/magus/types.MissingDependencyDetected const DiagnosticCode = "MGS4004"
-github.com/egladman/magus/types.ModelFacts type struct
-github.com/egladman/magus/types.ModelFacts.CacheRead field float64
-github.com/egladman/magus/types.ModelFacts.CacheWrite1h field float64
-github.com/egladman/magus/types.ModelFacts.CacheWrite5m field float64
-github.com/egladman/magus/types.ModelFacts.Factor method func(prompt int64) float64
-github.com/egladman/magus/types.ModelFacts.ID field string
-github.com/egladman/magus/types.ModelFacts.Input field float64
-github.com/egladman/magus/types.ModelFacts.Output field float64
-github.com/egladman/magus/types.ModelFacts.PriceStep field int64
-github.com/egladman/magus/types.ModelFacts.StepFactor field float64
-github.com/egladman/magus/types.ModelFacts.Window field int64
+github.com/egladman/magus/types.ModelPricing type struct
+github.com/egladman/magus/types.ModelPricing.CacheRead field USDPerMTok
+github.com/egladman/magus/types.ModelPricing.CacheWrite1h field USDPerMTok
+github.com/egladman/magus/types.ModelPricing.CacheWrite5m field USDPerMTok
+github.com/egladman/magus/types.ModelPricing.ID field string
+github.com/egladman/magus/types.ModelPricing.Input field USDPerMTok
+github.com/egladman/magus/types.ModelPricing.LongContext field *PriceStep
+github.com/egladman/magus/types.ModelPricing.Output field USDPerMTok
+github.com/egladman/magus/types.ModelPricing.PriceMultiplier method func(promptTokens int64) float64
+github.com/egladman/magus/types.ModelPricing.Window field int64
 github.com/egladman/magus/types.ModelTier type struct
 github.com/egladman/magus/types.ModelTier.Above method func(u ModelTier) (bool, error)
 github.com/egladman/magus/types.ModelTier.IsZero method func() bool
@@ -3039,6 +3133,9 @@ github.com/egladman/magus/types.PrecedentScope type struct
 github.com/egladman/magus/types.PrecedentScope.Language field string "json:\"language,omitempty\""
 github.com/egladman/magus/types.PrecedentScope.Layers field []string "json:\"layers,omitempty\""
 github.com/egladman/magus/types.PrecedentTestPackageName const PrecedentFamily = "test-package-name"
+github.com/egladman/magus/types.PriceStep type struct
+github.com/egladman/magus/types.PriceStep.Above field int64
+github.com/egladman/magus/types.PriceStep.Multiplier field float64
 github.com/egladman/magus/types.PrimaryGoalID const untyped string = "check"
 github.com/egladman/magus/types.ProcSocketWithheld const DiagnosticCode = "MGS2008"
 github.com/egladman/magus/types.ProfileAggressive const ConcurrencyProfile = "aggressive"
@@ -3142,6 +3239,7 @@ github.com/egladman/magus/types.RangeReporter type interface
 github.com/egladman/magus/types.RangeReporter.RangeCommits imethod func(ctx context.Context, dir string, base string, head string, paths []string) ([]Commit, error)
 github.com/egladman/magus/types.RangeReporter.RangeDiff imethod func(ctx context.Context, dir string, base string, head string, paths []string) (string, error)
 github.com/egladman/magus/types.RangeReporter.RangeFiles imethod func(ctx context.Context, dir string, base string, head string, paths []string) ([]string, error)
+github.com/egladman/magus/types.ReadConformRatchet func(data []byte) (ConformRatchet, error)
 github.com/egladman/magus/types.ReadinessComponent type struct
 github.com/egladman/magus/types.ReadinessComponent.Detail field string "json:\"detail\""
 github.com/egladman/magus/types.ReadinessComponent.Name field ReadinessName "json:\"name\""
@@ -4015,6 +4113,7 @@ github.com/egladman/magus/types.URL.Path field string
 github.com/egladman/magus/types.URL.Port field string
 github.com/egladman/magus/types.URL.Query field string
 github.com/egladman/magus/types.URL.Scheme field string
+github.com/egladman/magus/types.USDPerMTok type float64
 github.com/egladman/magus/types.UncompressResult type struct
 github.com/egladman/magus/types.UncompressResult.Bytes field int
 github.com/egladman/magus/types.UncompressResult.Files field []Path

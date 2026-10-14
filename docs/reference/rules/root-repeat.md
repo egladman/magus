@@ -1,12 +1,12 @@
 ---
 title: "root-repeat: a main thread running the same delegable command again with no write since"
-description: "An advisory by default: it explains, and blocks nothing, on a main thread running the same delegable command again with no write since."
+description: "Off by default: once a workspace turns it on, it reports a main thread running the same delegable command again with no write since."
 tags: [guard, rules, root-repeat, off]
 ---
 
 # root-repeat
 
-An advisory by default: it explains, and blocks nothing, on a main thread running the same delegable command again with no write since.
+Off by default: once a workspace turns it on, it reports a main thread running the same delegable command again with no write since.
 
 ## What it catches
 
@@ -32,9 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-deny [root-repeat]: ...
 advise [root-repeat]: ...
 ```
+
+A workspace that sets this rule to `deny` sees `deny [root-repeat]: ...` instead.
 
 `magus describe rule root-repeat` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

@@ -33,8 +33,9 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [whole-tree]: ...
-advise [whole-tree]: ...
 ```
+
+A workspace that sets this rule to `advise` sees `advise [whole-tree]: ...` instead.
 
 `magus describe rule whole-tree` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

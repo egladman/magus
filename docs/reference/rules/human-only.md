@@ -33,8 +33,9 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [human-only]: ...
-advise [human-only]: ...
 ```
+
+A workspace that sets this rule to `advise` sees `advise [human-only]: ...` instead.
 
 `magus describe rule human-only` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

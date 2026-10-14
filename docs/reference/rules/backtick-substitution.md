@@ -33,8 +33,9 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [backtick-substitution]: ...
-advise [backtick-substitution]: ...
 ```
+
+A workspace that sets this rule to `advise` sees `advise [backtick-substitution]: ...` instead.
 
 `magus describe rule backtick-substitution` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

@@ -28,9 +28,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-deny [checkpoint-state]: ...
 advise [checkpoint-state]: ...
 ```
+
+A workspace that sets this rule to `deny` sees `deny [checkpoint-state]: ...` instead.
 
 `magus describe rule checkpoint-state` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

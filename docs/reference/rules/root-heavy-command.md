@@ -1,12 +1,12 @@
 ---
 title: "root-heavy-command: a main thread running delegable commands one after another without spawning"
-description: "An advisory by default: it explains, and blocks nothing, on a main thread running delegable commands one after another without spawning."
+description: "Off by default: once a workspace turns it on, it reports a main thread running delegable commands one after another without spawning."
 tags: [guard, rules, root-heavy-command, off]
 ---
 
 # root-heavy-command
 
-An advisory by default: it explains, and blocks nothing, on a main thread running delegable commands one after another without spawning.
+Off by default: once a workspace turns it on, it reports a main thread running delegable commands one after another without spawning.
 
 ## What it catches
 
@@ -32,9 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-deny [root-heavy-command]: ...
 advise [root-heavy-command]: ...
 ```
+
+A workspace that sets this rule to `deny` sees `deny [root-heavy-command]: ...` instead.
 
 `magus describe rule root-heavy-command` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

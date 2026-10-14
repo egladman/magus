@@ -1,12 +1,12 @@
 ---
 title: "root-context-budget: a session's main thread whose context has grown past its level's size"
-description: "An advisory by default: it explains, and blocks nothing, on a session's main thread whose context has grown past its level's size."
+description: "Off by default: once a workspace turns it on, it reports a session's main thread whose context has grown past its level's size."
 tags: [guard, rules, root-context-budget, off]
 ---
 
 # root-context-budget
 
-An advisory by default: it explains, and blocks nothing, on a session's main thread whose context has grown past its level's size.
+Off by default: once a workspace turns it on, it reports a session's main thread whose context has grown past its level's size.
 
 ## What it catches
 
@@ -32,9 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-deny [root-context-budget]: ...
 advise [root-context-budget]: ...
 ```
+
+A workspace that sets this rule to `deny` sees `deny [root-context-budget]: ...` instead.
 
 `magus describe rule root-context-budget` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

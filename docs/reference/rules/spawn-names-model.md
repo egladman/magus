@@ -1,12 +1,12 @@
 ---
 title: "spawn-names-model: a main thread spawning a subagent without naming the model it runs on"
-description: "An advisory by default: it explains, and blocks nothing, on a main thread spawning a subagent without naming the model it runs on."
+description: "Off by default: once a workspace turns it on, it reports a main thread spawning a subagent without naming the model it runs on."
 tags: [guard, rules, spawn-names-model, off]
 ---
 
 # spawn-names-model
 
-An advisory by default: it explains, and blocks nothing, on a main thread spawning a subagent without naming the model it runs on.
+Off by default: once a workspace turns it on, it reports a main thread spawning a subagent without naming the model it runs on.
 
 ## What it catches
 
@@ -32,9 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-deny [spawn-names-model]: ...
 advise [spawn-names-model]: ...
 ```
+
+A workspace that sets this rule to `deny` sees `deny [spawn-names-model]: ...` instead.
 
 `magus describe rule spawn-names-model` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

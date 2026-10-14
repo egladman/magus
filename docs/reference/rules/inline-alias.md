@@ -33,8 +33,9 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [inline-alias]: ...
-advise [inline-alias]: ...
 ```
+
+A workspace that sets this rule to `advise` sees `advise [inline-alias]: ...` instead.
 
 `magus describe rule inline-alias` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

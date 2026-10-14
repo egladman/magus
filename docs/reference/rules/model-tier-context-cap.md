@@ -32,9 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-deny [model-tier-context-cap]: ...
 advise [model-tier-context-cap]: ...
 ```
+
+A workspace that sets this rule to `deny` sees `deny [model-tier-context-cap]: ...` instead.
 
 `magus describe rule model-tier-context-cap` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

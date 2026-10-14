@@ -29,8 +29,9 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [lease-gate]: ...
-advise [lease-gate]: ...
 ```
+
+A workspace that sets this rule to `advise` sees `advise [lease-gate]: ...` instead.
 
 `magus describe rule lease-gate` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

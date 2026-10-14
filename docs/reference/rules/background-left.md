@@ -33,8 +33,9 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [background-left]: ...
-advise [background-left]: ...
 ```
+
+A workspace that sets this rule to `advise` sees `advise [background-left]: ...` instead.
 
 `magus describe rule background-left` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

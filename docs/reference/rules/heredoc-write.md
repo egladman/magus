@@ -33,8 +33,9 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [heredoc-write]: ...
-advise [heredoc-write]: ...
 ```
+
+A workspace that sets this rule to `advise` sees `advise [heredoc-write]: ...` instead.
 
 `magus describe rule heredoc-write` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

@@ -33,8 +33,9 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [agent-sign-off]: ...
-advise [agent-sign-off]: ...
 ```
+
+A workspace that sets this rule to `advise` sees `advise [agent-sign-off]: ...` instead.
 
 `magus describe rule agent-sign-off` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

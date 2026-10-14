@@ -33,8 +33,9 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [worker-check-only]: ...
-advise [worker-check-only]: ...
 ```
+
+A workspace that sets this rule to `advise` sees `advise [worker-check-only]: ...` instead.
 
 `magus describe rule worker-check-only` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

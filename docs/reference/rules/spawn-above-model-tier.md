@@ -1,12 +1,12 @@
 ---
 title: "spawn-above-model-tier: a subagent spawned on a model whose tier ranks above the tier its job was forked at"
-description: "An advisory by default: it explains, and blocks nothing, on a subagent spawned on a model whose tier ranks above the tier its job was forked at."
+description: "Off by default: once a workspace turns it on, it reports a subagent spawned on a model whose tier ranks above the tier its job was forked at."
 tags: [guard, rules, spawn-above-model-tier, off]
 ---
 
 # spawn-above-model-tier
 
-An advisory by default: it explains, and blocks nothing, on a subagent spawned on a model whose tier ranks above the tier its job was forked at.
+Off by default: once a workspace turns it on, it reports a subagent spawned on a model whose tier ranks above the tier its job was forked at.
 
 ## What it catches
 

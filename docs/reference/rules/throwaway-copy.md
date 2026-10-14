@@ -32,9 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-deny [throwaway-copy]: ...
 advise [throwaway-copy]: ...
 ```
+
+A workspace that sets this rule to `deny` sees `deny [throwaway-copy]: ...` instead.
 
 `magus describe rule throwaway-copy` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

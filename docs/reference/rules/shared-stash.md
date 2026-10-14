@@ -33,8 +33,9 @@ A verdict names its rule in brackets, which is how you got here:
 
 ```text
 deny [shared-stash]: ...
-advise [shared-stash]: ...
 ```
+
+A workspace that sets this rule to `advise` sees `advise [shared-stash]: ...` instead.
 
 `magus describe rule shared-stash` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
