@@ -2045,6 +2045,31 @@ func TestDenyWriteOutsideLeaseGradesWhatADirectoryHolds(t *testing.T) {
 	})
 }
 
+// A worker's scratch outside the checkout is its own: a remove or move there, or of a path
+// the shell expands, is never graded against the write paths.
+func TestDenyWriteOutsideLeaseLeavesScratchOutsideTheCheckout(t *testing.T) {
+	ctx, root := fleetFixture(t, writePathFleet()...)
+	scratch := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "cmd", "magus"), 0o755))
+	from := func(dir string) Dependencies { return Dependencies{callDir: dir} }
+
+	for _, command := range []string{
+		"rm /tmp/x",
+		"rm -rf " + scratch,
+		"mv " + filepath.Join(scratch, "a") + " " + filepath.Join(scratch, "b"),
+		`rm -f "$TMPDIR/foo"`,
+		`rm -f "$tmp"`,
+		"rm -rf $(mktemp -d)",
+		"rm ~/scratch.txt",
+	} {
+		assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "lease-b", command), "%q", command)
+	}
+	assert.Empty(t, denyWriteOutsideLease(ctx, from(filepath.Join(root, "cmd", "magus")), "lease-b", "rm ../../../outside.txt"),
+		"a relative path that resolves outside the checkout")
+	assert.Empty(t, denyWriteOutsideLease(ctx, from(scratch), "lease-b", "rm -r notes"), "a call run outside the checkout")
+	assert.NotEmpty(t, denyWriteOutsideLease(ctx, from(root), "lease-b", "rm notes.txt"), "the same word inside it")
+}
+
 // A relative operand names a path under the directory the call runs in.
 func TestDenyWriteOutsideLeaseResolvesFromTheCallDir(t *testing.T) {
 	ctx, root := fleetFixture(t, writePathFleet()...)

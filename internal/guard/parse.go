@@ -348,22 +348,37 @@ func removedOrMovedOperands(command string, depth int, d Dialect) []string {
 		if !ok {
 			return true
 		}
+		// A word the shell expands (`$TMPDIR/x`, `$(mktemp)`, `~/x`) renders as a fragment
+		// of the path it names, so where it lands is unknown and it is not graded.
+		expanded := map[string]bool{}
 		if call, ok := stmt.Cmd.(*syntax.CallExpr); ok {
 			if script, ok := shellPayload(literalWords(call.Args)); ok {
 				nested = append(nested, script)
+			}
+			for _, w := range call.Args {
+				if _, literal := literalArg(w.Parts); !literal {
+					expanded[literalWord(w.Parts)] = true
+				}
+			}
+		}
+		keep := func(ops []string) {
+			for _, op := range ops {
+				if !expanded[op] && !strings.HasPrefix(op, "~") {
+					out = append(out, op)
+				}
 			}
 		}
 		for _, c := range stmtCommands(stmt, d) {
 			name := path.Base(c.Name)
 			if paths, ok := vcsPathOperands(name, c.Args); ok {
-				out = append(out, paths...)
+				keep(paths)
 				continue
 			}
 			switch name {
 			case "rm", "rmdir":
-				out = append(out, operands(c.Args, "")...)
+				keep(operands(c.Args, ""))
 			case "mv":
-				out = append(out, mvOperands(c.Args)...)
+				keep(mvOperands(c.Args))
 			}
 		}
 		return true
