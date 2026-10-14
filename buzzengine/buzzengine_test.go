@@ -1,4 +1,4 @@
-package buzzengine_test
+package buzzengine
 
 import (
 	"testing"

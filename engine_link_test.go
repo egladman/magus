@@ -1,3 +1,3 @@
-package magus_test
+package magus
 
 import _ "github.com/egladman/magus/buzzengine"
