@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 26196
-skill_short_bytes: 20493
+skill_full_bytes: 26372
+skill_short_bytes: 20669
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `125` |
 | `knowledge-schema-version` | `18` |
-| `skill-content` | `f50fdac4c9db` |
+| `skill-content` | `ad9b6af72079` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -86,7 +86,9 @@ the work.
 Fan out only after the collision check below REPORTS the jobs disjoint; looking
 separate is not that check. With only one coherent write set, keep the work local.
 The root agent owns the goal, the budget, the topology, integration, and final
-verification, and never hands those out.
+verification, and never hands those out. Above the root is the human in the loop:
+what lands, what is published and what a round may spend are the person's calls, so
+the root reports to them and does not decide them.
 
 ## Coalesce what the write sets allow
 
@@ -516,7 +518,9 @@ the work.
 Fan out only after the collision check below REPORTS the jobs disjoint; looking
 separate is not that check. With only one coherent write set, keep the work local.
 The root agent owns the goal, the budget, the topology, integration, and final
-verification, and never hands those out.
+verification, and never hands those out. Above the root is the human in the loop:
+what lands, what is published and what a round may spend are the person's calls, so
+the root reports to them and does not decide them.
 
 ## Contents
 

@@ -3,8 +3,8 @@ title: magus-workspace-rules
 generated_from: internal/agent/skills/magus-workspace-rules/SKILL.md
 description: "Adapt magus's installed agent integration to THIS workspace without breaking it."
 tags: [agents, skills, magus-workspace-rules]
-skill_full_bytes: 11304
-skill_short_bytes: 8782
+skill_full_bytes: 11441
+skill_short_bytes: 8919
 ---
 
 # magus-workspace-rules
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `125` |
 | `knowledge-schema-version` | `18` |
-| `skill-content` | `5928654a4da6` |
+| `skill-content` | `e5a2132016c1` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -140,7 +140,9 @@ read-only.
 | host harness | the verdict is right but ARRIVES wrong: bad suggestion, wrong wiring, no hook at all | human |
 | upstream | the guard refused something it cannot prove is wrong | human, as an issue |
 
-A candidate is not a decision, and never an argument for weakening a guard rule.
+A candidate is not a decision, and never an argument for weakening a guard rule. The
+"who acts" column is the human in the loop: the agent drafts, and a person decides
+what changes how the workspace's agents are held.
 
 ### Make the change (the workspace owns every byte of it)
 
@@ -350,7 +352,9 @@ read-only.
 | host harness | the verdict is right but ARRIVES wrong: bad suggestion, wrong wiring, no hook at all | human |
 | upstream | the guard refused something it cannot prove is wrong | human, as an issue |
 
-A candidate is not a decision, and never an argument for weakening a guard rule.
+A candidate is not a decision, and never an argument for weakening a guard rule. The
+"who acts" column is the human in the loop: the agent drafts, and a person decides
+what changes how the workspace's agents are held.
 
 ### Make the change (the workspace owns every byte of it)
 
