@@ -822,3 +822,37 @@ func TestApplyGradesEveryGoalCheckItAdds(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, rec.graded, graded, "a goal naming a check the row already holds is not graded again")
 }
+
+// Every door that forks by merge pins the rows it read for the guard's grading, creating a
+// row or updating one, so grading a check never sweeps the store a second time.
+func TestForkDoorsGradeAgainstTheRowsTheyRead(t *testing.T) {
+	t.Parallel()
+
+	var pinned [][]string
+	loc := tmpLoc(t, testRoot(t).Root())
+	loc.Grader = func(ctx context.Context, _ string, row types.Job) CheckVerdict {
+		snap, ok := SnapshotFromContext(ctx)
+		if !assert.True(t, ok, "%s was graded with no rows pinned", row.ID) {
+			return CheckVerdict{}
+		}
+		ids := make([]string, len(snap.Rows))
+		for i, r := range snap.Rows {
+			ids[i] = r.ID
+		}
+		pinned = append(pinned, ids)
+		return CheckVerdict{}
+	}
+	s := NewStore(loc)
+	lint := &types.LeaseCheck{Target: "lint", Project: "."}
+
+	_, err := ForkMerge(t.Context(), s, "a", func(u *types.Job) { u.WritePaths, u.Check = []string{"pkg/a.go"}, forkCheck() }, config.Jobs{}, nil)
+	require.NoError(t, err)
+	_, err = Apply(t.Context(), s, []types.Declaration{{ID: "b", WritePaths: []string{"pkg/b.go"}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
+	require.NoError(t, err)
+	_, err = ForkMerge(t.Context(), s, "a", func(u *types.Job) { u.Check = lint }, config.Jobs{}, nil)
+	require.NoError(t, err)
+	_, err = Apply(t.Context(), s, []types.Declaration{{ID: "b", WritePaths: []string{"pkg/b.go"}, Check: lint}}, config.Jobs{}, nil, nil, false)
+	require.NoError(t, err)
+
+	assert.Equal(t, [][]string{{}, {"a"}, {"a", "b"}, {"a", "b"}}, pinned)
+}

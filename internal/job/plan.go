@@ -40,8 +40,8 @@ func Declare(row types.Declaration, defaultTimeout time.Duration) func(*types.Jo
 	}
 }
 
-// ForkMerge applies a field merge the way `magus job fork` applies a declaration, for the
-// doors that fork by merge (magus\job.put, from the client tool or a magusfile), and takes
+// ForkMerge applies a field merge to one row, for `magus job fork` (whose merge is
+// [Declare]) and magus\job.put (from the client tool or a magusfile), and takes
 // default_timeout when a merge that creates the row named no timeout. What it is held to is
 // [refuseMerge]'s, the rules `magus job apply` shares. read may be nil where no graph is at
 // hand, which skips only the ambiguity check.
@@ -81,10 +81,13 @@ func writeMerge(ctx context.Context, store *Store, id string, merge func(*types.
 // every one: graded, within the jobs limits, unambiguous symbol goals, and write paths that
 // are no directory (MGS3018), ungradable claim (MGS3031), project configuration held whole
 // (MGS3036), shared checkout or unordered shared file (MGS3032), and a check that skips a
-// test of its write paths' packages or that the guard denies its holder. A merge onto an existing row meets the same rules for what it
-// ADDS: the goals and write paths it did not carry, so a path the row already held never
-// blocks an unrelated update.
+// test of its write paths' packages or that the guard denies its holder. A merge onto an
+// existing row meets the same rules for what it ADDS: the goals and write paths it did not
+// carry, so a path the row already held never blocks an unrelated update.
+//
+// The guard grades the check against rows rather than sweep the store again.
 func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) (types.JobWriteProof, error) {
+	graded := WithSnapshot(ctx, Snapshot{Rows: rows})
 	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 {
 		prev := rows[i]
 		merged := prev.Clone()
@@ -130,7 +133,7 @@ func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string,
 				return "", err
 			}
 		}
-		return "", RefuseDeniedCheck(ctx, store, addedChecks(prev, merged, checkChanged))
+		return "", RefuseDeniedCheck(graded, store, addedChecks(prev, merged, checkChanged))
 	}
 	row := types.Job{ID: id}
 	merge(&row)
@@ -161,7 +164,7 @@ func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string,
 	if err := RefuseNarrowedTests(store, row); err != nil {
 		return "", err
 	}
-	if err := RefuseDeniedCheck(ctx, store, row); err != nil {
+	if err := RefuseDeniedCheck(graded, store, row); err != nil {
 		return "", err
 	}
 	return store.WriteProof(rows, row), nil
