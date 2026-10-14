@@ -3,6 +3,7 @@ package job
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"path"
@@ -598,8 +599,9 @@ func resolveMerge(ctx context.Context, store *Store, rows []types.Job, id string
 // declaration that exists, so its word must name exactly one declaration of its file as
 // store's version control places them: none means the symbol index is behind the tree, and
 // several mean the claim would guard more than the goal asked for, and either is refused
-// (MGS3031). A file no diff driver places gets no claim, and a store with no tree to ask
-// places none. A claim written by hand is held to [RefuseUngradableClaims] instead, which
+// (MGS3031). A file no diff driver places gets no claim, and a store with no tree to ask,
+// or whose version control is disabled, places none; version control that cannot answer
+// is an error. A claim written by hand is held to [RefuseUngradableClaims] instead, which
 // accepts a word naming no declaration, since that one may not be written yet.
 func PlaceDerivedClaims(ctx context.Context, store *Store, derived []string) ([]string, error) {
 	if store == nil || store.root == "" || len(derived) == 0 {
@@ -609,9 +611,12 @@ func PlaceDerivedClaims(ctx context.Context, store *Store, derived []string) ([]
 	for i, claim := range derived {
 		files[i], _ = types.SplitClaim(claim)
 	}
-	driver, drivers, why := claimDrivers(ctx, store.root, files)
-	if why != "" {
+	driver, drivers, err := claimDrivers(ctx, store.root, files)
+	switch {
+	case errors.Is(err, errVCSDisabled):
 		return nil, nil
+	case err != nil:
+		return nil, fmt.Errorf("job: the claims derived from symbol goals cannot be placed: %w", err)
 	}
 	var kept, refused []string
 	for _, claim := range derived {

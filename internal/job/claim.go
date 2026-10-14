@@ -68,12 +68,12 @@ func RefuseUngradableClaims(ctx context.Context, store *Store, row types.Job) er
 		for i, c := range claimed {
 			files[i] = c.path
 		}
-		driver, drivers, why := claimDrivers(ctx, store.root, files)
+		driver, drivers, err := claimDrivers(ctx, store.root, files)
 		placed := map[string][]string{}
 		for _, c := range claimed {
 			switch {
-			case why != "":
-				refused = append(refused, c.field+fmt.Sprintf("%q: %s", c.path, why))
+			case err != nil:
+				refused = append(refused, c.field+fmt.Sprintf("%q: %v", c.path, err))
 			case drivers[c.path] == "":
 				refused = append(refused, c.field+fmt.Sprintf("%q has no diff driver, so no changed line of it can be placed in a declaration;"+
 					" give %s one in .gitattributes (`magus doctor` lists the managed ones)", c.path, driverPattern(c.path)))
@@ -126,8 +126,8 @@ func RefuseWholeFileConfigClaims(ctx context.Context, store *Store, row types.Jo
 		if strings.ContainsAny(file, globMeta) || !projectConfig(store.root, file) {
 			continue
 		}
-		driver, drivers, why := claimDrivers(ctx, store.root, []string{file})
-		if why != "" || drivers[file] == "" {
+		driver, drivers, err := claimDrivers(ctx, store.root, []string{file})
+		if err != nil || drivers[file] == "" {
 			continue
 		}
 		all, ok := declarationsOf(ctx, driver, store.root, file)
@@ -186,22 +186,26 @@ func listClaims(file string, all []string) string {
 	return strings.Join(claims, ", ")
 }
 
+// errVCSDisabled is claimDrivers' answer for a workspace that turned version control off.
+var errVCSDisabled = errors.New("version control is disabled here, so no diff places a changed line")
+
 // claimDrivers asks root's version control which diff driver names each path's
-// declarations, or says why it cannot. It returns the version control with the answer, so a
-// caller can place a file's lines without resolving it again.
-func claimDrivers(ctx context.Context, root string, paths []string) (types.VCSDriver, map[string]string, string) {
+// declarations; the error says why it cannot, and is errVCSDisabled when version control is
+// off. It returns the version control with the answer, so a caller can place a file's lines
+// without resolving it again.
+func claimDrivers(ctx context.Context, root string, paths []string) (types.VCSDriver, map[string]string, error) {
 	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
 	switch {
 	case err != nil:
-		return nil, nil, fmt.Sprintf("no version control answered here (%v)", err)
+		return nil, nil, fmt.Errorf("no version control answered here (%w)", err)
 	case res.Source == types.VCSSourceDisabled || res.VCS == nil:
-		return nil, nil, "version control is disabled here, so no diff places a changed line"
+		return nil, nil, errVCSDisabled
 	}
 	drivers, err := res.VCS.Drivers(ctx, root, paths)
 	if err != nil {
-		return nil, nil, fmt.Sprintf("its diff driver could not be read: %v", err)
+		return nil, nil, fmt.Errorf("its diff driver could not be read: %w", err)
 	}
-	return res.VCS, drivers, ""
+	return res.VCS, drivers, nil
 }
 
 // driverPattern is the .gitattributes pattern a driver for p would be declared under.
@@ -549,8 +553,8 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 		if decl == "" || decl == types.Preamble {
 			continue
 		}
-		driver, drivers, why := claimDrivers(ctx, store.root, []string{file})
-		if why != "" || drivers[file] == "" {
+		driver, drivers, err := claimDrivers(ctx, store.root, []string{file})
+		if err != nil || drivers[file] == "" {
 			continue
 		}
 		all, readable := declarationsOf(ctx, driver, store.root, file)

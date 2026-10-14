@@ -94,7 +94,8 @@ func claimsOnFile(row types.Job, file string) []string {
 //
 // The write is the store's own, so it is not held to the holder's boundary: the claims sit
 // inside what the pattern already covered. Refused when file is not a project's
-// configuration, when id is not live, or when no pattern of id covers file.
+// configuration, when version control cannot place its lines, when id is not live, or when
+// no pattern of id covers file.
 func NarrowConfigHold(ctx context.Context, store *Store, id, file string, touched []string) (types.Job, error) {
 	if store == nil || store.root == "" {
 		return types.Job{}, errors.New("job: no workspace to narrow a hold in")
@@ -103,8 +104,12 @@ func NarrowConfigHold(ctx context.Context, store *Store, id, file string, touche
 	if !projectConfig(store.root, file) {
 		return types.Job{}, fmt.Errorf("job: %s is not a project's configuration, so no hold on it narrows", file)
 	}
+	driver, drivers, err := claimDrivers(ctx, store.root, []string{file})
+	if err != nil {
+		return types.Job{}, fmt.Errorf("job: no claim on %s can be graded, so its hold stays whole: %w", file, err)
+	}
 	var all []string
-	if driver, drivers, why := claimDrivers(ctx, store.root, []string{file}); why == "" && drivers[file] != "" {
+	if drivers[file] != "" {
 		all, _ = declarationsOf(ctx, driver, store.root, file)
 	}
 	return store.mutate(ctx, id, asNarrowing, func(cur *types.Job, exists bool, now int64) error {
