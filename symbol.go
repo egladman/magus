@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/log/attr"
 	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/retry"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -297,16 +298,7 @@ func backoffDuration(failures int) time.Duration {
 	if failures < 1 {
 		return 0
 	}
-	// Saturate before shifting: base<<4 already exceeds the cap, and a large shift would
-	// otherwise wrap to a small positive value and briefly retry faster than the cap.
-	if failures >= 5 {
-		return symbolIndexBackoffMax
-	}
-	d := symbolIndexBackoffBase << (failures - 1)
-	if d > symbolIndexBackoffMax {
-		return symbolIndexBackoffMax
-	}
-	return d
+	return retry.Backoff(symbolIndexBackoffBase, symbolIndexBackoffMax, failures)
 }
 
 // projectIndex is one symbol index a project declares: the indexer op that writes it, the
