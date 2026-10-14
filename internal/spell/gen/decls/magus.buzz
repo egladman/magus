@@ -926,6 +926,8 @@ export object JobAttempt {
     durationMs: int = 0,
     revision: str = "",
     dirty: bool = false,
+    lease: str = "",
+    extraArgs: [str] = [],
 }
 
 export object JobGateAttempt {
@@ -1785,7 +1787,7 @@ export object job {
     static extern fun modelTier(matrix: fun (req: ModelTierRequest) > any !> any) > void;
     static extern fun modelTiers(tiers: any, default: any = null, hosts: any = null, bounds: any = null, skills: any = null) > void;
     static extern fun put(id: str, opts: {str: any} = {<str: any>}) > Job !> any;
-    static extern fun register(id: str, reported_base: str) > {str: any} !> any;
+    static extern fun register(id: str) > {str: any} !> any;
     static extern fun wait(id: str, result: {str: any} = {<str: any>}) > JobStatus !> any;
 }
 

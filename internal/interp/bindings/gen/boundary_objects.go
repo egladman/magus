@@ -2892,6 +2892,12 @@ func ObjectJobAttempt(v types.JobAttempt) vm.Value {
 	out.MapSet("durationMs", vm.IntValue(int64(v.DurationMs)))
 	out.MapSet("revision", vm.StrValue(v.Revision))
 	out.MapSet("dirty", vm.BoolValue(v.Dirty))
+	out.MapSet("lease", vm.StrValue(v.Lease))
+	itemsExtraArgs := make([]vm.Value, len(v.ExtraArgs))
+	for indexExtraArgs := range v.ExtraArgs {
+		itemsExtraArgs[indexExtraArgs] = vm.StrValue(v.ExtraArgs[indexExtraArgs])
+	}
+	out.MapSet("extraArgs", vm.ListValue(itemsExtraArgs))
 	return out
 }
 
