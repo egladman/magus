@@ -26,24 +26,27 @@ A suppression is a claim that a finding is wrong here, and a reviewer can only w
 
 The code is `PRF1090`. The decision depends on the kind of text judged:
 
-| Kind                          | Default |
-| ----------------------------- | ------- |
-| `doc-comment`                 | deny    |
-| `reference`                   | deny    |
-| `change-description`          | deny    |
-| `agent-instructions`          | deny    |
-| `agent-instructions-template` | deny    |
-| `guide`                       | deny    |
-| `review-reply`                | deny    |
-| `message`                     | deny    |
-| `commit-message`              | deny    |
-| `cli-help`                    | deny    |
-| `issue`                       | deny    |
-| `release-notes`               | deny    |
-| `changelog`                   | deny    |
-| `agent-reply`                 | deny    |
-| `tool-description`            | deny    |
-| `stylesheet`                  | deny    |
+| Kind                 | Default |
+| -------------------- | ------- |
+| `doc-comment`        | deny    |
+| `reference`          | deny    |
+| `change-description` | deny    |
+| `agent-brief`        | deny    |
+| `agent-compact`      | deny    |
+| `skill-template`     | deny    |
+| `guide`              | deny    |
+| `review-summary`     | deny    |
+| `review-inline`      | deny    |
+| `review-reply`       | deny    |
+| `diagnostic`         | deny    |
+| `commit-message`     | deny    |
+| `cli-help`           | deny    |
+| `issue`              | deny    |
+| `release-notes`      | deny    |
+| `changelog`          | deny    |
+| `agent-reply`        | deny    |
+| `tool-description`   | deny    |
+| `stylesheet`         | deny    |
 
 ## Changing it
 
@@ -75,4 +78,4 @@ A finding names the rule, its code and the decision that applies, and links here
 
 - [All proofread rules](index.md) - every rule, grouped by what it checks
 - [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests
-- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries
+- [The findings contract](https://github.com/egladman/magus/blob/main/libs/proofread/README.md#findings) - the fields every finding carries

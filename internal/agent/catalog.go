@@ -368,7 +368,12 @@ import (
 // 121: magus-test-design and magus-context-audit state their claims as verbs, and the
 // descriptions of magus-diagram, magus-context-audit and magus-run shorten their lead
 // sentence and name what not to use them for.
-const SkillVersion = 121
+//
+// 122: the short form of every skill is compressed further: grammar words dropped,
+// tables written as lists, and each passage both forms carry split into a full and a
+// short arm. The full form is byte-identical to 121's. magus-multi-agent's reference.md
+// carries short arms too, which no install renders while Render keeps references full.
+const SkillVersion = 122
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -983,8 +988,8 @@ func (c *Catalog) RenderedSkills(form Form) ([]AgentSkill, error) {
 		// full twin when the acting lease says a delegated worker is running, and the
 		// session brief names it for the same reason. A description cannot route; a
 		// verdict that has read the lease can.
-		full.Description = "Full reference copy of " + def.Name + ", same scope with the worked examples kept. " +
-			"Load it instead of " + def.Name + " when magus names it, or when that skill left a step underspecified."
+		full.Description = "Full copy of " + def.Name + " with worked examples. " +
+			"Load it when magus names it or when " + def.Name + " left a step underspecified."
 		skills = append(skills, full)
 	}
 	return skills, nil

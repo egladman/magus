@@ -4,7 +4,7 @@ generated_from: internal/agent/skills/magus-change-summary/SKILL.md
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-change-summary]
 skill_full_bytes: 6519
-skill_short_bytes: 4415
+skill_short_bytes: 3565
 ---
 
 # magus-change-summary
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `121` |
+| `agent-skill-version` | `122` |
 | `knowledge-schema-version` | `17` |
-| `skill-content` | `0f08d5ce2b94` |
+| `skill-content` | `bd1b9cbe8ad7` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -54,32 +54,29 @@ magus agent install --tar | tar -xO -f - magus-change-summary/SKILL.md
 ```
 
 ````markdown
-# Recent changes in a magus workspace
+# Recent changes
 
-Turn a large workspace's recent change history into a short, evidence-backed
-brief.
+Output: short, evidence-backed brief.
 
-## Gather evidence
+## Evidence
 
-1. Get the project map and target vocabulary from the workspace: `magus ls` and
-   `magus describe targets`. Do not read `MAGUS.md` for this: a brief on stale structure is worse than none.
-2. Establish the requested time boundary.
+1. Project map, target vocabulary: `magus ls`, `magus describe targets`. Never read `MAGUS.md` for this: stale-structure brief worse than none.
+2. Requested time window:
 
    ```sh
    git log --first-parent --merges --since="<window>" --format='%h %ad %s' --date=short
    ```
 
-   With no VCS merge history, say so.
-3. List each candidate change's files, then classify them before reading:
+   No VCS merge history -> say so.
+3. Each candidate change: list files, then classify before reading:
 
    ```sh
    git show --format= --name-only <commit>
    magus describe file <paths...>
    ```
 
-   Ignore generated outputs when identifying the change.
-4. Map the source files to projects and graph entities. Prefer MCP
-   `client` (`magus\query`, `magus\explain`, `magus\describe.file`); otherwise:
+   Ignore generated outputs when identifying change.
+4. Source files -> projects, graph entities. Prefer MCP `client` (`magus\query`, `magus\explain`, `magus\describe.file`); else:
 
    ```sh
    magus query "<project or feature terms>"
@@ -87,81 +84,59 @@ brief.
    magus graph diff --rev <base> -o markdown
    ```
 
-5. Read affinity, ownership, or trend from `client` (`magus\insight`) only for
-   context: hidden coupling, ownership risk, rising activity. Insight has no CLI verb; without MCP, read one lens
-   through `magus buzz`:
+5. `client` (`magus\insight`) affinity, ownership, trend: only context (hidden coupling, ownership risk, rising activity). No CLI verb; without MCP: one lens via `magus buzz`:
 
    ```sh
    magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\insight().trend)); }'
    ```
 
-## Write the brief
+## Brief
 
-Lead with three to seven grouped changes, not every commit. For each item:
+Three to seven grouped changes, not every commit.
+Each item:
+- What landed: plain-language feature or behavior change.
+- Affected projects, graph entities.
+- Evidence: merge commits, source files, graph relation.
+- Why it matters: user or dependency impact, or explicit uncertainty.
+- Follow-up: concrete next command when more detail helps.
 
-- What landed, as a plain-language feature or behavior change.
-- The projects and graph entities affected.
-- The evidence: merge commit(s), source files, the relevant graph relation.
-- Why it matters: user impact, dependency impact, or an explicit uncertainty.
-- A follow-up: a concrete next command when more detail helps.
+End: `Watch items`: hidden affinity, ownership, trend signals, or "None found."
+Never label refactor, generated-output refresh, dependency bump, failed experiment as landed feature unless source, graph evidence support it.
 
-End with a `Watch items` section: hidden affinity, ownership, or trend signals, or
-"None found."
+## Changelog
 
-Do not label a refactor, generated-output refresh, dependency bump, or failed
-experiment a landed feature unless source and graph evidence support it.
-
-## Write a changelog entry
-
- For "add
-this to the changelog", match the file's shape (Keep a Changelog 1.1.0 with SemVer)
-and append under `## [Unreleased]`. Open with what a user can now do, then why it is the right shape.
-
-Write each entry to this checkable list:
-
-- Name everything it adds: the config key WITH its env var, the CLI flag, the
-  diagnostic code, the target.
-- Use Keep a Changelog's section headings: `Added`, `Changed`, `Deprecated`,
-  `Removed`, `Fixed`, `Security`. Never invent one.
-- Write behavior, not implementation.
+"add this to the changelog" -> match file shape (Keep a Changelog 1.1.0, SemVer); append under `## [Unreleased]`.
+Open: what user can now do, then why shape right.
+Each entry:
+- Name everything added: config key with env var, CLI flag, diagnostic code, target.
+- Only Keep a Changelog headings: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`; never invent one.
+- Behavior, not implementation.
 - One entry per user-visible change, not per commit.
-- `CHANGELOG.md` is a SOURCE file, not generated.
+- `CHANGELOG.md`: source file, not generated.
 
-## Answer a granular diff question
+## Granular diff
 
-For "what exactly changed in X", stay on magus's own commands.
+"what exactly changed in X": only magus commands.
+- domain shape change: `magus graph diff --rev <base> -o markdown`
+- file source or generated: `magus describe file <paths...>`
+- projects reached: `magus affected --impact`
+- why THIS project affected: `magus affected --explain <project>`
+- node neighborhood now: `magus explain <node>`
+- symbol defined, used: `magus refs <symbol>`
+- target actual output: `magus query output <ref>`
 
-| question | command |
-| --- | --- |
-| what did this change do to the domain's shape | `magus graph diff --rev <base> -o markdown` |
-| is this changed file source or generated output | `magus describe file <paths...>` |
-| which projects does the change reach | `magus affected --impact` |
-| why is THIS project in the affected set | `magus affected --explain <project>` |
-| what does one node's neighborhood look like now | `magus explain <node>` |
-| where is this symbol defined and used | `magus refs <symbol>` |
-| what did a target actually output | `magus query output <ref>` |
+Branch review: `magus graph diff` first, with `magus describe file` -> 300 paths collapse to few declared sources.
+Raw VCS: who, when; above: what change did.
 
-Reach for `magus graph diff` first on a branch review. Pair it with `magus describe file`, so a diff of 300
-paths collapses to the few declared sources.
+## Resume review
 
-Raw VCS answers who and when; the table answers what the change did.
+"what changed since last review, what needs look now", three pieces:
+1. At review time: `magus vcs checkpoint -o name` prints revision, or `<revision>+<digest>` when tree dirty.
+2. Later: `git diff <revision> | magus diff -` -> annotated delta: each changed file's reach, public API exposure, referents. `magus diff` refuses positional git ref by design; use pipe form.
+3. Diff session: per-hunk viewed marks keyed by content digest, not position; unchanged stays marked, changed resurfaces.
 
-## Resume a review from a checkpoint
-
-Answer "what changed since my last review, and what needs a look now" from three
-pieces:
-
-1. At review time: `magus vcs checkpoint -o name` prints the revision, or
-   `<revision>+<digest>` when the tree was dirty.
-2. Later: `git diff <revision> | magus diff -` gives the annotated delta: each
-   changed file's reach, public API exposure, and referents. `magus diff` refuses a positional git ref on
-   purpose; the pipe form is the sanctioned spelling.
-3. In a diff session, per-hunk viewed marks key off content digest, not position:
-   unchanged stays marked, changed resurfaces.
-
-WRONG: re-reviewing a whole branch because nobody recorded where the last review
-stopped.
-CORRECT: checkpoint at review time, pipe the delta later.
+Wrong: re-review whole branch; nobody recorded where last review stopped.
+Right: checkpoint at review time, pipe delta later.
 ````
 
 

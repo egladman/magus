@@ -1,13 +1,13 @@
 ---
 title: "hedge"
-description: "A deny rule by default: it refuses a softener qualifying a claim (\"might fix\", \"could potentially\")."
-tags: [proofread, rules, hedge, advise]
+description: "A rule that is off by default: it reports a softener qualifying a claim (\"might fix\", \"could potentially\") once a decisions table turns it on."
+tags: [proofread, rules, hedge, off]
 aliases: [reference/prose/hedge]
 ---
 
 # hedge
 
-A deny rule by default: it refuses a softener qualifying a claim ("might fix", "could potentially").
+A rule that is off by default: it reports a softener qualifying a claim ("might fix", "could potentially") once a decisions table turns it on.
 
 ## What it catches
 
@@ -31,11 +31,12 @@ The code is `PRF3002`. The decision depends on the kind of text judged:
 | `reference`          | off     |
 | `guide`              | off     |
 | `change-description` | off     |
-| `agent-instructions` | off     |
+| `agent-brief`        | off     |
 | `commit-message`     | off     |
 | `issue`              | off     |
 | `release-notes`      | off     |
 | `changelog`          | off     |
+| `agent-compact`      | off     |
 | `agent-reply`        | off     |
 | `stylesheet`         | off     |
 
@@ -60,7 +61,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "hedge", "code": "PRF3002", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/hedge/"}
+{"rule": "hedge", "code": "PRF3002", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/hedge/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.
@@ -69,4 +70,4 @@ A finding names the rule, its code and the decision that applies, and links here
 
 - [All proofread rules](index.md) - every rule, grouped by what it checks
 - [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests
-- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries
+- [The findings contract](https://github.com/egladman/magus/blob/main/libs/proofread/README.md#findings) - the fields every finding carries

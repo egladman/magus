@@ -1,13 +1,13 @@
 ---
 title: "second-person"
-description: "A deny rule by default: it refuses we, us, our or ours in a guide, which speaks to the reader as you."
-tags: [proofread, rules, second-person, advise]
+description: "A rule that is off by default: it reports we, us, our or ours in a guide, which speaks to the reader as you once a decisions table turns it on."
+tags: [proofread, rules, second-person, off]
 aliases: [reference/prose/second-person]
 ---
 
 # second-person
 
-A deny rule by default: it refuses we, us, our or ours in a guide, which speaks to the reader as you.
+A rule that is off by default: it reports we, us, our or ours in a guide, which speaks to the reader as you once a decisions table turns it on.
 
 ## What it catches
 
@@ -51,7 +51,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "second-person", "code": "PRF1003", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/second-person/"}
+{"rule": "second-person", "code": "PRF1003", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/second-person/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.
@@ -60,4 +60,4 @@ A finding names the rule, its code and the decision that applies, and links here
 
 - [All proofread rules](index.md) - every rule, grouped by what it checks
 - [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests
-- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries
+- [The findings contract](https://github.com/egladman/magus/blob/main/libs/proofread/README.md#findings) - the fields every finding carries

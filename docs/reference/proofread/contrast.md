@@ -1,13 +1,13 @@
 ---
 title: "contrast"
-description: "A deny rule by default: it refuses a claim made by denying its opposite first (\"not just X, it is Y\")."
-tags: [proofread, rules, contrast, advise]
+description: "A rule that is off by default: it reports a claim made by denying its opposite first (\"not just X, it is Y\") once a decisions table turns it on."
+tags: [proofread, rules, contrast, off]
 aliases: [reference/prose/contrast]
 ---
 
 # contrast
 
-A deny rule by default: it refuses a claim made by denying its opposite first ("not just X, it is Y").
+A rule that is off by default: it reports a claim made by denying its opposite first ("not just X, it is Y") once a decisions table turns it on.
 
 ## What it catches
 
@@ -31,11 +31,12 @@ The code is `PRF4010`. The decision depends on the kind of text judged:
 | `reference`          | off     |
 | `guide`              | off     |
 | `change-description` | off     |
-| `agent-instructions` | off     |
+| `agent-brief`        | off     |
 | `commit-message`     | off     |
 | `issue`              | off     |
 | `release-notes`      | off     |
 | `changelog`          | off     |
+| `agent-compact`      | off     |
 | `agent-reply`        | off     |
 
 ## Changing it
@@ -59,7 +60,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "contrast", "code": "PRF4010", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/contrast/"}
+{"rule": "contrast", "code": "PRF4010", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/contrast/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.
@@ -68,4 +69,4 @@ A finding names the rule, its code and the decision that applies, and links here
 
 - [All proofread rules](index.md) - every rule, grouped by what it checks
 - [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests
-- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries
+- [The findings contract](https://github.com/egladman/magus/blob/main/libs/proofread/README.md#findings) - the fields every finding carries

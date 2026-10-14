@@ -1,0 +1,16 @@
+Cases written with the rule (2026-10-13), not drawn from a labeling round.
+An approving review whose body names a blocker.
+-- hit/review-summary event=APPROVE --
+Approving, but the lock must be fixed before merge.
+LGTM once the blocking issue in the retry is addressed.
+Looks good. Do not merge until the migration lands.
+Fine by me, but this needs to change before release.
+-- pass/review-summary event=APPROVE --
+LGTM, nothing blocking.
+Approving; the naming comments are non-blocking.
+No blockers from me.
+Looks good, the retry covers the timeout.
+-- pass/review-summary event=COMMENT --
+The lock must be fixed before merge.
+-- pass/review-summary --
+The lock must be fixed before merge.

@@ -1,9 +1,10 @@
 // The pull-request-text rule: the text a forge command posts to a pull request, either its
-// title and description (the change-description kind) or a review comment, a review's body
-// or a reply in a thread (review-reply). COMMANDS says which command writes which kind, and
-// through which flags.
+// title and description (the change-description kind), a review's body (review-summary), a
+// comment on a line of the diff (review-inline), or a reply in a thread or on the
+// conversation (review-reply). COMMANDS says which command writes which kind, and through
+// which flags.
 //
-// The words are judged by libs/conventions/proofread under this repository's decisions table
+// The words are judged by libs/proofread under this repository's decisions table
 // (hack/policy/proofread.buzz), with any OUTSIDE_JUDGES beside it. A finding decided deny is
 // denied, every one listed with its rule; one decided advise is told once per pull request.
 // The pr-description CI step runs judgeText too, so the guard and CI reach one decision.
@@ -44,17 +45,20 @@ import "./hack/policy/commits" as subjects;
 import "./hack/policy/proofread" as decisions;
 import "./hack/magusfile/commits" as conventional;
 import "./hack/magusfile/changelog" as entries;
-import "./libs/conventions/proofread" as proofread;
+import "./libs/proofread/proofread" as proofread;
 
 final descriptionKind = "change-description";
+final summaryKind = "review-summary";
+final inlineKind = "review-inline";
 final replyKind = "review-reply";
+final reviewKinds = [summaryKind, inlineKind, replyKind];
 final commitKind = "commit-message";
 final issueKind = "issue";
 final releaseKind = "release-notes";
-// anchoredFlag tells proofread a reply sits on a line of the diff, the referent nonspecific
-// would otherwise ask it to name. It rides in the judge's kind, `review-reply -anchored`,
-// since the guard hands every judge a kind alone.
-final anchoredFlag = "-anchored";
+// events are the verdicts a review is posted with, as proofread's -event takes them.
+final events = ["APPROVE", "REQUEST_CHANGES", "COMMENT"];
+// inlineField is the field of a review POST carrying one inline comment's text.
+final inlineField = "comments[][body]";
 
 // example is the shape a denial teaches, since an agent sees only the denial text.
 final example = "    fix(cache): sort the key's inputs before hashing\n"
@@ -76,6 +80,11 @@ final replyLine = "Rewrite the reply: acknowledge the point it answers, state wh
     + "evidence, label a judgment call and give its reason, and ask where you do not know. For "
     + "example: \"I'd move the retry into the client: the upstream drops about 1% of calls. "
     + "Open to keeping it here if you see a cleaner seam.\"";
+final summaryLine = "Rewrite the review's body: the verdict and what blocks it, pointing at the inline "
+    + "comments that do, with what is left marked optional. For example: \"Requesting changes: "
+    + "`Cache.put` races with `Cache.get` (see the comment on cache.go). The naming notes are optional.\"";
+final inlineLine = "Rewrite the comment: one point about this line, with its reason and, where you can, "
+    + "the change. For example: \"Use a sync.Map here: two workers write this map at once.\"";
 final commitLine = "Rewrite the subject as one line in the imperative ('add', not 'added'), at most 100 "
     + "bytes, with no trailing period, no selling word and no credit to a tool; detail belongs in the "
     + "pull request description. For example: sort the key's inputs before hashing";
@@ -118,15 +127,23 @@ final maxCitedRefs = 10;
 // unknownRef is the code magus\output raises for a ref this checkout's output store lacks.
 final unknownRef = "MGS8001";
 
+// Route is a kind of text the API paths matching endpoint write.
+export object Route {
+    endpoint: str,
+    kind: str,
+}
+
 // TextCommand is one forge command that posts text to a pull request: the program and the
 // words naming the command, the kind of text it writes, and the flags carrying it. title,
 // body and bodyFile hold flags whose value is the title, the text, or a file holding the
 // text. fields hold the flags of a raw API call taking `name=value`, where `body=` carries
-// the text and `body=@file` names a file; endpoint is the pattern the call's path must
-// match, and anchored the pattern of the paths whose text sits on a line of the diff: an
-// inline review comment and a reply in its thread. base and head name the branches a description's pull request merges, which decide
-// whether the checkout's diff is its diff. values are every other flag taking a value, so
-// what remains names the pull request.
+// the text, `body=@file` names a file, `comments[][body]=` carries an inline comment of a
+// review and `event=` the review's verdict; input holds the flag naming a JSON file sent as
+// the request instead. endpoint is the pattern the call's path must match, and routes give
+// the kind of the paths that write another kind than the row's. events map a flag to the
+// verdict it posts a review with. base and head name the branches a description's pull
+// request merges, which decide whether the checkout's diff is its diff. values are every
+// other flag taking a value, so what remains names the pull request.
 export object TextCommand {
     program: str,
     command: [str],
@@ -135,8 +152,10 @@ export object TextCommand {
     body: [str] = [<str>],
     bodyFile: [str] = [<str>],
     fields: [str] = [<str>],
+    input: [str] = [<str>],
     endpoint: str = "",
-    anchored: str = "",
+    routes: [Route] = [<Route>],
+    events: {str: str} = {<str: str>},
     base: [str] = [<str>],
     head: [str] = [<str>],
     values: [str] = [<str>],
@@ -157,15 +176,20 @@ final COMMANDS = [
             "--add-project", "--remove-project"] },
     TextCommand{ program = "gh", command = ["pr", "comment"], kind = replyKind,
         body = ["--body", "-b"], bodyFile = ["--body-file", "-F"], values = ["-R", "--repo"] },
-    TextCommand{ program = "gh", command = ["pr", "review"], kind = replyKind,
-        body = ["--body", "-b"], bodyFile = ["--body-file", "-F"], values = ["-R", "--repo"] },
+    TextCommand{ program = "gh", command = ["pr", "review"], kind = summaryKind,
+        body = ["--body", "-b"], bodyFile = ["--body-file", "-F"], values = ["-R", "--repo"],
+        events = {"--approve": "APPROVE", "-a": "APPROVE", "--request-changes": "REQUEST_CHANGES",
+            "-r": "REQUEST_CHANGES", "--comment": "COMMENT", "-c": "COMMENT"} },
     // A review comment, a reply to one, a review, or a comment on the pull request's
     // conversation, posted through the REST API.
     TextCommand{ program = "gh", command = ["api"], kind = replyKind,
-        fields = ["-f", "--raw-field", "-F", "--field"],
+        fields = ["-f", "--raw-field", "-F", "--field"], input = ["--input"],
         endpoint = `(^|/)(pulls/[0-9]+/(comments|reviews)|pulls/[0-9]+/comments/[0-9]+/replies|pulls/[0-9]+/reviews/[0-9]+/events|issues/[0-9]+/comments)$`,
-        anchored = `(^|/)pulls/[0-9]+/comments(/[0-9]+/replies)?$`,
-        values = ["-X", "--method", "-H", "--header", "-q", "--jq", "-t", "--template", "--input",
+        routes = [
+            Route{ endpoint = `(^|/)pulls/[0-9]+/comments$`, kind = inlineKind },
+            Route{ endpoint = `(^|/)pulls/[0-9]+/reviews(/[0-9]+/events)?$`, kind = summaryKind },
+        ],
+        values = ["-X", "--method", "-H", "--header", "-q", "--jq", "-t", "--template",
             "--hostname", "--cache", "-p", "--preview"] },
     TextCommand{ program = "glab", command = ["mr", "create"], kind = descriptionKind,
         title = ["--title", "-t"], body = ["--description", "-d"],
@@ -204,7 +228,7 @@ export object OutsideJudge {
     kinds: [str],
 }
 
-// OUTSIDE_JUDGES is empty here: libs/conventions/proofread is this repository's only judge.
+// OUTSIDE_JUDGES is empty here: libs/proofread is this repository's only judge.
 export final OUTSIDE_JUDGES = [<OutsideJudge>];
 
 // matchCommand is the row of COMMANDS p runs, or null.
@@ -234,13 +258,38 @@ fun matchCommand(p: helpers\Program) > TextCommand? {
     return null;
 }
 
-// postsAnchored reports whether p, a command of row c, posts its text on a line of the diff.
-fun postsAnchored(p: helpers\Program, c: TextCommand) > bool {
-    if (c.anchored == "") {
-        return false;
-    }
+// kindOf is the kind of text p, a command of row c, writes: its route's, or the row's.
+fun kindOf(p: helpers\Program, c: TextCommand) > str {
     final ops = helpers\stripFlags(p.args, valueFlags: flagsIn(c));
-    return ops.len() > c.command.len() and std\pattern(c.anchored).match(ops[c.command.len()]) != null;
+    if (ops.len() > c.command.len()) {
+        foreach (r in c.routes) {
+            if (std\pattern(r.endpoint).match(ops[c.command.len()]) != null) {
+                return r.kind;
+            }
+        }
+    }
+    return c.kind;
+}
+
+// eventOf is the verdict p, a command of row c, posts a review with: a flag's, or the
+// `event=` field's. "" when it names none proofread knows.
+fun eventOf(p: helpers\Program, c: TextCommand) > str {
+    foreach (arg in p.args) {
+        final flagged = c.events[arg];
+        if (flagged != null) {
+            return flagged!;
+        }
+    }
+    return knownEvent(last(namedFields(p.args, flags: c.fields, name: "event")) ?? "");
+}
+
+// knownEvent is event in proofread's spelling, or "" when it is none of events.
+fun knownEvent(event: str) > str {
+    final upper = event.upper();
+    if (events.indexOf(upper) != null) {
+        return upper;
+    }
+    return "";
 }
 
 // writesText reports whether p is a command of COMMANDS carrying text.
@@ -249,11 +298,11 @@ export fun writesText(p: helpers\Program) > bool {
     if (c == null) {
         return false;
     }
-    if (fieldValues(p.args, flags: c!.fields).len() > 0) {
+    if (fieldValues(p.args, flags: c!.fields).len() > 0 or namedFields(p.args, flags: c!.fields, name: inlineField).len() > 0) {
         return true;
     }
     foreach (arg in p.args) {
-        foreach (flag in c!.title + c!.body + c!.bodyFile) {
+        foreach (flag in c!.title + c!.body + c!.bodyFile + c!.input) {
             if (arg == flag or arg.startsWith(flag + "=")) {
                 return true;
             }
@@ -285,10 +334,16 @@ fun flagValues(args: [str], flags: [str]) > [Value] {
 
 // fieldValues are the `body=` values given to any of flags, the prefix left out.
 fun fieldValues(args: [str], flags: [str]) > [Value] {
+    return namedFields(args, flags: flags, name: "body");
+}
+
+// namedFields are the `name=` values given to any of flags, the prefix left out.
+fun namedFields(args: [str], flags: [str], name: str) > [Value] {
     final found = mut [<Value>];
+    final prefix = name + "=";
     foreach (v in flagValues(args, flags: flags)) {
-        if (v.text.startsWith("body=")) {
-            found.append(Value{ text = v.text.sub(5), slot = null });
+        if (v.text.startsWith(prefix)) {
+            found.append(Value{ text = v.text.sub(prefix.len()), slot = null });
         }
     }
     return found;
@@ -310,18 +365,29 @@ export fun textSlots(p: helpers\Program) > [int] {
     return slots;
 }
 
-// bodyFiles are the files the line's commands read their text from, `-` (stdin) left out.
+// bodyFiles are the files the line's commands read their text from, an API call's --input
+// JSON among them, `-` (stdin) left out.
 export fun bodyFiles(programs: [helpers\Program]) > [str] {
     final paths = mut [<str>];
     foreach (p in programs) {
         if (writesText(p)) {
-            final file = textFile(p);
-            if (file != null and file! != "" and file! != "-") {
-                paths.append(file!);
+            foreach (file in [textFile(p), inputFile(p)]) {
+                if (file != null and file! != "" and file! != "-") {
+                    paths.append(file!);
+                }
             }
         }
     }
     return paths;
+}
+
+// inputFile is the JSON file p sends as its request, or null when it sends none.
+fun inputFile(p: helpers\Program) > str? {
+    final c = matchCommand(p);
+    if (c == null) {
+        return null;
+    }
+    return last(flagValues(p.args, flags: c!.input));
 }
 
 // textFile is the file p reads its text from: a body-file flag's, or an API field's
@@ -603,7 +669,7 @@ export fun branchDiff(workspace: str) > fun (base: str) > Facts {
     };
 }
 
-// Judged is one finding of a judge, in the findings JSON libs/conventions/README.md
+// Judged is one finding of a judge, in the findings JSON libs/proofread/README.md
 // describes: line counts from the first line of the text judged, 0 when the finding has
 // none, and decision is "deny" or "advise".
 export object Judged {
@@ -615,12 +681,12 @@ export object Judged {
     url: str = "",
 }
 
-// judgeRunner returns a judge that runs the built libs/conventions/cmd/proofread over text
+// judgeRunner returns a judge that runs the built libs/proofread/cmd/proofread over text
 // of a kind, under this repository's decisions table, and then each of OUTSIDE_JUDGES that
 // judges the kind. The judge lives in Go, where the Markdown lint and the CI step reach the
 // same rules; a judge that is missing, stale or did not run is a finding, since silence
 // would read as a pass. kind is proofread's subcommand, with any flags after it
-// (`review-reply -anchored`).
+// (`review-summary -event APPROVE`).
 export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
     final dir = "{workspace}/{proofread\home}";
     return fun (text: str, kind: str) > [Judged] {
@@ -634,7 +700,7 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
             return [Judged{ rule = "judge", line = 0,
                 message = "proofread cannot run: its decisions file could not be written to a temp dir" }];
         }
-        // No dir: proc\exec resolves a relative cmd against dir, which names libs/conventions
+        // No dir: proc\exec resolves a relative cmd against dir, which names libs/proofread
         // twice when workspace is relative (the pr-description target passes "."), so the
         // judge must run from the path stale checked.
         final bin = "{dir}/{proofread\binary}";
@@ -998,20 +1064,27 @@ fun wordsAfterLead(body: str) > int {
 }
 
 // Text is what one command posts: its kind, and the title and body it sets, null for one
-// it leaves alone. anchored marks a reply posted on a line of the diff.
+// it leaves alone. event is the verdict a review summary is posted with, "" for none.
 export object Text {
     kind: str,
     title: str? = null,
     body: str? = null,
-    anchored: bool = false,
+    event: str = "",
 }
 
-// judgedKind is the kind a judge reads t as: an anchored reply carries anchoredFlag after it.
+// judgedKind is the kind a judge reads t as: a summary posted with a verdict carries it as
+// -event, which the summary rules read.
 fun judgedKind(t: Text) > str {
-    if (t.anchored) {
-        return "{t.kind} {anchoredFlag}";
+    if (t.kind == summaryKind and t.event != "") {
+        return "{t.kind} -event {t.event}";
     }
     return t.kind;
+}
+
+// isReview reports whether kind is a text a review posts: its summary, an inline comment
+// or a reply.
+fun isReview(kind: str) > bool {
+    return reviewKinds.indexOf(kind) != null;
 }
 
 // judgeText is this rule's decision over one readable text, the one the guard and the
@@ -1201,9 +1274,16 @@ fun describesBranch(p: helpers\Program, c: TextCommand) > bool {
 // branchDiff), and is called only for the checkout's own pull request; judge is the prose
 // judge (see judgeRunner); cited judges the output refs a description cites (see judgeText).
 // A value the parser could not render is unknown, and then the whole line is judged for
-// credit and typography in its place.
+// credit and typography in its place. A review's inline comments are judged beside its
+// body. An --input JSON file is the whole request, so its texts alone are judged, and none
+// when the guard could not read it.
 export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: fun (base: str) > Facts, judge: fun (text: str, kind: str) > [Judged], cited: fun (ref: str) > Citation) > Findings {
     final c = matchCommand(p)!;
+    final kind = kindOf(p, c: c);
+    final input = inputFile(p);
+    if (input != null) {
+        return judgeAll(inputTexts(files[input!] ?? "", kind: kind), judge: judge, cited: cited);
+    }
     final title = last(flagValues(p.args, flags: c.title));
     var body = last(flagValues(p.args, flags: c.body));
     final field = last(fieldValues(p.args, flags: c.fields));
@@ -1227,11 +1307,20 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
             }
             return unknownFacts();
         };
-        return judgeText(Text{ kind = c.kind, title = title, body = body, anchored = postsAnchored(p, c: c) },
+        final found = judgeText(Text{ kind = kind, title = title, body = body, event = eventOf(p, c: c) },
             facts: facts, judge: judge, cited: cited);
+        final inline = mut [<Text>];
+        if (kind == summaryKind) {
+            foreach (v in namedFields(p.args, flags: c.fields, name: inlineField)) {
+                if (v.text != "" and !v.text.startsWith("@")) {
+                    inline.append(Text{ kind = inlineKind, body = v.text });
+                }
+            }
+        }
+        return merged(found, more: judgeAll(inline, judge: judge, cited: cited));
     }
     final problems = mut [<str>];
-    foreach (f in judge(shellQuote.replaceAll(line, with: ""), kind: c.kind)) {
+    foreach (f in judge(shellQuote.replaceAll(line, with: ""), kind: kind)) {
         if (f.decision == "deny" and (lineRules.indexOf(f.rule) != null or f.rule == "judge")) {
             problems.append("{f.message} [{f.rule}]");
         }
@@ -1248,6 +1337,60 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
         }
     }
     return Findings{ denies = problems, advice = [<str>] };
+}
+
+// inputTexts are the texts a JSON request body posts: its `body` as kind, with its `event`
+// for a summary, and each `comments[].body` as an inline comment. A file that is empty or
+// not a JSON object of that shape posts nothing this rule can read.
+fun inputTexts(content: str, kind: str) > [Text] {
+    final texts = mut [<Text>];
+    try {
+        final doc: {str: any} = json\parse(content);
+        final body: str = doc["body"] ?? "";
+        if (body != "") {
+            final event: str = doc["event"] ?? "";
+            texts.append(Text{ kind = kind, body = body, event = knownEvent(event) });
+        }
+        if (kind == summaryKind) {
+            final comments: [any] = doc["comments"] ?? [<any>];
+            foreach (comment in comments) {
+                final text: str = comment["body"] ?? "";
+                if (text != "") {
+                    texts.append(Text{ kind = inlineKind, body = text });
+                }
+            }
+        }
+    } catch (e) {
+        return [<Text>];
+    }
+    return texts;
+}
+
+// judgeAll is judgeText over each of texts, none of them a description, their findings
+// joined.
+fun judgeAll(texts: [Text], judge: fun (text: str, kind: str) > [Judged], cited: fun (ref: str) > Citation) > Findings {
+    var found = Findings{ denies = [<str>], advice = [<str>] };
+    foreach (t in texts) {
+        found = merged(found, more: judgeText(t, facts: fun () > Facts => unknownFacts(), judge: judge, cited: cited));
+    }
+    return found;
+}
+
+// merged is a's findings, then each of more's that a lacks.
+fun merged(a: Findings, more: Findings) > Findings {
+    final denies = mut [<str>];
+    final advice = mut [<str>];
+    foreach (d in a.denies + more.denies) {
+        if (denies.indexOf(d) == null) {
+            denies.append(d);
+        }
+    }
+    foreach (n in a.advice + more.advice) {
+        if (advice.indexOf(n) == null) {
+            advice.append(n);
+        }
+    }
+    return Findings{ denies = denies, advice = advice };
 }
 
 final pullNumber = $"(pulls|issues|merge_requests)/([0-9]+)";
@@ -1313,21 +1456,22 @@ fun decideCiting(programs: [helpers\Program], line: str, files: {str: str}, diff
             continue;
         }
         final c = matchCommand(p)!;
+        final kind = kindOf(p, c: c);
         final found = textProblems(p, line: line, files: files, diff: diff, judge: judge, cited: cited);
         foreach (problem in found.denies) {
             if (problems.indexOf(problem) == null) {
                 problems.append(problem);
             }
         }
-        if (found.denies.len() > 0 and denied.indexOf(c.kind) == null) {
-            denied.append(c.kind);
+        if (found.denies.len() > 0 and denied.indexOf(kind) == null) {
+            denied.append(kind);
         }
         if (found.advice.len() > 0) {
             if (key == "") {
                 key = adviceKey(p, c: c);
             }
-            if (advised.indexOf(c.kind) == null) {
-                advised.append(c.kind);
+            if (advised.indexOf(kind) == null) {
+                advised.append(kind);
             }
         }
         foreach (note in found.advice) {
@@ -1366,10 +1510,21 @@ fun advisingWhenUnrun(judge: fun (text: str, kind: str) > [Judged]) > fun (text:
     };
 }
 
-// ruleName is the guard rule a verdict on text of kinds answers as: a description or a reply
-// is pull-request-text, a commit message its own, and an issue or release notes forge-text.
+// anyReview reports whether one of kinds is a text a review posts.
+fun anyReview(kinds: [str]) > bool {
+    foreach (k in kinds) {
+        if (isReview(k)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// ruleName is the guard rule a verdict on text of kinds answers as: a description or review
+// text is pull-request-text, a commit message its own, and an issue or release notes
+// forge-text.
 fun ruleName(kinds: [str]) > str {
-    if (kinds.indexOf(descriptionKind) != null or kinds.indexOf(replyKind) != null) {
+    if (kinds.indexOf(descriptionKind) != null or anyReview(kinds)) {
         return "pull-request-text";
     }
     if (kinds.indexOf(commitKind) != null) {
@@ -1379,14 +1534,14 @@ fun ruleName(kinds: [str]) > str {
 }
 
 // opening is the first line of advice on text of kinds, or the lead of a denial's verdict, for
-// the first of them in the order a description, a reply, a commit message, an issue and
+// the first of them in the order a description, review text, a commit message, an issue and
 // release notes.
 fun opening(kinds: [str], advice: bool) > str {
     if (kinds.indexOf(descriptionKind) != null) {
         return if (advice) "This pull request description could read better:" else "this pull request text breaks a description rule";
     }
-    if (kinds.indexOf(replyKind) != null) {
-        return if (advice) "This review reply could read better:" else "this review reply breaks a reply rule";
+    if (anyReview(kinds)) {
+        return if (advice) "This review text could read better:" else "this review text breaks a review rule";
     }
     if (kinds.indexOf(commitKind) != null) {
         return if (advice) "This commit message could read better:" else "this commit message breaks a writing rule";
@@ -1398,11 +1553,17 @@ fun opening(kinds: [str], advice: bool) > str {
 }
 
 // teaching is the shape a verdict on text of kinds teaches, one line per kind: a description's
-// fixLine, or its shapeLine for advice, replyLine for a reply, and one for each other kind.
+// fixLine, or its shapeLine for advice, and one for each other kind.
 fun teaching(kinds: [str], advice: bool) > str {
     final lines = mut [<str>];
     if (kinds.indexOf(descriptionKind) != null) {
         lines.append(if (advice) shapeLine else fixLine);
+    }
+    if (kinds.indexOf(summaryKind) != null) {
+        lines.append(summaryLine);
+    }
+    if (kinds.indexOf(inlineKind) != null) {
+        lines.append(inlineLine);
     }
     if (kinds.indexOf(replyKind) != null) {
         lines.append(replyLine);
@@ -1444,7 +1605,7 @@ fun facts(f: Facts) > fun (base: str) > Facts {
 }
 
 // passing is a judge that finds nothing, so a case sees only this rule's own verdicts;
-// libs/conventions/proofread tests proofread itself.
+// libs/proofread tests proofread itself.
 fun passing() > fun (text: str, kind: str) > [Judged] {
     return fun (text: str, kind: str) > [Judged] {
         return [<Judged>];
@@ -1638,13 +1799,17 @@ test "proofread reads the title and the description as one pull request" {
     std\assert(seen.len() == 2 and seen[1].text == "gh pr create --body $BODY", message: "an unreadable description is judged as its line");
 }
 
-test "each forge command is judged as the kind it writes, an inline comment as anchored" {
+test "each forge command is judged as the kind it writes" {
     final cases: {str: [str]} = {
         "review-reply|Good catch, the map is shared.": ["gh", "pr", "comment", "412", "--body", "Good catch, the map is shared."],
-        "review-reply|I'd keep the retry.": ["gh", "pr", "review", "412", "--comment", "-b", "I'd keep the retry."],
-        "review-reply -anchored|It needs a lock.": ["gh", "api", "repos/o/r/pulls/412/comments", "-f", "body=It needs a lock.", "-f", "path=a.go"],
-        "review-reply -anchored|A reply in the thread.": ["gh", "api", "-X", "POST", "/repos/o/r/pulls/412/comments/99/replies", "--raw-field", "body=A reply in the thread."],
-        "review-reply|The review as a whole.": ["gh", "api", "repos/o/r/pulls/412/reviews", "-f", "body=The review as a whole.", "-f", "event=COMMENT"],
+        "review-summary -event COMMENT|I'd keep the retry.": ["gh", "pr", "review", "412", "--comment", "-b", "I'd keep the retry."],
+        "review-summary -event APPROVE|LGTM": ["gh", "pr", "review", "412", "-a", "-b", "LGTM"],
+        "review-summary -event REQUEST_CHANGES|Needs work.": ["gh", "pr", "review", "--request-changes", "--body", "Needs work."],
+        "review-inline|It needs a lock.": ["gh", "api", "repos/o/r/pulls/412/comments", "-f", "body=It needs a lock.", "-f", "path=a.go"],
+        "review-reply|A reply in the thread.": ["gh", "api", "-X", "POST", "/repos/o/r/pulls/412/comments/99/replies", "--raw-field", "body=A reply in the thread."],
+        "review-summary -event COMMENT|The review as a whole.": ["gh", "api", "repos/o/r/pulls/412/reviews", "-f", "body=The review as a whole.", "-f", "event=COMMENT"],
+        "review-summary -event APPROVE|Approved.": ["gh", "api", "repos/o/r/pulls/412/reviews/7/events", "-f", "body=Approved.", "-f", "event=approve"],
+        "review-summary|No verdict yet.": ["gh", "api", "repos/o/r/pulls/412/reviews", "-f", "body=No verdict yet."],
         "review-reply|From a file.": ["gh", "api", "repos/o/r/issues/412/comments", "-F", "body=@reply.md"],
         "change-description|fix: pin the key\nPins the key.": ["glab", "mr", "create", "-t", "fix: pin the key", "-d", "Pins the key."],
         "review-reply|Thanks, done.": ["glab", "mr", "note", "12", "-m", "Thanks, done."],
@@ -1673,9 +1838,56 @@ test "a reply denial teaches a reply, not a description" {
     final v = decidePullRequest(helpers\request([["gh", "pr", "comment", "412", "--body", "No, as I said."]]), line: "",
         files: {<str: str>}, diff: facts(unknownFacts()), judge: reporting(opener), once: helpers\counter());
     std\assert(v.decision == "deny", message: v.reason);
-    std\assert(v.reason.startsWith("this review reply breaks a reply rule"), message: v.reason);
+    std\assert(v.reason.startsWith("this review text breaks a review rule"), message: v.reason);
     std\assert(v.reason.indexOf("line 1: Open with the point you answer. [reply-opener]") != null, message: v.reason);
     std\assert(v.reason.indexOf("acknowledge the point it answers") != null and v.reason.indexOf("conventional title") == null, message: v.reason);
+}
+
+test "a summary denial teaches a review's body" {
+    final f = Judged{ rule = "blame", line = 1, message = "Name the code, not the person." };
+    final v = decidePullRequest(helpers\request([["gh", "pr", "review", "412", "-r", "-b", "You broke it."]]), line: "",
+        files: {<str: str>}, diff: facts(unknownFacts()), judge: reporting(f), once: helpers\counter());
+    std\assert(v.reason.startsWith("this review text breaks a review rule"), message: v.reason);
+    std\assert(v.reason.indexOf("the verdict and what blocks it") != null and v.reason.indexOf("acknowledge the point") == null,
+        message: v.reason);
+}
+
+// judgedCalls are the texts the guard hands its judge for argv, with files readable.
+fun judgedCalls(argv: [str], files: {str: str}) > [str] {
+    final seen = mut [<str>];
+    final recording = fun (text: str, kind: str) > [Judged] {
+        seen.append(kind + "|" + text);
+        return [<Judged>];
+    };
+    decidePullRequest(helpers\request([argv]), line: argv.join(" "), files: files, diff: facts(unknownFacts()),
+        judge: recording, once: helpers\counter());
+    return seen;
+}
+
+test "a review's inline comments are judged as inline, beside its body" {
+    final got = judgedCalls(["gh", "api", "repos/o/r/pulls/412/reviews", "-f", "body=Two notes.", "-f", "event=COMMENT",
+        "-f", "comments[][path]=a.go", "-f", "comments[][body]=Use a lock.", "-F", "comments[][body]=Drop the copy."], files: {<str: str>});
+    std\assert(got.join(";") == "review-summary -event COMMENT|Two notes.;review-inline|Use a lock.;review-inline|Drop the copy.",
+        message: got.join(";"));
+    final alone = judgedCalls(["gh", "api", "repos/o/r/pulls/412/reviews", "-f", "event=APPROVE", "-f", "comments[][body]=Use a lock."],
+        files: {<str: str>});
+    std\assert(alone.join(";") == "review-inline|Use a lock.", message: "a review with no body: {alone.join(";")}");
+}
+
+test "an --input review is judged from its JSON, and not at all when unread" {
+    final review = `{"body": "LGTM", "event": "APPROVE", "comments": [{"path": "a.go", "line": 3, "body": "Use a lock."}, {"path": "b.go"}]}`;
+    final argv = ["gh", "api", "-X", "POST", "repos/o/r/pulls/412/reviews", "--input", "review.json"];
+    final got = judgedCalls(argv, files: {"review.json": review});
+    std\assert(got.join(";") == "review-summary -event APPROVE|LGTM;review-inline|Use a lock.", message: got.join(";"));
+    std\assert(bodyFiles(helpers\request([argv])).indexOf("review.json") != null, message: "the guard reads the --input file");
+    std\assert(judgedCalls(argv, files: {<str: str>}).len() == 0, message: "an unread file is not guessed at");
+    std\assert(judgedCalls(argv, files: {"review.json": "not json"}).len() == 0, message: "an unparsable file is not guessed at");
+    final stdin = ["gh", "api", "repos/o/r/pulls/412/reviews", "--input", "-"];
+    std\assert(judgedCalls(stdin, files: {<str: str>}).len() == 0, message: "stdin is not read");
+    std\assert(bodyFiles(helpers\request([stdin])).len() == 0, message: "stdin is no file");
+    final inline = judgedCalls(["gh", "api", "repos/o/r/pulls/412/comments", "--input", "c.json"],
+        files: {"c.json": `{"body": "Use a lock.", "path": "a.go", "line": 3}`});
+    std\assert(inline.join(";") == "review-inline|Use a lock.", message: inline.join(";"));
 }
 
 fun commit(message: str) > [helpers\Program] {
@@ -1810,12 +2022,11 @@ test "proofread runs from a relative workspace and its absence is a finding" {
     final ws = fs\tempDir("judge-runner") catch "";
     std\assert(ws != "", message: "a temp dir");
     final dir = "{ws}/{proofread\home}";
-    fs\mkdirAll("{dir}/proofread") catch void;
     fs\mkdirAll("{dir}/cmd/proofread") catch void;
     fs\mkdirAll("{dir}/gen") catch void;
     fs\writeFile("{dir}/go.mod", content: "module m\n") catch void;
     fs\writeFile("{dir}/go.sum", content: "") catch void;
-    fs\writeFile("{dir}/proofread/proofread.go", content: "package proofread\n") catch void;
+    fs\writeFile("{dir}/proofread.go", content: "package proofread\n") catch void;
     fs\writeFile("{dir}/cmd/proofread/main.go", content: "package main\n") catch void;
     final relative = path\rel(path\abs(".") catch ".", target: ws) catch ws;
     std\assert(!path\isAbs(relative), message: relative);
@@ -1936,7 +2147,7 @@ test "touchedAreas names projects and top-level packages, generated files and fr
     final files: [any] = [
         {"path": "internal/guard/dir.go", "project": ".", "role": "source"},
         {"path": "internal/guard/rules/x.go", "project": ".", "role": "source"},
-        {"path": "libs/conventions/proofread/voice.go", "project": "libs/conventions", "role": "source"},
+        {"path": "libs/conventions/diagmsg/analyzer.go", "project": "libs/conventions", "role": "source"},
         {"path": "magusfile.buzz", "project": ".", "role": "source"},
         {"path": "MAGUS.md", "project": ".", "role": "output"},
         {"path": ".gitattributes", "project": ".", "role": "maintained"},

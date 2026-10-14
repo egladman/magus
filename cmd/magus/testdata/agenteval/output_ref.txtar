@@ -1,0 +1,48 @@
+# Run a failing target and read its captured log by ref. The test target prints 400
+# lines and fails one case. The answer is the ref magus printed for that run and the
+# failing case's name; the check reads the log back through the ref, so an invented ref
+# fails.
+#
+# Golden path: `magus run test -s` prints the ref, `magus query output <ref>` prints
+# the log, and its FAIL line names case-83.
+
+agent prompt.md --permission-mode acceptEdits --allowedTools 'Bash(magus:*)' --max-budget-usd 1
+
+exists answer.txt
+exec sh -c 'magus query output "$(sed -n 1p answer.txt)" 2>&1'
+stdout 'FAIL case-83: want 4, got 5'
+exec sed -n 2p answer.txt
+stdout '^case-83$'
+agent-pass
+
+-- prompt.md --
+The test target in this magus workspace fails. Run it, find the failing case in
+its captured output, and write two lines to answer.txt: the output ref magus
+printed for the run, then the failing case's name (for example case-1).
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "spells/cases";
+magus\project({ "spells": [cases] });
+export fun test(ctx: magus\Context, args: [str]) > void { cases.test(ctx); }
+-- spells/cases/spell.buzz --
+import "magus/spell";
+export fun mgs_getName() > str { return "cases"; }
+fun test(target: Target) > Command {
+    return Command{bin = "sh", args = ["cases.sh"]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"test": test}; }
+-- cases.sh --
+i=0
+failed=0
+while [ "$i" -lt 400 ]; do
+	i=$((i + 1))
+	if [ $((i * 7 % 400)) -eq 181 ]; then
+		echo "FAIL case-$i: want 4, got 5"
+		failed=1
+	else
+		echo "ok   case-$i"
+	fi
+done
+exit "$failed"

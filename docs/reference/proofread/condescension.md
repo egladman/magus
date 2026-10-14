@@ -1,13 +1,13 @@
 ---
 title: "condescension"
-description: "A deny rule by default: it refuses a word that tells the reader how hard a step should feel or what they should already know."
-tags: [proofread, rules, condescension, advise]
+description: "A rule that is off by default: it reports a word that tells the reader how hard a step should feel or what they should already know once a decisions table turns it on."
+tags: [proofread, rules, condescension, off]
 aliases: [reference/prose/condescension]
 ---
 
 # condescension
 
-A deny rule by default: it refuses a word that tells the reader how hard a step should feel or what they should already know.
+A rule that is off by default: it reports a word that tells the reader how hard a step should feel or what they should already know once a decisions table turns it on.
 
 ## What it catches
 
@@ -31,12 +31,15 @@ The code is `PRF2006`. The decision depends on the kind of text judged:
 | `reference`          | off     |
 | `guide`              | off     |
 | `change-description` | off     |
-| `agent-instructions` | off     |
+| `agent-brief`        | off     |
 | `commit-message`     | off     |
 | `issue`              | off     |
 | `release-notes`      | off     |
 | `changelog`          | off     |
+| `review-summary`     | off     |
+| `review-inline`      | off     |
 | `review-reply`       | off     |
+| `agent-compact`      | off     |
 | `cli-help`           | off     |
 | `agent-reply`        | off     |
 
@@ -61,7 +64,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "condescension", "code": "PRF2006", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/condescension/"}
+{"rule": "condescension", "code": "PRF2006", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/condescension/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.
@@ -70,4 +73,4 @@ A finding names the rule, its code and the decision that applies, and links here
 
 - [All proofread rules](index.md) - every rule, grouped by what it checks
 - [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests
-- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries
+- [The findings contract](https://github.com/egladman/magus/blob/main/libs/proofread/README.md#findings) - the fields every finding carries

@@ -8,7 +8,7 @@ import "os";
 import "proc";
 import "std";
 import "project/../libs/textsearch";
-import "project/../libs/conventions";
+import "project/../libs/proofread";
 import "project/../docs";
 import "encoding/json";
 import "project/.." as root;
@@ -202,14 +202,14 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     ctx.needs(textsearch\lint);
-    ctx.needs(conventions\proofread_build);
+    ctx.needs(proofread\proofread_build);
     // proofread's digest and the decisions table key this target, so a change to a rule reruns
     // the lint. A declaration replaces the project baseline, hence the sources restated.
     ctx.readsFiles("*.buzz", "src/**/*.ts", "src/**/*.css", "src/**/*.html", "index.html",
                    "manifest.webmanifest", "sw.js", "scripts/**/*.mjs", "package.json",
                    "pnpm-lock.yaml", "tsconfig.json", "tsconfig.test.json", "stylelint*.mjs",
                    "src/assets/**", "src/apps/diff/demo.patch",
-                   "../libs/conventions/gen/proofread.inputs", "../hack/policy/proofread-decisions.json");
+                   "../libs/proofread/gen/proofread.inputs", "../hack/policy/proofread-decisions.json");
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.test.json"]});
     proc\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
@@ -226,7 +226,7 @@ fun judgeCssComments() > void !> any {
     foreach (f in fs\glob("src/**/*.css")) {
         args.append(f.value);
     }
-    final run = proc\exec("../libs/conventions/gen/proofread", args: args, dir: ".", opts: {"quiet": true, "allow_failure": true});
+    final run = proc\exec("../libs/proofread/gen/proofread", args: args, dir: ".", opts: {"quiet": true, "allow_failure": true});
     if (run.code != 0) {
         throw "lint: proofread exited {run.code} on the stylesheets: " + run.stderr.trim();
     }

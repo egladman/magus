@@ -1,0 +1,16 @@
+The release pipeline was rebuilt last spring, and most work went into making failures legible. Before the
+rewrite, a job failing at three in the morning left nothing but an exit code, so whoever was on call had to reproduce
+the run by hand. Reading those logs, we found that nearly half of the failures came from the same two causes: stale
+caches and flaky network fetches. Neither was hard to fix, though both had been ignored for years. We added a checksum
+to every cache entry and retried fetches with a short backoff, which cut the failure rate slightly more than we
+expected. The harder problem was ownership. Nobody knew who maintained the deploy scripts, and the documentation
+described a layout that no longer existed. Although the scripts were only a few hundred lines, they called into three
+internal services, each owned by a different team. We spent a week tracing those calls, writing down what each one
+assumed about its inputs. That inventory turned out to be the most useful artifact of the project. It showed us which
+assumptions were safe to keep and which were accidents of history. The scripts expected the build
+directory to be writable by any user, a choice made years ago for convenience and never revisited. Removing that
+permission broke two jobs, both of which were fixed within a day. Looking back, the technical changes were small. What
+mattered was the shared understanding of how the pieces fit together, and the habit of writing it down while it was
+still fresh. The pipeline is not perfect, and some of the older jobs still depend on behavior we would rather remove.
+But a failure now arrives with a reason attached, and the person reading it can usually act on it without asking anyone
+else.

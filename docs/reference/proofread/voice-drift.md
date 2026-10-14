@@ -1,17 +1,17 @@
 ---
 title: "voice-drift"
-description: "An advisory by default: it explains, and blocks nothing, on a text whose style measures outside its author's own range on two or more features of a voice file."
+description: "An advisory by default: it explains, and blocks nothing, on a draft that reads further from its author's own texts of its kind than 95 percent of them do, or a commit subject longer than 95 percent of the author's."
 tags: [proofread, rules, voice-drift, advise]
 aliases: [reference/prose/voice-drift]
 ---
 
 # voice-drift
 
-An advisory by default: it explains, and blocks nothing, on a text whose style measures outside its author's own range on two or more features of a voice file.
+An advisory by default: it explains, and blocks nothing, on a draft that reads further from its author's own texts of its kind than 95 percent of them do, or a commit subject longer than 95 percent of the author's.
 
 ## What it catches
 
-A text whose style measures outside its author's own range on two or more features of a voice file.
+A draft that reads further from its author's own texts of its kind than 95 percent of them do, or a commit subject longer than 95 percent of the author's.
 
 ## Dimension
 
@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Runs only with a voice file, which proofread voice build measures from the author's own texts. A feature drifts when the text measures under its p10 or over its p90 for the kind, so about one text in five drifts on any one feature by construction, and a finding needs two. A study of one author, 2026-10-10, set p90 thresholds on 254 hand-typed descriptions, 286 replies and 1,055 commits: two or more features over range fired on 9 percent of that author's descriptions against 66 percent of agent descriptions, 7 against 46 percent of replies, and 5 against 60 percent of commits. Those rates are in-sample and count p90 alone, and no firing has been labeled, so the rule advises.
+Runs only with a voice file, which proofread voice build measures from the author's own texts, 1,000 words or more of a kind, shuffled and pooled into windows of 200 words or more. A draft of 200 words or more is ranked on commas, parentheses, colons, semicolons, "I", "and", repeated part-of-speech 4-grams, part-of-speech compression and participial clauses, each only in the direction agent drafts move, and the ranks combine by Fisher's method. The draft is scored on the features it has data for, against the author's windows with data for all of them, and the draft and each of those windows are scored alike against the rest; the draft drifts when it scores past all but 5 percent of the windows. A commit message is held to the 95th percentile of the author's subject lengths instead. The features and their directions come from voice-calibration, which measured one author's held-out text against agent drafts and against light agent edits of that text: the rule separates drafts, not edits. No firing has been labeled, so the rule advises.
 
 ## Default decision
 
@@ -32,6 +32,8 @@ The code is `PRF1040`. The decision depends on the kind of text judged:
 | `review-reply`       | advise  |
 | `commit-message`     | advise  |
 | `issue`              | advise  |
+| `review-summary`     | advise  |
+| `review-inline`      | advise  |
 
 ## Changing it
 
@@ -63,4 +65,4 @@ A finding names the rule, its code and the decision that applies, and links here
 
 - [All proofread rules](index.md) - every rule, grouped by what it checks
 - [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests
-- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries
+- [The findings contract](https://github.com/egladman/magus/blob/main/libs/proofread/README.md#findings) - the fields every finding carries

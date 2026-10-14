@@ -27,3 +27,8 @@ plugins:
   - module: github.com/egladman/magus/libs/conventions
     import: github.com/egladman/magus/libs/conventions/plugin
     path: ../conventions
+  # Not a plugin: conventions' diagmsg imports proofread through a local replace, which
+  # the custom build ignores, so the module is named here to resolve from the tree.
+  - module: github.com/egladman/magus/libs/proofread
+    import: github.com/egladman/magus/libs/proofread
+    path: ../proofread

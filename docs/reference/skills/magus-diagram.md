@@ -4,7 +4,7 @@ generated_from: internal/agent/skills/magus-diagram/SKILL.md
 description: "Write, check and view an architecture figure with magus/figure, the embedded Buzz module."
 tags: [agents, skills, magus-diagram]
 skill_full_bytes: 8189
-skill_short_bytes: 6715
+skill_short_bytes: 5782
 ---
 
 # magus-diagram
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `121` |
+| `agent-skill-version` | `122` |
 | `knowledge-schema-version` | `17` |
-| `skill-content` | `82147101094d` |
+| `skill-content` | `997ae36323c4` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -54,36 +54,28 @@ magus agent install --tar | tar -xO -f - magus-diagram/SKILL.md
 ```
 
 ````markdown
-# Drawing architecture figures with magus/figure
+# magus/figure
 
-`magus/figure`, a Buzz module embedded in the binary, lays out an architecture figure
-from the knowledge graph's records. A box is a directory the graph holds; a group is
-a set of them. Edges between code boxes are the imports and declared calls those
-records carry.
+`magus/figure`: Buzz module in binary; lays out architecture figure from knowledge graph records.
+Box: directory graph holds. Group: set of them.
+Edges between code boxes: imports and declared calls those records carry.
+Never place anything or type edge between two packages.
+Module places figure, or refuses with finding naming call to change.
 
-You never place anything or type an edge between two packages. The
-module places the figure, or refuses with a finding naming the call to change.
+## When
 
-## When to reach for it
+One claim per figure: subsystem, process, or package scope, stated in title; boxes and connectors are evidence.
+- Use when prose keeps restating how parts connect, or doc page describes request path or pipeline.
+- Use when reviewer needs packages change crosses.
+- Never draw everything: whole-workspace figure blows every budget, proves nothing.
+- Before writing: find same-scope figure via `magus query diagrams`.
 
-Draw ONE claim per figure: a subsystem, a process, or a package scope, stated in the
-title, with the boxes and connectors as its evidence.
+Max: 9 boxes, 12 connectors, 3 zones, 2 accented elements, 14 characters per connector label.
 
-- Use it when prose keeps restating how parts connect, or a doc page describes a
-  request path or a pipeline. Use it when a reviewer needs to see which packages a
-  change crosses.
-- Never draw everything. A figure of the whole workspace blows every budget and
-  proves nothing.
-- Before writing one, look for a figure of the same scope with
-  `magus query diagrams`.
+## First figure
 
-Budgets: at most 9 boxes, 12 connectors, 3 zones, 2 accented elements, and 14
-characters per connector label.
-
-## The first figure
-
-A figure is one exported function returning a `figure\Figure`. Both imports resolve
-in any workspace; nothing needs a copy on disk:
+Figure: one exported function returning `figure\Figure`.
+Both imports resolve in any workspace; nothing needs copy on disk:
 
 ```buzz
 import "magus";
@@ -104,103 +96,79 @@ export fun serverHttpFigure() > figure\Figure !> any {
 }
 ```
 
-- `magus\dir(path)` raises MGS7005 on a directory the graph does not hold, naming
-  the nearest one. `magus\layer(name)` raises MGS7006 on a layer nothing declares.
-  A typo fails the figure at the line that made it.
-- `.diagram()` lays it out and raises every finding at once;
-  `figure\draw(f, theme: figure\Theme.light)` does the same and paints it.
-- Prove a figure draws before you register it: call it from a scratch `main()`
-  inside `try`/`catch` and run `magus buzz <file>`.
+- `magus\dir(path)`: raises MGS7005 on directory graph does not hold, naming nearest.
+- `magus\layer(name)`: raises MGS7006 on layer nothing declares.
+- Typo fails figure at its line.
+- `.diagram()`: lays out, raises every finding at once.
+- `figure\draw(f, theme: figure\Theme.light)`: same, and paints.
+- Prove figure draws before registering: call from scratch `main()` inside `try`/`catch`, run `magus buzz <file>`.
 
-## Boxes, groups and actors
+## Boxes, groups, actors
 
-| call | draws |
-| --- | --- |
-| `.box(dir, label:, sub:, tag:, focal:, look:, symbol:)` | one directory; `symbol:` anchors it at a `magus\refs` result |
-| `.group(dirs, label:, ...)` | every directory in a list of `magus\Dir` as one box |
-| `figure\external(name, sub:, tag:, link:, look:)` | an actor: a person, a vendor, a step, a Buzz file, a decision |
+- `.box(dir, label:, sub:, tag:, focal:, look:, symbol:)`: one directory; `symbol:` anchors it at `magus\refs` result
+- `.group(dirs, label:, ...)`: every directory in list of `magus\Dir` as one box
+- `figure\external(name, sub:, tag:, link:, look:)`: actor: person, vendor, step, Buzz file, decision
 
-Take directories as records, never as path strings:
+Directories as records, never path strings:
+- `magus\layer("handler").dirs`: every directory declared layer covers.
+- `magus\dirs("internal/queue/*")`: every directory glob matches.
+- `+` joins two lists.
+- `figure\without(dirs, drop: [...])` leaves some out; raises when one it drops is not there.
 
-- `magus\layer("handler").dirs` is every directory a declared layer covers.
-- `magus\dirs("internal/queue/*")` is every directory a glob matches.
-- `+` joins two lists. `figure\without(dirs, drop: [...])` leaves some out, and
-  raises when one it drops is not there.
+Package joining layer joins group; figure needs no change.
+Layers declared under `"layers"` in `magus\project`: workspace-relative directory or glob -> lowercase name.
+Directory drawn once: box inside group's dirs refused -> drop it with `figure\without`.
+Files of one package: one box, or actors when they are steps.
 
-A package that joins the layer joins the group, and the figure needs no change.
-Layers are declared under `"layers"` in `magus\project`: a workspace-relative
-directory or glob to a lowercase name.
+`look:` takes `figure\Look.plain`, `focal`, `store`, `external`, `input`, `optional` or `decision` (actors only, at most three exits).
+Spend two accents on one point title makes.
+Every look used gets `.legend(figure\Look.x, label:)` line.
 
-A directory is drawn once: a box inside a group's dirs is refused, so drop it with
-`figure\without`. Files of one package are one box, or actors when they are steps.
+## Edges
 
-`look:` takes `figure\Look.plain`, `focal`, `store`, `external`, `input`, `optional` or
-`decision` (actors only, at most three exits). Spend the two accents on the one point
-the title makes. Give every look you use a `.legend(figure\Look.x, label:)` line.
-
-## Edges come from the graph
-
-`.edgesFromGraph()` draws every import and every declared `magus:calls` marker
-between two drawn boxes; two or more code boxes require it. Arrows point importer to
-imported. An edge inside one group is not drawn. Every drawn directory needs a
-symbol index. An unindexed one is a finding, never an empty edge list, so run
-`magus graph build` first.
-
-- `.hideEdges(src, dst:, why:)` drops graph edges from one list of dirs to another,
-  reason required. A hide that matches nothing is a finding: the code changed, so
-  look again.
-- `.markEdge(src, dst:, label:, stroke:)` labels or strokes one graph edge.
-- `.flowIn(actor, dst: dir)`, `.flowOut(dir, dst: actor)` and `.flowAcross(actor, dst:
-  actor)` are the only hand edges. Each has an actor at one end and claims flow,
-  which nothing checks. A hand edge where the graph already draws one is a finding.
+`.edgesFromGraph()`: draws every import and every declared `magus:calls` marker between two drawn boxes; required with two or more code boxes.
+Arrows: importer -> imported.
+Edge inside one group: not drawn.
+Every drawn directory needs symbol index; unindexed one is finding, never empty edge list -> run `magus graph build` first.
+- `.hideEdges(src, dst:, why:)`: drops graph edges from one dir list to another; reason required. Hide matching nothing is finding: code changed, look again.
+- `.markEdge(src, dst:, label:, stroke:)`: labels or strokes one graph edge.
+- `.flowIn(actor, dst: dir)`, `.flowOut(dir, dst: actor)`, `.flowAcross(actor, dst: actor)`: only hand edges. Each has actor at one end, claims flow nothing checks. Hand edge where graph already draws one: finding.
 
 ## Scope
 
-`.scope(dirs)` names the directories the figure answers for. A box or a group must
-draw each one, or `.except(dirs, why:)` leaves it out. `.except` is for a true
-exclusion, not a list of packages the picture did not fit: narrow the scope
-instead. A figure with no code behind it (a decision process, a CI arrangement) says
-so with `.unscoped(why:)`.
+`.scope(dirs)`: directories figure answers for; box or group must draw each one, or `.except(dirs, why:)` leaves it out.
+`.except`: true exclusion only, not packages picture did not fit -> narrow scope instead.
+Figure with no code behind it (decision process, CI arrangement): `.unscoped(why:)`.
 
-## Findings name the call to change
+## Findings
 
-Nothing is drawn until the figure is clean.
+Nothing drawn until figure clean.
+Do what finding says, at call it names.
+Finding ending `layout bug, report it`: not yours to fix -> reorder declarations or split figure, and report it.
 
-Do what the finding says, at the call it names. A finding ending `layout bug, report
-it` is not yours to fix: reorder declarations or split the figure, and report it.
+## Register, embed
 
-## Register and embed
+Unregistered figure: checked by nothing.
+- Find registry: `magus query diagrams`. magus's own tree: `docs/site/diagrams/all.buzz`: one import, one entry.
+- `magus run diagrams-generate docs`: lays out every figure from symbol index -> light, dark, page SVGs, each with JSON receipt.
+- Docs page embeds figure by id: `<!--diagram:<id>-->`.
 
-A figure nobody registers is checked by nothing.
+Source can point back at figure: `magus:diagram <id>` comment beside code box depicts.
+Marker whose figure is gone: finding.
 
-- Find the workspace's registry with `magus query diagrams`. In magus's own tree
-  it is `docs/site/diagrams/all.buzz`: one import plus one entry.
-- `magus run diagrams-generate docs` lays every figure out from the symbol index.
-  It writes the light, dark and page SVGs, each with a JSON receipt.
-- A docs page embeds a figure by id with `<!--diagram:<id>-->`.
+## Console
 
-Source code can point back at a figure with a `magus:diagram <id>` comment beside the
-code a box depicts. A marker whose figure is gone is a finding.
+Console Diagrams page draws workspace itself, no figure file: project graph, one project's targets, package import graph.
+Each view through declared lens of scope, focus, depth.
+- Needs running server (`magus server start`); import view needs symbol index.
+- Server renders with same module -> lens over budget refused with own finding. Narrow lens; do not ask for bigger picture.
 
-## The console
+## Refused
 
-The console's Diagrams page draws the workspace itself, with no figure file. It shows
-the project graph, one project's targets, and the package import graph. Each view
-goes through a declared lens of scope, focus and depth.
+- Coordinates, weights, pins: layout knob grows into second language. Shape with `rank`, `row`, `zone`, `boundary`, or split.
+- Hand-drawn code edges, path strings: edge no code holds asserts what nobody checked; path string goes stale day package moves.
 
-- It needs a running server (`magus server start`); the import view needs the
-  symbol index.
-- The server renders with the same module, so a lens over the budget is refused
-  with its own finding. Narrow the lens; do not ask for a bigger picture.
-
-## What this skill refuses
-
-- **Coordinates, weights, pins.** A layout knob grows into a second language. Shape
-  a figure with `rank`, `row`, `zone` and `boundary`, or split it.
-- **Hand-drawn code edges and path strings.** An edge no code holds asserts
-  something nobody checked, and a path string goes stale the day a package moves.
-
-Writing the Buzz itself, the syntax and strict mode: magus-buzz-lang.
+Buzz itself, syntax, strict mode: magus-buzz-lang.
 ````
 
 

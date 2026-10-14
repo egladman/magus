@@ -1,5 +1,5 @@
 // cli-help-follows-proofread-rules holds the help text of magus's own commands and flags to
-// libs/conventions/proofread's cli-help kind, under this repository's decisions table
+// libs/proofread's cli-help kind, under this repository's decisions table
 // (hack/policy/proofread.buzz). The text is read from internal/cli/registry.go, where the man
 // pages, the generated flag bindings and `--help` all take it from: the quoted Doc of a flag,
 // and the Short and the one-line Description of a command. A Long description is several
@@ -18,7 +18,7 @@ import "encoding/json";
 import "magus/lint";
 import "hack/lint/support" as support;
 import "hack/policy/proofread" as decisions;
-import "libs/conventions/proofread" as proofread;
+import "libs/proofread/proofread" as proofread;
 
 export final REGISTRY = "internal/cli/registry.go";
 
@@ -41,8 +41,8 @@ export final BASELINE: [str] = [];
 
 // reads keys lint-rules on the registry and on everything the judge is linked from.
 export fun reads() > [str] {
-    return [REGISTRY, "hack/policy/proofread.buzz", "libs/conventions/go.mod", "libs/conventions/go.sum",
-        "libs/conventions/**/*.go", "libs/conventions/proofread.buzz"];
+    return [REGISTRY, "hack/policy/proofread.buzz", "libs/proofread/go.mod", "libs/proofread/go.sum",
+        "libs/proofread/**/*.go", "libs/proofread/proofread.buzz"];
 }
 
 // Help is one help text and the line of the registry it sits on.

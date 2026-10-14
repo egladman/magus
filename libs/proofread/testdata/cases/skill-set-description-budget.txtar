@@ -1,0 +1,59 @@
+An installed set of skills whose descriptions, both forms of each counted, sum past the word budget.
+-- hit/skill-template whole --
+---
+name: magus-run
+description: "Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run"
+---
+---
+name: magus-query
+description: "Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run"
+---
+---
+name: magus-vcs-hygiene
+description: "Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run"
+---
+---
+name: magus-buzz-lang
+description: "Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run"
+---
+---
+name: magus-buzz-review
+description: "Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run"
+---
+---
+name: magus-change-summary
+description: "Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run"
+---
+---
+name: magus-commit-composition
+description: "Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run"
+---
+---
+name: magus-context-audit
+description: "Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run"
+---
+---
+name: magus-multi-agent
+description: "Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run"
+---
+---
+name: magus-test-design
+description: "Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run"
+---
+---
+name: magus-upstream-docs
+description: "Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run from its captured output rather than running it again to see more of the log. Run the named targets through magus so the cache, the sandbox and affected tracking see the work, and read a failed run"
+---
+-- pass/skill-template whole --
+---
+name: magus-run
+description: "{{if .Full}}Full copy of magus-run with worked examples. Load it when magus names it or when magus-run left a step underspecified.{{else}}Run builds and tests through magus targets before any raw language tool.{{end}}"
+---
+---
+name: magus-query
+description: "{{if .Full}}Full copy of magus-query with worked examples. Load it when magus names it or when magus-query left a step underspecified.{{else}}Query the magus knowledge graph before grepping for what exists or depends on what.{{end}}"
+---
+-- pass/skill-template whole --
+# Run
+
+Run it.

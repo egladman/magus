@@ -1,0 +1,34 @@
+Invented lists, written with the rule; no labeling round has read them.
+A list item whose initial capital or closing full stop differs from the list's other items. Each case is a whole list.
+-- hit/reference whole --
+- Keeps the key stable
+- sorts the inputs
+- Hashes them once
+-- hit/changelog whole --
+- Adds a flag for the cache.
+- Keeps the key stable.
+- Sorts the inputs before hashing
+-- hit/guide whole --
+1. Save the key
+2. Verify the signature.
+3. Push the tag
+-- pass/reference whole --
+- Keeps the key stable.
+- Sorts the inputs.
+- Hashes them once.
+-- pass/reference whole --
+- keeps the key stable
+- sorts the inputs
+- hashes them once
+-- pass/reference whole --
+- Keeps the key stable.
+- sorts the inputs
+-- pass/reference whole --
+- Keeps the key stable.
+- `magus ls`
+- [The guide](guide.md)
+- Hashes them once.
+-- pass/reference whole --
+- keeps the key stable
+- GitHub hosts the release
+- npm serves the package

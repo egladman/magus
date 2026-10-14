@@ -1,0 +1,9 @@
+A compact line over the word cap that joins clauses: more than one fact on a line.
+-- hit/agent-compact --
+Prove drift by regenerating a second time, never by reading the diff and judging it; same diff again with inputs unchanged means environmental drift.
+Merge conflicts settle with magus vcs resolve in one pass over every generated file, and only the conflicts it cannot settle remain for a person to merge.
+-- pass/agent-compact --
+Prove drift: regenerate second time, never read diff and judge.
+Same diff again, inputs unchanged -> environmental.
+Run magus run ci for the project you work in while iterating on a failing target named by the last run of ci.
+Run gate; read log.

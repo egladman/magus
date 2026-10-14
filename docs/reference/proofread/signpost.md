@@ -1,13 +1,13 @@
 ---
 title: "signpost"
-description: "A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, and `review-reply` and advises on `agent-reply` by default: it reports an announcement standing where the point should be (\"Here's the thing\", \"Let's dive in\")."
+description: "A rule that denies on `reference`, `guide`, `change-description`, `agent-brief`, `commit-message`, `issue`, `release-notes`, `changelog`, `review-summary`, `review-inline`, `review-reply`, and `agent-compact` and advises on `agent-reply` by default: it reports an announcement standing where the point should be (\"Here's the thing\", \"Let's dive in\")."
 tags: [proofread, rules, signpost, deny]
 aliases: [reference/prose/signpost]
 ---
 
 # signpost
 
-A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, and `review-reply` and advises on `agent-reply` by default: it reports an announcement standing where the point should be ("Here's the thing", "Let's dive in").
+A rule that denies on `reference`, `guide`, `change-description`, `agent-brief`, `commit-message`, `issue`, `release-notes`, `changelog`, `review-summary`, `review-inline`, `review-reply`, and `agent-compact` and advises on `agent-reply` by default: it reports an announcement standing where the point should be ("Here's the thing", "Let's dive in").
 
 ## What it catches
 
@@ -31,13 +31,16 @@ The code is `PRF4003`. The decision depends on the kind of text judged:
 | `reference`          | deny    |
 | `guide`              | deny    |
 | `change-description` | deny    |
-| `agent-instructions` | deny    |
+| `agent-brief`        | deny    |
 | `commit-message`     | deny    |
 | `issue`              | deny    |
 | `release-notes`      | deny    |
 | `changelog`          | deny    |
+| `review-summary`     | deny    |
+| `review-inline`      | deny    |
 | `review-reply`       | deny    |
 | `agent-reply`        | advise  |
+| `agent-compact`      | deny    |
 
 ## Changing it
 
@@ -69,4 +72,4 @@ A finding names the rule, its code and the decision that applies, and links here
 
 - [All proofread rules](index.md) - every rule, grouped by what it checks
 - [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests
-- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries
+- [The findings contract](https://github.com/egladman/magus/blob/main/libs/proofread/README.md#findings) - the fields every finding carries

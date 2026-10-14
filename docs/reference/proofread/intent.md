@@ -1,13 +1,13 @@
 ---
 title: "intent"
-description: "A deny rule by default: it refuses a motive given to a tool or a person (\"guessed\", \"pretends\")."
-tags: [proofread, rules, intent, advise]
+description: "A rule that is off by default: it reports a motive given to a tool or a person (\"guessed\", \"pretends\") once a decisions table turns it on."
+tags: [proofread, rules, intent, off]
 aliases: [reference/prose/intent]
 ---
 
 # intent
 
-A deny rule by default: it refuses a motive given to a tool or a person ("guessed", "pretends").
+A rule that is off by default: it reports a motive given to a tool or a person ("guessed", "pretends") once a decisions table turns it on.
 
 ## What it catches
 
@@ -29,6 +29,8 @@ The code is `PRF2004`. The decision depends on the kind of text judged:
 | Kind                 | Default |
 | -------------------- | ------- |
 | `change-description` | off     |
+| `review-summary`     | off     |
+| `review-inline`      | off     |
 | `review-reply`       | off     |
 | `commit-message`     | off     |
 | `issue`              | off     |
@@ -55,7 +57,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "intent", "code": "PRF2004", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/intent/"}
+{"rule": "intent", "code": "PRF2004", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/intent/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.
@@ -64,4 +66,4 @@ A finding names the rule, its code and the decision that applies, and links here
 
 - [All proofread rules](index.md) - every rule, grouped by what it checks
 - [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests
-- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries
+- [The findings contract](https://github.com/egladman/magus/blob/main/libs/proofread/README.md#findings) - the fields every finding carries

@@ -506,14 +506,14 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 
 	covered["pull-request-text"] = true
 	t.Run("pull-request-text", func(t *testing.T) {
-		// The rule runs proofread, which `magus run proofread-build libs/conventions` links into
-		// the workspace's libs/conventions/gen, so this one holds that module, built output
+		// The rule runs proofread, which `magus run proofread-build libs/proofread` links into
+		// the workspace's libs/proofread/gen, so this one holds that module, built output
 		// and all; the root test target needs proofread-build. It is not the checkout itself, whose
 		// branch diff would add advice about the areas it touches to every verdict.
-		conventions := filepath.Join(root, "libs", "conventions")
+		proofreadMod := filepath.Join(root, "libs", "proofread")
 		ws := t.TempDir()
 		require.NoError(t, os.Mkdir(filepath.Join(ws, "libs"), 0o755))
-		require.NoError(t, os.Symlink(conventions, filepath.Join(ws, "libs", "conventions")))
+		require.NoError(t, os.Symlink(proofreadMod, filepath.Join(ws, "libs", "proofread")))
 		run, cacheDir := shellAt(t, "trim-key", ws)
 		const describe = `gh pr create --title "fix(cache): pin the key" --body "Warm builds miss the cache because the key hashes its inputs in map order; sorting them pins one key per build."`
 		v := run(describe)
@@ -557,28 +557,25 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 
 		// The same sources with no gen/ dir: a judge never built denies, and never compiles.
 		unbuilt := t.TempDir()
-		mod := filepath.Join(unbuilt, "libs", "conventions")
+		mod := filepath.Join(unbuilt, "libs", "proofread")
 		require.NoError(t, os.MkdirAll(mod, 0o755))
-		for _, name := range []string{"go.mod", "go.sum", "proofread", "cmd"} {
-			require.NoError(t, os.Symlink(filepath.Join(conventions, name), filepath.Join(mod, name)))
+		entries, err := os.ReadDir(proofreadMod)
+		require.NoError(t, err)
+		for _, e := range entries {
+			if e.Name() != "gen" {
+				require.NoError(t, os.Symlink(filepath.Join(proofreadMod, e.Name()), filepath.Join(mod, e.Name())))
+			}
 		}
 		v = shellIn(t, "trim-key", unbuilt)(describe)
 		assert.Equal(t, "deny", v.Decision, v.Reason)
-		assert.Contains(t, v.Reason, "libs/conventions/gen/proofread is not built; run `magus run proofread-build libs/conventions`")
+		assert.Contains(t, v.Reason, "libs/proofread/gen/proofread is not built; run `magus run proofread-build libs/proofread`")
 
 		// The built judge beside a source it was not linked from is as stale as none.
-		require.NoError(t, os.Symlink(filepath.Join(conventions, "gen"), filepath.Join(mod, "gen")))
-		require.NoError(t, os.Remove(filepath.Join(mod, "proofread")))
-		require.NoError(t, os.Mkdir(filepath.Join(mod, "proofread"), 0o755))
-		sources, err := filepath.Glob(filepath.Join(conventions, "proofread", "*.go"))
-		require.NoError(t, err)
-		for _, src := range sources {
-			require.NoError(t, os.Symlink(src, filepath.Join(mod, "proofread", filepath.Base(src))))
-		}
-		require.NoError(t, os.WriteFile(filepath.Join(mod, "proofread", "zz.go"), []byte("package proofread\n"), 0o644))
+		require.NoError(t, os.Symlink(filepath.Join(proofreadMod, "gen"), filepath.Join(mod, "gen")))
+		require.NoError(t, os.WriteFile(filepath.Join(mod, "zz.go"), []byte("package proofread\n"), 0o644))
 		v = shellIn(t, "trim-key", unbuilt)(describe)
 		assert.Equal(t, "deny", v.Decision, v.Reason)
-		assert.Contains(t, v.Reason, "was linked from other sources than the tree holds; run `magus run proofread-build libs/conventions`")
+		assert.Contains(t, v.Reason, "was linked from other sources than the tree holds; run `magus run proofread-build libs/proofread`")
 	})
 
 	covered["code-comments"] = true

@@ -124,8 +124,8 @@ func TestNoDirectEncodingJSONImport(t *testing.T) {
 		// proofread lives in its own module and ships as its own binary; it cannot import
 		// this one without the magus module depending on repo policy. A key ending in "/"
 		// allows every file directly in that directory.
-		"libs/conventions/cmd/proofread/": true,
-		"libs/conventions/proofread/":     true,
+		"libs/proofread/cmd/proofread/": true,
+		"libs/proofread/":               true,
 	}
 	importers, err := encodingJSONImporters(root, allowed)
 	require.NoError(t, err)

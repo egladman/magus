@@ -1,0 +1,14 @@
+feat(proofread): add evidence-backed rules (#584)
+
+* give prose findings a severity; select rules by profile; add the reply kind
+
+* pin the core rule order apart from the tone and slop rules
+
+* add the slop rules; widen filler and wordy; drop four wordy phrases from docs
+
+* add DiffStater across the four vcs backends; expose it as vcs diff_stat
+
+* drop the selling and filler words the widened filler rule refuses; bump the skill version
+
+* add the tone, claim and reply rules; let a description carry named sections; give judge-docs profile, severity and rule flags
+

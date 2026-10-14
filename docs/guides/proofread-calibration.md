@@ -21,11 +21,11 @@ their disagreements, and score the result. This is calibration, not training: th
 stay hand-written, and a round only measures how often one is right. This guide runs one
 round end to end with `proofread calibrate round`. How to add a rule or a kind, and how
 a fix round avoids fooling itself, is in
-[the proofread README](https://github.com/egladman/magus/blob/main/libs/conventions/proofread/README.md).
+[the proofread README](https://github.com/egladman/magus/blob/main/libs/proofread/README.md).
 
 You need the `proofread` binary from this repository
-(`magus run proofread-build libs/conventions` writes it to
-`libs/conventions/gen/proofread`), `jq`, and a clean checkout of this repository.
+(`magus run proofread-build libs/proofread` writes it to
+`libs/proofread/gen/proofread`), `jq`, and a clean checkout of this repository.
 
 ## Where the data lives
 
@@ -40,8 +40,8 @@ Round data never goes into git. It sits under `$XDG_CACHE_HOME/proofread/calibra
 | `sealed/`       | held-out sets for confirmatory rounds that no tuner may read            |
 
 Git holds what is not third-party text: the guideline at
-`libs/conventions/proofread/testdata/guideline.md` and one record of counts and scores
-per round under `libs/conventions/proofread/testdata/rounds/`.
+`libs/proofread/testdata/guideline.md` and one record of counts and scores
+per round under `libs/proofread/testdata/rounds/`.
 
 The examples below use `C` for the base directory:
 
@@ -108,7 +108,7 @@ Freeze before anyone labels:
 
 ```sh
 proofread calibrate round freeze -dir "$C/labels/round5" \
-  -guideline libs/conventions/proofread/testdata/guideline.md \
+  -guideline libs/proofread/testdata/guideline.md \
   -purpose "confirm claim and absolute after the round 4 guideline revisions"
 ```
 
@@ -185,7 +185,7 @@ you promote it.
 ## 7. Apply the result
 
 1. Audit the spot-check ids of each rule that passed advise.
-2. In `libs/conventions/proofread/evidence.go`, set each scored rule's `evidenceCeiling`
+2. In `libs/proofread/evidence.go`, set each scored rule's `evidenceCeiling`
    entry to what the round supports, citing the round, the correct count over n, and the
    lower bound in its comment. A rule whose evidence supports its declared default leaves
    the table.
@@ -210,7 +210,7 @@ you promote it.
 ## 8. Record the round
 
 Commit a record of counts and scores, with no text, as `round<N>.json` in
-`libs/conventions/proofread/testdata/rounds/`, N the round's number:
+`libs/proofread/testdata/rounds/`, N the round's number:
 
 ```sh
 cd "$C/labels/round5"
@@ -245,7 +245,7 @@ a rule's failures, but it never again supports a promotion.
 
 ## Reproduce a past round
 
-Each record under `libs/conventions/proofread/testdata/rounds/` names its rule commit, its seed and its sources, or
+Each record under `libs/proofread/testdata/rounds/` names its rule commit, its seed and its sources, or
 says `unrecorded` where the round kept no such fact.
 
 1. Check out the rule commit in a worktree and build `proofread` there.

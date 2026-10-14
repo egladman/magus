@@ -47,6 +47,7 @@ import "hack/lint/prose-names-targets-that-exist" as prosetargets;
 import "hack/lint/published-magus-is-built-first-and-verified-by-digest" as publishedmagus;
 import "hack/lint/root-project-declares-the-configs-its-tools-read" as rootconfigs;
 import "hack/lint/setup-magus-mints-the-queue-app-token-only-as-an-output" as queuetoken;
+import "hack/lint/skill-renders-follow-markdown-and-description-budgets" as skillrenders;
 import "hack/lint/skills-generate-declares-every-shipped-skill" as skills;
 import "hack/lint/symbol-docs-follow-proofread-rules" as symbolproofread;
 import "hack/lint/testlayout-pairing-has-no-exemptions" as testpairing;
@@ -91,6 +92,7 @@ export fun rules() > [Rule] {
         Rule{ name = "symbol-docs-follow-proofread-rules", reads = symbolproofread\reads(), check = symbolproofread\check },
         Rule{ name = "cli-help-follows-proofread-rules", reads = clihelp\reads(), check = clihelp\check },
         Rule{ name = "tool-descriptions-follow-proofread-rules", reads = tooldesc\reads(), check = tooldesc\check },
+        Rule{ name = "skill-renders-follow-markdown-and-description-budgets", reads = skillrenders\reads(), check = skillrenders\check },
         Rule{ name = "proofread-case-moves-name-their-origin", reads = casemoves\reads(), check = casemoves\check },
     ];
 }

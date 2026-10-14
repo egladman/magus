@@ -1,0 +1,38 @@
+Invented dates, written with the rule, after the resume branch's cases; the ISO mix is docs/decisions/0001's. No labeling round has read them.
+Dates in more than one style in one text (2026-10-13, Oct 2026, October 2026, 10/13/2026, Sep beside Sept).
+-- hit/reference --
+Acme Corp, Jan 2022 - Present; Beta Inc, 06/2019 - Dec 2021
+Acme Corp, January 2022 - Present; Beta Inc, Mar 2019 - December 2021
+Acme Corp, 2022-01 - Present; Beta Inc, 2019-03 - 12/2021
+Decided 2026-09-19 and revisited after the Sept 2026 audit.
+Sept 2022, Sept 2023, Sep 2024.
+-- hit/guide whole --
+## Experience
+
+Acme Corp, Jan 2022 - Present
+
+Beta Inc, Mar 2019 - Dec 2021
+
+Gamma LLC, June 2017 - Feb 2019
+-- pass/reference --
+Acme Corp, Jan 2022 - Present; Beta Inc, Mar 2019 - Dec 2021
+Acme Corp, January 2022 - Present; Beta Inc, March 2019 - December 2021
+Acme Corp, May 2022 - Present; Beta Inc, Sept. 2019 - Apr 2022
+Acme Corp, 2022-01 - Present; Beta Inc, 2019-03 - 2021-12; BS, 2015-2019
+Decided 2026-09-19; see `2026-Sep-19.log`.
+-- pass/changelog whole --
+## [0.5.0] - 2026-10-13
+
+- Ships the plan drafted 2026-09.
+-- pass/reference whole --
+## Experience
+
+Acme Corp, Jan 2022 - Present
+
+- Rewrote the billing export in Go.
+
+Beta Inc, Mar 2019 - Dec 2021
+
+## Education
+
+State University, BS Computer Science, 2015-2019
