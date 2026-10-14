@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-214-g6201d3c17-dirty (commit 6201d3c17e541ad3c7263f513f424aaa7eca8f9b, 2026-10-13T21:50:18-04:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-228-gf4cc5c397 (commit f4cc5c39737ecd53704ffeb9361283fdccbb2de0, 2026-10-13T22:34:34-04:00)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -160,6 +160,7 @@ manpage/*.1 merge=magus linguist-generated
 proto/MAGUS.md merge=magus linguist-generated
 proto/gen/** merge=magus linguist-generated
 schema/gen/*.go merge=magus linguist-generated
+std/gen/std-api.lock merge=magus linguist-generated
 tapes/core-loop.capture merge=magus linguist-generated
 tapes/showcase.capture merge=magus linguist-generated
 testdata/hosts/cursor/gen/*.schema.json merge=magus linguist-generated
