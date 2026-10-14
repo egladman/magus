@@ -1,7 +1,6 @@
 package magus
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"go/ast"
@@ -328,8 +327,7 @@ func attachConformance(byPath map[string]*types.DiffFile, head *knowledge.Graph,
 func diffConform(o types.ConformOptions, cfg diffConfig, patch string, generated map[string]bool,
 	read func(path string) (string, bool),
 ) (conform types.ConformOptions, base *types.ConformRatchet, note string, err error) {
-	o.Gates.MinCohort = cmp.Or(cfg.minCohort, o.Gates.MinCohort)
-	o.Gates.MinShare = cmp.Or(cfg.minShare, o.Gates.MinShare)
+	o.Gates = o.Gates.Override(cfg.minCohort, cfg.minShare)
 	o.Generated = generated
 	o, head, err := loadConform(o, read)
 	if err != nil || o.RatchetPath == "" {

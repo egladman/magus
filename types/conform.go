@@ -81,6 +81,13 @@ type ConformGates struct {
 	MaxFindings int
 }
 
+// Override is g with one review's MinCohort and MinShare in place of its own. Zero keeps g's.
+func (g ConformGates) Override(minCohort int, minShare float64) ConformGates {
+	g.MinCohort = cmp.Or(minCohort, g.MinCohort)
+	g.MinShare = cmp.Or(minShare, g.MinShare)
+	return g
+}
+
 // ConformOptions is the conform policy as the graph reads it: configuration plus the
 // committed ratchet record named by RatchetPath. Generated holds the workspace paths of
 // declared outputs, which no population counts.
@@ -298,7 +305,7 @@ type ConformKnown struct {
 	Metric ConformMetric `json:"metric" yaml:"metric"`
 	Items  []string      `json:"items"  yaml:"items"`
 	Reason string        `json:"reason" yaml:"reason"`
-	Line   int           `json:"-"      yaml:"-"`
+	Line   int           `json:"-"      yaml:"-"      buzz:"-"`
 }
 
 // ReadConformRatchet decodes a committed ratchet record strictly: an unknown field, a

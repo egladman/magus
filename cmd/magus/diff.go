@@ -741,10 +741,13 @@ func attachLayout(ctx context.Context, m *magus.Magus, rev *types.Diff, opts typ
 			generated[e.Path] = true
 		}
 	}
-	gates := globalCfg.Knowledge.Conform.Options().Gates
+	conform, err := m.ConformOptions()
+	if err != nil {
+		fail(err)
+		return
+	}
 	// compat: see diffCmd.
-	gates.MinCohort = cmp.Or(opts.MinCohort, gates.MinCohort)
-	gates.MinShare = cmp.Or(opts.MinShare, gates.MinShare)
+	gates := conform.Gates.Override(opts.MinCohort, opts.MinShare)
 	found := graph.Layout(knowledge.LayoutChange{Added: added, Generated: generated, Gates: gates})
 	for dir, checks := range found {
 		i := slices.IndexFunc(rev.Files, func(f types.DiffFile) bool { return path.Dir(f.Path) == dir })
