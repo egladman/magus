@@ -308,8 +308,9 @@ func TestRegionsBetween(t *testing.T) {
 			want: []types.RegionChange{region("a.go", was, 10, 10, "func B() int {", "golang"), region("a.go", now, 10, 10, "func B() int {", "golang")},
 		},
 		{
-			name: "an added function is itself", path: "a.go", before: regionsGo, after: added,
-			want: []types.RegionChange{region("a.go", now, 16, 16, "func C() {", "golang"), region("a.go", now, 17, 18, "func D() {", "golang")},
+			// Line 16 is the blank line the hunk starts with; it leads into D, not C.
+			name: "an added function is itself, its leading blank line included", path: "a.go", before: regionsGo, after: added,
+			want: []types.RegionChange{region("a.go", now, 16, 18, "func D() {", "golang")},
 		},
 		{
 			name: "no before places every line", path: "a.go", after: "package a\n\nfunc X() {\n}\n",

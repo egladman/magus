@@ -110,6 +110,10 @@ func TestPlaceHunk(t *testing.T) {
 
 func TestHunksChargeALeadingBlankLineToTheNewDeclaration(t *testing.T) {
 	golang, _ := MatchDiffDriver("a.go")
+	appended, ok := Hunks("a.go", []byte("func C() {\n}\n"), []byte("func C() {\n}\n\nfunc D() {\n}\n"), golang)
+	require.True(t, ok)
+	assert.Equal(t, []RegionChange{{File: FileChange{Path: "a.go"}, Side: RegionNew, Lines: [2]int{3, 5}, Declaration: "func D() {", Driver: "golang"}},
+		appended, "a function appended after another")
 	for name, tc := range map[string]struct {
 		insert string
 		decl   string
