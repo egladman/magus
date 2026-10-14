@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -650,6 +651,12 @@ type Knowledge struct {
 	// The defaults were set against this repository; a codebase of many small helpers
 	// will want MinShared higher, one of large functions may want MinScore lower.
 	Duplication DuplicationConfig `json:"duplication" yaml:"duplication"`
+	// Conform is the policy of the conform lens and its checks: which code distributions are
+	// measured, the shipped anchor each is bounded by, and the committed ratchet record.
+	//
+	// cli:"-": magus.yaml ONLY. A ratchet is committed policy, so a per-run flag or one
+	// exported env var would loosen every check without a trace in any file.
+	Conform ConformConfig `json:"conform" yaml:"conform" cli:"-"`
 	// Sessions declares which agent hosts' transcripts to fold into the @session overlay,
 	// the layer that answers which code agents actually touch. `magus graph build` runs
 	// each declared adapter before assembling, so the server's sync-graph job keeps it
@@ -732,6 +739,118 @@ func (c DuplicationConfig) Options() types.DuplicationOptions {
 		MinScore:     c.MinScore,
 		MinSpanRatio: c.MinSpanRatio,
 		IncludeTests: c.IncludeTests,
+	}
+}
+
+// ConformConfig is knowledge.conform in magus.yaml. See types.ConformOptions for how the
+// graph reads it.
+//
+// A key written in a magus.yaml replaces the default for that whole field, as every
+// non-zero config value does: writing checks states all of them.
+type ConformConfig struct {
+	// Ratchet is the workspace-relative path of the committed record of measured
+	// thresholds. Empty enforces the anchors alone and records no proposals.
+	Ratchet string `json:"ratchet" yaml:"ratchet"`
+	// MinSample is how many measurements a population needs before a proposal is made
+	// from it; a smaller population keeps its anchor.
+	MinSample int `json:"min_sample" yaml:"min_sample" validate:"gte=1"`
+	// Step is the fraction a live percentile must fall below its committed value before a
+	// tighter one is proposed.
+	Step float64 `json:"step" yaml:"step" validate:"gt=0,lt=1"`
+	// Exclude are workspace-relative globs of code kept out of every population, such as
+	// a vendored or upstream-shaped tree. Generated output is always out.
+	Exclude []string `json:"exclude" yaml:"exclude"`
+	// Gates are the absolute noise gates of the conformance checks.
+	Gates ConformGatesConfig `json:"gates" yaml:"gates"`
+	// Checks is the policy per metric and population. A metric or population left out is
+	// not checked.
+	Checks map[types.ConformMetric]map[types.ConformPopulation]ConformLimitConfig `json:"checks" yaml:"checks"`
+}
+
+// ConformGatesConfig is knowledge.conform.gates: the cohort a convention needs before it
+// binds a change, and how many findings are reported.
+type ConformGatesConfig struct {
+	MinCohort   int     `json:"min_cohort" yaml:"min_cohort" validate:"gte=1"`
+	MinShare    float64 `json:"min_share" yaml:"min_share" validate:"gte=0,lte=1"`
+	Bar         float64 `json:"bar" yaml:"bar" validate:"gte=0,lte=1"`
+	MaxFindings int     `json:"max_findings" yaml:"max_findings" validate:"gte=1"`
+}
+
+// ConformLimitConfig is the policy for one metric and population.
+type ConformLimitConfig struct {
+	// Percentile is the percentile of the live distribution a proposal measures at.
+	Percentile float64 `json:"percentile" yaml:"percentile"`
+	// Anchor is the ceiling no committed value may exceed, and the value enforced while
+	// nothing is committed.
+	Anchor int `json:"anchor" yaml:"anchor"`
+	// Scopes bounds a package directory or layer apart from the rest of the population,
+	// as directory to anchor, measured at this Percentile. Only dep-fanout has scopes. A
+	// package that legitimately sits past the population's anchor takes its own here, so
+	// the anchor itself stays tight.
+	Scopes map[string]int `json:"scopes,omitempty" yaml:"scopes,omitempty"`
+}
+
+// Options is the config as the graph package reads it, which cannot import this one.
+// Ratchet and Generated are the caller's to fill from files. A scope becomes its own key.
+func (c ConformConfig) Options() types.ConformOptions {
+	limits := map[types.ConformKey]types.ConformLimit{}
+	for metric, pops := range c.Checks {
+		for pop, l := range pops {
+			limits[types.ConformKey{Metric: metric, Population: pop}] = types.ConformLimit{Percentile: l.Percentile, Anchor: l.Anchor}
+			for scope, anchor := range l.Scopes {
+				limits[types.ConformKey{Metric: metric, Population: pop, Scope: scope}] = types.ConformLimit{Percentile: l.Percentile, Anchor: anchor}
+			}
+		}
+	}
+	return types.ConformOptions{
+		Limits:      limits,
+		RatchetPath: c.Ratchet,
+		MinSample:   c.MinSample,
+		Step:        c.Step,
+		Exclude:     slices.Clone(c.Exclude),
+		Gates: types.ConformGates{
+			MinCohort:   c.Gates.MinCohort,
+			MinShare:    c.Gates.MinShare,
+			Bar:         c.Gates.Bar,
+			MaxFindings: c.Gates.MaxFindings,
+		},
+	}
+}
+
+// conformDefaults are magus's own numbers, in the way DuplicationConfig's are: a
+// workspace with no knowledge.conform fails nothing magus would not fail on itself.
+//
+// An anchor is magus's own p99 at the measuring rev, rounded up to two significant
+// figures, except clone-tokens: its anchor is the smallest body worth one shared home,
+// just above the typical function (p50 58). The percentile is where a proposal
+// measures: p99 for test files and function lengths, since a long table test is
+// deliberate, p50 for clones, p95 elsewhere. The libs/gopherbuzz tree follows upstream
+// Buzz, so it is kept out. The cmd/magus scope is the import fan-out of the one binary
+// that wires every package together.
+func conformDefaults() ConformConfig {
+	limit := func(percentile float64, anchor int) ConformLimitConfig {
+		return ConformLimitConfig{Percentile: percentile, Anchor: anchor}
+	}
+	const (
+		src  = types.ConformPopSource
+		main = types.ConformPopMain
+		test = types.ConformPopTest
+	)
+	fanout := limit(95, 62)
+	fanout.Scopes = map[string]int{"cmd/magus": 89}
+	return ConformConfig{
+		MinSample: 30,
+		Step:      0.05,
+		Exclude:   []string{"libs/gopherbuzz/**"},
+		Gates:     ConformGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
+		Checks: map[types.ConformMetric]map[types.ConformPopulation]ConformLimitConfig{
+			types.ConformFileLines:   {src: limit(95, 2200), main: limit(95, 3000), test: limit(99, 1900)},
+			types.ConformFuncLines:   {src: limit(99, 92), main: limit(99, 140), test: limit(99, 73)},
+			types.ConformTypeMethods: {src: limit(95, 49), main: limit(95, 22), test: limit(95, 32)},
+			types.ConformFileSymbols: {src: limit(95, 82)},
+			types.ConformCloneTokens: {src: limit(50, 80), main: limit(50, 80)},
+			types.ConformDepFanout:   {src: fanout},
+		},
 	}
 }
 
@@ -1010,6 +1129,7 @@ func Defaults() Config {
 			// MinShared 4 is the line that mattered: at 3, identical triples of small
 			// helpers scored a perfect 1.0 and were most of the list.
 			Duplication: DuplicationConfig{MinCallees: 3, MinShared: 4, MinScore: 0.7, MinSpanRatio: 0.5},
+			Conform:     conformDefaults(),
 		},
 		Telemetry: Telemetry{
 			Protocol:    "grpc",
