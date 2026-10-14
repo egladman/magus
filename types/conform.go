@@ -3,13 +3,13 @@ package types
 import (
 	"bytes"
 	"cmp"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"maps"
 	"slices"
 	"strings"
+
+	"github.com/egladman/magus/internal/json"
 )
 
 // ConformMetric names one measured code distribution. Every metric is a ceiling: a lower
@@ -306,28 +306,24 @@ type ConformKnown struct {
 // Each threshold and known entry carries the line it starts on. The caller prefixes
 // errors with the record's path.
 func ReadConformRatchet(data []byte) (ConformRatchet, error) {
-	if err := conformNoDuplicateKeys(data); err != nil {
-		return ConformRatchet{}, err
-	}
-	dec := json.NewDecoder(bytes.NewReader(data))
-	if err := conformExpect(dec, '{'); err != nil {
+	dec := json.NewStrictDecoder(data)
+	if err := dec.Delim('{'); err != nil {
 		return ConformRatchet{}, fmt.Errorf("line %d: ratchet: %w", conformLineAt(data, 0), err)
 	}
 	var r ConformRatchet
 	schemaLine := 0
 	for dec.More() {
-		at := conformLineAt(data, dec.InputOffset())
-		tok, err := dec.Token()
+		at := conformLineAt(data, dec.Offset())
+		key, err := dec.Name()
 		if err != nil {
 			return ConformRatchet{}, fmt.Errorf("line %d: %w", at, err)
 		}
-		key, _ := tok.(string)
 		switch key {
 		case "schema":
 			schemaLine = at
 			err = dec.Decode(&r.Schema)
 		case "measured":
-			err = conformDecodeStrict(dec, &r.Measured)
+			err = dec.Decode(&r.Measured)
 		case "thresholds":
 			r.Thresholds, err = conformDecodeList(dec, data, func(t *ConformThreshold, line int) { t.Line = line })
 		case "known":
@@ -343,11 +339,11 @@ func ReadConformRatchet(data []byte) (ConformRatchet, error) {
 			return ConformRatchet{}, fmt.Errorf("line %d: %s: %w", at, key, err)
 		}
 	}
-	if _, err := dec.Token(); err != nil {
+	if err := dec.Delim('}'); err != nil {
 		return ConformRatchet{}, err
 	}
-	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return ConformRatchet{}, fmt.Errorf("line %d: trailing data after the ratchet", conformLineAt(data, dec.InputOffset()))
+	if err := dec.End(); err != nil {
+		return ConformRatchet{}, fmt.Errorf("line %d: %w after the ratchet", conformErrorLine(data, err, 0), err)
 	}
 	if r.Schema != 1 {
 		if schemaLine == 0 {
@@ -367,94 +363,30 @@ type conformLineError struct {
 func (e conformLineError) Error() string { return fmt.Sprintf("line %d: %v", e.line, e.err) }
 func (e conformLineError) Unwrap() error { return e.err }
 
-func conformDecodeList[T any](dec *json.Decoder, data []byte, setLine func(*T, int)) ([]T, error) {
-	if err := conformExpect(dec, '['); err != nil {
+func conformDecodeList[T any](dec *json.StrictDecoder, data []byte, setLine func(*T, int)) ([]T, error) {
+	if err := dec.Delim('['); err != nil {
 		return nil, err
 	}
 	var out []T
 	for dec.More() {
-		var raw json.RawMessage
-		if err := dec.Decode(&raw); err != nil {
-			return nil, err
-		}
-		line := conformLineAt(data, dec.InputOffset()-int64(len(raw)))
+		line := conformLineAt(data, dec.Offset())
 		var v T
-		if err := conformUnmarshalStrict(raw, &v); err != nil {
-			return nil, conformLineError{line: line, err: err}
+		if err := dec.Decode(&v); err != nil {
+			return nil, conformLineError{line: conformErrorLine(data, err, line), err: err}
 		}
 		setLine(&v, line)
 		out = append(out, v)
 	}
-	_, err := dec.Token()
-	return out, err
+	return out, dec.Delim(']')
 }
 
-func conformDecodeStrict(dec *json.Decoder, v any) error {
-	var raw json.RawMessage
-	if err := dec.Decode(&raw); err != nil {
-		return err
+// conformErrorLine is the line a decoder error names, or line when it names none.
+func conformErrorLine(data []byte, err error, line int) int {
+	var strict *json.StrictError
+	if errors.As(err, &strict) {
+		return conformLineAt(data, strict.Offset)
 	}
-	return conformUnmarshalStrict(raw, v)
-}
-
-func conformUnmarshalStrict(raw []byte, v any) error {
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	return dec.Decode(v)
-}
-
-func conformExpect(dec *json.Decoder, want json.Delim) error {
-	tok, err := dec.Token()
-	if err != nil {
-		return err
-	}
-	if d, ok := tok.(json.Delim); !ok || d != want {
-		return fmt.Errorf("want %q, got %v", want, tok)
-	}
-	return nil
-}
-
-// conformNoDuplicateKeys walks every object in data, which encoding/json would otherwise
-// resolve silently in favor of the last key.
-func conformNoDuplicateKeys(data []byte) error {
-	dec := json.NewDecoder(bytes.NewReader(data))
-	var walk func() error
-	walk = func() error {
-		tok, err := dec.Token()
-		if err != nil {
-			return err
-		}
-		switch tok {
-		case json.Delim('{'):
-			seen := map[string]bool{}
-			for dec.More() {
-				at := conformLineAt(data, dec.InputOffset())
-				tok, err := dec.Token()
-				if err != nil {
-					return err
-				}
-				key, _ := tok.(string)
-				if seen[key] {
-					return fmt.Errorf("line %d: duplicate key %q", at, key)
-				}
-				seen[key] = true
-				if err := walk(); err != nil {
-					return err
-				}
-			}
-		case json.Delim('['):
-			for dec.More() {
-				if err := walk(); err != nil {
-					return err
-				}
-			}
-		default:
-			return nil
-		}
-		_, err = dec.Token()
-		return err
-	}
-	return walk()
+	return line
 }
 
 // conformLineAt is the 1-based line of the first token at or after offset. A decoder's
