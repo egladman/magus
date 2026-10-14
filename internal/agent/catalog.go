@@ -368,7 +368,10 @@ import (
 // 121: magus-test-design and magus-context-audit state their claims as verbs, and the
 // descriptions of magus-diagram, magus-context-audit and magus-run shorten their lead
 // sentence and name what not to use them for.
-const SkillVersion = 123
+//
+// 124: magus-multi-agent teaches signature goals, `breaks` and deletion candidates, and
+// cuts its repetition to fit the 500-line skill cap.
+const SkillVersion = 124
 
 const skillLicense = "GPL-3.0-or-later"
 
