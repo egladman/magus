@@ -342,7 +342,7 @@ func dependsOnTransitively(combined []types.Job, from, on string) bool {
 // pays for it.
 func touchedDeclarations(ctx context.Context, store *Store, rows []types.Job, holder, file string) (decls []string, unknown string) {
 	driver, _ := resolveDriver(ctx, store.root)
-	fp := readFootprint(ctx, driver, rows, holder)
+	fp := readFootprint(withFootprintCache(ctx, store.footprintCache()), driver, rows, holder)
 	if !fp.known {
 		if fp.reason == "" {
 			return nil, "its footprint could not be read"
@@ -563,14 +563,15 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 		}
 	}
 	here, _ := filepath.Abs(store.root)
-	var shared []string
+	type pair struct{ peer, file string }
+	shared := map[pair]bool{}
 	for _, peer := range rows {
 		if peer.ID == row.ID || !Editing(peer) || len(peer.WritePaths) == 0 || peer.CheckoutRoot != "" && peer.CheckoutRoot != here {
 			continue
 		}
 		for _, mine := range row.WritePaths {
 			file, ok := literalClaimableFile(store.root, mine)
-			if !ok || slices.Contains(shared, peer.ID+" "+file) {
+			if !ok || shared[pair{peer.ID, file}] {
 				continue
 			}
 			if _, driven := types.MatchDiffDriver(file); !driven {
@@ -580,7 +581,7 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 				if other, ok := literalClaimableFile(store.root, theirs); !ok || other != file || !types.PathsIntersect(mine, theirs) {
 					continue
 				}
-				shared = append(shared, peer.ID+" "+file)
+				shared[pair{peer.ID, file}] = true
 				var touched []string
 				if peer.CheckoutRoot != "" {
 					touched, _ = touchedDeclarations(ctx, store, rows, peer.ID, file)

@@ -342,6 +342,20 @@ func TestForkNotes(t *testing.T) {
 		got := ForkNotes(ctx, s, rows, types.Job{ID: "B", WritePaths: []string{"run.go"}, Goals: goals})
 		assert.Equal(t, []string{"B and A both write run.go. Claim `run.go#C` on B (its symbol goals name it) and a declaration other than that on A, or add `--depends-on A` to B, or fold B into A"}, got)
 	})
+
+	// One note per peer and file, however many of the row's entries name the file; a
+	// second peer on it gets its own.
+	t.Run("a file two entries and two peers share", func(t *testing.T) {
+		t.Parallel()
+		rows := []types.Job{
+			{ID: "A", State: types.StateDeclared, WritePaths: []string{"run.go"}},
+			{ID: "D", State: types.StateDeclared, WritePaths: []string{"run.go#B"}},
+		}
+		got := ForkNotes(ctx, s, rows, types.Job{ID: "B", WritePaths: []string{"run.go#A", "run.go#B"}})
+		require.Len(t, got, 2, "%q", got)
+		assert.True(t, strings.HasPrefix(got[0], "B and A both write run.go."), got[0])
+		assert.True(t, strings.HasPrefix(got[1], "B and D both write run.go."), got[1])
+	})
 }
 
 // strPtr returns a pointer to s, for a test table field that must tell "not given" (nil)

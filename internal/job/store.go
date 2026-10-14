@@ -955,8 +955,12 @@ func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
 			}
 			return err
 		}
+		retained := f.Retained
 		if err := s.retainDue(&f, s.now()); err != nil {
 			return err
+		}
+		if retained != 0 && f.Retained != retained {
+			s.pruneFootprints(f.Jobs)
 		}
 		raw, err := encodeJobs(f)
 		if err != nil {
@@ -964,6 +968,27 @@ func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
 		}
 		return file.WriteFileAtomic(s.path, raw, 0o644)
 	})
+}
+
+// pruneFootprints removes the footprint cache of every checkpoint revision no live row in
+// rows declares, riding the retention pass. Best effort, as for the archives it drops.
+func (s *Store) pruneFootprints(rows []types.Job) {
+	dir := s.footprintCache().dir
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	named := map[string]bool{}
+	for _, r := range rows {
+		if rev := checkpointRevision(r.Checkpoint); rev != "" && !over(r) {
+			named[revisionDir(rev)] = true
+		}
+	}
+	for _, e := range entries {
+		if !named[e.Name()] {
+			_ = os.RemoveAll(filepath.Join(dir, e.Name()))
+		}
+	}
 }
 
 // now is the Store's clock.

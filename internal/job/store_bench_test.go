@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/require"
 )
 
 // realSizedRows is n rows shaped like the store that made `magus job fork` take minutes
@@ -103,4 +104,91 @@ func BenchmarkStoreAtRealSize(b *testing.B) {
 			}
 		})
 	}
+}
+
+// benchFiles is how many Go files each benchmark checkout has edited, each in two of its
+// declarations: a worker's diff, not a one-line fix.
+const benchFiles = 12
+
+// editedCheckouts is overlapCheckouts with benchFiles files edited in each checkout, and the
+// changed files of the first.
+func editedCheckouts(b *testing.B) (rows []types.Job, overlaps []types.JobOverlap, root, rev string, files []types.FileChange) {
+	b.Helper()
+	a, other, rows, _ := overlapCheckouts(b)
+	tree := map[string]string{}
+	for i := range benchFiles {
+		tree[fmt.Sprintf("api/f%d.go", i)] = twoFuncs
+	}
+	rev = a.Commit("files", tree)
+	other.Git("merge", "-q", "--ff-only", rev)
+	for i := range benchFiles {
+		p := fmt.Sprintf("api/f%d.go", i)
+		a.Write(p, strings.Replace(twoFuncs, "return", "panic(1)", 2))
+		other.Write(p, strings.Replace(twoFuncs, "func Y() {\n\treturn", "func Y() {\n\tpanic(2)", 1))
+		files = append(files, types.FileChange{Path: p})
+	}
+	for i := range rows {
+		rows[i].Checkpoint = rev
+		rows[i].WritePaths = []string{"api/*.go"}
+	}
+	return rows, types.NewJobList(rows).Overlaps, a.Root(), rev, files
+}
+
+// BenchmarkRegionsSinceWarm places the changed lines of benchFiles edited files: cold reads
+// them as every read did before the cache, warm answers from the cache. calls/op is the
+// driver calls one read makes.
+func BenchmarkRegionsSinceWarm(b *testing.B) {
+	rows, _, root, rev, files := editedCheckouts(b)
+	driver := gitDriver(b, root)
+	cache := withFootprintCache(b.Context(), footprintCache{dir: b.TempDir()}.forRow(rows[0]))
+	if _, ok, why := regionsSince(cache, driver, root, rev, files); !ok {
+		b.Fatal(why)
+	}
+	for _, tc := range []struct {
+		name string
+		ctx  context.Context
+	}{{"cold", b.Context()}, {"warm", cache}} {
+		b.Run(tc.name, func(b *testing.B) {
+			driver.take()
+			for b.Loop() {
+				if _, ok, why := regionsSince(tc.ctx, driver, root, rev, files); !ok {
+					b.Fatal(why)
+				}
+			}
+			reportCalls(b, driver.take())
+		})
+	}
+}
+
+// BenchmarkOverlapFootprintsWarm measures one overlap between two checkouts that each edited
+// benchFiles files, as `magus ls jobs` does: cold diffs both as every read did before the
+// cache, warm probes each checkout and reuses its footprint.
+func BenchmarkOverlapFootprintsWarm(b *testing.B) {
+	rows, overlaps, root, _, _ := editedCheckouts(b)
+	require.Len(b, overlaps, 1)
+	driver := gitDriver(b, root)
+	cache := withFootprintCache(b.Context(), footprintCache{dir: b.TempDir()})
+	if got := OverlapFootprints(cache, driver, rows, overlaps); got[0].Footprint.Verdict == types.FootprintUnknown {
+		b.Fatal(got[0].Footprint.Reason)
+	}
+	for _, tc := range []struct {
+		name string
+		ctx  context.Context
+	}{{"cold", b.Context()}, {"warm", cache}} {
+		b.Run(tc.name, func(b *testing.B) {
+			driver.take()
+			for b.Loop() {
+				OverlapFootprints(tc.ctx, driver, rows, overlaps)
+			}
+			reportCalls(b, driver.take())
+		})
+	}
+}
+
+func reportCalls(b *testing.B, calls map[string]int) {
+	total := 0
+	for _, n := range calls {
+		total += n
+	}
+	b.ReportMetric(float64(total)/float64(b.N), "calls/op")
 }
