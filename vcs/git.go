@@ -4135,11 +4135,11 @@ func (v gitVCS) Unbundle(ctx context.Context, root, file string) error {
 }
 
 // RegionsConfig is the configuration Regions places lines in root with besides the files and
-// revisions it is handed, so a cache of Regions can key on it: every funcname pattern the
-// placement runs with, magus's defaults and each diff.<driver>.funcname and xfuncname the
-// repository sees, then the path and content of each attribute file outside the tree that
-// picks a file's diff driver (info/attributes and core.attributesFile). A missing attribute file reads as
-// empty.
+// revisions it is handed, so a cache of Regions can key on it. It holds every funcname
+// pattern the placement runs with: magus's defaults and each diff.<driver>.funcname and
+// xfuncname the repository sees. Then it holds the path and content of each attribute file
+// outside the tree that picks a file's diff driver (info/attributes and
+// core.attributesFile). A missing attribute file reads as empty.
 func (gitVCS) RegionsConfig(ctx context.Context, root string) (string, error) {
 	args, err := gitFuncnameConfig(ctx, root)
 	if err != nil {

@@ -197,10 +197,10 @@ func (d DiffDriver) OpaqueLines(lines []string) []bool {
 }
 
 // Conform rewrites decls, a placement git's own funcname matching made of lines, so it
-// reads as Declarations does: a declaration that begins on a line OpaqueLines reports gives
-// way to the one enclosing it, and the keys of a magusfile's project call or a YAML file
-// are named by their path (see placeKeys), and a doc comment goes to the declaration below
-// it (see handLeadersDown). decls is indexed by line-1 like lines.
+// reads as Declarations does. A declaration that begins on a line OpaqueLines reports gives
+// way to the one enclosing it. The keys of a magusfile's project call or a YAML file are
+// named by their path (see placeKeys). A doc comment goes to the declaration below it (see
+// handLeadersDown). decls is indexed by line-1 like lines.
 func (d DiffDriver) Conform(lines, decls []string) {
 	d.dropOpaque(lines, decls)
 	d.refine(lines, decls)
