@@ -161,3 +161,24 @@ var modelTierSources = enum.Set[ModelTierSource]{ModelTierSourceRow, ModelTierSo
 func (v ModelTierSource) Values() []string { return modelTierSources.Strings() }
 func (v ModelTierSource) Valid() bool      { return modelTierSources.Valid(v) }
 func (v ModelTierSource) String() string   { return enum.String(v) }
+
+var conformMetrics = enum.Set[ConformMetric]{
+	ConformFileLines, ConformFuncLines, ConformTypeMethods, ConformFileSymbols, ConformDepFanout,
+	ConformCloneTokens, ConformExportScope,
+}
+
+func (v ConformMetric) Values() []string { return conformMetrics.Strings() }
+func (v ConformMetric) Valid() bool      { return conformMetrics.Valid(v) }
+func (v ConformMetric) String() string   { return enum.String(v) }
+
+var conformPopulations = enum.Set[ConformPopulation]{ConformPopSource, ConformPopMain, ConformPopTest}
+
+func (v ConformPopulation) Values() []string { return conformPopulations.Strings() }
+func (v ConformPopulation) Valid() bool      { return conformPopulations.Valid(v) }
+func (v ConformPopulation) String() string   { return enum.String(v) }
+
+var conformSources = enum.Set[ConformSource]{ConformFromRatchet, ConformFromAnchor}
+
+func (v ConformSource) Values() []string { return conformSources.Strings() }
+func (v ConformSource) Valid() bool      { return conformSources.Valid(v) }
+func (v ConformSource) String() string   { return enum.String(v) }
