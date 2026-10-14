@@ -818,6 +818,44 @@ func TestDescribeAndWaitGradeSymbolsAlike(t *testing.T) {
 	assert.Equal(t, waited, grade(read(true, stale)), "wait builds whatever the index says")
 }
 
+// describe reads the graph evidence as it reads the symbol goals: from the graph as built,
+// and from none while a symbol index is stale, which it reports cold.
+func TestLeaseGraphEvidenceBuildsNothingOverAStaleIndex(t *testing.T) {
+	t.Parallel()
+
+	paths := []string{"code.go"}
+	evidence := func(rebuild bool, stale []types.KnowledgeStaleIndex) (cold bool, loads int) {
+		graph := &jobGraph{
+			rebuild: rebuild,
+			stale:   func(context.Context) []types.KnowledgeStaleIndex { return stale },
+			domain: func(context.Context) (*knowledge.Graph, error) {
+				loads++
+				if !rebuild && len(stale) > 0 {
+					t.Error("describe built the graph over a stale index")
+				}
+				return deltaGraph(nil), nil
+			},
+		}
+		_, cold = leaseGraphEvidence(t.Context(), graph, paths)
+		_, again := leaseGraphEvidence(t.Context(), graph, paths)
+		assert.Equal(t, cold, again, "a second ask answers alike")
+		return cold, loads
+	}
+
+	cold, loads := evidence(false, nil)
+	assert.False(t, cold)
+	assert.Equal(t, 1, loads, "one load serves every ask")
+
+	stale := []types.KnowledgeStaleIndex{{Project: "pkg", Language: "go"}}
+	cold, loads = evidence(false, stale)
+	assert.True(t, cold, "a stale index is reported, not read as nothing depending on the paths")
+	assert.Zero(t, loads)
+
+	cold, loads = evidence(true, stale)
+	assert.False(t, cold)
+	assert.Equal(t, 1, loads)
+}
+
 func TestDeletionCandidatesAskNothingOfARowThatWritesNothing(t *testing.T) {
 	t.Parallel()
 

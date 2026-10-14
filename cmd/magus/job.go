@@ -173,10 +173,17 @@ func probeConsoleServer() (serving bool, serverVersion string) {
 const consoleProbeTimeout = 2 * time.Second
 
 func openJobs(root string) (*job.Store, error) {
+	return openJobsDry(root, false)
+}
+
+// openJobsDry is openJobs whose reads write nothing under dryRun: no sweep and no cached
+// footprint.
+func openJobsDry(root string, dryRun bool) (*job.Store, error) {
 	loc, err := jobLocation(root)
 	if err != nil {
 		return nil, err
 	}
+	loc.DryRun = dryRun
 	return job.NewStore(loc), nil
 }
 
@@ -822,7 +829,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return usagef("magus describe job: requires exactly one job")
 	}
 	root = resolveRootOrEmpty(root)
-	store, err := openJobs(root)
+	store, err := openJobsDry(root, globalCfg.DryRun)
 	if err != nil {
 		return err
 	}
@@ -839,11 +846,11 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	// A read: the symbol goals, their delta and the deletion candidates take the graph as
-	// built, and none while a symbol index is stale (see jobGraph).
+	// A read: the symbol goals, their delta, the deletion candidates and the graph evidence
+	// take the graph as built, and none while a symbol index is stale (see jobGraph).
 	graph := newJobGraph(root, false)
 	facts := leaseBoundary(ctx, root, row, leases, graph)
-	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, root, row.WritePaths)
+	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, graph, row.WritePaths)
 	brief := job.NewTerms(row, facts)
 
 	status, err := job.GradeGates(ctx, store, row.ID, jobObserver(root, graph))
@@ -1722,7 +1729,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	}
 	root = resolveRootOrEmpty(root)
 
-	store, err := openJobs(root)
+	store, err := openJobsDry(root, globalCfg.DryRun)
 	if err != nil {
 		return err
 	}
@@ -2369,13 +2376,15 @@ func chainToGate(start string, deps map[string][]string) []string {
 // A path the graph cannot resolve is skipped SILENTLY, because most write paths are
 // ordinary source directories the containment tree does not carry, and a "no node" line
 // per path would bury the ones that do resolve. A cold graph is different and is
-// reported once: "not asked" must not read as "nothing depends on this".
-func leaseGraphEvidence(ctx context.Context, root string, paths []string) (evidence []job.TermsEvidence, cold bool) {
+// reported once: "not asked" must not read as "nothing depends on this". It takes the domain
+// graph through graph, so a graph that must not build answers cold while a symbol index is
+// stale.
+func leaseGraphEvidence(ctx context.Context, graph *jobGraph, paths []string) (evidence []job.TermsEvidence, cold bool) {
 	if len(paths) == 0 {
 		return nil, false
 	}
-	g, err := loadKnowledgeGraph(ctx, root, false, false, false)
-	if err != nil {
+	g := graph.loadDomain(ctx)
+	if g == nil {
 		return nil, true
 	}
 	for _, p := range paths {
@@ -2439,11 +2448,16 @@ type jobGraph struct {
 	rebuild bool
 	stale   func(context.Context) []types.KnowledgeStaleIndex
 	build   func(context.Context) (*knowledge.Graph, error)
+	// domain loads the graph without its symbol shards, the graph whose blast radius
+	// `magus explain` prints.
+	domain func(context.Context) (*knowledge.Graph, error)
 
-	staleOnce sync.Once
-	staleIdx  []types.KnowledgeStaleIndex
-	once      sync.Once
-	g         *knowledge.Graph
+	staleOnce  sync.Once
+	staleIdx   []types.KnowledgeStaleIndex
+	once       sync.Once
+	g          *knowledge.Graph
+	domainOnce sync.Once
+	domainG    *knowledge.Graph
 }
 
 func newJobGraph(root string, rebuild bool) *jobGraph {
@@ -2453,7 +2467,23 @@ func newJobGraph(root string, rebuild bool) *jobGraph {
 		build: func(ctx context.Context) (*knowledge.Graph, error) {
 			return loadKnowledgeGraphForRefs(ctx, root, false, "")
 		},
+		domain: func(ctx context.Context) (*knowledge.Graph, error) {
+			return loadKnowledgeGraph(ctx, root, false, false, false)
+		},
 	}
+}
+
+// loadDomain is load for the domain graph, under the same rule.
+func (r *jobGraph) loadDomain(ctx context.Context) *knowledge.Graph {
+	r.domainOnce.Do(func() {
+		if !r.rebuild && len(r.staleIndexes(ctx)) > 0 {
+			return
+		}
+		if loaded, err := r.domain(ctx); err == nil {
+			r.domainG = loaded
+		}
+	})
+	return r.domainG
 }
 
 // staleIndexes is the stale symbol indexes, asked once.
@@ -2712,15 +2742,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	root = resolveRootOrEmpty(root)
 	opener := openForkJobs
 	if globalCfg.DryRun {
-		// A dry-run store's reads write nothing either: no sweep, no cached footprint.
-		opener = func(_ context.Context, root string) (*job.Store, error) {
-			loc, err := jobLocation(root)
-			if err != nil {
-				return nil, err
-			}
-			loc.DryRun = true
-			return job.NewStore(loc), nil
-		}
+		opener = func(_ context.Context, root string) (*job.Store, error) { return openJobsDry(root, true) }
 	}
 	store, err := opener(ctx, root)
 	if err != nil {
