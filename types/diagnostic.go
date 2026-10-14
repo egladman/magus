@@ -315,6 +315,14 @@ const CarryApprovalsInvalid DiagnosticCode = "MGS1050"
 // mgs_ function it does not know is a declaration it would silently ignore.
 const SpellContractViolated DiagnosticCode = "MGS1051"
 
+// ModelTierDeclarationUnusable is a magus\job.modelTiers or magus\job.modelTier call the
+// load cannot use: tiers that are not an enum, a default that is not one of its cases, a
+// host key naming no harness the magusfile wired, a mapping function that raises or
+// answers the wrong type, a second call, or a call outside the root magusfile. The load
+// stops, because a declaration that silently failed to register leaves a workspace that
+// reads as tiered when its jobs get the default.
+const ModelTierDeclarationUnusable DiagnosticCode = "MGS1052"
+
 // SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 // ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 // keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -858,6 +866,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	ManifestScriptDelegation,
 	CarryApprovalsInvalid,
 	SpellContractViolated,
+	ModelTierDeclarationUnusable,
 	PathReadDenied,
 	PathWriteDenied,
 	EnvStripped,
