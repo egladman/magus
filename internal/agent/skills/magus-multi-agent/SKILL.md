@@ -67,7 +67,8 @@ Apply these four in the order they bite:
 Prove it before you plan it. A claim a plan or brief rests on cites the output ref of
 a run that settled it. A guess nobody ran stays out of the plan.
 
-{{if .Full}}The graph improves the loop's partition and collision decisions; run the loop:
+{{if .Full}}Graph engineering is a natural evolution of loop engineering: the graph improves
+the loop's partition and collision decisions, and does not replace the loop. Run it:
 
 1. State the top-level goal, constraints, and observable acceptance criteria.
 2. Map the affected graph and propose collision-resistant edit jobs.
