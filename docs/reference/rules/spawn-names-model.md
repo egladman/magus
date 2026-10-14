@@ -14,7 +14,7 @@ A main thread spawning a subagent without naming the model it runs on.
 
 ## Why
 
-A spawn that names no model runs the child on the session's own, usually the costliest it uses. At standard it advises once; at strict it refuses, and also refuses a spawn whose model and its job's model both name rows of the model table and differ.
+A spawn that names no model runs the child on the session's own, usually the costliest it uses. At standard it advises once; at strict it refuses, and also refuses a spawn whose job row records a model tier when the spawn's model is not at that tier. The model resolves to a tier through the host's aliases in the workspace's model-tier declaration, and the two compare by rank; a host the declaration maps no model for is refused naming the hosts entry to add. The refusal names the row's tier, rank, alias, the source that chose it, its reason and the declaration's site. A spawn bound to no row, or to a row forked with no tiers declared, is judged on the missing model alone.
 
 ## Default and override
 

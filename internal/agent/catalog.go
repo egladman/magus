@@ -371,7 +371,10 @@ import (
 //
 // 124: magus-multi-agent teaches signature goals, `breaks` and deletion candidates, and
 // cuts its repetition to fit the 500-line skill cap.
-const SkillVersion = 124
+//
+// 125: magus-multi-agent teaches the workspace's declared model tiers, what a row records of
+// its tier, and that `job fork --model` takes a tier or a model.
+const SkillVersion = 125
 
 const skillLicense = "GPL-3.0-or-later"
 
