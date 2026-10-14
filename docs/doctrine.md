@@ -208,7 +208,9 @@ for everything trains the person to confirm everything, which
 names as the failure, and [friction](#friction-that-carries-meaning) is the
 test for any new point. This prevents two quiet failures that look
 opposite: the agent that decides because nobody was asked, and the person who
-approves because everybody was.
+approves because everybody was. A default that acts without saying so is a
+third: a decision nobody made. [No silent defaults](#no-silent-defaults)
+closes it.
 
 ### Built for the expensive era
 

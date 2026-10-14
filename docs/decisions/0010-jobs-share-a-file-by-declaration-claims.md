@@ -121,8 +121,8 @@ says so and stays conflicted.
 - [Automation you can interrogate](../doctrine.md#automation-you-can-interrogate): relied on.
   The `vcs resolve` line names each claim and job behind a settle, and the reason a file
   did not settle.
-- [Misconfiguration is an error, never a warning](../doctrine.md#misconfiguration-is-an-error-never-a-warning):
-  relied on. A claim word that names several declarations is refused, not guessed at.
+- [No silent defaults](../doctrine.md#no-silent-defaults): relied on. A claim word that
+  names several declarations is refused, not guessed at.
 - [Friction that carries meaning](../doctrine.md#friction-that-carries-meaning): relied on.
   MGS3032 used to say `<declaration>`; it now carries the one move that clears it.
 

@@ -195,10 +195,10 @@ fold into `magus session show` and its JSON, and metrics go through the existing
 - [Friction that carries meaning](../doctrine.md#friction-that-carries-meaning): relied on.
   Each advisory fires once per session per threshold, because an advisory that fires on
   every call is a toll.
-- [Misconfiguration is an error, never a warning](../doctrine.md#misconfiguration-is-an-error-never-a-warning):
-  relied on. An unknown level is MGS1045, a model row with no window fails at load, a
-  declared `quota` under a metered environment is an error, and so is a budget `tokens`
-  figure past every window in the table.
+- [No silent defaults](../doctrine.md#no-silent-defaults): relied on. An unknown level is
+  MGS1045, a model row with no window fails at load, a declared `quota` under a metered
+  environment is an error, and so is a budget `tokens` figure past every window in the
+  table.
 - [Agents propose, humans dispose](../doctrine.md#agents-propose-humans-dispose): relied on.
   A stall files a row for the root and the person to read, and never picks the remedy.
 - [Told, never guessed](../doctrine.md#told-never-guessed): departed from, in two places.
