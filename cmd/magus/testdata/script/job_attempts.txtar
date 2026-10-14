@@ -20,7 +20,7 @@ stdout '^attempt 1 of 2$'
 ! stdout 'previous attempts'
 
 exec magus job exit scout
-stdout '^abandoned scout, recorded no_return$'
+stdout '^ended scout, recorded no_return: ended with no result filed, before any holder ran `magus job exec scout` on it$'
 stdin $WORK/two.json
 exec magus job fork --stdin
 exec magus describe job scout

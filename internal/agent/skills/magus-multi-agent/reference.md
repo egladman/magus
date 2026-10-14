@@ -196,8 +196,9 @@ EOF
 ```
 
 A scout whose output is prose has no check, so it cannot pass. The root ends it with
-`{{cmd "job exit"}} <job>`, recorded no_return. That is the expected end for such a
-scout, not a failure.
+`{{cmd "job exit"}} <job>`, recorded no_return with the end reason "returned ungraded"
+or "ended ungraded", never "abandoned". That is the expected end for such a scout, not a
+failure.
 
 Every row ends in pass, fail, or NO-RETURN, and the root writes which{{if .Full}}: silence
 is not a pass, and a worker that dies, stalls, or is killed is a different state

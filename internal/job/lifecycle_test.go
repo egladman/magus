@@ -20,6 +20,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestEndedReasonSaysWhichEnd: a read-only scout its holder finished, and a row the root
+// ended for an isolated worker that filed nothing, both read as abandoned no_return with no
+// reason (2026-10-14). Every no_return a write records now says which end it was.
+func TestEndedReasonSaysWhichEnd(t *testing.T) {
+	t.Parallel()
+	check := &types.LeaseCheck{Target: "test", Project: "."}
+	filed := &types.JobResult{}
+	for _, tt := range []struct {
+		name     string
+		row      types.Job
+		byHolder bool
+		want     string
+	}{
+		{"a read-only scout that filed a result", types.Job{ID: "s", ReadOnly: true, Registered: 1, Result: filed}, true, "returned ungraded"},
+		{"a read-only scout that filed nothing", types.Job{ID: "s", ReadOnly: true, Registered: 1}, true, "ended ungraded"},
+		{"a result nobody verified", types.Job{ID: "w", Check: check, Registered: 1, Result: filed}, false, "ended unverified"},
+		{"a row nobody took", types.Job{ID: "w", Check: check}, false, "before any holder ran"},
+		{"its holder giving it up", types.Job{ID: "w", Check: check, Registered: 1}, true, "abandoned by its holder"},
+		{"the root ending an isolated worker's row", types.Job{ID: "w", Check: check, Registered: 1}, false, "ended by someone other than its holder"},
+	} {
+		assert.Contains(t, endedReason(tt.row, tt.byHolder), tt.want, tt.name)
+	}
+}
+
 // observeClaim is an observer whose diff shows exactly what rep claims.
 func observeClaim(rep types.JobResult) Observer {
 	return func(context.Context, types.Job) (Observed, error) { return claimed(rep), nil }

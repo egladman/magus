@@ -30,6 +30,27 @@ import (
 // job rows live per repository.
 type AttemptResolver func(context.Context, string) (types.JobAttempt, error)
 
+// endedReason says which end a write recording no_return on the live row prev is, so a
+// row its holder returned with nothing to grade never reads as one nobody returned. byHolder
+// is a write under the row's lease or from the checkout its holder took it in.
+func endedReason(prev types.Job, byHolder bool) string {
+	ungradable := prev.Check == nil && len(prev.Goals) == 0
+	switch {
+	case prev.ReadOnly && ungradable && prev.Result != nil:
+		return "returned ungraded: its holder filed a result, and a read-only row declaring no check or goal has nothing magus can grade"
+	case prev.Result != nil:
+		return "ended unverified: its holder filed a result and nobody ran `" + hint.JobWait.With(prev.ID) + "` on it"
+	case prev.Registered == 0:
+		return "ended with no result filed, before any holder ran `" + hint.JobExec.With(prev.ID) + "` on it"
+	case prev.ReadOnly && ungradable:
+		return "ended ungraded: a read-only row declaring no check or goal has nothing magus can grade, so what it found went only to its caller"
+	case byHolder:
+		return "abandoned by its holder, which filed no result"
+	default:
+		return "ended by someone other than its holder, which filed no result, so nothing was graded"
+	}
+}
+
 // Exit records how a worker ended one job. A nil result is an abandonment, distinct from
 // a failed verification: nobody returned evidence at all. A non-nil result is filed with
 // the output attempt resolved in the worker's checkout, so a verifier in another

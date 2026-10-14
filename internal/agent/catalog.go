@@ -384,7 +384,8 @@ import (
 // `job wait` prints.
 //
 // 128: magus-multi-agent says the root coordinates and never builds: the checkout's
-// integrator, a job whose check is the gate, cherry-picks, builds, regenerates and commits.
+// integrator, a job whose check is the gate, cherry-picks, builds, regenerates and commits;
+// and that a prose scout's no_return names it ungraded, never abandoned.
 const SkillVersion = 128
 
 const skillLicense = "GPL-3.0-or-later"

@@ -198,11 +198,13 @@ gives it back with no result:
 
 ```console
 $ magus job exit refactor/tax
-abandoned refactor/tax, recorded no_return
+ended refactor/tax, recorded no_return: abandoned by its holder, which filed no result
 ```
 
 `no_return` is not a failure. A failed job came back and said so; an abandoned one
-said nothing, and the board keeps the two apart.
+said nothing, and the board keeps the two apart. The end reason says which kind of
+`no_return` it was: a holder that gave the job up, a read-only scout returned with
+nothing to grade, a result nobody verified, or someone other than the holder ending it.
 
 Back in the main checkout, she checks the result against the job:
 

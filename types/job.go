@@ -834,8 +834,9 @@ type Job struct {
 	// stamped by the store on that write. Once the directory is gone, nobody can be
 	// holding the job, and the store ends it.
 	CheckoutRoot string `json:"checkout_root,omitempty" yaml:"checkout_root,omitempty"`
-	// EndReason is why magus ended this row itself, empty when a holder or a person ended
-	// it. Store-computed; see job.Store.List for the rules that set it.
+	// EndReason is why the row ended as no_return: the sweep's reason when magus ended it
+	// itself, or which end a holder's or a person's exit was. Store-computed; see
+	// job.Store.List for the sweep's rules.
 	EndReason string `json:"end_reason,omitempty" yaml:"end_reason,omitempty"`
 	// Created and Updated are unix seconds, stamped by the store on write and
 	// output-only to callers: a client-supplied timestamp is a fact about the client's

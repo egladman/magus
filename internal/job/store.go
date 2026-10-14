@@ -675,10 +675,14 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		if i < 0 {
 			row.Entries = nil
 		}
-		// Only the sweep writes a reason, and a row brought back to life has none.
+		// The store writes every reason: the sweep's, and the one a write ending a live row
+		// as no_return gets from what the row had become. A row brought back to life has none.
 		row.EndReason = prev.EndReason
-		if row.State.Live() {
+		switch {
+		case row.State.Live():
 			row.EndReason = ""
+		case i >= 0 && prev.State.Live() && row.State == types.StateNoReturn:
+			row.EndReason = endedReason(prev, actor.Lease == id || (prev.CheckoutRoot != "" && prev.CheckoutRoot == s.root))
 		}
 		row.Updated = now
 		// A wait that refuses records why and leaves the row where it was, heartbeat

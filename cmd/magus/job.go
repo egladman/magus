@@ -1467,7 +1467,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 	var schema, stdin bool
 	pos, err := cmdParse("job exit", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&schema, "schema", false, "Print the JSON schema a result must satisfy, and exit")
-		fs.BoolVar(&stdin, "stdin", false, "Read this job's result from stdin; without it the job is abandoned")
+		fs.BoolVar(&stdin, "stdin", false, "Read this job's result from stdin; without it the job ends with no result filed")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job exit <job> --stdin < result.json")
 			fmt.Fprintln(os.Stderr, "       magus job exit <job>...")
@@ -1481,10 +1481,12 @@ func jobExit(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Do the work first, then file this. It is a record of what happened, not a form to")
 			fmt.Fprintln(os.Stderr, "fill in while you are still deciding what to do.")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "With no --stdin each named job is ABANDONED and recorded "+string(types.StateNoReturn)+": nobody")
-			fmt.Fprintln(os.Stderr, "returned it, which is not the same as returning it and failing. Every job named is")
-			fmt.Fprintln(os.Stderr, "tried, and the command fails at the end if any could not be ended. To end every job")
-			fmt.Fprintln(os.Stderr, "nobody is working in one call, use `magus job prune`.")
+			fmt.Fprintln(os.Stderr, "With no --stdin each named job is ended and recorded "+string(types.StateNoReturn)+", which is")
+			fmt.Fprintln(os.Stderr, "not the same as returning it and failing. Its end_reason says which end it was: a")
+			fmt.Fprintln(os.Stderr, "read-only row with nothing to grade, a result nobody verified, a holder that")
+			fmt.Fprintln(os.Stderr, "abandoned it, or someone else ending it. Every job named is tried, and the command")
+			fmt.Fprintln(os.Stderr, "fails at the end if any could not be ended. To end every job nobody is working in")
+			fmt.Fprintln(os.Stderr, "one call, use `magus job prune`.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Examples:")
 			fmt.Fprintln(os.Stderr, "  magus job exit refactor/pricing --stdin < result.json")
@@ -1545,7 +1547,8 @@ func jobExit(ctx context.Context, root string, args []string) error {
 	}
 }
 
-// abandonJobs ends every named job as no_return, printing one line per job. A job that cannot
+// abandonJobs ends every named job as no_return, printing one line per job with the
+// end_reason the store recorded for it. A job that cannot
 // be ended does not stop the rest: each is tried, and the command fails afterwards naming
 // every one that was refused.
 func abandonJobs(ctx context.Context, store *job.Store, ids []string) error {
@@ -1556,7 +1559,7 @@ func abandonJobs(ctx context.Context, store *job.Store, ids []string) error {
 			refused = append(refused, err.Error())
 			continue
 		}
-		fmt.Printf("abandoned %s, recorded %s\n", stored.ID, stored.State)
+		fmt.Printf("ended %s, recorded %s: %s\n", stored.ID, stored.State, stored.EndReason)
 	}
 	if len(refused) > 0 {
 		return usagef("magus job exit: %d of %d jobs not ended:\n  %s", len(refused), len(ids), strings.Join(refused, "\n  "))
