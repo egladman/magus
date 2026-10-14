@@ -18,6 +18,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -55,8 +56,17 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 		return types.Job{}, err
 	}
 	return store.Update(ctx, id, func(row *types.Job) {
-		row.Result, row.GateAttempts = result, gateAttempts
+		// Stamped with the generation the write keeps: an exit declares nothing new.
+		generation := max(row.Generation, 1)
+		filed := *result
+		filed.ObservedGeneration = generation
+		row.Result = &filed
+		row.GateAttempts = gateAttempts
+		for i := range row.GateAttempts {
+			row.GateAttempts[i].Attempt.ObservedGeneration = generation
+		}
 		if attempt.Found {
+			attempt.ObservedGeneration = generation
 			row.Attempt = &attempt
 		} else {
 			row.Attempt = nil
@@ -67,8 +77,10 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 
 // Wait verifies a returned result against the current job terms and records pass under
 // the same Store update that read those terms. A rejected result is an ordinary Status,
-// not an error: callers need its violations to decide what to repair. result=nil uses
-// the result and attempt filed by Exit; a supplied result is resolved in this checkout.
+// not an error: callers need its violations to decide what to repair, and the row records
+// them as its Rejection in the same write, its state left where it was. result=nil uses the
+// result and attempts filed by Exit at the row's generation (see [evidenceAt]), and evidence
+// filed against an earlier spec never passes; a supplied result is resolved in this checkout.
 // A bound store verifies only a row below its own lease (see [Actor.Verifies]).
 //
 // evidence names, per check goal, a run recorded in the waiter's checkout to grade in place
@@ -97,15 +109,12 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 	}
 
 	var ev graded
+	var prior int
 	if result == nil {
 		if jobs[i].Result == nil {
 			return types.JobStatus{}, fmt.Errorf("job: %s has filed no result", id)
 		}
-		ev.result = *jobs[i].Result
-		if jobs[i].Attempt != nil {
-			ev.attempt = *jobs[i].Attempt
-		}
-		ev.gateAttempts = jobs[i].GateAttempts
+		ev, prior = evidenceAt(jobs[i])
 	} else {
 		resolve, where := store.acrossCheckouts(jobs, id, resolve)
 		ev.result = *result
@@ -139,12 +148,31 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 		if !exists {
 			return fmt.Errorf("job: there is no job %q", id)
 		}
-		status = VerifyGates(inheritGoals(*row, jobs), ev.result, ev.attempt, ev.gateAttempts, jobs, seen)
-		if status.Verified {
-			row.State = types.StatePass
-			if taken != nil {
-				row.WaiterEvidence = gradedTake(*taken, status, now)
+		held := inheritGoals(*row, jobs)
+		status = VerifyGates(held, ev.result, ev.attempt, ev.gateAttempts, jobs, seen)
+		// A verdict declares nothing, so the row keeps this generation through the write.
+		generation := max(row.Generation, 1)
+		status.ObservedGeneration, status.PriorGeneration = generation, prior
+		// Evidence taken against an earlier spec never passes: what the spec now asks was
+		// never run.
+		if prior != 0 {
+			status.Verified = false
+			status.Violations = append(status.Violations, fmt.Sprintf("the evidence is from generation %d and the spec is now generation %d:"+
+				" run %s again and file its result with `%s`", prior, generation, checkLine(held), hint.JobExit.With(id, "--stdin")))
+		}
+		if !status.Verified {
+			row.Rejection = &types.JobRejection{
+				Unmet:              unmetGates(status.Gates),
+				Violations:         slices.Clone(status.Violations[:min(len(status.Violations), maxFolded)]),
+				At:                 now,
+				ObservedGeneration: generation,
 			}
+			return nil
+		}
+		row.State = types.StatePass
+		row.Rejection = nil
+		if taken != nil {
+			row.WaiterEvidence = gradedTake(*taken, status, now)
 		}
 		return nil
 	})
@@ -298,7 +326,7 @@ func (ev *graded) setGoalRun(goalID, ref string, run types.JobAttempt) {
 // gradedTake is taken as the row records it: each goal's verdict copied from status, the
 // verdict as a whole status's own, stamped at.
 func gradedTake(taken types.JobIntegration, status types.JobStatus, at int64) *types.JobIntegration {
-	taken.At, taken.Verified = at, status.Verified
+	taken.At, taken.Verified, taken.ObservedGeneration = at, status.Verified, status.ObservedGeneration
 	taken.Gates = slices.Clone(taken.Gates)
 	for i, g := range taken.Gates {
 		if j := slices.IndexFunc(status.Gates, func(s types.GateStatus) bool { return s.ID == g.ID }); j >= 0 {
@@ -692,26 +720,20 @@ func GradeGates(ctx context.Context, store *Store, id string, observe Observer) 
 	}
 	row := inheritGoals(jobs[i], jobs)
 
-	result := types.JobResult{Job: row.ID}
-	attempt, gateAttempts := types.JobAttempt{}, row.GateAttempts
-	if row.Result != nil {
-		result = *row.Result
-		if row.Attempt != nil {
-			attempt = *row.Attempt
-		}
-	}
+	ev, prior := evidenceAt(jobs[i])
 	var seen Observed
 	if observe != nil {
 		if seen, err = observe(ctx, row); err != nil {
 			return types.JobStatus{}, err
 		}
 	}
-	seen.Stale = staleRuns(ctx, workTree(store.root, row), seen, result, graded{attempt: attempt, gateAttempts: gateAttempts}.runs()...)
+	seen.Stale = staleRuns(ctx, workTree(store.root, row), seen, ev.result, ev.runs()...)
 	// Graded against a row whose state is cleared, so the "already verified" rule does not
 	// fire on a job that legitimately passed: this asks where the gates stand, and a job
 	// that finished stands with all of them met.
 	row.State = ""
-	status := VerifyGates(row, result, attempt, gateAttempts, jobs, seen)
+	status := VerifyGates(row, ev.result, ev.attempt, ev.gateAttempts, jobs, seen)
+	status.ObservedGeneration, status.PriorGeneration = max(row.Generation, 1), prior
 
 	// The GATES decide this verdict, not the whole result. VerifyGates also applies the
 	// rules a filed result must satisfy (a change set that is not empty, paths inside the
@@ -1093,7 +1115,7 @@ func (w *sweeper) worked(rows []types.Job, window time.Duration, all bool) map[s
 		if !Editing(row) || row.Registered == 0 {
 			continue
 		}
-		if row.Overdue(w.now) || (all && row.StaleAt(w.now, window)) {
+		if row.Overdue(w.now) || (all && window > 0 && w.now-row.Updated >= int64(window/time.Second)) {
 			continue
 		}
 		kept[row.ID] = true

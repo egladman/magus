@@ -185,7 +185,8 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	loc := job.Location{CacheDir: cacheDir, Root: root, Outputs: outputsIn, Grader: newCheckGrader(), DryRun: o.DryRun}
+	loc := job.Location{CacheDir: cacheDir, Root: root, Outputs: outputsIn, Grader: newCheckGrader(), DryRun: o.DryRun,
+		TrailBase: func(checkoutRoot string) (string, error) { return magus.ResolveCacheDir(checkoutRoot) }}
 	if o.ModelTiers && root != "" {
 		m, err := loadMagus(ctx, root)
 		if err != nil {

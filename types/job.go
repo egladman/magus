@@ -591,8 +591,11 @@ type JobStatus struct {
 	UndeclaredExports []string `json:"undeclared_exports,omitempty" yaml:"undeclared_exports,omitempty"`
 	LeftUnreferenced  []string `json:"left_unreferenced,omitempty" yaml:"left_unreferenced,omitempty"`
 	SymbolDeltaKnown  bool     `json:"symbol_delta_known" yaml:"symbol_delta_known"`
-	// ObservedGeneration is the job's Generation when it was graded.
+	// ObservedGeneration is the job's Generation when it was graded. PriorGeneration is the
+	// oldest generation among the evidence that was taken against an earlier spec, zero when
+	// all of it is current: such evidence never passes a wait.
 	ObservedGeneration int `json:"observed_generation,omitzero" yaml:"observed_generation,omitempty"`
+	PriorGeneration    int `json:"prior_generation,omitzero"    yaml:"prior_generation,omitempty"`
 }
 
 // Clean reports whether the holder's result left no risk unresolved.
@@ -1279,10 +1282,10 @@ func (u Job) EndedWithSession() bool {
 	return u.State == StateNoReturn && strings.HasPrefix(u.EndReason, EndReasonSessionEnded)
 }
 
-// StaleAt reports whether the row was last updated at least after ago as of now, in unix
-// seconds. A zero or negative after is never.
-func (u Job) StaleAt(now int64, after time.Duration) bool {
-	return after > 0 && now-u.Updated >= int64(after/time.Second)
+// StaleAt reports whether a record stamped with observed was taken against an earlier
+// declared spec than the row's. A zero on either side is unknown, never stale.
+func (u Job) StaleAt(observed int) bool {
+	return observed != 0 && u.Generation != 0 && observed != u.Generation
 }
 
 // JobIdleSince is when row's jobs.stale_after clock started, in unix seconds, reading its
@@ -1308,8 +1311,9 @@ func JobIdleSince(rows []Job, row Job) (since int64, waiting bool) {
 	return since, false
 }
 
-// JobStaleAt is [Job.StaleAt] with row's clock read by [JobIdleSince]: a queued row is
-// never stale.
+// JobStaleAt reports whether row has been idle at least after as of now, in unix seconds,
+// with its clock read by [JobIdleSince]: a queued row is never stale, and a zero or
+// negative after is never.
 func JobStaleAt(rows []Job, row Job, now int64, after time.Duration) bool {
 	since, waiting := JobIdleSince(rows, row)
 	return !waiting && after > 0 && now-since >= int64(after/time.Second)

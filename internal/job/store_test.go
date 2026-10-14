@@ -69,6 +69,7 @@ func seed(t *testing.T, s *Store, row types.Job) types.Job {
 // comparison covers every other field.
 func stamped(want, got types.Job) types.Job {
 	want.Schema, want.RegisteredBy, want.Created, want.Updated = got.Schema, got.RegisteredBy, got.Created, got.Updated
+	want.Generation, want.Attempts = got.Generation, got.Attempts
 	return want
 }
 
@@ -532,6 +533,8 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 				Validation:   check.String(),
 				State:        types.StateDeclared,
 				WriteProof:   tc.proof,
+				Generation:   1,
+				Attempts:     1,
 				Created:      stored.Created,
 				Updated:      stored.Updated,
 				RegisteredBy: stored.RegisteredBy,
@@ -1042,6 +1045,168 @@ func TestRecordUnattributedWriteIsBounded(t *testing.T) {
 	// Written f0..f(Max+over-1), so trimming to the last Max drops exactly the first `over`.
 	assert.Equal(t, fmt.Sprintf("f%d.go", over), kept[0].Path, "the oldest are dropped")
 	assert.Equal(t, fmt.Sprintf("f%d.go", MaxUnattributedWrites+over-1), kept[len(kept)-1].Path)
+}
+
+// The generation counts declared-spec changes only: a lifecycle move, a deadline and a
+// caller's own count leave it where it was.
+func TestStoreBumpsTheGenerationOnlyForASpecChange(t *testing.T) {
+	t.Parallel()
+
+	s := tmpStore(t, t.TempDir())
+	row := lease("a")
+	created := seed(t, s, row)
+	assert.Equal(t, 1, created.Generation)
+	assert.Equal(t, 1, created.Attempts)
+	assert.Nil(t, created.Requires, "a row carrying only its generation stays writable by an older magus")
+
+	row.State = types.StateRunning
+	row.Deadline = 1 << 40
+	assert.Equal(t, 1, seed(t, s, row).Generation, "state and deadline are not the spec")
+
+	require.NoError(t, s.RecordRework(t.Context(), "a"))
+	row.Criteria = "a sharper goal"
+	assert.Equal(t, 2, seed(t, s, row).Generation)
+
+	row.Generation, row.Attempts = 9, 9
+	forged := seed(t, s, row)
+	assert.Equal(t, 2, forged.Generation, "a caller's generation is replaced by the stored one")
+	assert.Equal(t, 1, forged.Attempts)
+
+	row.MaxAttempts = 3
+	capped := seed(t, s, row)
+	assert.Equal(t, 3, capped.Generation, "max_attempts is spec")
+	assert.Equal(t, []string{"job-generations"}, capped.Requires, "an older magus would ignore the cap")
+}
+
+// endAttempt ends row a as failed, its holder having run a failing check, been sent more
+// work once and left a risk.
+func endAttempt(t *testing.T, s *Store) {
+	t.Helper()
+	require.NoError(t, s.RecordRework(t.Context(), "a"))
+	_, err := s.Update(t.Context(), "a", func(u *types.Job) {
+		u.State = types.StateFail
+		u.Result = &types.JobResult{UnresolvedRisks: []string{"the second worktree was not tried"}}
+		u.Attempt = &types.JobAttempt{Ref: "out1", Failed: true}
+	})
+	require.NoError(t, err)
+}
+
+// A fork of an ended row is the job's next attempt: the one that ended is folded into Prior
+// for the next holder, and the evidence and counters start over so the next ending counts
+// its own attempt alone. Three ended attempts are kept, newest last.
+func TestStoreForkOfAnEndedRowFoldsTheAttempt(t *testing.T) {
+	t.Parallel()
+
+	s := tmpStore(t, t.TempDir())
+	row := lease("a")
+	seed(t, s, row)
+	endAttempt(t, s)
+
+	again := seed(t, s, row)
+
+	assert.Equal(t, types.StateDeclared, again.State)
+	assert.Equal(t, 2, again.Attempts)
+	assert.Equal(t, 1, again.Generation, "a re-fork with an unchanged spec leaves the generation alone")
+	require.Len(t, again.Prior, 1)
+	prior := again.Prior[0]
+	assert.Equal(t, 1, prior.N)
+	assert.Equal(t, types.StateFail, prior.State)
+	assert.Equal(t, 1, prior.ReworkRounds)
+	assert.Equal(t, []string{"the second worktree was not tried"}, prior.UnresolvedRisks)
+	assert.Equal(t, []string{"out1"}, prior.FailingRefs)
+	assert.True(t, prior.DenialsKnown, "this checkout's trail is empty, so it holds no denial")
+	assert.True(t, prior.Retry.Retryable)
+	assert.Nil(t, again.Result)
+	assert.Nil(t, again.Attempt)
+	assert.Zero(t, again.ReworkRounds, "the next attempt counts its own rework rounds")
+	assert.Equal(t, []string{"job-generations"}, again.Requires, "an older magus would re-fork without folding")
+
+	for range 3 {
+		endAttempt(t, s)
+		again = seed(t, s, row)
+	}
+	assert.Equal(t, 5, again.Attempts)
+	require.Len(t, again.Prior, 3)
+	assert.Equal(t, []int{2, 3, 4}, []int{again.Prior[0].N, again.Prior[1].N, again.Prior[2].N})
+}
+
+// max_attempts is checked at a fork of an ended row and nowhere else, against the cap the
+// fork's own record carries.
+func TestStoreRefusesAForkPastMaxAttempts(t *testing.T) {
+	t.Parallel()
+
+	s := tmpStore(t, t.TempDir())
+	row := lease("a")
+	row.MaxAttempts = 2
+	seed(t, s, row)
+	row.Criteria = "reworded while live"
+	seed(t, s, row)
+	endAttempt(t, s)
+	seed(t, s, row)
+	endAttempt(t, s)
+
+	_, err := s.Update(t.Context(), "a", func(u *types.Job) { *u = row })
+	require.ErrorIs(t, err, ErrMaxAttempts)
+	assert.ErrorContains(t, err, "a used 2 of its 2 attempt(s)")
+	assert.Equal(t, types.RetryAfterPerson, types.ClassifyRetry(err).Change)
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Equal(t, types.StateFail, rows[0].State, "a refused fork writes nothing")
+	assert.Equal(t, 2, rows[0].Attempts)
+
+	row.MaxAttempts = 3
+	raised := seed(t, s, row)
+	assert.Equal(t, 3, raised.Attempts, "a record raising the cap forks past the old one")
+}
+
+// The guard records a holder's denials in the trail of the checkout it worked in, so the
+// fold reads that trail and not the forker's.
+func TestStoreFoldsTheDenialsFromTheHoldersCheckout(t *testing.T) {
+	t.Parallel()
+
+	holder, holderTrail := t.TempDir(), t.TempDir()
+	deny := func(base, rule string) {
+		trail.AppendAgentCommand(t.Context(), base, trail.AgentCommand{
+			Host: "claude-code", Session: "s1", Tool: "file.write", Path: "docs/x.md",
+			Decision: "deny", Reason: "docs/x.md is no lease's", Rule: rule, Lease: "a",
+		})
+	}
+	deny(holderTrail, "lease-write")
+	ended := lease("a")
+	ended.State, ended.CheckoutRoot, ended.Created, ended.Updated = types.StateFail, holder, 1, 2
+
+	for _, tc := range []struct {
+		name      string
+		resolve   func(string) (string, error)
+		known     bool
+		rules     []string
+		retryable bool
+	}{
+		{name: "the holder's checkout trail", resolve: func(root string) (string, error) {
+			assert.Equal(t, holder, root)
+			return holderTrail, nil
+		}, known: true, rules: []string{"lease-write"}},
+		{name: "no resolver for another checkout", known: false, retryable: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			loc := tmpLoc(t, t.TempDir())
+			loc.TrailBase = tc.resolve
+			deny(loc.CacheDir, "raw-tool")
+			s := NewStore(loc)
+			plant(t, s, ended)
+
+			again := seed(t, s, lease("a"))
+
+			require.Len(t, again.Prior, 1)
+			var rules []string
+			for _, d := range again.Prior[0].Denials {
+				rules = append(rules, d.Rule)
+			}
+			assert.Equal(t, tc.rules, rules)
+			assert.Equal(t, tc.known, again.Prior[0].DenialsKnown)
+			assert.Equal(t, tc.retryable, again.Prior[0].Retry.Retryable)
+		})
+	}
 }
 
 // A lease that ended between the grading and the record is nothing to report to anybody, and

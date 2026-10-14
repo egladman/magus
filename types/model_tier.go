@@ -331,7 +331,10 @@ type ModelTierRequest struct {
 }
 
 // ModelTierRecord is the recorded outcome of jobs at one tier and job kind. PassLower is
-// the Wilson lower bound of the pass rate; the per-job figures are means.
+// the Wilson lower bound of the pass rate; the per-job figures are means. FirstAttempts
+// counts the endings of a job's first attempt and FirstPass those that passed, with
+// FirstPassLower their Wilson lower bound; NotRetryable counts the endings classified as
+// needing a change before another attempt could help.
 type ModelTierRecord struct {
 	Rank            int     `json:"rank"              yaml:"rank"`
 	ModelTier       string  `json:"model_tier"        yaml:"model_tier"`
@@ -347,11 +350,16 @@ type ModelTierRecord struct {
 	WideningsPerJob float64 `json:"widenings_per_job" yaml:"widenings_per_job"`
 	MeanCostUSD     float64 `json:"mean_cost_usd"     yaml:"mean_cost_usd"`
 	MedianTokens    int64   `json:"median_tokens"     yaml:"median_tokens"`
+	FirstAttempts   int     `json:"first_attempts"    yaml:"first_attempts"`
+	FirstPass       int     `json:"first_pass"        yaml:"first_pass"`
+	FirstPassLower  float64 `json:"first_pass_lower"  yaml:"first_pass_lower"`
+	NotRetryable    int     `json:"not_retryable"     yaml:"not_retryable"`
 }
 
 // JobOutcome is one job's terminal record, kept after the row expires. Model is the id
 // the host reported; Site is the file:line of the declaration or matrix that chose the
-// tier; Ended is Unix milliseconds.
+// tier; Ended is Unix milliseconds. Attempt numbers the attempt that ended, from 1, and
+// Retry is what must change before another attempt could help, empty when repeating may.
 type JobOutcome struct {
 	Job           string          `json:"job"                     yaml:"job"`
 	ModelTier     string          `json:"model_tier,omitempty"    yaml:"model_tier,omitempty"`
@@ -370,6 +378,8 @@ type JobOutcome struct {
 	Ended         int64           `json:"ended"                   yaml:"ended"`
 	ReworkRounds  int             `json:"rework_rounds,omitempty" yaml:"rework_rounds,omitempty"`
 	Widenings     int             `json:"widenings,omitempty"     yaml:"widenings,omitempty"`
+	Attempt       int             `json:"attempt,omitempty"       yaml:"attempt,omitempty"`
+	Retry         RetryChange     `json:"retry,omitempty"         yaml:"retry,omitempty"`
 }
 
 // JobModelTier is the tier recorded on a job row when it was assigned: the case name and

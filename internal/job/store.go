@@ -43,6 +43,11 @@ import (
 // incomplete.
 var ErrNoID = errors.New("job: a lease needs an id")
 
+// ErrMaxAttempts is a fork of an ended job that would start an attempt past its
+// max_attempts. The error wrapping it is typed not retryable: forking again unchanged meets
+// the same cap.
+var ErrMaxAttempts = errors.New("job: max_attempts reached")
+
 // Store is the repository's lease ledger, a single JSON file in the per-repository state
 // directory. Every operation reads the file, acts, and writes it back, so a Store is
 // cheap to construct and holds no state between calls beyond the path and its lock.
@@ -91,8 +96,9 @@ type Store struct {
 	notices    io.Writer
 	// retain is the retention window's seam; nil means the workspace's jobs.retain.
 	retain *time.Duration
-	// outputs is Location.Outputs.
-	outputs func(root string) AttemptResolver
+	// outputs is Location.Outputs, and trailBase Location.TrailBase.
+	outputs   func(root string) AttemptResolver
+	trailBase func(checkoutRoot string) (string, error)
 	// landed is the sweep's landing probe, nil for [Store.landedOnBase]; see [sweeper.landed].
 	landed func(context.Context, types.Job) string
 	// grader is Location.Grader.
@@ -138,6 +144,11 @@ type Location struct {
 	// result its worker recorded in another checkout of the repository. Nil tries the
 	// caller's resolver alone.
 	Outputs func(root string) AttemptResolver
+	// TrailBase resolves the activity trail base of the checkout at checkoutRoot, the cache
+	// dir the guard records a holder's denials in. A fork of an ended job reads the denials of
+	// its last holder there, from whichever checkout the holder took it in. Nil reads only
+	// this Store's own CacheDir, and the denials of a holder in another checkout are unknown.
+	TrailBase func(checkoutRoot string) (string, error)
 	// Grader judges a declared check the way the guard will judge the row's holder running
 	// it, for the fork doors, against the rules of the workspace at Root. Nil grades
 	// nothing: the guard lives above this package, so only a door that can reach it
@@ -177,7 +188,7 @@ type Location struct {
 // A resolution failure is held rather than returned: every operation reports it, so a
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
-	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, outputs: loc.Outputs, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildid.Build()),
+	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildid.Build()),
 		modelTiers: loc.ModelTiers, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners}
 	s.path, s.err = jobsPath(loc)
 	return s
@@ -306,8 +317,9 @@ func readOnly(row types.Job) error {
 }
 
 // requiredFeatures are the JobSchema features row's content needs a reader to implement,
-// sorted: a `file#Declaration` claim and a `signature` goal are each read wrongly by a magus
-// older than the version that named them, so a row carrying one is read-only to it. Derived
+// sorted: a `file#Declaration` claim, a `signature` goal and an attempt record (a cap, a
+// prior attempt, a second attempt) are each read wrongly by a magus older than the version
+// that named them, so a row carrying one is read-only to it. Derived
 // from the content on every write, so a row that drops its last claim is writable again.
 // Any requirement the stored row carried that this build does not know never reaches here:
 // readOnly refused that write.
@@ -318,6 +330,11 @@ func requiredFeatures(row types.Job) []string {
 	}
 	if slices.ContainsFunc(row.Goals, func(g types.Goal) bool { return g.Resolve().Expect == types.ExpectSignature }) {
 		out = append(out, types.JobSchema.Requires[12])
+	}
+	// Every row has a generation, so a row carrying only that is not stamped: it would make
+	// every row read-only to an older magus.
+	if row.MaxAttempts > 0 || len(row.Prior) > 0 || row.Attempts > 1 {
+		out = append(out, types.JobSchema.Requires[13])
 	}
 	slices.Sort(out)
 	return out
@@ -572,6 +589,13 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 	if strings.TrimSpace(id) == "" {
 		return types.Job{}, ErrNoID
 	}
+	// Read before the lock, like Exec's checkpoint: the trail may be another checkout's, and
+	// only a declaration of an ended row folds what they say.
+	var denials []types.JobDenial
+	var denialsKnown bool
+	if kind == asDeclaration {
+		denials, denialsKnown = s.endedAttemptDenials(id)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -617,6 +641,8 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 				return aerr
 			}
 		}
+		// An ended row declared again is a fork of the job's next attempt.
+		refork := kind == asDeclaration && i >= 0 && prev.State.Terminal() && row.State.Live()
 		// The store's own record of what HAPPENED is not a caller's to send. On an
 		// existing row it is carried forward, so a whole-row write neither forges nor
 		// erases a registration; a row a BOUND caller creates carries none, since a child
@@ -630,7 +656,10 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			// An ended row declared again is handed out afresh: its old holder gave it up,
 			// and a checkout left on it would refuse every new taker and, once that
 			// worktree is gone, end the row again on the next sweep.
-			if kind == asDeclaration && prev.State.Terminal() && row.State.Live() {
+			if refork {
+				if aerr := refuseAttempt(id, prev, row); aerr != nil {
+					return aerr
+				}
 				row.ReportedBase, row.BaseVerdict, row.Registered, row.CheckoutRoot = "", "", 0, ""
 			}
 			if kind != asObservation {
@@ -652,7 +681,9 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			row.EndReason = ""
 		}
 		row.Updated = now
-		if (kind == asObservation || entering) && i >= 0 {
+		// A wait that refuses records why and leaves the row where it was, heartbeat
+		// included: the waiter is not the holder.
+		if (kind == asObservation || entering || (kind == asVerdict && row.State == prev.State)) && i >= 0 {
 			row.Updated = prev.Updated
 		}
 		row.Created = now
@@ -660,7 +691,6 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		// members a newer magus stored, and the stamp never drops below what it read.
 		row.Schema = prev.Schema
 		row.Version = max(prev.Version, types.JobSchemaVersion)
-		row.Requires = requiredFeatures(row)
 		row.ModelTier = prev.ModelTier
 		if s.modelTiers != nil && (i < 0 || prev.Model != row.Model) {
 			assigned, aerr := s.assignModelTierWithHistory(ctx, row, f.Jobs)
@@ -679,6 +709,23 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			slices.ContainsFunc(row.WritePaths, func(p string) bool { return !slices.Contains(prev.WritePaths, p) }) {
 			row.Widenings++
 		}
+		// The generation and the attempt record are the store's too. Only a wait records a
+		// rejection, and a fork of the next attempt folds this one into Prior and starts the
+		// evidence and the counters over, so the next ending counts its own attempt alone.
+		row.Generation = nextGeneration(prev, row, i >= 0, kind)
+		row.Attempts, row.Prior = max(prev.Attempts, 1), prev.Prior
+		if kind != asVerdict {
+			row.Rejection = prev.Rejection
+		}
+		if refork {
+			row.Prior = append(slices.Clone(prev.Prior), foldAttempt(prev, denials, denialsKnown, now))
+			row.Prior = row.Prior[max(len(row.Prior)-maxPrior, 0):]
+			row.Attempts++
+			row.Result, row.Attempt, row.GateAttempts, row.Rejection = nil, nil, nil, nil
+			row.Integration, row.WaiterEvidence = nil, nil
+			row.ReworkRounds, row.Widenings = 0, 0
+		}
+		row.Requires = requiredFeatures(row)
 		if kind != asNarrowing {
 			row.Releases = s.releases(ctx, prev, row, now, prev.Registered != 0 && actor.Lease != id)
 		}
@@ -705,6 +752,60 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		return stored, err
 	}
 	return stored, nil
+}
+
+// endedAttemptDenials are the guard's denials of the holder of job id since its last
+// attempt began, for the fold a fork of the ended row makes, and whether the trail still
+// reaches back to that start. Only an ended row is read. A dry run, or a trail that cannot
+// be placed or read, gives none and unknown, which the fold records as unknown.
+func (s *Store) endedAttemptDenials(id string) ([]types.JobDenial, bool) {
+	if s.dryRun {
+		return nil, false
+	}
+	f, err := s.read()
+	if err != nil {
+		return nil, false
+	}
+	i := slices.IndexFunc(f.Jobs, func(r types.Job) bool { return r.ID == id })
+	if i < 0 || !f.Jobs[i].State.Terminal() {
+		return nil, false
+	}
+	row := f.Jobs[i]
+	base, err := s.holderTrail(row.CheckoutRoot)
+	if err != nil {
+		return nil, false
+	}
+	since := row.Created
+	if n := len(row.Prior); n > 0 {
+		since = row.Prior[n-1].Ended
+	}
+	denials, known, err := trail.LeaseDenials(base, id, since, maxDenialsRead)
+	if err != nil {
+		return nil, false
+	}
+	return denials, known
+}
+
+// holderTrail is the trail base of the checkout a holder took its job in: this Store's own
+// cache dir when that is this checkout or none, else what Location.TrailBase resolves. The
+// guard records a holder's denials in the trail of the checkout it works in, so neither the
+// forker's nor the caller's trail holds them.
+func (s *Store) holderTrail(checkoutRoot string) (string, error) {
+	if checkoutRoot == "" {
+		return s.cacheDir, nil
+	}
+	if s.root != "" {
+		if here, err := filepath.Abs(s.root); err == nil && here == checkoutRoot {
+			return s.cacheDir, nil
+		}
+	}
+	if s.trailBase == nil {
+		return "", fmt.Errorf("job: nothing resolves the trail of the checkout at %s", checkoutRoot)
+	}
+	if _, err := os.Stat(checkoutRoot); err != nil {
+		return "", fmt.Errorf("job: the checkout holding the trail is gone: %w", err)
+	}
+	return s.trailBase(checkoutRoot)
 }
 
 // List returns every row in the order it was first recorded. The rows are copies, so a

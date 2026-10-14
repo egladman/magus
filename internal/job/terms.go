@@ -1,7 +1,9 @@
 package job
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
@@ -149,6 +151,7 @@ func (b Terms) String() string {
 
 	writeList(&s, "interface", interfaceLines(b.Lease.Goals))
 	writeBlock(&s, "criteria", b.Lease.Criteria)
+	writeAttempts(&s, b.Lease)
 	writeList(&s, "may break", b.Lease.Breaks)
 	if b.Stage.Known() {
 		writeList(&s, "release stage", []string{stageLine(b.Stage)})
@@ -215,6 +218,99 @@ func interfaceLines(goals []types.Goal) []string {
 		}
 	}
 	return lines
+}
+
+// maxUnmetShown caps the unmet goals the newest previous attempt lists.
+const maxUnmetShown = 5
+
+// writeAttempts writes which attempt the holder is on and what the attempts before it left:
+// the newest in full, so the next holder starts from what failed and never from a
+// transcript, and each older one in a line, newest first. A first attempt with no cap writes
+// nothing.
+func writeAttempts(s *strings.Builder, row types.Job) {
+	if row.Attempts > 1 || row.MaxAttempts > 0 {
+		line := fmt.Sprintf("attempt %d", max(row.Attempts, 1))
+		if row.MaxAttempts > 0 {
+			line += fmt.Sprintf(" of %d", row.MaxAttempts)
+		}
+		fmt.Fprintf(s, "\n%s\n", line)
+	}
+	if len(row.Prior) == 0 {
+		return
+	}
+	newest := row.Prior[len(row.Prior)-1]
+	lines := append([]string{priorSummary(newest)}, priorDetail(newest)...)
+	for _, p := range slices.Backward(row.Prior[:len(row.Prior)-1]) {
+		lines = append(lines, priorSummary(p)+", "+retryLine(p.Retry))
+	}
+	writeList(s, "previous attempts", lines)
+}
+
+// priorSummary is one ended attempt in a line: how it ended, at which tier, and how much
+// more work and room it was given on the way.
+func priorSummary(p types.PriorAttempt) string {
+	line := fmt.Sprintf("attempt %d: %s", p.N, p.State)
+	if p.EndReason != "" {
+		line += " (" + p.EndReason + ")"
+	}
+	if p.ModelTier != "" {
+		line += ", tier " + p.ModelTier
+	}
+	return line + fmt.Sprintf(", %d rework round(s), %d widening(s)", p.ReworkRounds, p.Widenings)
+}
+
+// priorDetail is what the newest ended attempt left for the next holder, indented under its
+// summary, ending with its retry verdict.
+func priorDetail(p types.PriorAttempt) []string {
+	var lines []string
+	if len(p.Unmet) > 0 {
+		ids := make([]string, 0, maxUnmetShown)
+		for _, g := range p.Unmet[:min(len(p.Unmet), maxUnmetShown)] {
+			ids = append(ids, g.ID)
+		}
+		line := "  unmet: " + strings.Join(ids, ", ")
+		if more := len(p.Unmet) - len(ids); more > 0 {
+			line += fmt.Sprintf(" and %d more", more)
+		}
+		lines = append(lines, line)
+	}
+	for _, v := range p.Violations {
+		lines = append(lines, "  violation: "+firstLine(v))
+	}
+	for _, r := range p.UnresolvedRisks {
+		lines = append(lines, "  unresolved risk: "+firstLine(r))
+	}
+	for _, d := range p.Denials {
+		line := "  denied: " + d.Rule
+		if reason := firstLine(d.Reason); reason != "" {
+			line += ": " + reason
+		}
+		lines = append(lines, line)
+	}
+	if !p.DenialsKnown {
+		lines = append(lines, "  (denials unknown: the trail was rotated)")
+	}
+	for _, ref := range p.FailingRefs {
+		lines = append(lines, "  failed run: reopen with `"+hint.QueryOutput.With(ref)+"`")
+	}
+	return append(lines, "  "+retryLine(p.Retry))
+}
+
+// retryLine is an attempt's retry verdict as describe prints it.
+func retryLine(v types.RetryVerdict) string {
+	if v.Retryable {
+		return "retryable"
+	}
+	line := "not retryable until " + string(cmp.Or(v.Change, types.RetryAfterPerson))
+	if v.Reason != "" {
+		line += ": " + firstLine(v.Reason)
+	}
+	return line
+}
+
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
+	return line
 }
 
 func stageLine(s types.ReleaseStage) string {

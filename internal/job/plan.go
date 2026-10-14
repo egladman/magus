@@ -694,7 +694,8 @@ func keepFrozenSignatures(row *types.Job, prev types.Job) {
 }
 
 // RenderGates writes a gate report one gate per line, each unmet one followed by why, and
-// says when a stale symbol index left the symbol goals ungraded.
+// says when evidence was taken against an earlier spec or a stale symbol index left the
+// symbol goals ungraded.
 func RenderGates(out io.Writer, status types.JobStatus) {
 	if len(status.Gates) == 0 {
 		fmt.Fprintf(out, "%s declares no check and no goal, so there is nothing here to grade.\n", status.Job)
@@ -717,6 +718,10 @@ func RenderGates(out io.Writer, status types.JobStatus) {
 		for _, why := range gate.Violations {
 			fmt.Fprintf(out, "      %s\n", why)
 		}
+	}
+	if status.PriorGeneration != 0 {
+		fmt.Fprintf(out, "prior evidence: taken at generation %d, the spec is now generation %d; run it again\n",
+			status.PriorGeneration, status.ObservedGeneration)
 	}
 	renderDelta(out, status)
 	if len(status.StaleIndexes) > 0 {

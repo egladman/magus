@@ -22,7 +22,8 @@ import (
 //
 // The row carries no token count or cost, so those stay zero until a host reports them
 // onto it. ChecksRun counts the runs the row kept evidence of: its own check's and one per
-// goal.
+// goal. Retry classifies the attempt from the row alone: an outcome is recorded under the
+// store's lock, where the trail's denials are not read.
 func newJobOutcome(row types.Job, ended int64) types.JobOutcome {
 	out := types.JobOutcome{
 		Job:          row.ID,
@@ -34,6 +35,8 @@ func newJobOutcome(row types.Job, ended int64) types.JobOutcome {
 		Ended:        ended,
 		ReworkRounds: row.ReworkRounds,
 		Widenings:    row.Widenings,
+		Attempt:      max(row.Attempts, 1),
+		Retry:        foldAttempt(row, nil, false, ended/1000).Retry.Change,
 	}
 	if row.Attempt != nil {
 		out.ChecksRun++
@@ -93,6 +96,16 @@ func ModelTierRecords(outcomes []types.JobOutcome, set *types.ModelTierSet) []ty
 		default:
 			f.rec.NoReturn++
 		}
+		// An outcome recorded before attempts were numbered was a first attempt.
+		if o.Attempt <= 1 {
+			f.rec.FirstAttempts++
+			if o.State == types.StatePass {
+				f.rec.FirstPass++
+			}
+		}
+		if o.Retry != types.RetryAsIs {
+			f.rec.NotRetryable++
+		}
 		f.ids[o.Job] = struct{}{}
 		f.checks += o.ChecksRun
 		f.rework += o.ReworkRounds
@@ -104,6 +117,7 @@ func ModelTierRecords(outcomes []types.JobOutcome, set *types.ModelTierSet) []ty
 	for _, f := range groups {
 		n := float64(f.rec.Jobs)
 		f.rec.PassLower = volatility.WilsonLower(f.rec.Pass, f.rec.Jobs)
+		f.rec.FirstPassLower = volatility.WilsonLower(f.rec.FirstPass, f.rec.FirstAttempts)
 		f.rec.ChecksPerJob = float64(f.checks) / n
 		f.rec.ForksPerID = n / float64(len(f.ids))
 		f.rec.ReworkPerJob = float64(f.rework) / n

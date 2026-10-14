@@ -209,6 +209,24 @@ func TestRenderGatesSaysTheGraphWasStale(t *testing.T) {
 	assert.NotContains(t, out.String(), "graded against an index older")
 }
 
+func TestRenderGatesLabelsEvidenceOfAnEarlierSpec(t *testing.T) {
+	t.Parallel()
+
+	var out strings.Builder
+	RenderGates(&out, types.JobStatus{
+		Job:                "unit",
+		Gates:              []types.GateStatus{{ID: "check"}},
+		ObservedGeneration: 3,
+		PriorGeneration:    2,
+	})
+	assert.Equal(t, "unit: 0 of 1 goal(s) met\n  [unmet] check\n"+
+		"prior evidence: taken at generation 2, the spec is now generation 3; run it again\n", out.String())
+
+	out.Reset()
+	RenderGates(&out, types.JobStatus{Job: "unit", Gates: []types.GateStatus{{ID: "check", Verified: true}}, ObservedGeneration: 3})
+	assert.NotContains(t, out.String(), "prior evidence")
+}
+
 func TestRenderGatesReportsTheDelta(t *testing.T) {
 	t.Parallel()
 
@@ -720,6 +738,7 @@ func TestApplyWidensALiveJobAndKeepsItsState(t *testing.T) {
 	want.Updated = got[0].Next.Updated
 	want.Widenings = 1
 	want.WriteProof = types.WriteProofAlone // moved paths are proved again
+	want.Generation = before[0].Generation + 1
 	assert.Equal(t, want, got[0].Next)
 	assert.Equal(t, types.StateRunning, got[0].Next.State)
 }

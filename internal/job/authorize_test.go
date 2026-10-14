@@ -107,6 +107,8 @@ func TestBoundWorkerCannotRewriteThePlan(t *testing.T) {
 		"breaks":     func(u *types.Job) { u.Breaks = []string{"--any-flag"} },
 		"read_only":  func(u *types.Job) { u.ReadOnly = true },
 		"deadline":   func(u *types.Job) { u.Deadline = 1 << 40 },
+		// A holder that raised its own cap could fork itself past it.
+		"max_attempts": func(u *types.Job) { u.MaxAttempts = 9 },
 		"goals": func(u *types.Job) {
 			u.Goals = []types.Goal{{ID: "gate", Check: types.LeaseCheck{Target: "ci", Project: "."}}}
 		},

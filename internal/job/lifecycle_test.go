@@ -46,7 +46,9 @@ func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 	assert.Equal(t, types.StateExited, exited.State)
 	require.NotNil(t, exited.Result)
 	require.NotNil(t, exited.Attempt)
-	assert.Equal(t, attempt, *exited.Attempt)
+	attempt.ObservedGeneration = 1
+	assert.Equal(t, attempt, *exited.Attempt, "the run is stamped with the generation it was filed at")
+	assert.Equal(t, 1, exited.Result.ObservedGeneration)
 
 	status, err := Wait(t.Context(), NewStore(loc), result.Job, nil, nil, observeClaim(result), nil)
 	require.NoError(t, err)
@@ -55,10 +57,11 @@ func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 	assert.True(t, status.Clean(), "a verified job carries no risk")
 	status.UnresolvedRisks = nil
 	assert.Equal(t, types.JobStatus{
-		Job:      result.Job,
-		Verified: true,
-		Command:  result.Validation.Command,
-		Gates:    []types.GateStatus{{ID: types.PrimaryGoalID, OutputRef: result.Validation.OutputRef, Verified: true}},
+		Job:                result.Job,
+		Verified:           true,
+		Command:            result.Validation.Command,
+		Gates:              []types.GateStatus{{ID: types.PrimaryGoalID, OutputRef: result.Validation.OutputRef, Verified: true}},
+		ObservedGeneration: 1,
 	}, status)
 
 	rows, err := NewStore(loc).List()
@@ -121,6 +124,80 @@ func TestWaitKeepsARejectedJobOpen(t *testing.T) {
 	rows, err := NewStore(loc).List()
 	require.NoError(t, err)
 	assert.Equal(t, types.StateRunning, rows[0].State, "a rejected result is evidence to repair, not a terminal verdict")
+}
+
+// A rejection is recorded for the next attempt to read, in the verdict's write and with the
+// row's heartbeat untouched; a pass clears it.
+func TestWaitRecordsARejectionAndAPassClearsIt(t *testing.T) {
+	t.Parallel()
+
+	row := acceptRow()
+	loc := declared(t, row)
+	before, err := NewStore(loc).List()
+	require.NoError(t, err)
+	run := passingRun
+	run.Ref, run.TimestampMs = passingResult().Validation.OutputRef, 9_999_999_999_999
+	resolve := func(context.Context, string) (types.JobAttempt, error) { return run, nil }
+	empty := passingResult()
+	empty.ChangedPaths = nil
+
+	_, err = Wait(t.Context(), NewStore(loc), row.ID, &empty, resolve, nil, nil)
+	require.NoError(t, err)
+
+	rows, err := NewStore(loc).List()
+	require.NoError(t, err)
+	require.NotNil(t, rows[0].Rejection)
+	assert.Contains(t, rows[0].Rejection.Violations, "job harness/ledger-accept is not read-only and the result claims no changed paths at all")
+	assert.Positive(t, rows[0].Rejection.At)
+	assert.Equal(t, 1, rows[0].Rejection.ObservedGeneration)
+	assert.Equal(t, before[0].Updated, rows[0].Updated, "the waiter is not the holder, so the heartbeat stays")
+
+	result := passingResult()
+	status, err := Wait(t.Context(), NewStore(loc), row.ID, &result, resolve, observeClaim(result), nil)
+	require.NoError(t, err)
+	require.True(t, status.Verified, status.Violations)
+	rows, err = NewStore(loc).List()
+	require.NoError(t, err)
+	assert.Nil(t, rows[0].Rejection)
+}
+
+// Evidence filed before the spec changed never passes a wait: the wait says which generation
+// it came from and what to run again, and describe labels it prior. The run behind the check
+// belongs to the spec that asked for it, so it no longer grades.
+func TestWaitNeverPassesOnEvidenceOfAnEarlierSpec(t *testing.T) {
+	t.Parallel()
+
+	loc := declared(t, acceptRow())
+	result := passingResult()
+	attempt := passingRun
+	attempt.Ref, attempt.TimestampMs = result.Validation.OutputRef, 9_999_999_999_999
+	resolver := func(context.Context, string) (types.JobAttempt, error) { return attempt, nil }
+	_, err := Exit(t.Context(), boundStore(loc, result.Job), result.Job, &result, resolver)
+	require.NoError(t, err)
+	respecced, err := NewStore(loc).Update(t.Context(), result.Job, func(u *types.Job) { u.Criteria = "also cover the console" })
+	require.NoError(t, err)
+	require.Equal(t, 2, respecced.Generation)
+
+	described, err := GradeGates(t.Context(), NewStore(loc), result.Job, observeClaim(result))
+	require.NoError(t, err)
+	assert.Equal(t, 1, described.PriorGeneration)
+	assert.Equal(t, 2, described.ObservedGeneration)
+	assert.False(t, described.Verified, "the run of generation 1 no longer grades the check")
+
+	status, err := Wait(t.Context(), NewStore(loc), result.Job, nil, nil, observeClaim(result), nil)
+	require.NoError(t, err)
+	assert.False(t, status.Verified)
+	assert.Equal(t, 1, status.PriorGeneration)
+	i := slices.IndexFunc(status.Violations, func(v string) bool {
+		return strings.HasPrefix(v, "the evidence is from generation 1 and the spec is now generation 2: run ")
+	})
+	require.GreaterOrEqual(t, i, 0, status.Violations)
+	assert.Contains(t, status.Violations[i], "go-test", "the violation names the check to run again")
+	rows, err := NewStore(loc).List()
+	require.NoError(t, err)
+	assert.Equal(t, types.StateExited, rows[0].State)
+	require.NotNil(t, rows[0].Rejection)
+	assert.Equal(t, 2, rows[0].Rejection.ObservedGeneration)
 }
 
 // lineageRow is acceptRow renamed into a tree under parent.

@@ -65,8 +65,24 @@ func TestNewJobOutcomeReadsTheEndedRow(t *testing.T) {
 		Job: "a", ModelTier: "economy", Kind: types.JobKindCheck, Skills: types.SkillVariantFull,
 		Model: "haiku", Source: types.ModelTierSourceMatrix, Reason: "small checked job", Site: "magusfile.buzz:20",
 		WriteFiles: 2, State: types.StateFail, ChecksRun: 3, DurationMs: 60_000, Ended: 160_000,
-		ReworkRounds: 2, Widenings: 1,
+		ReworkRounds: 2, Widenings: 1, Attempt: 1,
 	}, got)
+}
+
+// The ending's attempt number and its classification ride the outcome, from the row alone.
+func TestNewJobOutcomeNumbersTheAttemptAndClassifiesIt(t *testing.T) {
+	t.Parallel()
+
+	row := lease("a")
+	row.State = types.StateFail
+	row.Attempts = 2
+	row.Prior = []types.PriorAttempt{{N: 1, State: types.StateFail, Unmet: []types.GateStatus{{ID: "check"}}}}
+	row.Rejection = &types.JobRejection{Unmet: []types.GateStatus{{ID: "check"}}}
+
+	got := newJobOutcome(row, 5_000)
+
+	assert.Equal(t, 2, got.Attempt)
+	assert.Equal(t, types.RetryAfterPerson, got.Retry, "a goal unmet twice needs a person")
 }
 
 func TestNewJobOutcomeOfARowWithNoTierNamesNone(t *testing.T) {
@@ -112,20 +128,50 @@ func TestModelTierRecordsFoldsEachTierAndKind(t *testing.T) {
 	// the same call can differ in the last bit.
 	assert.InDelta(t, volatility.WilsonLower(2, 3), got[0].PassLower, 1e-12)
 	assert.InDelta(t, volatility.WilsonLower(1, 1), got[3].PassLower, 1e-12)
-	got[0].PassLower, got[3].PassLower = 0, 0
+	assert.InDelta(t, volatility.WilsonLower(2, 3), got[0].FirstPassLower, 1e-12)
+	assert.InDelta(t, volatility.WilsonLower(1, 1), got[3].FirstPassLower, 1e-12)
+	got[0].PassLower, got[3].PassLower, got[0].FirstPassLower, got[3].FirstPassLower = 0, 0, 0, 0
 	assert.Equal(t, types.ModelTierRecord{
 		Rank: 0, ModelTier: "economy", Kind: types.JobKindCheck,
 		Jobs: 3, Pass: 2, Fail: 1,
 		ChecksPerJob: 8.0 / 3, ForksPerID: 3.0 / 2, ReworkPerJob: 1, WideningsPerJob: 1.0 / 3,
-		MeanCostUSD: 2.5 / 3, MedianTokens: 100,
+		MeanCostUSD: 2.5 / 3, MedianTokens: 100, FirstAttempts: 3, FirstPass: 2,
 	}, got[0], "a was forked twice, and the running and untiered outcomes do not count")
 	assert.Equal(t, "economy", got[1].ModelTier)
 	assert.Equal(t, types.JobKindProse, got[1].Kind)
 	assert.Equal(t, 1, got[1].NoReturn)
 	assert.Zero(t, got[1].PassLower)
 	assert.Equal(t, 2, got[2].Rank, "principal ranks after economy")
-	assert.Equal(t, types.ModelTierRecord{Rank: -1, ModelTier: "retired", Kind: types.JobKindCheck, Jobs: 1, Pass: 1, ChecksPerJob: 0, ForksPerID: 1}, got[3],
+	assert.Equal(t, types.ModelTierRecord{Rank: -1, ModelTier: "retired", Kind: types.JobKindCheck, Jobs: 1, Pass: 1, ChecksPerJob: 0, ForksPerID: 1,
+		FirstAttempts: 1, FirstPass: 1}, got[3],
 		"a tier the declaration dropped keeps its record, last, at rank -1")
+}
+
+// A first attempt is attempt 1 or an outcome recorded before attempts were numbered; a later
+// attempt counts toward the pass rate and not the first-attempt one. An ending classified as
+// needing a change counts as not retryable whatever its state.
+func TestModelTierRecordsCountsFirstAttemptsAndNotRetryableEndings(t *testing.T) {
+	t.Parallel()
+
+	attempt := func(job string, n int, state types.JobState, retry types.RetryChange) types.JobOutcome {
+		o := outcome(job, "economy", types.JobKindCheck, state)
+		o.Attempt, o.Retry = n, retry
+		return o
+	}
+	got := ModelTierRecords([]types.JobOutcome{
+		attempt("a", 1, types.StateFail, types.RetryAfterWidening),
+		attempt("a", 2, types.StatePass, types.RetryAsIs),
+		attempt("b", 0, types.StatePass, types.RetryAsIs),
+		attempt("c", 3, types.StateFail, types.RetryAfterPerson),
+	}, tierSet(t))
+
+	require.Len(t, got, 1)
+	assert.Equal(t, 4, got[0].Jobs)
+	assert.Equal(t, 2, got[0].FirstAttempts)
+	assert.Equal(t, 1, got[0].FirstPass)
+	assert.InDelta(t, volatility.WilsonLower(1, 2), got[0].FirstPassLower, 1e-12)
+	assert.Equal(t, 2, got[0].NotRetryable)
+	assert.InDelta(t, 4.0/3, got[0].ForksPerID, 1e-12, "forks per id keeps its meaning")
 }
 
 func TestModelTierRecordsWithoutADeclarationRanksEveryTierMinusOne(t *testing.T) {

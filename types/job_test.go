@@ -444,6 +444,26 @@ func TestDeclarationApplyLeavesStoreComputedAttemptsAlone(t *testing.T) {
 	assert.Equal(t, want, row)
 }
 
+func TestJobStaleAtReadsAZeroStampAsUnknown(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name              string
+		generation, stamp int
+		want              bool
+	}{
+		{"same generation", 2, 2, false},
+		{"an earlier spec", 2, 1, true},
+		{"an unstamped record", 2, 0, false},
+		{"a row with no generation", 0, 1, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, Job{Generation: tc.generation}.StaleAt(tc.stamp))
+		})
+	}
+}
+
 // slices.Clone preserves nil, which is what keeps a row that stored null from coming back
 // as [] through the JSON door.
 func TestJobCloneKeepsNilSlicesNil(t *testing.T) {
@@ -831,6 +851,11 @@ func TestFootprintsCrossJSON(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"job":"a","verified":false,"footprint_known":true,"footprint":[`+
 		`{"file":{"path":"a.go"},"side":"new","lines":[1,4],"declaration":"func X() {","driver":"golang"}],"lines_added":0,"lines_deleted":0,"symbol_delta_known":false}`, string(status))
+
+	status, err = json.Marshal(JobStatus{Job: "a", ObservedGeneration: 2, PriorGeneration: 1})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"job":"a","verified":false,"footprint_known":false,"lines_added":0,"lines_deleted":0,"symbol_delta_known":false,`+
+		`"observed_generation":2,"prior_generation":1}`, string(status))
 
 	overlap, err := json.Marshal(JobOverlap{JobA: "a", JobB: "b", PathsA: []string{"x"}, PathsB: []string{"x"},
 		Footprint: &JobOverlapFootprint{Verdict: FootprintShared, Shared: []string{"x/a.go#func X() {"}}})
