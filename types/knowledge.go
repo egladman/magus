@@ -5,6 +5,8 @@ import (
 	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
+	"go/scanner"
+	"go/token"
 	"regexp"
 	"slices"
 	"strconv"
@@ -37,7 +39,7 @@ import (
 // because shards load lazily and an edge legitimately arrives before the node that gives
 // its endpoint a kind. Graph.UndeclaredEdges reports violations, and a test over this
 // workspace's own graph fails when a producer widens the vocabulary without declaring it.
-const KnowledgeSchemaVersion = 17
+const KnowledgeSchemaVersion = 18
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
 // generates. Four renderers write one of these spellings: the target-graph index
@@ -526,6 +528,11 @@ type KnowledgeSymbol struct {
 	// was built over. Two sides with equal digests defined the symbol identically. Empty when
 	// the lines could not be read.
 	BodyDigest string
+	// BodyShape and BodyTokens are BodyShape's digest and token count over the same lines:
+	// equal shapes are copies that differ only in names and literal values. Empty and zero
+	// when the lines could not be read or the language has no lexer.
+	BodyShape  string
+	BodyTokens int
 	// SourceLines and SourceBytes size the file Source names, counted from the same read
 	// that computes BodyDigest. Zero when that read did not happen.
 	SourceLines int
@@ -584,6 +591,52 @@ func BodyDigest(lines [][]byte, start, end int) (digest string, ok bool) {
 	}
 	sum := sha256.Sum256(bytes.Join(lines[start-1:end], []byte("\n")))
 	return hex.EncodeToString(sum[:8]), true
+}
+
+// BodyShape fingerprints the lexical shape of lines start through end, indexed as
+// BodyDigest indexes them: comments are dropped, each identifier that is not a keyword
+// becomes the index of its first occurrence, and each string or number literal becomes
+// its kind. Two bodies with equal digests differ at most in names and literal values.
+// tokens counts the tokens hashed. ok is false when the range does not fit the file or
+// language has no lexer here; only "go" has one.
+func BodyShape(lines [][]byte, start, end int, language string) (digest string, tokens int, ok bool) {
+	if start < 1 || end < start || end > len(lines) || language != "go" {
+		return "", 0, false
+	}
+	src := bytes.Join(lines[start-1:end], []byte("\n"))
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(src))
+	var s scanner.Scanner
+	s.Init(file, src, func(token.Position, string) {}, 0)
+
+	var shape []byte
+	first := map[string]int{}
+	for {
+		_, tok, lit := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+		switch {
+		case tok == token.IDENT:
+			n, seen := first[lit]
+			if !seen {
+				n = len(first)
+				first[lit] = n
+			}
+			shape = append(shape, '$')
+			shape = strconv.AppendInt(shape, int64(n), 10)
+		case tok.IsLiteral(), tok.IsOperator(), tok.IsKeyword():
+			// A literal hashes as its kind, and a semicolon the scanner inserted at a line
+			// end as a typed one.
+			shape = append(shape, tok.String()...)
+		default:
+			shape = append(shape, lit...)
+		}
+		shape = append(shape, 0)
+		tokens++
+	}
+	sum := sha256.Sum256(shape)
+	return hex.EncodeToString(sum[:8]), tokens, true
 }
 
 // KnowledgePackage is one third-party dependency read out of a project's manifest:

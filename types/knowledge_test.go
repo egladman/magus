@@ -294,6 +294,44 @@ func TestBodyDigest(t *testing.T) {
 	}
 }
 
+func TestBodyShape(t *testing.T) {
+	shape := func(src string) (string, int) {
+		t.Helper()
+		lines := SplitSourceLines([]byte(src))
+		digest, tokens, ok := BodyShape(lines, 1, len(lines), "go")
+		require.True(t, ok, src)
+		return digest, tokens
+	}
+
+	sum, sumTokens := shape("func Sum(xs []int) int {\n\t// running total\n\tt := 0\n\tfor _, x := range xs {\n\t\tt += x\n\t}\n\treturn t + 1\n}\n")
+	add, addTokens := shape("func Add(vals []int) int {\n\tacc := 10\n\tfor _, v := range vals {\n\t\tacc += v\n\t}\n\treturn acc + 0x2a // done\n}\n")
+	assert.Equal(t, sum, add, "names, literal values and comments differ; the shape does not")
+	assert.Equal(t, sumTokens, addTokens)
+
+	for name, src := range map[string]string{
+		"another operator":     "func Sub(xs []int) int {\n\tt := 0\n\tfor _, x := range xs {\n\t\tt -= x\n\t}\n\treturn t + 1\n}\n",
+		"another statement":    "func Sum(xs []int) int {\n\tt := 0\n\tfor _, x := range xs {\n\t\tt += x\n\t}\n\tt++\n\treturn t + 1\n}\n",
+		"another literal kind": "func Sum(xs []int) int {\n\tt := 0\n\tfor _, x := range xs {\n\t\tt += x\n\t}\n\treturn t + \"1\"\n}\n",
+		"another binding":      "func Sum(xs []int) int {\n\tt := 0\n\tfor _, x := range xs {\n\t\tt += t\n\t}\n\treturn t + 1\n}\n",
+	} {
+		other, _ := shape(src)
+		assert.NotEqualf(t, sum, other, "%s is a different structure", name)
+	}
+
+	_, tokens := shape("func F() {}")
+	assert.Equal(t, 7, tokens, "func F ( ) { } and the semicolon the line end inserts")
+
+	lines := SplitSourceLines([]byte("package a\n\nfunc F() {}\n"))
+	for _, r := range [][2]int{{0, 1}, {3, 2}, {3, 8}} {
+		_, _, ok := BodyShape(lines, r[0], r[1], "go")
+		assert.Falsef(t, ok, "range %v does not fit the file", r)
+	}
+	for _, language := range []string{"python", "", "Go"} {
+		digest, tokens, ok := BodyShape(lines, 3, 3, language)
+		assert.Equalf(t, []any{"", 0, false}, []any{digest, tokens, ok}, "%q has no lexer here", language)
+	}
+}
+
 func TestMarkerFamilyIsClosed(t *testing.T) {
 	assert.Equal(t, []string{"diagram", "calls", "skills", "observed", "harness"}, MarkerFamily("").Values())
 	assert.True(t, MarkerCalls.Valid())
