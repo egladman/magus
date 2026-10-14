@@ -545,7 +545,8 @@ func writePathCovering(paths []string, rel string) (string, bool) {
 // write paths, that is working in this checkout or not yet taken by any. An untaken job
 // counts because only `job exec` binds one: two jobs forked back to back are both
 // untaken, and proving the second "alone" would be a claim about a plan nobody has
-// started. See [types.JobWriteProof] for why the three answers are distinct.
+// started. See [types.JobWriteProof] for why the three answers are distinct. A pattern
+// does not reach a file its row released (see [NarrowConfigHold]).
 //
 // A nil Store, or one with no root, answers alone: a caller with no checkout knows of no
 // other holder.
@@ -567,7 +568,7 @@ func (s *Store) WriteProof(rows []types.Job, row types.Job) types.JobWriteProof 
 	for _, peer := range peers {
 		for _, mine := range row.WritePaths {
 			for _, theirs := range peer.WritePaths {
-				if types.PathsIntersect(mine, theirs) {
+				if types.PathsIntersect(mine, theirs) && !releasedReach(peer, theirs, mine) && !releasedReach(row, mine, theirs) {
 					return types.WriteProofOverlapping
 				}
 			}

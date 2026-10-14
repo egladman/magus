@@ -704,9 +704,22 @@ func TestUnclaimedFootprint(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		writePaths []string
+		releases   []types.JobRelease
 		regions    []types.RegionChange
 		want       []string
 	}{
+		{
+			name:       "a pattern covers a file whole beside a claim on it",
+			writePaths: []string{"**/*.go", "run.go#executeStages"},
+			regions:    []types.RegionChange{placed("run.go", "func RunCI() {")},
+		},
+		{
+			name:       "a pattern no longer covers a file its row released",
+			writePaths: []string{"**/*.go", "run.go#executeStages"},
+			releases:   []types.JobRelease{{Path: "run.go", Digest: "sha256:ab"}},
+			regions:    []types.RegionChange{placed("run.go", "func RunCI() {"), placed("order.go", "func Order() {")},
+			want:       []string{"run.go#func RunCI() {"},
+		},
 		{
 			name:       "inside the claimed declaration",
 			writePaths: []string{"run.go#executeStages"},
@@ -747,7 +760,7 @@ func TestUnclaimedFootprint(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, unclaimedFootprint(tc.writePaths, tc.regions))
+			assert.Equal(t, tc.want, unclaimedFootprint(types.Job{WritePaths: tc.writePaths, Releases: tc.releases}, tc.regions))
 		})
 	}
 }

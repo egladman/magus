@@ -41,7 +41,7 @@ func gradeClaimedDeclarations(ctx context.Context, workspace string, me types.Jo
 	if len(others) == 0 {
 		return writeGrade{}
 	}
-	mine := job.ClaimedDeclarations(me.WritePaths, rel)
+	mine := job.ClaimedDeclarations(me, rel)
 	if mine == nil {
 		// me covers rel whole, or not at all: the path verdict already said which.
 		return writeGrade{}
@@ -75,6 +75,74 @@ func gradeClaimedDeclarations(ctx context.Context, workspace string, me types.Jo
 		}
 	}
 	return writeGrade{}
+}
+
+// gradeConfigNarrowing narrows me's hold on rel, a project's magusfile its write paths cover
+// whole only through a pattern (`**/*.buzz`), to the declarations this write changes: they
+// become claims on me's row and the rest of the file is released with its digest (see
+// job.NarrowConfigHold), so other jobs may claim what me never touched. It runs on every
+// such write and narrows only for a declaration me does not claim yet. A change to a
+// declaration another lease claims is denied as gradeClaimedDeclarations denies one.
+// A write magus cannot place, and a dry run, narrow nothing and keep the path verdict.
+func gradeConfigNarrowing(ctx context.Context, at location, checkout string, me types.Job, owners []types.Job, rel string, fields writeFields) writeGrade {
+	if path.Base(rel) != "magusfile.buzz" && path.Base(path.Dir(rel)) != "magusfiles" {
+		return writeGrade{}
+	}
+	if !coveredOnlyByPattern(me, rel) {
+		return writeGrade{}
+	}
+	changed, placed := changedDeclarations(ctx, checkout, rel, fields)
+	if !placed {
+		return writeGrade{}
+	}
+	now := time.Now().Unix()
+	mine := claimsOn(me.WritePaths, rel)
+	var touched []string
+	for _, decl := range changed {
+		if decl == types.Preamble || namedBy(mine, decl) || slices.Contains(touched, decl) {
+			continue
+		}
+		for _, owner := range owners {
+			if owner.ID == me.ID || owner.Overdue(now) {
+				continue
+			}
+			if claim, ok := namingClaim(claimsOn(owner.WritePaths, rel), decl); ok {
+				return denyClaimedDeclaration(me, owner, rel, claim, decl, mine)
+			}
+		}
+		touched = append(touched, decl)
+	}
+	if len(touched) == 0 || isDryRun(ctx) {
+		return writeGrade{}
+	}
+	row, err := job.NarrowConfigHold(ctx, job.NewStore(job.Location{CacheDir: at.cacheDir, Root: checkout}), me.ID, rel, touched)
+	if err != nil {
+		return writeGrade{}
+	}
+	return writeGrade{Decision: decisionAdvise,
+		Context: fmt.Sprintf("magus workspace: lease %s now holds %s by %s; the rest of the file is released for other jobs to claim.",
+			me.ID, rel, quotedClaims(rel, claimsOn(row.WritePaths, rel))),
+		Why: fmt.Sprintf("Your write paths cover %s, a project's magusfile, only through a pattern. Every job that changes the workspace's configuration writes that file, so magus narrows the hold to the declarations you change, on the first write to each. `magus job wait` grades your changes to it against these claims.", rel)}
+}
+
+// coveredOnlyByPattern reports whether a pattern among me's whole-file write paths covers
+// rel and no literal one does.
+func coveredOnlyByPattern(me types.Job, rel string) bool {
+	byPattern := false
+	for _, entry := range me.WritePaths {
+		p, decl := types.SplitClaim(entry)
+		if decl != "" {
+			continue
+		}
+		if _, covered, _ := declarationCovering([]string{entry}, rel); !covered {
+			continue
+		}
+		if !strings.ContainsAny(p, "*?[{") {
+			return false
+		}
+		byPattern = true
+	}
+	return byPattern
 }
 
 func denyClaimedDeclaration(me, owner types.Job, rel, claim, declaration string, mine []string) writeGrade {

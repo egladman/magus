@@ -615,7 +615,9 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		// members a newer magus stored, and the stamp never drops below what it read.
 		row.Schema = prev.Schema
 		row.Version = max(prev.Version, types.JobSchemaVersion)
-		row.Releases = s.releases(ctx, prev, row, now, prev.Registered != 0 && actor.Lease != id)
+		if kind != asNarrowing {
+			row.Releases = s.releases(ctx, prev, row, now, prev.Registered != 0 && actor.Lease != id)
+		}
 		if i >= 0 {
 			row.Created = prev.Created
 			row.RegisteredBy = prev.RegisteredBy

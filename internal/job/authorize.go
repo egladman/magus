@@ -102,10 +102,14 @@ const (
 	// row it lands on is by definition not the writer's, and the one write that sets
 	// Unattributed.
 	asObservation
+	// asNarrowing is [NarrowConfigHold] trading a pattern's hold on one config file for
+	// claims on the declarations its holder touched: ungraded, since the claims sit inside
+	// what the pattern already covered, and the one write that stamps its own release.
+	asNarrowing
 )
 
 // graded reports whether the acting party's boundary applies to this write.
-func (g grading) graded() bool { return g != asObservation }
+func (g grading) graded() bool { return g != asObservation && g != asNarrowing }
 
 // RefusedError is a write the store would not apply, naming the rule, the actor it
 // applied to, and what the actor should do instead.

@@ -73,8 +73,8 @@ func writeMerge(ctx context.Context, store *Store, id string, merge func(*types.
 // refuseMerge holds a merge into job id, against the plan rows, to the rules a fork is held
 // to, and returns the write proof a created row records. A merge that creates the row meets
 // every one: graded, within the jobs limits, unambiguous symbol goals, and write paths that
-// are no directory (MGS3018), ungradable claim (MGS3031), shared checkout or unordered
-// shared file (MGS3032), and a check that skips a test of its write paths' packages or that
+// are no directory (MGS3018), ungradable claim (MGS3031), project magusfile held whole
+// (MGS3036), shared checkout or unordered shared file (MGS3032), and a check that skips a test of its write paths' packages or that
 // the guard denies its holder. A merge onto an existing row meets the same rules for what it
 // ADDS: the goals and write paths it did not carry, so a path the row already held never
 // blocks an unrelated update.
@@ -144,6 +144,9 @@ func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string,
 		return "", err
 	}
 	if err := RefuseUngradableClaims(ctx, store, row); err != nil {
+		return "", err
+	}
+	if err := RefuseWholeFileConfigClaims(ctx, store, row); err != nil {
 		return "", err
 	}
 	if err := RefuseSharedCheckout(store, rows, row); err != nil {
@@ -280,10 +283,10 @@ func specChanges(prev, next types.Job) []string {
 }
 
 // RefuseAddedWritePaths holds the write paths a write adds to a job to the rules a fork's
-// are held to: no directory (MGS3018) and no claim a footprint cannot grade (MGS3031). A
-// rule that held only at creation would depend on which call wrote the path. added is the
-// job's row carrying only the write paths the write adds, so a path the row already held
-// never blocks an unrelated write.
+// are held to: no directory (MGS3018), no claim a footprint cannot grade (MGS3031), and no
+// project magusfile held whole (MGS3036). A rule that held only at creation would depend on
+// which call wrote the path. added is the job's row carrying only the write paths the
+// write adds, so a path the row already held never blocks an unrelated write.
 func RefuseAddedWritePaths(ctx context.Context, store *Store, added types.Job) error {
 	if len(added.WritePaths) == 0 {
 		return nil
@@ -291,7 +294,10 @@ func RefuseAddedWritePaths(ctx context.Context, store *Store, added types.Job) e
 	if err := RefuseDirectoryWritePaths(store, added); err != nil {
 		return err
 	}
-	return RefuseUngradableClaims(ctx, store, added)
+	if err := RefuseUngradableClaims(ctx, store, added); err != nil {
+		return err
+	}
+	return RefuseWholeFileConfigClaims(ctx, store, added)
 }
 
 // RefuseUngraded refuses a writing job that declares neither a check nor a goal: `job wait`

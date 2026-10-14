@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -119,6 +120,56 @@ func TestJudgeDeniesAnEditIntoAnotherJobsDeclaration(t *testing.T) {
 		"a whole-file write that changes only the writer's declaration is placed like an edit and passes")
 	assert.Equal(t, "deny", judge(map[string]any{"file_path": run, "content": "package run\n"}).Decision,
 		"a whole-file write that drops another job's declaration is placed like an edit and denied")
+}
+
+const claimedMagusfile = `import "magus";
+
+magus\project({
+    "name": "demo",
+    "targets": {
+        "test": {"timeout": "5m"},
+    },
+});
+`
+
+// A lease holding every Buzz file by a pattern narrows its hold on the magusfile to the keys
+// its first write changes, releasing the rest with its digest; from then on its claims are
+// graded like any other, in both directions.
+func TestConfigHoldNarrowsOnFirstWrite(t *testing.T) {
+	ctx, root := fleetFixture(t, claimLease("cfg", "**/*.buzz"), claimLease("keys", "magusfile.buzz#project.name"))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitattributes"), []byte("*.buzz diff=buzz\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(claimedMagusfile), 0o644))
+	cmd := exec.Command("git", "init", "-q")
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	magusfile := filepath.Join(root, "magusfile.buzz")
+	timeout := writeFields{OldText: `"5m"`, NewText: `"6m"`}
+	name := writeFields{OldText: `"demo"`, NewText: `"demo2"`}
+	row := func(id string) types.Job {
+		rows, err := leaseRows(ctx, hookLocation(ctx, Dependencies{}))
+		require.NoError(t, err)
+		return rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })]
+	}
+
+	assert.Empty(t, gradeLeasedEdit(ctx, Dependencies{}, "keys", magusfile, timeout).Decision,
+		"before the holder writes, its pattern claims no key another lease could collide with")
+
+	got := gradeLeasedEdit(ctx, Dependencies{}, "cfg", magusfile, timeout)
+	require.Equal(t, "advise", got.Decision, got.Reason)
+	assert.Contains(t, got.Context, `lease cfg now holds magusfile.buzz by "magusfile.buzz#project.targets.test"`)
+	cfg := row("cfg")
+	assert.Equal(t, []string{"**/*.buzz", "magusfile.buzz#project.targets.test"}, cfg.WritePaths)
+	require.Len(t, cfg.Releases, 1)
+	assert.Equal(t, "magusfile.buzz", cfg.Releases[0].Path)
+	assert.True(t, strings.HasPrefix(cfg.Releases[0].Digest, "sha256:"), cfg.Releases[0].Digest)
+
+	assert.Empty(t, gradeLeasedEdit(ctx, Dependencies{}, "cfg", magusfile, timeout).Decision, "a key it claims narrows nothing more")
+	assert.Equal(t, "deny", gradeLeasedEdit(ctx, Dependencies{}, "cfg", magusfile, name).Decision, "a key another lease claims")
+	assert.Equal(t, "deny", gradeLeasedEdit(ctx, Dependencies{}, "keys", magusfile, timeout).Decision, "the holder's new claim is graded")
+	assert.Empty(t, gradeLeasedEdit(ctx, Dependencies{}, "keys", magusfile, name).Decision)
+	assert.Len(t, row("cfg").WritePaths, 2, "a denied write narrows nothing")
 }
 
 func TestApplyEdits(t *testing.T) {

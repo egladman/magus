@@ -578,6 +578,12 @@ const MCPClientFailed DiagnosticCode = "MGS3034"
 // across an upgrade of that tool, so the run stops instead. An ABSENT tool is not
 // this: nothing that drives it can pass, so a placeholder there keys nothing false.
 const ToolUnprobeable DiagnosticCode = "MGS3035"
+
+// WritePathConfigWholeFile is a job write path that names a project's magusfile whole,
+// with no glob and no claim, when its declarations and project keys can be placed.
+// Every job that touches the workspace's configuration edits that file, so one holding
+// it whole blocks all of them for one line; the refusal lists the claims to hold instead.
+const WritePathConfigWholeFile DiagnosticCode = "MGS3036"
 const RaceDetected DiagnosticCode = "MGS4001"
 const OutputOverlapDetected DiagnosticCode = "MGS4002"
 const NondeterministicOutput DiagnosticCode = "MGS4003"
@@ -895,6 +901,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	MCPBuzzFailed,
 	MCPClientFailed,
 	ToolUnprobeable,
+	WritePathConfigWholeFile,
 	RaceDetected,
 	OutputOverlapDetected,
 	NondeterministicOutput,

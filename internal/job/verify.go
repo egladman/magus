@@ -237,7 +237,7 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 	v := Status{
 		Job: row.ID, Risks: rep.UnresolvedRisks, Command: rep.Validation.Command,
 		Footprint: seen.Regions, FootprintKnown: seen.RegionsKnown, FootprintReason: seen.RegionsReason,
-		FootprintUnclaimed: unclaimedFootprint(row.WritePaths, seen.Regions),
+		FootprintUnclaimed: unclaimedFootprint(row, seen.Regions),
 	}
 
 	if rep.Job != "" && rep.Job != row.ID {
@@ -579,24 +579,24 @@ func claimViolations(row types.Job, seen Observed, unclaimed []string) []string 
 	for _, loc := range unclaimed {
 		file, _ := types.SplitClaim(loc)
 		out = append(out, fmt.Sprintf("the diff since %s changed %s, outside every declaration the job claims in %s (%s)",
-			from, loc, file, strings.Join(ClaimedDeclarations(row.WritePaths, file), ", ")))
+			from, loc, file, strings.Join(ClaimedDeclarations(row, file), ", ")))
 	}
 	return out
 }
 
 // unclaimedFootprint is every location of regions, as its String, that lands in a file the
-// write paths claim only by declaration and that none of those declarations names. A file
-// some entry covers whole is claimed whole, a file no entry covers is the path rules'
-// violation rather than this one's, and a Preamble region is exempt. A region no driver
-// placed locates as its whole file, which no declaration names.
-func unclaimedFootprint(writePaths []string, regions []types.RegionChange) []string {
+// row claims only by declaration (see [ClaimedDeclarations]) and that none of those
+// declarations names. A file some entry covers whole is claimed whole, a file no entry covers
+// is the path rules' violation rather than this one's, and a Preamble region is exempt. A
+// region no driver placed locates as its whole file, which no declaration names.
+func unclaimedFootprint(row types.Job, regions []types.RegionChange) []string {
 	var out []string
 	for _, r := range regions {
 		loc := r.Location()
 		if loc.Declaration == types.Preamble {
 			continue
 		}
-		claimed := ClaimedDeclarations(writePaths, loc.Path)
+		claimed := ClaimedDeclarations(row, loc.Path)
 		if len(claimed) == 0 || slices.ContainsFunc(claimed, func(d string) bool { return types.NamesDeclaration(d, loc.Declaration) }) {
 			continue
 		}
@@ -673,14 +673,18 @@ func DeniedDeclarations(denyPaths []string, file string) []string {
 	return decls
 }
 
-// ClaimedDeclarations are the declarations writePaths claim in file, the repository-relative
-// path of one file, or nil when some entry covers the file whole or none covers it at all.
-func ClaimedDeclarations(writePaths []string, file string) []string {
+// ClaimedDeclarations are the declarations row's write paths claim in file, the
+// repository-relative path of one file, or nil when some entry covers the file whole or none
+// covers it at all. A file row released while a pattern still matches it (see
+// [NarrowConfigHold]) is held by its claims alone: the release is what ended the pattern's
+// hold on it.
+func ClaimedDeclarations(row types.Job, file string) []string {
+	released := releasedFile(row, file)
 	var decls []string
-	for _, entry := range writePaths {
+	for _, entry := range row.WritePaths {
 		p, decl := types.SplitClaim(entry)
 		switch {
-		case decl == "" && coversPath(p, file):
+		case decl == "" && !released && coversPath(p, file):
 			return nil
 		case decl != "" && p != "" && path.Clean(p) == path.Clean(file):
 			decls = append(decls, decl)

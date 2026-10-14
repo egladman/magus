@@ -1,7 +1,8 @@
 # `magus job fork` refuses a file another checkout already holds (MGS3032) and prints the
 # claim pair that would split it, computed from what the holder has touched and the symbols
 # the new job's goals name, without writing either claim. A claim word that several
-# declarations of its file share is refused (MGS3031), with words that name one each.
+# declarations of its file share is refused (MGS3031), with words that name one each. A
+# project's magusfile held whole is refused (MGS3036) in favour of its key claims.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 env GIT_AUTHOR_NAME=Ana
@@ -16,6 +17,7 @@ exec git add -A
 exec git commit -q -m 'run.go with three functions'
 exec git worktree add -q ../ana
 exec git worktree add -q ../ben
+exec git worktree add -q ../cara
 
 cd ../ana
 exec magus job fork wave/a --criteria 'change A' --write-paths run.go --check 'lint .'
@@ -53,15 +55,44 @@ exec magus ls jobs -o name
 stdout '^wave/open$'
 stdout '^wave/new$'
 
+# A job holding every Buzz file by a pattern, in a third checkout.
+cd ../cara
+exec magus job fork wave/cfg --criteria 'tune buzz' --write-paths '**/*.buzz' --check 'lint .'
+exec magus job exec wave/cfg
+
+# The magusfile whole is refused with the claims it has (MGS3036), and the holder is asked
+# to release it in one attention request however often the fork is refused.
+cd ../ben
+! exec magus job fork wave/slots --criteria 'lint timeout' --write-paths magusfile.buzz --check 'lint .'
+stderr 'MGS3036'
+stderr '`magusfile.buzz#project.name`, `magusfile.buzz#project.targets.lint`'
+! exec magus job fork wave/slots --criteria 'lint timeout' --write-paths magusfile.buzz --check 'lint .'
+exec magus session attention
+stdout -count=1 'job wave/cfg holds magusfile.buzz'
+
+# A key claim forks; a key whose entries it would also hold is a word several share.
+exec magus job fork wave/slots --criteria 'lint timeout' --write-paths 'magusfile.buzz#project.targets.lint' --check 'lint .'
+! exec magus job fork wave/targets --criteria 'targets' --write-paths 'magusfile.buzz#project.targets' --check 'lint .'
+stderr 'MGS3031'
+stderr '"magusfile.buzz#project.targets" names 2 declarations of magusfile.buzz'
+
 -- site/.gitignore --
 .magus/
 -- site/.gitattributes --
 *.go diff=golang
+*.buzz diff=buzz
 -- site/magus.yaml --
 concurrency: 2
 -- site/magusfile.buzz --
 import "magus";
 import "proc";
+
+magus\project({
+    "name": "site",
+    "targets": {
+        "lint": {"timeout": "5m"},
+    },
+});
 
 // lint fails on an empty file.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {

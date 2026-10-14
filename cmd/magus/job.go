@@ -1106,6 +1106,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if err := job.RefuseUngradableClaims(ctx, store, probe); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
+	if err := job.RefuseWholeFileConfigClaims(ctx, store, probe); err != nil {
+		return usagef("magus job fork: %s", err)
+	}
 	if err := job.RefuseSharedCheckout(store, plan, probe); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
