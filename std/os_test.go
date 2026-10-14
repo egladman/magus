@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -646,25 +647,57 @@ func TestOsRetryRejectsANilCallback(t *testing.T) {
 
 // TestOsRetryReadsIntegerBackoffOptions: the VM hands numbers over as float64,
 // but a Go caller (and a hand-built map) may pass int or int64, so all three are
-// accepted and anything else falls back to the default.
+// accepted.
 func TestOsRetryReadsIntegerBackoffOptions(t *testing.T) {
 	for _, tc := range []struct {
-		name     string
-		opts     map[string]any
-		failures int
+		name string
+		opts map[string]any
 	}{
-		{"int", map[string]any{"backoff_ms": 1, "max_backoff_ms": 2}, 1},
-		{"int64", map[string]any{"backoff_ms": int64(1), "max_backoff_ms": int64(2)}, 1},
-		// A value of the wrong type falls back to the 500ms default, so this case
-		// must not retry: the point is that the option is READ without erroring.
-		{"unusable values fall back to the defaults", map[string]any{"backoff_ms": "not a number", "max_backoff_ms": nil}, 0},
+		{"int", map[string]any{"backoff_ms": 1, "max_backoff_ms": 2}},
+		{"int64", map[string]any{"backoff_ms": int64(1), "max_backoff_ms": int64(2)}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := OsRetry(context.Background(), 2, failThenAnswer(t, tc.failures, "ok"), tc.opts)
+			got, err := OsRetry(context.Background(), 2, failThenAnswer(t, 1, "ok"), tc.opts)
 			require.NoError(t, err)
 			assert.Equal(t, "ok", got)
 		})
 	}
+}
+
+// TestOsRetryRefusesAMisconfiguredBackoff: a wrongly typed or negative option is an
+// error naming the key, raised before fn runs, never a silent fall back to the default.
+func TestOsRetryRefusesAMisconfiguredBackoff(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		opts map[string]any
+		key  string
+	}{
+		{"string backoff", map[string]any{"backoff_ms": "not a number"}, "backoff_ms"},
+		{"null cap", map[string]any{"max_backoff_ms": nil}, "max_backoff_ms"},
+		{"negative backoff", map[string]any{"backoff_ms": -1.0}, "backoff_ms"},
+		{"negative cap", map[string]any{"max_backoff_ms": -5}, "max_backoff_ms"},
+		{"NaN backoff", map[string]any{"backoff_ms": math.NaN()}, "backoff_ms"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// A mock with no expectations fails the test if fn is called.
+			_, err := OsRetry(context.Background(), 2, mocks.NewMockCallback(t), tc.opts)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), `os\retry: `+tc.key)
+		})
+	}
+}
+
+// TestOsRetryStopsOnANonRetryableError: the classification is shared with retry.Do, so
+// an error typed non-retryable gets one call and comes back as it is, not as an
+// exhaustion count.
+func TestOsRetryStopsOnANonRetryableError(t *testing.T) {
+	boom := types.NonRetryable(errors.New("hook is not a command"), types.RetryAfterConfig, "edit the hook")
+	cb := mocks.NewMockCallback(t)
+	cb.EXPECT().Call(mock.Anything).Return(nil, boom).Once()
+
+	_, err := OsRetry(context.Background(), 5, cb, covFastRetry)
+	require.Error(t, err)
+	assert.Same(t, boom, err)
 }
 
 // TestOsRetryHonorsCancellationDuringBackoff: an interrupted run must wake out of

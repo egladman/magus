@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/retry"
 	"github.com/egladman/magus/types"
 )
 
@@ -244,7 +245,7 @@ var Os = Module{
 		},
 		{
 			Name: "retry",
-			Doc:  "Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}.",
+			Doc:  "Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. An error typed non-retryable stops at once. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}; a wrongly typed or negative option raises.",
 			Args: []Arg{
 				{Name: "max", Type: TypeInt},
 				{Name: "fn", Type: TypeFunc, Func: "fun () > any !> any"},
@@ -554,23 +555,25 @@ func OsWithEnv(ctx context.Context, env map[string]string, cb Callback) error {
 // OsRetry calls fn up to max times, retrying on error with exponential backoff.
 // On success it returns fn's first return value; on exhaustion it errors.
 // opts keys: backoff_ms (initial delay, default 500), max_backoff_ms (cap, default 30000).
+// A key of the wrong type, or a negative value, is an error naming the key.
+//
+// An error [types.ClassifyRetry] calls non-retryable ends the loop at once and is
+// returned as it is.
+//
+// This is not [retry.Do] on purpose: fn runs once even on a cancelled context, its value
+// comes back, the knobs are float milliseconds, and the exhaustion text below is a
+// contract Buzz authors match on. The backoff arithmetic is shared: [retry.Backoff].
 func OsRetry(ctx context.Context, max int, fn Callback, opts map[string]any) (any, error) {
 	if fn == nil {
 		return nil, fmt.Errorf(`os\retry: fn must not be nil`)
 	}
-	backoffMs := 500.0
-	maxBackoffMs := 30000.0
-	if opts != nil {
-		if v, ok := opts["backoff_ms"]; ok {
-			if f, ok := retryFloat(v); ok {
-				backoffMs = f
-			}
-		}
-		if v, ok := opts["max_backoff_ms"]; ok {
-			if f, ok := retryFloat(v); ok {
-				maxBackoffMs = f
-			}
-		}
+	backoff, err := retryMillis(opts, "backoff_ms", 500)
+	if err != nil {
+		return nil, err
+	}
+	maxBackoff, err := retryMillis(opts, "max_backoff_ms", 30000)
+	if err != nil {
+		return nil, err
 	}
 	var lastErr error
 	for i := 0; i < max; i++ {
@@ -581,13 +584,12 @@ func OsRetry(ctx context.Context, max int, fn Callback, opts map[string]any) (an
 			}
 			return nil, nil //nolint:nilnil // fn succeeded with no return value; nil is the no-value result
 		}
+		if !types.ClassifyRetry(err).Retryable {
+			return nil, err
+		}
 		lastErr = err
 		if i < max-1 {
-			delay := backoffMs * math.Pow(2, float64(i))
-			if delay > maxBackoffMs {
-				delay = maxBackoffMs
-			}
-			t := time.NewTimer(time.Duration(delay * float64(time.Millisecond)))
+			t := time.NewTimer(retry.Backoff(backoff, maxBackoff, i+1))
 			select {
 			case <-ctx.Done():
 				t.Stop()
@@ -597,6 +599,24 @@ func OsRetry(ctx context.Context, max int, fn Callback, opts map[string]any) (an
 		}
 	}
 	return nil, fmt.Errorf(`os\retry: %d attempt(s): %w`, max, lastErr)
+}
+
+// retryMillis reads the millisecond option key as a duration, def when absent. A value that
+// is not a number, or is negative, is an error naming the key.
+func retryMillis(opts map[string]any, key string, def float64) (time.Duration, error) {
+	ms := def
+	if v, ok := opts[key]; ok {
+		f, isNum := retryFloat(v)
+		if !isNum || math.IsNaN(f) || f < 0 {
+			return 0, fmt.Errorf(`os\retry: %s must be a non-negative number, got %v`, key, v)
+		}
+		ms = f
+	}
+	const maxMs = float64(math.MaxInt64 / time.Millisecond)
+	if ms > maxMs {
+		return time.Duration(math.MaxInt64), nil
+	}
+	return time.Duration(ms * float64(time.Millisecond)), nil
 }
 
 // retryFloat extracts a float64 from a Go any value (int, int64, or float64).
