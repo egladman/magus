@@ -136,18 +136,12 @@ type MCPCall struct {
 }
 
 // AgentCall describes the cost facts recorded for one agent tool call, for the magus.agent.*
-// family. Every field is the caller's and optional: a zero ContextTokens, empty Billing,
-// empty DelegableClass or ResultChars of 0 records nothing for that instrument, and an
-// empty Thread or Model reads as "unknown". Shadow maps each guard profile to what it
-// would have decided.
+// family. Every field is the caller's and optional: a zero ContextTokens, empty Billing, or
+// an empty DelegableClass or ResultChars of nil or 0 records nothing for that instrument,
+// and an empty Thread or ContextModel reads as "unknown". Shadow maps each guard profile
+// to what it would have decided.
 type AgentCall struct {
-	Thread         types.AgentThread
-	Model          string
-	ContextTokens  int64
-	Billing        types.AgentBilling
-	DelegableClass string
-	ResultChars    int64
-	Shadow         map[types.GuardProfile]types.GuardDecision
+	types.AgentFacts
 }
 
 // SandboxRules describes the allow-rules one sandbox was built from, for the

@@ -15,6 +15,7 @@ const (
 	// AgentThreadSub is a subagent.
 	AgentThreadSub AgentThread = "sub"
 	// AgentThreadUnknown is a call whose host reports nothing that tells the two apart.
+	// It is the one spelling of unknown: magus writes it rather than leave a thread unset.
 	AgentThreadUnknown AgentThread = "unknown"
 )
 
@@ -28,14 +29,6 @@ func (t AgentThread) Valid() bool {
 	return t == "" || slices.Contains(t.Values(), string(t))
 }
 
-// String renders t for a message, with unset read as unknown.
-func (t AgentThread) String() string {
-	if t == "" {
-		return string(AgentThreadUnknown)
-	}
-	return string(t)
-}
-
 // MarshalText writes the name as given.
 func (t AgentThread) MarshalText() ([]byte, error) { return []byte(t), nil }
 
@@ -46,6 +39,42 @@ func (t *AgentThread) UnmarshalText(text []byte) error {
 		return fmt.Errorf("unknown agent thread %q (want one of %v)", text, v.Values())
 	}
 	*t = v
+	return nil
+}
+
+// ThreadSource is what an AgentThread rests on.
+type ThreadSource string
+
+const (
+	// ThreadReported is a thread the host reported: a call naming a subagent, or one
+	// naming none from a host that has named subagents before.
+	ThreadReported ThreadSource = "reported"
+	// ThreadInferred is a thread magus concluded with no report to rest on, such as an
+	// unleased session of a host that never names subagents, or an unknown thread. A rule
+	// reading one says a refusal as advice.
+	ThreadInferred ThreadSource = "inferred"
+)
+
+// Values lists the sources, excluding the zero value.
+func (s ThreadSource) Values() []string {
+	return []string{string(ThreadReported), string(ThreadInferred)}
+}
+
+// Valid reports whether s is a declared source or unset.
+func (s ThreadSource) Valid() bool {
+	return s == "" || slices.Contains(s.Values(), string(s))
+}
+
+// MarshalText writes the name as given.
+func (s ThreadSource) MarshalText() ([]byte, error) { return []byte(s), nil }
+
+// UnmarshalText sets s from a name, refusing one outside Values.
+func (s *ThreadSource) UnmarshalText(text []byte) error {
+	v := ThreadSource(text)
+	if !v.Valid() {
+		return fmt.Errorf("unknown thread source %q (want one of %v)", text, v.Values())
+	}
+	*s = v
 	return nil
 }
 
@@ -93,6 +122,46 @@ func (b *AgentBilling) UnmarshalText(text []byte) error {
 	return nil
 }
 
+// DelegableClass is the kind of work a subagent could have done in its caller's place.
+// Empty is a call no subagent would make for it.
+type DelegableClass string
+
+const (
+	// DelegableSearch is a search: a recursive grep, rg, find, or a host's search tool.
+	DelegableSearch DelegableClass = "search"
+	// DelegableRead is a whole read of a source file or of a run's full log.
+	DelegableRead DelegableClass = "read"
+	// DelegableDiff is a diff or a patch read whole.
+	DelegableDiff DelegableClass = "diff"
+	// DelegableRun is a target run.
+	DelegableRun DelegableClass = "run"
+	// DelegableFetch is a fetch of a URL.
+	DelegableFetch DelegableClass = "fetch"
+)
+
+// AgentFacts is what magus records about a caller's cost beside one of its calls. Every
+// field is the caller's, never a child it spawns, and the JSON names are the trail's.
+type AgentFacts struct {
+	// Thread is which thread of its session the caller is, and ThreadFrom what that
+	// rests on.
+	Thread     AgentThread  `json:"thread,omitempty"`
+	ThreadFrom ThreadSource `json:"thread_from,omitempty"`
+	// ContextTokens and ContextModel are the caller's last reported context size and the
+	// model it was reported for; 0 and empty when the host reported none.
+	ContextTokens int64  `json:"context_tokens,omitzero"`
+	ContextModel  string `json:"context_model,omitempty"`
+	// Billing is the billing mode in effect for the call, empty when unknown.
+	Billing AgentBilling `json:"billing,omitempty"`
+	// DelegableClass is the work a subagent could have done in the caller's place.
+	DelegableClass DelegableClass `json:"delegable_class,omitempty"`
+	// ResultChars is the size of the call's result in characters, nil when it was not
+	// observed, which is every record made before the call ran.
+	ResultChars *int `json:"result_chars,omitempty"`
+	// Shadow is what each guard profile would have decided for the call, whichever one is
+	// in force, so a level can be judged from the calls it would have changed.
+	Shadow map[GuardProfile]GuardDecision `json:"shadow,omitempty"`
+}
+
 // GuardProfile is how hard the guard's cost rules press on an agent session. Each level
 // is a set of built-in rule settings; a rule the workspace names in magus\guard.builtins
 // overrides its level's setting.
@@ -116,22 +185,31 @@ func (p GuardProfile) Valid() bool {
 	return p == "" || slices.Contains(p.Values(), string(p))
 }
 
-// Level is p with unset read as GuardProfileLight, the level that applies when nothing
-// declares one.
-func (p GuardProfile) Level() GuardProfile {
+// Effective is the level p applies: p, or GuardProfileLight when unset.
+func (p GuardProfile) Effective() GuardProfile {
 	if p == "" {
 		return GuardProfileLight
 	}
 	return p
 }
 
-// Rank orders p by how much it refuses, unset ranking as light; -1 for an unknown name.
+// Rank orders p's effective level by how much it refuses; -1 for an unknown name.
 func (p GuardProfile) Rank() int {
-	return slices.Index(p.Values(), string(p.Level()))
+	return slices.Index(p.Values(), string(p.Effective()))
 }
 
-// String renders p as its level.
-func (p GuardProfile) String() string { return string(p.Level()) }
+// Stricter is p raised by o: o when its level refuses more than p's effective one, else
+// p's effective level. An unset o raises nothing, since a tier that declares no level has
+// no say, and an unknown o ranks below off.
+func (p GuardProfile) Stricter(o GuardProfile) GuardProfile {
+	if o != "" && o.Rank() > p.Rank() {
+		return o
+	}
+	return p.Effective()
+}
+
+// String renders p as written, empty when unset; Effective names the level that applies.
+func (p GuardProfile) String() string { return string(p) }
 
 // MarshalText writes the name as given.
 func (p GuardProfile) MarshalText() ([]byte, error) { return []byte(p), nil }
@@ -146,25 +224,14 @@ func (p *GuardProfile) UnmarshalText(text []byte) error {
 	return nil
 }
 
-// StricterProfile returns the highest-ranked of profiles. An unset or unknown one says
-// nothing and is skipped, and light is the answer when none is left; pass p.Level() for a
-// side whose unset means light rather than "no opinion".
-func StricterProfile(profiles ...GuardProfile) GuardProfile {
-	best := GuardProfileLight
-	rank := -1
-	for _, p := range profiles {
-		if p == "" {
-			continue
-		}
-		if r := p.Rank(); r > rank {
-			best, rank = p, r
-		}
-	}
-	return best
-}
+// ContextSource names where a ContextWindow's size came from.
+type ContextSource string
 
-// AgentContext is the calling thread's context window as its host last reported it.
-type AgentContext struct {
+// ContextFromTranscript is a size read from the usage a host wrote into a transcript.
+const ContextFromTranscript ContextSource = "transcript"
+
+// ContextWindow is a thread's context window as its host last reported it.
+type ContextWindow struct {
 	// Tokens is the prompt the thread's last model call sent: input plus cache-read plus
 	// cache-write tokens. 0 when no usage was reported.
 	Tokens int64
@@ -173,9 +240,8 @@ type AgentContext struct {
 	Window int64
 	// Model is the model id the usage was reported for, raw; empty when unknown.
 	Model string
-	// Source names where Tokens came from, such as "transcript" or "precompact"; empty
-	// when nothing reported it.
-	Source string
+	// Source is where Tokens came from, empty when nothing reported it.
+	Source ContextSource
 }
 
 // ModelFacts is one model's row in the table magus prices agent context against. Prices

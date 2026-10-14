@@ -337,12 +337,12 @@ func newAgentCostInstruments(m metric.Meter) (agentCostInstruments, error) {
 func (p *otelProvider) RecordAgentCall(ctx context.Context, c observability.AgentCall) {
 	if c.ContextTokens > 0 {
 		p.agentCost.contextTokens.Record(ctx, c.ContextTokens, metric.WithAttributes(
-			attribute.String("thread", c.Thread.String()),
-			attribute.String("model", cmp.Or(c.Model, "unknown")),
+			attribute.String("thread", string(cmp.Or(c.Thread, types.AgentThreadUnknown))),
+			attribute.String("model", cmp.Or(c.ContextModel, "unknown")),
 		))
 	}
-	if c.DelegableClass != "" && c.ResultChars > 0 {
-		p.agentCost.delegable.Add(ctx, c.ResultChars, metric.WithAttributes(attribute.String("class", c.DelegableClass)))
+	if c.DelegableClass != "" && c.ResultChars != nil && *c.ResultChars > 0 {
+		p.agentCost.delegable.Add(ctx, int64(*c.ResultChars), metric.WithAttributes(attribute.String("class", string(c.DelegableClass))))
 	}
 	if c.Billing != "" {
 		p.agentCost.billing.Add(ctx, 1, metric.WithAttributes(attribute.String("mode", string(c.Billing))))

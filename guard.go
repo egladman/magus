@@ -685,7 +685,7 @@ func LoadApprovedBuiltins(ctx context.Context, root string) (map[string]builtin.
 	if reg != nil {
 		declared, profile = reg.Builtins(), reg.Profile()
 	}
-	expanded, err := builtin.ResolveProfile(types.StricterProfile(profile.Level(), agents.Profile), declared)
+	expanded, err := builtin.ResolveProfile(profile.Stricter(agents.Profile), declared)
 	if err != nil {
 		return nil, err
 	}
@@ -694,7 +694,7 @@ func LoadApprovedBuiltins(ctx context.Context, root string) (map[string]builtin.
 
 // LoadApprovedProfile is LoadApprovedSpawnRule for the magus\guard.profile level: the
 // approved sources' level, light when they declare none or there is no approval authority.
-// It does not read agents.profile; GuardProfile does.
+// It does not read agents.profile; EffectiveGuardProfile does.
 func LoadApprovedProfile(ctx context.Context, root string) (types.GuardProfile, error) {
 	reg, err := loadApprovedRegistry(ctx, root)
 	if err != nil {
@@ -703,40 +703,40 @@ func LoadApprovedProfile(ctx context.Context, root string) (types.GuardProfile, 
 	if reg == nil {
 		return types.GuardProfileLight, nil
 	}
-	return reg.Profile().Level(), nil
+	return reg.Profile().Effective(), nil
 }
 
-// GuardProfile is the level a hook's compiled-rule settings start from: the stricter of
-// the approved and the working-tree magus\guard.profile, raised by the person's
-// agents.profile. rules is the working tree's load, nil when it did not load, in which case
-// root's approved sources decide alone. A side that does not load counts as light, and a
-// magus.yaml that does not load raises nothing.
+// EffectiveGuardProfile is the level a hook's compiled-rule settings start from: the
+// stricter of the approved and the working-tree magus\guard.profile, raised by the
+// person's agents.profile. rules is the working tree's load, nil when it did not load, in
+// which case root's approved sources decide alone. A side that does not load counts as
+// light, and a magus.yaml that does not load raises nothing.
 //
 // It loads what GuardBuiltins loads, so it suits a report of the level, not a per-rule
 // lookup: the level's settings are already in GuardBuiltins.
-func GuardProfile(ctx context.Context, rules *GuardRules, root string) types.GuardProfile {
-	var levels []types.GuardProfile
+func EffectiveGuardProfile(ctx context.Context, rules *GuardRules, root string) types.GuardProfile {
+	var level types.GuardProfile
 	if rules != nil {
 		root = rules.root
-		levels = append(levels, rules.registry.Profile().Level())
+		level = rules.registry.Profile().Effective()
 		reg, err := approvedRegistryIfChanged(ctx, rules.root, ".", rules.opts, secret.New(), rules.sources, true)
 		switch {
 		case err != nil:
-			levels = append(levels, types.GuardProfileLight)
+			level = level.Stricter(types.GuardProfileLight)
 		case reg != nil:
-			levels = append(levels, reg.Profile().Level())
+			level = level.Stricter(reg.Profile().Effective())
 		}
 	} else {
 		approved, err := LoadApprovedProfile(ctx, root)
 		if err != nil {
 			approved = types.GuardProfileLight
 		}
-		levels = append(levels, approved)
+		level = approved
 	}
 	if agents, err := config.LoadAgents(root); err == nil {
-		levels = append(levels, agents.Profile)
+		level = level.Stricter(agents.Profile)
 	}
-	return types.StricterProfile(levels...)
+	return level
 }
 
 // GuardBuiltins is the compiled rules' effective settings for a hook, nil for the
@@ -1150,11 +1150,11 @@ func (g *GuardRules) EffectiveBuiltins(ctx context.Context) (map[string]builtin.
 		approved, approvedProfile = reg.Builtins(), reg.Profile()
 	}
 	agents, agentsErr := config.LoadAgents(g.root)
-	approved, err := builtin.ResolveProfile(types.StricterProfile(approvedProfile.Level(), agents.Profile), approved)
+	approved, err := builtin.ResolveProfile(approvedProfile.Stricter(agents.Profile), approved)
 	if err != nil {
 		return nil, err
 	}
-	working, err := builtin.ResolveProfile(types.StricterProfile(g.registry.Profile().Level(), agents.Profile), g.Builtins())
+	working, err := builtin.ResolveProfile(g.registry.Profile().Stricter(agents.Profile), g.Builtins())
 	if err != nil {
 		return nil, err
 	}

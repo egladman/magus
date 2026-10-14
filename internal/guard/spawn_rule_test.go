@@ -90,14 +90,14 @@ func TestSpawnRuleSeesEveryHostsEnvelope(t *testing.T) {
 				Kind: types.SpawnKindSpawn, Host: "claude-code", Session: "8f2c6a1e", Model: "sonnet",
 				AgentType: "general-purpose", Description: "orchestrator/brisk-heron/implement adr 0002",
 				Name: "brisk-heron", Prompt: "Implement ADR 0002. Run one plain command per call.", Background: true, Isolated: true,
-				Role: types.AgentRoleRoot, Thread: types.AgentThreadMain,
+				Role: types.AgentRoleRoot, Thread: types.AgentThreadMain, ThreadFrom: types.ThreadInferred,
 			},
 		},
 		{
 			name: "claude-code continue", host: "claude-code", event: claudeContinueEnvelope,
 			want: types.SpawnRequest{
 				Kind: types.SpawnKindContinue, Host: "claude-code", Session: "8f2c6a1e",
-				Prompt: "Now fix the review comments.", Role: types.AgentRoleRoot, Thread: types.AgentThreadMain,
+				Prompt: "Now fix the review comments.", Role: types.AgentRoleRoot, Thread: types.AgentThreadMain, ThreadFrom: types.ThreadInferred,
 				Target: &types.SpawnTarget{Agent: "brisk-heron"},
 			},
 		},
@@ -105,21 +105,21 @@ func TestSpawnRuleSeesEveryHostsEnvelope(t *testing.T) {
 			name: "cursor through its glue", host: "cursor", event: cursorGlueEnvelope,
 			want: types.SpawnRequest{
 				Kind: types.SpawnKindSpawn, Host: "cursor", Session: "conv-parent", AgentType: "explore",
-				Prompt: "Audit internal/job", Role: types.AgentRoleRoot, Thread: types.AgentThreadMain,
+				Prompt: "Audit internal/job", Role: types.AgentRoleRoot, Thread: types.AgentThreadMain, ThreadFrom: types.ThreadInferred,
 			},
 		},
 		{
 			name: "cursor raw", host: "cursor", event: cursorRawEnvelope,
 			want: types.SpawnRequest{
 				Kind: types.SpawnKindSpawn, Host: "cursor", Session: "conv-parent", AgentType: "explore",
-				Prompt: "Audit internal/job", Role: types.AgentRoleRoot, Thread: types.AgentThreadMain,
+				Prompt: "Audit internal/job", Role: types.AgentRoleRoot, Thread: types.AgentThreadMain, ThreadFrom: types.ThreadInferred,
 			},
 		},
 		{
 			name: "codex-shaped", host: "codex", event: codexShapedEnvelope,
 			want: types.SpawnRequest{
 				Kind: types.SpawnKindSpawn, Host: "codex", Session: "codex-s",
-				Prompt: "Audit internal/job", Role: types.AgentRoleRoot, Thread: types.AgentThreadMain,
+				Prompt: "Audit internal/job", Role: types.AgentRoleRoot, Thread: types.AgentThreadMain, ThreadFrom: types.ThreadInferred,
 			},
 		},
 	}
@@ -496,14 +496,14 @@ func TestSpawnRuleSeesTheHostsSubagentID(t *testing.T) {
 	Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 	require.Len(t, probe.asked, 2)
 	assert.Equal(t, types.SpawnRequest{
-		Kind:        types.SpawnKindSpawn,
-		Host:        "claude-code",
-		Session:     probe.asked[1].Session,
-		Prompt:      "x",
-		Agent:       "never-seen",
-		Role:        types.AgentRoleRoot,
-		Thread:      types.AgentThreadSub,
-		ThreadKnown: true,
+		Kind:       types.SpawnKindSpawn,
+		Host:       "claude-code",
+		Session:    probe.asked[1].Session,
+		Prompt:     "x",
+		Agent:      "never-seen",
+		Role:       types.AgentRoleRoot,
+		Thread:     types.AgentThreadSub,
+		ThreadFrom: types.ThreadReported,
 	}, probe.asked[0], "the subagent reports the main session's id; magus never saw it spawned, so no Parent")
 	assert.Empty(t, probe.asked[1].Agent, "the main agent carries no subagent id")
 }
@@ -640,7 +640,7 @@ func writeTranscript(t *testing.T, lines ...string) string {
 	return path
 }
 
-func TestLastContextTokens(t *testing.T) {
+func TestLastContextUsageReadsTheTail(t *testing.T) {
 	// A record bigger than the tail, so the only usage before it is out of reach.
 	filler := `{"type":"user","message":{"role":"user","content":"` + strings.Repeat("x", agentUsageTail+1024) + `"}}`
 	cases := []struct {
@@ -671,9 +671,9 @@ func TestLastContextTokens(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := lastContextTokens(tc.path(t))
+			got, ok := lastContextUsage(tc.path(t))
 			assert.Equal(t, tc.ok, ok)
-			assert.Equal(t, tc.want, got)
+			assert.Equal(t, tc.want, got.Tokens)
 		})
 	}
 }
@@ -1527,25 +1527,24 @@ func TestTranscriptUsageCodexTokenCount(t *testing.T) {
 	)
 
 	t.Run("the last count wins, with its window", func(t *testing.T) {
-		tokens, window, ok := lastContextUsage(writeTranscript(t, started, first, last, otherEvent))
+		got, ok := lastContextUsage(writeTranscript(t, started, first, last, otherEvent))
 		require.True(t, ok)
-		assert.Equal(t, int64(62447), tokens)
-		assert.Equal(t, int64(258400), window)
+		assert.Equal(t, types.ContextWindow{Tokens: 62447, Window: 258400, Source: types.ContextFromTranscript}, got)
 	})
 	t.Run("a count with no info is skipped", func(t *testing.T) {
-		tokens, _, ok := lastContextUsage(writeTranscript(t, first, rateLimitsOnly))
+		got, ok := lastContextUsage(writeTranscript(t, first, rateLimitsOnly))
 		require.True(t, ok)
-		assert.Equal(t, int64(30673), tokens)
+		assert.Equal(t, int64(30673), got.Tokens)
 	})
 	t.Run("no count at all", func(t *testing.T) {
-		_, _, ok := lastContextUsage(writeTranscript(t, started, rateLimitsOnly, otherEvent))
+		_, ok := lastContextUsage(writeTranscript(t, started, rateLimitsOnly, otherEvent))
 		assert.False(t, ok)
 	})
 	t.Run("a Claude Code record reports no window", func(t *testing.T) {
-		tokens, window, ok := lastContextUsage(writeTranscript(t, transcriptLastTurn))
+		got, ok := lastContextUsage(writeTranscript(t, transcriptLastTurn))
 		require.True(t, ok)
-		assert.Equal(t, transcriptLastTokens, tokens)
-		assert.Zero(t, window)
+		assert.Equal(t, transcriptLastTokens, got.Tokens)
+		assert.Zero(t, got.Window)
 	})
 	t.Run("a stop files the size and the window", func(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)
@@ -1553,7 +1552,7 @@ func TestTranscriptUsageCodexTokenCount(t *testing.T) {
 		Judge(ctx, Dependencies{}, Request{Input: subagentStop(t, "a1b2c3", writeTranscript(t, first, last)), Host: "claude-code"})
 		rec, ok := readSpawnedAgent(facts, "a1b2c3")
 		require.True(t, ok)
-		tokens, window := int64(62447), int64(258400)
-		assert.Equal(t, spawnedAgent{ContextTokens: &tokens, ContextWindow: &window}, rec)
+		tokens := int64(62447)
+		assert.Equal(t, spawnedAgent{ContextTokens: &tokens, ContextWindow: 258400}, rec)
 	})
 }

@@ -463,7 +463,7 @@ func Stricter(a, b Setting) Setting {
 // gives its rules, each stamped with p's level, with declared applied over them rule by
 // rule. Unset p is light. An unknown p is an MGS1045 error. Neither map is modified.
 func ResolveProfile(p types.GuardProfile, declared map[string]Setting) (map[string]Setting, error) {
-	level := p.Level()
+	level := p.Effective()
 	row, ok := profiles[level]
 	if !ok {
 		return nil, types.DiagnosticErrorf(types.GuardRuleMisdeclared,

@@ -2,6 +2,7 @@ package trail
 
 import (
 	"bufio"
+	"cmp"
 	"os"
 	"slices"
 	"strings"
@@ -245,19 +246,16 @@ type SessionTrail struct {
 }
 
 // SessionCall is one guard observation of a call and the cost facts recorded beside it.
-// The facts are the caller's; see AgentCommand. A field the record did not carry reads
-// as its zero value.
+// The facts are the caller's; see AgentCommand. A fact the record did not carry reads as
+// its zero value, except Thread, which reads as types.AgentThreadUnknown.
+//
+// Decision is the hook verdict's (pass, ask, advise or deny), not a rule's
+// types.GuardDecision, which has no pass or ask.
 type SessionCall struct {
-	At             time.Time
-	Thread         types.AgentThread
-	Decision       string
-	Rule           string
-	ContextTokens  int64
-	ContextModel   string
-	Billing        types.AgentBilling
-	DelegableClass string
-	ResultChars    int
-	Shadow         map[types.GuardProfile]types.GuardDecision
+	At       time.Time
+	Decision string
+	Rule     string
+	types.AgentFacts
 }
 
 // SessionSpawn is one recorded spawn: the label the host gave the callee, the lease the
@@ -265,14 +263,13 @@ type SessionCall struct {
 //
 // DeclaredModel is "" both when the caller named no model and when the spawn blob could not
 // be read; a reader who needs to tell those apart reads the trail's own blob (RequestRef,
-// off the underlying trail.Event) rather than this summary.
+// off the underlying trail.Event) rather than this summary. The spawn record's cost facts
+// are the caller's, so none of them is here: nothing in the trail measures the child.
 type SessionSpawn struct {
 	Child         string    `json:"child"`
 	Lease         string    `json:"lease,omitempty"`
 	At            time.Time `json:"at"`
 	DeclaredModel string    `json:"declared_model,omitempty"`
-	// ContextTokens is the context size the spawn record reported, 0 when it reported none.
-	ContextTokens int64 `json:"context_tokens,omitempty"`
 }
 
 // ForSession folds the trail at base for one host session, reading at most limit recent
@@ -295,7 +292,7 @@ func ForSession(base, session string, limit int) SessionTrail {
 		switch e.Kind {
 		case KindAgentCommand:
 			out.Commands++
-			call := SessionCall{At: time.UnixMilli(e.Ts)}
+			call := SessionCall{At: time.UnixMilli(e.Ts), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}}
 			if raw, err := ReadBlob(base, e.ResponseRef); err == nil {
 				var resp agentCommandResponse
 				if json.Unmarshal(raw, &resp) == nil {
@@ -308,9 +305,8 @@ func ForSession(base, session string, limit int) SessionTrail {
 			if raw, err := ReadBlob(base, e.RequestRef); err == nil {
 				var req agentCommandRequest
 				if json.Unmarshal(raw, &req) == nil {
-					call.Thread, call.ContextTokens, call.ContextModel = req.Thread, req.ContextTokens, req.ContextModel
-					call.Billing, call.DelegableClass, call.ResultChars = req.Billing, req.DelegableClass, req.ResultChars
-					call.Shadow = req.Shadow
+					call.AgentFacts = req.AgentFacts
+					call.Thread = cmp.Or(call.Thread, types.AgentThreadUnknown)
 				}
 			}
 			out.Calls = append(out.Calls, call)
@@ -322,7 +318,7 @@ func ForSession(base, session string, limit int) SessionTrail {
 			if raw, err := ReadBlob(base, e.RequestRef); err == nil {
 				var req agentSpawnRequest
 				if json.Unmarshal(raw, &req) == nil {
-					sp.DeclaredModel, sp.ContextTokens = req.DeclaredModel, req.ContextTokens
+					sp.DeclaredModel = req.DeclaredModel
 				}
 			}
 			out.Spawns = append(out.Spawns, sp)

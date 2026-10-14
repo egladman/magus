@@ -261,20 +261,18 @@ func TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction(t *testing.T) {
 
 func TestAppendAgentCommand_RecordsTheCostFacts(t *testing.T) {
 	dir := t.TempDir()
-	want := agentFacts{
+	chars := 9100
+	want := types.AgentFacts{
 		Thread:         types.AgentThreadMain,
+		ThreadFrom:     types.ThreadReported,
 		ContextTokens:  412_000,
 		ContextModel:   "claude-opus-5-5",
 		Billing:        types.AgentBillingMetered,
-		DelegableClass: "search",
-		ResultChars:    9100,
+		DelegableClass: types.DelegableSearch,
+		ResultChars:    &chars,
 		Shadow:         map[types.GuardProfile]types.GuardDecision{types.GuardProfileStrict: types.GuardDeny, types.GuardProfileLight: types.GuardAllow},
 	}
-	AppendAgentCommand(t.Context(), dir, AgentCommand{
-		Command: "grep x", Decision: "pass",
-		Thread: want.Thread, ContextTokens: want.ContextTokens, ContextModel: want.ContextModel,
-		Billing: want.Billing, DelegableClass: want.DelegableClass, ResultChars: want.ResultChars, Shadow: want.Shadow,
-	})
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "grep x", Decision: "pass", AgentFacts: want})
 
 	events, err := ReadRecent(dir, 1)
 	require.NoError(t, err)
@@ -283,7 +281,10 @@ func TestAppendAgentCommand_RecordsTheCostFacts(t *testing.T) {
 	require.NoError(t, err)
 	var got agentCommandRequest
 	require.NoError(t, json.Unmarshal(raw, &got))
-	assert.Equal(t, want, got.agentFacts)
+	assert.Equal(t, want, got.AgentFacts)
+	for _, key := range []string{"thread", "thread_from", "context_tokens", "context_model", "billing", "delegable_class", "result_chars", "shadow"} {
+		assert.Contains(t, string(raw), `"`+key+`"`, "the facts sit inline in the request blob")
+	}
 }
 
 func TestAppendAgentCommand_OmitsCostFactsItWasNotGiven(t *testing.T) {
@@ -294,16 +295,35 @@ func TestAppendAgentCommand_OmitsCostFactsItWasNotGiven(t *testing.T) {
 	require.NoError(t, err)
 	raw, err := ReadBlob(dir, events[0].RequestRef)
 	require.NoError(t, err)
-	for _, key := range []string{"thread", "context_tokens", "context_model", "billing", "delegable_class", "result_chars", "shadow"} {
+	for _, key := range []string{"thread", "thread_from", "context_tokens", "context_model", "billing", "delegable_class", "result_chars", "shadow"} {
 		assert.NotContains(t, string(raw), `"`+key+`"`)
 	}
 }
 
+// A result of zero characters was observed, which is not the same as no observation.
+func TestAppendAgentCommand_KeepsAnObservedEmptyResult(t *testing.T) {
+	dir := t.TempDir()
+	empty := 0
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "ls", AgentFacts: types.AgentFacts{ResultChars: &empty}})
+
+	events, err := ReadRecent(dir, 1)
+	require.NoError(t, err)
+	raw, err := ReadBlob(dir, events[0].RequestRef)
+	require.NoError(t, err)
+	var got agentCommandRequest
+	require.NoError(t, json.Unmarshal(raw, &got))
+	require.NotNil(t, got.ResultChars)
+	assert.Zero(t, *got.ResultChars)
+}
+
 func TestAppendAgentSpawn_RecordsTheCostFacts(t *testing.T) {
 	dir := t.TempDir()
+	want := types.AgentFacts{
+		Thread: types.AgentThreadMain, ThreadFrom: types.ThreadInferred,
+		ContextTokens: 88_000, ContextModel: "claude-opus-5-5", Billing: types.AgentBillingQuota,
+	}
 	AppendAgentSpawn(t.Context(), dir, AgentSpawn{
-		Child: "Explore", Context: "look around", DeclaredModel: "claude-haiku-5-5",
-		Thread: types.AgentThreadMain, ContextTokens: 88_000, ContextModel: "claude-opus-5-5", Billing: types.AgentBillingQuota,
+		Child: "Explore", Context: "look around", DeclaredModel: "claude-haiku-5-5", AgentFacts: want,
 	})
 
 	events, err := ReadRecent(dir, 1)
@@ -312,9 +332,7 @@ func TestAppendAgentSpawn_RecordsTheCostFacts(t *testing.T) {
 	require.NoError(t, err)
 	var got agentSpawnRequest
 	require.NoError(t, json.Unmarshal(raw, &got))
-	assert.Equal(t, agentFacts{
-		Thread: types.AgentThreadMain, ContextTokens: 88_000, ContextModel: "claude-opus-5-5", Billing: types.AgentBillingQuota,
-	}, got.agentFacts)
+	assert.Equal(t, want, got.AgentFacts)
 	assert.Equal(t, "claude-haiku-5-5", got.DeclaredModel)
 }
 

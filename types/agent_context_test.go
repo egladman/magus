@@ -13,6 +13,11 @@ func TestProfileAndAgentEnumsUnmarshalText(t *testing.T) {
 		require.NoError(t, th.UnmarshalText([]byte(name)), name)
 		assert.Equal(t, AgentThread(name), th)
 	}
+	for _, name := range []string{"", "reported", "inferred"} {
+		var s ThreadSource
+		require.NoError(t, s.UnmarshalText([]byte(name)), name)
+		assert.Equal(t, ThreadSource(name), s)
+	}
 	for _, name := range []string{"", "metered", "quota"} {
 		var b AgentBilling
 		require.NoError(t, b.UnmarshalText([]byte(name)), name)
@@ -26,16 +31,24 @@ func TestProfileAndAgentEnumsUnmarshalText(t *testing.T) {
 
 	var th AgentThread
 	require.EqualError(t, th.UnmarshalText([]byte("root")), `unknown agent thread "root" (want one of [main sub unknown])`)
+	var s ThreadSource
+	require.EqualError(t, s.UnmarshalText([]byte("guessed")), `unknown thread source "guessed" (want one of [reported inferred])`)
 	var b AgentBilling
 	require.EqualError(t, b.UnmarshalText([]byte("oauth")), `unknown agent billing "oauth" (want one of [metered quota])`)
 	var p GuardProfile
 	require.EqualError(t, p.UnmarshalText([]byte("max")), `unknown guard profile "max" (want one of [off light standard strict])`)
 }
 
-func TestProfileAndAgentEnumsRenderUnset(t *testing.T) {
-	assert.Equal(t, "unknown", AgentThread("").String())
+// A profile renders and encodes as written, so the two never disagree; Effective names the
+// level an unset one applies.
+func TestGuardProfileRendersAsWritten(t *testing.T) {
+	assert.Empty(t, GuardProfile("").String())
+	text, err := GuardProfile("").MarshalText()
+	require.NoError(t, err)
+	assert.Empty(t, text)
+	assert.Equal(t, GuardProfileLight, GuardProfile("").Effective())
+	assert.Equal(t, GuardProfileOff, GuardProfileOff.Effective())
 	assert.Equal(t, "unset", AgentBilling("").String())
-	assert.Equal(t, "light", GuardProfile("").String())
 }
 
 // Unset is light, so a workspace that declares nothing ranks with one that declares light,
@@ -49,22 +62,22 @@ func TestGuardProfileRank(t *testing.T) {
 	assert.Equal(t, -1, GuardProfile("max").Rank())
 }
 
-func TestStricterProfile(t *testing.T) {
+// The receiver is a level that applies, so unset is light; the argument raises it, so
+// unset says nothing and off never lowers it.
+func TestGuardProfileStricter(t *testing.T) {
 	for _, tc := range []struct {
-		in   []GuardProfile
+		p, o GuardProfile
 		want GuardProfile
 	}{
-		{nil, GuardProfileLight},
-		{[]GuardProfile{""}, GuardProfileLight},
-		{[]GuardProfile{GuardProfileOff}, GuardProfileOff},
-		{[]GuardProfile{GuardProfileOff, ""}, GuardProfileOff},
-		{[]GuardProfile{GuardProfile("").Level(), GuardProfileOff}, GuardProfileLight},
-		{[]GuardProfile{GuardProfileStrict, GuardProfileOff}, GuardProfileStrict},
-		{[]GuardProfile{GuardProfileStandard, GuardProfileLight}, GuardProfileStandard},
-		{[]GuardProfile{"max", GuardProfileOff}, GuardProfileOff},
-		{[]GuardProfile{"max"}, GuardProfileLight},
+		{"", "", GuardProfileLight},
+		{GuardProfileOff, "", GuardProfileOff},
+		{"", GuardProfileOff, GuardProfileLight},
+		{GuardProfileOff, GuardProfileLight, GuardProfileLight},
+		{GuardProfileStrict, GuardProfileOff, GuardProfileStrict},
+		{GuardProfileLight, GuardProfileStandard, GuardProfileStandard},
+		{GuardProfileOff, "max", GuardProfileOff},
 	} {
-		assert.Equal(t, tc.want, StricterProfile(tc.in...), "%v", tc.in)
+		assert.Equal(t, tc.want, tc.p.Stricter(tc.o), "%q.Stricter(%q)", tc.p, tc.o)
 	}
 }
 

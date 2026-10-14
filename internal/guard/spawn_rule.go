@@ -264,7 +264,7 @@ func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at 
 	// disagree about who is acting.
 	lease, _ := resolveActingLease(who, at, explicitLease)
 	req.Role, req.Lease = actingRole(ctx, at, lease)
-	req.Thread, req.ThreadKnown, req.Context = callerCost(at, who, lease, facts)
+	req.Thread, req.ThreadFrom, req.Window = callerCost(at, who, lease, facts)
 	return req
 }
 
@@ -343,9 +343,9 @@ type spawnedAgent struct {
 	// ContextTokens is the agent's last observed context size, nil until its host
 	// reports usage for it.
 	ContextTokens *int64 `json:"context_tokens,omitempty"`
-	// ContextWindow is the largest context the agent's host says it can hold, nil until a
+	// ContextWindow is the largest context the agent's host says it can hold, 0 until a
 	// host reports one alongside its usage.
-	ContextWindow *int64 `json:"context_window,omitempty"`
+	ContextWindow int64 `json:"context_window,omitempty"`
 }
 
 // recordSpawnedAgent files what a finished spawn call handed its child under the child's
@@ -778,14 +778,14 @@ func recordAgentUsage(facts hint.Gate, agentID, transcript string) {
 	if agentID == "" {
 		return
 	}
-	tokens, window, ok := lastContextUsage(transcript)
+	usage, ok := lastContextUsage(transcript)
 	if !ok {
 		return
 	}
 	rec, _ := readSpawnedAgent(facts, agentID)
-	rec.ContextTokens = &tokens
-	if window > 0 {
-		rec.ContextWindow = &window
+	rec.ContextTokens = &usage.Tokens
+	if usage.Window > 0 {
+		rec.ContextWindow = usage.Window
 	}
 	writeSpawnedAgent(facts, agentID, rec)
 }
@@ -840,34 +840,29 @@ func (u transcriptUsage) contextSize() (tokens, window int64, ok bool) {
 	return 0, 0, false
 }
 
-// lastContextTokens is the size half of [lastContextUsage].
-func lastContextTokens(path string) (int64, bool) {
-	tokens, _, ok := lastContextUsage(path)
-	return tokens, ok
-}
-
-// lastContextUsage reads the latest usage record in the tail of a JSONL transcript and
-// returns its input plus cache-read plus cache-write tokens: what the model was handed
-// on its last call, which is the context a resume would have to rebuild. The window is
-// the host's own figure for how large that context may grow, 0 when it names none.
-func lastContextUsage(path string) (tokens, window int64, ok bool) {
+// lastContextUsage reads the latest usage record in the tail of a JSONL transcript. Its
+// Tokens are input plus cache-read plus cache-write tokens: what the model was handed on
+// its last call, which is the context a resume would have to rebuild. Its Window is the
+// host's own figure for how large that context may grow, 0 when it names none. False when
+// the tail holds no usage record.
+func lastContextUsage(path string) (types.ContextWindow, bool) {
 	if !filepath.IsAbs(path) {
-		return 0, 0, false
+		return types.ContextWindow{}, false
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return 0, 0, false
+		return types.ContextWindow{}, false
 	}
 	defer f.Close()
 	info, err := f.Stat()
 	if err != nil || !info.Mode().IsRegular() {
-		return 0, 0, false
+		return types.ContextWindow{}, false
 	}
 	start := max(info.Size()-agentUsageTail, 0)
 	buf := make([]byte, info.Size()-start)
 	n, err := f.ReadAt(buf, start)
 	if err != nil && !errors.Is(err, io.EOF) {
-		return 0, 0, false
+		return types.ContextWindow{}, false
 	}
 	// A short read must not feed the unwritten tail of buf to json.Unmarshal.
 	lines := bytes.Split(buf[:n], []byte("\n"))
@@ -885,10 +880,10 @@ func lastContextUsage(path string) (tokens, window int64, ok bool) {
 			continue
 		}
 		if tokens, window, ok := rec.contextSize(); ok {
-			return tokens, window, true
+			return types.ContextWindow{Tokens: tokens, Window: window, Source: types.ContextFromTranscript}, true
 		}
 	}
-	return 0, 0, false
+	return types.ContextWindow{}, false
 }
 
 func readSpawnedAgent(facts hint.Gate, agentID string) (spawnedAgent, bool) {

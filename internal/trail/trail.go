@@ -277,23 +277,8 @@ type AgentCommand struct {
 	BinaryVersion string
 	Cwd           string
 	Phases        []Phase
-	// Thread is which thread of its session the caller is; see types.CommandRequest.
-	Thread types.AgentThread
-	// ContextTokens and ContextModel are the caller's last reported context size and the
-	// model it was reported for; 0 and empty when the host reported none.
-	ContextTokens int64
-	ContextModel  string
-	// Billing is the billing mode in effect for the call, empty when unknown.
-	Billing types.AgentBilling
-	// DelegableClass names the kind of work a subagent could have done in the caller's
-	// place (a search, a source read, a diff, a target run), empty for any other command.
-	DelegableClass string
-	// ResultChars is the size of the tool's result on an observation made after the call,
-	// 0 before it.
-	ResultChars int
-	// Shadow is what each guard profile would have decided for the call, whichever one is
-	// in force, so a level can be judged from the calls it would have changed.
-	Shadow map[types.GuardProfile]types.GuardDecision
+	// AgentFacts are the caller's cost facts, recorded in the request blob.
+	types.AgentFacts
 }
 
 const agentCommandSchemaVersion = 1
@@ -307,21 +292,8 @@ type agentCommandRequest struct {
 	Tool          string `json:"tool,omitempty"`
 	Command       string `json:"command,omitempty"`
 	Path          string `json:"path,omitempty"`
-	agentFacts
-}
-
-// agentFacts is what a request blob records about the caller's cost: its thread, context
-// size and model, billing mode, the delegable class and result size a post-call record
-// carries, and what each profile would have decided. ContextModel is the caller's, never
-// a spawned child's. Additive for the reason agentCommandResponse.PreauthorizedBy gives.
-type agentFacts struct {
-	Thread         types.AgentThread                          `json:"thread,omitempty"`
-	ContextTokens  int64                                      `json:"context_tokens,omitzero"`
-	ContextModel   string                                     `json:"context_model,omitempty"`
-	Billing        types.AgentBilling                         `json:"billing,omitempty"`
-	DelegableClass string                                     `json:"delegable_class,omitempty"`
-	ResultChars    int                                        `json:"result_chars,omitzero"`
-	Shadow         map[types.GuardProfile]types.GuardDecision `json:"shadow,omitempty"`
+	// Additive for the reason agentCommandResponse.PreauthorizedBy gives.
+	types.AgentFacts
 }
 
 type agentCommandResponse struct {
@@ -379,15 +351,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Tool:          command.Tool,
 		Command:       command.Command,
 		Path:          command.Path,
-		agentFacts: agentFacts{
-			Thread:         command.Thread,
-			ContextTokens:  command.ContextTokens,
-			ContextModel:   command.ContextModel,
-			Billing:        command.Billing,
-			DelegableClass: command.DelegableClass,
-			ResultChars:    command.ResultChars,
-			Shadow:         command.Shadow,
-		},
+		AgentFacts:    command.AgentFacts,
 	})
 	response, _ := json.Marshal(agentCommandResponse{
 		SchemaVersion:   agentCommandSchemaVersion,
@@ -494,16 +458,9 @@ type AgentSpawn struct {
 	BinaryVersion string
 	Cwd           string
 	Phases        []Phase
-	// Thread, ContextTokens, ContextModel, Billing, DelegableClass, ResultChars and Shadow
-	// are the CALLER's, as on AgentCommand. ContextModel is the model the caller runs as,
-	// never the child's: that one is DeclaredModel.
-	Thread         types.AgentThread
-	ContextTokens  int64
-	ContextModel   string
-	Billing        types.AgentBilling
-	DelegableClass string
-	ResultChars    int
-	Shadow         map[types.GuardProfile]types.GuardDecision
+	// AgentFacts are the CALLER's, as on AgentCommand. Its ContextModel is the model the
+	// caller runs as, never the child's: that one is DeclaredModel.
+	types.AgentFacts
 }
 
 // RuleFailure is one side of a workspace guard rule that judged nothing, and why.
@@ -532,7 +489,7 @@ type agentSpawnRequest struct {
 	// Target and RuleFailures are additive for the reason DeclaredModel is.
 	Target       string        `json:"target,omitempty"`
 	RuleFailures []RuleFailure `json:"rule_failures,omitempty"`
-	agentFacts
+	types.AgentFacts
 }
 
 const (
@@ -582,15 +539,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 		DeclaredModel: spawn.DeclaredModel,
 		Target:        spawn.Target,
 		RuleFailures:  failures,
-		agentFacts: agentFacts{
-			Thread:         spawn.Thread,
-			ContextTokens:  spawn.ContextTokens,
-			ContextModel:   spawn.ContextModel,
-			Billing:        spawn.Billing,
-			DelegableClass: spawn.DelegableClass,
-			ResultChars:    spawn.ResultChars,
-			Shadow:         spawn.Shadow,
-		},
+		AgentFacts:    spawn.AgentFacts,
 	})
 	reqRef, reqBytes := WriteBlob(ctx, base, "spawn", request)
 

@@ -172,11 +172,11 @@ func magusStateWrite(args []string) string {
 // inferred from the host.
 func commandRequest(ctx context.Context, in commandRuleInput, who hookAttribution, at location, facts hint.Gate) types.CommandRequest {
 	role, lease := actingRole(ctx, at, in.lease)
-	thread, known, reported := callerCost(at, who, in.lease, facts)
+	thread, from, window := callerCost(at, who, in.lease, facts)
 	return types.CommandRequest{
 		Thread:      thread,
-		ThreadKnown: known,
-		Context:     reported,
+		ThreadFrom:  from,
+		Window:      window,
 		Host:        who.Host,
 		Session:     who.Session,
 		Command:     in.command,

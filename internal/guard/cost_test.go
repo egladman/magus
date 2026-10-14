@@ -25,62 +25,62 @@ func TestCallerThread(t *testing.T) {
 	cache := t.TempDir()
 	host := hookAttribution{Host: "claude-code", Session: "s"}
 
-	thread, known := callerThread(cache, hookAttribution{Session: "s"}, "")
+	thread, from := callerThread(cache, hookAttribution{Session: "s"}, "")
 	assert.Equal(t, types.AgentThreadUnknown, thread, "a call no host made")
-	assert.False(t, known)
+	assert.Equal(t, types.ThreadInferred, from)
 
-	thread, known = callerThread(cache, host, "")
+	thread, from = callerThread(cache, host, "")
 	assert.Equal(t, types.AgentThreadMain, thread)
-	assert.False(t, known, "inferred: this host has named no subagent yet")
+	assert.Equal(t, types.ThreadInferred, from, "this host has named no subagent yet")
 
-	thread, known = callerThread(cache, host, "job-a")
+	thread, from = callerThread(cache, host, "job-a")
 	assert.Equal(t, types.AgentThreadUnknown, thread, "a leased call from an unlearned host")
-	assert.False(t, known)
+	assert.Equal(t, types.ThreadInferred, from)
 
 	sub := host
 	sub.Agent = "a1"
-	thread, known = callerThread(cache, sub, "")
+	thread, from = callerThread(cache, sub, "")
 	assert.Equal(t, types.AgentThreadSub, thread)
-	assert.True(t, known)
+	assert.Equal(t, types.ThreadReported, from)
 
 	hostGate(cache, "claude-code").MarkFired(hostAgentsKind)
-	thread, known = callerThread(cache, host, "job-a")
+	thread, from = callerThread(cache, host, "job-a")
 	assert.Equal(t, types.AgentThreadMain, thread, "a learned host's call naming no subagent")
-	assert.True(t, known)
+	assert.Equal(t, types.ThreadReported, from)
 
 	other := hookAttribution{Host: "codex", Session: "s"}
-	_, known = callerThread(cache, other, "")
-	assert.False(t, known, "what one host taught says nothing of another")
+	_, from = callerThread(cache, other, "")
+	assert.Equal(t, types.ThreadInferred, from, "what one host taught says nothing of another")
 }
 
 func TestDelegableClass(t *testing.T) {
 	t.Parallel()
-	for line, want := range map[string]string{
-		"rg -n Judge internal":                 delegableSearch,
-		"grep -rn Judge internal":              delegableSearch,
-		"find . -name '*.go'":                  delegableSearch,
+	for line, want := range map[string]types.DelegableClass{
+		"rg -n Judge internal":                 types.DelegableSearch,
+		"grep -rn Judge internal":              types.DelegableSearch,
+		"find . -name '*.go'":                  types.DelegableSearch,
 		"grep Judge internal/guard/x.go":       "",
-		"cat internal/guard/guard.go":          delegableRead,
-		"sed -n 10,40p internal/a.go":          delegableRead,
+		"cat internal/guard/guard.go":          types.DelegableRead,
+		"sed -n 10,40p internal/a.go":          types.DelegableRead,
 		"cat AGENTS.md":                        "",
-		"git diff":                             delegableDiff,
+		"git diff":                             types.DelegableDiff,
 		"git diff --stat":                      "",
-		"git show HEAD":                        delegableDiff,
-		"git log -p -3":                        delegableDiff,
+		"git show HEAD":                        types.DelegableDiff,
+		"git log -p -3":                        types.DelegableDiff,
 		"git log --oneline -n 20":              "",
 		"git status --short":                   "",
-		"./magus run test internal/guard":      delegableRun,
+		"./magus run test internal/guard":      types.DelegableRun,
 		"./magus affected ci":                  "",
-		"./magus query output out1":            delegableRead,
+		"./magus query output out1":            types.DelegableRead,
 		"./magus query output out1 --identity": "",
 		"./magus job wait a3-rules":            "",
 		"./magus run go-build . -s":            "",
 		"./magus run go-build .":               "",
 		"./magus run test internal/guard -s":   "",
 		"git commit -m x":                      "",
-		"curl -sS https://example.com/x":       delegableFetch,
+		"curl -sS https://example.com/x":       types.DelegableFetch,
 		"go version":                           "",
-		"cd internal && rg -l Verdict .":       delegableSearch,
+		"cd internal && rg -l Verdict .":       types.DelegableSearch,
 		"git diff --name-only main...HEAD":     "",
 	} {
 		assert.Equal(t, want, delegableClass(line), line)
@@ -119,27 +119,27 @@ var costFreeLines = []string{
 }
 
 // Each line can print a lot, or is not one of the quiet ones, and stays judged.
-var costBoundLines = map[string]string{
-	"cat internal/guard/guard.go":                 delegableRead,
-	"sed -n 1,400p internal/guard/guard.go":       delegableRead,
-	"rg -n Judge internal":                        delegableSearch,
-	"grep -rn Judge internal":                     delegableSearch,
-	"find . -name '*.go'":                         delegableSearch,
-	"git diff":                                    delegableDiff,
-	"git show HEAD":                               delegableDiff,
-	"git log -p -3":                               delegableDiff,
-	"git log --oneline -p -n 3":                   delegableDiff,
-	"./magus run test internal/guard":             delegableRun,
-	"./magus run test internal/guard -- -s":       delegableRun,
-	"./magus run test internal/guard -- --silent": delegableRun,
-	"./magus query output out1":                   delegableRead,
+var costBoundLines = map[string]types.DelegableClass{
+	"cat internal/guard/guard.go":                 types.DelegableRead,
+	"sed -n 1,400p internal/guard/guard.go":       types.DelegableRead,
+	"rg -n Judge internal":                        types.DelegableSearch,
+	"grep -rn Judge internal":                     types.DelegableSearch,
+	"find . -name '*.go'":                         types.DelegableSearch,
+	"git diff":                                    types.DelegableDiff,
+	"git show HEAD":                               types.DelegableDiff,
+	"git log -p -3":                               types.DelegableDiff,
+	"git log --oneline -p -n 3":                   types.DelegableDiff,
+	"./magus run test internal/guard":             types.DelegableRun,
+	"./magus run test internal/guard -- -s":       types.DelegableRun,
+	"./magus run test internal/guard -- --silent": types.DelegableRun,
+	"./magus query output out1":                   types.DelegableRead,
 	"./magus describe job a1 -o json":             "",
 	"./magus describe job a1":                     "",
 	"git status":                                  "",
 	"git log --oneline":                           "",
-	"cd /r && rg -n Judge internal":               delegableSearch,
-	"./magus run go-build . -s && rg -n Judge .":  delegableSearch,
-	"curl -sS https://example.com/x":              delegableFetch,
+	"cd /r && rg -n Judge internal":               types.DelegableSearch,
+	"./magus run go-build . -s && rg -n Judge .":  types.DelegableSearch,
+	"curl -sS https://example.com/x":              types.DelegableFetch,
 }
 
 func TestCostFree(t *testing.T) {
@@ -159,19 +159,19 @@ func TestCostFree(t *testing.T) {
 func TestInputClassOfAFreeCommandIsNone(t *testing.T) {
 	t.Parallel()
 	assert.Empty(t, inputClass(map[string]any{"command": "./magus run go-build . -s"}))
-	assert.Equal(t, delegableRead, inputClass(map[string]any{"command": "./magus query output out1"}))
+	assert.Equal(t, types.DelegableRead, inputClass(map[string]any{"command": "./magus query output out1"}))
 }
 
 func TestInputClassReadsAHostToolByShape(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, delegableRead, inputClass(map[string]any{"file_path": "/r/internal/a.go"}))
+	assert.Equal(t, types.DelegableRead, inputClass(map[string]any{"file_path": "/r/internal/a.go"}))
 	assert.Empty(t, inputClass(map[string]any{"file_path": "/r/AGENTS.md"}), "orientation")
 	assert.Empty(t, inputClass(map[string]any{"file_path": "/r/a.go", "content": "x"}), "a write")
 	assert.Empty(t, inputClass(map[string]any{"file_path": "/r/a.go", "old_string": "a", "new_string": "b"}), "an edit")
-	assert.Equal(t, delegableSearch, inputClass(map[string]any{"pattern": "Judge", "path": "/r"}))
-	assert.Equal(t, delegableFetch, inputClass(map[string]any{"url": "https://example.com"}))
-	assert.Equal(t, delegableDiff, inputClass(map[string]any{"command": "git diff"}))
-	assert.Equal(t, delegableSearch, inputClass(map[string]any{"command": []any{"rg", "Judge"}}))
+	assert.Equal(t, types.DelegableSearch, inputClass(map[string]any{"pattern": "Judge", "path": "/r"}))
+	assert.Equal(t, types.DelegableFetch, inputClass(map[string]any{"url": "https://example.com"}))
+	assert.Equal(t, types.DelegableDiff, inputClass(map[string]any{"command": "git diff"}))
+	assert.Equal(t, types.DelegableSearch, inputClass(map[string]any{"command": []any{"rg", "Judge"}}))
 }
 
 // appendLines appends JSONL lines to the file at path.
@@ -197,7 +197,7 @@ func TestReadTranscriptReadsEachLineOnce(t *testing.T) {
 	)
 	var st costState
 	got := st.readTranscript(path)
-	assert.Equal(t, []toolResult{{tool: "Bash", class: delegableSearch, chars: len(big)}}, got)
+	assert.Equal(t, []toolResult{{tool: "Bash", class: types.DelegableSearch, chars: len(big)}}, got)
 	assert.Equal(t, int64(200100), st.Tokens, "a subagent's line in the main transcript is not the main thread's")
 	assert.Equal(t, "claude-opus-5-5", st.Model)
 	assert.Empty(t, st.Pending)
@@ -208,7 +208,7 @@ func TestReadTranscriptReadsEachLineOnce(t *testing.T) {
 		`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t2","content":[{"type":"text","text":"package a"}]}]}}`,
 	)
 	got = st.readTranscript(path)
-	assert.Equal(t, []toolResult{{tool: "Read", class: delegableRead, chars: len("package a")}}, got)
+	assert.Equal(t, []toolResult{{tool: "Read", class: types.DelegableRead, chars: len("package a")}}, got)
 	assert.Equal(t, int64(250001), st.Tokens)
 	assert.Equal(t, "claude-opus-5-5", st.Model, "a line naming no model keeps the last one named")
 }
@@ -224,7 +224,7 @@ func TestReadTranscriptReadsARollout(t *testing.T) {
 	)
 	var st costState
 	got := st.readTranscript(path)
-	assert.Equal(t, []toolResult{{tool: "exec", class: delegableDiff, chars: len("diff --git a/x b/x")}}, got)
+	assert.Equal(t, []toolResult{{tool: "exec", class: types.DelegableDiff, chars: len("diff --git a/x b/x")}}, got)
 	assert.Equal(t, int64(120000), st.Tokens)
 	assert.Equal(t, int64(272000), st.Window)
 }
@@ -320,22 +320,24 @@ func TestObserveCallRecordsAJudgedCallOnce(t *testing.T) {
 	ctx = observability.WithProvider(ctx, rec)
 
 	observed := observeCall(ctx, at, "/r/a.go", who, hookToolRead, "", Verdict{})
-	assert.Equal(t, types.AgentThreadMain, observed.thread)
-	assert.Nil(t, observed.context, "an observation records the thread alone")
+	assert.Equal(t, types.AgentFacts{Thread: types.AgentThreadMain, ThreadFrom: types.ThreadReported}, observed, "an observation records the thread alone")
 	assert.Empty(t, calls, "and counts nothing")
 
 	got := observeCall(ctx, at, "rg -n Judge .", who, hookToolCommand, "", Verdict{Decision: decisionPass})
-	assert.Equal(t, types.AgentThreadMain, got.thread)
-	assert.Equal(t, delegableSearch, got.class)
-	require.NotNil(t, got.context)
-	assert.Equal(t, int64(100000), got.context.Tokens)
-	assert.Equal(t, int64(1_000_000), got.context.Window, "from the harness rows")
-	assert.Len(t, got.shadow, len(types.GuardProfile("").Values()))
+	assert.Equal(t, types.AgentThreadMain, got.Thread)
+	assert.Equal(t, types.ThreadReported, got.ThreadFrom)
+	assert.Equal(t, types.DelegableSearch, got.DelegableClass)
+	assert.Equal(t, int64(100000), got.ContextTokens)
+	assert.Equal(t, "claude-opus-5-5", got.ContextModel)
+	assert.Nil(t, got.ResultChars, "a call's own result is not known before it runs")
+	assert.Len(t, got.Shadow, len(types.GuardProfile("").Values()))
+	window := callerContext(at, who, types.AgentThreadMain, hint.NewGate(cache, who.factsKey()))
+	require.NotNil(t, window)
+	assert.Equal(t, int64(1_000_000), window.Window, "from the harness rows")
 	require.Len(t, calls, 2, "the call, and the diff result the transcript handed back")
-	assert.Equal(t, int64(100000), calls[0].ContextTokens)
-	assert.Equal(t, delegableSearch, calls[0].DelegableClass)
-	assert.Zero(t, calls[0].ResultChars, "a call's own result is not known before it runs")
-	assert.Equal(t, observability.AgentCall{Thread: types.AgentThreadMain, DelegableClass: delegableDiff, ResultChars: 4}, calls[1])
+	assert.Equal(t, observability.AgentCall{AgentFacts: got}, calls[0])
+	four := 4
+	assert.Equal(t, observability.AgentCall{AgentFacts: types.AgentFacts{Thread: types.AgentThreadMain, DelegableClass: types.DelegableDiff, ResultChars: &four}}, calls[1])
 
 	st := readCostState(hint.NewGate(cache, who.factsKey()))
 	assert.Equal(t, 1, st.Streak)
@@ -361,12 +363,12 @@ func TestCommandRequestCarriesTheThread(t *testing.T) {
 
 	req := commandRequest(ctx, commandRuleInput{command: "git diff"}, who, at, facts)
 	assert.Equal(t, types.AgentThreadMain, req.Thread)
-	assert.False(t, req.ThreadKnown, "inferred until the host names a subagent")
-	assert.Equal(t, &types.AgentContext{Tokens: 300_000, Window: 1_000_000, Model: "claude-sonnet-5-5", Source: "transcript"}, req.Context)
+	assert.Equal(t, types.ThreadInferred, req.ThreadFrom, "inferred until the host names a subagent")
+	assert.Equal(t, &types.ContextWindow{Tokens: 300_000, Window: 1_000_000, Model: "claude-sonnet-5-5", Source: types.ContextFromTranscript}, req.Window)
 
 	who.Agent = "a1"
 	req = commandRequest(ctx, commandRuleInput{command: "git diff"}, who, at, facts)
 	assert.Equal(t, types.AgentThreadSub, req.Thread)
-	assert.True(t, req.ThreadKnown)
-	assert.Nil(t, req.Context, "no usage was reported for the subagent")
+	assert.Equal(t, types.ThreadReported, req.ThreadFrom)
+	assert.Nil(t, req.Window, "no usage was reported for the subagent")
 }

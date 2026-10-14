@@ -208,14 +208,14 @@ type CommandRequest struct {
 	// does not carry comes back with only its ID set.
 	Lease *Job
 	// Thread is which thread of its session the caller is. Role says whether a lease binds
-	// it, which an unleased subagent and a person share; Thread says main or sub.
+	// it, which an unleased subagent and a person share; Thread says main or sub. It is
+	// never empty: a caller magus cannot place is AgentThreadUnknown.
 	Thread AgentThread
-	// ThreadKnown is true when the host reported what Thread rests on, and false when
-	// magus inferred it, such as a session with no lease that has spawned before.
-	ThreadKnown bool
-	// Context is the caller's context window as its host last reported it, nil when the
+	// ThreadFrom is what Thread rests on: the host's report, or magus's inference.
+	ThreadFrom ThreadSource
+	// Window is the caller's context window as its host last reported it, nil when the
 	// host reports none.
-	Context *AgentContext
+	Window *ContextWindow
 	// Checkout is the state of the checkout a push leaves from or, on a line that pushes
 	// nothing, the one its first commit records into (jj describe counts). It is read only
 	// for such a line, since reading it costs processes. Nil otherwise, and when the
@@ -244,17 +244,17 @@ type GuardBinary struct {
 // WriteRequest is what a magus\guard.write rule is handed: one file an agent is about to
 // write through its host's edit tools, with the text the host said it writes.
 type WriteRequest struct {
-	// Host, Session, Agent, Parent, Role, Lease, Thread, ThreadKnown and Context are the
+	// Host, Session, Agent, Parent, Role, Lease, Thread, ThreadFrom and Window are the
 	// caller's, as on CommandRequest.
-	Host        string
-	Session     string
-	Agent       string
-	Parent      string
-	Role        AgentRole
-	Lease       *Job
-	Thread      AgentThread
-	ThreadKnown bool
-	Context     *AgentContext
+	Host       string
+	Session    string
+	Agent      string
+	Parent     string
+	Role       AgentRole
+	Lease      *Job
+	Thread     AgentThread
+	ThreadFrom ThreadSource
+	Window     *ContextWindow
 	// Path is the file as the host named it.
 	Path string
 	// Workspace is the root of the workspace holding Path, empty when none does.

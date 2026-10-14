@@ -95,10 +95,10 @@ type SpawnRequest struct {
 	// title names. Nil on a continue, when the title names no live row, or when the row was
 	// written with no model tiers declared.
 	ModelTier *JobModelTier
-	// Thread, ThreadKnown and Context are the CALLER's, as on CommandRequest.
-	Thread      AgentThread
-	ThreadKnown bool
-	Context     *AgentContext
+	// Thread, ThreadFrom and Window are the CALLER's, as on CommandRequest.
+	Thread     AgentThread
+	ThreadFrom ThreadSource
+	Window     *ContextWindow
 	// Target is the agent a continue addresses, nil on a spawn.
 	Target *SpawnTarget
 }

@@ -84,18 +84,17 @@ func TestResolveBilling(t *testing.T) {
 	}
 	none := func(string) string { return "" }
 
-	got, err := Agents{Billing: types.AgentBillingQuota}.ResolveBilling(none)
-	require.NoError(t, err)
-	assert.Equal(t, types.AgentBillingQuota, got, "with nothing detected the declaration stands")
+	quota := Agents{Billing: types.AgentBillingQuota}
+	assert.Equal(t, types.AgentBillingQuota, quota.ResolveBilling(none), "with nothing detected the declaration stands")
+	require.NoError(t, quota.BillingMismatch(none))
 
-	got, err = Agents{}.ResolveBilling(metered)
-	require.NoError(t, err)
-	assert.Equal(t, types.AgentBillingMetered, got)
+	assert.Equal(t, types.AgentBillingMetered, Agents{}.ResolveBilling(metered))
+	require.NoError(t, Agents{}.BillingMismatch(metered), "nothing declared contradicts nothing")
+	require.NoError(t, Agents{Billing: types.AgentBillingMetered}.BillingMismatch(metered))
 
-	got, err = Agents{Billing: types.AgentBillingQuota}.ResolveBilling(metered)
-	require.Error(t, err)
-	assert.ErrorContains(t, err, "agents.billing is quota, but the agent host bills per token")
-	assert.Equal(t, types.AgentBillingMetered, got, "the detected mode stands beside the error")
+	assert.Equal(t, types.AgentBillingMetered, quota.ResolveBilling(metered), "the detected mode stands")
+	assert.EqualError(t, quota.BillingMismatch(metered),
+		"agents.billing is quota, but the agent host bills per token (one of ANTHROPIC_API_KEY, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX is set); set agents.billing to metered, or unset it")
 }
 
 // The workspace's magus.yaml wins for billing, as layering always does, but a profile
@@ -117,6 +116,17 @@ func TestLoadAgentsLayersTiers(t *testing.T) {
 	got, err = LoadAgents(root)
 	require.NoError(t, err)
 	assert.Equal(t, types.GuardProfileStandard, got.Profile)
+
+	writeYAML(t, root, "agents:\n  billing: metered\n")
+	got, err = LoadAgents(root)
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardProfileOff, got.Profile, "a tier stating no level says nothing")
+
+	writeYAML(t, filepath.Join(home, "magus"), "cache:\n  size_mb: 1\n")
+	writeYAML(t, root, "agents:\n  profile: off\n")
+	got, err = LoadAgents(root)
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardProfileOff, got.Profile)
 
 	empty := t.TempDir()
 	writeYAML(t, filepath.Join(home, "magus"), "cache:\n  size_mb: 1\n")

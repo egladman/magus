@@ -2304,13 +2304,7 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 		BinaryVersion:   by.version,
 		Cwd:             by.cwd,
 		Phases:          judgmentPhases(ctx).phases(),
-		Thread:          cost.thread,
-		Billing:         cost.billing,
-		DelegableClass:  cost.class,
-		Shadow:          cost.shadow,
-	}
-	if cost.context != nil {
-		command.ContextTokens, command.ContextModel = cost.context.Tokens, cost.context.Model
+		AgentFacts:      cost,
 	}
 	if tool == hookToolCommand {
 		command.Command = input
@@ -2346,8 +2340,9 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 	}
 	facts := hint.NewGate(location.cacheDir, who.factsKey())
 	lease, _ := resolveActingLease(who, location, "")
-	thread, _ := callerThread(location.cacheDir, who, lease)
-	cost := callFacts{thread: thread, billing: accountAt(location.workspace).billing, context: callerContext(location, who, thread, facts)}
+	thread, from := callerThread(location.cacheDir, who, lease)
+	cost := types.AgentFacts{Thread: thread, ThreadFrom: from, Billing: accountAt(location.workspace).billing}
+	setContext(&cost, callerContext(location, who, thread, facts))
 	recordAgentCalls(ctx, cost, nil)
 	spawn := trail.AgentSpawn{
 		VerdictRef:    rec.verdictRef,
@@ -2370,11 +2365,7 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 		BinaryVersion: deps.BinaryVersion,
 		Cwd:           req.Cwd,
 		Phases:        judgmentPhases(ctx).phases(),
-		Thread:        cost.thread,
-		Billing:       cost.billing,
-	}
-	if cost.context != nil {
-		spawn.ContextTokens, spawn.ContextModel = cost.context.Tokens, cost.context.Model
+		AgentFacts:    cost,
 	}
 	trail.AppendAgentSpawn(ctx, location.cacheDir, spawn)
 }

@@ -260,12 +260,16 @@ func TestAgentCostFamilyCollects(t *testing.T) {
 	p, coll := collectLocal(t)
 	ctx := context.Background()
 
-	p.RecordAgentCall(ctx, observability.AgentCall{
-		Thread: types.AgentThreadMain, Model: "claude-opus-5-5", ContextTokens: 300_000,
-		Billing: types.AgentBillingMetered, DelegableClass: "search", ResultChars: 4000,
+	large, small, empty := 4000, 1000, 0
+	p.RecordAgentCall(ctx, observability.AgentCall{AgentFacts: types.AgentFacts{
+		Thread: types.AgentThreadMain, ContextModel: "claude-opus-5-5", ContextTokens: 300_000,
+		Billing: types.AgentBillingMetered, DelegableClass: types.DelegableSearch, ResultChars: &large,
 		Shadow: map[types.GuardProfile]types.GuardDecision{types.GuardProfileStrict: types.GuardDeny, types.GuardProfileLight: types.GuardAllow},
-	})
-	p.RecordAgentCall(ctx, observability.AgentCall{ContextTokens: 5000, DelegableClass: "search", ResultChars: 1000, Billing: types.AgentBillingMetered})
+	}})
+	p.RecordAgentCall(ctx, observability.AgentCall{AgentFacts: types.AgentFacts{
+		ContextTokens: 5000, DelegableClass: types.DelegableSearch, ResultChars: &small, Billing: types.AgentBillingMetered,
+	}})
+	p.RecordAgentCall(ctx, observability.AgentCall{AgentFacts: types.AgentFacts{DelegableClass: types.DelegableRead, ResultChars: &empty}})
 	p.RecordAgentCall(ctx, observability.AgentCall{})
 
 	rm, err := coll.Collect(ctx)

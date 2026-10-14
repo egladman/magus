@@ -61,6 +61,7 @@ func TestCommandRuleSeesTheNormalizedRequest(t *testing.T) {
 		Commands:    []types.CommandInvocation{{Program: "gh", Args: []string{"pr", "checks", "183", "--watch"}}},
 		Role:        types.AgentRoleRoot,
 		Thread:      types.AgentThreadMain,
+		ThreadFrom:  types.ThreadInferred,
 		Dir:         at.dir,
 		Workspace:   at.workspace,
 	}, probe.asked[0])
@@ -90,7 +91,7 @@ func TestCommandRuleSeesTheHostsSubagentID(t *testing.T) {
 		Agent:       "a534fcfe",
 		Role:        types.AgentRoleRoot,
 		Thread:      types.AgentThreadSub,
-		ThreadKnown: true,
+		ThreadFrom:  types.ThreadReported,
 		Checkout:    sub.Checkout, // read from the fixture's own checkout, which this test does not shape
 		Dir:         sub.Dir,
 		Workspace:   sub.Workspace,

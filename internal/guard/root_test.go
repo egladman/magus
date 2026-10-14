@@ -60,8 +60,8 @@ func rulesOf(findings []costFinding) map[denyRuleName]bool {
 
 func TestMainFindingsByLevel(t *testing.T) {
 	t.Parallel()
-	diff := mainCall{known: true, window: 1_000_000, class: delegableDiff, line: "git diff"}
-	quiet := mainCall{known: true, window: 1_000_000, line: "git status --short"}
+	diff := mainCall{from: types.ThreadReported, window: 1_000_000, class: types.DelegableDiff, line: "git diff"}
+	quiet := mainCall{from: types.ThreadReported, window: 1_000_000, line: "git status --short"}
 
 	st := costState{Tokens: 520_000, Streak: 7, Repeats: map[string]int{lineDigest("git diff"): 2}, Results: map[string]int{"Bash": 45_000}}
 	assert.Equal(t, map[denyRuleName]bool{}, rulesOf(mainFindings(levelSetting(types.GuardProfileOff), st, diff)))
@@ -97,7 +97,7 @@ func TestFreeCallsEscapeTheBudgetRules(t *testing.T) {
 	t.Parallel()
 	st := costState{Tokens: 900_000, Streak: 20, Repeats: map[string]int{}}
 	call := func(line string) mainCall {
-		return mainCall{known: true, window: 1_000_000, class: delegableClass(line), free: costFree(line), line: line}
+		return mainCall{from: types.ThreadReported, window: 1_000_000, class: delegableClass(line), free: costFree(line), line: line}
 	}
 	for _, level := range []types.GuardProfile{types.GuardProfileLight, types.GuardProfileStandard, types.GuardProfileStrict} {
 		for _, line := range costFreeLines {
@@ -187,18 +187,18 @@ func TestApplyFindingsSaysAnInferredRefusalAsAdvice(t *testing.T) {
 	refusal := []costFinding{{rule: denyRuleRootHeavyCommand, deny: true, key: "k", say: "first line.\nwhy."}}
 	pass := Verdict{Decision: decisionPass}
 
-	v := applyFindings(markers, pass, refusal, true)
+	v := applyFindings(markers, pass, refusal, types.ThreadReported)
 	assert.Equal(t, decisionDeny, v.Decision)
 	assert.Equal(t, "first line.\nwhy.", v.Reason)
 
-	v = applyFindings(markers, pass, refusal, false)
+	v = applyFindings(markers, pass, refusal, types.ThreadInferred)
 	assert.Equal(t, decisionAdvise, v.Decision)
 	assert.Equal(t, "first line.", v.Context, "advice carries the verdict line")
 	assert.Equal(t, string(denyRuleRootHeavyCommand), v.Rule)
-	assert.Equal(t, decisionPass, applyFindings(markers, pass, refusal, false).Decision, "once a session")
+	assert.Equal(t, decisionPass, applyFindings(markers, pass, refusal, types.ThreadInferred).Decision, "once a session")
 
 	advised := Verdict{Decision: decisionAdvise, Context: "earlier", Rule: "graph-stale"}
-	v = applyFindings(hint.NewGate(t.TempDir(), "s"), advised, []costFinding{{rule: denyRuleRootRepeat, key: "r", say: "again."}}, true)
+	v = applyFindings(hint.NewGate(t.TempDir(), "s"), advised, []costFinding{{rule: denyRuleRootRepeat, key: "r", say: "again."}}, types.ThreadReported)
 	assert.Equal(t, "earlier\n\nagain.", v.Context)
 	assert.Equal(t, "graph-stale", v.Rule, "added to the advice already there")
 }
@@ -206,14 +206,14 @@ func TestApplyFindingsSaysAnInferredRefusalAsAdvice(t *testing.T) {
 func TestShadowVerdicts(t *testing.T) {
 	t.Parallel()
 	st := costState{Tokens: 400_000, Streak: 9}
-	got := shadowVerdicts(st, mainCall{known: true, window: 1_000_000, class: delegableSearch, line: "rg x"})
+	got := shadowVerdicts(st, mainCall{from: types.ThreadReported, window: 1_000_000, class: types.DelegableSearch, line: "rg x"})
 	assert.Equal(t, map[types.GuardProfile]types.GuardDecision{
 		types.GuardProfileOff:      types.GuardAllow,
 		types.GuardProfileLight:    types.GuardAllow,
 		types.GuardProfileStandard: types.GuardAdvise,
 		types.GuardProfileStrict:   types.GuardDeny,
 	}, got)
-	inferred := shadowVerdicts(st, mainCall{window: 1_000_000, class: delegableSearch, line: "rg x"})
+	inferred := shadowVerdicts(st, mainCall{window: 1_000_000, class: types.DelegableSearch, line: "rg x"})
 	assert.Equal(t, types.GuardAdvise, inferred[types.GuardProfileStrict], "an inferred thread is never refused")
 }
 

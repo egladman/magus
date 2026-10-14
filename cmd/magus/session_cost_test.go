@@ -32,9 +32,11 @@ func fixtureModels() model.Table {
 
 func at(sec int) time.Time { return costEpoch.Add(time.Duration(sec) * time.Second) }
 
-func mainCall(sec int, tokens int64, mdl string) trail.SessionCall {
-	return trail.SessionCall{At: at(sec), Thread: types.AgentThreadMain, ContextTokens: tokens, ContextModel: mdl}
+func mainCall(sec int, size int64, mdl string) trail.SessionCall {
+	return trail.SessionCall{At: at(sec), AgentFacts: types.AgentFacts{Thread: types.AgentThreadMain, ContextTokens: size, ContextModel: mdl}}
 }
+
+func resultOf(n int) *int { return &n }
 
 func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 	tr := &trail.SessionTrail{Commands: 6, Spawns: []trail.SessionSpawn{
@@ -45,7 +47,7 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 	for sec := 1; sec <= 30; sec++ {
 		c := mainCall(sec, 300_000, "claude-opus-5-5")
 		c.Billing = types.AgentBillingMetered
-		c.ResultChars = 1000
+		c.ResultChars = resultOf(1000)
 		c.Shadow = map[types.GuardProfile]types.GuardDecision{
 			types.GuardProfileStrict: types.GuardDeny,
 			types.GuardProfileLight:  types.GuardAllow,
@@ -53,9 +55,9 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 		switch sec {
 		case 1:
 			c.ContextTokens = 100_000
-			c.Decision, c.Rule, c.DelegableClass = "advise", "root-result-cap", "search" // answered by the spawn at 5s
+			c.Decision, c.Rule, c.DelegableClass = "advise", "root-result-cap", types.DelegableSearch // answered by the spawn at 5s
 		case 15:
-			c.Decision, c.Rule, c.DelegableClass = "advise", "root-repeat", "diff" // the next spawn is past the window
+			c.Decision, c.Rule, c.DelegableClass = "advise", "root-repeat", types.DelegableDiff // the next spawn is past the window
 		case 16:
 			c.Decision, c.Rule = "advise", "spawn-names-model" // not a cost advisory
 		case 30:
@@ -64,8 +66,8 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 		calls = append(calls, c)
 	}
 	calls = append(calls,
-		trail.SessionCall{At: at(2), Thread: types.AgentThreadSub, ContextTokens: 900_000, ContextModel: "claude-haiku-5-5"},
-		trail.SessionCall{At: at(3), Thread: types.AgentThreadUnknown, ContextTokens: 50_000})
+		trail.SessionCall{At: at(2), AgentFacts: types.AgentFacts{Thread: types.AgentThreadSub, ContextTokens: 900_000, ContextModel: "claude-haiku-5-5"}},
+		trail.SessionCall{At: at(3), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown, ContextTokens: 50_000}})
 
 	tr.Calls = calls
 
@@ -73,17 +75,19 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 
 	assert.Equal(t, &rootContext{Peak: 600_000, P50: 300_000, Samples: 30, Models: []string{"claude-opus-5-5"}}, got.RootContext)
 	assert.Equal(t, &delegableShare{
-		Chars: 2000, Total: 30_000, Share: 2000.0 / 30_000.0,
+		Chars: 2000, Total: 30_000,
 		ByClass: []countedName{{Name: "diff", Count: 1000}, {Name: "search", Count: 1000}},
 	}, got.Delegable)
-	assert.Equal(t, &spawnTally{Total: 2, ByModel: []countedName{{Name: "claude-sonnet-5-5", Count: 1}, {Name: "none declared", Count: 1}}}, got.Spawns)
-	assert.Equal(t, &advisoryOutcome{Given: 2, Followed: 1, Ignored: 1, Within: followWithin}, got.Advisories)
+	assert.InDelta(t, 2000.0/30_000.0, got.Delegable.Share(), 1e-12)
+	assert.Equal(t, &spawnTally{Total: 2, ByModel: []countedName{{Name: "", Count: 1}, {Name: "claude-sonnet-5-5", Count: 1}}}, got.Spawns,
+		"an undeclared model is stored as itself; the renderer labels it")
+	assert.Equal(t, &advisoryOutcome{Given: 2, Followed: 1, Within: followWithin}, got.Advisories)
+	assert.Equal(t, 1, got.Advisories.Ignored())
 	assert.Equal(t, []shadowTally{
-		{Profile: types.GuardProfileLight, Allow: 30},
-		{Profile: types.GuardProfileStrict, Deny: 30},
+		{Profile: types.GuardProfileLight, Decisions: map[types.GuardDecision]int{types.GuardAllow: 30}},
+		{Profile: types.GuardProfileStrict, Decisions: map[types.GuardDecision]int{types.GuardDeny: 30}},
 	}, got.Shadow)
-	assert.Nil(t, got.PastPriceStep, "no spawn reported a context size")
-	assert.Equal(t, map[string]string{costPriceStep: "no spawn recorded its final context size"}, got.NotMeasured)
+	assert.Nil(t, got.NotMeasured, "every section was measured")
 	require.NotNil(t, got.Dollars)
 	assert.Equal(t, 3, got.Dollars.Calls, "100k, the run of 300k, and 600k")
 	assert.InDelta(t, (0.1+0.3+0.6)*0.20, got.Dollars.FloorUSD, 1e-9)
@@ -94,7 +98,7 @@ func TestSummarizeCostSaysNothingWasMeasuredWithoutATrail(t *testing.T) {
 
 	assert.Nil(t, got.RootContext)
 	assert.Nil(t, got.Dollars)
-	assert.Len(t, got.NotMeasured, len(costSectionLabels), "every section names why it is empty")
+	assert.Len(t, got.NotMeasured, len(costSections), "every section names why it is empty")
 }
 
 func TestSummarizeCostCountsSpawnsFromATrailWithNoPerCallFacts(t *testing.T) {
@@ -109,28 +113,17 @@ func TestSummarizeCostCountsSpawnsFromATrailWithNoPerCallFacts(t *testing.T) {
 	assert.NotContains(t, got.NotMeasured, costSpawns)
 }
 
-func TestSummarizeCostCarriesASpawnsContextIntoThePriceStep(t *testing.T) {
-	tr := &trail.SessionTrail{Commands: 1, Spawns: []trail.SessionSpawn{
-		{Child: "Explore", At: at(1), DeclaredModel: "claude-haiku-5-5", ContextTokens: 120_000},
-	}}
-
-	got := summarizeCost(tr, fixtureModels())
-
-	assert.Equal(t, []costSpawn{{At: at(1), Model: "claude-haiku-5-5", ContextTokens: 120_000}}, spawnsOf(tr))
-	require.NotNil(t, got.PastPriceStep)
-	assert.Equal(t, 1, *got.PastPriceStep)
-	assert.NotContains(t, got.NotMeasured, costPriceStep)
-}
-
 // The path `session show` takes: calls written by the hook, folded by ForSession, summarized.
 func TestSummarizeCostReadsTheFactsAHookRecorded(t *testing.T) {
 	base := t.TempDir()
 	for range 2 {
 		trail.AppendAgentCommand(t.Context(), base, trail.AgentCommand{
 			Session: "s1", Tool: "shell.command", Command: "grep -r x .", Decision: "pass",
-			Thread: types.AgentThreadMain, ContextTokens: 250_000, ContextModel: "claude-opus-5-5",
-			Billing: types.AgentBillingMetered, DelegableClass: "search", ResultChars: 4000,
-			Shadow: map[types.GuardProfile]types.GuardDecision{types.GuardProfileStrict: types.GuardDeny},
+			AgentFacts: types.AgentFacts{
+				Thread: types.AgentThreadMain, ThreadFrom: types.ThreadReported, ContextTokens: 250_000, ContextModel: "claude-opus-5-5",
+				Billing: types.AgentBillingMetered, DelegableClass: types.DelegableSearch, ResultChars: resultOf(4000),
+				Shadow: map[types.GuardProfile]types.GuardDecision{types.GuardProfileStrict: types.GuardDeny},
+			},
 		})
 	}
 	tr := trail.ForSession(base, "s1", 100)
@@ -138,14 +131,14 @@ func TestSummarizeCostReadsTheFactsAHookRecorded(t *testing.T) {
 	got := summarizeCost(&tr, fixtureModels())
 
 	assert.Equal(t, &rootContext{Peak: 250_000, P50: 250_000, Samples: 2, Models: []string{"claude-opus-5-5"}}, got.RootContext)
-	assert.Equal(t, int64(8000), got.Delegable.Chars)
-	assert.Equal(t, []shadowTally{{Profile: types.GuardProfileStrict, Deny: 2}}, got.Shadow)
+	assert.Equal(t, chars(8000), got.Delegable.Chars)
+	assert.Equal(t, []shadowTally{{Profile: types.GuardProfileStrict, Decisions: map[types.GuardDecision]int{types.GuardDeny: 2}}}, got.Shadow)
 	require.NotNil(t, got.Dollars)
 	assert.Equal(t, types.AgentBillingMetered, got.Dollars.Billing)
 }
 
 func TestSummarizeCostNeverCountsAnUnknownThreadAsTheRoot(t *testing.T) {
-	calls := []trail.SessionCall{{At: at(1), Thread: types.AgentThreadUnknown, ContextTokens: 700_000, ContextModel: "claude-opus-5-5"}}
+	calls := []trail.SessionCall{{At: at(1), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown, ContextTokens: 700_000, ContextModel: "claude-opus-5-5"}}}
 
 	got := summarizeCost(&trail.SessionTrail{Commands: 1, Calls: calls}, fixtureModels())
 
@@ -153,9 +146,30 @@ func TestSummarizeCostNeverCountsAnUnknownThreadAsTheRoot(t *testing.T) {
 	assert.Equal(t, "no call is known to be on the main thread (1 of unknown thread)", got.NotMeasured[costRootContext])
 }
 
+func TestSummarizeCostLeavesItsCallersCallsInOrder(t *testing.T) {
+	calls := []trail.SessionCall{mainCall(2, 1, "m"), mainCall(1, 1, "m")}
+
+	summarizeCost(&trail.SessionTrail{Calls: calls}, fixtureModels())
+
+	assert.Equal(t, []time.Time{at(2), at(1)}, []time.Time{calls[0].At, calls[1].At})
+}
+
+// No call observing a result is unmeasured; a call observing an empty one is a measured
+// zero.
+func TestDelegableTellsAnUnobservedResultFromAnEmptyOne(t *testing.T) {
+	assert.Nil(t, delegableOf([]trail.SessionCall{mainCall(1, 1, "m")}))
+
+	empty := mainCall(1, 1, "m")
+	empty.ResultChars = resultOf(0)
+	got := delegableOf([]trail.SessionCall{empty})
+	require.NotNil(t, got)
+	assert.Zero(t, got.Total)
+	assert.Zero(t, got.Share())
+}
+
 func TestDollarsPriceTheCacheReadFloorOnceForEachModelCall(t *testing.T) {
-	metered := func(sec int, tokens int64, mdl string) trail.SessionCall {
-		c := mainCall(sec, tokens, mdl)
+	metered := func(sec int, size int64, mdl string) trail.SessionCall {
+		c := mainCall(sec, size, mdl)
 		c.Billing = types.AgentBillingMetered
 		return c
 	}
@@ -205,20 +219,6 @@ func TestDollarsAreWithheldWhenOneCallLacksBilling(t *testing.T) {
 	assert.Contains(t, why, "billing is unknown")
 }
 
-func TestPastPriceStepCountsChildrenOverTheirModelsStep(t *testing.T) {
-	spawns := []costSpawn{
-		{Model: "claude-haiku-5-5", ContextTokens: 120_000},
-		{Model: "claude-haiku-5-5", ContextTokens: 80_000},
-		{Model: "claude-opus-5-5", ContextTokens: 900_000}, // no step
-	}
-
-	got := pastPriceStep(spawns, fixtureModels())
-
-	require.NotNil(t, got)
-	assert.Equal(t, 1, *got)
-	assert.Nil(t, pastPriceStep([]costSpawn{{Model: "claude-haiku-5-5"}}, fixtureModels()), "an unreported size is not 0 children past")
-}
-
 func TestAdvisoryFollowEndsAfterTheWindow(t *testing.T) {
 	adv := mainCall(0, 1, "m")
 	adv.Decision, adv.Rule = "advise", "root-heavy-command"
@@ -232,15 +232,26 @@ func TestAdvisoryFollowEndsAfterTheWindow(t *testing.T) {
 
 	assert.Equal(t, 1, inside.Followed)
 	assert.Equal(t, 0, outside.Followed)
-	assert.Equal(t, 1, outside.Ignored)
+	assert.Equal(t, 1, outside.Ignored())
+}
+
+// A decision outside allow, advise and deny is counted under its own name, never folded
+// into another.
+func TestShadowTallyPrintsEveryDecision(t *testing.T) {
+	tally := shadowTally{Profile: types.GuardProfileStandard, Decisions: map[types.GuardDecision]int{types.GuardAdvise: 2, "ask": 1}}
+
+	assert.Equal(t, "standard 0 allow/2 advise/0 deny/1 ask", tally.String())
 }
 
 func TestRenderCostPrintsMeasuredAndUnmeasuredSections(t *testing.T) {
-	tr := &trail.SessionTrail{Commands: 2, Spawns: []trail.SessionSpawn{{Child: "Explore", At: at(9), DeclaredModel: "claude-sonnet-5-5"}}}
+	tr := &trail.SessionTrail{Commands: 2, Spawns: []trail.SessionSpawn{
+		{Child: "Explore", At: at(9), DeclaredModel: "claude-sonnet-5-5"},
+		{Child: "Explore", At: at(10)},
+	}}
 	c1 := mainCall(1, 612_000, "claude-opus-5-5")
 	c1.Billing = types.AgentBillingMetered
-	c1.ResultChars = 1000
-	c1.DelegableClass = "search"
+	c1.ResultChars = resultOf(1500)
+	c1.DelegableClass = types.DelegableSearch
 	tr.Calls = []trail.SessionCall{c1}
 	got := summarizeCost(tr, fixtureModels())
 
@@ -251,10 +262,9 @@ func TestRenderCostPrintsMeasuredAndUnmeasuredSections(t *testing.T) {
 Cost, with the root as the main thread:
   root context     peak 612k, p50 612k over 1 call(s), claude-opus-5-5
   delegable        100% of 1k result chars (search 1k)
-  spawns           1: claude-sonnet-5-5 1
+  spawns           2: none declared 1, claude-sonnet-5-5 1
   advisories       0 given, 0 followed by a spawn within 10 calls, 0 ignored
   shadow           not measured: no call recorded what each profile would have decided
-  past price step  not measured: no spawn recorded its final context size
   dollars          $0.12 floor: cache reads of the root's 1 model call(s), metered
 `, buf.String())
 }

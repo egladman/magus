@@ -110,13 +110,13 @@ func resultFigures(level types.GuardProfile) ladder {
 
 // mainCall is one main-thread call as the cost rules read it.
 type mainCall struct {
-	// known is whether the host said the caller is the main thread; inferred, every
-	// refusal is said as advice.
-	known   bool
+	// from is what the caller's main thread rests on; inferred, every refusal is said as
+	// advice.
+	from    types.ThreadSource
 	billing types.AgentBilling
 	window  int64
 	// class is the call's delegable class, "" for a call no subagent would make for it.
-	class string
+	class types.DelegableClass
 	// free is whether the call is costFree: its output is a ref or one line, so it adds
 	// nothing the budget rules exist to keep out of the context.
 	free bool
@@ -211,12 +211,12 @@ func ordinal(n int) string {
 	return fmt.Sprintf("%dth", n)
 }
 
-// applyFindings puts findings on verdict: the first refusal replaces it when the thread is
-// known, and every other finding advises once per session, appended to advice already
-// there. An inferred thread is told a refusal as advice.
-func applyFindings(markers hint.Gate, verdict Verdict, findings []costFinding, known bool) Verdict {
+// applyFindings puts findings on verdict: the first refusal replaces it when the host
+// reported the thread, and every other finding advises once per session, appended to
+// advice already there. An inferred thread is told a refusal as advice.
+func applyFindings(markers hint.Gate, verdict Verdict, findings []costFinding, from types.ThreadSource) Verdict {
 	for _, f := range findings {
-		if f.deny && known {
+		if f.deny && from == types.ThreadReported {
 			return Verdict{SchemaVersion: verdict.SchemaVersion, Decision: decisionDeny, Reason: f.say, Rule: string(f.rule), Lease: verdict.Lease, LeaseFrom: verdict.LeaseFrom}
 		}
 	}
@@ -251,17 +251,17 @@ func gradeMainCommand(deps Dependencies, verdict Verdict, in commandRuleInput, w
 		return verdict
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
-	thread, known := callerThread(at.cacheDir, who, in.lease)
+	thread, from := callerThread(at.cacheDir, who, in.lease)
 	if thread != types.AgentThreadMain {
 		return verdict
 	}
 	gate := hint.NewGate(at.cacheDir, who.callerKey())
 	if f, misdeclared := budgetPastEveryWindow(deps.settingOf(string(denyRuleRootContextBudget)), accountAt(at.workspace).table); misdeclared {
-		return applyFindings(gate, verdict, []costFinding{f}, known)
+		return applyFindings(gate, verdict, []costFinding{f}, from)
 	}
 	st := readCostState(facts)
-	call := mainCall{known: known, billing: accountAt(at.workspace).billing, window: contextWindow(st, at), class: delegableClass(in.command), free: costFree(in.command), line: in.command}
-	return applyFindings(gate, verdict, mainFindings(deps.settingOf, st, call), known)
+	call := mainCall{from: from, billing: accountAt(at.workspace).billing, window: contextWindow(st, at), class: delegableClass(in.command), free: costFree(in.command), line: in.command}
+	return applyFindings(gate, verdict, mainFindings(deps.settingOf, st, call), from)
 }
 
 // budgetPastEveryWindow is the refusal of a root-context-budget tokens figure above the
@@ -310,7 +310,7 @@ func shadowVerdicts(st costState, c mainCall) map[types.GuardProfile]types.Guard
 	for level, settings := range levelSettings() {
 		decision := types.GuardAllow
 		for _, f := range mainFindings(func(rule string) builtin.Setting { return settings[rule] }, st, c) {
-			if f.deny && c.known {
+			if f.deny && c.from == types.ThreadReported {
 				decision = types.GuardDeny
 				break
 			}
@@ -329,7 +329,7 @@ func gradeMainSpawn(deps Dependencies, verdict Verdict, env hookRequest, who hoo
 	if verdict.Decision == decisionDeny || !env.IsSpawn || lease != "" || at.cacheDir == "" {
 		return verdict
 	}
-	thread, known := callerThread(at.cacheDir, who, lease)
+	thread, from := callerThread(at.cacheDir, who, lease)
 	if thread != types.AgentThreadMain {
 		return verdict
 	}
@@ -356,7 +356,7 @@ func gradeMainSpawn(deps Dependencies, verdict Verdict, env hookRequest, who hoo
 			findings = append(findings, costFinding{rule: denyRuleSpawnAboveModelTier, key: hint.MarkerKind(denyRuleSpawnAboveModelTier), say: say})
 		}
 	}
-	return applyFindings(hint.NewGate(at.cacheDir, who.callerKey()), verdict, findings, known)
+	return applyFindings(hint.NewGate(at.cacheDir, who.callerKey()), verdict, findings, from)
 }
 
 // forkedTier is the model tier a job row was forked at, resolved against the workspace's

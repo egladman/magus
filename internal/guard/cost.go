@@ -28,15 +28,6 @@ import (
 // it is, how large its context is, and how its account pays. None is inferred from a
 // host's name.
 
-// The kinds of work a subagent could do in the main thread's place.
-const (
-	delegableSearch = "search"
-	delegableRead   = "read"
-	delegableDiff   = "diff"
-	delegableRun    = "run"
-	delegableFetch  = "fetch"
-)
-
 // hostAgentsKind marks a host that has reported a subagent id on a judged call, so a call
 // from it that reports none comes from a main thread.
 const hostAgentsKind hint.MarkerKind = "reports-agent-ids"
@@ -53,48 +44,46 @@ func hostGate(cacheDir, host string) hint.Gate {
 	return hint.NewGate(cacheDir, "guard/host/"+callerKeyEscaper.Replace(host))
 }
 
-// callerThread is which thread of its session who is, and whether the host said so. A
-// call naming a subagent is one. A host that has named a subagent on some call does so on
+// callerThread is which thread of its session who is, and what that rests on. A call
+// naming a subagent is one. A host that has named a subagent on some call does so on
 // every call, so its calls naming none are the main thread's. Otherwise an unleased call
 // from a host is taken for the main thread, inferred: the subagents of a host that names
 // none look the same, so a rule reading an inferred thread only advises. A call no host
 // made, or a leased one from a host magus has not learned, is unknown.
-func callerThread(cacheDir string, who hookAttribution, lease string) (types.AgentThread, bool) {
+func callerThread(cacheDir string, who hookAttribution, lease string) (types.AgentThread, types.ThreadSource) {
 	switch {
 	case who.Agent != "":
-		return types.AgentThreadSub, true
+		return types.AgentThreadSub, types.ThreadReported
 	case strings.TrimSpace(who.Host) == "":
-		return types.AgentThreadUnknown, false
+		return types.AgentThreadUnknown, types.ThreadInferred
 	case hostGate(cacheDir, who.Host).AlreadyFired(hostAgentsKind):
-		return types.AgentThreadMain, true
+		return types.AgentThreadMain, types.ThreadReported
 	case lease == "":
-		return types.AgentThreadMain, false
+		return types.AgentThreadMain, types.ThreadInferred
 	}
-	return types.AgentThreadUnknown, false
+	return types.AgentThreadUnknown, types.ThreadInferred
 }
 
-// callerCost is the thread and context a rule request carries for who.
-func callerCost(at location, who hookAttribution, lease string, facts hint.Gate) (types.AgentThread, bool, *types.AgentContext) {
-	thread, known := callerThread(at.cacheDir, who, lease)
-	return thread, known, callerContext(at, who, thread, facts)
+// callerCost is the thread, its source and the context window a rule request carries for
+// who.
+func callerCost(at location, who hookAttribution, lease string, facts hint.Gate) (types.AgentThread, types.ThreadSource, *types.ContextWindow) {
+	thread, from := callerThread(at.cacheDir, who, lease)
+	return thread, from, callerContext(at, who, thread, facts)
 }
 
 // callerContext is the caller's context as magus last recorded it: the main thread's from
 // its transcript, a subagent's from the usage its host reported for it. Nil when nothing
 // was recorded.
-func callerContext(at location, who hookAttribution, thread types.AgentThread, facts hint.Gate) *types.AgentContext {
-	var c types.AgentContext
+func callerContext(at location, who hookAttribution, thread types.AgentThread, facts hint.Gate) *types.ContextWindow {
+	var c types.ContextWindow
 	switch thread {
 	case types.AgentThreadMain:
 		st := readCostState(facts)
-		c = types.AgentContext{Tokens: st.Tokens, Window: st.Window, Model: st.Model, Source: "transcript"}
+		c = types.ContextWindow{Tokens: st.Tokens, Window: st.Window, Model: st.Model, Source: types.ContextFromTranscript}
 	case types.AgentThreadSub:
 		rec, _ := readSpawnedAgent(facts, who.Agent)
 		if rec.ContextTokens != nil {
-			c = types.AgentContext{Tokens: *rec.ContextTokens, Model: rec.Model, Source: "transcript"}
-		}
-		if rec.ContextWindow != nil {
-			c.Window = *rec.ContextWindow
+			c = types.ContextWindow{Tokens: *rec.ContextTokens, Window: rec.ContextWindow, Model: rec.Model, Source: types.ContextFromTranscript}
 		}
 	}
 	if c.Tokens == 0 {
@@ -160,7 +149,7 @@ func accountAt(root string) account {
 		a.harness = src.(func() []types.ModelFacts)
 	}
 	if agents, err := config.LoadAgents(root); err == nil {
-		a.billing, _ = agents.ResolveBilling(os.Getenv)
+		a.billing = agents.ResolveBilling(os.Getenv)
 		a.models = model.Table{}.Merge(agents.ModelOverrides())
 	} else {
 		a.billing = config.DetectBilling(os.Getenv)
@@ -219,8 +208,8 @@ type costState struct {
 }
 
 type pendingCall struct {
-	Tool  string `json:"tool"`
-	Class string `json:"class,omitempty"`
+	Tool  string               `json:"tool"`
+	Class types.DelegableClass `json:"class,omitempty"`
 }
 
 // pendingCap bounds Pending: a call whose result never lands must not grow it forever.
@@ -260,7 +249,7 @@ func lineDigest(line string) string {
 // toolResult is one finished tool call the transcript reported.
 type toolResult struct {
 	tool  string
-	class string
+	class types.DelegableClass
 	chars int
 }
 
@@ -341,7 +330,7 @@ type contentBlock struct {
 // back, read by shape: content blocks of a message, or a rollout's function call items.
 func (st *costState) toolCalls(rec transcriptUsage) []toolResult {
 	var out []toolResult
-	start := func(id, tool, class string) {
+	start := func(id, tool string, class types.DelegableClass) {
 		if id == "" {
 			return
 		}
@@ -413,7 +402,7 @@ func resultChars(raw json.RawMessage) int {
 
 // inputClass is the delegable class of a host tool call, read from its input by shape: a
 // shell command by its line, a whole file read, a search pattern, a URL.
-func inputClass(input map[string]any) string {
+func inputClass(input map[string]any) types.DelegableClass {
 	if line := inputCommand(input); line != "" {
 		return delegableClass(line)
 	}
@@ -421,11 +410,11 @@ func inputClass(input map[string]any) string {
 	_, edits := input["old_string"]
 	switch p, _ := input["file_path"].(string); {
 	case p != "" && !writes && !edits && !orientationFile(p):
-		return delegableRead
+		return types.DelegableRead
 	case input["pattern"] != nil && !writes && !edits:
-		return delegableSearch
+		return types.DelegableSearch
 	case input["url"] != nil:
-		return delegableFetch
+		return types.DelegableFetch
 	}
 	return ""
 }
@@ -461,7 +450,7 @@ func orientationFile(p string) bool {
 // delegableClass names the work a shell line does that a subagent could have done in the
 // caller's place, "" for any other line. The final gate is never delegable: the main
 // thread runs it, and neither is a command that costFree reports.
-func delegableClass(line string) string {
+func delegableClass(line string) types.DelegableClass {
 	if commandRunsGate(line) {
 		return ""
 	}
@@ -581,22 +570,22 @@ func magusProjection(args []string) bool {
 	return format == "name" || strings.HasPrefix(format, "template=")
 }
 
-func invocationClass(c hint.Invocation) string {
+func invocationClass(c hint.Invocation) types.DelegableClass {
 	name := path.Base(c.Name)
 	switch name {
 	case "rg", "ag", "ack", "find", "fd":
-		return delegableSearch
+		return types.DelegableSearch
 	case "grep", "egrep", "fgrep":
 		if hasFlag(c.Args, 'r', "recursive") || hasFlag(c.Args, 'R', "dereference-recursive") {
-			return delegableSearch
+			return types.DelegableSearch
 		}
 		return ""
 	case "curl", "wget":
-		return delegableFetch
+		return types.DelegableFetch
 	}
 	for _, rc := range parseReadCalls(c) {
 		if !orientationFile(rc.path) {
-			return delegableRead
+			return types.DelegableRead
 		}
 	}
 	if v := vcsInvocation(c); v != nil && v.Tool == "git" {
@@ -613,33 +602,24 @@ func invocationClass(c hint.Invocation) string {
 		switch v.Subcommand {
 		case "diff", "show":
 			if !summary("--stat", "--shortstat", "--numstat", "--name-only", "--name-status") {
-				return delegableDiff
+				return types.DelegableDiff
 			}
 		case "log":
 			if summary("-p", "--patch", "-u") && !summary("--stat", "--name-only", "--name-status") {
-				return delegableDiff
+				return types.DelegableDiff
 			}
 		}
 	}
 	if isMagusInvocation(c) {
 		switch words := magusSubcommandWords(c.Args); {
 		case len(words) > 0 && words[0] == "run":
-			return delegableRun
+			return types.DelegableRun
 		case len(words) > 1 && words[0] == "query" && words[1] == "output":
 			// A full log; costFree took the --identity form before it got here.
-			return delegableRead
+			return types.DelegableRead
 		}
 	}
 	return ""
-}
-
-// callFacts is what the trail and the metrics record about one judged call's caller.
-type callFacts struct {
-	thread  types.AgentThread
-	context *types.AgentContext
-	billing types.AgentBilling
-	class   string
-	shadow  map[types.GuardProfile]types.GuardDecision
 }
 
 // observeCall records what one call teaches about its caller and returns the facts its
@@ -648,30 +628,30 @@ type callFacts struct {
 //
 // An observation is the same call another hook judges, so it records the thread alone and
 // nothing a metric counts: counting both would count the call twice.
-func observeCall(ctx context.Context, at location, input string, who hookAttribution, tool, lease string, verdict Verdict) callFacts {
+func observeCall(ctx context.Context, at location, input string, who hookAttribution, tool, lease string, verdict Verdict) types.AgentFacts {
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	if who.Agent != "" && verdict.Decision != "" {
 		hostGate(at.cacheDir, who.Host).MarkFired(hostAgentsKind)
 	}
-	thread, known := callerThread(at.cacheDir, who, lease)
-	out := callFacts{thread: thread}
+	thread, from := callerThread(at.cacheDir, who, lease)
+	out := types.AgentFacts{Thread: thread, ThreadFrom: from}
 	if verdict.Decision == "" {
 		return out
 	}
-	out.billing = accountAt(at.workspace).billing
+	out.Billing = accountAt(at.workspace).billing
 	free := false
 	if tool == hookToolCommand {
-		out.class = delegableClass(input)
+		out.DelegableClass = delegableClass(input)
 		free = costFree(input)
 	}
 	ran := verdict.Decision == decisionPass || verdict.Decision == decisionAdvise
 	var results []toolResult
 	if thread == types.AgentThreadMain && lease == "" {
 		st := readCostState(facts)
-		out.shadow = shadowVerdicts(st, mainCall{known: known, billing: out.billing, window: contextWindow(st, at), class: out.class, free: free, line: input})
+		out.Shadow = shadowVerdicts(st, mainCall{from: from, billing: out.Billing, window: contextWindow(st, at), class: out.DelegableClass, free: free, line: input})
 		results = st.readTranscript(who.Transcript)
 		switch {
-		case ran && tool == hookToolCommand && out.class != "":
+		case ran && tool == hookToolCommand && out.DelegableClass != "":
 			st.Streak++
 			if st.Repeats == nil {
 				st.Repeats = map[string]int{}
@@ -690,7 +670,7 @@ func observeCall(ctx context.Context, at location, input string, who hookAttribu
 		}
 		writeCostState(facts, st)
 	}
-	out.context = callerContext(at, who, thread, facts)
+	setContext(&out, callerContext(at, who, thread, facts))
 	if lease != "" {
 		observeStall(ctx, at, who, lease, verdict)
 	}
@@ -698,21 +678,24 @@ func observeCall(ctx context.Context, at location, input string, who hookAttribu
 	return out
 }
 
+// setContext files w's size and model on f; a nil w leaves both unset.
+func setContext(f *types.AgentFacts, w *types.ContextWindow) {
+	if w != nil {
+		f.ContextTokens, f.ContextModel = w.Tokens, w.Model
+	}
+}
+
 // recordAgentCalls counts one call in the magus.agent.* metrics, and each tool result the
 // transcript handed back since the last call under the class of the call that made it.
-func recordAgentCalls(ctx context.Context, f callFacts, results []toolResult) {
+func recordAgentCalls(ctx context.Context, f types.AgentFacts, results []toolResult) {
 	p := observability.FromContext(ctx)
 	if p == nil {
 		return
 	}
-	call := observability.AgentCall{Thread: f.thread, Billing: f.billing, DelegableClass: f.class, Shadow: f.shadow}
-	if f.context != nil {
-		call.ContextTokens, call.Model = f.context.Tokens, f.context.Model
-	}
-	p.RecordAgentCall(ctx, call)
+	p.RecordAgentCall(ctx, observability.AgentCall{AgentFacts: f})
 	for _, r := range results {
 		if r.class != "" && r.chars > 0 {
-			p.RecordAgentCall(ctx, observability.AgentCall{Thread: f.thread, DelegableClass: r.class, ResultChars: int64(r.chars)})
+			p.RecordAgentCall(ctx, observability.AgentCall{AgentFacts: types.AgentFacts{Thread: f.Thread, DelegableClass: r.class, ResultChars: &r.chars}})
 		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"io"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -27,67 +28,80 @@ var costAdviceRules = []string{
 	"spawn-above-model-tier",
 }
 
-// The cost sections, in the order they print. A section nobody could measure is listed
-// under sessionCost.NotMeasured by these keys instead of being left out or zeroed.
+// costSection names one cost section. A section nobody could measure is listed under
+// sessionCost.NotMeasured by its name instead of being left out or zeroed.
+type costSection string
+
 const (
-	costRootContext = "root_context"
-	costDelegable   = "delegable"
-	costSpawns      = "spawns"
-	costAdvisories  = "advisories"
-	costShadow      = "shadow"
-	costPriceStep   = "price_step"
-	costDollars     = "dollars"
+	costRootContext costSection = "root_context"
+	costDelegable   costSection = "delegable"
+	costSpawns      costSection = "spawns"
+	costAdvisories  costSection = "advisories"
+	costShadow      costSection = "shadow"
+	costDollars     costSection = "dollars"
 )
 
-var costSectionLabels = []struct{ key, label string }{
-	{costRootContext, "root context"},
-	{costDelegable, "delegable"},
-	{costSpawns, "spawns"},
-	{costAdvisories, "advisories"},
-	{costShadow, "shadow"},
-	{costPriceStep, "past price step"},
-	{costDollars, "dollars"},
-}
+// costSections are the sections in the order they print.
+var costSections = []costSection{costRootContext, costDelegable, costSpawns, costAdvisories, costShadow, costDollars}
 
-// costSpawn is one subagent the session started. ContextTokens is its last reported
-// context, 0 when none was.
+// label is how the text view names s.
+func (s costSection) label() string { return strings.ReplaceAll(string(s), "_", " ") }
+
+// tokens counts model tokens and chars counts tool-result characters. They print alike,
+// and the two types keep one from being summed into or printed as the other.
+type (
+	tokens int64
+	chars  int64
+)
+
+func (n tokens) String() string { return abbreviate(int64(n)) }
+
+func (n chars) String() string { return abbreviate(int64(n)) }
+
+// costSpawn is one subagent the session started.
 type costSpawn struct {
-	At            time.Time
-	Model         string
-	ContextTokens int64
+	At    time.Time
+	Model string
 }
 
 // sessionCost is the cost half of `magus session show`. Every section is a pointer or a
 // slice that is absent when it could not be measured, and NotMeasured says why, so an
 // unmeasured section never reads as a measured zero.
 type sessionCost struct {
-	RootContext   *rootContext      `json:"root_context,omitempty"`
-	Delegable     *delegableShare   `json:"delegable,omitempty"`
-	Spawns        *spawnTally       `json:"spawns,omitempty"`
-	Advisories    *advisoryOutcome  `json:"advisories,omitempty"`
-	Shadow        []shadowTally     `json:"shadow,omitempty"`
-	PastPriceStep *int              `json:"past_price_step,omitempty"`
-	Dollars       *dollarEstimate   `json:"dollars,omitempty"`
-	NotMeasured   map[string]string `json:"not_measured,omitempty"`
+	RootContext *rootContext           `json:"root_context,omitempty"`
+	Delegable   *delegableShare        `json:"delegable,omitempty"`
+	Spawns      *spawnTally            `json:"spawns,omitempty"`
+	Advisories  *advisoryOutcome       `json:"advisories,omitempty"`
+	Shadow      []shadowTally          `json:"shadow,omitempty"`
+	Dollars     *dollarEstimate        `json:"dollars,omitempty"`
+	NotMeasured map[costSection]string `json:"not_measured,omitempty"`
 }
 
 // rootContext is the prompt size the main thread sent across its calls.
 type rootContext struct {
-	Peak    int64    `json:"peak"`
-	P50     int64    `json:"p50"`
+	Peak    tokens   `json:"peak"`
+	P50     tokens   `json:"p50"`
 	Samples int      `json:"samples"`
 	Models  []string `json:"models,omitempty"`
 }
 
 // delegableShare is the part of the main thread's tool-result characters that came from
-// work a subagent could have done in its place.
+// work a subagent could have done in its place. ByClass counts characters.
 type delegableShare struct {
-	Chars   int64         `json:"chars"`
-	Total   int64         `json:"total"`
-	Share   float64       `json:"share"`
+	Chars   chars         `json:"chars"`
+	Total   chars         `json:"total"`
 	ByClass []countedName `json:"by_class,omitempty"`
 }
 
+// Share is Chars as a fraction of Total, 0 when every observed result was empty.
+func (d delegableShare) Share() float64 {
+	if d.Total == 0 {
+		return 0
+	}
+	return float64(d.Chars) / float64(d.Total)
+}
+
+// spawnTally counts the session's spawns by the model each declared, "" for none.
 type spawnTally struct {
 	Total   int           `json:"total"`
 	ByModel []countedName `json:"by_model,omitempty"`
@@ -98,17 +112,33 @@ type spawnTally struct {
 type advisoryOutcome struct {
 	Given    int `json:"given"`
 	Followed int `json:"followed"`
-	Ignored  int `json:"ignored"`
 	Within   int `json:"within"`
 }
 
+// Ignored is how many advisories no spawn answered.
+func (a advisoryOutcome) Ignored() int { return a.Given - a.Followed }
+
 // shadowTally is what one profile would have decided across the main thread's calls,
-// whatever profile was in force.
+// whatever profile was in force, counted by decision.
 type shadowTally struct {
-	Profile types.GuardProfile `json:"profile"`
-	Allow   int                `json:"allow"`
-	Advise  int                `json:"advise"`
-	Deny    int                `json:"deny"`
+	Profile   types.GuardProfile          `json:"profile"`
+	Decisions map[types.GuardDecision]int `json:"decisions"`
+}
+
+// String renders t as its profile and a count of every decision: allow, advise and deny
+// always, then any other decision recorded.
+func (t shadowTally) String() string {
+	declared := types.GuardDecision("").Values()
+	counts := make([]string, 0, len(declared)+len(t.Decisions))
+	for _, d := range declared {
+		counts = append(counts, fmt.Sprintf("%d %s", t.Decisions[types.GuardDecision(d)], d))
+	}
+	for _, d := range slices.Sorted(maps.Keys(t.Decisions)) {
+		if !slices.Contains(declared, string(d)) {
+			counts = append(counts, fmt.Sprintf("%d %s", t.Decisions[d], d))
+		}
+	}
+	return fmt.Sprintf("%s %s", t.Profile, strings.Join(counts, "/"))
 }
 
 // dollarEstimate is the cache-read price of the main thread's context alone: a floor,
@@ -123,11 +153,12 @@ const noCallFacts = "the trail holds no per-call facts for this session"
 
 // summarizeCost folds one session's trail into the cost sections. tr is nil when this
 // checkout's trail holds nothing for the session, in which case no section is measured.
+// tr is not modified.
 func summarizeCost(tr *trail.SessionTrail, table model.Table) *sessionCost {
-	c := &sessionCost{NotMeasured: map[string]string{}}
+	c := &sessionCost{NotMeasured: map[costSection]string{}}
 	if tr == nil {
-		for _, s := range costSectionLabels {
-			c.NotMeasured[s.key] = "this checkout's trail holds nothing for the session"
+		for _, s := range costSections {
+			c.NotMeasured[s] = "this checkout's trail holds nothing for the session"
 		}
 		return c
 	}
@@ -143,7 +174,7 @@ func summarizeCost(tr *trail.SessionTrail, table model.Table) *sessionCost {
 		switch call.Thread {
 		case types.AgentThreadMain:
 			main = append(main, call)
-		case types.AgentThreadUnknown, "":
+		case types.AgentThreadUnknown:
 			unknown++
 		}
 	}
@@ -181,11 +212,6 @@ func summarizeCost(tr *trail.SessionTrail, table model.Table) *sessionCost {
 		c.NotMeasured[costShadow] = "no call recorded what each profile would have decided"
 	}
 
-	c.PastPriceStep = pastPriceStep(spawns, table)
-	if c.PastPriceStep == nil {
-		c.NotMeasured[costPriceStep] = "no spawn recorded its final context size"
-	}
-
 	est, why := dollarsOf(main, table)
 	c.Dollars = est
 	if est == nil {
@@ -200,7 +226,7 @@ func summarizeCost(tr *trail.SessionTrail, table model.Table) *sessionCost {
 func spawnsOf(tr *trail.SessionTrail) []costSpawn {
 	out := make([]costSpawn, 0, len(tr.Spawns))
 	for _, sp := range tr.Spawns {
-		out = append(out, costSpawn{At: sp.At, Model: sp.DeclaredModel, ContextTokens: sp.ContextTokens})
+		out = append(out, costSpawn{At: sp.At, Model: sp.DeclaredModel})
 	}
 	return out
 }
@@ -208,17 +234,17 @@ func spawnsOf(tr *trail.SessionTrail) []costSpawn {
 func spawnsByModel(spawns []costSpawn) *spawnTally {
 	tally := map[string]int{}
 	for _, sp := range spawns {
-		tally[cmp.Or(sp.Model, "none declared")]++
+		tally[sp.Model]++
 	}
 	return &spawnTally{Total: len(spawns), ByModel: counted(tally)}
 }
 
 func rootContextOf(main []trail.SessionCall) *rootContext {
-	var sizes []int64
+	var sizes []tokens
 	models := map[string]bool{}
 	for _, call := range main {
 		if call.ContextTokens > 0 {
-			sizes = append(sizes, call.ContextTokens)
+			sizes = append(sizes, tokens(call.ContextTokens))
 			if call.ContextModel != "" {
 				models[call.ContextModel] = true
 			}
@@ -236,20 +262,27 @@ func rootContextOf(main []trail.SessionCall) *rootContext {
 	return rc
 }
 
+// delegableOf sums the result sizes the main thread's calls observed, nil when none
+// observed one.
 func delegableOf(main []trail.SessionCall) *delegableShare {
-	var total, delegable int64
+	var total, delegable chars
+	observed := false
 	byClass := map[string]int{}
 	for _, call := range main {
-		total += int64(call.ResultChars)
+		if call.ResultChars == nil {
+			continue
+		}
+		observed = true
+		total += chars(*call.ResultChars)
 		if call.DelegableClass != "" {
-			delegable += int64(call.ResultChars)
-			byClass[call.DelegableClass] += call.ResultChars
+			delegable += chars(*call.ResultChars)
+			byClass[string(call.DelegableClass)] += *call.ResultChars
 		}
 	}
-	if total == 0 {
+	if !observed {
 		return nil
 	}
-	return &delegableShare{Chars: delegable, Total: total, Share: float64(delegable) / float64(total), ByClass: counted(byClass)}
+	return &delegableShare{Chars: delegable, Total: total, ByClass: counted(byClass)}
 }
 
 func advisoriesOf(main []trail.SessionCall, spawns []costSpawn) *advisoryOutcome {
@@ -269,57 +302,30 @@ func advisoriesOf(main []trail.SessionCall, spawns []costSpawn) *advisoryOutcome
 			out.Followed++
 		}
 	}
-	out.Ignored = out.Given - out.Followed
 	return out
 }
 
+// shadowOf tallies each profile's decisions across the main thread's calls. An unset
+// decision is an allow, as a rule's zero verdict is.
 func shadowOf(main []trail.SessionCall) []shadowTally {
-	byProfile := map[types.GuardProfile]*shadowTally{}
+	byProfile := map[types.GuardProfile]map[types.GuardDecision]int{}
 	for _, call := range main {
 		for p, d := range call.Shadow {
-			t := byProfile[p]
-			if t == nil {
-				t = &shadowTally{Profile: p}
-				byProfile[p] = t
+			if byProfile[p] == nil {
+				byProfile[p] = map[types.GuardDecision]int{}
 			}
-			switch d {
-			case types.GuardDeny:
-				t.Deny++
-			case types.GuardAdvise:
-				t.Advise++
-			default:
-				t.Allow++
-			}
+			byProfile[p][cmp.Or(d, types.GuardAllow)]++
 		}
 	}
 	if len(byProfile) == 0 {
 		return nil
 	}
 	out := make([]shadowTally, 0, len(byProfile))
-	for _, t := range byProfile {
-		out = append(out, *t)
+	for p, decisions := range byProfile {
+		out = append(out, shadowTally{Profile: p, Decisions: decisions})
 	}
 	slices.SortFunc(out, func(a, b shadowTally) int { return cmp.Compare(a.Profile.Rank(), b.Profile.Rank()) })
 	return out
-}
-
-// pastPriceStep counts children whose final context crossed their model's price step,
-// nil when no child reported a context size to compare.
-func pastPriceStep(spawns []costSpawn, table model.Table) *int {
-	reported, past := false, 0
-	for _, sp := range spawns {
-		if sp.ContextTokens == 0 {
-			continue
-		}
-		reported = true
-		if facts, ok := table.Lookup(sp.Model); ok && facts.PriceStep > 0 && sp.ContextTokens > facts.PriceStep {
-			past++
-		}
-	}
-	if !reported {
-		return nil
-	}
-	return &past
 }
 
 // dollarsOf prices the main thread's context at the cache-read rate, and returns the
@@ -364,31 +370,24 @@ func dollarsOf(main []trail.SessionCall, table model.Table) (*dollarEstimate, st
 
 func renderCost(w io.Writer, c *sessionCost) {
 	fmt.Fprintln(w, "\nCost, with the root as the main thread:")
-	line := func(key, text string) {
-		label := key
-		for _, s := range costSectionLabels {
-			if s.key == key {
-				label = s.label
-			}
-		}
-		if why, no := c.NotMeasured[key]; no {
-			fmt.Fprintf(w, "  %-16s not measured: %s\n", label, why)
+	line := func(s costSection, text string) {
+		if why, no := c.NotMeasured[s]; no {
+			fmt.Fprintf(w, "  %-16s not measured: %s\n", s.label(), why)
 			return
 		}
-		fmt.Fprintf(w, "  %-16s %s\n", label, text)
+		fmt.Fprintf(w, "  %-16s %s\n", s.label(), text)
 	}
 	if rc := c.RootContext; rc != nil {
-		line(costRootContext, fmt.Sprintf("peak %s, p50 %s over %d call(s)%s",
-			tokenCount(rc.Peak), tokenCount(rc.P50), rc.Samples, modelSuffix(rc.Models)))
+		line(costRootContext, fmt.Sprintf("peak %s, p50 %s over %d call(s)%s", rc.Peak, rc.P50, rc.Samples, modelSuffix(rc.Models)))
 	} else {
 		line(costRootContext, "")
 	}
 	if d := c.Delegable; d != nil {
-		text := fmt.Sprintf("%.0f%% of %s result chars", d.Share*100, tokenCount(d.Total))
+		text := fmt.Sprintf("%.0f%% of %s result chars", d.Share()*100, d.Total)
 		if len(d.ByClass) > 0 {
 			parts := make([]string, 0, len(d.ByClass))
 			for _, k := range d.ByClass {
-				parts = append(parts, fmt.Sprintf("%s %s", k.Name, tokenCount(int64(k.Count))))
+				parts = append(parts, fmt.Sprintf("%s %s", k.Name, chars(k.Count)))
 			}
 			text += " (" + strings.Join(parts, ", ") + ")"
 		}
@@ -401,7 +400,7 @@ func renderCost(w io.Writer, c *sessionCost) {
 		if sp.Total > 0 {
 			parts := make([]string, 0, len(sp.ByModel))
 			for _, m := range sp.ByModel {
-				parts = append(parts, fmt.Sprintf("%s %d", m.Name, m.Count))
+				parts = append(parts, fmt.Sprintf("%s %d", cmp.Or(m.Name, "none declared"), m.Count))
 			}
 			text = fmt.Sprintf("%d: %s", sp.Total, strings.Join(parts, ", "))
 		}
@@ -410,23 +409,18 @@ func renderCost(w io.Writer, c *sessionCost) {
 		line(costSpawns, "")
 	}
 	if a := c.Advisories; a != nil {
-		line(costAdvisories, fmt.Sprintf("%d given, %d followed by a spawn within %d calls, %d ignored", a.Given, a.Followed, a.Within, a.Ignored))
+		line(costAdvisories, fmt.Sprintf("%d given, %d followed by a spawn within %d calls, %d ignored", a.Given, a.Followed, a.Within, a.Ignored()))
 	} else {
 		line(costAdvisories, "")
 	}
 	if len(c.Shadow) > 0 {
 		parts := make([]string, 0, len(c.Shadow))
 		for _, t := range c.Shadow {
-			parts = append(parts, fmt.Sprintf("%s %d allow/%d advise/%d deny", t.Profile, t.Allow, t.Advise, t.Deny))
+			parts = append(parts, t.String())
 		}
 		line(costShadow, strings.Join(parts, "; "))
 	} else {
 		line(costShadow, "")
-	}
-	if c.PastPriceStep != nil {
-		line(costPriceStep, fmt.Sprintf("%d child(ren)", *c.PastPriceStep))
-	} else {
-		line(costPriceStep, "")
 	}
 	if d := c.Dollars; d != nil {
 		line(costDollars, fmt.Sprintf("$%.2f floor: cache reads of the root's %d model call(s), metered", d.FloorUSD, d.Calls))
@@ -442,8 +436,8 @@ func modelSuffix(models []string) string {
 	return ", " + strings.Join(models, ", ")
 }
 
-// tokenCount renders n as 1.2M or 612k, exact below a thousand.
-func tokenCount(n int64) string {
+// abbreviate renders n as 1.2M or 612k, exact below a thousand.
+func abbreviate(n int64) string {
 	switch {
 	case n >= 1_000_000:
 		return fmt.Sprintf("%.1fM", float64(n)/1e6)
