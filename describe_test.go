@@ -313,14 +313,11 @@ func TestListCharms_InverseIndex(t *testing.T) {
 	}
 }
 
-// TestListTargets_CustomTargets exercises this package's own test build,
-// which deliberately does not link the Buzz interpreter (see doc.go and
-// register_test.go) — so validateTargetPolicies (A4) cannot see this project's
-// magusfile at all and its "policy names an unknown target" enforcement does not
-// apply here (see the interp.Available guard in load()). The end-to-end version
-// of that check, exercised through a real magusfile via the linked interpreter,
-// lives in cmd/magus (which blank-imports interp/bindings): see
-// TestInspect_TargetPolicyNamingUnknownTarget in cmd/magus/project_options_test.go.
+// TestListTargets_CustomTargets: a target a Go program names with WithTarget is one it
+// declares, so validateTargetPolicies accepts it with no op behind it and ListTargets
+// lists it as custom. A magusfile's policy table naming an unknown target is still a
+// load error: see TestInspect_TargetPolicyNamingUnknownTarget in
+// cmd/magus/project_options_test.go.
 func TestListTargets_CustomTargets(t *testing.T) {
 	t.Parallel()
 	const customTarget = "zzz-custom-target"

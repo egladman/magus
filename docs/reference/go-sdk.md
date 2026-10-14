@@ -79,6 +79,7 @@ import (
     "log"
 
     magus "github.com/egladman/magus"
+    _ "github.com/egladman/magus/buzzengine"
 )
 
 func main() {
@@ -94,17 +95,10 @@ func main() {
 }
 ```
 
-Against a workspace whose only project is a bare `magusfile.buzz` declaring
-one `export fun build`, this prints:
-
-```text
-workspace root: /path/to/workspace
-project . (spell="", resolved spells=0)
-```
-
-`resolved spells=0` is not a bug in the example; see
-[what this SDK does not give you](#what-this-sdk-does-not-give-you) before
-you go looking for why `build` never runs.
+The blank import links the engine that evaluates a `magusfile.buzz`. Without
+it, `Inspect` on a workspace with a magusfile returns
+`*types.EngineNotLinkedError`; see
+[linking the Buzz engine](#linking-the-buzz-engine).
 
 ## The interface hierarchy: depend on the narrowest role
 
@@ -285,12 +279,11 @@ type runner interface {
 A test then passes a function that records the targets it was handed. Keep a
 small number of end-to-end tests for the code that builds those targets.
 
-**Magusfile targets do not run in your tests.** As described in
-[what this SDK does not give you](#what-this-sdk-does-not-give-you), a target
-declared in a `magusfile.buzz` is visible to `TargetGraph` but never
-dispatched outside this module. A test that writes one and calls `Run`
-passes without running anything. To exercise a real run, register a spell in
-Go and attach it with `WithSpell`; see `ExampleWorkspaceRegistry_withSpell`.
+**A test that opens a magusfile links the engine.** One file of the test
+binary imports `_ "github.com/egladman/magus/buzzengine"`, or `Open` fails as
+[linking the Buzz engine](#linking-the-buzz-engine) describes. To exercise a
+run with no magusfile, register a spell in Go and attach it with `WithSpell`;
+see `ExampleWorkspaceRegistry_withSpell`.
 
 **Programmatic spells.** `project.DefaultSpellRegistry()` is process-global, so
 two tests that register the same name in parallel race, and a spell left
@@ -306,41 +299,33 @@ tests out of `t.Parallel`.
 call. `*testing.T` and `*testing.B` satisfy it, and so can a small type of your
 own where no test is running, such as an `Example`.
 
-## What this SDK does not give you
+## Linking the Buzz engine
 
 > [!IMPORTANT]
-> A magusfile's custom targets are visible but not runnable through this
-> SDK. Read this before you build anything that depends on dispatching one.
+> A program that opens a workspace with a magusfile must link the Buzz
+> engine. Without it, `Open` and `Inspect` return an error, never a
+> workspace missing that magusfile's targets.
 
-**Buzz magusfile evaluation is not reachable from outside this module.**
 Evaluating a `magusfile.buzz` (running `magus\project(...)`, discovering
-`export fun` targets, binding spells) requires the Buzz interpreter engine
-to be linked in, and that link only happens through two `internal/` packages
-(`internal/interp/engine/buzz`, `internal/interp/bindings`) that only
-`cmd/magus`, built inside this repository, blank-imports. `internal/`
-packages are unreachable from any other module's import graph, so a program
-that imports `github.com/egladman/magus` as a dependency can discover
-projects and read a magusfile's static target graph
-(`Inspector.TargetGraph`, which parses source without executing it), but it
-cannot make magus dispatch a target that magusfile declares: `ListTargets`
-does not list it, no spell gets attached, and attempting to run it is a
-silent no-op rather than an error. There is currently no exported way to
-even ask "is magusfile evaluation available in this process"; you have to
-know this limitation going in.
+`export fun` targets, binding spells) needs the Buzz engine. The root package
+does not link it, so a program that only builds workspaces in Go never pays
+for the VM. A program that loads magusfiles links it with one blank import:
 
-The escape hatch: build the workspace programmatically instead of authoring
-a magusfile, using the exported wire API in the root package:
-`WithSpell`, `WithTarget`, `WithDependsOn`, and friends, composed via
-a `WorkspaceRegistry` passed to `Open`/`Inspect` as an `Option`. Built-in
+```go
+import _ "github.com/egladman/magus/buzzengine"
+```
+
+`cmd/magus` makes the same import. Without it, `Open` and `Inspect` on a
+workspace where any project has a magusfile return
+`*types.EngineNotLinkedError` ([MGS1104](codes/capability/MGS1104.md)), whose
+message names the import. A workspace with no magusfile still opens without
+the engine.
+
+The other path builds the workspace in Go instead of authoring a magusfile,
+through the exported wire API in the root package: `WithSpell`, `WithTarget`,
+`WithDependsOn`, and friends, composed via a `WorkspaceRegistry` passed to
+`Open`/`Inspect` as an `Option`. A target a program names with `WithTarget`
+counts as declared, the way an `export fun` does in a magusfile. Built-in
 spells (`go`, `ts`, `rust`, ...) decode from embedded bytecode through
-`internal/spell`, which the exported wrapper functions can reach on your
-behalf even though you cannot import that package directly. This path gets
-you real spell execution without a magusfile; it does not get you
-arbitrary Buzz-authored targets.
-
-**Nothing else in this doc is a workaround for that gap.** If your workspace
-model is "a set of projects bound to built-in spells, described in Go," the
-SDK covers you end to end. If it depends on a hand-authored magusfile's
-custom targets, only the CLI (or a program that vendors and links the
-interpreter packages the way `cmd/magus` does, which requires being inside
-this module) can run it today.
+`internal/spell`, which the exported wrapper functions reach on your behalf
+even though you cannot import that package directly.

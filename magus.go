@@ -395,6 +395,9 @@ func (m *Magus) load(ctx context.Context) error {
 		return err
 	}
 	m.spellImports = imports
+	// Read before any magusfile adds to the registry, so a magusfile's policy table is
+	// still held to targets that exist.
+	goDeclared := goDeclaredTargets(m)
 	customTargets, err := preloadMagusfiles(ctx, m)
 	if err != nil {
 		// Apply and the policy check would judge a registry the failed magusfiles
@@ -418,7 +421,7 @@ func (m *Magus) load(ctx context.Context) error {
 	if err := m.wsReg.Apply(m); err != nil {
 		return err
 	}
-	if err := validateTargetPolicies(m, customTargets); err != nil {
+	if err := validateTargetPolicies(m, customTargets, goDeclared); err != nil {
 		return err
 	}
 	// Fold target-level static facts (cross-project deps, and per-target
@@ -665,7 +668,9 @@ func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, erro
 // surfacing as a load error. customTargets comes from preloadMagusfiles; spell
 // targets come from each project's already-resolved spells (wsReg.Apply having
 // just run), so both "kinds" of known target (per describe.go's byName) count.
-func validateTargetPolicies(m *Magus, customTargets map[string][]string) error {
+// goDeclared comes from goDeclaredTargets: a target a Go program names with WithTarget
+// is one it declares, as an export fun is one a magusfile declares.
+func validateTargetPolicies(m *Magus, customTargets, goDeclared map[string][]string) error {
 	for _, p := range m.All() {
 		if len(p.TargetPolicies) == 0 {
 			continue
@@ -677,6 +682,9 @@ func validateTargetPolicies(m *Magus, customTargets map[string][]string) error {
 			}
 		}
 		for _, t := range customTargets[p.Path] {
+			known[t] = struct{}{}
+		}
+		for _, t := range goDeclared[p.Path] {
 			known[t] = struct{}{}
 		}
 		declared := make([]string, 0, len(known))
@@ -709,6 +717,41 @@ func validateTargetPolicies(m *Magus, customTargets map[string][]string) error {
 	}
 	return nil
 }
+
+// goDeclaredTargets names each project's policy targets as the Go caller's own registry
+// declares them, keyed by project path. It runs those registrations against scratch
+// projects, so the real ones are untouched until wsReg.Apply; a registration Apply
+// would refuse is Apply's to report.
+func goDeclaredTargets(m *Magus) map[string][]string {
+	probe := policyProbe{WorkspaceRepository: m, scratch: map[string]*types.Project{}}
+	_ = m.wsReg.Apply(probe)
+	out := make(map[string][]string, len(probe.scratch))
+	for path, p := range probe.scratch {
+		for name := range p.TargetPolicies {
+			out[path] = append(out[path], name)
+		}
+	}
+	return out
+}
+
+// policyProbe hands a registry a scratch copy of each project it asks for, and lists none,
+// so Apply resolves no spell.
+type policyProbe struct {
+	types.WorkspaceRepository
+	scratch map[string]*types.Project
+}
+
+func (w policyProbe) Get(path string) *types.Project {
+	p := w.WorkspaceRepository.Get(path)
+	if p == nil {
+		return nil
+	}
+	c := &types.Project{Path: p.Path, Dir: p.Dir}
+	w.scratch[p.Path] = c
+	return c
+}
+
+func (policyProbe) All() []*types.Project { return nil }
 
 // autobindMagusfileSpell binds the "magusfile" spell to projects with a magusfile but no resolved spell.
 func (m *Magus) autobindMagusfileSpell() {
