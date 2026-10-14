@@ -14,6 +14,9 @@ import (
 //go:embed lib/lcov.buzz
 var lcovSource string
 
+//go:embed lib/modeltiers.buzz
+var modelTiersSource string
+
 func init() {
 	RegisterSource(SourceModule{
 		Name:   "lcov",
@@ -25,5 +28,11 @@ func init() {
 		Path:   "magus/figure",
 		Doc:    "Architecture figures drawn from graph records: boxes and groups over Dir records, coverage by scope, edges derived from imports and declared calls.",
 		Source: figuresrc.Source,
+	})
+	RegisterSource(SourceModule{
+		Name:   "modeltiers",
+		Path:   "magus/modeltiers",
+		Doc:    "The default model-tier declaration: the ModelTier enum, cheapest first, its default, and the bounds and skill variant of each tier.",
+		Source: modelTiersSource,
 	})
 }
