@@ -74,6 +74,64 @@ func TestTermsRendersUnrunGatesAsASection(t *testing.T) {
 		"the section sits among the facts, ahead of the check")
 }
 
+// The interface is what the holder implements, so it leads; what the job may break, the
+// release stage and the deletion candidates follow the criteria in that order, and the
+// check stays the only check named.
+func TestTermsRendersTheInterfaceFirstThenWhatMayBreak(t *testing.T) {
+	t.Parallel()
+
+	row := briefRow()
+	row.Goals = []types.Goal{
+		{ID: "api", Kind: types.GoalKindSymbol, Expect: types.ExpectSignature, Symbols: []string{"Open"},
+			Signature: "func Open(root string) error", Description: "opens the ledger at root"},
+		{ID: "gone", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"OpenLegacy"}},
+		{ID: "unit", Kind: types.GoalKindCheck, Expect: types.ExpectPassed, Check: types.LeaseCheck{Target: "test", Project: "."}},
+	}
+	row.Breaks = []string{"--old-flag", "ledger.Open"}
+	facts := TermsFacts{
+		Stage:              types.ReleaseStage{Tag: "v0.4.0"},
+		DeletionCandidates: []types.UnreferencedEntry{{ID: "a", Label: "stale", Kind: "Function", Source: "internal/ledger/x.go:4"}},
+	}
+
+	got := NewTerms(row, facts).String()
+
+	want := "job: harness/ledger-per-repo\n" +
+		"\ninterface\n" +
+		"  Open (signature): func Open(root string) error\n" +
+		"    opens the ledger at root\n" +
+		"  OpenLegacy (absent)\n" +
+		"\ncriteria\n"
+	assert.True(t, strings.HasPrefix(got, want), "got:\n%s", got)
+	for _, section := range []string{
+		"\nmay break\n  --old-flag\n  ledger.Open\n",
+		"\nrelease stage\n  newest release v0.4.0: below 1.0 a major floor ships as a minor release\n",
+		"\n" + deletionHeading + "\n  stale (function) at internal/ledger/x.go:4\n",
+		"\nwrite paths\n",
+	} {
+		assert.Contains(t, got, section)
+	}
+	assert.Less(t, strings.Index(got, "may break"), strings.Index(got, "release stage"))
+	assert.Less(t, strings.Index(got, "release stage"), strings.Index(got, deletionHeading))
+	assert.Less(t, strings.Index(got, deletionHeading), strings.Index(got, "write paths"))
+	assert.NotContains(t, got, "unit", "a check goal is not an interface; the check stays the only one named")
+	assert.Equal(t, got, NewTerms(row, facts).String(), "two renders are byte-identical")
+}
+
+// An empty section is dropped, a major release names no pre-1.0 rule, and an unknown stage
+// renders nothing rather than a guess.
+func TestTermsDropsEmptyInterfaceStageAndCandidates(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, NewTerms(briefRow(), TermsFacts{}).String(), NewTerms(briefRow(), TermsFacts{Stage: types.ReleaseStage{}}).String())
+	bare := NewTerms(briefRow(), TermsFacts{}).String()
+	for _, heading := range []string{"interface", "may break", "release stage", deletionHeading} {
+		assert.NotContains(t, bare, heading)
+	}
+
+	got := NewTerms(briefRow(), TermsFacts{Stage: types.ReleaseStage{Tag: "v1.2.0", Major: 1}}).String()
+	assert.Contains(t, got, "\nrelease stage\n  newest release v1.2.0\n")
+}
+
 // Nothing outside the fixed order reaches the worker, which is how the gate stops leaking
 // into a brief: `ci` is not rendered because nothing renders it.
 func TestTermsRendersOnlyTheRow(t *testing.T) {

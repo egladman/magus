@@ -59,6 +59,12 @@ type Terms struct {
 	// affinity as a reason to reduce parallelism, which is the orchestrator's call to
 	// make and not a path this worker is refused.
 	Affinity []TermsAffinity `json:"affinity,omitempty" yaml:"affinity,omitempty"`
+	// Stage is where the workspace's releases stand, from its newest tag. The zero stage is
+	// unknown and renders nothing.
+	Stage types.ReleaseStage `json:"stage" yaml:"stage"`
+	// DeletionCandidates are the unreferenced symbols in the write paths, from
+	// [UnreferencedInPaths]: findings to finish or delete, never goals.
+	DeletionCandidates []types.UnreferencedEntry `json:"deletion_candidates,omitempty" yaml:"deletion_candidates,omitempty"`
 }
 
 // TermsEvidence is what the knowledge graph knows about one write path: the node it
@@ -107,6 +113,8 @@ type TermsFacts struct {
 	RegeneratedOutside []RegeneratedOutput
 	UnrunGates         []UnrunGate
 	Affinity           []TermsAffinity
+	Stage              types.ReleaseStage
+	DeletionCandidates []types.UnreferencedEntry
 }
 
 // NewTerms renders one job's terms: the job itself, plus what the workspace contributed.
@@ -121,6 +129,8 @@ func NewTerms(row types.Job, facts TermsFacts) Terms {
 		RegeneratedOutside: facts.RegeneratedOutside,
 		UnrunGates:         facts.UnrunGates,
 		Affinity:           facts.Affinity,
+		Stage:              facts.Stage,
+		DeletionCandidates: facts.DeletionCandidates,
 	}
 }
 
@@ -134,7 +144,13 @@ func (b Terms) String() string {
 	var s strings.Builder
 	fmt.Fprintf(&s, "job: %s\n", b.Lease.ID)
 
+	writeList(&s, "interface", interfaceLines(b.Lease.Goals))
 	writeBlock(&s, "criteria", b.Lease.Criteria)
+	writeList(&s, "may break", b.Lease.Breaks)
+	if b.Stage.Known() {
+		writeList(&s, "release stage", []string{stageLine(b.Stage)})
+	}
+	writeList(&s, deletionHeading, deletionLines(b.DeletionCandidates))
 	writeList(&s, "write paths", b.Lease.WritePaths)
 	writeList(&s, "deny paths", b.Lease.DenyPaths)
 	writeList(&s, "projects", b.Projects)
@@ -175,6 +191,35 @@ func (b Terms) String() string {
 	writeBlock(&s, "the only check you run", b.Lease.Validation)
 	writeList(&s, "depends on", b.Lease.DependsOn)
 	return s.String()
+}
+
+// interfaceLines is one entry per symbol goal: what the job must leave behind, as the
+// signature the fork froze. It leads the terms because the contract a holder implements
+// is the part the rest of the brief only bounds.
+func interfaceLines(goals []types.Goal) []string {
+	var lines []string
+	for _, g := range goals {
+		if g.Kind != types.GoalKindSymbol {
+			continue
+		}
+		line := strings.Join(g.Symbols, ", ") + " (" + string(g.Expect) + ")"
+		if g.Signature != "" {
+			line += ": " + g.Signature
+		}
+		lines = append(lines, line)
+		if d := strings.TrimSpace(g.Description); d != "" {
+			lines = append(lines, "  "+d)
+		}
+	}
+	return lines
+}
+
+func stageLine(s types.ReleaseStage) string {
+	line := "newest release " + s.Tag
+	if s.Major == 0 {
+		line += ": below 1.0 a major floor ships as a minor release"
+	}
+	return line
 }
 
 // writeBlock emits a heading and a verbatim body. Verbatim is deliberate for the criteria:
