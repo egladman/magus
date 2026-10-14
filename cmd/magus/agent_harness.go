@@ -327,6 +327,8 @@ func resolveHarnessIDs(ctx context.Context, rootOverride, id string) ([]string, 
 	}
 	wired := workspaceHarnessNames(ws)
 	ctx = agent.ContextWithWiredHarnesses(ctx, wired)
+	// A harness's native prompts name the workspace's human_only targets.
+	ctx = types.WithWorkspace(ctx, ws)
 	if id != "" {
 		return []string{id}, ctx, nil
 	}

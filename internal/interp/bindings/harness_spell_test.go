@@ -3,12 +3,15 @@ package bindings
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -95,6 +98,47 @@ func TestHarnessSpellWithoutTheAgentsOpGetsNoAgents(t *testing.T) {
 	assert.Empty(t, d.Agents)
 	require.Len(t, offered, 1)
 	assert.Equal(t, "magus-scout", offered[0].(map[string]any)["name"])
+}
+
+// TestHarnessPromptsAskBeforeAHumanOnlyRun pins that the native prompts of the hosts whose
+// hooks cannot ask carry each target the workspace declares human_only, with its reason
+// where the host shows one, and that a load with no workspace prompts for pushes alone.
+func TestHarnessPromptsAskBeforeAHumanOnlyRun(t *testing.T) {
+	for _, id := range []string{"codex", "opencode"} {
+		loadShippedHarness(t, id)
+	}
+	ws := mocks.NewMockWorkspaceRepository(t)
+	ws.EXPECT().All().Return([]*types.Project{{Path: ".", TargetPolicies: map[string]types.Target{
+		"agent-bench-run": {HumanOnly: true, HumanOnlyReason: "launches paid sessions"},
+		"lint":            {Slots: 2},
+	}}}).Maybe()
+	ctx := types.WithWorkspace(context.Background(), ws)
+
+	codex, _, ok, err := loadHarnessFromSpell(ctx, "codex")
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Len(t, codex.Prompts, 1)
+	rules := codex.Prompts[0].Content
+	for _, pattern := range []string{`["magus", "run", "agent-bench-run"]`, `["./magus", "run", "agent-bench-run"]`,
+		`["magus", "affected", "agent-bench-run"]`, `["./magus", "affected", "agent-bench-run"]`} {
+		assert.Contains(t, rules, "pattern = "+pattern)
+	}
+	assert.Contains(t, rules, `justification = "magus: a person runs this target: launches paid sessions"`)
+	assert.NotContains(t, rules, `"lint"`)
+
+	opencode, _, ok, err := loadHarnessFromSpell(ctx, "opencode")
+	require.NoError(t, err)
+	require.True(t, ok)
+	var keys []string
+	for _, p := range opencode.Prompts {
+		keys = append(keys, strings.Join(p.Key, "."))
+	}
+	assert.Contains(t, keys, "permission.bash.magus run agent-bench-run")
+	assert.Contains(t, keys, "permission.bash../magus affected agent-bench-run *")
+
+	bare, _, _, err := loadHarnessFromSpell(context.Background(), "codex")
+	require.NoError(t, err)
+	assert.NotContains(t, bare.Prompts[0].Content, `"run"`, "no workspace on the context, no run prompt")
 }
 
 func TestDecodeHarnessJSONReadsAListFieldForField(t *testing.T) {

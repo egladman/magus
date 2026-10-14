@@ -3,13 +3,16 @@ package bindings
 import (
 	"context"
 	"fmt"
+	"maps"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 )
 
 func init() {
@@ -70,7 +73,7 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessMCPContract, err)
 		}
 	}
-	promptsResp, err := drv.Invoke(ctx, spells.InvokeRequest{Target: spells.HarnessPromptsContract})
+	promptsResp, err := drv.Invoke(ctx, spells.InvokeRequest{Target: spells.HarnessPromptsContract, Params: map[string]any{"human_only": humanOnlyReasons(ctx)}})
 	if err != nil {
 		if !isMissingHarnessOp(err) {
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessPromptsContract, err)
@@ -115,6 +118,32 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 		}
 	}
 	return d, "spell:" + id, true, nil
+}
+
+// humanOnlyReasons maps each target the workspace on ctx declares human_only to its
+// reason, joining the reasons of one name declared in several projects. A host's native
+// prompt matches a run by target name alone, so the project is not kept. Empty when ctx
+// carries no workspace.
+func humanOnlyReasons(ctx context.Context) map[string]any {
+	out := map[string]any{}
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return out
+	}
+	for _, p := range ws.All() {
+		for _, name := range slices.Sorted(maps.Keys(p.TargetPolicies)) {
+			pol := p.TargetPolicies[name]
+			if !pol.HumanOnly {
+				continue
+			}
+			if prior, ok := out[name].(string); ok {
+				out[name] = prior + "; " + pol.HumanOnlyReason
+				continue
+			}
+			out[name] = pol.HumanOnlyReason
+		}
+	}
+	return out
 }
 
 // decodeHarnessJSON reads a spell's return value into the descriptor field through the
