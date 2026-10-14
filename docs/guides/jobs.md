@@ -25,7 +25,10 @@ declare one with `magus job fork`, take it in the checkout where you edit with
 `magus job exec`, hand back what happened with `magus job exit`, and have
 `magus job wait` check the result against the agreement. `magus ls jobs` is the
 board. Every step is a command you type; magus records and answers, and moves
-nothing on its own.
+nothing on its own. That keeps a
+[human in the loop](../doctrine.md#human-in-the-loop) when the workers are
+agents: the job is the agreement a person can read before anyone starts and
+check before anyone calls it done.
 
 This page follows three people at a terminal: one developer splitting a refactor,
 two teammates who both need the same file, and a CI job checking merged work. The

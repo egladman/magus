@@ -244,6 +244,11 @@ magus\project({
 });
 ```
 
+`human_only` is where a
+[human in the loop](../doctrine.md#human-in-the-loop) meets cost: the reason string is what the
+person reads when the guard asks, and a person at their own terminal runs the target
+without being asked.
+
 ## depends_on: cross-project dependencies
 
 `depends_on` declares that this project's work depends on one or more upstream projects. Paths resolve exactly like CLI project arguments (via `file.Resolve`): a bare path (`shared`) is repo-relative to the workspace root; a dot-relative path (`../shared`) is relative to the declaring project; absolute paths and paths that escape the root are rejected (see [targets.md#path-resolution-on-the-cli](targets.md#path-resolution-on-the-cli)).

@@ -445,6 +445,9 @@ something to think with while you write.
 
 ## What magus does not do
 
+Review is where the [human in the loop](../doctrine.md#human-in-the-loop) is least
+negotiable: an agent may read and draft, and a person sends, replies and approves.
+
 - **An agent cannot publish.** An agent pairing over MCP reads the review's threads and may
   draft a comment into the shared session. You send it. magus stamps authorship from the
   transport a write arrived on rather than from the payload, so nothing can claim to be you.

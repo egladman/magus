@@ -31,6 +31,11 @@ of them. Every tool answers a question from declared sources; none of them
 decides, plans, or injects itself into the agent's context. Answering is the
 tool's job, deciding is the model's.
 
+Past the model sits the person. magus keeps a
+[human in the loop](../../doctrine.md#human-in-the-loop): agents propose and do
+bounded work, and the guard, the job store and the review put each decision that
+matters in front of someone who can say no.
+
 | artifact                   | answers                                              | freshness                                                           |
 | -------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------- |
 | `MAGUS.md`                 | WHAT is in this workspace (targets, counts, anchors) | regenerated with the workspace (`magus describe graph -o markdown`) |

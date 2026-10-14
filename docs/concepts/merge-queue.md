@@ -57,7 +57,10 @@ you want it to land with:
 gh pr merge 482 --auto --squash
 ```
 
-or "Enable auto-merge" on the pull request's page. Nothing else changes for the author:
+or "Enable auto-merge" on the pull request's page. Merge intent is the author's to give
+and the queue never supplies it, which is the
+[human in the loop](../doctrine.md#human-in-the-loop) at the last step: the queue
+validates and lands what a person asked to land. Nothing else changes for the author:
 push fixes as usual, and a push to a queued pull request has it validated again. Once
 the queue's `merge-queue` status is main's required check, auto-merge cannot fire on its
 own: GitHub waits for that status, and the queue sets it to `success` only when it is
