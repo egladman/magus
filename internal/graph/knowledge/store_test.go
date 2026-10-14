@@ -1066,6 +1066,97 @@ func TestSymbolIndexDeclarationsWithoutAManifestAnswerNothing(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func humanOnlyFixture() types.HumanOnlyIndex {
+	return types.HumanOnlyIndex{
+		Projects: []string{".", "pkg/a"},
+		Targets: []types.HumanOnlyTarget{{
+			TargetRef: types.TargetRef{Project: ".", Target: "bench"},
+			Reason:    "launches paid sessions",
+			ReachedBy: []types.TargetRef{{Project: ".", Target: "bench-all"}},
+		}},
+	}
+}
+
+// ensureHumanOnly runs a read whose fast stamps are fast and whose full stamps are v1, with
+// the human_only targets behind a callback that counts its calls.
+func ensureHumanOnly(t *testing.T, cacheDir string, fast Stamps, in Inputs, declared types.HumanOnlyIndex) int {
+	t.Helper()
+	calls := 0
+	_, err := Ensure(context.Background(), cacheDir, BuildOptions{
+		FastStamps: fast,
+		StampsFunc: func(context.Context) (Stamps, error) { return stampsAll("v1"), nil },
+		HumanOnlyFunc: func(context.Context) (types.HumanOnlyIndex, error) {
+			calls++
+			return declared, nil
+		},
+	}, DefaultClasses, func([]ShardClass) (Inputs, error) { return in, nil }, nil)
+	require.NoError(t, err)
+	return calls
+}
+
+func TestHumanOnlyAnswersOnlyForTheRecordedDomainFastStamp(t *testing.T) {
+	cacheDir, in := seedFast(t)
+	store := NewStore(cacheDir, true, 0, nil, nil)
+	domain := "f2" + string(ClassDomain)
+
+	_, ok := store.HumanOnly("f1" + string(ClassDomain))
+	assert.False(t, ok, "a store that never recorded the targets cannot vouch for them, whatever the stamp")
+
+	assert.Equal(t, 1, ensureHumanOnly(t, cacheDir, stampsAll("f2"), in, humanOnlyFixture()),
+		"the full stamps paid for the workspace, so the targets ride along")
+	got, ok := store.HumanOnly(domain)
+	require.True(t, ok)
+	assert.Equal(t, humanOnlyFixture(), got)
+
+	_, ok = store.HumanOnly("f1" + string(ClassDomain))
+	assert.False(t, ok, "the stamp the targets were recorded under has moved on")
+	_, ok = store.HumanOnly("f2" + string(ClassRuntime))
+	assert.False(t, ok, "only the domain stamp vouches for what a workspace declares")
+	_, ok = store.HumanOnly("")
+	assert.False(t, ok, "a stamp the caller could not compute matches nothing")
+
+	assert.Zero(t, ensureHumanOnly(t, cacheDir, stampsAll("f2"), in, humanOnlyFixture()),
+		"a read the fast stamps settle never evaluates the workspace to record them")
+}
+
+func TestHumanOnlyRecordsADeclarationOfNoneAndNothingWithoutProjects(t *testing.T) {
+	cacheDir, in := seedFast(t)
+	store := NewStore(cacheDir, true, 0, nil, nil)
+
+	ensureHumanOnly(t, cacheDir, stampsAll("f2"), in, types.HumanOnlyIndex{})
+	_, ok := store.HumanOnly("f2" + string(ClassDomain))
+	assert.False(t, ok, "an index listing no project is no evaluation's answer and records nothing")
+
+	ensureHumanOnly(t, cacheDir, stampsAll("f3"), in, types.HumanOnlyIndex{Projects: []string{"."}})
+	got, ok := store.HumanOnly("f3" + string(ClassDomain))
+	assert.True(t, ok, "a workspace that declares no human_only target answers yes, with nothing")
+	assert.Empty(t, got.Targets)
+}
+
+func TestHumanOnlyRecordedByASyncAndKeptByOneWithout(t *testing.T) {
+	cacheDir, in := stampFixture(t)
+	in.HumanOnly = humanOnlyFixture()
+	_, err := Ensure(context.Background(), cacheDir, BuildOptions{Stamps: stampsAll("v1"), FastStamps: stampsAll("f1")}, AllClasses,
+		func([]ShardClass) (Inputs, error) { return in, nil }, nil)
+	require.NoError(t, err)
+	got, ok := NewStore(cacheDir, true, 0, nil, nil).HumanOnly("f1" + string(ClassDomain))
+	require.True(t, ok)
+	assert.Equal(t, humanOnlyFixture(), got)
+
+	in.HumanOnly = types.HumanOnlyIndex{}
+	_, err = Ensure(context.Background(), cacheDir, BuildOptions{Stamps: stampsAll("v1"), FastStamps: stampsAll("f1"), Refresh: true}, AllClasses,
+		func([]ShardClass) (Inputs, error) { return in, nil }, nil)
+	require.NoError(t, err)
+	got, ok = NewStore(cacheDir, true, 0, nil, nil).HumanOnly("f1" + string(ClassDomain))
+	require.True(t, ok, "a sync with no evaluated answer keeps the recorded one")
+	assert.Equal(t, humanOnlyFixture(), got)
+}
+
+func TestHumanOnlyWithoutAManifestAnswersNothing(t *testing.T) {
+	_, ok := NewStore(filepath.Join(t.TempDir(), ".magus"), true, 0, nil, nil).HumanOnly("f1" + string(ClassDomain))
+	assert.False(t, ok)
+}
+
 // A sync that rebuilds one class must carry every other class's record forward; Extra is
 // what the next stamp folds for a class this sync did not touch, whether or not the sync
 // declares indexes.

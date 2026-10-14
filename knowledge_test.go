@@ -915,9 +915,10 @@ func TestKnowledgeStampsInvalidateExactlyTheirClasses(t *testing.T) {
 		Knowledge:   config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}},
 	}
 	store := knowledge.NewStore(cacheDir, true, 0, nil, nil)
+	humanOnly := types.HumanOnlyIndex{Projects: []string{"pkg/a"}}
 	stamps := func() knowledge.Stamps {
 		src := knowledgeSources{
-			cfg: cfg, root: root, cacheDir: cacheDir, spells: spells, projects: projects,
+			cfg: cfg, root: root, cacheDir: cacheDir, spells: spells, projects: projects, humanOnly: humanOnly,
 			tree: knowledge.WalkTree(root), log: slog.New(slog.DiscardHandler),
 		}
 		return knowledgeStamps(ctx, src, store, knowledge.AllClasses)
@@ -952,6 +953,12 @@ func TestKnowledgeStampsInvalidateExactlyTheirClasses(t *testing.T) {
 			[]knowledge.ShardClass{knowledge.ClassRuntime}},
 		{"a coverage profile", func() { write(filepath.Join(root, ".magus", "coverage.out"), "mode: set\n") },
 			[]knowledge.ShardClass{knowledge.ClassCoverage, knowledge.ClassSession}},
+		// The graph and projects carry no target policy: an evaluation that turned a target
+		// human_only without changing a byte of the tree (an environment variable its
+		// magusfile reads) moves the domain stamp through the record alone.
+		{"a human_only declaration", func() {
+			humanOnly.Targets = []types.HumanOnlyTarget{{TargetRef: types.TargetRef{Project: "pkg/a", Target: "bench"}, Reason: "spends"}}
+		}, []knowledge.ShardClass{knowledge.ClassDomain, knowledge.ClassSession}},
 		// No walk sees .git, but the tree scans drop what its rules ignore.
 		{"an ignore rule outside the tree", func() { write(filepath.Join(root, ".git", "info", "exclude"), "docs/\n") },
 			[]knowledge.ShardClass{knowledge.ClassDomain, knowledge.ClassSession}},

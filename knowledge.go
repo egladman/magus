@@ -234,7 +234,8 @@ func ensureKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, 
 			}
 			model = knowledgeSources{
 				cfg: cfg, root: root, cacheDir: cacheDir,
-				spells: spells, graph: graph, projects: projects, tree: tree, log: log.With(attr.Component("knowledge")),
+				spells: spells, graph: graph, projects: projects, humanOnly: humanOnlyIndexBehind(ctx, ws),
+				tree: tree, log: log.With(attr.Component("knowledge")),
 			}
 		})
 		return model, modelErr
@@ -261,6 +262,13 @@ func ensureKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, 
 			}
 			return symbolIndexDeclarationRecords(ctx, src.symbolInputs(), indexFreshness(ctx, ws)), nil
 		},
+		HumanOnlyFunc: func(ctx context.Context) (types.HumanOnlyIndex, error) {
+			src, err := resolveModel(ctx)
+			if err != nil {
+				return types.HumanOnlyIndex{}, err
+			}
+			return src.humanOnly, nil
+		},
 		ReadsFunc: func(ctx context.Context) (readlog.Reads, error) {
 			if _, err := resolveModel(ctx); err != nil {
 				return readlog.Reads{}, err
@@ -277,6 +285,7 @@ func ensureKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, 
 		}
 		in := gatherKnowledgeInputs(ctx, src, refresh, stale)
 		in.Indexes = symbolIndexDeclarationRecords(ctx, src.symbolInputs(), indexFreshness(ctx, ws))
+		in.HumanOnly = src.humanOnly
 		if reads, ok := evaluationReads(ctx, ws); ok {
 			in.Reads = &reads
 		}
@@ -364,11 +373,8 @@ func symbolIndexDeclarationRecords(ctx context.Context, in symbolIngestInputs, f
 // the domain fast stamp still matches. false means the caller must open the workspace to
 // resolve them; it never guesses.
 func recordedSymbolIndexDeclarations(ctx context.Context, lw *LazyWorkspace, cfg config.Config) ([]knowledge.SymbolIndexDeclaration, bool) {
-	cacheDir := resolveCacheDir(lw.root, cfg)
-	store := knowledge.NewStore(cacheDir, true, 0, nil, nil)
-	reads, known := store.EvaluationReads()
-	fast := knowledgeFastStamps(ctx, cfg, lw.root, cacheDir, lw.tree(), []knowledge.ShardClass{knowledge.ClassDomain}, reads, known)
-	return store.SymbolIndexDeclarations(fast[knowledge.ClassDomain])
+	store, fastDomain := recordedDomainStamp(ctx, lw, cfg)
+	return store.SymbolIndexDeclarations(fastDomain)
 }
 
 // RecordedStaleIndexes answers, for a lazy workspace that has not been opened, which
@@ -417,8 +423,11 @@ type knowledgeSources struct {
 	spells   []types.Spell
 	graph    types.TargetGraphOutput
 	projects types.ProjectsOutput
-	tree     *knowledge.TreeWalk // nil when there is no root to walk
-	log      *slog.Logger
+	// humanOnly is what the evaluation declares human_only. The graph and projects above
+	// carry no target policy, so the domain stamp folds it on its own.
+	humanOnly types.HumanOnlyIndex
+	tree      *knowledge.TreeWalk // nil when there is no root to walk
+	log       *slog.Logger
 }
 
 func (s knowledgeSources) symbolInputs() symbolIngestInputs {
@@ -532,9 +541,11 @@ func knowledgeStamps(ctx context.Context, src knowledgeSources, store *knowledge
 	if wants(knowledge.ClassDomain) {
 		ignoreSources, ignoreKnown = vcsIgnoreSources(ctx, src.root)
 	}
-	if wants(knowledge.ClassDomain) && historyKnown && ignoreKnown {
+	humanOnly, humanOnlyErr := json.Marshal(src.humanOnly)
+	if wants(knowledge.ClassDomain) && historyKnown && ignoreKnown && humanOnlyErr == nil {
 		h := knowledge.NewInputHash(string(knowledge.ClassDomain))
 		h.String(base)
+		h.String(string(humanOnly))
 		h.String(tree)
 		h.String(vcsHead)
 		for _, p := range ignoreSources {

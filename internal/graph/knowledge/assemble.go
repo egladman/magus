@@ -67,6 +67,11 @@ type Inputs struct {
 	// manifest.Reads), recorded with the shards so the next read's fast domain stamp folds
 	// the same inputs. nil leaves the manifest's record as it was.
 	Reads *readlog.Reads
+	// HumanOnly is what the evaluated workspace declares human_only, recorded on the
+	// manifest (see manifest.HumanOnly) the way Indexes is and assembled into no shard. An
+	// index that lists no project leaves the manifest's record as it was: it is what a
+	// gather with no evaluated workspace to resolve one from leaves it as.
+	HumanOnly types.HumanOnlyIndex
 	// Packages maps a project path to the third-party dependencies its manifest
 	// declares, at the versions that manifest resolves to. They merge into the single
 	// @packages shard rather than one per project, because a package node is shared
