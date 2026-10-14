@@ -418,16 +418,8 @@ func (m *Magus) load(ctx context.Context) error {
 	if err := m.wsReg.Apply(m); err != nil {
 		return err
 	}
-	// Only enforceable when the Buzz interpreter is linked in (interp.Available):
-	// without it, preloadMagusfiles cannot discover a project's custom (export fun)
-	// targets, so customTargets is always empty and every per-target policy would
-	// falsely look unknown. cmd/magus links the interpreter unconditionally
-	// (packs_interp.go); a bare library caller that doesn't gets no enforcement here,
-	// same as it gets no magus.project() evaluation at all.
-	if interp.Available() {
-		if err := validateTargetPolicies(m, customTargets); err != nil {
-			return err
-		}
+	if err := validateTargetPolicies(m, customTargets); err != nil {
+		return err
 	}
 	// Fold target-level static facts (cross-project deps, and per-target
 	// magus.inputs/outputs cache footprint) into the project model.
@@ -624,9 +616,6 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 // load names all of them instead of one per fix.
 func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, error) {
 	customTargets := make(map[string][]string)
-	if !interp.Available() {
-		return customTargets, nil
-	}
 	ctx = installWorkspaceRegistry(ctx, m.wsReg)
 	// The workspace's resolver, not a fresh one: this path evaluates magusfile top levels,
 	// so a top-level read here must be the SAME read the run sees.
@@ -642,6 +631,9 @@ func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, erro
 			}
 			errs = append(errs, fmt.Errorf("magus: %s: %w", types.ProjectLabel(p.Path, p.Dir), err))
 			continue
+		}
+		if !interp.Available() && len(srcs) > 0 && len(srcs[0].Files) > 0 {
+			return nil, &types.EngineNotLinkedError{Op: "evaluate " + srcs[0].Files[0]}
 		}
 		pctx := interp.WithProjectPath(ctx, p.Path)
 		if filepath.Clean(p.Dir) == filepath.Clean(m.ws.Root) {
@@ -720,9 +712,6 @@ func validateTargetPolicies(m *Magus, customTargets map[string][]string) error {
 
 // autobindMagusfileSpell binds the "magusfile" spell to projects with a magusfile but no resolved spell.
 func (m *Magus) autobindMagusfileSpell() {
-	if !interp.Available() {
-		return
-	}
 	magusfileSpell, ok := project.DefaultSpellRegistry().Lookup("magusfile")
 	if !ok {
 		return
