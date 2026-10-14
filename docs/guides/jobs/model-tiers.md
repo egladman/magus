@@ -31,8 +31,9 @@ With no declaration, the workspace uses the `magus/modeltiers` module: `economy`
 `standard` and `principal`, with `standard` as the default. Economy jobs are
 capped at four live at once and 100000 tokens of context, and economy workers
 load the `full` skill bodies, since a smaller model is the reader least able to
-re-derive the steps the `short` form leaves out. The module names no model. Each
-harness maps the tiers to its own models.
+re-derive the steps the `short` form leaves out. The module names no model, and
+the default maps no harness to one: until a magusfile maps a harness with
+`hosts`, below, a tier has no model alias for any harness.
 
 `magus\job.modelTiers(null)` turns tiers off.
 
@@ -42,6 +43,7 @@ Copy the module into the root magusfile and change what you need:
 
 ```buzz
 import "magus";
+import "spells/harness/claude-code" as claudecode;
 
 enum ModelTier { economy, standard, principal }
 
@@ -69,8 +71,10 @@ fun skills(tier: ModelTier) > magus\SkillVariant {
     };
 }
 
+final cc = magus\harness.provider(claudecode);
+
 magus\job.modelTiers(ModelTier, default: ModelTier.standard,
-    hosts: {magus\HarnessKey{ id = "claude-code" }: claudeCode},
+    hosts: {cc: claudeCode},
     bounds: bounds, skills: skills);
 ```
 
@@ -78,12 +82,12 @@ magus\job.modelTiers(ModelTier, default: ModelTier.standard,
   `.standrd` fails `magus check`, like any other enum.
 - **Every mapping is a `match` over the enum.** Add a tier and `magus check`
   fails until `hosts`, `bounds` and `skills` each cover it.
-- **`hosts` is keyed by harness.** The key is a `magus\HarnessKey` whose id is
-  the harness spell's name, and the harness must already be wired with
-  `magus\harness.provider` above the call. The function answers the model alias
-  that harness spawns for the tier, such as the string `sonnet`. Two tiers cannot
-  share an alias on one harness, because a spawn of that alias would name no one
-  tier.
+- **`hosts` is keyed by harness.** `magus\harness.provider` returns a
+  `magus\HarnessKey`; keep it, as `cc` above, and use it as the key. A call that
+  ignores the return value wires the harness as before. The harness must be wired
+  above the declaration. The function answers the model alias that harness spawns
+  for the tier, such as the string `sonnet`. Two tiers cannot share an alias on
+  one harness, because a spawn of that alias would name no one tier.
 - **`bounds` caps a tier.** `maxLive` is how many jobs at the tier may be live at
   once and `maxContext` the tokens a worker at the tier may reach. A field left
   out is no cap.
