@@ -2000,6 +2000,7 @@ github.com/egladman/magus/types.JobKindPaths const JobKind = "paths"
 github.com/egladman/magus/types.JobKindProse const JobKind = "prose"
 github.com/egladman/magus/types.JobKindScript const JobKind = "script"
 github.com/egladman/magus/types.JobKindSymbol const JobKind = "symbol"
+github.com/egladman/magus/types.JobLeaseFromContext func(ctx context.Context) string
 github.com/egladman/magus/types.JobList type struct
 github.com/egladman/magus/types.JobList.Blocked field []JobBlock "json:\"blocked,omitempty\" yaml:\"blocked,omitempty\""
 github.com/egladman/magus/types.JobList.Changes field []InflightChange "json:\"changes,omitempty\" yaml:\"changes,omitempty\""
@@ -4150,6 +4151,7 @@ github.com/egladman/magus/types.WithExitCapture func(ctx context.Context) (conte
 github.com/egladman/magus/types.WithGraphObserver func(o Observer) GraphOption
 github.com/egladman/magus/types.WithInstallRunner func(ctx context.Context, r InstallRunner) context.Context
 github.com/egladman/magus/types.WithInvocationAncestors func(ctx context.Context, refs []string) context.Context
+github.com/egladman/magus/types.WithJobLease func(ctx context.Context, lease string) context.Context
 github.com/egladman/magus/types.WithMagusBuild func(ctx context.Context, b MagusBuild) context.Context
 github.com/egladman/magus/types.WithMagusVersion func(ctx context.Context, version string) context.Context
 github.com/egladman/magus/types.WithOutputCacheDir func(ctx context.Context, cacheDir string) context.Context

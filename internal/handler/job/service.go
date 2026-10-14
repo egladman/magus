@@ -384,6 +384,7 @@ func wireAttempt(a *types.JobAttempt) *jobv1.JobAttempt {
 		Found: a.Found, Ref: a.Ref, TimestampMs: a.TimestampMs,
 		Project: a.Project, Target: a.Target, Spell: a.Spell, Failed: a.Failed,
 		AttemptId: a.AttemptID, DurationMs: a.DurationMs, Revision: a.Revision, Dirty: a.Dirty,
+		Lease: a.Lease, ExtraArgs: a.ExtraArgs,
 	}
 }
 

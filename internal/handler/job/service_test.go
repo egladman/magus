@@ -351,6 +351,7 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 		Attempt: &types.JobAttempt{
 			Found: true, Ref: "out1", TimestampMs: 5, Project: "api", Target: "go-test", Failed: true,
 			AttemptID: "att-1", DurationMs: 1200, Revision: "94d434ac0", Dirty: true,
+			Lease: "api/store", ExtraArgs: []string{"-run", "TestStore"},
 		},
 		Releases:     []types.JobRelease{{Path: "api/old.go", Digest: "sha", ReleasedAt: 6, Revoked: true}},
 		GateAttempts: []types.JobGateAttempt{{GateID: "lint", Attempt: types.JobAttempt{Found: true, Ref: "out2"}}},
@@ -406,6 +407,7 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	require.True(t, proto.Equal(&jobv1.JobAttempt{
 		Found: true, Ref: "out1", TimestampMs: 5, Project: "api", Target: "go-test", Failed: true,
 		AttemptId: "att-1", DurationMs: 1200, Revision: "94d434ac0", Dirty: true,
+		Lease: "api/store", ExtraArgs: []string{"-run", "TestStore"},
 	}, got.Attempt))
 	require.True(t, proto.Equal(&jobv1.JobRelease{Path: "api/old.go", Digest: "sha", ReleasedAt: 6, Revoked: true}, got.Releases[0]))
 	require.True(t, proto.Equal(&jobv1.JobIntegration{

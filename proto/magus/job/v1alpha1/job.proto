@@ -199,6 +199,11 @@ message JobAttempt {
   // tree also held uncommitted changes then, so revision alone does not name what it read.
   string revision = 10;
   bool dirty = 11;
+  // lease is the job lease the run acted under, empty for a run under none.
+  string lease = 12;
+  // extra_args are the args the run forwarded after `--`, empty when it forwarded none or its
+  // record predates the field.
+  repeated string extra_args = 13;
 }
 
 // JobGateAttempt is the newest recorded run of one goal's check.

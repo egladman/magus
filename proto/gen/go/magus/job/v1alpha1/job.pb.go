@@ -838,8 +838,13 @@ type JobAttempt struct {
 	DurationMs int64 `protobuf:"varint,9,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
 	// revision is the VCS revision the run read its inputs at, empty when unknown. dirty says the
 	// tree also held uncommitted changes then, so revision alone does not name what it read.
-	Revision      string `protobuf:"bytes,10,opt,name=revision,proto3" json:"revision,omitempty"`
-	Dirty         bool   `protobuf:"varint,11,opt,name=dirty,proto3" json:"dirty,omitempty"`
+	Revision string `protobuf:"bytes,10,opt,name=revision,proto3" json:"revision,omitempty"`
+	Dirty    bool   `protobuf:"varint,11,opt,name=dirty,proto3" json:"dirty,omitempty"`
+	// lease is the job lease the run acted under, empty for a run under none.
+	Lease string `protobuf:"bytes,12,opt,name=lease,proto3" json:"lease,omitempty"`
+	// extra_args are the args the run forwarded after `--`, empty when it forwarded none or its
+	// record predates the field.
+	ExtraArgs     []string `protobuf:"bytes,13,rep,name=extra_args,json=extraArgs,proto3" json:"extra_args,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -949,6 +954,20 @@ func (x *JobAttempt) GetDirty() bool {
 		return x.Dirty
 	}
 	return false
+}
+
+func (x *JobAttempt) GetLease() string {
+	if x != nil {
+		return x.Lease
+	}
+	return ""
+}
+
+func (x *JobAttempt) GetExtraArgs() []string {
+	if x != nil {
+		return x.ExtraArgs
+	}
+	return nil
 }
 
 // JobGateAttempt is the newest recorded run of one goal's check.
@@ -2310,7 +2329,7 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\x05agent\x18\x06 \x01(\tR\x05agent\x12C\n" +
 	"\n" +
 	"credential\x18\a \x01(\v2#.magus.activity.v1alpha1.CredentialR\n" +
-	"credential\"\xa9\x02\n" +
+	"credential\"\xde\x02\n" +
 	"\n" +
 	"JobAttempt\x12\x14\n" +
 	"\x05found\x18\x01 \x01(\bR\x05found\x12\x10\n" +
@@ -2326,7 +2345,10 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"durationMs\x12\x1a\n" +
 	"\brevision\x18\n" +
 	" \x01(\tR\brevision\x12\x14\n" +
-	"\x05dirty\x18\v \x01(\bR\x05dirty\"c\n" +
+	"\x05dirty\x18\v \x01(\bR\x05dirty\x12\x14\n" +
+	"\x05lease\x18\f \x01(\tR\x05lease\x12\x1d\n" +
+	"\n" +
+	"extra_args\x18\r \x03(\tR\textraArgs\"c\n" +
 	"\x0eJobGateAttempt\x12\x17\n" +
 	"\agate_id\x18\x01 \x01(\tR\x06gateId\x128\n" +
 	"\aattempt\x18\x02 \x01(\v2\x1e.magus.job.v1alpha1.JobAttemptR\aattempt\"R\n" +
