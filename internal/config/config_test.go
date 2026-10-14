@@ -140,6 +140,12 @@ func TestConformDefaults(t *testing.T) {
 		types.ConformCallerSpread: c.Checks[types.ConformCallerSpread],
 		types.ConformModeKnobs:    c.Checks[types.ConformModeKnobs],
 	}, "the coupling keys pool source and main; a knob past the rule is a list item")
+	assert.Equal(t, map[types.ConformPopulation]ConformLimitConfig{
+		types.ConformPopSource: {Percentile: 95, Anchor: 100, MinSubject: 5},
+	}, c.Checks[types.ConformAliasShare])
+	assert.Equal(t, map[types.ConformPopulation]ConformLimitConfig{
+		types.ConformPopSource: {Percentile: 99, Anchor: 62, MinSubject: 5},
+	}, c.Checks[types.ConformNameClash], "62 is internal/queue/types, the one clash measured")
 }
 
 func TestConformDefaultsAreNotShared(t *testing.T) {
@@ -158,18 +164,21 @@ func TestConformOptions(t *testing.T) {
 		Exclude:   []string{"vendor/**"},
 		Gates:     ConformGatesConfig{MinCohort: 3, MinShare: 0.7, Bar: 0.4, MaxFindings: 9},
 		Checks: map[types.ConformMetric]map[types.ConformPopulation]ConformLimitConfig{
-			types.ConformFileLines: {types.ConformPopTest: {Percentile: 99, Anchor: 1900}},
-			types.ConformDepFanout: {types.ConformPopSource: {Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 89}}},
+			types.ConformFileLines:  {types.ConformPopTest: {Percentile: 99, Anchor: 1900}},
+			types.ConformDepFanout:  {types.ConformPopSource: {Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 89}}},
+			types.ConformAliasShare: {types.ConformPopSource: {Percentile: 95, Anchor: 100, MinSubject: 5}},
 		},
 	}
 	fileLines := types.ConformKey{Metric: types.ConformFileLines, Population: types.ConformPopTest}
 	fanout := types.ConformKey{Metric: types.ConformDepFanout, Population: types.ConformPopSource}
 	scoped := types.ConformKey{Metric: types.ConformDepFanout, Population: types.ConformPopSource, Scope: "cmd/magus"}
+	alias := types.ConformKey{Metric: types.ConformAliasShare, Population: types.ConformPopSource}
 	want := types.ConformOptions{
 		Limits: map[types.ConformKey]types.ConformLimit{
 			fileLines: {Percentile: 99, Anchor: 1900},
 			fanout:    {Percentile: 95, Anchor: 62},
 			scoped:    {Percentile: 95, Anchor: 89},
+			alias:     {Percentile: 95, Anchor: 100, MinSubject: 5},
 		},
 		RatchetPath: "hack/policy/conform.json",
 		MinSample:   12,

@@ -36,6 +36,7 @@ func (g *Graph) Conform(o types.ConformOptions) types.ConformOutput {
 	loops, knobbed := sharedLoops(g, o)
 	maps.Copy(samples, loops)
 	samples[couplingKey(types.ConformModeKnobs)] = knobbed
+	maps.Copy(samples, aliasSamples(g, o))
 	groups := cloneGroups(g, o)
 	known := conformKnownItems(o.Ratchet.Known)
 	// past holds, per metric, every item some enforced row found past its value: a known

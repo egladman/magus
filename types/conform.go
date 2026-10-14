@@ -44,6 +44,12 @@ const (
 	// ConformModeKnobs counts the knobs of a function shared past the coupling rule: a
 	// parameter its body branches on, or an option one caller package alone sets.
 	ConformModeKnobs ConformMetric = "mode-knobs"
+	// ConformAliasShare is the percent of a package's importers that must alias it: not
+	// to its own package name, and not from inside a package of that name.
+	ConformAliasShare ConformMetric = "alias-share"
+	// ConformNameClash is the most percent of a package's importers that also import
+	// another package of the same name, measured on the package with fewer importers.
+	ConformNameClash ConformMetric = "name-clash"
 )
 
 // ConformPopulation is the set of files a metric is measured over. Each is measured apart,
@@ -80,10 +86,13 @@ type ConformKey struct {
 }
 
 // ConformLimit is the configured policy for one key: the percentile a proposal measures
-// at, and the shipped anchor no committed value may exceed.
+// at, the shipped anchor no committed value may exceed, and, for a metric judging
+// packages by their importers, the fewest importers a package needs to be judged (zero
+// judges every package with one).
 type ConformLimit struct {
 	Percentile float64
 	Anchor     int
+	MinSubject int
 }
 
 // ConformGates are the absolute noise gates of the conformance checks.
@@ -170,6 +179,9 @@ func (o ConformOptions) Validate() error {
 		}
 		if l.Anchor < 0 {
 			fail("limit %s: anchor %d: want at least 0", conformKeyName(k), l.Anchor)
+		}
+		if l.MinSubject < 0 {
+			fail("limit %s: min_subject %d: want at least 0", conformKeyName(k), l.MinSubject)
 		}
 	}
 
@@ -447,6 +459,39 @@ type ConformRow struct {
 	Known      int           `json:"known"      yaml:"known"`
 	Source     ConformSource `json:"source"     yaml:"source"`
 	Violations []ConformItem `json:"violations" yaml:"violations"`
+}
+
+// ImportAliasReport is how a workspace's packages are imported under other names. Indexed
+// is false when no symbol index was read; Packages is then empty, never nil, because nobody
+// looked.
+type ImportAliasReport struct {
+	Indexed  bool         `json:"indexed"  yaml:"indexed"`
+	Packages []AliasFacts `json:"packages" yaml:"packages"`
+}
+
+// AliasFacts is one workspace package with an importer: its directory and package name,
+// how many files import it, how many write an alias and under which spellings, and how many
+// of those had to (Needed: not the package's own name, and not from inside a package of
+// that name). Clashes are the packages of the same name its importers also import.
+type AliasFacts struct {
+	Dir       string         `json:"dir"       yaml:"dir"`
+	Name      string         `json:"name"      yaml:"name"`
+	Importers int            `json:"importers" yaml:"importers"`
+	Aliased   int            `json:"aliased"   yaml:"aliased"`
+	Needed    int            `json:"needed"    yaml:"needed"`
+	Aliases   map[string]int `json:"aliases"   yaml:"aliases"`
+	Clashes   []AliasClash   `json:"clashes"   yaml:"clashes"`
+}
+
+// AliasClash is another package of the same name: Both files import the two, and
+// Importers import it. Ours is false for a package outside the workspace, whose name is the
+// last element of its import path.
+type AliasClash struct {
+	Dir       string `json:"dir"       yaml:"dir"`
+	Name      string `json:"name"      yaml:"name"`
+	Both      int    `json:"both"      yaml:"both"`
+	Importers int    `json:"importers" yaml:"importers"`
+	Ours      bool   `json:"ours"      yaml:"ours"`
 }
 
 // ConformItem is one file, symbol, package or clone group past its row's value and not

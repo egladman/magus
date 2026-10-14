@@ -65,6 +65,34 @@ func TestFingerprintBodiesMarksGeneratedSource(t *testing.T) {
 	assert.False(t, syms[1].SourceGenerated)
 }
 
+// A Go namespace symbol reads its package clause, and each reference its import line's
+// alias; an unaliased import and another language read neither.
+func TestFingerprintBodiesReadsPackageNamesAndAliases(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "q"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "a"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "q", "q.go"), []byte("// Package queuetypes is q.\npackage queuetypes\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a", "a.go"),
+		[]byte("package a\n\nimport (\n\tqtypes \"example.com/m/q\"\n)\n\nvar _ = qtypes.X\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a", "b.go"), []byte("package a\n\nimport \"example.com/m/q\"\n"), 0o644))
+
+	ns := "example.com/m/q/"
+	syms := []types.KnowledgeSymbol{
+		{Key: ns, Namespace: ns, Language: "go", Source: "q/q.go:2", Refs: []types.KnowledgeSymbolRef{
+			{Path: "a/a.go", Count: 2, Lines: []int{4, 7}}, {Path: "a/b.go", Count: 1, Lines: []int{3}},
+		}},
+		{Key: "ts/", Namespace: "ts/", Language: "typescript", Source: "q/q.go:2", Refs: []types.KnowledgeSymbolRef{
+			{Path: "a/a.go", Count: 1, Lines: []int{4}},
+		}},
+	}
+	FingerprintBodies(root, syms)
+
+	assert.Equal(t, "queuetypes", syms[0].PackageName)
+	assert.Equal(t, []string{"qtypes", ""}, []string{syms[0].Refs[0].Alias, syms[0].Refs[1].Alias})
+	assert.Empty(t, syms[1].PackageName)
+	assert.Empty(t, syms[1].Refs[0].Alias)
+}
+
 // A body's bare switch subjects and if conditions ride its record; a selector subject and a
 // decision table carry none.
 func TestFingerprintBodiesReadsBranchIdents(t *testing.T) {

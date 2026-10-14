@@ -250,6 +250,27 @@ func TestAssembleSymbolsCarriesBodyShape(t *testing.T) {
 	assert.NotContains(t, c.Attrs, attrBodyTokens)
 }
 
+// A package's clause rides its namespace node, and an import's alias the file's reference
+// edge to it; an unaliased import carries no attr.
+func TestAssembleSymbolsCarriesImportAliases(t *testing.T) {
+	ns := "example.com/q/"
+	syms := []types.KnowledgeSymbol{{
+		Key: ns, Namespace: ns, Label: "q", Source: "q/q.go:1", PackageName: "queuetypes", Defs: []string{"q/q.go"},
+		Refs: []types.KnowledgeSymbolRef{{Path: "a/a.go", Count: 1, Alias: "qtypes"}, {Path: "a/b.go", Count: 1}},
+	}}
+	g := mergeAll([]Shard{assembleSymbols("q", syms, nil)})
+	g.ensureAdj()
+
+	assert.Equal(t, "queuetypes", g.nodes[symbolID(ns)].Attrs[attrPackageName])
+	aliases := map[string]string{}
+	for _, e := range g.in[symbolID(ns)] {
+		if e.Relation == types.RelationReferences {
+			aliases[e.Source] = e.Attrs[attrImportAlias]
+		}
+	}
+	assert.Equal(t, map[string]string{"file:a/a.go": "qtypes", "file:a/b.go": ""}, aliases)
+}
+
 // What a body branches on rides its node as a comma list; a body branching on nothing
 // carries no attr.
 func TestAssembleSymbolsCarriesBranchIdents(t *testing.T) {

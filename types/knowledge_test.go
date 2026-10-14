@@ -381,6 +381,37 @@ func TestBranchIdents(t *testing.T) {
 	assert.Nil(t, BranchIdents(lines, 1, len(lines), "python"), "no lexer")
 }
 
+func TestImportAlias(t *testing.T) {
+	lines := SplitSourceLines([]byte("package a\n\nimport (\n" +
+		"\tqtypes \"example.com/m/internal/queue/types\"\n" +
+		"\t\"example.com/m/types\"\n" +
+		"\t_ \"embed\"\n" +
+		"\t. \"example.com/m/dsl\"\n" +
+		"\tprocrun \"example.com/m/internal/proc/run\" // run shadows it\n" +
+		")\n" +
+		"import buzz `example.com/m/libs/gopherbuzz`\n" +
+		"import \"fmt\"\n" +
+		"var x = qtypes.New(\"p\")\n"))
+	for _, tc := range []struct {
+		line int
+		want string
+	}{
+		{line: 4, want: "qtypes"},
+		{line: 5},
+		{line: 6},
+		{line: 7},
+		{line: 8, want: "procrun"},
+		{line: 10, want: "buzz"},
+		{line: 11},
+		{line: 12},
+		{line: 0},
+		{line: 99},
+	} {
+		assert.Equal(t, tc.want, ImportAlias(lines, tc.line, "go"), "line %d", tc.line)
+	}
+	assert.Empty(t, ImportAlias(lines, 4, "typescript"), "only Go is read")
+}
+
 func TestMarkerFamilyIsClosed(t *testing.T) {
 	assert.Equal(t, []string{"diagram", "calls", "skills", "observed", "harness"}, MarkerFamily("").Values())
 	assert.True(t, MarkerCalls.Valid())

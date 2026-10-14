@@ -39,7 +39,7 @@ import (
 // because shards load lazily and an edge legitimately arrives before the node that gives
 // its endpoint a kind. Graph.UndeclaredEdges reports violations, and a test over this
 // workspace's own graph fails when a producer widens the vocabulary without declaring it.
-const KnowledgeSchemaVersion = 20
+const KnowledgeSchemaVersion = 21
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
 // generates. Four renderers write one of these spellings: the target-graph index
@@ -537,6 +537,10 @@ type KnowledgeSymbol struct {
 	// on or tests bare. Nil for a decision table, and when the lines could not be read or the
 	// language has no lexer.
 	BranchIdents []string
+	// PackageName is the package clause a namespace symbol's defining file declares, which
+	// is what an importer calls it unless it writes an alias. Empty for any other symbol and
+	// for a language with no package clause (only Go is read).
+	PackageName string
 	// SourceLines and SourceBytes size the file Source names, counted from the same read
 	// that computes BodyDigest. Zero when that read did not happen.
 	SourceLines int
@@ -747,6 +751,26 @@ func BranchIdents(lines [][]byte, start, end int, language string) []string {
 	return slices.Compact(idents)
 }
 
+// importSpec is one Go import spec on its own line, `a "p"` or `import a "p"`, with an
+// optional trailing comment; the first group is the name written before the path.
+var importSpec = regexp.MustCompile("^(?:import\\s+)?([\\p{L}_][\\p{L}\\p{N}_]*)\\s+(?:\"[^\"]*\"|`[^`]*`)\\s*(?://.*)?$")
+
+// ImportAlias returns the alias written on the 1-based import spec line of a file split by
+// SplitSourceLines, `a "p"` or `import a "p"`. It returns "" for a spec with no alias, a
+// blank or dot import, any line that is not an import spec, a line outside the file, and
+// any language but "go".
+func ImportAlias(lines [][]byte, line int, language string) string {
+	if language != "go" || line < 1 || line > len(lines) {
+		return ""
+	}
+	m := importSpec.FindSubmatch(bytes.TrimSpace(lines[line-1]))
+	// `import "p"` matches with the keyword as the name, and the keyword is never an alias.
+	if m == nil || string(m[1]) == "_" || string(m[1]) == "import" {
+		return ""
+	}
+	return string(m[1])
+}
+
 // KnowledgePackage is one third-party dependency read out of a project's manifest:
 // which package manager governs it, its name in that manager's namespace, and the
 // version the manifest resolves to.
@@ -812,6 +836,9 @@ type KnowledgeSymbolRef struct {
 	Path  string
 	Count int
 	Lines []int
+	// Alias is the name the file imports a namespace symbol under, as ImportAlias reads its
+	// import line, or empty when it writes none.
+	Alias string
 }
 
 // KnowledgeSymbolCall is one callee reached from inside a symbol's definition body: the

@@ -245,6 +245,9 @@ const (
 	// CheckSharedLoop is a function shared by callers that do not share its knobs: one
 	// caller's branch or option bends a body the rest also run.
 	CheckSharedLoop = "shared-loop"
+	// CheckImportAlias is an aliased import of a package its importers rename past what
+	// knowledge.conform enforces, or a new package taking the name of an existing one.
+	CheckImportAlias = "import-alias"
 	// CheckPackageFiles is a new directory holding one source file where most directories of
 	// its language beside it hold more.
 	CheckPackageFiles = "package-files"

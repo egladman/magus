@@ -188,6 +188,7 @@ run. The checks:
 | `call-sequence`     | a function calling the same workspace functions in the same order as another, over a run longer than the `call-sequence` value for its population: share the sequence in one function, or record a known entry with its reason                    |
 | `sibling-sprawl`    | a method or function joining siblings whose names differ in one complementary word (`RecordCacheHit`, `RecordCacheMiss`); it weighs shared parameters, three types carrying the family, and a type past its `type-methods` value                  |
 | `shared-loop`       | a function shared past `shared-body`, `caller-spread` or `shared-reach` that one caller's branch or option bends, or a re-signed one that gains such a knob: give each caller a copy with one line saying why, or record a mode-knobs known entry |
+| `import-alias`      | an aliased import of a package past `alias-share` or `name-clash`, or a new package taking an existing one's name: rename the package, or record a known entry with its reason                                                                    |
 
 The checks read what every language's index holds (names, kinds, scopes, references) and,
 where a language reports it, the declaration's shape: `param-order` needs a language whose
@@ -217,6 +218,16 @@ packages or files call that branches on a parameter. The index holds no base sig
 re-signed function's every knob is named, whether or not the change added it. Keep a shared
 function only when its callers share failure semantics and policy knobs, so a bug in one is a
 bug in the other.
+
+`import-alias` reads an import that must be renamed as advice that a package's name is
+wrong, and stays advice. `alias-share` is the percent of a package's importers that alias it,
+leaving out an alias equal to its name and an importer inside a package of that name;
+`name-clash` is the percent of a package's importers that also import another package of its
+name, blamed on the package with fewer importers. Both judge only packages with
+`min_subject` importers (5 by default), never a generated or excluded one, and read Go's
+package clauses, so another language contributes nothing. The finding names the package's
+spellings (one: name the package after it; several: pick one) or the clash and its share,
+and every importer.
 
 A directory the change creates gets three more checks, read from `magus diff`'s `layout` on
 the first changed file in it. A directory is new when every file the index places under it

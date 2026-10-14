@@ -783,6 +783,9 @@ type ConformLimitConfig struct {
 	// Anchor is the ceiling no committed value may exceed, and the value enforced while
 	// nothing is committed.
 	Anchor int `json:"anchor" yaml:"anchor"`
+	// MinSubject is the fewest importers a package needs before alias-share or name-clash
+	// judges it; 0 judges every package with one. Other metrics ignore it.
+	MinSubject int `json:"min_subject" yaml:"min_subject" validate:"gte=0"`
 	// Scopes bounds a package directory or layer apart from the rest of the population,
 	// as directory to anchor, measured at this Percentile. Only dep-fanout has scopes. A
 	// package that legitimately sits past the population's anchor takes its own here, so
@@ -796,9 +799,13 @@ func (c ConformConfig) Options() types.ConformOptions {
 	limits := map[types.ConformKey]types.ConformLimit{}
 	for metric, pops := range c.Checks {
 		for pop, l := range pops {
-			limits[types.ConformKey{Metric: metric, Population: pop}] = types.ConformLimit{Percentile: l.Percentile, Anchor: l.Anchor}
+			limits[types.ConformKey{Metric: metric, Population: pop}] = types.ConformLimit{
+				Percentile: l.Percentile, Anchor: l.Anchor, MinSubject: l.MinSubject,
+			}
 			for scope, anchor := range l.Scopes {
-				limits[types.ConformKey{Metric: metric, Population: pop, Scope: scope}] = types.ConformLimit{Percentile: l.Percentile, Anchor: anchor}
+				limits[types.ConformKey{Metric: metric, Population: pop, Scope: scope}] = types.ConformLimit{
+					Percentile: l.Percentile, Anchor: anchor, MinSubject: l.MinSubject,
+				}
 			}
 		}
 	}
@@ -825,7 +832,8 @@ func (c ConformConfig) Options() types.ConformOptions {
 // just above the typical function (p50 58), and call-sequence: 7 is the run just below
 // maint-review's measured precision cut (a shared run of 8 callees caught B1, B7 and
 // B15), not a p99. The coupling keys pool source and main code under source, and
-// mode-knobs is a list, so its anchor is 0. The percentile is where a proposal measures:
+// mode-knobs is a list, so its anchor is 0. The alias keys judge packages with 5 or more
+// importers, the median, and name-clash's anchor is its one measured case, 62. The percentile is where a proposal measures:
 // p99 for test files, function lengths and call sequences, since a long table test is
 // deliberate, p50 for clones, p90 for a shared body, p95 elsewhere. They name no path: an exclusion or a scope is one workspace's
 // layout, so it lives in that workspace's magus.yaml.
@@ -854,6 +862,8 @@ func conformDefaults() ConformConfig {
 			types.ConformSharedReach:  {src: limit(95, 7)},
 			types.ConformCallerSpread: {src: limit(95, 3)},
 			types.ConformModeKnobs:    {src: limit(0, 0)},
+			types.ConformAliasShare:   {src: {Percentile: 95, Anchor: 100, MinSubject: 5}},
+			types.ConformNameClash:    {src: {Percentile: 99, Anchor: 62, MinSubject: 5}},
 		},
 	}
 }

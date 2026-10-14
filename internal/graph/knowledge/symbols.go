@@ -195,6 +195,9 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		if len(sym.BranchIdents) > 0 {
 			attrs[attrBranchIdents] = strings.Join(sym.BranchIdents, ",")
 		}
+		if sym.PackageName != "" {
+			attrs[attrPackageName] = sym.PackageName
+		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{
 			ID:     sID,
 			Kind:   types.KindSymbol,
@@ -208,7 +211,11 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		}
 		for _, ref := range sym.Refs {
 			noteFile(ref.Path, sym.Language)
-			s.Edges = append(s.Edges, extractedEdge(fileID(ref.Path), sID, types.RelationReferences, refProvenance(ref)))
+			e := extractedEdge(fileID(ref.Path), sID, types.RelationReferences, refProvenance(ref))
+			if ref.Alias != "" {
+				e.Attrs = map[string]string{attrImportAlias: ref.Alias}
+			}
+			s.Edges = append(s.Edges, e)
 		}
 		for _, c := range sym.Calls {
 			s.Edges = append(s.Edges, extractedEdge(sID, symbolID(c.Key), types.RelationCalls, callProvenance(c)))

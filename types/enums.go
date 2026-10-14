@@ -165,7 +165,7 @@ func (v ModelTierSource) String() string   { return enum.String(v) }
 var conformMetrics = enum.Set[ConformMetric]{
 	ConformFileLines, ConformFuncLines, ConformTypeMethods, ConformFileSymbols, ConformDepFanout,
 	ConformCloneTokens, ConformExportScope, ConformCallSequence, ConformSharedBody, ConformSharedReach,
-	ConformCallerSpread, ConformModeKnobs,
+	ConformCallerSpread, ConformModeKnobs, ConformAliasShare, ConformNameClash,
 }
 
 func (v ConformMetric) Values() []string { return conformMetrics.Strings() }

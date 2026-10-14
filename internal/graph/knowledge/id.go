@@ -393,6 +393,14 @@ const (
 // bare (types.BranchIdents). Absent for a decision table and for a language with no lexer.
 const attrBranchIdents = "branch_idents"
 
+// attrImportAlias is the alias a file -references-> namespace edge's file imports the
+// package under, and attrPackageName the package clause on a namespace node. Both are Go
+// only and absent when nothing was written.
+const (
+	attrImportAlias = "import_alias"
+	attrPackageName = "package_name"
+)
+
 // AttrDoc is a symbol's doc comment as its indexer recorded it, signature block dropped.
 // Unlike every other attr it keeps its newlines and tabs, so a reader sees its paragraphs,
 // lists and code blocks.
