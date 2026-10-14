@@ -846,6 +846,45 @@ var Magus = Module{
 					Raises:  true,
 					Extern:  true,
 				},
+				{
+					Name: "modelTiers",
+					Doc: "Declare the model tiers a fork assigns: an enum of your own, cheapest case first, " +
+						"which magus reads once at load. tiers is that enum and default one of its cases. " +
+						"hosts maps each harness the magusfile wired with magus\\harness.provider, as a " +
+						"magus\\HarnessKey, to a function from a tier to the model alias that harness spawns; " +
+						"bounds maps a tier to its magus\\ModelTierBounds (maxLive, maxContext; a zero field is " +
+						"no cap); skills maps a tier to the magus\\SkillVariant its workers load. Write each " +
+						"function as an exhaustive match over the enum, so a tier added later fails " +
+						"`magus check` until every function covers it. No model name is magus's: the aliases " +
+						"are yours. hosts, bounds and skills are checked at load against the enum, and the " +
+						"declaration must follow the magus\\harness.provider calls it maps. A declaration " +
+						"magus cannot use is MGS1052, and so is a second call or one outside the root " +
+						"magusfile. magus\\job.modelTiers(null) turns tiers off. With no call the workspace " +
+						"gets the magus/modeltiers module: economy, standard and principal. This declares; " +
+						"it never selects a model for a call, retries or escalates, and prints nothing.",
+					Args: []Arg{
+						{Name: "tiers", Type: TypeAny},
+						{Name: "default", Type: TypeAny, Optional: true},
+						{Name: "hosts", Type: TypeAny, Optional: true},
+						{Name: "bounds", Type: TypeAny, Optional: true},
+						{Name: "skills", Type: TypeAny, Optional: true},
+					},
+					Extern: true,
+				},
+				{
+					Name: "modelTier",
+					Doc: "Register the one function a fork calls to choose a job's model tier: " +
+						"fun(req: ModelTierRequest) > any, returning null to leave the declared default to " +
+						"decide, else an object with tier (a case of the modelTiers enum), skills (a " +
+						"SkillVariant) and a non-empty reason. It runs once per fork, never during a run, and " +
+						"a row that names its own tier or model bypasses it. The job store is read-only inside " +
+						"it: every magus\\job member raises, so it decides from the request and the recorded " +
+						"history alone. A non-null answer lacking tier, skills or a reason fails the fork. " +
+						"Declared at the top level of the root magusfile, once; a second call, a call from " +
+						"another project, or a non-function is MGS1052.",
+					Args:   []Arg{{Name: "matrix", Type: TypeFunc, Func: "fun (req: ModelTierRequest) > any !> any"}},
+					Extern: true,
+				},
 			},
 		},
 		{

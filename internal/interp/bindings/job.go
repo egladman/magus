@@ -17,10 +17,11 @@ import (
 //
 // Hand-bound, like cache/ci/secret/workspace above, because a Namespace's methods are
 // Extern by construction (see std.Namespace): there is no Impl for codegen to reflect a
-// trampoline from. Unlike those, job needs no session-scoped state (a provider
-// selection, a resolver), so it takes no captured ctx: each closure calls std.MagusListJob
-// et al with the CALL-TIME ctx the VM supplies, the same one every generated Impl
-// trampoline uses to find the workspace on the context.
+// trampoline from. The store members need no session-scoped state, so each closure calls
+// std.MagusListJob et al with the CALL-TIME ctx the VM supplies, the same one every
+// generated Impl trampoline uses to find the workspace on the context. modelTiers and
+// modelTier keep functions the magusfile passes, so they take the load's ctx and
+// session, as the guard rules do.
 //
 // Every failure goes back through ffi.Error, which is what a generated
 // trampoline does and what makes a caught value a MAP rather than a str: the VM turns a
@@ -28,7 +29,7 @@ import (
 // (see vm.caughtValue). Every method here is Raises, so BZZ1006 forces callers to catch
 // one; handing them a differently-typed value than every other magus\* method does is a
 // difference they would only find at run time.
-func buildJob(obs buzz.DirectObserver) vm.Value {
+func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) vm.Value {
 	job := vm.NewMap()
 	job.MapSet("list", directVal(obs, "magus.job.list", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
 		report, err := std.MagusListJob(ctx)
@@ -93,6 +94,8 @@ func buildJob(obs buzz.DirectObserver) vm.Value {
 		}
 		return ffi.IntVal(n), nil
 	}))
+	registerModelTiers(ctx, sess, obs, job)
+	registerModelTierMatrix(ctx, sess, obs, job)
 	return job
 }
 
