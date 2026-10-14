@@ -217,7 +217,7 @@ var guardInputs = []string{"command", "path", "mcp"}
 // background tasks left running refuse a stop, and cursor-hook.buzz no longer rewrites the
 // shell command. Under a config written for 26, a 25 copy leaves those stops unanswered and
 // still prepends its stdin and quiet-output prefix to every Cursor command.
-const GuardTemplateVersion = 26
+const GuardTemplateVersion = 27
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

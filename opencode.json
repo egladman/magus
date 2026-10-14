@@ -1,12 +1,28 @@
 {
   "permission": {
     "bash": {
+      "./magus affected agent-bench-run": "ask",
+      "./magus affected agent-bench-run *": "ask",
+      "./magus affected hoste-2-e-test": "ask",
+      "./magus affected hoste-2-e-test *": "ask",
+      "./magus run agent-bench-run": "ask",
+      "./magus run agent-bench-run *": "ask",
+      "./magus run hoste-2-e-test": "ask",
+      "./magus run hoste-2-e-test *": "ask",
       "git push": "ask",
       "git push *": "ask",
       "hg push": "ask",
       "hg push *": "ask",
       "jj git push": "ask",
       "jj git push *": "ask",
+      "magus affected agent-bench-run": "ask",
+      "magus affected agent-bench-run *": "ask",
+      "magus affected hoste-2-e-test": "ask",
+      "magus affected hoste-2-e-test *": "ask",
+      "magus run agent-bench-run": "ask",
+      "magus run agent-bench-run *": "ask",
+      "magus run hoste-2-e-test": "ask",
+      "magus run hoste-2-e-test *": "ask",
       "sl push": "ask",
       "sl push *": "ask"
     }

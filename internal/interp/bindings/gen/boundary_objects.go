@@ -1633,6 +1633,8 @@ func ObjectTarget(v types.Target) vm.Value {
 	out.MapSet("retry_on_volatile_reason", vm.StrValue(v.RetryOnVolatileReason))
 	out.MapSet("advisory", vm.BoolValue(v.Advisory))
 	out.MapSet("advisory_reason", vm.StrValue(v.AdvisoryReason))
+	out.MapSet("human_only", vm.BoolValue(v.HumanOnly))
+	out.MapSet("human_only_reason", vm.StrValue(v.HumanOnlyReason))
 	return out
 }
 

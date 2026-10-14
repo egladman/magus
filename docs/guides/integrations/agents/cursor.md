@@ -270,7 +270,7 @@ script also accepts `file_path`.
 // session --brief` has been measured (MAGUS_PPROF=mem, buzz --profile) at tens of MB of
 // workspace Buzz load on this tree, so a brief over SESSION_BRIEF_MAX_BYTES is dropped.
 //
-// magus-guard-template: 26
+// magus-guard-template: 27
 // magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=model pass=none ask=human

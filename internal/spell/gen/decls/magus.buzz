@@ -1199,6 +1199,8 @@ export object Target {
     retry_on_volatile_reason: str = "",
     advisory: bool = false,
     advisory_reason: str = "",
+    human_only: bool = false,
+    human_only_reason: str = "",
 }
 
 export object EvaluatedProject {
