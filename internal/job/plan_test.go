@@ -205,6 +205,8 @@ func TestRenderGatesSaysTheGraphWasStale(t *testing.T) {
 	assert.Contains(t, out.String(), "stale")
 	assert.Contains(t, out.String(), "., console")
 	assert.Contains(t, out.String(), "graph build")
+	assert.Contains(t, out.String(), "symbol goals were not graded", "describe grades nothing over a stale index")
+	assert.NotContains(t, out.String(), "graded against an index older")
 }
 
 func TestRenderGatesReportsTheDelta(t *testing.T) {

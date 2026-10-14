@@ -556,8 +556,8 @@ type JobStatus struct {
 	Risks      []string     `json:"unresolved_risks,omitempty" yaml:"unresolved_risks,omitempty"`
 	Command    string       `json:"command,omitempty" yaml:"command,omitempty"`
 	Gates      []GateStatus `json:"gates,omitempty" yaml:"gates,omitempty"`
-	// StaleIndexes are the projects whose symbol index was older than their sources when
-	// symbol goals were graded, so a symbol verdict may be drawn from missing facts.
+	// StaleIndexes are the projects whose symbol index was older than their sources when the
+	// job was described, so its symbol goals were not graded.
 	StaleIndexes []string `json:"stale_indexes,omitempty" yaml:"stale_indexes,omitempty"`
 	// Footprint is the declaration each changed line of the job's diff since its checkpoint
 	// lands in. It decides Verified only for a job claiming declarations (see

@@ -644,7 +644,7 @@ func keepFrozenSignatures(row *types.Job, prev types.Job) {
 }
 
 // RenderGates writes a gate report one gate per line, each unmet one followed by why, and
-// says when the symbol index those gates were graded against was stale.
+// says when a stale symbol index left the symbol goals ungraded.
 func RenderGates(out io.Writer, status types.JobStatus) {
 	if len(status.Gates) == 0 {
 		fmt.Fprintf(out, "%s declares no check and no goal, so there is nothing here to grade.\n", status.Job)
@@ -670,8 +670,8 @@ func RenderGates(out io.Writer, status types.JobStatus) {
 	}
 	renderDelta(out, status)
 	if len(status.StaleIndexes) > 0 {
-		fmt.Fprintf(out, "\nstale index: the symbol goals were graded against an index older than the sources in %s,"+
-			" so a symbol verdict may be missing sites.\n  refresh and ask again: %s\n",
+		fmt.Fprintf(out, "\nstale index: the symbol index of %s is older than its sources,"+
+			" so the symbol goals were not graded against it.\n  refresh and ask again: %s\n",
 			strings.Join(status.StaleIndexes, ", "), hint.GraphBuild)
 	}
 }
