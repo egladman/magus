@@ -3,12 +3,10 @@
 //
 // This spell is the reference example for a *codegen producer*: the interesting
 // part is the cache/affected metadata, not the commands. mgs_listRequiredGlobs
-// declares the .proto sources and buf config as inputs, and mgs_listProvidedGlobs
-// declares the generated code as outputs — so editing a .proto reruns codegen and,
-// because the generated files are a *dependent* project's inputs, invalidates
-// everything downstream of them. Keep `provides` in sync with the `out:` paths in
-// your buf.gen.yaml: under-declare and the cache won't replay codegen; over-declare
-// and every replay snapshots more than necessary.
+// declares the .proto sources and buf config as inputs, so editing a .proto reruns
+// codegen and, because the generated files are a *dependent* project's inputs,
+// invalidates everything downstream of them. The generated outputs are declared by
+// the target that runs buf-generate (see mgs_listProvidedGlobs).
 
 import "magus/spell";
 // charm constructors derive argv patches from an anchor arg, not a counted index.
@@ -37,9 +35,15 @@ export fun mgs_listRequiredGlobs() > [Path] {
     return [Path{value = "**/*.proto"}, Path{value = "buf.yaml"}, Path{value = "buf.gen.yaml"}, Path{value = "buf.work.yaml"}, Path{value = "buf.lock"}];
 }
 
-// Generated code buf writes. Adjust to match the `out:` directories in your
-// buf.gen.yaml; "gen/**" is the buf convention.
-export fun mgs_listProvidedGlobs() > [Path] { return [Path{value = "gen/**"}]; }
+// Empty on purpose. Where buf writes is the `out:` of each plugin in buf.gen.yaml, which
+// this spell cannot read, and only buf-generate writes there. A provided glob is
+// contributed to EVERY target on the project, so "gen/**" made buf-build, or a go-build
+// whose sources include the generated .go files, capture gen/** and replay an older
+// capture over freshly generated code on a cache hit.
+//
+// Declare the outputs on the target that runs buf-generate with ctx.writesFiles, which
+// replaces any baseline for that target alone.
+export fun mgs_listProvidedGlobs() > [Path] { return [<Path>]; }
 
 
 // No protoc-gen-* probes here, deliberately. buf generate delegates codegen to

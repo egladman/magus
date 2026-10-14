@@ -239,7 +239,6 @@ var goldenBuiltins = map[string]spells.Descriptor{
 	"buf": {
 		Name:               "buf",
 		Needs:              []string{"**/*.proto", "buf.yaml", "buf.gen.yaml", "buf.work.yaml", "buf.lock"},
-		Provides:           []string{"gen/**"},
 		Language:           "protobuf",
 		LanguageExtensions: []string{".proto"},
 		Syntax: &spells.Syntax{Comments: &spells.CommentSyntax{

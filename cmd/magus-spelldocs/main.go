@@ -101,7 +101,7 @@ var spellMeta = map[string]spellInfo{
 	"buf": {
 		dir: "buf", language: "Protobuf",
 		description: "Buf spell: protobuf build, lint, format, and code generation.",
-		intro:       "The `buf` spell forks the `buf` CLI to build, lint, format, and generate from Protobuf sources. It declares `gen/**` as its outputs so magus caches generated code correctly.",
+		intro:       "The `buf` spell forks the `buf` CLI to build, lint, format, and generate from Protobuf sources. It declares no outputs of its own: the target that runs `buf-generate` declares where buf writes.",
 		tags:        []string{"protobuf", "buf", "codegen", "lint"},
 	},
 	"cosign": {
