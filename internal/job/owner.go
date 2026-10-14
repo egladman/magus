@@ -66,7 +66,9 @@ func (s *Store) EndSession(ctx context.Context, c Caller) (types.Job, bool, erro
 	}
 	now := s.now().Unix()
 	var ended types.Job
+	var outcomes endings
 	err := s.update(ctx, func(f *jobsFile) error {
+		outcomes = endings{}
 		i := slices.IndexFunc(f.Jobs, func(r types.Job) bool { return r.ID == b.Job })
 		if i < 0 || !Editing(f.Jobs[i]) || f.Jobs[i].Registered == 0 || f.Jobs[i].Holder.OrSession() == types.HolderServer {
 			return file.ErrSkipWrite
@@ -79,7 +81,7 @@ func (s *Store) EndSession(ctx context.Context, c Caller) (types.Job, bool, erro
 			types.EndReasonSessionEnded, c.Host, b.Job)
 		f.Jobs[i].Updated = now
 		ended = f.Jobs[i].Clone()
-		return nil
+		return outcomes.hold(s, ended)
 	})
 	if err != nil {
 		return types.Job{}, false, err
@@ -89,6 +91,9 @@ func (s *Store) EndSession(ctx context.Context, c Caller) (types.Job, bool, erro
 		return types.Job{}, false, nil
 	}
 	s.noteEnded(ended.ID, ended.EndReason)
+	if err := outcomes.record(ctx, now*1000); err != nil {
+		return ended, true, err
+	}
 	return ended, true, nil
 }
 

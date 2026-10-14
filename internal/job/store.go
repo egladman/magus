@@ -569,8 +569,9 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 
 	actor := s.Actor()
 	var stored types.Job
-	var outcomeAt string
+	var ended endings
 	err := s.update(ctx, func(f *jobsFile) error {
+		ended = endings{}
 		i := slices.IndexFunc(f.Jobs, func(e types.Job) bool { return e.ID == id })
 		var prev types.Job
 		if i >= 0 {
@@ -670,14 +671,6 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			slices.ContainsFunc(row.WritePaths, func(p string) bool { return !slices.Contains(prev.WritePaths, p) }) {
 			row.Widenings++
 		}
-		outcomeAt = ""
-		if i >= 0 && !prev.State.Terminal() && row.State.Terminal() {
-			path, perr := s.outcomeHistoryPath(row)
-			if perr != nil {
-				return perr
-			}
-			outcomeAt = path
-		}
 		if kind != asNarrowing {
 			row.Releases = s.releases(ctx, prev, row, now, prev.Registered != 0 && actor.Lease != id)
 		}
@@ -689,16 +682,19 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			row.RegisteredBy = trail.StampOrigin(ctx, types.Origin{})
 			f.Jobs = append(f.Jobs, row)
 		}
+		if i >= 0 && !prev.State.Terminal() && row.State.Terminal() {
+			if err := ended.hold(s, row); err != nil {
+				return err
+			}
+		}
 		stored = row.Clone()
 		return nil
 	})
 	if err != nil {
 		return types.Job{}, err
 	}
-	if outcomeAt != "" {
-		if err := recordOutcome(ctx, outcomeAt, NewJobOutcome(stored, time.Now().UnixMilli())); err != nil {
-			return stored, err
-		}
+	if err := ended.record(ctx, time.Now().UnixMilli()); err != nil {
+		return stored, err
 	}
 	return stored, nil
 }

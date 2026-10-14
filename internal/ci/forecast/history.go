@@ -9,7 +9,7 @@
 //	              projects(map[string]map[string]Stats), setup([]int64),
 //	              alpha([]int64), workspace_fallback_ms(int64),
 //	              runs([]Run), jobs([]types.JobOutcome)
-//	Constants:   setup_p50_ms(int64), alpha_ms(int64)
+//	Constants:    setup_p50_ms(int64), alpha_ms(int64)
 //	Stats:        p75_ms(int64), samples(int), last_updated(time), recent([]int64),
 //	              buckets(map[string]BucketStats), hit_count(int), miss_count(int),
 //	              hit_rate(float64), pass_count(int), fail_count(int),
@@ -23,6 +23,7 @@
 //	JobOutcome:   job(string: a job id the workspace chose), model_tier(string: a case
 //	              of the workspace's tier enum), kind, skills, source(enums), model(string:
 //	              a model alias), reason(string: the sentence that chose the tier),
+//	              site(string: the file:line of the declaration that chose it),
 //	              write_files, checks_run, rework_rounds, widenings(int), state(enum),
 //	              context_tokens(int64), cost_usd(float64), duration_ms, ended(int64)
 //

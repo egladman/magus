@@ -149,7 +149,10 @@ it never falls through to the default.
 The matrix is a function of the job's declared record and the workspace's
 recorded history. The record's `writeProjects` are the projects that own the
 job's write paths, found the way `magus describe job` finds a job's projects.
-`history` is empty today: the job outcomes it will read are not recorded yet.
+`history` holds one record per tier and job kind, folded from the outcomes magus
+keeps in the run history (`history_path`). An outcome is recorded when a job that
+ran at a tier ends: its holder ends it, the sweep or `magus job prune` ends it as
+`no_return`, or the session holding it closes.
 
 It runs once, at fork, with the job store read-only: every `magus\job` member
 raises inside it. It returns `null` to let the default decide, or an object with
@@ -189,8 +192,9 @@ magus\job.modelTier(choose);
 ```
 
 This one sends small, checked jobs to economy until economy has failed half of
-ten or more jobs of the same kind. Once the history is recorded it is the same
-set of numbers `magus insight` reports, so the matrix and a person read one record.
+ten or more jobs of the same kind. The history is the same set of numbers
+`magus insight` reports and the `model-tier-fit` check in `magus doctor` judges,
+so the matrix and a person read one record.
 The same file is the compiled example under `std/examples/magus`.
 
 Read-only and unchecked jobs fall through to the default, because a job nothing

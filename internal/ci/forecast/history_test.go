@@ -38,10 +38,11 @@ func TestHistorySchemaLockIsStructural(t *testing.T) {
 			"jobs": true,
 		},
 		reflect.TypeOf(types.JobOutcome{}): {
-			// Ids, enum cases and the sentence that chose a tier: names the workspace
-			// declared and numbers about a job, never its prose, paths or output.
+			// Ids, enum cases, the sentence that chose a tier and the file:line of the
+			// declaration that chose it: names the workspace declared and numbers about a
+			// job, never its prose, file contents or output.
 			"job": true, "model_tier": true, "kind": true, "skills": true, "model": true,
-			"source": true, "reason": true, "write_files": true, "state": true,
+			"source": true, "reason": true, "site": true, "write_files": true, "state": true,
 			"checks_run": true, "context_tokens": true, "cost_usd": true,
 			"duration_ms": true, "ended": true, "rework_rounds": true, "widenings": true,
 		},

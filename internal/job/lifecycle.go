@@ -911,7 +911,9 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 	if err != nil || len(dead) == 0 {
 		return f, false, err
 	}
+	var ended endings
 	err = s.update(context.Background(), func(cur *jobsFile) error {
+		ended = endings{}
 		var err error
 		if dead, err = w.dead(cur.Jobs); err != nil {
 			return err
@@ -920,6 +922,12 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 		f = *cur
 		if len(dead) == 0 {
 			return file.ErrSkipWrite
+		}
+		for _, e := range dead {
+			i := slices.IndexFunc(cur.Jobs, func(r types.Job) bool { return r.ID == e.id })
+			if err := ended.hold(s, cur.Jobs[i]); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -935,6 +943,9 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 		if strings.HasPrefix(e.reason, overdueReasonPrefix) {
 			s.noteEnded(e.id, e.reason)
 		}
+	}
+	if err := ended.record(context.Background(), w.now*1000); err != nil {
+		return jobsFile{}, false, err
 	}
 	return f, len(dead) > 0, nil
 }
@@ -1002,7 +1013,9 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions) ([]Ending, error) 
 	w.landed = s.landings(f.Jobs, w.now)
 
 	var out []Ending
+	var ended endings
 	err = s.update(ctx, func(cur *jobsFile) error {
+		ended = endings{}
 		var err error
 		if out, err = w.prunable(cur.Jobs, window, opts.All); err != nil {
 			return err
@@ -1015,11 +1028,17 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions) ([]Ending, error) 
 			cur.Jobs[i].State = types.StateNoReturn
 			cur.Jobs[i].EndReason = e.Reason
 			cur.Jobs[i].Updated = w.now
+			if err := ended.hold(s, cur.Jobs[i]); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
+	}
+	if err := ended.record(ctx, w.now*1000); err != nil {
+		return out, err
 	}
 	return out, nil
 }

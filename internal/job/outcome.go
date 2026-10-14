@@ -6,11 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
 	"slices"
+	"strings"
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/internal/config"
+	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/types"
 )
 
@@ -36,7 +39,7 @@ func NewJobOutcome(row types.Job, ended int64) types.JobOutcome {
 		out.ChecksRun++
 	}
 	if t := row.ModelTier; t != nil {
-		out.ModelTier, out.Skills, out.Source, out.Reason = t.Name, t.Skills, t.Source, t.Reason
+		out.ModelTier, out.Skills, out.Source, out.Reason, out.Site = t.Name, t.Skills, t.Source, t.Reason, t.Site
 		out.Model = cmp.Or(t.Model, row.Model)
 	}
 	if row.Created > 0 {
@@ -137,12 +140,12 @@ func median(xs []int64) int64 {
 	return (xs[mid-1] + xs[mid]) / 2
 }
 
-// historyPath is the workspace's own history_path, resolved from its magus.yaml as
-// [Store.retainWindow] resolves jobs.retain.
+// historyPath is the history file in effect for the workspace: the user-global, workspace
+// and environment tiers merged, as every command that writes the history resolves it.
 func (s *Store) historyPath() (string, error) {
-	cfg, err := config.LoadWorkspaceOnly(s.root)
+	cfg, err := config.LoadWithRoot("", s.root)
 	if err == nil {
-		err = config.Validate(cfg)
+		err = configgen.ApplyEnv(&cfg, os.Getenv)
 	}
 	if err != nil {
 		return "", fmt.Errorf("job: read history_path for the recorded job outcomes: %w", err)
@@ -150,16 +153,53 @@ func (s *Store) historyPath() (string, error) {
 	return cfg.HistoryPath, nil
 }
 
-// outcomeHistoryPath is the history file row's outcome is recorded in when row has just
-// ended, or "" when none is: a dry run writes nothing, a store with no checkout has no
-// workspace to name, and a row that ran at no tier has nothing the lens could rank.
-// Resolved before the row is written, so a config that does not read fails the write
-// rather than losing the outcome after it.
-func (s *Store) outcomeHistoryPath(row types.Job) (string, error) {
+// endings are the rows one write ends, held until the write lands so their outcomes are
+// recorded together. Every door that ends a row (a write, the sweep, Prune, EndSession)
+// holds them here, so an outcome is recorded the same way whoever ended the job.
+type endings struct {
+	path string
+	rows []types.Job
+}
+
+// hold keeps row's outcome, row having just ended. The history file is resolved here,
+// inside the write, so a config that does not read fails the write rather than losing the
+// outcome after it. A dry run writes nothing, a store with no checkout has no workspace to
+// name, and a row that ran at no tier has nothing the lens could rank, so none holds one.
+func (e *endings) hold(s *Store, row types.Job) error {
 	if s.dryRun || s.root == "" || row.ModelTier == nil {
-		return "", nil
+		return nil
 	}
-	return s.historyPath()
+	if e.path == "" {
+		path, err := s.historyPath()
+		if err != nil || path == "" {
+			return err
+		}
+		e.path = path
+	}
+	e.rows = append(e.rows, row.Clone())
+	return nil
+}
+
+// record appends the held outcomes to the history file through [forecast.UpdateHistory],
+// which rewrites the file under its cross-process lock without erasing what another
+// workspace recorded meanwhile. ended is Unix milliseconds.
+func (e endings) record(ctx context.Context, ended int64) error {
+	if len(e.rows) == 0 {
+		return nil
+	}
+	ids := make([]string, len(e.rows))
+	for i, row := range e.rows {
+		ids[i] = row.ID
+	}
+	if err := forecast.UpdateHistory(ctx, e.path, func(h *forecast.History) error {
+		for _, row := range e.rows {
+			h.RecordJob(NewJobOutcome(row, ended))
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("job: record the outcome of %s: %w", strings.Join(ids, ", "), err)
+	}
+	return nil
 }
 
 // assignModelTierWithHistory is [Store.assignModelTier] with the recorded outcomes in the
@@ -196,19 +236,6 @@ func (s *Store) tierHistory(ctx context.Context) ([]types.ModelTierRecord, error
 		return nil, fmt.Errorf("job: %w", err)
 	}
 	return ModelTierRecords(h.Jobs, s.modelTiers), nil
-}
-
-// recordOutcome appends o to the history file at path through [forecast.UpdateHistory],
-// which rewrites the file under its cross-process lock without erasing what another
-// workspace recorded meanwhile.
-func recordOutcome(ctx context.Context, path string, o types.JobOutcome) error {
-	if err := forecast.UpdateHistory(ctx, path, func(h *forecast.History) error {
-		h.RecordJob(o)
-		return nil
-	}); err != nil {
-		return fmt.Errorf("job: record the outcome of %s: %w", o.Job, err)
-	}
-	return nil
 }
 
 // RecordRework counts one more rework round on job id: its holder handed back and was sent

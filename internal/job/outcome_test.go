@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
@@ -61,7 +63,7 @@ func TestNewJobOutcomeReadsTheEndedRow(t *testing.T) {
 
 	assert.Equal(t, types.JobOutcome{
 		Job: "a", ModelTier: "economy", Kind: types.JobKindCheck, Skills: types.SkillVariantFull,
-		Model: "haiku", Source: types.ModelTierSourceMatrix, Reason: "small checked job",
+		Model: "haiku", Source: types.ModelTierSourceMatrix, Reason: "small checked job", Site: "magusfile.buzz:20",
 		WriteFiles: 2, State: types.StateFail, ChecksRun: 3, DurationMs: 60_000, Ended: 160_000,
 		ReworkRounds: 2, Widenings: 1,
 	}, got)
@@ -106,10 +108,14 @@ func TestModelTierRecordsFoldsEachTierAndKind(t *testing.T) {
 	got := ModelTierRecords(outcomes, tierSet(t))
 
 	require.Len(t, got, 4)
+	// Within a delta: arm64 may fuse the bound's multiply-add differently once inlined, so
+	// the same call can differ in the last bit.
+	assert.InDelta(t, volatility.WilsonLower(2, 3), got[0].PassLower, 1e-12)
+	assert.InDelta(t, volatility.WilsonLower(1, 1), got[3].PassLower, 1e-12)
+	got[0].PassLower, got[3].PassLower = 0, 0
 	assert.Equal(t, types.ModelTierRecord{
 		Rank: 0, ModelTier: "economy", Kind: types.JobKindCheck,
 		Jobs: 3, Pass: 2, Fail: 1,
-		PassLower:    volatility.WilsonLower(2, 3),
 		ChecksPerJob: 8.0 / 3, ForksPerID: 3.0 / 2, ReworkPerJob: 1, WideningsPerJob: 1.0 / 3,
 		MeanCostUSD: 2.5 / 3, MedianTokens: 100,
 	}, got[0], "a was forked twice, and the running and untiered outcomes do not count")
@@ -118,7 +124,7 @@ func TestModelTierRecordsFoldsEachTierAndKind(t *testing.T) {
 	assert.Equal(t, 1, got[1].NoReturn)
 	assert.Zero(t, got[1].PassLower)
 	assert.Equal(t, 2, got[2].Rank, "principal ranks after economy")
-	assert.Equal(t, types.ModelTierRecord{Rank: -1, ModelTier: "retired", Kind: types.JobKindCheck, Jobs: 1, Pass: 1, PassLower: volatility.WilsonLower(1, 1), ChecksPerJob: 0, ForksPerID: 1}, got[3],
+	assert.Equal(t, types.ModelTierRecord{Rank: -1, ModelTier: "retired", Kind: types.JobKindCheck, Jobs: 1, Pass: 1, ChecksPerJob: 0, ForksPerID: 1}, got[3],
 		"a tier the declaration dropped keeps its record, last, at rank -1")
 }
 
@@ -275,4 +281,75 @@ func TestStoreCountsReworkRoundsAndKeepsThemAgainstAWholeRowWrite(t *testing.T) 
 	rows, err := s.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "counting rework creates no row")
+}
+
+// staleTieredRow is a declared row nobody took, untouched for three hours: past a
+// two-hour jobs.stale_after, so the sweep and Prune both end it.
+func staleTieredRow(s *Store, now int64) types.Job {
+	staleAfter := 2 * time.Hour
+	s.clock = func() time.Time { return time.Unix(now, 0) }
+	s.staleAfter = &staleAfter
+	s.notices = &strings.Builder{}
+	s.landed = func(context.Context, types.Job) string { return "" }
+	return types.Job{
+		ID: "idle", State: types.StateDeclared, Updated: now - int64((3 * time.Hour).Seconds()),
+		ModelTier: &types.JobModelTier{Name: "economy", Source: types.ModelTierSourceMatrix, Site: "magusfile.buzz:40"},
+	}
+}
+
+func TestStoreRecordsAnOutcomeWhenTheSweepEndsARow(t *testing.T) {
+	t.Parallel()
+
+	const now = int64(100_000)
+	s, history := outcomeStore(t, tierSet(t), nil, false)
+	plant(t, s, staleTieredRow(s, now))
+
+	_, err := s.List()
+	require.NoError(t, err)
+
+	jobs := recordedJobs(t, history)
+	require.Len(t, jobs, 1)
+	assert.Equal(t, types.StateNoReturn, jobs[0].State)
+	assert.Equal(t, "magusfile.buzz:40", jobs[0].Site)
+	assert.Equal(t, now*1000, jobs[0].Ended)
+}
+
+func TestStoreRecordsAnOutcomeWhenPruneEndsARow(t *testing.T) {
+	t.Parallel()
+
+	const now = int64(100_000)
+	s, history := outcomeStore(t, tierSet(t), nil, false)
+	plant(t, s, staleTieredRow(s, now))
+
+	got, err := s.Prune(t.Context(), PruneOptions{DryRun: true})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.NoFileExists(t, history, "a dry prune ends nothing, so it records nothing")
+
+	got, err = s.Prune(t.Context(), PruneOptions{})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	jobs := recordedJobs(t, history)
+	require.Len(t, jobs, 1)
+	assert.Equal(t, types.StateNoReturn, jobs[0].State)
+}
+
+func TestStoreRecordsAnOutcomeWhenTheHoldingSessionEnds(t *testing.T) {
+	t.Parallel()
+
+	s, history := outcomeStore(t, tierSet(t), nil, false)
+	seed(t, s, types.Job{ID: "w", Checkpoint: baseA, State: types.StateDeclared})
+	_, err := s.Exec(t.Context(), "w", baseA)
+	require.NoError(t, err)
+	worker := Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
+	require.NoError(t, s.Bind(worker, "w"))
+
+	_, ok, err := s.EndSession(t.Context(), worker)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	jobs := recordedJobs(t, history)
+	require.Len(t, jobs, 1)
+	assert.Equal(t, "w", jobs[0].Job)
+	assert.Equal(t, types.StateNoReturn, jobs[0].State)
 }
