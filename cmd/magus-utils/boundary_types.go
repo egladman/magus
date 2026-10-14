@@ -251,7 +251,16 @@ var boundaryTypes = []boundaryType{
 	{Name: "JobGateAttempt", Type: reflect.TypeFor[types.JobGateAttempt](), RuntimeObject: true},
 	{Name: "JobIntegration", Type: reflect.TypeFor[types.JobIntegration](), RuntimeObject: true},
 	{Name: "JobRun", Type: reflect.TypeFor[types.JobRun](), RuntimeObject: true},
-	{Name: "Job", Type: reflect.TypeFor[types.Job](), RuntimeObject: true},
+	// Model tiers. A magusfile's bounds function and a harness spell build the first two,
+	// so they carry no encoder; a matrix function is handed the request, whose history is
+	// a list of records. There is deliberately no ModelTier object: that name is the
+	// workspace's own Buzz enum.
+	{Name: "ModelTierBounds", Type: reflect.TypeFor[types.ModelTierBounds]()},
+	{Name: "HarnessKey", Type: reflect.TypeFor[types.HarnessKey]()},
+	{Name: "JobModelTier", Type: reflect.TypeFor[types.JobModelTier](), RuntimeObject: true},
+	{Name: "ModelTierRecord", Type: reflect.TypeFor[types.ModelTierRecord](), RuntimeObject: true},
+	{Name: "ModelTierRequest", Type: reflect.TypeFor[types.ModelTierRequest](), RuntimeObject: true},
+	{Name: "Job",Type: reflect.TypeFor[types.Job](), RuntimeObject: true},
 	// Declaration is Job's INPUT twin: a magusfile can construct one, but nothing hands one
 	// back out, so it carries no RuntimeObject encoder.
 	{Name: "Declaration", Type: reflect.TypeFor[types.Declaration]()},
@@ -447,6 +456,22 @@ var boundaryEnums = []boundaryEnum{
 		Name:  "SandboxAccess",
 		Type:  reflect.TypeFor[spells.SandboxAccess](),
 		Cases: []enumCase{{"none", ""}, {"ro", "ro"}, {"rx", "rx"}, {"rw", "rw"}, {"rwx", "rwx"}},
+	},
+	{
+		Name:  "SkillVariant",
+		Type:  reflect.TypeFor[types.SkillVariant](),
+		Cases: []enumCase{{"short", "short"}, {"full", "full"}},
+	},
+	{
+		Name: "JobKind",
+		Type: reflect.TypeFor[types.JobKind](),
+		Cases: []enumCase{{"check", "check"}, {"symbol", "symbol"}, {"paths", "paths"},
+			{"script", "script"}, {"prose", "prose"}},
+	},
+	{
+		Name:  "ModelTierSource",
+		Type:  reflect.TypeFor[types.ModelTierSource](),
+		Cases: []enumCase{{"row", "row"}, {"matrix", "matrix"}, {"default", "default"}},
 	},
 }
 
