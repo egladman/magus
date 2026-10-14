@@ -212,7 +212,7 @@ func TestWrapRecordsSoftErrorAsError(t *testing.T) {
 	require.Len(t, events, 1)
 	assert.Equal(t, trail.OutcomeError, events[0].Outcome, "a soft IsError result must record as error")
 	require.Len(t, *calls, 1)
-	assert.Equal(t, trail.OutcomeError, (*calls)[0].Outcome, "the metric must also see error")
+	assert.Equal(t, observability.OutcomeError, (*calls)[0].Outcome, "the metric must also see error")
 }
 
 // A server whose workspace failed to load keeps every tool listed, so an agent's tool list
