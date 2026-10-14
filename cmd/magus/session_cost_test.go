@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -14,6 +16,19 @@ import (
 )
 
 var costEpoch = time.Date(2026, time.October, 13, 9, 0, 0, 0, time.UTC)
+
+// fixtureModels stand in for the rows a harness spell publishes; no table is built into
+// magus.
+func fixtureModels() model.Table {
+	return model.Table{}.Merge([]types.ModelFacts{
+		{ID: "claude-fable-5-1", Window: 1_000_000, Input: 10, CacheWrite5m: 12.50, CacheWrite1h: 20, CacheRead: 0.25, Output: 50},
+		{ID: "claude-opus-5-5", Window: 1_000_000, Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.20, Output: 20},
+		{ID: "claude-sonnet-5-5", Window: 1_000_000, Input: 2, CacheWrite5m: 2.50, CacheWrite1h: 4, CacheRead: 0.10, Output: 10},
+		{ID: "claude-haiku-5-5", Window: 1_000_000, Input: 0.10, CacheWrite5m: 0.125, CacheWrite1h: 0.20, CacheRead: 0.01, Output: 0.50,
+			PriceStep: 100_000, StepFactor: 5},
+		{ID: "claude-haiku-4-5", Window: 200_000, Input: 1, CacheWrite5m: 1.25, CacheWrite1h: 2, CacheRead: 0.10, Output: 5},
+	})
+}
 
 func at(sec int) time.Time { return costEpoch.Add(time.Duration(sec) * time.Second) }
 
@@ -54,7 +69,7 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 
 	tr.Calls = calls
 
-	got := summarizeCost(tr, model.Shipped())
+	got := summarizeCost(tr, fixtureModels())
 
 	assert.Equal(t, &rootContext{Peak: 600_000, P50: 300_000, Samples: 30, Models: []string{"claude-opus-5-5"}}, got.RootContext)
 	assert.Equal(t, &delegableShare{
@@ -75,7 +90,7 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 }
 
 func TestSummarizeCostSaysNothingWasMeasuredWithoutATrail(t *testing.T) {
-	got := summarizeCost(nil, model.Shipped())
+	got := summarizeCost(nil, fixtureModels())
 
 	assert.Nil(t, got.RootContext)
 	assert.Nil(t, got.Dollars)
@@ -85,7 +100,7 @@ func TestSummarizeCostSaysNothingWasMeasuredWithoutATrail(t *testing.T) {
 func TestSummarizeCostCountsSpawnsFromATrailWithNoPerCallFacts(t *testing.T) {
 	tr := &trail.SessionTrail{Commands: 3, Spawns: []trail.SessionSpawn{{Child: "Explore", At: at(1), DeclaredModel: "claude-sonnet-5-5"}}}
 
-	got := summarizeCost(tr, model.Shipped())
+	got := summarizeCost(tr, fixtureModels())
 
 	assert.Equal(t, &spawnTally{Total: 1, ByModel: []countedName{{Name: "claude-sonnet-5-5", Count: 1}}}, got.Spawns)
 	assert.Nil(t, got.RootContext)
@@ -99,7 +114,7 @@ func TestSummarizeCostCarriesASpawnsContextIntoThePriceStep(t *testing.T) {
 		{Child: "Explore", At: at(1), DeclaredModel: "claude-haiku-5-5", ContextTokens: 120_000},
 	}}
 
-	got := summarizeCost(tr, model.Shipped())
+	got := summarizeCost(tr, fixtureModels())
 
 	assert.Equal(t, []costSpawn{{At: at(1), Model: "claude-haiku-5-5", ContextTokens: 120_000}}, spawnsOf(tr))
 	require.NotNil(t, got.PastPriceStep)
@@ -120,7 +135,7 @@ func TestSummarizeCostReadsTheFactsAHookRecorded(t *testing.T) {
 	}
 	tr := trail.ForSession(base, "s1", 100)
 
-	got := summarizeCost(&tr, model.Shipped())
+	got := summarizeCost(&tr, fixtureModels())
 
 	assert.Equal(t, &rootContext{Peak: 250_000, P50: 250_000, Samples: 2, Models: []string{"claude-opus-5-5"}}, got.RootContext)
 	assert.Equal(t, int64(8000), got.Delegable.Chars)
@@ -132,7 +147,7 @@ func TestSummarizeCostReadsTheFactsAHookRecorded(t *testing.T) {
 func TestSummarizeCostNeverCountsAnUnknownThreadAsTheRoot(t *testing.T) {
 	calls := []trail.SessionCall{{At: at(1), Thread: types.AgentThreadUnknown, ContextTokens: 700_000, ContextModel: "claude-opus-5-5"}}
 
-	got := summarizeCost(&trail.SessionTrail{Commands: 1, Calls: calls}, model.Shipped())
+	got := summarizeCost(&trail.SessionTrail{Commands: 1, Calls: calls}, fixtureModels())
 
 	assert.Nil(t, got.RootContext)
 	assert.Equal(t, "no call is known to be on the main thread (1 of unknown thread)", got.NotMeasured[costRootContext])
@@ -151,7 +166,7 @@ func TestDollarsPriceTheCacheReadFloorOnceForEachModelCall(t *testing.T) {
 		metered(4, 150_000, "claude-haiku-5-5"), // past its 100k step: 5x the cache-read price
 	}
 
-	est, why := dollarsOf(calls, model.Shipped())
+	est, why := dollarsOf(calls, fixtureModels())
 
 	require.NotNil(t, est, why)
 	assert.Equal(t, 3, est.Calls)
@@ -172,7 +187,7 @@ func TestDollarsAreWithheldWhenTheyWouldBeAGuess(t *testing.T) {
 			c := mainCall(1, 400_000, tc.model)
 			c.Billing = tc.billing
 
-			est, why := dollarsOf([]trail.SessionCall{c}, model.Shipped())
+			est, why := dollarsOf([]trail.SessionCall{c}, fixtureModels())
 
 			assert.Nil(t, est)
 			assert.Equal(t, tc.want, why)
@@ -184,7 +199,7 @@ func TestDollarsAreWithheldWhenOneCallLacksBilling(t *testing.T) {
 	billed := mainCall(1, 400_000, "claude-opus-5-5")
 	billed.Billing = types.AgentBillingMetered
 
-	est, why := dollarsOf([]trail.SessionCall{billed, mainCall(2, 410_000, "claude-opus-5-5")}, model.Shipped())
+	est, why := dollarsOf([]trail.SessionCall{billed, mainCall(2, 410_000, "claude-opus-5-5")}, fixtureModels())
 
 	assert.Nil(t, est)
 	assert.Contains(t, why, "billing is unknown")
@@ -197,11 +212,11 @@ func TestPastPriceStepCountsChildrenOverTheirModelsStep(t *testing.T) {
 		{Model: "claude-opus-5-5", ContextTokens: 900_000}, // no step
 	}
 
-	got := pastPriceStep(spawns, model.Shipped())
+	got := pastPriceStep(spawns, fixtureModels())
 
 	require.NotNil(t, got)
 	assert.Equal(t, 1, *got)
-	assert.Nil(t, pastPriceStep([]costSpawn{{Model: "claude-haiku-5-5"}}, model.Shipped()), "an unreported size is not 0 children past")
+	assert.Nil(t, pastPriceStep([]costSpawn{{Model: "claude-haiku-5-5"}}, fixtureModels()), "an unreported size is not 0 children past")
 }
 
 func TestAdvisoryFollowEndsAfterTheWindow(t *testing.T) {
@@ -227,7 +242,7 @@ func TestRenderCostPrintsMeasuredAndUnmeasuredSections(t *testing.T) {
 	c1.ResultChars = 1000
 	c1.DelegableClass = "search"
 	tr.Calls = []trail.SessionCall{c1}
-	got := summarizeCost(tr, model.Shipped())
+	got := summarizeCost(tr, fixtureModels())
 
 	var buf bytes.Buffer
 	renderCost(&buf, got)
@@ -257,4 +272,17 @@ func TestSessionShowNamesTheCostSectionsItCouldNotMeasure(t *testing.T) {
 	assert.Contains(t, out, "Cost, with the root as the main thread:")
 	assert.Contains(t, out, "root context     not measured: this checkout's trail holds nothing for the session")
 	assert.NotContains(t, out, "$0.00")
+}
+
+func TestHarnessModelRowsOpenTheWorkspaceOnceAndOnlyWhenAsked(t *testing.T) {
+	opened := 0
+	rows := harnessModelRows(t.Context(), t.TempDir(), func(context.Context) (types.WorkspaceRepository, error) {
+		opened++
+		return nil, errors.New("magusfile.buzz does not load")
+	})
+
+	assert.Zero(t, opened, "building the reader reads nothing")
+	assert.Empty(t, rows(), "a workspace that will not load has no rows")
+	assert.Empty(t, rows())
+	assert.Equal(t, 1, opened)
 }

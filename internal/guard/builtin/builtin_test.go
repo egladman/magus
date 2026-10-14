@@ -269,8 +269,6 @@ func TestResolveChecksEachParameter(t *testing.T) {
 			`built-in rule "stage-all" takes no tokens parameter; only root-context-budget, test-cost-rule do`},
 		{"tokens below 1", rule, Setting{Decision: Advise, Tokens: -1},
 			`built-in rule "test-cost-rule": tokens is -1; give 1 or more, or leave it out`},
-		{"tokens past every window", rule, Setting{Decision: Advise, Tokens: 1_000_001},
-			`built-in rule "test-cost-rule": tokens is 1000001, past the largest context window any known model has (1000000); give 1000000 or less, or leave it out`},
 		{"calls below 2", rule, Setting{Decision: Deny, Calls: 1},
 			`built-in rule "test-cost-rule": calls is 1; give 2 or more, or leave it out`},
 		{"chars below 1000", rule, Setting{Decision: Advise, Chars: 999},
@@ -289,6 +287,15 @@ func TestResolveChecksEachParameter(t *testing.T) {
 	got, err := Resolve(map[string]Setting{rule: ok})
 	require.NoError(t, err)
 	assert.Equal(t, ok, got[rule])
+}
+
+// No window is built in to bound tokens by: a value no model could reach loads, since only
+// the workspace's own model rows know the largest window.
+func TestResolveDoesNotBoundTokensByAGuessedWindow(t *testing.T) {
+	rule := testRule(t)
+	got, err := Resolve(map[string]Setting{rule: {Decision: Advise, Tokens: 50_000_000}})
+	require.NoError(t, err)
+	assert.Equal(t, 50_000_000, got[rule].Tokens)
 }
 
 func TestResolveNamesEveryTakerOfAParameter(t *testing.T) {

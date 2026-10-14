@@ -1,12 +1,13 @@
 package guard
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
@@ -216,7 +217,7 @@ func TestShadowVerdicts(t *testing.T) {
 
 func TestPrincipalPricedReadsTheTable(t *testing.T) {
 	t.Parallel()
-	table := model.Shipped()
+	table := fixtureModelTable()
 	assert.True(t, principalPriced("opus", table))
 	assert.True(t, principalPriced("claude-fable-5-1", table))
 	assert.False(t, principalPriced("sonnet", table))
@@ -263,7 +264,9 @@ func TestMainThreadCommandsAreJudgedByTheCostRules(t *testing.T) {
 // A spawn naming no model is refused at strict, and a read-only job's spawn on one of the
 // costliest models is advised.
 func TestMainThreadSpawnsAreJudgedByTheSpawnRules(t *testing.T) {
-	ctx, _ := fleetFixture(t, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared, Model: "haiku"})
+	ctx, root := fleetFixture(t, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared, Model: "haiku"})
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("agents:\n  models:\n"+
+		"    claude-haiku-5-5: {window: 1000000, input: 0.1}\n    claude-opus-5-5: {window: 1000000, input: 4}\n"), 0o600))
 	deps := strictDeps(t)
 	at := hookLocation(ctx, deps)
 	hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)

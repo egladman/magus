@@ -85,6 +85,12 @@ type Dependencies struct {
 	// harness declares it; false when it declares none or cannot be loaded. It can load a
 	// harness spell, so it is asked only about a judgment that ran long.
 	HostHookTimeout func(ctx context.Context, host string) (time.Duration, bool)
+	// ModelRows yields the model rows the workspace's harnesses publish through
+	// harness_models, nil when none does. It can load the workspace and its harness
+	// spells, so the guard calls it once, and only for a judgment that needs a window or a
+	// price, never for one that needs only the billing mode. Nil means no rows: a rule
+	// then finds no facts for a model, as for one the table does not know.
+	ModelRows func() []types.ModelFacts
 	// CheckoutState reads the checkout holding dir for a command rule judging a push or a
 	// commit, nil when its version control cannot report it.
 	CheckoutState func(ctx context.Context, dir string) *types.CheckoutState
@@ -2367,6 +2373,7 @@ func hookLocationAt(deps Dependencies, dir string) location {
 			dir = wd
 		}
 	}
+	useModelRows(root, deps.ModelRows)
 	return location{cacheDir: cacheDir, workspace: root, dir: dir}
 }
 

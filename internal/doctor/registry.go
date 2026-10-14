@@ -308,12 +308,6 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkAgentSkills() },
 	},
 	{
-		Name:     modelTableCheck,
-		Doc:      "the shipped agent model table is recent enough to know the models in use",
-		Evidence: types.EvidenceInferred,
-		run:      func(r *runner, _ []*types.Project) types.Check { return r.checkModelTable() },
-	},
-	{
 		Name:           "release-index",
 		Doc:            "the signed release index has not passed its expires_at",
 		Evidence:       types.EvidenceMeasured,

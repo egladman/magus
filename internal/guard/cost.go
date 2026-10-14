@@ -101,7 +101,7 @@ func callerContext(at location, who hookAttribution, thread types.AgentThread, f
 		return nil
 	}
 	if c.Window == 0 {
-		if row, ok := resolveModel(c.Model, accountAt(at.workspace).models); ok {
+		if row, ok := resolveModel(c.Model, accountAt(at.workspace).table()); ok {
 			c.Window = row.Window
 		}
 	}
@@ -112,8 +112,22 @@ func callerContext(at location, who hookAttribution, thread types.AgentThread, f
 // account agents run under.
 type account struct {
 	billing types.AgentBilling
-	models  model.Table
+	// models holds the rows agents.models declares and nothing else; table adds the rows
+	// the workspace's harnesses publish. Reading them takes a workspace load, so a call
+	// that needs only billing must not trigger it.
+	models model.Table
+	// harness yields the harness rows, once; nil when the workspace registered none.
+	harness func() []types.ModelFacts
 	read    time.Time
+}
+
+// table is every model row in effect: the workspace's harness rows, then agents.models
+// over them. The harness rows load on the first call.
+func (a account) table() model.Table {
+	if a.harness == nil {
+		return a.models
+	}
+	return model.Table{}.Merge(a.harness()).Merge(a.models.Rows())
 }
 
 // accountTTL bounds how long a process trusts a read of magus.yaml; a daemon judging for
@@ -122,17 +136,32 @@ const accountTTL = 10 * time.Second
 
 var accounts sync.Map
 
-// accountAt is the billing mode and model table in effect for the workspace at root. A
-// magus.yaml that does not load leaves billing unknown and the shipped table, and a
-// declared mode the environment contradicts yields the detected one.
+// modelRowSources holds, per workspace root, the lazy reader of the rows its harnesses
+// publish, as Dependencies.ModelRows supplies it.
+var modelRowSources sync.Map
+
+// useModelRows records rows as the source of the harness model rows for the workspace at
+// root. A nil rows leaves the source alone.
+func useModelRows(root string, rows func() []types.ModelFacts) {
+	if rows != nil && root != "" {
+		modelRowSources.Store(root, rows)
+	}
+}
+
+// accountAt is the billing mode and agents.models rows in effect for the workspace at
+// root. A magus.yaml that does not load leaves billing unknown and no rows, and a declared
+// mode the environment contradicts yields the detected one.
 func accountAt(root string) account {
 	if got, ok := accounts.Load(root); ok && time.Since(got.(account).read) < accountTTL {
 		return got.(account)
 	}
-	a := account{models: model.Shipped(), read: time.Now()}
+	a := account{read: time.Now()}
+	if src, ok := modelRowSources.Load(root); ok {
+		a.harness = src.(func() []types.ModelFacts)
+	}
 	if agents, err := config.LoadAgents(root); err == nil {
 		a.billing, _ = agents.ResolveBilling(os.Getenv)
-		a.models = a.models.Merge(agents.ModelOverrides())
+		a.models = model.Table{}.Merge(agents.ModelOverrides())
 	} else {
 		a.billing = config.DetectBilling(os.Getenv)
 	}
@@ -710,7 +739,7 @@ func contextWindow(st costState, at location) int64 {
 	if st.Window > 0 {
 		return st.Window
 	}
-	if row, ok := resolveModel(st.Model, accountAt(at.workspace).models); ok {
+	if row, ok := resolveModel(st.Model, accountAt(at.workspace).table()); ok {
 		return row.Window
 	}
 	return 0

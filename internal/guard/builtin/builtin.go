@@ -1,8 +1,8 @@
 // Package builtin holds the decision each compiled guard rule takes when the workspace
 // declares nothing for it, and resolves what a workspace does declare against that set.
 //
-// It imports only leaves (stdlib, types and the model table) so the guard, the Buzz binding
-// and the CLI can all read one table without importing the guard engine.
+// It imports only leaves (stdlib and types) so the guard, the Buzz binding and the CLI can
+// all read one table without importing the guard engine.
 package builtin
 
 import (
@@ -12,7 +12,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/types"
 )
 
@@ -331,17 +330,15 @@ func validate(name string, s Setting) error {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 			"built-in rule %q never refuses; give off or advise", name).WithWhy(why)
 	}
-	window := model.Shipped().LargestWindow()
 	for _, p := range []struct {
 		param string
 		value int
 		min   int
-		max   int
 	}{
-		{"lines", s.Lines, 1, 0},
-		{"tokens", s.Tokens, 1, int(window)},
-		{"calls", s.Calls, 2, 0},
-		{"chars", s.Chars, 1000, 0},
+		{"lines", s.Lines, 1},
+		{"tokens", s.Tokens, 1},
+		{"calls", s.Calls, 2},
+		{"chars", s.Chars, 1000},
 	} {
 		if p.value == 0 {
 			continue
@@ -352,11 +349,6 @@ func validate(name string, s Setting) error {
 		if p.value < p.min {
 			return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 				"built-in rule %q: %s is %d; give %d or more, or leave it out", name, p.param, p.value, p.min)
-		}
-		if p.max > 0 && p.value > p.max {
-			return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-				"built-in rule %q: %s is %d, past the largest context window any known model has (%d); give %d or less, or leave it out",
-				name, p.param, p.value, p.max, p.max)
 		}
 	}
 	if len(s.Markers) > 0 && !slices.Contains(params[name], "markers") {

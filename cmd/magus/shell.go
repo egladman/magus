@@ -335,6 +335,7 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 		TrackedFiles:     trackedFilesForGuard,
 		CheckoutBase:     checkoutBaseForGuard,
 		CheckoutState:    checkoutStateForGuard,
+		ModelRows:        guardModelRows(ctx, rootOverride),
 		VCS: types.VCSOptions{
 			Enabled: globalCfg.VCS.Enabled, Name: globalCfg.VCS.Name, BaseRef: globalCfg.VCS.BaseRef,
 		},
@@ -378,6 +379,42 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 		return magus.LoadApprovedWriteRule(ctx, root)
 	}
 	return deps, nil
+}
+
+// harnessModelRows is the lazy reader of the model rows the harnesses wired in the
+// workspace at root publish through harness_models. The first call opens the workspace
+// through inspect and loads each harness spell, and its answer is kept for the rest, so a
+// judgment that never asks for a row pays for none of it. A workspace that does not load,
+// wires no harness or wires none that publishes rows yields no rows, which the guard reads
+// as no facts about a model rather than an error.
+func harnessModelRows(ctx context.Context, root string, inspect func(context.Context) (types.WorkspaceRepository, error)) func() []types.ModelFacts {
+	return sync.OnceValue(func() []types.ModelFacts {
+		ws, err := inspect(ctx)
+		if err != nil {
+			return nil
+		}
+		wired := workspaceHarnessNames(ws)
+		ctx := agent.ContextWithWiredHarnesses(types.WithWorkspace(ctx, ws), wired)
+		var rows []types.ModelFacts
+		for _, id := range wired {
+			if d, _, err := agent.LoadHarness(ctx, root, id); err == nil {
+				rows = append(rows, d.Models...)
+			}
+		}
+		return rows
+	})
+}
+
+// guardModelRows is harnessModelRows for the workspace found from rootOverride, opened as
+// the guard's other rules open it, so one load serves them all. nil outside a workspace.
+func guardModelRows(ctx context.Context, rootOverride string) func() []types.ModelFacts {
+	root, err := magus.FindRoot(rootOverride)
+	if err != nil {
+		return nil
+	}
+	return harnessModelRows(ctx, root, func(ctx context.Context) (types.WorkspaceRepository, error) {
+		return inspectWorkspace(ctx, rootOverride)
+	})
 }
 
 // guardCacheDir resolves a workspace's cache directory for the guard: root's own, read from

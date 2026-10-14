@@ -2,7 +2,6 @@ package doctor
 
 import (
 	"regexp"
-	"slices"
 	"testing"
 
 	"github.com/egladman/magus/libs/testkit"
@@ -89,19 +88,6 @@ func TestRunSkipsWorkspaceChecksWhenLoadFailed(t *testing.T) {
 	require.Contains(t, byName, "workspace")
 	assert.Equal(t, types.CheckFail, byName["workspace"].Status)
 	assert.NotContains(t, byName, "vcs-base-ref")
-}
-
-// The model table belongs to the binary, so it is checked even when the workspace will not
-// load.
-func TestRunReportsTheModelTableWithoutAWorkspace(t *testing.T) {
-	i := slices.IndexFunc(allChecks, func(def checkDef) bool { return def.Name == modelTableCheck })
-	require.GreaterOrEqual(t, i, 0, "model-table is not registered")
-	assert.False(t, allChecks[i].NeedsWorkspace)
-
-	report := Run(t.Context(), t.TempDir(), nil, assert.AnError)
-	j := slices.IndexFunc(report.Checks, func(c types.Check) bool { return c.Name == modelTableCheck })
-	require.GreaterOrEqual(t, j, 0, "the report carries no model-table check")
-	assert.NotEqual(t, types.EvidenceUnknown, report.Checks[j].Evidence)
 }
 
 // TestEveryRunCheckStatesItsEvidence pins the property the whole field exists for: no

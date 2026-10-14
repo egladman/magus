@@ -953,7 +953,7 @@ func sessionShow(root string, args []string) error {
 
 	out := summarizeSession(rest[0], events)
 	out.Trail = sessionTrailHere(root, rest[0])
-	out.Cost = summarizeCost(out.Trail, model.Shipped().Merge(globalCfg.Agents.ModelOverrides()))
+	out.Cost = summarizeCost(out.Trail, sessionModelTable(root))
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
@@ -963,6 +963,18 @@ func sessionShow(root string, args []string) error {
 	}
 	renderSessionShow(os.Stdout, out)
 	return nil
+}
+
+// sessionModelTable is the model rows in effect for the workspace at root: those its
+// harnesses publish, then agents.models over them. A workspace that will not load has no
+// harness rows, and the cost section then reports no facts for a model rather than failing
+// the report. The workspace is opened apart from the process's shared handle, which a
+// session read never needs.
+func sessionModelTable(root string) model.Table {
+	rows := harnessModelRows(context.Background(), root, func(ctx context.Context) (types.WorkspaceRepository, error) {
+		return magus.Inspect(ctx, root, magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
+	})
+	return model.Table{}.Merge(rows()).Merge(globalCfg.Agents.ModelOverrides())
 }
 
 // sessionTrailHere folds this checkout's trail for the session, or nil when it holds
