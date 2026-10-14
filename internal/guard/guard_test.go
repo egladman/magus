@@ -1073,7 +1073,6 @@ func TestJudgeLeaseNoticesHonorEveryDecision(t *testing.T) {
 	}
 }
 
-
 // The shell advisories that spoke with no name, each now naming a catalogued rule.
 func TestShellAdvisoriesNameACataloguedRule(t *testing.T) {
 	t.Parallel()

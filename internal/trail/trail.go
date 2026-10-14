@@ -256,7 +256,7 @@ type AgentCommand struct {
 	Reason     string
 	Context    string
 	// Rule is the catalogued rule behind a deny, advise or ask; empty for a pass.
-	Rule string
+	Rule      string
 	Lease     string
 	LeaseFrom types.LeaseSource
 	// PreauthorizedBy is the `next` template that had already served this exact command to

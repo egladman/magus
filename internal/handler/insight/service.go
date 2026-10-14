@@ -18,7 +18,7 @@ import (
 
 	"github.com/egladman/magus/internal/service/console"
 	graphv1 "github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1"
-	insightv1"github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1"
+	insightv1 "github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1/insightv1alpha1connect"
 	"github.com/egladman/magus/types"
 )

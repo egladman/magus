@@ -216,4 +216,3 @@ func planHarnessSetting(root string, s HarnessSetting) (types.HarnessFile, error
 			settingLocation(s), got, s.Value)
 	})
 }
-

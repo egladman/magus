@@ -2257,7 +2257,7 @@ func specChange(field string, prev, next types.Job) string {
 		"read_paths":  {prev.ReadPaths, next.ReadPaths},
 		"depends_on":  {prev.DependsOn, next.DependsOn},
 		"breaks":      {prev.Breaks, next.Breaks},
-		"goals":      {goalIDs(prev.Goals), goalIDs(next.Goals)},
+		"goals":       {goalIDs(prev.Goals), goalIDs(next.Goals)},
 	}
 	pair, ok := lists[field]
 	if !ok {

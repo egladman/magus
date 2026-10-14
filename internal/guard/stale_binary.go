@@ -64,14 +64,14 @@ func unloadCause(loadFailure error, root string) unloadReason {
 		return unloadReason{}
 	}
 	if ward.IsStaleBinary(loadFailure) {
-		return unloadReason{Cause:unloadStale}
+		return unloadReason{Cause: unloadStale}
 	}
 	spell := skewedSpell(loadFailure, root)
 	switch {
 	case !hasMagusBinary(root):
-		return unloadReason{Cause:unloadNoBinary, Spell: spell}
+		return unloadReason{Cause: unloadNoBinary, Spell: spell}
 	case spell != "":
-		return unloadReason{Cause:unloadSkewedSpell, Spell: spell}
+		return unloadReason{Cause: unloadSkewedSpell, Spell: spell}
 	}
 	return unloadReason{}
 }

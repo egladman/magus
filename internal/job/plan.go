@@ -581,7 +581,7 @@ func declarationWord(signature string) string {
 		if end < 0 {
 			return ""
 		}
-		fields := strings.Fields(sig[len("func (") : end])
+		fields := strings.Fields(sig[len("func ("):end])
 		name := nameOf(strings.TrimLeft(sig[end+1:], ". "))
 		if len(fields) == 0 || name == "" {
 			return ""

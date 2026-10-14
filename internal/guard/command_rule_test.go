@@ -87,13 +87,13 @@ func TestCommandRuleSeesTheHostsSubagentID(t *testing.T) {
 			Args:    []string{"push", "origin", "HEAD:x"},
 			VCS:     &types.VCSInvocation{Tool: "git", Subcommand: "push", Args: []string{"origin", "HEAD:x"}},
 		}},
-		Agent:       "a534fcfe",
-		Role:        types.AgentRoleRoot,
-		Thread:      types.AgentThreadSub,
-		ThreadFrom:  types.ThreadReported,
-		Checkout:    sub.Checkout, // read from the fixture's own checkout, which this test does not shape
-		Dir:         sub.Dir,
-		Workspace:   sub.Workspace,
+		Agent:      "a534fcfe",
+		Role:       types.AgentRoleRoot,
+		Thread:     types.AgentThreadSub,
+		ThreadFrom: types.ThreadReported,
+		Checkout:   sub.Checkout, // read from the fixture's own checkout, which this test does not shape
+		Dir:        sub.Dir,
+		Workspace:  sub.Workspace,
 	}, sub, "the subagent reports the main session's id; magus never saw it spawned, so no Parent or Lease")
 	assert.Empty(t, main.Agent, "the main agent carries no subagent id")
 }
