@@ -1101,13 +1101,10 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if err := job.RefuseAmbiguousSymbols(ctx, row.Goals, symbols); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
-	declaredPaths := probe.WritePaths
-	resolved, derived, err := job.ResolveSymbolGoals(ctx, probe, symbols)
+	probe, derived, err := resolveForkGoals(ctx, store, probe, symbols)
 	if err != nil {
 		return usagef("magus job fork: %s", err)
 	}
-	derived = placedClaims(ctx, store, root, row.ID, derived)
-	probe.Goals, probe.WritePaths = resolved.Goals, append(slices.Clone(declaredPaths), derived...)
 	row.Goals, row.WritePaths = probe.Goals, probe.WritePaths
 	if err := job.RefuseDirectoryWritePaths(store, probe); err != nil {
 		return usagef("magus job fork: %s", err)

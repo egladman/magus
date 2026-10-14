@@ -428,8 +428,8 @@ func RefuseAmbiguousSymbols(ctx context.Context, goals []types.Goal, read Symbol
 // the write paths do not cover claims that symbol's declaration, `<file>#<declaration>`,
 // since its holder has to write it. A goal that only asks a symbol to be present or
 // unreferenced claims nothing, a read-only row claims nothing, and so does a symbol whose
-// declaration line has no form a claim can name (a field, a value). A door still holds each
-// claim to the rules a declared one meets, and drops one no diff driver can place.
+// declaration line has no form a claim can name (a field, a value). Every door then holds
+// the claims to [PlaceDerivedClaims].
 func ResolveSymbolGoals(ctx context.Context, row types.Job, read SymbolReader) (types.Job, []string, error) {
 	row = row.Clone()
 	var refused, claims []string
@@ -567,22 +567,29 @@ func resolveMerge(ctx context.Context, store *Store, rows []types.Job, id string
 	if err != nil {
 		return nil, err
 	}
+	placed, err := PlaceDerivedClaims(ctx, store, derived)
+	if err != nil {
+		return nil, err
+	}
 	goals := resolved.Goals
-	paths := append(slices.Clone(probe.WritePaths), placeableClaims(ctx, store, derived)...)
+	paths := append(slices.Clone(probe.WritePaths), placed...)
 	return func(u *types.Job) {
 		merge(u)
 		u.Goals, u.WritePaths = goals, paths
 	}, nil
 }
 
-// placeableClaims are the derived claims whose word names exactly one declaration of its
-// file as store's version control places them. The rest are dropped rather than refused: a
-// derived claim is magus's inference, not the job's request, and one no diff driver places,
-// or that names no declaration or several, would hold the holder to lines it never meant.
-// A store with no tree to ask places nothing.
-func placeableClaims(ctx context.Context, store *Store, derived []string) []string {
+// PlaceDerivedClaims holds the claims [ResolveSymbolGoals] derived to the one rule every
+// door that stores a job shares, and returns those it keeps. A derived claim names a
+// declaration that exists, so its word must name exactly one declaration of its file as
+// store's version control places them: none means the symbol index is behind the tree, and
+// several mean the claim would guard more than the goal asked for, and either is refused
+// (MGS3031). A file no diff driver places gets no claim, and a store with no tree to ask
+// places none. A claim written by hand is held to [RefuseUngradableClaims] instead, which
+// accepts a word naming no declaration, since that one may not be written yet.
+func PlaceDerivedClaims(ctx context.Context, store *Store, derived []string) ([]string, error) {
 	if store == nil || store.root == "" || len(derived) == 0 {
-		return nil
+		return nil, nil
 	}
 	files := make([]string, len(derived))
 	for i, claim := range derived {
@@ -590,19 +597,35 @@ func placeableClaims(ctx context.Context, store *Store, derived []string) []stri
 	}
 	driver, drivers, why := claimDrivers(ctx, store.root, files)
 	if why != "" {
-		return nil
+		return nil, nil
 	}
-	var kept []string
+	var kept, refused []string
 	for _, claim := range derived {
 		file, word := types.SplitClaim(claim)
 		if drivers[file] == "" {
 			continue
 		}
-		if all, ok := declarationsOf(ctx, driver, store.root, file); ok && len(namedDeclarations(word, all)) == 1 {
+		all, ok := declarationsOf(ctx, driver, store.root, file)
+		if !ok {
+			refused = append(refused, fmt.Sprintf("%q: the declarations of %s could not be placed", claim, file))
+			continue
+		}
+		switch matched := namedDeclarations(word, all); len(matched) {
+		case 1:
 			kept = append(kept, claim)
+		case 0:
+			refused = append(refused, fmt.Sprintf("%q names no declaration of %s, so the symbol index is behind the tree; `%s` brings it current",
+				claim, file, hint.GraphBuild))
+		default:
+			refused = append(refused, ambiguousClaim(file, word, matched, all))
 		}
 	}
-	return kept
+	if len(refused) > 0 {
+		return nil, types.DiagnosticErrorf(types.WritePathClaimUngradable,
+			"job: a claim derived from a symbol goal must name exactly one declaration: %s. Claim the declaration in write_paths instead, or fix what is named",
+			strings.Join(refused, "; "))
+	}
+	return kept, nil
 }
 
 // keepFrozenSignatures fills each signature goal of row that declares none from prev's goal

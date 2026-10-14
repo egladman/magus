@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -63,6 +66,55 @@ func TestReadSymbolDelta(t *testing.T) {
 	} {
 		_, ok := read()
 		assert.False(t, ok, "%s: a delta nobody could read is unknown, not empty", name)
+	}
+}
+
+// The fork door and job apply hold one derived claim to one rule: a word naming exactly one
+// declaration is kept, one naming none is refused alike, and a file no diff driver places
+// is claimed by neither.
+func TestForkAndApplyHoldDerivedClaimsAlike(t *testing.T) {
+	t.Parallel()
+
+	root := testkit.NewRepo(t, map[string]string{
+		".gitattributes": "*.go diff=golang\n",
+		"run.go":         "package run\n\nfunc A(ctx int) {\n\ta()\n}\n\nfunc B(ctx int) {\n\tb()\n}\n",
+		"notes.txt":      "A\n",
+	}).Root()
+	for _, tc := range []struct {
+		name    string
+		fact    job.SymbolFact
+		paths   []string
+		refused string
+	}{
+		{"a word naming one declaration", job.SymbolFact{DefinedIn: []string{"run.go"}, Signature: "func A(ctx int)"},
+			[]string{"other.go", "run.go#func A"}, ""},
+		{"a file no driver places", job.SymbolFact{DefinedIn: []string{"notes.txt"}, Signature: "func A()"},
+			[]string{"other.go"}, ""},
+		{"an index behind the tree", job.SymbolFact{DefinedIn: []string{"run.go"}, Signature: "func Gone()"},
+			nil, `"run.go#func Gone" names no declaration of run.go`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			read := func(context.Context, string, string) (job.SymbolFact, bool) { return tc.fact, true }
+			goals := []types.Goal{{ID: "moved", Kind: types.GoalKindSymbol, Expect: types.ExpectChanged, Symbols: []string{"A"}}}
+			store := job.NewStore(job.Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: root, Actor: &job.Actor{}})
+
+			forked, _, forkErr := resolveForkGoals(t.Context(), store, types.Job{ID: "wave/job", WritePaths: []string{"other.go"}, Goals: goals}, read)
+			plan, applyErr := job.Apply(t.Context(), store, []types.Declaration{{ID: "wave/job", WritePaths: []string{"other.go"},
+				Check: &types.LeaseCheck{Target: "test", Project: "."}, Goals: goals}}, config.Jobs{}, read, nil, true)
+
+			if tc.refused != "" {
+				require.Error(t, forkErr)
+				require.Error(t, applyErr)
+				assert.Equal(t, forkErr.Error(), applyErr.Error(), "the two doors refuse with one answer")
+				assert.Contains(t, forkErr.Error(), tc.refused)
+				return
+			}
+			require.NoError(t, forkErr)
+			require.NoError(t, applyErr)
+			assert.Equal(t, tc.paths, forked.WritePaths)
+			assert.Equal(t, tc.paths, plan[0].Next.WritePaths)
+		})
 	}
 }
 

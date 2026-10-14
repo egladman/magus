@@ -107,22 +107,21 @@ func readSymbolDelta(ctx context.Context, root string, g *knowledge.Graph, drive
 	return delta, true
 }
 
-// placedClaims are the claims job.ResolveSymbolGoals derived that the fork can hold its
-// holder to: each one job.RefuseUngradableClaims accepts in root's tree. The rest name a
-// file with no diff driver, or a word naming several declarations, and are dropped rather
-// than refused, since magus inferred them and the job did not ask for them. A fork with no
-// workspace places nothing.
-func placedClaims(ctx context.Context, store *job.Store, root, id string, derived []string) []string {
-	if root == "" {
-		return nil
+// resolveForkGoals is the fork door's half of what job.Apply and job.ForkMerge do to a row:
+// freeze its signature goals, derive the claims its symbol goals imply, and hold those to
+// job.PlaceDerivedClaims, the rule all three doors share. It returns the row with the
+// placed claims added to its write paths, and those claims.
+func resolveForkGoals(ctx context.Context, store *job.Store, row types.Job, read job.SymbolReader) (types.Job, []string, error) {
+	resolved, derived, err := job.ResolveSymbolGoals(ctx, row, read)
+	if err != nil {
+		return types.Job{}, nil, err
 	}
-	var kept []string
-	for _, claim := range derived {
-		if job.RefuseUngradableClaims(ctx, store, types.Job{ID: id, WritePaths: []string{claim}}) == nil {
-			kept = append(kept, claim)
-		}
+	placed, err := job.PlaceDerivedClaims(ctx, store, derived)
+	if err != nil {
+		return types.Job{}, nil, err
 	}
-	return kept
+	resolved.WritePaths = append(slices.Clone(row.WritePaths), placed...)
+	return resolved, placed, nil
 }
 
 // goExport is a Go symbol's name as a goal spells it, `Type#Member` for a member, and
