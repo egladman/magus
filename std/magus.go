@@ -887,6 +887,7 @@ var Magus = Module{
 					Extern: true,
 				},
 			},
+			Objects: []string{"ModelTierRequest", "ModelTierBounds", "JobModelTier"},
 		},
 		{
 			Name: "describe",
