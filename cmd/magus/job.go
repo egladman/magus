@@ -173,11 +173,39 @@ func probeConsoleServer() (serving bool, serverVersion string) {
 const consoleProbeTimeout = 2 * time.Second
 
 func openJobs(root string) (*job.Store, error) {
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	loc, err := jobLocation(root)
 	if err != nil {
 		return nil, err
 	}
-	return job.NewStore(job.Location{CacheDir: cacheDir, Root: root, Outputs: outputsIn, Grader: newCheckGrader()}), nil
+	return job.NewStore(loc), nil
+}
+
+func jobLocation(root string) (job.Location, error) {
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return job.Location{}, err
+	}
+	return job.Location{CacheDir: cacheDir, Root: root, Outputs: outputsIn, Grader: newCheckGrader()}, nil
+}
+
+// openForkJobs opens the store a write that creates a row or changes its model goes
+// through: openJobs, with the workspace's model tiers and matrix wired so the store
+// assigns the row's tier. A workspace that will not load is an error, since a tier
+// declaration that failed to load must not read as one that declared nothing; a root
+// of "" is no workspace at all, and assigns nothing.
+func openForkJobs(ctx context.Context, root string) (*job.Store, error) {
+	loc, err := jobLocation(root)
+	if err != nil {
+		return nil, err
+	}
+	if root != "" {
+		m, err := loadMagus(ctx, root)
+		if err != nil {
+			return nil, err
+		}
+		loc.ModelTiers, loc.ModelTierMatrix = m.ModelTiers(), m.ModelTierMatrix()
+	}
+	return job.NewStore(loc), nil
 }
 
 // newCheckGrader grades a declared check against the guard's rules for the workspace at the
@@ -626,7 +654,7 @@ func printJobTree(out io.Writer, report types.JobList) {
 		}
 		fmt.Fprintf(w, "%s%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
 			strings.Repeat("  ", row.depth), row.lease.ID,
-			jobHolderCell(row.lease), state, orDash(row.lease.Model),
+			jobHolderCell(row.lease), state, jobModelCell(row.lease),
 			len(row.lease.WritePaths), orDash(string(row.lease.WriteProof)), orDash(row.lease.Validation))
 	}
 	_ = w.Flush()
@@ -677,6 +705,27 @@ func printJobTree(out io.Writer, report types.JobList) {
 			fmt.Fprintf(out, "    %s\n", line)
 		}
 	}
+}
+
+// jobModelCell is the model the job names, else the model tier the store assigned it.
+func jobModelCell(row types.Job) string {
+	if row.Model == "" && row.ModelTier != nil {
+		return row.ModelTier.Name
+	}
+	return orDash(row.Model)
+}
+
+// modelTierLine is the line `describe job` prints for the tier a job was assigned; see
+// job.Terms.
+func modelTierLine(t types.JobModelTier) string {
+	line := fmt.Sprintf("model tier: %s (rank %d), %s", t.Name, t.Rank, t.Source)
+	if t.Reason != "" {
+		line += fmt.Sprintf(": %q", t.Reason)
+	}
+	if t.Site != "" {
+		line += " at " + t.Site
+	}
+	return line
 }
 
 // jobHolderCell is who holds row as the tree names it: the server for its own jobs, the
@@ -1001,7 +1050,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		fs.Var(&declared.readPaths, "read-paths", "A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)")
 		fs.Var(&declared.dependsOn, "depends-on", "A job this one waits on; repeatable or comma-separated")
 		fs.StringVar(&declared.check, "check", "", "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
-		fs.StringVar(&declared.model, "model", "", "The model the work was matched to")
+		fs.StringVar(&declared.model, "model", "", "The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier")
 		fs.BoolVar(&declared.readOnly, "read-only", false, "A job that gathers evidence and writes nothing")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job fork <job> [flags]")
@@ -1070,12 +1119,16 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	}
 
 	root = resolveRootOrEmpty(root)
-	store, err := openJobs(root)
+	if row.Enter != "" {
+		store, err := openJobs(root)
+		if err != nil {
+			return err
+		}
+		return jobEnter(ctx, store, row.ID, row.Enter)
+	}
+	store, err := openForkJobs(ctx, root)
 	if err != nil {
 		return err
-	}
-	if row.Enter != "" {
-		return jobEnter(ctx, store, row.ID, row.Enter)
 	}
 	var probe types.Job
 	row.Apply(&probe)
@@ -1157,6 +1210,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		fmt.Printf("forked %s, %s, with %d write path(s). Its holder reads the terms with `%s` and takes it with `%s`\n",
 			stored.ID, orDash(string(stored.State)), len(stored.WritePaths),
 			hint.DescribeJob.With(stored.ID), hint.JobExec.With(stored.ID))
+		if stored.ModelTier != nil {
+			fmt.Println(modelTierLine(*stored.ModelTier))
+		}
 		if len(derived) > 0 {
 			fmt.Printf("its symbol goals claimed %d declaration(s) its write paths did not cover:\n", len(derived))
 			for _, claim := range derived {
@@ -2625,7 +2681,11 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		return usagef("magus job apply: %s (`%s` prints the schema each record must satisfy)", err, hint.JobFork.With("--schema"))
 	}
 	root = resolveRootOrEmpty(root)
-	store, err := openJobs(root)
+	opener := openForkJobs
+	if globalCfg.DryRun {
+		opener = func(_ context.Context, root string) (*job.Store, error) { return openJobs(root) }
+	}
+	store, err := opener(ctx, root)
 	if err != nil {
 		return err
 	}
@@ -2694,6 +2754,9 @@ func printJobApply(out io.Writer, applied []job.Applied, notes map[string]rowNot
 			fmt.Fprintf(out, "would create %s with %d write path(s)\n", a.Next.ID, len(a.Next.WritePaths))
 		case a.Created:
 			fmt.Fprintf(out, "created %s, %s, with %d write path(s)\n", a.Next.ID, a.Next.State, len(a.Next.WritePaths))
+			if a.Next.ModelTier != nil {
+				fmt.Fprintf(out, "%s\n", modelTierLine(*a.Next.ModelTier))
+			}
 		case len(a.Changed) == 0:
 			fmt.Fprintf(out, "unchanged %s\n", a.Next.ID)
 		default:

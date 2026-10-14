@@ -1336,3 +1336,37 @@ func TestEvidenceFlagCollectsGoalRefPairs(t *testing.T) {
 		})
 	}
 }
+
+// The MODEL column names the model the row asks for and falls back to the tier the store
+// assigned, so a row that names nothing still shows what it runs at.
+func TestJobModelCellFallsBackToTheAssignedTier(t *testing.T) {
+	t.Parallel()
+
+	tier := &types.JobModelTier{Name: "economy"}
+	tests := []struct {
+		name string
+		row  types.Job
+		want string
+	}{
+		{"the model the row names wins", types.Job{Model: "opus", ModelTier: tier}, "opus"},
+		{"the assigned tier stands in", types.Job{ModelTier: tier}, "economy"},
+		{"neither is a dash", types.Job{}, "-"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, jobModelCell(tt.row))
+		})
+	}
+}
+
+// Fork and describe job print one line, with the reason and site only when the source gave
+// them.
+func TestModelTierLine(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, `model tier: economy (rank 0), matrix: "small" at magusfile.buzz`,
+		modelTierLine(types.JobModelTier{Name: "economy", Source: types.ModelTierSourceMatrix, Reason: "small", Site: "magusfile.buzz"}))
+	assert.Equal(t, "model tier: standard (rank 1), default",
+		modelTierLine(types.JobModelTier{Name: "standard", Rank: 1, Source: types.ModelTierSourceDefault}))
+}

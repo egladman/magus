@@ -103,14 +103,42 @@ project's magusfile instead of the root one.
 
 ## Which tier a job gets
 
-A fork assigns the tier in this order, and records which step decided:
+The store assigns the tier when a row is created or its `model` changes, whichever
+door writes it: `magus job fork`, `magus job apply`, or `magus\job.put` from a
+magusfile or the client MCP tool. It tries these in order and records which step
+decided:
 
-1. **The row.** A tier or model the row names wins (`row`).
+1. **The row.** A `model` that is a tier name wins (`row`). A `model` that names no
+   tier is kept as the row's word and the job takes the declared default's rank;
+   hosts name their models differently, so the fork records the mismatch in the
+   reason instead of refusing it. `magus job fork --model` takes either.
 2. **The matrix.** The function registered with `magus\job.modelTier`, when the
-   row names neither (`matrix`).
-3. **The default.** The declaration's default (`default`).
+   row names no model (`matrix`). It may decline with `null`.
+3. **The default.** The declaration's default, with the skill variant the
+   declaration gives it (`default`). A workspace that declares nothing records the
+   shipped default.
 
-`magus job describe` prints the tier, the step that chose it and the reason.
+The record holds the tier, its rank, the skill variant, the source, the reason and,
+for a matrix, the magusfile that registered it. `magus job fork` prints it:
+
+```text
+model tier: economy (rank 0), matrix: "1 file" at magusfile.buzz
+```
+
+`magus describe job` prints the same line and the skill variant under it, and
+`magus ls jobs` shows the tier in the MODEL column of a row that names no model.
+Editing a row without changing its `model` leaves the tier alone, and nothing
+re-runs the matrix: a tier changes when someone edits the row, the matrix or the
+declaration.
+
+A fork that would put more jobs at a tier than its `maxLive` allows is refused
+before anything is written, and the message names the bound. The count is the
+live jobs recorded at that tier, read inside the write, so two forks racing for the
+last place cannot both take it. A matrix that raises, or answers with a tier the
+declaration lacks, a skill variant that is not one, or no reason, fails the fork;
+it never falls through to the default.
+
+`magus job apply --dry-run` assigns nothing and does not run the matrix.
 
 ## Pick a tier with a matrix
 
