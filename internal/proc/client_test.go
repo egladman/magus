@@ -60,7 +60,7 @@ func TestForwardCarriesTheLease(t *testing.T) {
 	got := make(chan string, 1)
 	srv, err := New(Options{
 		Handler: func(ctx context.Context, _ []string) error {
-			got <- LeaseFromContext(ctx)
+			got <- types.JobLeaseFromContext(ctx)
 			return nil
 		},
 	})

@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -478,7 +477,7 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 		return refusal
 	})
 
-	_, err = VcsCmd(proc.WithLease(ws, "worker"), []string{"push", "origin", "main"}, map[string]any{"quiet": true})
+	_, err = VcsCmd(types.WithJobLease(ws, "worker"), []string{"push", "origin", "main"}, map[string]any{"quiet": true})
 	require.ErrorIs(t, err, refusal)
 	assert.Equal(t, []string{"worker git push origin main " + dir}, asked)
 
@@ -489,7 +488,7 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 
 	gitEnv = nil
 	t.Setenv("GIT_INDEX_FILE", "/from/the/process")
-	err = OsWithEnv(proc.WithLease(ws, "worker"), map[string]string{"GIT_DIR": "/from/with_env"},
+	err = OsWithEnv(types.WithJobLease(ws, "worker"), map[string]string{"GIT_DIR": "/from/with_env"},
 		cbFunc(func(ctx context.Context) error {
 			_, err := VcsCmd(ctx, []string{"commit", "-m", "x"}, map[string]any{"quiet": true})
 			return err

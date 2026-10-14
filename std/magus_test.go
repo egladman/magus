@@ -12,7 +12,6 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/testkit"
@@ -66,7 +65,7 @@ func TestMagusCmdWarnsForTypedSubcommands(t *testing.T) {
 }
 
 func TestRecursiveMagusEnvPreservesTheCapturedLease(t *testing.T) {
-	ctx := proc.WithLease(t.Context(), "fleet/captured")
+	ctx := types.WithJobLease(t.Context(), "fleet/captured")
 	assert.Contains(t, recursiveMagusEnv(ctx), "BAGGAGE=magus.lease=fleet/captured")
 }
 
@@ -569,7 +568,7 @@ func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
 func TestJobStoreRetainsTheLeaseCapturedOnTheBuzzContext(t *testing.T) {
 	testkit.Isolate(t)
 	workspace := &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
-	ctx := proc.WithLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
+	ctx := types.WithJobLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
 
 	store, err := jobStoreFromContext(ctx, "job.put")
 	require.NoError(t, err)
@@ -582,7 +581,7 @@ func TestJobStorePrefersTheCheckoutsBindingOverTheCapturedClaim(t *testing.T) {
 	testkit.Isolate(t)
 	workspace := &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
 	require.NoError(t, job.NewStore(job.Location{CacheDir: workspace.cacheDir}).Bind(job.Caller{}, "fleet/bound"))
-	ctx := proc.WithLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
+	ctx := types.WithJobLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
 
 	store, err := jobStoreFromContext(ctx, "job.put")
 	require.NoError(t, err)

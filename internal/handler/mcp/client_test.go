@@ -20,7 +20,6 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/mcpclient"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -51,7 +50,7 @@ func TestClientStandInProcess(t *testing.T) {
 		if ws, err = magus.Open(ctx, root); err != nil {
 			return ctx, err
 		}
-		return proc.WithLease(types.WithWorkspace(ctx, ws), trail.LeaseFromEnv()), nil
+		return types.WithJobLease(types.WithWorkspace(ctx, ws), trail.LeaseFromEnv()), nil
 	})
 	if ws != nil {
 		_ = ws.Close()

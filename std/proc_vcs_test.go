@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -121,6 +120,6 @@ func TestVcsCmdIsStillLeaseGraded(t *testing.T) {
 	refusal := errors.New("lease-vcs: refused")
 	withVCSLeaseGate(t, func(context.Context, types.Job, string, []string, string, []string) error { return refusal })
 
-	_, err = VcsCmd(proc.WithLease(WithCwd(ws, repo.Root()), "worker"), []string{"commit", "--allow-empty", "-m", "x"}, nil)
+	_, err = VcsCmd(types.WithJobLease(WithCwd(ws, repo.Root()), "worker"), []string{"commit", "--allow-empty", "-m", "x"}, nil)
 	assert.ErrorIs(t, err, refusal)
 }

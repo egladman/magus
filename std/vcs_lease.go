@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/types"
@@ -61,7 +60,9 @@ func vcsLeaseRefusal(ctx context.Context, backend string, args []string, dir str
 	if !ok {
 		return nil
 	}
-	lease, _ := job.ActingLease(cd.CacheDir(), proc.LeaseFromContext(ctx))
+	// Ctx-only, not job.RunLease: the daemon's own environment names nobody's lease, and a
+	// CLI process has frozen its BAGGAGE onto ctx already.
+	lease, _ := job.ActingLease(cd.CacheDir(), types.JobLeaseFromContext(ctx))
 	if lease == "" {
 		return nil
 	}

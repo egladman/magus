@@ -125,7 +125,7 @@ func TestRunAdoptsClientAncestry(t *testing.T) {
 func TestRunAdoptsClientLease(t *testing.T) {
 	got := make(chan string, 1)
 	s := newJobService(func(ctx context.Context, _ []string) error {
-		got <- LeaseFromContext(ctx)
+		got <- types.JobLeaseFromContext(ctx)
 		return nil
 	})
 
@@ -147,7 +147,7 @@ func TestRunDropsAnInvalidClientLease(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got := make(chan string, 1)
 			s := newJobService(func(ctx context.Context, _ []string) error {
-				got <- LeaseFromContext(ctx)
+				got <- types.JobLeaseFromContext(ctx)
 				return nil
 			})
 

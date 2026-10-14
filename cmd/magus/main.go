@@ -138,7 +138,7 @@ func runCLI() int {
 	// Freeze the caller's lease at the trust boundary. A Buzz script may change its
 	// process environment later, but it must not shed the job identity it was handed
 	// before invoking another Magus entry point.
-	rootCtx = proc.WithLease(rootCtx, trail.LeaseFromEnv())
+	rootCtx = types.WithJobLease(rootCtx, trail.LeaseFromEnv())
 	// The verbs that are another entry point (the hook, the server) restamp this.
 	rootCtx = trail.ContextWithEntryPoint(rootCtx, types.EntryPointCLI)
 	// Stamp the binary's version onto the root context so host methods (the drift

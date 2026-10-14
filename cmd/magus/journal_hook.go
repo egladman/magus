@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 )
@@ -30,21 +29,12 @@ func withInvocationJournal(ctx context.Context, handlers []slog.Handler, root, v
 	// The environment is read ONCE, here, and every fact this invocation writes carries that
 	// copy. Reading it per fact would let a mid-run environment change split one
 	// invocation's facts across two leases, which is a history no producer could have meant.
-	//
-	// On an ADOPTED run the environment belongs to the SERVER, not to whoever asked for the
-	// run, so the environment channel alone leaves every forwarded run unattributed. proc
-	// carries the client's lease on the request and lands it on ctx, and that is the claim
-	// here. The trace context does not cross that socket, so a forwarded run records the
-	// client's lease and no ancestry rather than borrowing the server's. A plain CLI run
-	// carries none on ctx and reads its own environment.
 	spawn := trail.SpawnFromEnv()
-	if forwarded := proc.LeaseFromContext(ctx); forwarded != "" {
-		spawn = trail.Spawn{Lease: forwarded}
-	}
-	// The claim is resolved like every other lease, so a checkout's binding outranks it. A
-	// binding that does not read records no lease and says why, rather than recording the
-	// claim as if nothing outranked it.
-	lease, leaseFrom, err := checkoutLease(root, spawn.Lease)
+	// The lease is resolved like every other: on an ADOPTED run the environment belongs to
+	// the SERVER, so the client's lease on ctx is the claim, and a checkout's binding
+	// outranks it. A binding that does not read records no lease and says why, rather than
+	// recording the claim as if nothing outranked it.
+	lease, leaseFrom, err := checkoutLease(ctx, root)
 	if err != nil {
 		slog.With(attr.Component("magus")).WarnContext(ctx, "this invocation records no lease", attr.Error(err))
 		lease, leaseFrom = "", ""

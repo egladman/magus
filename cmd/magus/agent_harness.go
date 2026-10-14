@@ -15,7 +15,6 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )
 
@@ -54,7 +53,7 @@ func agentHarnessInstallCmd(ctx context.Context, rootOverride string, args []str
 	if root == "" {
 		return fmt.Errorf("magus agent harness install: no workspace here: run it from inside one or pass --root <path>")
 	}
-	lease, err := harnessActingLease(ctx, root)
+	lease, _, err := checkoutLease(ctx, root)
 	if err != nil {
 		return fmt.Errorf("magus agent harness install: %w", err)
 	}
@@ -126,22 +125,16 @@ func installHarnessSkillPath(ctx context.Context, root, path string, form agent.
 	return nil
 }
 
-// harnessActingLease is the lease a harness skill install is refused under: the checkout's
-// binding, else the claim this process was launched with.
-func harnessActingLease(ctx context.Context, root string) (string, error) {
-	lease, _, err := checkoutLease(root, proc.LeaseFromContext(ctx))
-	return lease, err
-}
-
 // checkoutLease resolves the lease a CLI call acts under in root's checkout through
-// job.ActingLease: the checkout's record, else claim. A CLI process knows no host
-// session or subagent, so those sources never answer here.
-func checkoutLease(root, claim string) (string, types.LeaseSource, error) {
+// job.RunLease: the checkout's record, else the claim of the process that asked for the
+// work (a forwarded call's lease, else BAGGAGE). A CLI process knows no host session or
+// subagent, so those sources never answer here.
+func checkoutLease(ctx context.Context, root string) (string, types.LeaseSource, error) {
 	dir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 	if err != nil {
 		return "", "", fmt.Errorf("resolve the checkout's lease: %w", err)
 	}
-	lease, from := job.ActingLease(dir, claim)
+	lease, from := job.RunLease(ctx, dir)
 	return lease, from, nil
 }
 

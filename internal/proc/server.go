@@ -70,30 +70,6 @@ func CwdFromContext(ctx context.Context) string {
 	return ""
 }
 
-// WithLease returns ctx carrying the client's lease, readable via
-// LeaseFromContext. An id failing [types.ValidJobID] (including the empty
-// string a client that predates the field sends) stores nothing, so a reader sees "".
-// It is [types.WithJobLease], so packages proc sits above, such as the cache recording a
-// run's output, read the same lease through [types.JobLeaseFromContext].
-//
-// The validation is here rather than at the call site because the value crosses a socket
-// any local process may dial: a lease id is exempt from the trail's redaction, so
-// storing an unvalidated one would let the wire carry a credential onto an event line.
-// Dropping it matches what trail.LeaseFromEnv does with a malformed environment value.
-func WithLease(ctx context.Context, lease string) context.Context {
-	return types.WithJobLease(ctx, lease)
-}
-
-// LeaseFromContext returns the lease the adopted client was launched under, or
-// "" when it claimed none or claimed one that failed validation.
-//
-// A caller that also reads the environment channel must prefer this: it is the lease
-// of the process that ASKED for the run, while the server's own environment describes
-// whoever happened to start the server.
-func LeaseFromContext(ctx context.Context) string {
-	return types.JobLeaseFromContext(ctx)
-}
-
 type sandboxFloorKey struct{}
 
 // WithSandboxFloor marks ctx as belonging to a run that must stay sandboxed at mode or
@@ -613,7 +589,7 @@ func (s *service) run(req runRequest, reply *runReply) error {
 
 	ctx = WithRoot(ctx, req.Root)
 	ctx = WithCwd(ctx, req.Cwd)
-	ctx = WithLease(ctx, req.Lease)
+	ctx = types.WithJobLease(ctx, req.Lease)
 	// A run of its own, so its env\set reaches no other run this server holds.
 	ctx = environ.With(ctx)
 	if req.Sandbox.Enabled() {

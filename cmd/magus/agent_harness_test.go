@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
@@ -66,20 +66,26 @@ func TestHarnessInstallRefusesABoundJobFromEitherSource(t *testing.T) {
 	saved := globalCfg
 	t.Cleanup(func() { globalCfg = saved })
 	globalCfg = config.Config{}
+	t.Setenv(trail.EnvBaggage, "")
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("version: 1\n"), 0o644))
 	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 
 	acting := func(ctx context.Context) string {
-		lease, err := harnessActingLease(ctx, root)
+		lease, _, err := checkoutLease(ctx, root)
 		require.NoError(t, err)
 		return lease
 	}
 	assert.Empty(t, acting(context.Background()), "an unbound caller installs its own skills")
 
-	claimed := proc.WithLease(context.Background(), "fleet/claimed")
+	claimed := types.WithJobLease(context.Background(), "fleet/claimed")
 	assert.Equal(t, "fleet/claimed", acting(claimed), "the claim")
+
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/env")
+	assert.Equal(t, "fleet/env", acting(context.Background()), "BAGGAGE, with no forwarded lease")
+	assert.Equal(t, "fleet/claimed", acting(claimed), "a forwarded lease over BAGGAGE")
+	t.Setenv(trail.EnvBaggage, "")
 
 	bindCheckout(t, cacheDir, "fleet/bound")
 	assert.Equal(t, "fleet/bound", acting(context.Background()), "the binding, with no claim")

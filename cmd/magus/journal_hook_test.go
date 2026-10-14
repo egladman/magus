@@ -10,7 +10,6 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
@@ -211,7 +210,7 @@ func TestWithInvocationJournalPrefersTheForwardedLease(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/server-env")
 	root := t.TempDir()
 
-	ctx := proc.WithLease(context.Background(), "fleet/client")
+	ctx := types.WithJobLease(context.Background(), "fleet/client")
 	handlers := withInvocationJournal(ctx, nil, root, "run", []string{"ci", "api"})
 	require.Len(t, handlers, 1)
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusPass})
@@ -238,7 +237,7 @@ func TestWithInvocationJournalFallsBackToTheEnvironmentWithoutAForwardedLease(t 
 
 	// An invalid forwarded id stores nothing, so this is also the "the wire lied" case: the
 	// context carries none and the local environment is what remains.
-	ctx := proc.WithLease(context.Background(), "not a lease id")
+	ctx := types.WithJobLease(context.Background(), "not a lease id")
 	handlers := withInvocationJournal(ctx, nil, root, "run", []string{"build"})
 	require.Len(t, handlers, 1)
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})

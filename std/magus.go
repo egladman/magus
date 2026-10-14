@@ -1810,7 +1810,7 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	if !ok {
 		return nil, fmt.Errorf("%s: this workspace has no cache directory", member)
 	}
-	loc := job.Location{CacheDir: cd.CacheDir(), Root: ws.Root(), Grader: currentJobGrader()}
+	loc := job.Location{CacheDir: cd.CacheDir(), Root: ws.Root(), Grader: currentJobGrader(), Build: proc.BinaryBuild()}
 	// Recovered by assertion like workspaceCacheDir; declared here, inside the one
 	// declaration this door owns.
 	type modelTiered interface {
@@ -1831,11 +1831,12 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 			return res.Seed, nil
 		}
 	}
-	// A Buzz process keeps the lease it was launched under in context. Do not
+	// Ctx-only on purpose, not job.RunLease: a Buzz process keeps the lease it was launched
+	// under in context, and the daemon's own environment names nobody's lease. Do not
 	// rediscover it from the mutable environment at each job-store write: a script
 	// could otherwise unset BAGGAGE and become an apparent orchestrator mid-run. It is
 	// the claim, so the checkout's record still outranks it.
-	if claim := proc.LeaseFromContext(ctx); claim != "" {
+	if claim := types.JobLeaseFromContext(ctx); claim != "" {
 		lease, _ := job.ActingLease(loc.CacheDir, claim)
 		loc.Actor = &job.Actor{Lease: lease}
 	}
@@ -2248,7 +2249,7 @@ func nestedResult(label string, full []string, res run.ExecResult, err error, op
 // process value, so a script cannot shed its bound lease before calling magus\cmd.
 func recursiveMagusEnv(ctx context.Context) []string {
 	var env []string
-	if lease := proc.LeaseFromContext(ctx); lease != "" {
+	if lease := types.JobLeaseFromContext(ctx); lease != "" {
 		env = append(env, trail.EnvBaggage+"="+trail.BaggageLease+"="+lease)
 	}
 	for _, k := range run.ProcForwardVars {

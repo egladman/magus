@@ -549,3 +549,48 @@ func TestAuthorizeGradesAHoldersVerdict(t *testing.T) {
 		})
 	}
 }
+
+// The lease a forwarded call carries is the claim of the process that asked, so it beats the
+// daemon's own BAGGAGE; with none forwarded BAGGAGE answers, and the checkout's record
+// outranks both.
+func TestRunLeaseResolvesTheForwardedLeaseBeforeTheEnvironment(t *testing.T) {
+	type answer struct {
+		Lease string
+		From  types.LeaseSource
+	}
+	for name, tc := range map[string]struct {
+		forwarded, baggage, bound string
+		want                      answer
+	}{
+		"nothing":                          {},
+		"the environment":                  {baggage: "fleet/env", want: answer{"fleet/env", types.LeaseSourceEnv}},
+		"the forwarded lease":              {forwarded: "fleet/client", want: answer{"fleet/client", types.LeaseSourceEnv}},
+		"the forwarded lease over BAGGAGE": {forwarded: "fleet/client", baggage: "fleet/env", want: answer{"fleet/client", types.LeaseSourceEnv}},
+		"an invalid forwarded lease":       {forwarded: "not a lease id", baggage: "fleet/env", want: answer{"fleet/env", types.LeaseSourceEnv}},
+		"the record over a claim":          {forwarded: "fleet/client", bound: "fleet/bound", want: answer{"fleet/bound", types.LeaseSourceContested}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(trail.EnvBaggage, "")
+			if tc.baggage != "" {
+				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.baggage)
+			}
+			cacheDir := t.TempDir()
+			if tc.bound != "" {
+				require.NoError(t, NewStore(Location{CacheDir: cacheDir}).Bind(Caller{}, tc.bound))
+			}
+
+			lease, from := RunLease(types.WithJobLease(t.Context(), tc.forwarded), cacheDir)
+			assert.Equal(t, tc.want, answer{lease, from})
+		})
+	}
+}
+
+// The footprint cache keys on the build, so a view that writes as another actor must keep
+// the build or it would silently recompute every footprint.
+func TestAsKeepsTheBuildTheFootprintCacheKeysOn(t *testing.T) {
+	t.Parallel()
+
+	s := NewStore(Location{StateBase: t.TempDir(), Root: t.TempDir(), Build: testBuild})
+	assert.Equal(t, testBuild, s.footprintCache().build)
+	assert.Equal(t, testBuild, s.As(Actor{Lease: "wave/worker"}).footprintCache().build)
+}

@@ -13,7 +13,6 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -367,17 +366,13 @@ func briefLeases(ctx context.Context, root string) (leases []briefLease, others 
 	if err != nil {
 		return nil, 0
 	}
-	claim := trail.SpawnFromEnv().Lease
-	if forwarded := proc.LeaseFromContext(ctx); forwarded != "" {
-		claim = forwarded
-	}
-	acting, _, _ := checkoutLease(root, claim)
+	acting, _, _ := checkoutLease(ctx, root)
 	var editing, exited []briefLease
 	for _, row := range rows {
 		if !row.State.Live() {
 			continue
 		}
-		mine := row.ID == acting || row.ID == claim ||
+		mine := row.ID == acting ||
 			(row.CheckoutRoot != "" && filepath.Clean(row.CheckoutRoot) == filepath.Clean(root))
 		if !mine {
 			others++

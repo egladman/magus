@@ -16,7 +16,6 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -307,7 +306,8 @@ func fileAttention(root string, ev types.Event) (held bool, err error) {
 	// Lease and files are not inputs to the id, on purpose; see sessions.RequestID.
 	// They ride the payload so the queue can say whose work is blocked, and which
 	// paths the event named, without the row's identity moving when either changes.
-	lease, leaseFrom, err := checkoutLease(root, trail.LeaseFromEnv())
+	// fileAttention takes no ctx, so the hook's own BAGGAGE is the claim.
+	lease, leaseFrom, err := checkoutLease(context.Background(), root)
 	if err != nil {
 		return false, err
 	}
