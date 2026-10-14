@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 13669
-skill_short_bytes: 8240
+skill_full_bytes: 13734
+skill_short_bytes: 8222
 ---
 
 # magus-run
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `122` |
 | `knowledge-schema-version` | `17` |
-| `skill-content` | `d81207ddf02c` |
+| `skill-content` | `05d3e596e093` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -141,8 +141,8 @@ CORRECT: `magus run ci <project>` while working, and `magus affected ci` once do
 
 ## Output control: silence runs, read structure
 
-- `-s` / `--silent`: the default for every CLI run. A pass prints a
-  result line plus an output ref; a failure adds a bounded tail.
+- `-s` / `--silent`: the default for every CLI run. A pass prints one `ref`
+  line; a failure adds a bounded tail.
   DROP it when the question is what RAN versus what replayed. The per-target
   timings and the `(cached, 320ms)` / `(ran, 5m28s)` verdict print only without
   it.
@@ -378,8 +378,9 @@ You are a machine reader; no news is good news. Shape the output instead of
 truncating it after the fact:
 
 - `-s` / `--silent`: the default for every CLI run. Progress is dropped; a pass
-  is a few lines (result line + output ref), a failure keeps a bounded tail of
-  the failing project plus the ref to fetch the rest.
+  prints one line, `ref  <output ref>`, and a failure keeps a bounded tail of
+  the failing project plus the ref to fetch the rest. With `--tee <file>` a
+  structured record goes to the file alone.
   DROP it when the question is what RAN versus what replayed. The per-target
   timings and the `(cached, 320ms)` / `(ran, 5m28s)` verdict print only without
   it. Reaching for shell `time` around a silent run measures the wall clock magus
