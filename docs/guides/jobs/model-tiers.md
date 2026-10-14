@@ -28,10 +28,11 @@ edits the row, the matrix function or the declaration.
 ## What a workspace gets by default
 
 With no declaration, the workspace uses the `magus/modeltiers` module: `economy`,
-`standard` and `principal`, with `standard` as the default. Economy jobs are
-capped at four live at once and 100000 tokens of context, and economy workers
-load the `full` skill bodies, since a smaller model is the reader least able to
-re-derive the steps the `short` form leaves out. The module names no model, and
+`standard` and `principal`, with `standard` as the default. Economy workers are
+capped at 100000 tokens of context and load the `full` skill bodies, since a smaller model is the reader least able to
+re-derive the steps the `short` form leaves out. No tier caps how many of its jobs
+are live at once; a cap applies only where a magusfile declares one. The module
+names no model, and
 the default maps no harness to one: until a magusfile maps a harness with
 `hosts`, below, a tier has no model alias for any harness.
 
@@ -57,8 +58,8 @@ fun claudeCode(tier: ModelTier) > str {
 
 fun bounds(tier: ModelTier) > magus\ModelTierBounds {
     return match (tier) {
-        .economy -> magus\ModelTierBounds{ maxLive = 4, maxContext = 100000 },
-        .standard -> magus\ModelTierBounds{ maxLive = 2 },
+        .economy -> magus\ModelTierBounds{ maxContext = 100000 },
+        .standard -> magus\ModelTierBounds{},
         .principal -> magus\ModelTierBounds{ maxLive = 1 },
     };
 }

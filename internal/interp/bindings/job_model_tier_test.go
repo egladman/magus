@@ -134,7 +134,10 @@ func TestModelTiersDefaultToTheShippedDeclaration(t *testing.T) {
 	assert.Equal(t, "standard", set.Default().Name())
 	economy, err := set.Parse("economy")
 	require.NoError(t, err)
-	assert.Equal(t, types.ModelTierBounds{MaxLive: 4, MaxContext: 100000}, set.Bounds(economy))
+	assert.Equal(t, types.ModelTierBounds{MaxContext: 100000}, set.Bounds(economy))
+	standard, err := set.Parse("standard")
+	require.NoError(t, err)
+	assert.Zero(t, set.Bounds(standard).MaxLive, "the default caps no tier's live jobs")
 	assert.Equal(t, types.SkillVariantFull, set.Skills(economy), "economy workers load the full skill bodies")
 	assert.Same(t, set, reg.ModelTiers(), "the default is built once")
 }

@@ -13,12 +13,14 @@ export enum ModelTier { economy, standard, principal }
 
 export final defaultTier = ModelTier.standard;
 
-/// bounds caps the jobs live at one tier, and the context an economy worker may reach.
+/// bounds caps the context an economy worker may reach. It caps no tier's live jobs: a
+/// default that refused a workspace's next fork would surprise everyone who never asked
+/// for a cap, so maxLive is set only by a magusfile that declares one.
 export fun bounds(tier: ModelTier) > magus\ModelTierBounds {
     return match (tier) {
-        .economy -> magus\ModelTierBounds{ maxLive = 4, maxContext = 100000 },
-        .standard -> magus\ModelTierBounds{ maxLive = 2 },
-        .principal -> magus\ModelTierBounds{ maxLive = 1 },
+        .economy -> magus\ModelTierBounds{ maxContext = 100000 },
+        .standard -> magus\ModelTierBounds{},
+        .principal -> magus\ModelTierBounds{},
     };
 }
 
