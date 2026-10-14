@@ -372,8 +372,20 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	row.Version = 11
 	row.Requires = []string{"claims"}
 	row.Breaks = []string{"--old-flag", "api.Open"}
+	row.ModelTier = &types.JobModelTier{
+		Name: "economy", Rank: 0, Skills: types.SkillVariantFull, Source: types.ModelTierSourceMatrix,
+		Reason: "small checked job", Site: "magusfile.buzz:20", Model: "haiku",
+	}
+	row.ReworkRounds, row.Widenings = 2, 1
 
 	got := delegatedJob(row)
+
+	require.True(t, proto.Equal(&jobv1.JobModelTier{
+		Name: "economy", Rank: 0, Skills: "full", Source: "matrix",
+		Reason: "small checked job", Site: "magusfile.buzz:20", Model: "haiku",
+	}, got.ModelTier), "model_tier: %v", got.ModelTier)
+	require.Equal(t, int32(2), got.ReworkRounds)
+	require.Equal(t, int32(1), got.Widenings)
 
 	require.Equal(t, []string{"--old-flag", "api.Open"}, got.Breaks)
 	require.Equal(t, "its checkout no longer exists", got.EndReason)
@@ -420,6 +432,7 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	require.Nil(t, bare.Attempt)
 	require.Nil(t, bare.Integration)
 	require.Nil(t, bare.WaiterEvidence)
+	require.Nil(t, bare.ModelTier, "a workspace that declared no tiers assigned none")
 }
 
 // TestListJobs_ServesTheStoresReport pins that the listing's flags are the ones the store's

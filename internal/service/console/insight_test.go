@@ -109,9 +109,12 @@ func TestServiceInsightCacheHit(t *testing.T) {
 	)
 
 	// Insight folds the volatility lens onto the cached scan; with no history path
-	// configured that lens is an empty report carrying just the (zero) threshold.
+	// configured that lens is an empty report carrying just the (zero) threshold. The
+	// model-tier lens is empty too: a service with no workspace has no outcomes to read, and
+	// still says what the lens means.
 	want := view
 	want.Volatility = &types.VolatilityReport{}
+	want.ModelTiers = &types.ModelTierOutput{Definition: types.ModelTiersDefinition, Rows: []types.ModelTierRecord{}}
 	for i := 0; i < 3; i++ {
 		got, err := svc.Insight(context.Background())
 		require.NoError(t, err)

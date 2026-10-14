@@ -53,8 +53,8 @@ func (s *Service) GetInsight(ctx context.Context, _ *connect.Request[insightv1.G
 }
 
 // insightToProto maps the domain view onto the wire. Every lens is always present; only
-// volatility is nilable, and a nil report stays nil so a reader can tell "no run history
-// recorded" from "no volatile targets".
+// volatility and the model-tier lens are nilable, and a nil report stays nil so a reader can
+// tell "no run history recorded" from "no volatile targets".
 func insightToProto(v types.InsightView) *insightv1.Insight {
 	return &insightv1.Insight{
 		Hotspots: &insightv1.HotspotOutput{
@@ -83,6 +83,34 @@ func insightToProto(v types.InsightView) *insightv1.Insight {
 			Projects:   mapSlice(v.Trend.Projects, trendToProto),
 		},
 		Volatility: volatilityToProto(v.Volatility),
+		ModelTiers: modelTiersToProto(v.ModelTiers),
+	}
+}
+
+func modelTiersToProto(o *types.ModelTierOutput) *insightv1.ModelTierOutput {
+	if o == nil {
+		return nil
+	}
+	return &insightv1.ModelTierOutput{
+		Definition: o.Definition,
+		Rows: mapSlice(o.Rows, func(r types.ModelTierRecord) *insightv1.ModelTierRecord {
+			return &insightv1.ModelTierRecord{
+				Rank:            int32(r.Rank),
+				ModelTier:       r.ModelTier,
+				Kind:            string(r.Kind),
+				Jobs:            int32(r.Jobs),
+				Pass:            int32(r.Pass),
+				Fail:            int32(r.Fail),
+				NoReturn:        int32(r.NoReturn),
+				PassLower:       r.PassLower,
+				ChecksPerJob:    r.ChecksPerJob,
+				ForksPerId:      r.ForksPerID,
+				ReworkPerJob:    r.ReworkPerJob,
+				WideningsPerJob: r.WideningsPerJob,
+				MeanCostUsd:     r.MeanCostUSD,
+				MedianTokens:    r.MedianTokens,
+			}
+		}),
 	}
 }
 

@@ -323,6 +323,9 @@ func delegatedJob(row types.Job) *jobv1.Job {
 		WaiterEvidence: wireIntegration(row.WaiterEvidence),
 		SchemaVersion:  int32(row.Version),
 		Requires:       row.Requires,
+		ModelTier:      wireModelTier(row.ModelTier),
+		ReworkRounds:   int32(row.ReworkRounds),
+		Widenings:      int32(row.Widenings),
 	}
 	if row.Holder.OrSession() == types.HolderServer {
 		j.Holder = jobv1.JobHolder_JOB_HOLDER_SERVER
@@ -359,6 +362,18 @@ func wireOrigin(o types.Origin) *jobv1.JobOrigin {
 		w.Credential = &activityv1.Credential{Class: string(c.Kind), Id: c.ID, Name: c.Name, Grant: c.Grant.String()}
 	}
 	return w
+}
+
+// wireModelTier maps the tier the store assigned, nil for a row written where the workspace
+// declared none.
+func wireModelTier(t *types.JobModelTier) *jobv1.JobModelTier {
+	if t == nil {
+		return nil
+	}
+	return &jobv1.JobModelTier{
+		Name: t.Name, Rank: int32(t.Rank), Skills: string(t.Skills), Source: string(t.Source),
+		Reason: t.Reason, Site: t.Site, Model: t.Model,
+	}
 }
 
 func wireAttempt(a *types.JobAttempt) *jobv1.JobAttempt {

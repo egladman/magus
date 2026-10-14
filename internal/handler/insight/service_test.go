@@ -103,6 +103,15 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 				LastPass:      lastPass,
 			}},
 		},
+		ModelTiers: &types.ModelTierOutput{
+			Definition: types.ModelTiersDefinition,
+			Rows: []types.ModelTierRecord{{
+				Rank: 0, ModelTier: "economy", Kind: types.JobKindCheck,
+				Jobs: 12, Pass: 9, Fail: 2, NoReturn: 1,
+				PassLower: 0.48, ChecksPerJob: 1.5, ForksPerID: 1.1, ReworkPerJob: 0.25, WideningsPerJob: 0.5,
+				MeanCostUSD: 0.07, MedianTokens: 41_000,
+			}},
+		},
 	}}
 
 	want := &insightv1.Insight{
@@ -170,6 +179,15 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 				LastPassTime:  timestamppb.New(lastPass),
 			}},
 		},
+		ModelTiers: &insightv1.ModelTierOutput{
+			Definition: types.ModelTiersDefinition,
+			Rows: []*insightv1.ModelTierRecord{{
+				Rank: 0, ModelTier: "economy", Kind: "check",
+				Jobs: 12, Pass: 9, Fail: 2, NoReturn: 1,
+				PassLower: 0.48, ChecksPerJob: 1.5, ForksPerId: 1.1, ReworkPerJob: 0.25, WideningsPerJob: 0.5,
+				MeanCostUsd: 0.07, MedianTokens: 41_000,
+			}},
+		},
 	}
 
 	got, err := get(t, src)
@@ -191,6 +209,7 @@ func TestGetInsight_NilVolatility(t *testing.T) {
 	}
 	require.True(t, proto.Equal(want, got), "wire mismatch:\ngot  %v\nwant %v", got, want)
 	require.Nil(t, got.GetVolatility(), "a nil report must stay absent on the wire")
+	require.Nil(t, got.GetModelTiers(), "so must a nil model-tier lens")
 }
 
 // A zero time.Time is UNSET on the wire, not the year-0001 sentinel the JSON route emitted.

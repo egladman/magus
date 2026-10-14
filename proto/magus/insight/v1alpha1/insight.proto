@@ -1,12 +1,12 @@
 syntax = "proto3";
 
 // Package magus.insight.v1alpha1 is the versioned wire contract for magus insight: where a
-// codebase's attention and risk concentrate. Five lenses ride one message - four read VCS
+// codebase's attention and risk concentrate. Six lenses ride one message - four read VCS
 // history (hotspots, affinity, ownership, trend) from a single bounded git-log scan the
-// server caches, and volatility reads run-outcome history instead. They travel together
-// because the dashboard renders them as one board; splitting them into five RPCs would cost
-// five round trips for one paint and would let the four git lenses disagree about the window
-// they were scanned over.
+// server caches, volatility reads run-outcome history instead, and model_tiers reads the
+// outcomes of finished jobs. They travel together because the dashboard renders them as one
+// board; splitting them into six RPCs would cost six round trips for one paint and would let
+// the four git lenses disagree about the window they were scanned over.
 //
 // It is a sibling of the other console tool-page contracts (magus.status.v1alpha1, magus.activity.v1alpha1,
 // magus.metrics.v1alpha1). It mirrors types.InsightView, which the CLI also renders; the mapping to
@@ -30,15 +30,17 @@ service InsightService {
 
 message GetInsightRequest {}
 
-// Insight bundles the five lenses. volatility is absent (not an empty report) when the
+// Insight bundles the six lenses. volatility is absent (not an empty report) when the
 // workspace has no run-outcome history to score - the distinction matters to a reader, which
-// renders "no runs recorded yet" rather than "no volatile targets".
+// renders "no runs recorded yet" rather than "no volatile targets". model_tiers is absent
+// for the same reason when no job outcome was ever recorded.
 message Insight {
   HotspotOutput hotspots = 1;
   AffinityOutput affinity = 2;
   OwnershipOutput ownership = 3;
   TrendOutput trend = 4;
   VolatilityReport volatility = 5;
+  ModelTierOutput model_tiers = 6;
 }
 
 // Every git lens repeats definition/commits/since because each is independently renderable:
@@ -192,4 +194,35 @@ message VolatilityTarget {
   int32 volatile_count = 7;
   int32 samples = 8;
   google.protobuf.Timestamp last_pass_time = 9; // the most recent passing run, unset when never
+}
+
+// ModelTierOutput is the job-history lens: what each model tier achieved on each kind of
+// job. It reads the outcomes the job store recorded, not git, and it reports only: changing
+// a tier is a person editing the declaration or matrix the doctor check names.
+message ModelTierOutput {
+  string definition = 1;
+  repeated ModelTierRecord rows = 2;
+}
+
+// ModelTierRecord is the recorded outcome of the jobs that ran at one tier and job kind.
+// rank is the tier's place in the current declaration, -1 for one it no longer names.
+// pass_lower is the Wilson lower bound of the pass rate; the per-job fields are means, so a
+// reader sets pass rate beside the work a pass cost: checks run, re-forks of one id, rework
+// rounds (a worker sent more work after handing back) and widenings (write paths added to a
+// taken job).
+message ModelTierRecord {
+  int32 rank = 1;
+  string model_tier = 2;
+  string kind = 3; // check, symbol, paths, script or prose
+  int32 jobs = 4;
+  int32 pass = 5;
+  int32 fail = 6;
+  int32 no_return = 7;
+  double pass_lower = 8;
+  double checks_per_job = 9;
+  double forks_per_id = 10;
+  double rework_per_job = 11;
+  double widenings_per_job = 12;
+  double mean_cost_usd = 13;
+  int64 median_tokens = 14;
 }
