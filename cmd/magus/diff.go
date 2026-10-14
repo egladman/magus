@@ -1673,12 +1673,19 @@ func diffAPILines(api *types.DiffAPI) []string {
 	if api.Likely != api.Floor {
 		head += fmt.Sprintf(", likely %s (%d public signature(s) changed)", api.Likely, api.Signature)
 	}
-	return []string{
+	lines := []string{
 		head + " against " + api.Base,
 		fmt.Sprintf("  public symbols: %d added, %d removed, %d re-signed, %d changed in body only",
 			api.Added, api.Removed, api.Signature, api.Body),
-		"  a floor, not a verdict: behavior can change under an unchanged signature, so raise it freely",
 	}
+	if api.Stage.Known() {
+		stage := "  newest release " + api.Stage.Tag
+		if api.Stage.Major == 0 {
+			stage += ": below 1.0 a major floor ships as a minor release"
+		}
+		lines = append(lines, stage)
+	}
+	return append(lines, "  a floor, not a verdict: behavior can change under an unchanged signature, so raise it freely")
 }
 
 // diffFileFacts is what magus knows about one changed file, one claim per line.

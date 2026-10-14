@@ -2365,3 +2365,40 @@ func TestDiffTUIFilesLeavesAnHonestPatchAlone(t *testing.T) {
 	require.Len(t, files[0].Hunks, 1)
 	assert.Equal(t, []string{"-old", "+new"}, files[0].Hunks[0].Lines)
 }
+
+func TestDiffAPILinesNameTheReleaseStage(t *testing.T) {
+	t.Parallel()
+
+	api := func(stage types.ReleaseStage) *types.DiffAPI {
+		return &types.DiffAPI{Base: "main", Floor: types.DiffBumpMajor, Likely: types.DiffBumpMajor, Removed: 1, Stage: stage}
+	}
+	cases := map[string]struct {
+		stage types.ReleaseStage
+		want  []string
+	}{
+		"below 1.0 a major floor ships as a minor": {
+			stage: types.ReleaseStage{Tag: "v0.4.0", Major: 0},
+			want:  []string{"  newest release v0.4.0: below 1.0 a major floor ships as a minor release"},
+		},
+		"from 1.0 on the tag stands alone": {
+			stage: types.ReleaseStage{Tag: "v1.2.0", Major: 1},
+			want:  []string{"  newest release v1.2.0"},
+		},
+		"no tag visible says nothing about a stage": {},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			lines := diffAPILines(api(tc.stage))
+			var stageLines []string
+			for _, l := range lines {
+				if strings.HasPrefix(l, "  newest release") {
+					stageLines = append(stageLines, l)
+				}
+			}
+			assert.Equal(t, tc.want, stageLines)
+			assert.Equal(t, "  a floor, not a verdict: behavior can change under an unchanged signature, so raise it freely", lines[len(lines)-1],
+				"the caveat stays last")
+		})
+	}
+}

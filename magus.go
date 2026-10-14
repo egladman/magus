@@ -1258,6 +1258,26 @@ func (m *Magus) resolveReviewOrigin(ctx context.Context, driver types.VCSDriver)
 	return out
 }
 
+// releaseStage is the stage of the workspace's newest release tag, or the zero (unknown)
+// stage when there is no VCS or no tag to read.
+func (m *Magus) releaseStage(ctx context.Context) types.ReleaseStage {
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil || res.VCS == nil {
+		return types.ReleaseStage{}
+	}
+	return releaseStageFrom(ctx, res.VCS, m.ws.Root)
+}
+
+// releaseStageFrom treats a driver that cannot list tags as one with none: the stage is
+// then unknown, which a reader must not mistake for pre-1.0.
+func releaseStageFrom(ctx context.Context, driver types.VCSDriver, root string) types.ReleaseStage {
+	tags, err := driver.Tags(ctx, root, "")
+	if err != nil {
+		return types.ReleaseStage{}
+	}
+	return types.NewestReleaseStage(tags)
+}
+
 // untrackedPatch synthesizes a unified patch for files the VCS does not track yet: every line
 // is an addition against /dev/null, which is exactly how git renders a new file.
 //
@@ -1543,6 +1563,9 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 	if cfg.baseline != nil {
 		if indexed {
 			in.changes, in.removed = attachAPIDelta(&out, byPath, graph, cfg, m.externalReferents)
+			if out.API != nil {
+				out.API.Stage = m.releaseStage(ctx)
+			}
 		} else {
 			out.Notes = append(out.Notes, "API delta skipped: no symbol index loaded for this tree, so nothing could be compared against "+cfg.baselineLabel)
 		}

@@ -1,6 +1,8 @@
 package magus
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -430,4 +432,29 @@ func TestGoDescriptorsExported(t *testing.T) {
 			assert.Equal(t, tc.want, got)
 		})
 	}
+}
+
+// tagsDriver answers Tags and nothing else; any other call panics on the nil embedded
+// interface, which pins that the stage reads tags only.
+type tagsDriver struct {
+	types.VCSDriver
+	tags []types.VCSTag
+	err  error
+}
+
+func (d tagsDriver) Tags(context.Context, string, string) ([]types.VCSTag, error) {
+	return d.tags, d.err
+}
+
+func TestReleaseStageFromReadsTheNewestRootTag(t *testing.T) {
+	v, _ := types.ParseVersion("v0.4.0")
+	driver := tagsDriver{tags: []types.VCSTag{{Name: "v0.4.0", Version: v}}}
+
+	assert.Equal(t, types.ReleaseStage{Tag: "v0.4.0", Major: 0}, releaseStageFrom(t.Context(), driver, "."))
+}
+
+func TestReleaseStageFromIsUnknownWithoutTags(t *testing.T) {
+	assert.False(t, releaseStageFrom(t.Context(), tagsDriver{}, ".").Known(), "no tag visible is unknown")
+	assert.False(t, releaseStageFrom(t.Context(), tagsDriver{err: errors.New("no tags")}, ".").Known(),
+		"a driver that cannot list tags is unknown, never pre-1.0 by guess")
 }

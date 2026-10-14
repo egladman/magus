@@ -124,6 +124,10 @@ type DiffAPI struct {
 	Removed   int `json:"removed"   yaml:"removed"`
 	Signature int `json:"signature" yaml:"signature"`
 	Body      int `json:"body"      yaml:"body"`
+	// Stage is where the workspace's releases stand, from its newest tag, so a reader can
+	// tell what a major floor ships as. Unknown (see [ReleaseStage.Known]) when no tag is
+	// visible.
+	Stage ReleaseStage `json:"stage" yaml:"stage"`
 }
 
 // DiffSymbol is one changed symbol with its exposure.
