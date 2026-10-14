@@ -2080,11 +2080,6 @@ func magusWithFlags(args []string, flags ...string) []string {
 	return append(argv, flags...)
 }
 
-// magusSilent reports -s or --silent among a magus argv's own flags.
-func magusSilent(args []string) bool {
-	return magusFlag(args, "silent") || magusFlag(args, "s")
-}
-
 // magusOutputFormat is the value of -o/--output, "" when none was given.
 func magusOutputFormat(args []string) string {
 	for i, a := range args {
@@ -2118,7 +2113,7 @@ func pipeRemedy(p pipedMagus) (string, []hint.Next) {
 	words := magusSubcommandWords(p.args)
 	switch {
 	case len(words) > 0 && isRunVerb(words[0]) && slices.Contains([]string{"head", "tail", "less", "more"}, p.filter):
-		if magusSilent(p.args) {
+		if magusFlag(p.args, "s", "silent") {
 			return "", nil
 		}
 		flags, why = []string{"-s"}, "-s stays quiet until something fails, then prints the diagnostics and the log path."
@@ -2168,7 +2163,7 @@ func redirectRemedy(r redirectedMagus) (string, []hint.Next) {
 	case r.file == "/dev/null":
 		lead = "`" + r.verb + " " + r.dest + "` discards the diagnostics a failure prints."
 		why = "--silent says nothing until something fails, then prints what the redirect would have discarded."
-		if !magusSilent(r.args) {
+		if !magusFlag(r.args, "s", "silent") {
 			flags = []string{"--silent"}
 		}
 	case r.stdout && r.file != "" && !magusFlag(r.args, "tee"):
