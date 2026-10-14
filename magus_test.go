@@ -854,20 +854,20 @@ func TestOpenRefusesARequiredRemoteWriteWithNoBackend(t *testing.T) {
 	assert.ErrorContains(t, err, "remote writes are required but no remote backend is wired")
 }
 
-// TestOpenRemoteBackendThatDidNotStart: this test binary links no backend opener, so
-// every wired backend fails to start. A required write surfaces that failure as the
-// error; an optional one names it in the header the run prints.
+// TestOpenRemoteBackendThatDidNotStart: no magusfile here imports the github spell, so the
+// wired backend fails to start. A required write surfaces that failure as the error; an
+// optional one names it in the header the run prints.
 func TestOpenRemoteBackendThatDidNotStart(t *testing.T) {
 	opt := remoteBackendOption(t.Context(), "github", nil)
 	require.NotNil(t, opt)
 
 	_, err := cache.Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), opt, cache.WithRemoteWrite(true))
-	assert.ErrorContains(t, err, "run local-only: remote github unavailable: cache: no remote backend registered in this binary")
+	assert.ErrorContains(t, err, `run local-only: remote github unavailable: spell "github" is not registered`)
 
 	c, err := cache.Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), opt)
 	require.NoError(t, err)
 	tier, mode := (&Magus{cache: c}).CacheDescription()
-	assert.True(t, strings.HasPrefix(tier, "local (remote github unavailable: cache: no remote backend registered in this binary"), tier)
+	assert.True(t, strings.HasPrefix(tier, `local (remote github unavailable: spell "github" is not registered`), tier)
 	assert.Equal(t, "read+write", mode)
 }
 

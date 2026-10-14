@@ -408,9 +408,9 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 
 	p := m.Get(".")
 	require.NotNil(t, p, "root project")
-	// This package's tests do not link the Buzz interpreter, so a magus.project()
-	// policy table in the fixture would never evaluate (see interp.Available in Open).
-	// The chain and the writesFiles footprint are static, and come from the magusfile.
+	// The policy is set here rather than in the fixture's magus.project() table, so the
+	// test reads one fact from the magusfile at a time: the chain and the writesFiles
+	// footprint are static, and come from it.
 	p.TargetPolicies = map[string]types.Target{"index-generate": {SkipCache: true}}
 
 	magusMD := types.Glob{Pattern: "MAGUS.md"}
@@ -598,8 +598,8 @@ func TestRun_CachedComposerStillRunsItsSkipCacheGate(t *testing.T) {
 
 	p := m.Get(".")
 	require.NotNil(t, p, "root project")
-	// This package's tests do not link the Buzz interpreter, so a magusfile stating
-	// the policy and the chain would never evaluate (see interp.Available in Open).
+	// The policy and the chain are set on the loaded project, not stated in a magusfile,
+	// so the test pins the gate rule over exactly this table.
 	p.TargetPolicies = map[string]types.Target{"gate": {SkipCache: true}}
 	p.TargetChains = map[string][]types.ChainStep{"composer": {{Target: "gate"}}}
 	// The artifact is what makes it a gate rather than a side effect to leave alone.
@@ -755,21 +755,21 @@ func TestStepKeysOnTheBinaryOnlyWhenItsBodyAsksIt(t *testing.T) {
 	const mf = `import "magus";
 import "./lib/index" as index;
 import "fs";
-export fun rules_generate(ctx: magus\Context, args: [str]) > void {
+export fun rules_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("rules.md");
     final rules = magus\describe.rule();
     fs\writeFile("rules.md", "{rules.len()}");
 }
-export fun index_generate(ctx: magus\Context, args: [str]) > void {
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     index\render(".");
 }
-export fun nested(ctx: magus\Context, args: [str]) > void {
+export fun nested(ctx: magus\Context, args: [str]) > void !> any {
     helper();
 }
-fun helper() > void {
+fun helper() > void !> any {
     magus\run(["build"]);
 }
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     index\plain();
     fs\writeFile("out.txt", "built");
 }
@@ -777,7 +777,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 	const lib = `namespace index;
 import "magus";
 import "fs";
-export fun render(project: str) > void {
+export fun render(project: str) > void !> any {
     fs\writeFile("MAGUS.md", magus\describe.graphMarkdown([project]));
 }
 export fun plain() > void {}
@@ -896,7 +896,8 @@ func TestComputedExecOverrideLoadsForALibraryCaller(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
 	const mf = `import "magus";
-export fun build(ctx: magus\Context, args: [str]) > void {
+import "magus/spell/go";
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     final env = mut {"GOOS": "linux"};
     go["go-build"](ctx.withEnv(env), {});
 }
@@ -1326,7 +1327,7 @@ func TestRedactError(t *testing.T) {
 func TestRunCIAnchorIgnoresSpellCIOpOnMagusfileProject(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
 	reg := NewWorkspaceRegistry()
-	reg.RegisterProject(".", WithSpell("ci-capable"))
+	reg.RegisterProject(".", WithSpell(register.Spell(t, "ci-capable", spells.WithTargets("ci"))))
 
 	ctx := context.Background()
 	m, err := Open(ctx, root, WithWorkspaceRegistry(reg))
@@ -2351,7 +2352,7 @@ func TestOutputGlobsByRootStopsAtNestedProjects(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
 	for _, rel := range []string{"magusfile.buzz", "leaf/magusfile.buzz", "gen/own.txt", "leaf/gen/child.txt"} {
-		w.Write(rel, rel)
+		w.Write(rel, "// "+rel)
 	}
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithOutputs("**/gen/*.txt"))

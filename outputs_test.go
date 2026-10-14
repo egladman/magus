@@ -271,9 +271,9 @@ func TestFindOutputProducerReturnsWriterNotOwner(t *testing.T) {
 // into a SIBLING project's tree. It returns the opened workspace and the absolute path of
 // the file producer generates inside site.
 //
-// The body never runs here: the interpreter is a pack only the CLI wires in, so these
-// tests exercise the static half (the derived edge, the glob views, clean). The
-// execution half is cmd/magus's TestCrossProjectOutputReplaysFromCache, which has it.
+// The body never runs here: these tests exercise the static half (the derived edge, the
+// glob views, clean). The execution half is cmd/magus's
+// TestCrossProjectOutputReplaysFromCache.
 func writeCrossOutputWorkspace(t *testing.T) (*Magus, string) {
 	t.Helper()
 	w := testkit.NewWorkspace(t)
@@ -285,7 +285,7 @@ func writeCrossOutputWorkspace(t *testing.T) (*Magus, string) {
 import "fs";
 import "project/../site";
 
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(site.file("generated.txt"));
     fs\writeFile("../site/generated.txt", "hello");
 }

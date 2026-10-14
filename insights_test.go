@@ -23,10 +23,10 @@ func TestInsightsUseHistoryAndProjectLabels(t *testing.T) {
 	require.NoError(t, os.MkdirAll(root, 0o755))
 	gitRun(t, root, "init", "-q")
 	commitInsightFiles(t, root, "Ada", "2026-01-01T00:00:00Z", map[string]string{
-		"magusfile.buzz":      "# root\n",
-		"api/magusfile.buzz":  "# api\n",
+		"magusfile.buzz":      "// root\n",
+		"api/magusfile.buzz":  "// api\n",
 		"api/service.go":      "package api\n",
-		"docs/magusfile.buzz": "# docs\n",
+		"docs/magusfile.buzz": "// docs\n",
 		"docs/guide.md":       "# guide\n",
 	})
 	commitInsightFiles(t, root, "Ada", "2026-01-02T00:00:00Z", map[string]string{"api/service.go": "package api\n// second\n"})

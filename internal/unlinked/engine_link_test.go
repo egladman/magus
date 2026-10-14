@@ -12,8 +12,6 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/project"
-	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -57,16 +55,17 @@ func TestOpenMagusfileWithoutEngine(t *testing.T) {
 	}
 }
 
-func TestInspectWorkspaceWithoutMagusfileWithoutEngine(t *testing.T) {
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell("go",
-		spells.WithSources("**/*.go", "go.mod"),
-		spells.WithManifests("go.mod"),
-	))
+// A workspace with no magusfile has nothing to evaluate, so it opens without the engine.
+// magus infers no project from a go.mod, so it holds none.
+func TestOpenWorkspaceWithoutMagusfileWithoutEngine(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Write("go.mod", "module example.test/app\n")
 
 	ws, err := magus.Inspect(context.Background(), w.Root())
-
 	require.NoError(t, err)
-	assert.NotNil(t, ws.Get("."), "the go.mod project is discovered without the engine")
+	assert.Empty(t, ws.All())
+
+	m, err := magus.Open(context.Background(), w.Root())
+	require.NoError(t, err)
+	require.NoError(t, m.Close())
 }

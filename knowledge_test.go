@@ -40,7 +40,7 @@ import (
 func mkGlobalWS(t *testing.T, target string) string {
 	t.Helper()
 	w := testkit.NewWorkspace(t)
-	w.Magusfile("export fun " + target + "(args: [str]) > void {}\n")
+	w.Magusfile("import \"magus\";\n\nexport fun " + target + "(ctx: magus\\Context, args: [str]) > void {}\n")
 	return w.Root()
 }
 
@@ -492,7 +492,7 @@ func TestBuildKnowledgeGraphChurnIsStableAcrossBuilds(t *testing.T) {
 	ctx := context.Background()
 	repo := testkit.NewRepo(t, nil)
 	root := repo.Root()
-	repo.Magusfile("export fun build(args: [str]) > void {}\n")
+	repo.Magusfile("import \"magus\";\n\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
 	writeCommit(t, repo, "pkg/a.buzz", "export fun a(args: [str]) > void {}\n")
 	writeCommit(t, repo, "pkg/a.buzz", "export fun a(args: [str]) > void { }\n")
 
@@ -1035,7 +1035,7 @@ func TestParseSymbolIndexCachedReparsesOnlyAMovedIndex(t *testing.T) {
 func indexedWorkspace(t *testing.T) (string, types.WorkspaceRepository, config.Config) {
 	t.Helper()
 	w := testkit.NewWorkspace(t)
-	w.Magusfile("export fun build(args: [str]) > void {}\n")
+	w.Magusfile("import \"magus\";\n\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
 	root := w.Root()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg", "a"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg", "a", "a.go"), []byte("package a\n\ntype Foo struct{}\n"), 0o644))
@@ -1112,7 +1112,7 @@ func TestQueryKnowledgeGraphEqualsTheMergedQuery(t *testing.T) {
 func TestBuildKnowledgeGraphAnswersFromTheStore(t *testing.T) {
 	ctx := context.Background()
 	w := testkit.NewWorkspace(t)
-	w.Magusfile("export fun build(args: [str]) > void {}\n")
+	w.Magusfile("import \"magus\";\n\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
 	root := w.Root()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "docs"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "docs", "guide.md"), []byte("# Guide\n"), 0o644))
@@ -1328,11 +1328,12 @@ func writeIndexOf(t *testing.T, root, path, language string, docs map[string][]f
 // leaves the registry's go alone; the Buzz one is buzz, whose op name is under test.
 func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 	ctx := t.Context()
-	const goSpell = "zzz-buzz-beside-go-spell"
+	// Neither is the built-in go or buzz spell, which the linked engine registers.
+	const goSpell, buzzSpell = "zzz-buzz-beside-go-spell", "zzz-go-beside-buzz-spell"
 	for _, sp := range []*spellpkg.Spell{
 		spellpkg.NewSpell(goSpell, spellpkg.WithLanguage("go"), spellpkg.WithSources("**/*.go"),
 			spellpkg.WithSymbolIndexer(&spellpkg.SymbolIndexer{Format: spellpkg.SymbolFormatSCIP, Command: spellpkg.Command{Bin: "scip-go"}})),
-		spellpkg.NewSpell("buzz", spellpkg.WithLanguage("buzz"), spellpkg.WithSources("**/*.buzz"),
+		spellpkg.NewSpell(buzzSpell, spellpkg.WithLanguage("buzz"), spellpkg.WithSources("**/*.buzz"),
 			spellpkg.WithSymbolIndexer(&spellpkg.SymbolIndexer{Format: spellpkg.SymbolFormatSCIP, Op: "scip-buzz", Command: spellpkg.Command{Bin: "scip-buzz"}}),
 			spellpkg.WithOps(map[string]spellpkg.Op{"scip-buzz": {Kind: spellpkg.OpKindSymbolIndex, Command: spellpkg.Command{Bin: "scip-buzz"}}})),
 	} {
@@ -1369,7 +1370,7 @@ func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 	})
 
 	reg := NewWorkspaceRegistry()
-	reg.RegisterProject(".", WithSpell(goSpell), WithSpell("buzz"))
+	reg.RegisterProject(".", WithSpell(goSpell), WithSpell(buzzSpell))
 	ws, err := Open(ctx, root, WithWorkspaceRegistry(reg))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = ws.Close() })

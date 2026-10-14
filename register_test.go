@@ -10,35 +10,12 @@ import (
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func init() {
-	// Register minimal test spells so WithSpell name lookups resolve without
-	// linking interp/bindings into the library's test binary. (There is no import
-	// cycle — bindings does not import this package; the point is to keep the
-	// library free of the Buzz VM. bindings' init also eagerly registers the real
-	// built-in spells, which would collide with these shims.)
-	for _, meta := range []struct {
-		name    string
-		sources []string
-	}{
-		{"go", []string{"**/*.go", "go.mod", "go.sum"}},
-		{"rust", []string{"**/*.rs", "Cargo.toml"}},
-		{"ts", []string{"**/*.ts", "**/*.tsx", "package.json"}},
-		{"json", []string{"**/*.json", "**/*.jsonc"}},
-	} {
-		m := meta
-		project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(
-			m.name,
-			spells.WithSources(m.sources...),
-		))
-	}
-}
 
 // makeWorkspaceRoot lays down project manifest stubs and returns the
 // temp directory path. Does not call Open — lets the caller register
@@ -125,7 +102,7 @@ func TestWithDependsOnEscapesRoot(t *testing.T) {
 // both the Spell and Spells fields via Register.
 func TestWithSpellAddsLanguage(t *testing.T) {
 	w := testkit.NewWorkspace(t)
-	w.Magusfile("//go:build magus\npackage main\n")
+	w.Magusfile("")
 	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
@@ -160,7 +137,7 @@ func TestWithSpellMultipleTools(t *testing.T) {
 // out at Open time rather than silently doing nothing.
 func TestWithSpellUnknownTool(t *testing.T) {
 	w := testkit.NewWorkspace(t)
-	w.Magusfile("//go:build magus\npackage main\n")
+	w.Magusfile("")
 	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
@@ -225,15 +202,6 @@ func TestWithSpell(t *testing.T) {
 	assert.Equal(t, "go", p.Bindings[0].Name)
 }
 
-func init() {
-	// A spell whose ci op stands in for a provider-driven toolchain's own composed
-	// pipeline (e.g. `nx run project:ci`): the RunCI anchor tests below need a
-	// registered spell with a ci op, and a provided project has no magusfile to
-	// declare one in. Registered for the WHOLE package (the registry is a process
-	// singleton with no scoped teardown), so every test in package magus sees this
-	// phantom spell; a test enumerating registered spells must account for it.
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell("ci-capable", spells.WithTargets("ci")))
-}
 
 // These tests live in package magus, beside no provider.go, because what they cover
 // is the LOAD ORDER in magus.go: that providers run after magusfile evaluation and
@@ -241,23 +209,31 @@ func init() {
 // from a declared one everywhere downstream. The unit-level behaviour of the fold
 // itself is tested in internal/workspace/provider_test.go.
 
-// providedProjects is what the fake runner reports for the next Inspect. The
-// library's test binary does not link the bindings package, so the real runner is
-// never registered and this one owns the hook for the whole test binary. It is
-// package state, so these tests must not call t.Parallel.
-var providedProjects []spells.ProvidedProject
-
-func init() {
-	workspace.RegisterProviderRunner(func(context.Context, string, string) ([]spells.ProvidedProject, error) {
-		return providedProjects, nil
-	})
-}
-
-// withProvided sets the fake runner's answer for one test.
-func withProvided(t *testing.T, pp ...spells.ProvidedProject) {
+// provider registers a spell whose list_projects answers pp as a Buzz spell would, and
+// returns its name to wire. The engine's own runner invokes it, so these tests cover the
+// decode a real provider's answer goes through.
+func provider(t *testing.T, pp ...spells.ProvidedProject) string {
 	t.Helper()
-	providedProjects = pp
-	t.Cleanup(func() { providedProjects = nil })
+	list := func(ss []string) []any {
+		out := make([]any, 0, len(ss))
+		for _, s := range ss {
+			out = append(out, s)
+		}
+		return out
+	}
+	items := make([]any, 0, len(pp))
+	for _, p := range pp {
+		items = append(items, map[string]any{
+			"path": p.Path, "name": p.Name, "spells": list(p.Spells),
+			"depends_on": list(p.DependsOn), "sources": list(p.Sources), "outputs": list(p.Outputs),
+		})
+	}
+	return register.Spell(t, "provider", spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+		if req.Target != spells.ListProjectsContract {
+			return nil, nil
+		}
+		return items, nil
+	}))
 }
 
 // TestProvidedProjectIsAFullProject is the end-to-end claim the whole mechanism
@@ -266,18 +242,19 @@ func withProvided(t *testing.T, pp ...spells.ProvidedProject) {
 // the dependency graph) purely because a provider named it.
 func TestProvidedProjectIsAFullProject(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "libs/foo/package.json", "libs/shared/package.json")
-	withProvided(t,
-		spells.ProvidedProject{Path: "libs/shared", Spells: []string{"ts"}},
+	ts := register.Spell(t, "ts", spells.WithSources("**/*.ts", "package.json"))
+	nx := provider(t,
+		spells.ProvidedProject{Path: "libs/shared", Spells: []string{ts}},
 		spells.ProvidedProject{
 			Path:      "libs/foo",
 			Name:      "@acme/foo",
-			Spells:    []string{"ts"},
+			Spells:    []string{ts},
 			DependsOn: []string{"libs/shared"},
 			Outputs:   []string{"dist/**"},
 		},
 	)
 	reg := NewWorkspaceRegistry()
-	reg.AddProvider("nx")
+	reg.AddProvider(nx)
 
 	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
 	require.NoError(t, err)
@@ -285,8 +262,8 @@ func TestProvidedProjectIsAFullProject(t *testing.T) {
 	foo := ws.Get("libs/foo")
 	require.NotNil(t, foo, "a provided project must be addressable like any other")
 	assert.Equal(t, "@acme/foo", foo.Name) //nolint:fieldwise // an Inspect-built Project carries resolved spells, bindings and discovery state this test cannot construct
-	assert.Equal(t, types.ProvidedBy("nx"), foo.Origin)
-	assert.Equal(t, []string{"ts"}, foo.Spells)
+	assert.Equal(t, types.ProvidedBy(nx), foo.Origin)
+	assert.Equal(t, []string{ts}, foo.Spells)
 	assert.Equal(t, []string{"libs/shared"}, foo.DependsOn)
 	assert.Equal(t, []types.Glob{{Pattern: "dist/**"}}, foo.Outputs)
 	assert.Equal(t, filepath.Join(ws.Root(), "libs", "foo"), foo.Dir)
@@ -304,9 +281,9 @@ func TestProviderThenCentralFormComposes(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "libs/foo/package.json")
 	// No spell here on purpose: binding one unions its own globs into Sources, which
 	// would obscure the ordering this test exists to pin.
-	withProvided(t, spells.ProvidedProject{Path: "libs/foo", Sources: []string{"**/*.ts"}})
+	nx := provider(t, spells.ProvidedProject{Path: "libs/foo", Sources: []string{"**/*.ts"}})
 	reg := NewWorkspaceRegistry()
-	reg.AddProvider("nx")
+	reg.AddProvider(nx)
 	reg.RegisterProject("libs/foo", workspace.WithSources("schema/**/*.json"))
 
 	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
@@ -322,9 +299,9 @@ func TestProviderThenCentralFormComposes(t *testing.T) {
 // directory that declares itself keeps its own definition.
 func TestProviderCannotShadowAMagusfile(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "libs/foo/magusfile.buzz")
-	withProvided(t, spells.ProvidedProject{Path: "libs/foo", Name: "from-provider"})
+	nx := provider(t, spells.ProvidedProject{Path: "libs/foo", Name: "from-provider"})
 	reg := NewWorkspaceRegistry()
-	reg.AddProvider("nx")
+	reg.AddProvider(nx)
 
 	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
 	require.NoError(t, err)
@@ -339,7 +316,7 @@ func TestProviderCannotShadowAMagusfile(t *testing.T) {
 // every workspace that does not use one.
 func TestNoProviderWiredChangesNothing(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "libs/foo/package.json")
-	withProvided(t, spells.ProvidedProject{Path: "libs/foo"})
+	provider(t, spells.ProvidedProject{Path: "libs/foo"})
 
 	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(NewWorkspaceRegistry()))
 	require.NoError(t, err)
@@ -354,9 +331,9 @@ func TestNoProviderWiredChangesNothing(t *testing.T) {
 func TestProvidedProjectRejectsEscapingPath(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
 	require.NoError(t, os.MkdirAll(filepath.Join(filepath.Dir(root), "outside"), 0o755))
-	withProvided(t, spells.ProvidedProject{Path: "../outside"})
+	nx := provider(t, spells.ProvidedProject{Path: "../outside"})
 	reg := NewWorkspaceRegistry()
-	reg.AddProvider("nx")
+	reg.AddProvider(nx)
 
 	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
 
@@ -372,9 +349,12 @@ func TestProvidedProjectRejectsEscapingPath(t *testing.T) {
 // run that would otherwise succeed.
 func TestRunCIAnchorAllowsProvidedProjectWithCIOp(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "libs/foo/package.json")
-	withProvided(t, spells.ProvidedProject{Path: "libs/foo", Spells: []string{"ci-capable"}})
+	// The ci op stands in for a provider-driven toolchain's own composed pipeline (e.g.
+	// `nx run project:ci`): a provided project has no magusfile to declare one in.
+	ci := register.Spell(t, "ci-capable", spells.WithTargets("ci"))
+	nx := provider(t, spells.ProvidedProject{Path: "libs/foo", Spells: []string{ci}})
 	reg := NewWorkspaceRegistry()
-	reg.AddProvider("nx")
+	reg.AddProvider(nx)
 
 	ctx := context.Background()
 	m, err := Open(ctx, root, WithWorkspaceRegistry(reg))
@@ -391,9 +371,10 @@ func TestRunCIAnchorAllowsProvidedProjectWithCIOp(t *testing.T) {
 // counting provided projects at all must not make the anchor unconditionally pass.
 func TestRunCIAnchorRejectsProvidedProjectWithoutCIOp(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "libs/foo/package.json")
-	withProvided(t, spells.ProvidedProject{Path: "libs/foo", Spells: []string{"ts"}})
+	ts := register.Spell(t, "ts", spells.WithSources("**/*.ts", "package.json"))
+	nx := provider(t, spells.ProvidedProject{Path: "libs/foo", Spells: []string{ts}})
 	reg := NewWorkspaceRegistry()
-	reg.AddProvider("nx")
+	reg.AddProvider(nx)
 
 	ctx := context.Background()
 	m, err := Open(ctx, root, WithWorkspaceRegistry(reg))
