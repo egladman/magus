@@ -259,6 +259,8 @@ func authorizeChild(actor Actor, id string, next types.Job, exists bool, rows []
 		return refuse(actor, id, "a child may only be handed paths its parent owns, and this one claims more")
 	case !subset(ReadBoundary(next), ReadBoundary(parent)):
 		return refuse(actor, id, "a child may only read what its parent reads, and this one's read paths reach further")
+	case !listedIn(next.Breaks, parent.Breaks):
+		return refuse(actor, id, "a child may only break what its parent may break, and this one's breaks reach further")
 	case !subset(parent.DenyPaths, next.DenyPaths):
 		return refuse(actor, id, "a child carries every deny_path its parent carries, and this one drops some")
 	case next.State != "" && next.State != types.StateDeclared:
@@ -345,6 +347,7 @@ func changedFields(prev, next types.Job) []string {
 	add("deny_paths", !slices.Equal(prev.DenyPaths, next.DenyPaths))
 	add("read_paths", !slices.Equal(prev.ReadPaths, next.ReadPaths))
 	add("depends_on", !slices.Equal(prev.DependsOn, next.DependsOn))
+	add("breaks", !slices.Equal(prev.Breaks, next.Breaks))
 	add("model", prev.Model != next.Model)
 	add("validation", prev.Validation != next.Validation)
 	add("goals", !goalsEqual(prev.Goals, next.Goals))
@@ -374,6 +377,14 @@ func goalsEqual(a, b []types.Goal) bool {
 		}
 	}
 	return true
+}
+
+// listedIn reports whether every entry of inner is one outer also lists, as exact strings.
+// Breaks entries are free text, so unlike [subset] a `#` in one claims nothing.
+func listedIn(inner, outer []string) bool {
+	return !slices.ContainsFunc(inner, func(p string) bool {
+		return !slices.ContainsFunc(outer, func(o string) bool { return strings.TrimSpace(o) == strings.TrimSpace(p) })
+	})
 }
 
 // subset reports whether every declaration in inner is one outer also holds, compared as

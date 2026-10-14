@@ -1173,20 +1173,20 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	default:
 		notes := jobNotes(ctx, root, []types.Job{stored})[stored.ID]
 		return emitFormatted(opts, forkReport{
-			forkOutput:         forkOutput{Job: stored, RegeneratedOutside: notes.RegeneratedOutside, UnrunGates: notes.UnrunGates, ForegroundOverrun: notes.ForegroundOverrun},
-			DerivedClaims:      derived,
-			DeletionCandidates: deletionCandidates(ctx, root, stored),
+			forkOutput{
+				Job: stored, RegeneratedOutside: notes.RegeneratedOutside, UnrunGates: notes.UnrunGates,
+				DeletionCandidates: deletionCandidates(ctx, root, stored), ForegroundOverrun: notes.ForegroundOverrun,
+			},
+			derived,
 		})
 	}
 }
 
-// forkReport is forkOutput with what the fork computes and never stores: the write path
-// claims it derived from its symbol goals, and the unreferenced symbols its write paths
-// cover. The candidates are findings to finish or delete, not goals.
+// forkReport is forkOutput with the write path claims the fork derived from its symbol
+// goals, which are computed at the fork and never stored apart from write_paths.
 type forkReport struct {
-	forkOutput         `yaml:",inline"`
-	DerivedClaims      []string                  `json:"derived_claims,omitempty" yaml:"derived_claims,omitempty"`
-	DeletionCandidates []types.UnreferencedEntry `json:"deletion_candidates,omitempty" yaml:"deletion_candidates,omitempty"`
+	forkOutput    `yaml:",inline"`
+	DerivedClaims []string `json:"derived_claims,omitempty" yaml:"derived_claims,omitempty"`
 }
 
 // deletionCandidates is the unreferenced symbols in row's write paths, or nil when the

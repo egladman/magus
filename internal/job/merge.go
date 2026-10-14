@@ -163,7 +163,7 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 // because they are how a door names the call rather than fields of the row.
 var mergeFields = []string{
 	"parent", "criteria", "checkpoint", "write_paths", "deny_paths", "read_paths",
-	"depends_on", "model", "check", "validation", "goals", "state", "read_only", "timeout",
+	"depends_on", "breaks", "model", "check", "validation", "goals", "state", "read_only", "timeout",
 	"enter",
 }
 

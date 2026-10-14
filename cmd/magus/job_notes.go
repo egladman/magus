@@ -98,7 +98,7 @@ func checkOverrun(m *magus.Magus, row types.Job, foregroundMax func() (time.Dura
 
 // forkOutput is `job fork`'s structured output: the row as stored, plus its notes. The
 // embedded row flattens, so the wire shape is the job's own with regenerated_outside,
-// unrun_gates and foreground_overrun added.
+// unrun_gates, deletion_candidates and foreground_overrun added.
 type forkOutput struct {
 	types.Job `yaml:",inline"`
 	// RegeneratedOutside is computed when the fork renders and never stored.
@@ -106,6 +106,9 @@ type forkOutput struct {
 	// UnrunGates is computed beside it: ci targets over the write paths that neither the
 	// check nor a goal runs.
 	UnrunGates []job.UnrunGate `json:"unrun_gates,omitempty" yaml:"unrun_gates,omitempty"`
+	// DeletionCandidates are the unreferenced symbols the write paths cover: findings to
+	// finish or delete, never goals.
+	DeletionCandidates []types.UnreferencedEntry `json:"deletion_candidates,omitempty" yaml:"deletion_candidates,omitempty"`
 	// ForegroundOverrun is the check, when its last real run took longer than a wired host
 	// lets a foreground call wait.
 	ForegroundOverrun *job.ForegroundOverrun `json:"foreground_overrun,omitempty" yaml:"foreground_overrun,omitempty"`

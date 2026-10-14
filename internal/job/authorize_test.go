@@ -104,6 +104,7 @@ func TestBoundWorkerCannotRewriteThePlan(t *testing.T) {
 		"read_paths": func(u *types.Job) { u.ReadPaths = []string{"/"} },
 		"parent":     func(u *types.Job) { u.Parent = "adj/other" },
 		"model":      func(u *types.Job) { u.Model = "principal" },
+		"breaks":     func(u *types.Job) { u.Breaks = []string{"--any-flag"} },
 		"read_only":  func(u *types.Job) { u.ReadOnly = true },
 		"deadline":   func(u *types.Job) { u.Deadline = 1 << 40 },
 		"goals": func(u *types.Job) {
@@ -460,6 +461,28 @@ func TestChildIsHandedADeclarationOfItsParentsFile(t *testing.T) {
 	var refused *RefusedError
 	require.ErrorAs(t, err, &refused, "a child claims more than its parent owns when it also names other.go")
 	assert.Contains(t, err.Error(), "may only be handed paths its parent owns")
+}
+
+// A child breaks at most what its parent may: handing out breaks the parent lacks would mint
+// the authority the parent's own row is refused.
+func TestChildBreaksOnlyWhatItsParentMayBreak(t *testing.T) {
+	t.Parallel()
+
+	parent := types.Job{ID: "adj/store", WritePaths: []string{"internal/ledger"}, Breaks: []string{"--old-flag"}, State: types.StateRunning}
+	loc := declared(t, parent)
+
+	stored, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store/a", func(u *types.Job) {
+		*u = types.Job{Parent: "adj/store", WritePaths: []string{"internal/ledger"}, Breaks: []string{"--old-flag"}}
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"--old-flag"}, stored.Breaks)
+
+	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/b", func(u *types.Job) {
+		*u = types.Job{Parent: "adj/store", WritePaths: []string{"internal/ledger"}, Breaks: []string{"--old-flag", "api.Open"}}
+	})
+	var refused *RefusedError
+	require.ErrorAs(t, err, &refused)
+	assert.Contains(t, err.Error(), "may only break what its parent may break")
 }
 
 // A verdict is graded by the store, not only by Wait's door: a holder passes a row below

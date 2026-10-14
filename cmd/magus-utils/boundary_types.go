@@ -158,6 +158,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "DiffOrderCount", Type: reflect.TypeFor[types.DiffOrderCount](), RuntimeObject: true},
 	{Name: "DiffOrder", Type: reflect.TypeFor[types.DiffOrder](), RuntimeObject: true},
 	{Name: "DiffReviewed", Type: reflect.TypeFor[types.DiffReviewed](), RuntimeObject: true},
+	{Name: "ReleaseStage", Type: reflect.TypeFor[types.ReleaseStage](), RuntimeObject: true},
 	{Name: "DiffAPI", Type: reflect.TypeFor[types.DiffAPI](), RuntimeObject: true},
 	{Name: "VCSCheckpoint", Type: reflect.TypeFor[types.VCSCheckpoint](), RuntimeObject: true},
 	// A thrown error's shape, and also returned: Diff.conformanceError is one.
