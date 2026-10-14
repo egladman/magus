@@ -141,6 +141,7 @@ github.com/egladman/magus.Magus.Close method(ptr) func() error
 github.com/egladman/magus.Magus.CommandRule method(ptr) func() github.com/egladman/magus/internal/workspace.CommandRule
 github.com/egladman/magus.Magus.ComputeTargetKey method(ptr) func(ctx context.Context, projectPath string, target string, charms []string) (key string, lines []string, err error)
 github.com/egladman/magus.Magus.ConcurrencyNudge method(ptr) func() string
+github.com/egladman/magus.Magus.Conform method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.ConformOutput, error)
 github.com/egladman/magus.Magus.ConformOptions method(ptr) func() (github.com/egladman/magus/types.ConformOptions, error)
 github.com/egladman/magus.Magus.ContextWithSecrets method(ptr) func(ctx context.Context) context.Context
 github.com/egladman/magus.Magus.CurrentRevision method(ptr) func(ctx context.Context) (name string, revision string, dirty bool)
@@ -859,6 +860,7 @@ github.com/egladman/magus/types.ConflictResolver.KeepIncoming imethod func(ctx c
 github.com/egladman/magus/types.ConflictResolver.MarkResolved imethod func(ctx context.Context, root string, paths []string) error
 github.com/egladman/magus/types.ConflictResolver.RemoveConflicts imethod func(ctx context.Context, root string, paths []string) error
 github.com/egladman/magus/types.ConformCloneTokens const ConformMetric = "clone-tokens"
+github.com/egladman/magus/types.ConformDefinition const untyped string = "Conform measures how big and how coupled the workspace's code is, one row per metric and population: file lines, function lines, methods per type, top-level declarations per file, workspace imports per package, token count of bodies that share a shape, and exported symbols nothing outside their package uses. Each row gives the live percentiles, the value a check enforces (the committed ratchet value, else the configured anchor) and where that value came from, and the files, symbols or clone groups past it that no known entry accepts. Propose is the live percentile when it has fallen at least the configured step below the enforced value on a large enough sample, and never otherwise: nothing here enforces a live percentile, since a threshold that follows the code loosens as the code grows. The lens proposes; a person commits the value to the ratchet record the row names, and nothing here edits it. Generated and excluded files belong to no population, and excluded counts the files the configured exclusions hid. An index that is missing or stale answers unknown, never a pass."
 github.com/egladman/magus/types.ConformDepFanout const ConformMetric = "dep-fanout"
 github.com/egladman/magus/types.ConformExportScope const ConformMetric = "export-scope"
 github.com/egladman/magus/types.ConformFileLines const ConformMetric = "file-lines"
@@ -1999,6 +2001,7 @@ github.com/egladman/magus/types.InputRef.Rooted method func(projectPath string) 
 github.com/egladman/magus/types.InsecureTokenPermissions const DiagnosticCode = "MGS9002"
 github.com/egladman/magus/types.InsightAnalyzer type interface
 github.com/egladman/magus/types.InsightAnalyzer.Affinity imethod func(ctx context.Context, opts InsightOptions) (AffinityOutput, error)
+github.com/egladman/magus/types.InsightAnalyzer.Conform imethod func(ctx context.Context) (ConformOutput, error)
 github.com/egladman/magus/types.InsightAnalyzer.Duplication imethod func(ctx context.Context) (DuplicationOutput, error)
 github.com/egladman/magus/types.InsightAnalyzer.Hotspots imethod func(ctx context.Context, opts InsightOptions) (HotspotOutput, error)
 github.com/egladman/magus/types.InsightAnalyzer.ModelTierLens imethod func(ctx context.Context) (ModelTierOutput, error)
@@ -2014,6 +2017,7 @@ github.com/egladman/magus/types.InsightOptions.Files field bool
 github.com/egladman/magus/types.InsightOptions.Since field string
 github.com/egladman/magus/types.InsightReport type struct
 github.com/egladman/magus/types.InsightReport.Affinity field AffinityOutput "json:\"affinity\"    yaml:\"affinity\""
+github.com/egladman/magus/types.InsightReport.Conform field ConformOutput "json:\"conform\" yaml:\"conform\""
 github.com/egladman/magus/types.InsightReport.Duplication field DuplicationOutput "json:\"duplication\" yaml:\"duplication\""
 github.com/egladman/magus/types.InsightReport.Hotspots field HotspotOutput "json:\"hotspots\"    yaml:\"hotspots\""
 github.com/egladman/magus/types.InsightReport.ModelTiers field ModelTierOutput "json:\"model_tiers\" yaml:\"model_tiers\""
@@ -2023,6 +2027,7 @@ github.com/egladman/magus/types.InsightReport.Unreferenced field UnreferencedOut
 github.com/egladman/magus/types.InsightReport.Volatility field VolatilityReport "json:\"volatility\"  yaml:\"volatility\""
 github.com/egladman/magus/types.InsightView type struct
 github.com/egladman/magus/types.InsightView.Affinity field AffinityOutput "json:\"affinity\"   yaml:\"affinity\""
+github.com/egladman/magus/types.InsightView.Conform field *ConformOutput "json:\"conform\" yaml:\"conform\""
 github.com/egladman/magus/types.InsightView.Hotspots field HotspotOutput "json:\"hotspots\"   yaml:\"hotspots\""
 github.com/egladman/magus/types.InsightView.ModelTiers field *ModelTierOutput "json:\"model_tiers\" yaml:\"model_tiers\""
 github.com/egladman/magus/types.InsightView.Ownership field OwnershipOutput "json:\"ownership\"  yaml:\"ownership\""

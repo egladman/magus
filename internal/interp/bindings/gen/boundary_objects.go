@@ -507,6 +507,75 @@ func ObjectDuplicationOutput(v types.DuplicationOutput, enums ffi.EnumCases) vm.
 	return out
 }
 
+func ObjectConformKey(v types.ConformKey) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("metric", vm.StrValue(string(v.Metric)))
+	out.MapSet("population", vm.StrValue(string(v.Population)))
+	out.MapSet("scope", vm.StrValue(v.Scope))
+	return out
+}
+
+func ObjectConformItem(v types.ConformItem) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("source", vm.StrValue(v.Source))
+	out.MapSet("measure", vm.IntValue(int64(v.Measure)))
+	return out
+}
+
+func ObjectConformRow(v types.ConformRow) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("key", ObjectConformKey(v.Key))
+	out.MapSet("n", vm.IntValue(int64(v.N)))
+	out.MapSet("p50", vm.IntValue(int64(v.P50)))
+	out.MapSet("p90", vm.IntValue(int64(v.P90)))
+	out.MapSet("p95", vm.IntValue(int64(v.P95)))
+	out.MapSet("p99", vm.IntValue(int64(v.P99)))
+	out.MapSet("live", vm.IntValue(int64(v.Live)))
+	out.MapSet("value", vm.IntValue(int64(v.Value)))
+	out.MapSet("anchor", vm.IntValue(int64(v.Anchor)))
+	out.MapSet("propose", vm.IntValue(int64(v.Propose)))
+	out.MapSet("known", vm.IntValue(int64(v.Known)))
+	out.MapSet("source", vm.StrValue(string(v.Source)))
+	itemsViolations := make([]vm.Value, len(v.Violations))
+	for indexViolations := range v.Violations {
+		itemsViolations[indexViolations] = ObjectConformItem(v.Violations[indexViolations])
+	}
+	out.MapSet("violations", vm.ListValue(itemsViolations))
+	return out
+}
+
+func ObjectConformKnown(v types.ConformKnown) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("metric", vm.StrValue(string(v.Metric)))
+	itemsItems := make([]vm.Value, len(v.Items))
+	for indexItems := range v.Items {
+		itemsItems[indexItems] = vm.StrValue(v.Items[indexItems])
+	}
+	out.MapSet("items", vm.ListValue(itemsItems))
+	out.MapSet("reason", vm.StrValue(v.Reason))
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	return out
+}
+
+func ObjectConformOutput(v types.ConformOutput, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("definition", vm.StrValue(v.Definition))
+	itemsRows := make([]vm.Value, len(v.Rows))
+	for indexRows := range v.Rows {
+		itemsRows[indexRows] = ObjectConformRow(v.Rows[indexRows])
+	}
+	out.MapSet("rows", vm.ListValue(itemsRows))
+	itemsStale := make([]vm.Value, len(v.Stale))
+	for indexStale := range v.Stale {
+		itemsStale[indexStale] = ObjectConformKnown(v.Stale[indexStale])
+	}
+	out.MapSet("stale", vm.ListValue(itemsStale))
+	out.MapSet("excluded", vm.IntValue(int64(v.Excluded)))
+	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer, enums))
+	return out
+}
+
 func ObjectModelTierRecord(v types.ModelTierRecord, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("rank", vm.IntValue(int64(v.Rank)))
@@ -546,6 +615,7 @@ func ObjectInsightReport(v types.InsightReport, enums ffi.EnumCases) vm.Value {
 	out.MapSet("volatility", ObjectVolatilityReport(v.Volatility))
 	out.MapSet("unreferenced", ObjectUnreferencedOutput(v.Unreferenced, enums))
 	out.MapSet("duplication", ObjectDuplicationOutput(v.Duplication, enums))
+	out.MapSet("conform", ObjectConformOutput(v.Conform, enums))
 	out.MapSet("modelTiers", ObjectModelTierOutput(v.ModelTiers, enums))
 	return out
 }

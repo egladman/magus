@@ -15,9 +15,10 @@
 // this wire lives in the handler, so the domain type stays free of protobuf. buf-breaking
 // gates this file.
 //
-// It deliberately does NOT carry the knowledge-graph axis (types.InsightReport's graph_stats):
-// the console read never touches the knowledge graph, and folding it in here would make every
-// dashboard poll pay for a graph load.
+// It carries one knowledge-graph lens, conform, and no other (types.InsightReport's graph_stats,
+// unreferenced and duplication stay out): conform is the one that proposes a value for a
+// person to commit, so the dashboard shows it beside the history it is judged against. The
+// server computes it with the cached scan, so a burst of polls pays for one graph load.
 package insightv1alpha1connect
 
 import (

@@ -148,6 +148,13 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ffi.AnyMapVal(ret0), nil
 	}))
+	m.MapSet("conform", vm.DirectValue("magus.conform", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := std.MagusConform(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.AnyMapVal(ret0), nil
+	}))
 	m.MapSet("symbols", vm.DirectValue("magus.symbols", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.MagusSymbols(ctx)
 		if err != nil {

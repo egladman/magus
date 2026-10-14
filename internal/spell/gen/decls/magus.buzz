@@ -608,6 +608,49 @@ export object Duplication {
     answer: KnowledgeAnswer = KnowledgeAnswer{},
 }
 
+export object ConformKey {
+    metric: str = "",
+    population: str = "",
+    scope: str = "",
+}
+
+export object ConformItem {
+    id: str = "",
+    source: str = "",
+    measure: int = 0,
+}
+
+export object ConformRow {
+    key: ConformKey = ConformKey{},
+    n: int = 0,
+    p50: int = 0,
+    p90: int = 0,
+    p95: int = 0,
+    p99: int = 0,
+    live: int = 0,
+    value: int = 0,
+    anchor: int = 0,
+    propose: int = 0,
+    known: int = 0,
+    source: str = "",
+    violations: [ConformItem] = [],
+}
+
+export object ConformKnown {
+    metric: str = "",
+    items: [str] = [],
+    reason: str = "",
+    line: int = 0,
+}
+
+export object Conform {
+    definition: str = "",
+    rows: [ConformRow] = [],
+    stale: [ConformKnown] = [],
+    excluded: int = 0,
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+}
+
 export object ModelTierRecord {
     rank: int = 0,
     modelTier: str = "",
@@ -638,6 +681,7 @@ export object InsightReport {
     volatility: Volatility = Volatility{},
     unreferenced: Unreferenced = Unreferenced{},
     duplication: Duplication = Duplication{},
+    conform: Conform = Conform{},
     modelTiers: ModelTierOutput = ModelTierOutput{},
 }
 
@@ -1741,6 +1785,7 @@ export extern fun bustCache(project_path: str = "") > void !> any;
 export extern fun canonicalName(name: str) > str;
 export extern fun clean(args: [str], opts: {str: any} = {<str: any>}) > CleanReport !> any;
 export extern fun cmd(sub: str, args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
+export extern fun conform() > {str: any} !> any;
 export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
 export extern fun diff(opts: {str: any} = {<str: any>}) > Diff !> any;
 export extern fun dir(path: str) > Dir !> any;

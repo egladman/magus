@@ -8,6 +8,7 @@ ci
 ci.provider
 clean
 cmd
+conform
 describe
 describe.charm
 describe.evaluatedProject
