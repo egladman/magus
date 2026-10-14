@@ -282,7 +282,7 @@ func TestReadConformRatchetIsStrict(t *testing.T) {
 		"schema of the wrong type": {
 			in:    `{"schema": "1"}`,
 			want:  "line 1: schema: ",
-			cause: "cannot unmarshal",
+			cause: "unmarshal JSON string into Go int", // encoding/json/v2 picks "cannot" or "unable to" at random per process
 		},
 		"a list that is not one": {
 			in:   `{"schema": 1, "known": {}}`,
