@@ -42,7 +42,6 @@ const (
 	rootCtxKey contextKey = iota
 	cwdCtxKey
 	jobCtxKey
-	leaseCtxKey
 )
 
 // WithRoot returns ctx carrying the client-sent workspace root, readable via RootFromContext.
@@ -74,16 +73,15 @@ func CwdFromContext(ctx context.Context) string {
 // WithLease returns ctx carrying the client's lease, readable via
 // LeaseFromContext. An id failing [types.ValidJobID] (including the empty
 // string a client that predates the field sends) stores nothing, so a reader sees "".
+// It is [types.WithJobLease], so packages proc sits above, such as the cache recording a
+// run's output, read the same lease through [types.JobLeaseFromContext].
 //
 // The validation is here rather than at the call site because the value crosses a socket
 // any local process may dial: a lease id is exempt from the trail's redaction, so
 // storing an unvalidated one would let the wire carry a credential onto an event line.
 // Dropping it matches what trail.LeaseFromEnv does with a malformed environment value.
 func WithLease(ctx context.Context, lease string) context.Context {
-	if !types.ValidJobID(lease) {
-		return ctx
-	}
-	return context.WithValue(ctx, leaseCtxKey, lease)
+	return types.WithJobLease(ctx, lease)
 }
 
 // LeaseFromContext returns the lease the adopted client was launched under, or
@@ -93,10 +91,7 @@ func WithLease(ctx context.Context, lease string) context.Context {
 // of the process that ASKED for the run, while the server's own environment describes
 // whoever happened to start the server.
 func LeaseFromContext(ctx context.Context) string {
-	if v, ok := ctx.Value(leaseCtxKey).(string); ok {
-		return v
-	}
-	return ""
+	return types.JobLeaseFromContext(ctx)
 }
 
 type sandboxFloorKey struct{}

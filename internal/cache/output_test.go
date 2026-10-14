@@ -171,23 +171,31 @@ func TestOutputDescriptorJobAttemptCarriesTheRunsIdentity(t *testing.T) {
 func TestRecordOutputStampsTheActingLease(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root, cdir, c := newMutableCache(t)
-	record := func() OutputDescriptor {
+	recordIn := func(ctx context.Context) OutputDescriptor {
 		t.Helper()
-		ref := c.recordOutput(t.Context(), Step{ProjectPath: "api", Target: "test", WorkspaceRoot: root}, "deadbeefcafef00d", []byte("ok\n"), time.Second, nil, false)
+		ref := c.recordOutput(ctx, Step{ProjectPath: "api", Target: "test", WorkspaceRoot: root}, "deadbeefcafef00d", []byte("ok\n"), time.Second, nil, false)
 		require.NotEmpty(t, ref)
 		_, d, err := c.outputs.ByRef(ref)
 		require.NoError(t, err)
 		return d
 	}
+	record := func() OutputDescriptor {
+		t.Helper()
+		return recordIn(t.Context())
+	}
+	adopted := types.WithJobLease(t.Context(), "wave/client")
 
 	t.Setenv(trail.EnvBaggage, "")
 	assert.Empty(t, record().Lease, "a run under no lease records none")
+	assert.Equal(t, "wave/client", recordIn(adopted).Lease, "a run the daemon adopted records its client's lease")
 
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=wave/api")
 	assert.Equal(t, "wave/api", record().Lease)
+	assert.Equal(t, "wave/client", recordIn(adopted).Lease, "the client's lease outranks the daemon's environment")
 
 	require.NoError(t, job.NewStore(job.Location{CacheDir: cdir}).Bind(job.Caller{}, "wave/bound"))
 	assert.Equal(t, "wave/bound", record().Lease, "the checkout's binding outranks the claim")
+	assert.Equal(t, "wave/bound", recordIn(adopted).Lease, "the checkout's binding outranks the client's claim")
 }
 
 // TestOutputStoreV2DescriptorResolvesWithEmptyRevision pins backward compatibility for
