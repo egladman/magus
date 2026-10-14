@@ -137,7 +137,46 @@ const (
 	DelegableRun DelegableClass = "run"
 	// DelegableFetch is a fetch of a URL.
 	DelegableFetch DelegableClass = "fetch"
+	// DelegableEdit is a write or edit of a file inside a checkout of the repository.
+	DelegableEdit DelegableClass = "edit"
 )
+
+// Orchestration is how surely a session hands its work to workers. Empty means magus
+// recorded no evidence that it does.
+type Orchestration string
+
+const (
+	// OrchestrationInferred rests on evidence short of proof: a spawn bound to no job row,
+	// a loaded multi-agent skill, or proof on a thread the host did not report. A rule
+	// reading it only advises.
+	OrchestrationInferred Orchestration = "inferred"
+	// OrchestrationProven is a main thread the host reported that forked a job row the
+	// store then showed live, or spawned a worker bound to one. It lasts the session.
+	OrchestrationProven Orchestration = "proven"
+)
+
+// Values lists the levels in rank order, excluding the zero value.
+func (o Orchestration) Values() []string {
+	return []string{string(OrchestrationInferred), string(OrchestrationProven)}
+}
+
+// Valid reports whether o is a declared level or unset.
+func (o Orchestration) Valid() bool {
+	return o == "" || slices.Contains(o.Values(), string(o))
+}
+
+// MarshalText writes the name as given.
+func (o Orchestration) MarshalText() ([]byte, error) { return []byte(o), nil }
+
+// UnmarshalText sets o from a name, refusing one outside Values.
+func (o *Orchestration) UnmarshalText(text []byte) error {
+	v := Orchestration(text)
+	if !v.Valid() {
+		return fmt.Errorf("unknown orchestration %q (want one of %v)", text, v.Values())
+	}
+	*o = v
+	return nil
+}
 
 // AgentFacts is what magus records about a caller's cost beside one of its calls. Every
 // field is the caller's, never a child it spawns, and the JSON names are the trail's.
@@ -154,6 +193,9 @@ type AgentFacts struct {
 	Billing AgentBilling `json:"billing,omitempty"`
 	// DelegableClass is the work a subagent could have done in the caller's place.
 	DelegableClass DelegableClass `json:"delegable_class,omitempty"`
+	// Orchestration is how surely the caller's session hands its work to workers, empty
+	// with no evidence.
+	Orchestration Orchestration `json:"orchestration,omitempty"`
 	// ResultChars is the size of the call's result in characters, nil when it was not
 	// observed, which is every record made before the call ran.
 	ResultChars *int `json:"result_chars,omitempty"`

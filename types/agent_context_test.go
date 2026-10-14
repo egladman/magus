@@ -23,6 +23,11 @@ func TestProfileAndAgentEnumsUnmarshalText(t *testing.T) {
 		require.NoError(t, b.UnmarshalText([]byte(name)), name)
 		assert.Equal(t, AgentBilling(name), b)
 	}
+	for _, name := range []string{"", "inferred", "proven"} {
+		var o Orchestration
+		require.NoError(t, o.UnmarshalText([]byte(name)), name)
+		assert.Equal(t, Orchestration(name), o)
+	}
 	for _, name := range []string{"", "off", "light", "standard", "strict"} {
 		var p GuardProfile
 		require.NoError(t, p.UnmarshalText([]byte(name)), name)
@@ -35,6 +40,8 @@ func TestProfileAndAgentEnumsUnmarshalText(t *testing.T) {
 	require.EqualError(t, s.UnmarshalText([]byte("guessed")), `unknown thread source "guessed" (want one of [reported inferred])`)
 	var b AgentBilling
 	require.EqualError(t, b.UnmarshalText([]byte("oauth")), `unknown agent billing "oauth" (want one of [metered quota])`)
+	var o Orchestration
+	require.EqualError(t, o.UnmarshalText([]byte("likely")), `unknown orchestration "likely" (want one of [inferred proven])`)
 	var p GuardProfile
 	require.EqualError(t, p.UnmarshalText([]byte("max")), `unknown guard profile "max" (want one of [off light standard strict])`)
 }

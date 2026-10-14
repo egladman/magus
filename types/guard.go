@@ -213,6 +213,9 @@ type CommandRequest struct {
 	Thread AgentThread
 	// ThreadFrom is what Thread rests on: the host's report, or magus's inference.
 	ThreadFrom ThreadSource
+	// Orchestration is how surely the caller's session hands its work to workers, empty
+	// when magus recorded no evidence that it does.
+	Orchestration Orchestration
 	// Window is the caller's context window as its host last reported it, nil when the
 	// host reports none.
 	Window *ContextWindow
@@ -244,17 +247,18 @@ type GuardBinary struct {
 // WriteRequest is what a magus\guard.write rule is handed: one file an agent is about to
 // write through its host's edit tools, with the text the host said it writes.
 type WriteRequest struct {
-	// Host, Session, Agent, Parent, Role, Lease, Thread, ThreadFrom and Window are the
-	// caller's, as on CommandRequest.
-	Host       string
-	Session    string
-	Agent      string
-	Parent     string
-	Role       AgentRole
-	Lease      *Job
-	Thread     AgentThread
-	ThreadFrom ThreadSource
-	Window     *ContextWindow
+	// Host, Session, Agent, Parent, Role, Lease, Thread, ThreadFrom, Orchestration and
+	// Window are the caller's, as on CommandRequest.
+	Host          string
+	Session       string
+	Agent         string
+	Parent        string
+	Role          AgentRole
+	Lease         *Job
+	Thread        AgentThread
+	ThreadFrom    ThreadSource
+	Orchestration Orchestration
+	Window        *ContextWindow
 	// Path is the file as the host named it.
 	Path string
 	// Workspace is the root of the workspace holding Path, empty when none does.
