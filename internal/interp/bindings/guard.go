@@ -176,23 +176,6 @@ func parseBuiltinSetting(v vm.Value) (builtin.Setting, error) {
 				return s, errors.New(`"decision" must be "off", "advise" or "deny"`)
 			}
 			s.Decision = builtin.Decision(field.AsString())
-		case "lines", "tokens", "calls", "chars":
-			// Resolve reads 0 as unset, so a declared 0 must not reach it as one. Resolve
-			// owns each parameter's floor and which rules take it.
-			if !field.IsInt() || field.AsInt() < 1 {
-				return s, fmt.Errorf(`%q must be an int of 1 or more`, k)
-			}
-			n := int(field.AsInt())
-			switch k {
-			case "lines":
-				s.Lines = n
-			case "tokens":
-				s.Tokens = n
-			case "calls":
-				s.Calls = n
-			default:
-				s.Chars = n
-			}
 		case "markers":
 			// An empty list would reach Resolve as unset and take the rule's own markers,
 			// which is not what a workspace declaring none meant.
@@ -206,7 +189,18 @@ func parseBuiltinSetting(v vm.Value) (builtin.Setting, error) {
 				s.Markers = append(s.Markers, item.AsString())
 			}
 		default:
-			return s, fmt.Errorf(`unknown field %q, a setting takes "decision", "lines", "tokens", "calls", "chars" and "markers"`, k)
+			n := 0
+			if field.IsInt() {
+				n = int(field.AsInt())
+			}
+			if !s.SetParam(k, n) {
+				return s, fmt.Errorf(`unknown field %q, a setting takes "decision", "lines", "tokens", "calls", "chars" and "markers"`, k)
+			}
+			// Resolve reads 0 as unset, so a declared 0 must not reach it as one. Resolve
+			// owns each parameter's floor and which rules take it.
+			if n < 1 {
+				return s, fmt.Errorf(`%q must be an int of 1 or more`, k)
+			}
 		}
 	}
 	if s.Decision == "" {

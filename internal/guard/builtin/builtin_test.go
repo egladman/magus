@@ -249,21 +249,8 @@ func TestStricter(t *testing.T) {
 	}
 }
 
-// testRule gives one compiled rule every parameter for the length of a test.
-func testRule(t *testing.T) string {
-	t.Helper()
-	const name = "test-cost-rule"
-	defaults[name] = Advise
-	params[name] = []string{"tokens", "calls", "chars"}
-	t.Cleanup(func() {
-		delete(defaults, name)
-		delete(params, name)
-	})
-	return name
-}
-
 func TestResolveChecksEachParameter(t *testing.T) {
-	rule := testRule(t)
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		rule string
@@ -271,13 +258,13 @@ func TestResolveChecksEachParameter(t *testing.T) {
 		want string
 	}{
 		{"tokens on a rule without it", "stage-all", Setting{Decision: Advise, Tokens: 1000},
-			`built-in rule "stage-all" takes no tokens parameter; only root-context-budget, test-cost-rule do`},
-		{"tokens below 1", rule, Setting{Decision: Advise, Tokens: -1},
-			`built-in rule "test-cost-rule": tokens is -1; give 1 or more, or leave it out`},
-		{"calls below 2", rule, Setting{Decision: Deny, Calls: 1},
-			`built-in rule "test-cost-rule": calls is 1; give 2 or more, or leave it out`},
-		{"chars below 1000", rule, Setting{Decision: Advise, Chars: 999},
-			`built-in rule "test-cost-rule": chars is 999; give 1000 or more, or leave it out`},
+			`built-in rule "stage-all" takes no tokens parameter; only root-context-budget does`},
+		{"tokens below 1", rootContextBudget, Setting{Decision: Advise, Tokens: -1},
+			`built-in rule "root-context-budget": tokens is -1; give 1 or more, or leave it out`},
+		{"calls below 2", rootHeavyCommand, Setting{Decision: Deny, Calls: 1},
+			`built-in rule "root-heavy-command": calls is 1; give 2 or more, or leave it out`},
+		{"chars below 1000", rootResultCap, Setting{Decision: Advise, Chars: 999},
+			`built-in rule "root-result-cap": chars is 999; give 1000 or more, or leave it out`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Resolve(map[string]Setting{tc.rule: tc.s})
@@ -288,19 +275,50 @@ func TestResolveChecksEachParameter(t *testing.T) {
 		})
 	}
 
-	ok := Setting{Decision: Deny, Tokens: 1_000_000, Calls: 2, Chars: 1000}
-	got, err := Resolve(map[string]Setting{rule: ok})
+	ok := map[string]Setting{
+		rootContextBudget: {Decision: Deny, Tokens: 1_000_000},
+		rootHeavyCommand:  {Decision: Deny, Calls: 2},
+		rootResultCap:     {Decision: Advise, Chars: 1000},
+	}
+	got, err := Resolve(ok)
 	require.NoError(t, err)
-	assert.Equal(t, ok, got[rule])
+	for name, s := range ok {
+		assert.Equal(t, s, got[name], "each parameter at its floor loads")
+	}
 }
 
 // No window is built in to bound tokens by: a value no model could reach loads, since only
 // the workspace's own model rows know the largest window.
 func TestResolveDoesNotBoundTokensByAGuessedWindow(t *testing.T) {
-	rule := testRule(t)
-	got, err := Resolve(map[string]Setting{rule: {Decision: Advise, Tokens: 50_000_000}})
+	t.Parallel()
+	got, err := Resolve(map[string]Setting{rootContextBudget: {Decision: Advise, Tokens: 50_000_000}})
 	require.NoError(t, err)
-	assert.Equal(t, 50_000_000, got[rule].Tokens)
+	assert.Equal(t, 50_000_000, got[rootContextBudget].Tokens)
+}
+
+// Every parameter a rule takes is one the parser can set, or markers.
+func TestParamsNameOnlyKnownParameters(t *testing.T) {
+	t.Parallel()
+	for rule, names := range params {
+		for _, name := range names {
+			if name == "markers" {
+				continue
+			}
+			var s Setting
+			assert.True(t, s.SetParam(name, 1), "%s takes %s, which no parameter spec names", rule, name)
+		}
+	}
+}
+
+func TestSetParam(t *testing.T) {
+	t.Parallel()
+	var s Setting
+	for i, p := range paramSpecs {
+		require.True(t, s.SetParam(p.name, i+1), p.name)
+	}
+	assert.Equal(t, Setting{Lines: 1, Tokens: 2, Calls: 3, Chars: 4}, s)
+	assert.False(t, s.SetParam("markers", 1), "markers are a list, not a number")
+	assert.False(t, s.SetParam("decision", 1))
 }
 
 func TestResolveNamesEveryTakerOfAParameter(t *testing.T) {
@@ -365,24 +383,21 @@ func TestProfilesAreDefinedAndResolve(t *testing.T) {
 // A profile sets the rules it names; a rule the workspace declares overrides its
 // profile's setting, and every other rule keeps its default.
 func TestResolveProfileExpandsThenDeclared(t *testing.T) {
-	rule := testRule(t)
-	saved := profiles[types.GuardProfileStrict]
-	profiles[types.GuardProfileStrict] = map[string]Setting{
-		rule:        {Decision: Deny, Calls: 8},
-		"stage-all": {Decision: Deny},
-	}
-	t.Cleanup(func() { profiles[types.GuardProfileStrict] = saved })
-
-	declared := map[string]Setting{"stage-all": {Decision: Off}}
+	t.Parallel()
+	strict := len(profiles[types.GuardProfileStrict])
+	declared := map[string]Setting{rootRepeat: {Decision: Off}}
 	expanded, err := ResolveProfile(types.GuardProfileStrict, declared)
 	require.NoError(t, err)
 	got, err := Resolve(expanded)
 	require.NoError(t, err)
-	assert.Equal(t, Setting{Decision: Deny, Calls: 8, Profile: types.GuardProfileStrict}, got[rule], "a level stamps its rows")
-	assert.Equal(t, Setting{Decision: Off}, got["stage-all"], "the declaration overrides the profile")
+	assert.Equal(t, Setting{Decision: Deny, Profile: types.GuardProfileStrict}, got[rootContextBudget], "a level stamps its rows")
+	assert.Equal(t, Setting{Decision: Off}, got[rootRepeat], "the declaration overrides the profile")
 	assert.Equal(t, Setting{Decision: Advise}, got["raw-tool"], "a rule neither names keeps its default")
 	assert.Len(t, declared, 1, "ResolveProfile leaves declared alone")
-	assert.Len(t, profiles[types.GuardProfileStrict], 2, "ResolveProfile leaves the row alone")
+	assert.Len(t, profiles[types.GuardProfileStrict], strict, "ResolveProfile leaves the row alone")
+	for _, s := range profiles[types.GuardProfileStrict] {
+		assert.Empty(t, s.Profile, "ResolveProfile stamps a copy, never the row")
+	}
 
 	light, err := ResolveProfile("", nil)
 	require.NoError(t, err)

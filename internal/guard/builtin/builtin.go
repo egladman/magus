@@ -60,8 +60,37 @@ const (
 	stall               = "stall"
 )
 
-// params maps each rule that takes a parameter to the parameters it takes, by the names
-// magus\guard.builtins spells them.
+// paramSpec is one numeric parameter: its name as magus\guard.builtins spells it, the
+// lowest value that loads, and the Setting field that holds it. No parameter has a
+// ceiling: only the workspace's model rows know the largest window, and they load later.
+type paramSpec struct {
+	name  string
+	min   int
+	field func(*Setting) *int
+}
+
+// paramSpecs are the numeric parameters, in the order validate reports them.
+var paramSpecs = []paramSpec{
+	{"lines", 1, func(s *Setting) *int { return &s.Lines }},
+	{"tokens", 1, func(s *Setting) *int { return &s.Tokens }},
+	{"calls", 2, func(s *Setting) *int { return &s.Calls }},
+	{"chars", 1000, func(s *Setting) *int { return &s.Chars }},
+}
+
+// SetParam sets the numeric parameter name to n, reporting false for a name that is no
+// numeric parameter. Which rules take it, and its floor, are Resolve's to judge.
+func (s *Setting) SetParam(name string, n int) bool {
+	for _, p := range paramSpecs {
+		if p.name == name {
+			*p.field(s) = n
+			return true
+		}
+	}
+	return false
+}
+
+// params maps each rule that takes a parameter to the parameters it takes: a paramSpecs
+// name, or markers.
 var params = map[string][]string{
 	compatMarker:      {"markers"},
 	readNavigation:    {"lines"},
@@ -350,25 +379,17 @@ func validate(name string, s Setting) error {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 			"built-in rule %q never refuses; give off or advise", name).WithWhy(why)
 	}
-	for _, p := range []struct {
-		param string
-		value int
-		min   int
-	}{
-		{"lines", s.Lines, 1},
-		{"tokens", s.Tokens, 1},
-		{"calls", s.Calls, 2},
-		{"chars", s.Chars, 1000},
-	} {
-		if p.value == 0 {
+	for _, p := range paramSpecs {
+		value := *p.field(&s)
+		if value == 0 {
 			continue
 		}
-		if !slices.Contains(params[name], p.param) {
-			return takesNo(name, p.param)
+		if !slices.Contains(params[name], p.name) {
+			return takesNo(name, p.name)
 		}
-		if p.value < p.min {
+		if value < p.min {
 			return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-				"built-in rule %q: %s is %d; give %d or more, or leave it out", name, p.param, p.value, p.min)
+				"built-in rule %q: %s is %d; give %d or more, or leave it out", name, p.name, value, p.min)
 		}
 	}
 	if len(s.Markers) > 0 && !slices.Contains(params[name], "markers") {
@@ -442,14 +463,15 @@ func Stricter(a, b Setting) Setting {
 // gives its rules, each stamped with p's level, with declared applied over them rule by
 // rule. Unset p is light. An unknown p is an MGS1045 error. Neither map is modified.
 func ResolveProfile(p types.GuardProfile, declared map[string]Setting) (map[string]Setting, error) {
-	row, ok := profiles[p.Level()]
+	level := p.Level()
+	row, ok := profiles[level]
 	if !ok {
 		return nil, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 			"unknown guard profile %q; give one of %s", string(p), strings.Join(p.Values(), ", "))
 	}
 	out := make(map[string]Setting, len(row)+len(declared))
 	for name, s := range row {
-		s.Profile = p.Level()
+		s.Profile = level
 		out[name] = s
 	}
 	maps.Copy(out, declared)
