@@ -245,7 +245,7 @@ func TestRefsMemoizesPerSymbolScope(t *testing.T) {
 		_, err := MagusRefs(eval, graphSymbol, nil)
 		require.NoError(t, err)
 	}
-	assert.Equal(t, []types.GraphRequest{{Symbols: types.SymbolsFor(graphSymbol)}}, ws.reqs)
+	assert.Equal(t, []types.GraphRequest{{Symbols: types.SymbolsMentioning(graphSymbol)}}, ws.reqs)
 
 	_, err := MagusRefs(eval, "symbol:example.com/x Bar#", nil)
 	require.NoError(t, err)

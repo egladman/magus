@@ -157,11 +157,11 @@ func TestSummarizeCostLeavesItsCallersCallsInOrder(t *testing.T) {
 // No call observing a result is unmeasured; a call observing an empty one is a measured
 // zero.
 func TestDelegableTellsAnUnobservedResultFromAnEmptyOne(t *testing.T) {
-	assert.Nil(t, delegableOf([]trail.SessionCall{mainCall(1, 1, "m")}))
+	assert.Nil(t, sumDelegable([]trail.SessionCall{mainCall(1, 1, "m")}))
 
 	empty := mainCall(1, 1, "m")
 	empty.ResultChars = resultOf(0)
-	got := delegableOf([]trail.SessionCall{empty})
+	got := sumDelegable([]trail.SessionCall{empty})
 	require.NotNil(t, got)
 	assert.Zero(t, got.Total)
 	assert.Zero(t, got.Share())
@@ -180,7 +180,7 @@ func TestDollarsPriceTheCacheReadFloorOnceForEachModelCall(t *testing.T) {
 		metered(4, 150_000, "claude-haiku-5-5"), // past its 100k step: 5x the cache-read price
 	}
 
-	est, why := dollarsOf(calls, fixtureModels())
+	est, why := estimateDollars(calls, fixtureModels())
 
 	require.NotNil(t, est, why)
 	assert.Equal(t, 3, est.Calls)
@@ -201,7 +201,7 @@ func TestDollarsAreWithheldWhenTheyWouldBeAGuess(t *testing.T) {
 			c := mainCall(1, 400_000, tc.model)
 			c.Billing = tc.billing
 
-			est, why := dollarsOf([]trail.SessionCall{c}, fixtureModels())
+			est, why := estimateDollars([]trail.SessionCall{c}, fixtureModels())
 
 			assert.Nil(t, est)
 			assert.Equal(t, tc.want, why)
@@ -213,7 +213,7 @@ func TestDollarsAreWithheldWhenOneCallLacksBilling(t *testing.T) {
 	billed := mainCall(1, 400_000, "claude-opus-5-5")
 	billed.Billing = types.AgentBillingMetered
 
-	est, why := dollarsOf([]trail.SessionCall{billed, mainCall(2, 410_000, "claude-opus-5-5")}, fixtureModels())
+	est, why := estimateDollars([]trail.SessionCall{billed, mainCall(2, 410_000, "claude-opus-5-5")}, fixtureModels())
 
 	assert.Nil(t, est)
 	assert.Contains(t, why, "billing is unknown")
@@ -227,8 +227,8 @@ func TestAdvisoryFollowEndsAfterTheWindow(t *testing.T) {
 		main = append(main, mainCall(i, 1, "m"))
 	}
 
-	inside := advisoriesOf(main, []costSpawn{{At: at(followWithin)}})
-	outside := advisoriesOf(main, []costSpawn{{At: at(followWithin + 1)}})
+	inside := tallyAdvisories(main, []costSpawn{{At: at(followWithin)}})
+	outside := tallyAdvisories(main, []costSpawn{{At: at(followWithin + 1)}})
 
 	assert.Equal(t, 1, inside.Followed)
 	assert.Equal(t, 0, outside.Followed)

@@ -110,7 +110,7 @@ func NarrowConfigHold(ctx context.Context, store *Store, id, file string, touche
 	}
 	var all []string
 	if drivers[file] != "" {
-		all, _ = declarationsOf(ctx, driver, store.root, file)
+		all, _ = readDeclarations(ctx, driver, store.root, file)
 	}
 	return store.mutate(ctx, id, asNarrowing, func(cur *types.Job, exists bool, now int64) error {
 		switch {
@@ -139,9 +139,9 @@ func NarrowConfigHold(ctx context.Context, store *Store, id, file string, touche
 	})
 }
 
-// holdersOf are the live rows other than id whose write paths cover file, a pattern that
+// liveHolders are the live rows other than id whose write paths cover file, a pattern that
 // released it excepted.
-func holdersOf(rows []types.Job, id, file string) []types.Job {
+func liveHolders(rows []types.Job, id, file string) []types.Job {
 	var out []types.Job
 	for _, r := range rows {
 		if r.ID == id || !Editing(r) {

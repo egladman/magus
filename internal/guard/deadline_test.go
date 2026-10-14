@@ -325,7 +325,7 @@ func TestStageFor(t *testing.T) {
 		lapsesBeforeDegrade + 2: lapseStillDegraded,
 		lapsesBeforeDegrade + 9: lapseStillDegraded,
 	} {
-		assert.Equal(t, want, stageFor(inARow), inARow)
+		assert.Equal(t, want, stageAtLapses(inARow), inARow)
 	}
 }
 

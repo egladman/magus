@@ -24,8 +24,8 @@ const (
 	ModeRepl      = "repl"
 )
 
-// outcomeOf labels a completed Buzz call by its error.
-func outcomeOf(err error) observability.Outcome {
+// callOutcome labels a completed Buzz call by its error.
+func callOutcome(err error) observability.Outcome {
 	if err != nil {
 		return observability.OutcomeError
 	}
@@ -70,7 +70,7 @@ func TimeExec(ctx context.Context, mode string, fn func() error) error {
 	}
 	start := time.Now()
 	err := fn()
-	p.RecordBuzzExec(ctx, observability.BuzzExec{Mode: mode, Outcome: outcomeOf(err), Duration: time.Since(start).Seconds()})
+	p.RecordBuzzExec(ctx, observability.BuzzExec{Mode: mode, Outcome: callOutcome(err), Duration: time.Since(start).Seconds()})
 	recordJITDelta(ctx, p)
 	return err
 }
@@ -84,7 +84,7 @@ func TimeCall(ctx context.Context, mode string, fn func() (vm.Value, error)) (vm
 	}
 	start := time.Now()
 	v, err := fn()
-	p.RecordBuzzExec(ctx, observability.BuzzExec{Mode: mode, Outcome: outcomeOf(err), Duration: time.Since(start).Seconds()})
+	p.RecordBuzzExec(ctx, observability.BuzzExec{Mode: mode, Outcome: callOutcome(err), Duration: time.Since(start).Seconds()})
 	recordJITDelta(ctx, p)
 	return v, err
 }
@@ -114,7 +114,7 @@ func (o compileObserver) Phase(phase buzz.CompilePhase, elapsed time.Duration, _
 }
 
 func (o compileObserver) Import(_ string, outcome buzz.ImportOutcome, elapsed time.Duration, err error) {
-	o.p.RecordBuzzImport(o.ctx, observability.BuzzImport{Kind: outcome.String(), Outcome: outcomeOf(err), Duration: elapsed.Seconds()})
+	o.p.RecordBuzzImport(o.ctx, observability.BuzzImport{Kind: outcome.String(), Outcome: callOutcome(err), Duration: elapsed.Seconds()})
 }
 
 // NewPoolObserver returns a PoolObserver that reports Buzz session-pool lifecycle
@@ -177,7 +177,7 @@ type hostCallObserver struct {
 func (o hostCallObserver) DirectCall(name string, elapsed time.Duration, err error) {
 	o.p.RecordBuzzHostCall(o.ctx, observability.BuzzHostCall{
 		Callable: name,
-		Outcome:  outcomeOf(err),
+		Outcome:  callOutcome(err),
 		Duration: elapsed.Seconds(),
 	})
 }

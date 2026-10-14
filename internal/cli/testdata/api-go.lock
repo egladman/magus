@@ -3956,7 +3956,7 @@ github.com/egladman/magus/types.SymbolReport.Symbols field []SymbolDecl "json:\"
 github.com/egladman/magus/types.SymbolScope type struct
 github.com/egladman/magus/types.SymbolScope.Loaded method func() bool
 github.com/egladman/magus/types.SymbolScope.Ref method func() string
-github.com/egladman/magus/types.SymbolsFor func(ref string) SymbolScope
+github.com/egladman/magus/types.SymbolsMentioning func(ref string) SymbolScope
 github.com/egladman/magus/types.Target type struct
 github.com/egladman/magus/types.Target.Advisory field bool "json:\"advisory,omitempty\" buzz:\"advisory\""
 github.com/egladman/magus/types.Target.AdvisoryReason field string "json:\"advisory_reason,omitempty\" buzz:\"advisory_reason\""

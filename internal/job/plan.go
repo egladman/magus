@@ -78,11 +78,11 @@ func writeMerge(ctx context.Context, store *Store, id string, merge func(*types.
 
 // refuseMerge holds a merge into job id, against the plan rows, to the rules a fork is held
 // to, and returns the write proof the row records. A merge that creates the row, or brings
-// an ended one back, meets every one: scoped and graded, within the jobs limits,
-// unambiguous symbol goals, and write paths that are no directory (MGS3018), ungradable
-// claim (MGS3031), project configuration held whole (MGS3036), shared checkout or
-// unordered shared file (MGS3032), and a check that skips a test of its write paths'
-// packages or that the guard denies its holder. A merge onto a row that has not ended meets
+// an ended one back, meets every one. The row is scoped and graded, within the jobs limits,
+// with unambiguous symbol goals. Its write paths are no directory (MGS3018), no ungradable
+// claim (MGS3031), no project configuration held whole (MGS3036), and no shared checkout or
+// unordered shared file (MGS3032). Its check skips no test of its write paths' packages and
+// is none the guard denies its holder. A merge onto a row that has not ended meets
 // the same rules for what it ADDS: the goals and write paths it did not carry, so a path the
 // row already held never blocks an unrelated update. Its proof is recomputed when its write
 // paths change, and is empty otherwise, which keeps the one it holds.
@@ -655,7 +655,7 @@ func PlaceDerivedClaims(ctx context.Context, store *Store, derived []string) ([]
 		if drivers[file] == "" {
 			continue
 		}
-		all, ok := declarationsOf(ctx, driver, store.root, file)
+		all, ok := readDeclarations(ctx, driver, store.root, file)
 		if !ok {
 			refused = append(refused, fmt.Sprintf("%q: the declarations of %s could not be placed", claim, file))
 			continue

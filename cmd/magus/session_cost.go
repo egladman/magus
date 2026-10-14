@@ -162,7 +162,7 @@ func summarizeCost(tr *trail.SessionTrail, table model.Table) *sessionCost {
 		}
 		return c
 	}
-	spawns := spawnsOf(tr)
+	spawns := sessionSpawns(tr)
 	c.Spawns = spawnsByModel(spawns)
 
 	// The root is the main thread; a call of unknown thread is never counted as the root's.
@@ -183,7 +183,7 @@ func summarizeCost(tr *trail.SessionTrail, table model.Table) *sessionCost {
 		noMain = fmt.Sprintf("no call is known to be on the main thread (%d of unknown thread)", unknown)
 	}
 
-	c.RootContext = rootContextOf(main)
+	c.RootContext = buildRootContext(main)
 	switch {
 	case c.RootContext != nil:
 	case len(main) == 0:
@@ -192,7 +192,7 @@ func summarizeCost(tr *trail.SessionTrail, table model.Table) *sessionCost {
 		c.NotMeasured[costRootContext] = "no main-thread call reported a context size"
 	}
 
-	c.Delegable = delegableOf(main)
+	c.Delegable = sumDelegable(main)
 	switch {
 	case c.Delegable != nil:
 	case len(main) == 0:
@@ -202,17 +202,17 @@ func summarizeCost(tr *trail.SessionTrail, table model.Table) *sessionCost {
 	}
 
 	if len(main) > 0 {
-		c.Advisories = advisoriesOf(main, spawns)
+		c.Advisories = tallyAdvisories(main, spawns)
 	} else {
 		c.NotMeasured[costAdvisories] = noMain
 	}
 
-	c.Shadow = shadowOf(main)
+	c.Shadow = tallyShadow(main)
 	if c.Shadow == nil {
 		c.NotMeasured[costShadow] = "no call recorded what each profile would have decided"
 	}
 
-	est, why := dollarsOf(main, table)
+	est, why := estimateDollars(main, table)
 	c.Dollars = est
 	if est == nil {
 		c.NotMeasured[costDollars] = why
@@ -223,7 +223,7 @@ func summarizeCost(tr *trail.SessionTrail, table model.Table) *sessionCost {
 	return c
 }
 
-func spawnsOf(tr *trail.SessionTrail) []costSpawn {
+func sessionSpawns(tr *trail.SessionTrail) []costSpawn {
 	out := make([]costSpawn, 0, len(tr.Spawns))
 	for _, sp := range tr.Spawns {
 		out = append(out, costSpawn{At: sp.At, Model: sp.DeclaredModel})
@@ -239,7 +239,7 @@ func spawnsByModel(spawns []costSpawn) *spawnTally {
 	return &spawnTally{Total: len(spawns), ByModel: counted(tally)}
 }
 
-func rootContextOf(main []trail.SessionCall) *rootContext {
+func buildRootContext(main []trail.SessionCall) *rootContext {
 	var sizes []tokens
 	models := map[string]bool{}
 	for _, call := range main {
@@ -262,9 +262,9 @@ func rootContextOf(main []trail.SessionCall) *rootContext {
 	return rc
 }
 
-// delegableOf sums the result sizes the main thread's calls observed, nil when none
+// sumDelegable sums the result sizes the main thread's calls observed, nil when none
 // observed one.
-func delegableOf(main []trail.SessionCall) *delegableShare {
+func sumDelegable(main []trail.SessionCall) *delegableShare {
 	var total, delegable chars
 	observed := false
 	byClass := map[string]int{}
@@ -285,7 +285,7 @@ func delegableOf(main []trail.SessionCall) *delegableShare {
 	return &delegableShare{Chars: delegable, Total: total, ByClass: counted(byClass)}
 }
 
-func advisoriesOf(main []trail.SessionCall, spawns []costSpawn) *advisoryOutcome {
+func tallyAdvisories(main []trail.SessionCall, spawns []costSpawn) *advisoryOutcome {
 	out := &advisoryOutcome{Within: followWithin}
 	for i, call := range main {
 		if call.Decision != string(types.GuardAdvise) || !slices.Contains(costAdviceRules, call.Rule) {
@@ -305,9 +305,9 @@ func advisoriesOf(main []trail.SessionCall, spawns []costSpawn) *advisoryOutcome
 	return out
 }
 
-// shadowOf tallies each profile's decisions across the main thread's calls. An unset
+// tallyShadow tallies each profile's decisions across the main thread's calls. An unset
 // decision is an allow, as a rule's zero verdict is.
-func shadowOf(main []trail.SessionCall) []shadowTally {
+func tallyShadow(main []trail.SessionCall) []shadowTally {
 	byProfile := map[types.GuardProfile]map[types.GuardDecision]int{}
 	for _, call := range main {
 		for p, d := range call.Shadow {
@@ -328,11 +328,11 @@ func shadowOf(main []trail.SessionCall) []shadowTally {
 	return out
 }
 
-// dollarsOf prices the main thread's context at the cache-read rate, and returns the
+// estimateDollars prices the main thread's context at the cache-read rate, and returns the
 // reason instead when it would be a guess: billing that is not metered on every call, or
 // a model the table does not know. Consecutive calls reporting the same context are one
 // model call that ran several tools, so they are priced once.
-func dollarsOf(main []trail.SessionCall, table model.Table) (*dollarEstimate, string) {
+func estimateDollars(main []trail.SessionCall, table model.Table) (*dollarEstimate, string) {
 	var samples []trail.SessionCall
 	for _, call := range main {
 		if call.ContextTokens > 0 {

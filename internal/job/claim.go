@@ -80,7 +80,7 @@ func RefuseUngradableClaims(ctx context.Context, store *Store, row types.Job) er
 			default:
 				all, ok := placed[c.path]
 				if !ok {
-					all, _ = declarationsOf(ctx, driver, store.root, c.path)
+					all, _ = readDeclarations(ctx, driver, store.root, c.path)
 					placed[c.path] = all
 				}
 				if matched := namedDeclarations(c.decl, all); len(matched) > 1 {
@@ -130,7 +130,7 @@ func RefuseWholeFileConfigClaims(ctx context.Context, store *Store, row types.Jo
 		if err != nil || drivers[file] == "" {
 			continue
 		}
-		all, ok := declarationsOf(ctx, driver, store.root, file)
+		all, ok := readDeclarations(ctx, driver, store.root, file)
 		if !ok || len(all) == 0 {
 			continue
 		}
@@ -143,7 +143,7 @@ func RefuseWholeFileConfigClaims(ctx context.Context, store *Store, row types.Jo
 	if f, err := store.read(); err == nil {
 		combined := append(slices.DeleteFunc(slices.Clone(f.Jobs), func(r types.Job) bool { return r.ID == row.ID }), row)
 		for _, file := range files {
-			for _, holder := range holdersOf(f.Jobs, row.ID, file) {
+			for _, holder := range liveHolders(f.Jobs, row.ID, file) {
 				// A parent holds its children's paths by design; it is not blocking them.
 				if !orderedPair(combined, row.ID, holder.ID) {
 					store.requestRelease(ctx, holder.ID, file, []string{file})
@@ -390,7 +390,7 @@ func splitAdvice(ctx context.Context, store *Store, row, holder types.Job, file 
 	if driver == nil {
 		return generic
 	}
-	all, _ := declarationsOf(ctx, driver, store.root, file)
+	all, _ := readDeclarations(ctx, driver, store.root, file)
 	var theirs, mine []string
 	for _, d := range touched {
 		if d != types.Preamble {
@@ -445,11 +445,11 @@ func appendUnique(list []string, s string) []string {
 	return append(list, s)
 }
 
-// declarationsOf lists the declarations of file as its diff driver places them, in file
+// readDeclarations lists the declarations of file as its diff driver places them, in file
 // order and without the preamble; false when the file cannot be read or placed. A file
 // compared with nothing is all added, which is how a RegionReporter says where each of its
 // declarations lies.
-func declarationsOf(ctx context.Context, driver types.VCSDriver, root, file string) ([]string, bool) {
+func readDeclarations(ctx context.Context, driver types.VCSDriver, root, file string) ([]string, bool) {
 	body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(file)))
 	if err != nil {
 		return nil, false
@@ -533,12 +533,12 @@ func wordByte(b byte) bool {
 	return b == '_' || b == '$' || b >= '0' && b <= '9' || b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= 0x80
 }
 
-// ForkNotes are what a fork that passed owes its reader, one line each: a write-path claim
-// that names no declaration of its file yet (allowed, since the declaration may not be
-// written; echoed so a typo shows), and, for a file row shares with a job in the same
-// checkout or not yet taken (write_proof overlapping), the claim pair that would split it.
-// Nothing is written to a row. A nil store, or one with no workspace root, has no tree to
-// read and returns nil.
+// ForkNotes are what a fork that passed owes its reader, one line each. A write-path claim
+// that names no declaration of its file yet is allowed, since the declaration may not be
+// written, and is echoed so a typo shows. A file row shares with a job in the same
+// checkout, or not yet taken (write_proof overlapping), gets the claim pair that would
+// split it. Nothing is written to a row. A nil store, or one with no workspace root, has
+// no tree to read and returns nil.
 func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Job) []string {
 	if store == nil || store.root == "" {
 		return nil
@@ -557,7 +557,7 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 		if err != nil || drivers[file] == "" {
 			continue
 		}
-		all, readable := declarationsOf(ctx, driver, store.root, file)
+		all, readable := readDeclarations(ctx, driver, store.root, file)
 		switch {
 		case !readable:
 			notes = append(notes, fmt.Sprintf("%s does not exist yet in this checkout, so %q names a declaration once it is written", file, entry))

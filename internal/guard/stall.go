@@ -49,7 +49,7 @@ func gradeStall(deps Dependencies, verdict types.GuardJudgment, lease string, at
 	if verdict.Decision != decisionDeny || lease == "" || !unclearable[verdict.Rule] {
 		return verdict
 	}
-	if deps.settingOf(string(denyRuleStall)).Decision == builtin.Off || stallGate(at.cacheDir, lease).AlreadyFired(stallRowKind(verdict.Rule)) {
+	if deps.settingLookup(string(denyRuleStall)).Decision == builtin.Off || stallGate(at.cacheDir, lease).AlreadyFired(stallRowKind(verdict.Rule)) {
 		return verdict
 	}
 	line, rest, more := strings.Cut(verdict.Reason, "\n")

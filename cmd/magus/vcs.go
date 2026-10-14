@@ -487,7 +487,7 @@ func (s *claimSettle) settle(ctx context.Context, p string, writers []types.Job)
 	}
 	var jobs [2][]types.Job
 	for _, row := range writers {
-		if side, ok := s.sideOf(ctx, row, base); ok {
+		if side, ok := s.resolveSide(ctx, row, base); ok {
 			jobs[side] = append(jobs[side], row)
 		}
 	}
@@ -550,11 +550,11 @@ func (s *claimSettle) mergeBase(ctx context.Context) (string, error) {
 	return s.base, s.baseErr
 }
 
-// sideOf is the side whose history carries row's work, or false for neither: the work is
+// resolveSide is the side whose history carries row's work, or false for neither: the work is
 // already in the merge base, or no revision here names it. The work is the revision row's
 // checkout has checked out, else a revision named row.ID: the branch-per-job convention
 // hack/dev/merge-job-branches.buzz also reads.
-func (s *claimSettle) sideOf(ctx context.Context, row types.Job, base string) (mergeSide, bool) {
+func (s *claimSettle) resolveSide(ctx context.Context, row types.Job, base string) (mergeSide, bool) {
 	tip := row.ID
 	if info, err := os.Stat(row.CheckoutRoot); err == nil && info.IsDir() {
 		if ref, err := s.drv.Ref(ctx, row.CheckoutRoot); err == nil && ref != "" {

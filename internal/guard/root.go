@@ -226,8 +226,8 @@ func applyFindings(markers hint.Gate, verdict types.GuardJudgment, findings []co
 	return verdict
 }
 
-// settingOf adapts deps.setting to the lookup mainFindings takes.
-func (d Dependencies) settingOf(rule string) builtin.Setting {
+// settingLookup adapts deps.setting to the lookup mainFindings takes.
+func (d Dependencies) settingLookup(rule string) builtin.Setting {
 	s, _ := d.setting(rule)
 	return s
 }
@@ -243,7 +243,7 @@ func gradeMainCommand(ctx context.Context, deps Dependencies, verdict types.Guar
 		return verdict
 	}
 	gate := hint.NewGate(at.cacheDir, who.callerKey())
-	if f, misdeclared := budgetPastEveryWindow(deps.settingOf(string(denyRuleRootContextBudget)), at.modelTable); misdeclared {
+	if f, misdeclared := budgetPastEveryWindow(deps.settingLookup(string(denyRuleRootContextBudget)), at.modelTable); misdeclared {
 		return applyFindings(gate, verdict, []costFinding{f}, from)
 	}
 	st := sessionCostState(at, who, liveRowLookup(ctx, at), time.Now())
@@ -252,7 +252,7 @@ func gradeMainCommand(ctx context.Context, deps Dependencies, verdict types.Guar
 	if call.orchestration != "" {
 		call.work = mainWork(ctx, at, st, in.command)
 	}
-	return applyFindings(gate, verdict, mainFindings(deps.settingOf, st, call), from)
+	return applyFindings(gate, verdict, mainFindings(deps.settingLookup, st, call), from)
 }
 
 // gradeMainWrite judges a write by a session's unleased main thread inside a checkout of
@@ -268,7 +268,7 @@ func gradeMainWrite(deps Dependencies, verdict types.GuardJudgment, path string,
 		return verdict
 	}
 	st := sessionCostState(at, who, nil, time.Now())
-	f, ok := groundworkFinding(deps.settingOf(string(denyRuleOrchestratorGroundwork)),
+	f, ok := groundworkFinding(deps.settingLookup(string(denyRuleOrchestratorGroundwork)),
 		mainCall{from: from, line: path, orchestration: orchestration(st, from), work: types.DelegableEdit})
 	if !ok {
 		return verdict
@@ -355,7 +355,7 @@ func gradeMainSpawn(deps Dependencies, verdict types.GuardJudgment, env hookRequ
 	}
 	host := types.HarnessKey{ID: who.Host}
 	var findings []costFinding
-	switch s := deps.settingOf(string(denyRuleSpawnNamesModel)); {
+	switch s := deps.settingLookup(string(denyRuleSpawnNamesModel)); {
 	case s.Decision == builtin.Off:
 	case env.DeclaredModel == "":
 		findings = append(findings, costFinding{rule: denyRuleSpawnNamesModel, deny: s.Decision == builtin.Deny, key: hint.MarkerKind(denyRuleSpawnNamesModel),
@@ -366,7 +366,7 @@ func gradeMainSpawn(deps Dependencies, verdict types.GuardJudgment, env hookRequ
 			findings = append(findings, costFinding{rule: denyRuleSpawnNamesModel, deny: true, key: hint.MarkerKind(denyRuleSpawnNamesModel), say: say})
 		}
 	}
-	if s := deps.settingOf(string(denyRuleSpawnAboveModelTier)); s.Decision != builtin.Off && bound {
+	if s := deps.settingLookup(string(denyRuleSpawnAboveModelTier)); s.Decision != builtin.Off && bound {
 		if say := forked.rankedAbove(host, env.DeclaredModel); say != "" {
 			findings = append(findings, costFinding{rule: denyRuleSpawnAboveModelTier, key: hint.MarkerKind(denyRuleSpawnAboveModelTier), say: say})
 		}

@@ -224,9 +224,9 @@ const (
 	lapseStillDegraded
 )
 
-// stageFor is the stage inARow lapses in a row put a session at, this one included. Zero,
+// stageAtLapses is the stage inARow lapses in a row put a session at, this one included. Zero,
 // a session whose lapses are not counted, denies.
-func stageFor(inARow int) lapseStage {
+func stageAtLapses(inARow int) lapseStage {
 	switch {
 	case inARow <= lapsesBeforeDegrade:
 		return lapseDenies
@@ -305,7 +305,7 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 	switch {
 	case builtins.Deny != "":
 		verdict.Decision, verdict.Reason, verdict.Rule = decisionDeny, builtins.Deny, builtins.RuleName()
-	case call.changes && (stageFor(inARow) == lapseDenies || pushes):
+	case call.changes && (stageAtLapses(inARow) == lapseDenies || pushes):
 		// A push is never degraded: the gate it needs proven is in the run log, which only
 		// a judgment that finishes reads.
 		lapse := ruleLapse{budget: hookBudget, said: lapseWording{"the guard's judgment", "finish"}}
@@ -342,7 +342,7 @@ func stallSite(stalled trail.Phase, isStalled bool, finished []trail.Phase) stri
 // inARow-th judgment in a row to run out of time, which stopped where. Only the first past
 // lapsesBeforeDegrade names the cause and what to check; the session has it from then on.
 func degradedNote(call judgedCall, where string, inARow int) string {
-	if stageFor(inARow) == lapseStillDegraded {
+	if stageAtLapses(inARow) == lapseStillDegraded {
 		return "The guard is still not finishing in time (" + strconv.Itoa(inARow) + " judgments in a row), so " +
 			call.what + " ran unjudged, as the notice before said."
 	}

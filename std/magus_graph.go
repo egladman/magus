@@ -202,7 +202,7 @@ func MagusRefs(ctx context.Context, symbol string, opts map[string]any) (types.K
 	if err != nil {
 		return types.KnowledgeRefsOutput{}, err
 	}
-	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.SymbolsFor(symbol)})
+	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.SymbolsMentioning(symbol)})
 	if err != nil {
 		return types.KnowledgeRefsOutput{}, err
 	}
