@@ -632,7 +632,7 @@ func TestRefuseUnscopedHoldsANewRowToABoundary(t *testing.T) {
 // root holding each path, the way `magus job apply` finds a live job.
 func appliedRow(t *testing.T, write ...string) (*Store, Location) {
 	t.Helper()
-	root := loadableRoot(t)
+	root := loadableRepo(t)
 	for _, p := range write {
 		require.NoError(t, os.WriteFile(filepath.Join(root, p), []byte(p+"\n"), 0o644))
 	}
@@ -640,7 +640,7 @@ func appliedRow(t *testing.T, write ...string) (*Store, Location) {
 	s := NewStore(loc)
 	_, err := s.Update(t.Context(), "w", Declare(spec(write...), 0))
 	require.NoError(t, err)
-	_, err = s.Exec(t.Context(), "w", "abc123")
+	_, err = s.Exec(t.Context(), "w")
 	require.NoError(t, err)
 	_, err = s.Update(t.Context(), "w", func(u *types.Job) { u.State = types.StateRunning })
 	require.NoError(t, err)

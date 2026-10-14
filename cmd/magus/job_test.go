@@ -793,10 +793,11 @@ func bindCheckout(t *testing.T, cacheDir, id string) {
 func TestJobExecWritesNoMarker(t *testing.T) {
 	row := leaseRow("lease-enforcement/wave4/docs", "")
 	row.State = types.StateRunning
-	root, cacheDir := execFixture(t, row)
+	repo, cacheDir := execRepoFixture(t, row)
+	root := repo.Root()
 
 	out := captureStdout(t, func() {
-		require.NoError(t, jobExec(t.Context(), root, []string{row.ID, "--base", "rev1"}))
+		require.NoError(t, jobExec(t.Context(), root, []string{row.ID}))
 	})
 	assert.Contains(t, out, "took "+row.ID)
 
@@ -805,12 +806,16 @@ func TestJobExecWritesNoMarker(t *testing.T) {
 	lease, from := job.ActingLease(cacheDir, "")
 	assert.Equal(t, []any{"", types.LeaseSource("")}, []any{lease, from}, "the checkout acts under nothing")
 
-	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
+	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
+	rows, err := store.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	abs, err := filepath.Abs(root)
 	require.NoError(t, err)
-	assert.Equal(t, []any{"rev1", abs}, []any{rows[0].ReportedBase, rows[0].CheckoutRoot}, "the base and the checkout are recorded")
+	base, err := store.CheckoutToken(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, []any{base, abs}, []any{rows[0].ReportedBase, rows[0].CheckoutRoot}, "the base read from the tree and the checkout are recorded")
+	assert.True(t, strings.HasPrefix(base, repo.Head()), "the base is the checkout's own revision")
 }
 
 // Exec takes exactly one job: the read form it had printed a binding the CLI no longer
@@ -818,16 +823,34 @@ func TestJobExecWritesNoMarker(t *testing.T) {
 func TestJobExecRefusesAnythingButOneLiveJob(t *testing.T) {
 	done := leaseRow("lease-enforcement/wave4/done", "")
 	done.State = types.StatePass
-	root, _ := execFixture(t, done)
+	repo, _ := execRepoFixture(t, done)
+	root := repo.Root()
 
 	for name, args := range map[string][]string{
 		"no job":        nil,
 		"two jobs":      {"a", "b"},
-		"an unknown id": {"harness/no-such-job", "--base", "rev1"},
-		"an ended job":  {done.ID, "--base", "rev1"},
+		"an unknown id": {"harness/no-such-job"},
+		"an ended job":  {done.ID},
 	} {
 		assert.Error(t, jobExec(t.Context(), root, args), name)
 	}
+}
+
+// The base is read from the tree, so there is no flag to type one: --base is an unknown
+// flag, refused before the row is touched.
+func TestJobExecRefusesATypedBase(t *testing.T) {
+	row := leaseRow("lease-enforcement/wave4/docs", "")
+	row.State = types.StateDeclared
+	repo, cacheDir := execRepoFixture(t, row)
+
+	err := jobExec(t.Context(), repo.Root(), []string{row.ID, "--base", repo.Head()})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "-base")
+
+	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: repo.Root()}).List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, []any{types.StateDeclared, ""}, []any{rows[0].State, rows[0].ReportedBase}, "a refused exec takes nothing")
 }
 
 // inflightFixture is the in-flight plan's fixture: two job trees, one checkout on

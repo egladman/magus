@@ -405,13 +405,17 @@ func TestStoreKeepsItsOwnRecordAcrossAWholeRowWrite(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	s := tmpStore(t, t.TempDir())
-	seed(t, s, lease("a"))
-	_, err := s.Exec(ctx, "a", "abc123")
+	repo := execRepo(t)
+	head := repo.Head()
+	s := tmpStore(t, repo.Root())
+	declared := lease("a")
+	declared.Checkpoint = head
+	seed(t, s, declared)
+	_, err := s.Exec(ctx, "a")
 	require.NoError(t, err)
 	require.NoError(t, s.RecordUnattributedWrite(ctx, "a", "internal/a/store.go"))
 
-	forged := lease("a")
+	forged := declared
 	forged.ReportedBase, forged.BaseVerdict, forged.Registered = "deadbeef", types.BaseDiverged, 1
 	forged.Unattributed = []types.JobUnattributedWrite{{Path: "docs/forged.md"}}
 	stored := seed(t, s, forged)
@@ -420,8 +424,8 @@ func TestStoreKeepsItsOwnRecordAcrossAWholeRowWrite(t *testing.T) {
 	require.Len(t, stored.Unattributed, 1)
 	assert.Equal(t, "internal/a/store.go", stored.Unattributed[0].Path)
 
-	want := stamped(lease("a"), stored)
-	want.ReportedBase, want.BaseVerdict = "abc123", types.BaseMatch
+	want := stamped(declared, stored)
+	want.ReportedBase, want.BaseVerdict = head, types.BaseMatch
 	want.Registered, want.CheckoutRoot, want.Unattributed = stored.Registered, stored.CheckoutRoot, stored.Unattributed
 	assert.Equal(t, want, stored, "the forged registration is dropped and the one the store observed kept")
 }
@@ -455,10 +459,10 @@ func TestJobForkWidensALiveRowInPlace(t *testing.T) {
 			t.Parallel()
 
 			ctx := t.Context()
-			s := tmpStore(t, t.TempDir())
+			s := tmpStore(t, execRepo(t).Root())
 			_, err := s.Update(ctx, "a", fork("goal", []string{"a.go"}, nil))
 			require.NoError(t, err)
-			taken, err := s.Exec(ctx, "a", "abc123")
+			taken, err := s.Exec(ctx, "a")
 			require.NoError(t, err)
 			_, err = s.Update(ctx, "a", func(u *types.Job) { u.State = tc.from })
 			require.NoError(t, err)

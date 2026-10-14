@@ -38,6 +38,13 @@ func loadableRoot(t *testing.T) string {
 	return w.Root()
 }
 
+// loadableRepo is loadableRoot committed to a git repository, for a fixture that execs:
+// Exec reads its base from the checkout.
+func loadableRepo(t *testing.T) string {
+	t.Helper()
+	return testkit.NewRepo(t, loadableFiles).Root()
+}
+
 var loadableFiles = map[string]string{
 	"magus.yaml":            "jobs:\n  stale_after: 2h\n",
 	"magusfile.buzz":        "export fun build() {}\n",
@@ -61,7 +68,7 @@ func TestForkRefusesAWorkspaceLoadWritePathInASharedCheckout(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	root := loadableRoot(t)
+	root := loadableRepo(t)
 	loc := tmpLoc(t, root)
 	s := NewStore(loc)
 	limits := config.Jobs{}
@@ -70,7 +77,7 @@ func TestForkRefusesAWorkspaceLoadWritePathInASharedCheckout(t *testing.T) {
 		u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"internal/job/store.go"}
 	}, limits, nil)
 	require.NoError(t, err)
-	_, err = s.Exec(ctx, held.ID, "rev")
+	_, err = s.Exec(ctx, held.ID)
 	require.NoError(t, err)
 
 	_, err = ForkMerge(ctx, s, "wave/worker-two", func(u *types.Job) {
@@ -105,7 +112,7 @@ func TestForkRecordsWhetherTheWritePathsWereProvenDisjoint(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	root := loadableRoot(t)
+	root := loadableRepo(t)
 	loc := tmpLoc(t, root)
 	s := NewStore(loc)
 
@@ -114,7 +121,7 @@ func TestForkRecordsWhetherTheWritePathsWereProvenDisjoint(t *testing.T) {
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, types.WriteProofAlone, alone.WriteProof, "nothing else holds the checkout")
-	_, err = s.Exec(ctx, alone.ID, "rev")
+	_, err = s.Exec(ctx, alone.ID)
 	require.NoError(t, err)
 
 	disjoint, err := ForkMerge(ctx, s, "wave/second", func(u *types.Job) {
@@ -234,14 +241,14 @@ func TestSharedCheckoutRefusalIgnoresAJobThatIsOver(t *testing.T) {
 			t.Parallel()
 
 			ctx := context.Background()
-			root := loadableRoot(t)
+			root := loadableRepo(t)
 			s := NewStore(tmpLoc(t, root))
 
 			done, err := ForkMerge(ctx, s, "wave/done", func(u *types.Job) {
 				u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"magus.yaml"}
 			}, config.Jobs{}, nil)
 			require.NoError(t, err)
-			_, err = s.Exec(ctx, done.ID, "rev")
+			_, err = s.Exec(ctx, done.ID)
 			require.NoError(t, err)
 			_, err = s.Update(ctx, done.ID, func(u *types.Job) { u.State = over })
 			require.NoError(t, err)

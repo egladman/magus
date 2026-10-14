@@ -701,13 +701,10 @@ func registerAgentBase(ctx context.Context, deps Dependencies, at location, agen
 		if refusals.AlreadyFired(refused) {
 			return false
 		}
-		base := deps.checkoutBase(ctx, at.workspace)
-		if base == "" {
-			return false
-		}
-		if _, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Exec(ctx, agentJob, base); err != nil {
+		if _, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Exec(ctx, agentJob); err != nil {
 			// Only a holder conflict lasts until the row changes. A cancelled deadline, lock
-			// contention or I/O may pass on the next call, so it is never remembered.
+			// contention, I/O or a checkout with no revision yet may pass on the next call, so
+			// it is never remembered.
 			if errors.Is(err, job.ErrHeldElsewhere) {
 				refusals.MarkFired(refused)
 			}

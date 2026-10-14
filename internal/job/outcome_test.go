@@ -21,7 +21,7 @@ import (
 // exactly what the store recorded.
 func outcomeStore(t *testing.T, set *types.ModelTierSet, matrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error), dryRun bool) (*Store, string) {
 	t.Helper()
-	root := t.TempDir()
+	root := execRepo(t).Root()
 	history := filepath.Join(t.TempDir(), "history.json")
 	require.NoError(t, os.WriteFile(filepath.Join(root, config.Filename), []byte("history_path: "+strconv.Quote(history)+"\n"), 0o644))
 	loc := tmpLoc(t, root)
@@ -339,7 +339,7 @@ func TestStoreRecordsAnOutcomeWhenTheHoldingSessionEnds(t *testing.T) {
 
 	s, history := outcomeStore(t, tierSet(t), nil, false)
 	seed(t, s, types.Job{ID: "w", Checkpoint: baseA, State: types.StateDeclared})
-	_, err := s.Exec(t.Context(), "w", baseA)
+	_, err := s.Exec(t.Context(), "w")
 	require.NoError(t, err)
 	worker := Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
 	require.NoError(t, s.Bind(worker, "w"))

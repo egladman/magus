@@ -774,10 +774,11 @@ var Magus = Module{
 				},
 				{
 					Name: "register",
-					Doc: "Report the base a worker actually landed on, and learn how it compares " +
-						"with the checkpoint the job was handed. reported_base is a checkpoint token " +
-						"in the form `magus vcs checkpoint -o name` prints: `<rev>`, or `<rev>+<digest>` " +
-						"when the tree is dirty. Returns {job, advice}: the stored row, and a " +
+					Doc: "Take job id in this checkout: record the base it is on, and learn how it " +
+						"compares with the checkpoint the job was handed. The base is read from the " +
+						"checkout's version control, never passed in, as `magus vcs checkpoint -o name` " +
+						"prints it: `<rev>`, or `<rev>+<digest>` when the tree is dirty; a checkout " +
+						"that reports no revision raises. Returns {job, advice}: the stored row, and a " +
 						"sentence naming both revisions and what to do next. The row carries " +
 						"reported_base, registered, and base_verdict - one of match (same token), " +
 						"revision-match (same revision, different uncommitted patch), diverged " +
@@ -787,13 +788,12 @@ var Magus = Module{
 						"like any other, and what to do about it is the caller's and the " +
 						"orchestrator's call. The one write here that does not create the row it " +
 						"names - an id nothing declared means the worker was handed the wrong id, so " +
-						"it raises rather than inventing a row. Read straight off the workspace " +
-						"already open on the context - no subprocess. Works from a magusfile target " +
-						"and from a `magus buzz` script run inside a workspace; raises MGS1022 only " +
-						"when there is no workspace to read.",
+						"it raises rather than inventing a row. Reads the job store of the workspace " +
+						"already open on the context, and runs its version control to read the base. " +
+						"Works from a magusfile target and from a `magus buzz` script run inside a " +
+						"workspace; raises MGS1022 when there is no workspace to read.",
 					Args: []Arg{
 						{Name: "id", Type: TypeString},
-						{Name: "reported_base", Type: TypeString},
 					},
 					Returns: []Ret{{Type: TypeAnyMap}},
 					Raises:  true,
@@ -1898,19 +1898,20 @@ func MagusPutJob(ctx context.Context, id string, opts map[string]any) (types.Job
 	return job.ForkMerge(ctx, store, strings.TrimSpace(id), merge, limits, nil)
 }
 
-// MagusRegisterJob backs magus\job.register: a worker reports the base it actually
-// landed on, and learns how that compares with the checkpoint its job was handed. It
-// returns the stored row and internal/job.BaseAdvice's reading of the verdict, the
-// same pair `magus job exec` answers with.
+// MagusRegisterJob backs magus\job.register: it records the base the workspace's
+// checkout is on, read from its version control, for job id, and reports how that
+// compares with the checkpoint the job was handed. It returns the stored row and
+// internal/job.BaseAdvice's reading of the verdict, the same pair `magus job exec`
+// answers with.
 //
 // The verdict is a FACT, never a refusal: a diverged registration is recorded and
 // reported like any other. See types.Job.
-func MagusRegisterJob(ctx context.Context, id, base string) (types.Job, string, error) {
+func MagusRegisterJob(ctx context.Context, id string) (types.Job, string, error) {
 	store, err := jobStoreFromContext(ctx, "job.register")
 	if err != nil {
 		return types.Job{}, "", err
 	}
-	row, err := store.Exec(ctx, strings.TrimSpace(id), base)
+	row, err := store.Exec(ctx, strings.TrimSpace(id))
 	if err != nil {
 		return types.Job{}, "", err
 	}
@@ -1958,7 +1959,7 @@ func jobAttemptFromContext(ctx context.Context, ref string) (types.JobAttempt, e
 	desc, err := cache.NewOutputStore(cd.CacheDir()).DescriptorByRef(ref)
 	switch {
 	case err == nil:
-		return types.JobAttempt{Found: true, Ref: ref, Project: desc.Project, Target: desc.Target, Spell: desc.Spell, Failed: desc.Failed, TimestampMs: desc.TimestampMs}, nil
+		return desc.JobAttempt(ref), nil
 	case errors.Is(err, fs.ErrNotExist):
 		return types.JobAttempt{}, nil
 	default:

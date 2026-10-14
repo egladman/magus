@@ -335,7 +335,10 @@ func TestStampedLeaseOnlyDowngrades(t *testing.T) {
 func TestUnstampedActorReadsAndWritesNothing(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	t.Setenv(EnvStampedLease, "1")
-	loc := declared(t, workerRow())
+	// A checkout with a revision, so the exec below is refused for its caller and not for
+	// a missing base.
+	loc := tmpLoc(t, execRepo(t).Root())
+	seed(t, NewStore(loc), workerRow())
 	loc.Actor = nil
 	s := NewStore(loc)
 
@@ -356,7 +359,7 @@ func TestUnstampedActorReadsAndWritesNothing(t *testing.T) {
 			_, err := Exit(t.Context(), s, "adj/store", nil, nil)
 			return err
 		},
-		"exec":   func() error { _, err := s.Exec(t.Context(), "adj/store", "abc123"); return err },
+		"exec":   func() error { _, err := s.Exec(t.Context(), "adj/store"); return err },
 		"clear":  func() error { _, err := s.Clear(t.Context()); return err },
 		"delete": func() error { _, err := s.Delete(t.Context(), "adj/store", true); return err },
 	} {

@@ -52,7 +52,7 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 	// (see job.BaseAdvice), so folding it in beside the row's own keys would put a
 	// rendering where a caller reads facts; "job" and "advice" keep the two apart.
 	job.MapSet("register", directVal(obs, "magus.job.register", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		row, advice, err := std.MagusRegisterJob(ctx, ffi.Str(args, 0), ffi.Str(args, 1))
+		row, advice, err := std.MagusRegisterJob(ctx, ffi.Str(args, 0))
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}

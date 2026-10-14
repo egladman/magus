@@ -209,10 +209,12 @@ func TestSessionEndedIsASubagentStopOrASessionEnd(t *testing.T) {
 // A subagent whose stop the guard lets through ends the job it held; one it refuses is
 // still running, so its job stays.
 func TestEndStoppedSessionEndsTheJobOnlyWhenTheStopStands(t *testing.T) {
-	store := job.NewStore(job.Location{Root: t.TempDir(), CacheDir: t.TempDir(), Actor: &job.Actor{}})
+	root := t.TempDir()
+	commitCheckout(t, root)
+	store := job.NewStore(job.Location{Root: root, CacheDir: t.TempDir(), Actor: &job.Actor{}})
 	_, err := store.Update(t.Context(), "w", func(row *types.Job) { *row = types.Job{ID: "w", State: types.StateDeclared} })
 	require.NoError(t, err)
-	_, err = store.Exec(t.Context(), "w", "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678")
+	_, err = store.Exec(t.Context(), "w")
 	require.NoError(t, err)
 	worker := job.Caller{Host: "claude-code", Session: "8f2c6a1e", Agent: "a05d44b006f8f68af"}
 	require.NoError(t, store.Bind(worker, "w"))

@@ -333,7 +333,6 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 		GraphIDs:         index.graphIDs,
 		IndexedIDs:       index.indexedIDs,
 		TrackedFiles:     trackedFilesForGuard,
-		CheckoutBase:     checkoutBaseForGuard,
 		CheckoutState:    checkoutStateForGuard,
 		ModelRows:        guardModelRows(ctx, rootOverride),
 		ModelTiers:       guardModelTiers(ctx, rootOverride),
@@ -549,21 +548,6 @@ func revisionForGuard(ctx context.Context, dir, rev string) string {
 		return ""
 	}
 	return cmp.Or(c.Short, c.ID)
-}
-
-// checkoutBaseForGuard answers the checkout at root as `magus vcs checkpoint -o name`
-// prints it, or "" when it cannot be read. Resolved by root rather than through
-// inspectWorkspace, which is memoized for one root and the hook may name another.
-func checkoutBaseForGuard(ctx context.Context, root string) string {
-	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
-	if err != nil || res.VCS == nil {
-		return ""
-	}
-	cp, err := vcs.Checkpoint(ctx, root, res, false)
-	if err != nil {
-		return ""
-	}
-	return cp.Token()
 }
 
 // checkoutStateForGuard reads the checkout holding dir through the version control that

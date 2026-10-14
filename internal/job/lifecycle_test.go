@@ -444,13 +444,13 @@ func TestListSweepIsIdempotent(t *testing.T) {
 
 // Exec records where the job was taken, so removing that worktree ends the job.
 func TestExecRecordsTheCheckoutAndItsRemovalEndsTheJob(t *testing.T) {
-	checkout := t.TempDir()
+	checkout := execRepo(t).Root()
 	s := tmpStore(t, checkout)
 	var notices strings.Builder
 	s.notices = &notices
 	seed(t, s, types.Job{ID: "w", State: types.StateDeclared, Checkpoint: "abc"})
 
-	taken, err := s.Exec(t.Context(), "w", "abc")
+	taken, err := s.Exec(t.Context(), "w")
 	require.NoError(t, err)
 	abs, err := filepath.Abs(checkout)
 	require.NoError(t, err)
@@ -465,7 +465,7 @@ func TestExecRecordsTheCheckoutAndItsRemovalEndsTheJob(t *testing.T) {
 		Criteria:     "rewritten",
 		Checkpoint:   "abc",
 		State:        types.StateNoReturn,
-		ReportedBase: "abc",
+		ReportedBase: taken.ReportedBase,
 		BaseVerdict:  taken.BaseVerdict,
 		Registered:   taken.Registered,
 		CheckoutRoot: abs,

@@ -337,10 +337,7 @@ func outputsIn(root string) job.AttemptResolver {
 func attemptIn(cacheDir, ref string) (types.JobAttempt, error) {
 	switch d, err := cache.NewOutputStore(cacheDir).DescriptorByRef(ref); {
 	case err == nil:
-		return types.JobAttempt{
-			Found: true, Ref: ref, Project: d.Project, Target: d.Target, Spell: d.Spell, Failed: d.Failed, TimestampMs: d.TimestampMs,
-			AttemptID: d.Attempt, DurationMs: d.DurationMs, Revision: d.Revision, Dirty: d.Dirty,
-		}, nil
+		return d.JobAttempt(ref), nil
 	case errors.Is(err, fs.ErrNotExist):
 		return types.JobAttempt{}, nil
 	default:
@@ -1314,12 +1311,11 @@ func printJobEntries(out io.Writer, entries []types.JobEntry) {
 // be keyed on the checkout, and one subagent's exec there graded its parent as that
 // subagent from the parent's next call.
 //
-// The base is READ FROM THE CHECKOUT rather than passed in. A holder typing the token it
-// believes it is on is a holder reporting a belief; the divergence this records is only
-// worth anything if the value comes from the tree.
+// The base is READ FROM THE CHECKOUT, and no flag passes one in (see job.Store.Exec). A
+// holder typing the token it believes it is on is a holder reporting a belief; the
+// divergence this records is only worth anything if the value comes from the tree.
 func jobExec(ctx context.Context, root string, args []string) error {
 	var (
-		base    string
 		timeout time.Duration
 		slots   int
 	)
@@ -1329,15 +1325,15 @@ func jobExec(ctx context.Context, root string, args []string) error {
 		args, command = args[:sep], args[sep+1:]
 	}
 	pos, err := cmdParse("job exec", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&base, "base", "", "The base this checkout landed on, as `magus vcs checkpoint -o name` prints it (default: read from this checkout)")
 		fs.DurationVar(&timeout, "timeout", 0, "Run the command after -- and stop its whole process group once this long has passed (exit 124)")
 		fs.IntVar(&slots, "slots", 1, "The machine budget slots the command after -- takes while it runs")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job exec <job> [flags]")
 			fmt.Fprintln(os.Stderr, "       magus job exec --timeout <duration> [--slots N] -- <command> [args...]")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Take a job here: record the base this tree is on beside the checkpoint the job")
-			fmt.Fprintln(os.Stderr, "was handed, with the divergence between them as a fact rather than a refusal,")
+			fmt.Fprintln(os.Stderr, "Take a job here: read the base this tree is on from version control, as")
+			fmt.Fprintln(os.Stderr, "`magus vcs checkpoint -o name` prints it, and record it beside the checkpoint the")
+			fmt.Fprintln(os.Stderr, "job was handed, with the divergence between them as a fact rather than a refusal,")
 			fmt.Fprintln(os.Stderr, "and the checkout it was taken in. A declared job starts running.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "A job another checkout holds is refused: wait grades the holder's checkout, so")
@@ -1374,7 +1370,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if sep >= 0 || timeout != 0 {
-		return jobExecCommand(ctx, root, pos, base, timeout, slots, command)
+		return jobExecCommand(ctx, root, pos, timeout, slots, command)
 	}
 	if len(pos) != 1 {
 		return usagef("magus job exec: requires exactly one job (`%s` lists them)", hint.LsJobs)
@@ -1383,18 +1379,11 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	if root == "" {
 		return errors.New("magus job exec: no workspace here: run from inside one or pass --root <path>")
 	}
-	if strings.TrimSpace(base) == "" {
-		base, _ = checkoutBaseToken(ctx, root)
-	}
-	if strings.TrimSpace(base) == "" {
-		return fmt.Errorf("magus job exec: this checkout reports no revision, so there is no base to record for %s,"+
-			" pass the one you are on with --base", pos[0])
-	}
 	store, err := openJobs(root)
 	if err != nil {
 		return err
 	}
-	stored, err := store.Exec(ctx, pos[0], base)
+	stored, err := store.Exec(ctx, pos[0])
 	if err != nil {
 		return fmt.Errorf("magus job exec: %w", err)
 	}
@@ -1426,11 +1415,11 @@ const jobExecGrace = 10 * time.Second
 // itself too, so the bound holds with no broker (broker: off, or none answered).
 //
 // Nothing about it is for agents only: a person bounds a long search the same way.
-func jobExecCommand(ctx context.Context, root string, pos []string, base string, timeout time.Duration, slots int, command []string) error {
+func jobExecCommand(ctx context.Context, root string, pos []string, timeout time.Duration, slots int, command []string) error {
 	switch {
-	case len(pos) > 0 || base != "":
+	case len(pos) > 0:
 		return usagef("magus job exec: a command after -- runs under your own lease and takes no job; drop %q",
-			strings.Join(append(pos, base), " "))
+			strings.Join(pos, " "))
 	case timeout <= 0:
 		return usagef("magus job exec: a command after -- needs --timeout, a positive duration such as 10m: nothing else ends it")
 	case len(command) == 0:

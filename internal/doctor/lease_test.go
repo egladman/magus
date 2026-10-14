@@ -225,10 +225,12 @@ func TestBoundLeasePassesOnALiveRegisteredRowAHostHookJudges(t *testing.T) {
 // orchestrator's however the store resolves its actor.
 func registeredLease(t *testing.T, id string) (cacheDir string, w *testkit.Workspace) {
 	t.Helper()
-	w = testkit.NewWorkspace(t)
+	// A git checkout: exec reads the base from it.
+	repo := testkit.NewRepo(t, nil)
+	w = repo.Workspace
 	cacheDir, store := ledgerIn(t, w.Root())
-	seed(t, store, types.Job{ID: id, State: types.StateRunning, Checkpoint: "abc123"})
-	_, err := store.Exec(context.Background(), id, "abc123")
+	seed(t, store, types.Job{ID: id, State: types.StateRunning, Checkpoint: repo.Head()})
+	_, err := store.Exec(context.Background(), id)
 	require.NoError(t, err)
 	bindCheckout(t, cacheDir, id)
 	return cacheDir, w

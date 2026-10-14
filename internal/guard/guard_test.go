@@ -842,8 +842,8 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 			setup: func(t *testing.T) (context.Context, Dependencies, Request) {
 				ctx, root := fleetFixture(t, types.Job{ID: "worker", State: types.StateRunning, WritePaths: []string{"app/**"}})
 				bindCaller(t, ctx, hookAttribution{}, "worker")
-				deps := Dependencies{CheckoutBase: func(context.Context, string) string { return "77aa01c" }}
-				return ctx, deps, Request{Input: filepath.Join(root, "app", "main.go"), IsPath: true}
+				commitCheckout(t, root)
+				return ctx, Dependencies{}, Request{Input: filepath.Join(root, "app", "main.go"), IsPath: true}
 			},
 			want: Verdict{Decision: "pass", Lease: "worker", LeaseFrom: types.LeaseSourceMarker},
 		},

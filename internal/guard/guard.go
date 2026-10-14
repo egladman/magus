@@ -154,10 +154,6 @@ type Dependencies struct {
 	// relative to root, and reports false when it cannot say before ctx ends. A listing of
 	// tracked files is proved against it.
 	TrackedFiles func(ctx context.Context, root string) (files []string, ok bool)
-	// CheckoutBase is the checkout at root as `magus vcs checkpoint -o name` prints it:
-	// `<rev>`, or `<rev>+<digest>` when dirty. "" when there is no VCS to ask. It is the
-	// base an attributed spawn records for its job, the value `magus job exec` records.
-	CheckoutBase func(ctx context.Context, root string) string
 	// VCS is the workspace's version-control configuration. The worktree rule reads its
 	// base branch, and refuses when it disables version control.
 	VCS types.VCSOptions
@@ -270,13 +266,6 @@ func (d Dependencies) revision(ctx context.Context, dir, rev string) string {
 type revisionMemo struct {
 	mu      sync.Mutex
 	current map[string]string
-}
-
-func (d Dependencies) checkoutBase(ctx context.Context, root string) string {
-	if d.CheckoutBase == nil || root == "" {
-		return ""
-	}
-	return d.CheckoutBase(ctx, root)
 }
 
 func (d Dependencies) spells() []*spells.Spell {
@@ -2209,8 +2198,8 @@ func withRegisteredBase(ctx context.Context, deps Dependencies, at location, age
 	if i < 0 || !snap.Rows[i].State.Live() || (snap.Rows[i].Registered != 0 && !baseSuperseded(ctx, deps, at, snap.Rows[i])) {
 		return ctx
 	}
-	base := deps.checkoutBase(ctx, at.workspace)
-	if base == "" {
+	base, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).CheckoutToken(ctx)
+	if err != nil {
 		return ctx
 	}
 	snap = snap.Clone()

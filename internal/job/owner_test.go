@@ -22,11 +22,12 @@ func attentionRows(t *testing.T, root string) []sessions.AttentionRequest {
 // A session that ends takes the job it was editing with it, tells the root once, and a
 // session resuming the work in the same checkout takes the row back with its next exec.
 func TestEndSessionEndsTheTakenJobAndExecTakesItBack(t *testing.T) {
-	root := t.TempDir()
+	repo := execRepo(t)
+	root := repo.Root()
 	loc := tmpLoc(t, root)
 	s := NewStore(loc)
-	seed(t, s, types.Job{ID: "w", Checkpoint: baseA, State: types.StateDeclared})
-	_, err := s.Exec(t.Context(), "w", baseA)
+	seed(t, s, types.Job{ID: "w", Checkpoint: repo.Head(), State: types.StateDeclared})
+	_, err := s.Exec(t.Context(), "w")
 	require.NoError(t, err)
 	worker := Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
 	require.NoError(t, s.Bind(worker, "w"))
@@ -49,7 +50,7 @@ func TestEndSessionEndsTheTakenJobAndExecTakesItBack(t *testing.T) {
 	assert.False(t, again, "a tombstone ends nothing more")
 	assert.Len(t, attentionRows(t, root), 1)
 
-	resumed, err := boundStore(loc, "w").Exec(t.Context(), "w", baseA)
+	resumed, err := boundStore(loc, "w").Exec(t.Context(), "w")
 	require.NoError(t, err)
 	assert.Equal(t, types.StateRunning, resumed.State)
 	assert.Empty(t, resumed.EndReason)
@@ -83,18 +84,19 @@ func TestEndSessionLeavesWorkItDidNotTake(t *testing.T) {
 }
 
 func TestExecDoesNotTakeBackARowEndedForAnotherReason(t *testing.T) {
-	s := tmpStore(t, t.TempDir())
+	s := tmpStore(t, execRepo(t).Root())
 	seed(t, s, types.Job{ID: "w", Checkpoint: baseA, State: types.StateNoReturn})
 	require.NoError(t, s.update(t.Context(), func(f *jobsFile) error {
 		f.Jobs[0].EndReason = "overdue: its deadline passed 1m0s ago"
 		return nil
 	}))
-	_, err := s.Exec(t.Context(), "w", baseA)
+	_, err := s.Exec(t.Context(), "w")
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already ended")
 }
 
 func TestExecTakesBackASessionEndedRowOnlyInItsOwnCheckout(t *testing.T) {
-	loc := tmpLoc(t, t.TempDir())
+	loc := tmpLoc(t, execRepo(t).Root())
 	elsewhere := t.TempDir()
 	seed(t, NewStore(loc), types.Job{ID: "w", Checkpoint: baseA, State: types.StateNoReturn})
 	require.NoError(t, NewStore(loc).update(t.Context(), func(f *jobsFile) error {
@@ -102,7 +104,7 @@ func TestExecTakesBackASessionEndedRowOnlyInItsOwnCheckout(t *testing.T) {
 		f.Jobs[0].CheckoutRoot = elsewhere
 		return nil
 	}))
-	_, err := NewStore(loc).Exec(t.Context(), "w", baseA)
+	_, err := NewStore(loc).Exec(t.Context(), "w")
 	require.Error(t, err)
 	assert.True(t, strings.Contains(err.Error(), "already ended"), err.Error())
 }

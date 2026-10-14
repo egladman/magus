@@ -21,27 +21,45 @@ const (
 	baseB      = "b0000000000000000000000000000000000000000"
 )
 
+// execRepo is a git checkout for a store to exec in: Exec reads its base from the tree.
+func execRepo(t *testing.T) *testkit.Repo {
+	t.Helper()
+	return testkit.NewRepo(t, map[string]string{"a.txt": "a\n"})
+}
+
+// checkoutToken is the token `magus vcs checkpoint -o name` prints for the checkout at
+// root, which is what Exec records.
+func checkoutToken(t *testing.T, root string) string {
+	t.Helper()
+	res, err := vcs.Resolve(t.Context(), root, "", types.VCSOptions{})
+	require.NoError(t, err)
+	cp, err := vcs.Checkpoint(t.Context(), root, res, false)
+	require.NoError(t, err)
+	return cp.Token()
+}
+
 func TestStoreExec(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		checkpoint string
-		reported   string
+		name string
+		// checkpoint is the token the job was handed, given the repository at its first
+		// commit; work then moves the checkout before the exec.
+		checkpoint func(repo *testkit.Repo) string
+		work       func(repo *testkit.Repo)
 		want       types.JobBaseVerdict
-		says       []string
+		says       func(checkpoint, reported string) []string
 		saysNot    []string
 	}{
 		{
 			name:       "the same token is a match",
-			checkpoint: baseA,
-			reported:   baseA,
+			checkpoint: (*testkit.Repo).Head,
 			want:       types.BaseMatch,
 		},
 		{
 			name:       "a dirty tree on the handed revision is a revision-match, not a divergence",
-			checkpoint: baseA,
-			reported:   baseADirty,
+			checkpoint: (*testkit.Repo).Head,
+			work:       func(repo *testkit.Repo) { repo.WriteTree(map[string]string{"a.txt": "a changed\n"}) },
 			want:       types.BaseRevisionMatch,
 			// Naming BOTH digests is the point: the revision agreeing is what makes this
 			// confusing, so the reading has to show the half that did not.
@@ -51,22 +69,26 @@ func TestStoreExec(t *testing.T) {
 			// patch's digest, so there was nothing to materialize from and the advice told
 			// a worker to perform an impossible recovery. The negative assertion below is
 			// what keeps a restore promise from coming back.
-			says:    []string{baseA, "00112233445566778899aabbccddeeff", "none (clean tree)", "have the orchestrator commit"},
+			says: func(checkpoint, reported string) []string {
+				_, digest := types.ParseCheckpointToken(reported)
+				return []string{checkpoint, digest, "none (clean tree)", "have the orchestrator commit"}
+			},
 			saysNot: []string{"Materialize"},
 		},
 		{
 			name:       "a different revision is a divergence",
-			checkpoint: baseA,
-			reported:   baseB,
+			checkpoint: (*testkit.Repo).Head,
+			work:       func(repo *testkit.Repo) { repo.Commit("next", map[string]string{"b.txt": "b\n"}) },
 			want:       types.BaseDiverged,
-			says:       []string{baseA, baseB, "Respawn from"},
+			says: func(checkpoint, reported string) []string {
+				return []string{checkpoint, reported, "Respawn from"}
+			},
 		},
 		{
 			name:       "a lease declared without a checkpoint has nothing to compare against",
-			checkpoint: "",
-			reported:   baseA,
+			checkpoint: func(*testkit.Repo) string { return "" },
 			want:       types.BaseUnknown,
-			says:       []string{"magus vcs checkpoint -o name"},
+			says:       func(string, string) []string { return []string{"magus vcs checkpoint -o name"} },
 		},
 	}
 
@@ -75,17 +97,23 @@ func TestStoreExec(t *testing.T) {
 			t.Parallel()
 
 			ctx := t.Context()
-			s := tmpStore(t, t.TempDir())
-			seed(t, s, types.Job{ID: "u1", Checkpoint: tt.checkpoint, State: types.StateDeclared})
+			repo := execRepo(t)
+			checkpoint := tt.checkpoint(repo)
+			if tt.work != nil {
+				tt.work(repo)
+			}
+			reported := checkoutToken(t, repo.Root())
+			s := tmpStore(t, repo.Root())
+			seed(t, s, types.Job{ID: "u1", Checkpoint: checkpoint, State: types.StateDeclared})
 
-			got, err := s.Exec(ctx, "u1", tt.reported)
+			got, err := s.Exec(ctx, "u1")
 			require.NoError(t, err, "the ledger records every verdict and refuses none of them")
 			assert.NotZero(t, got.Registered, "the store stamps Registered")
 			wantRow := stamped(types.Job{
 				ID:           "u1",
-				Checkpoint:   tt.checkpoint,
+				Checkpoint:   checkpoint,
 				State:        types.StateRunning,
-				ReportedBase: tt.reported,
+				ReportedBase: reported,
 				BaseVerdict:  tt.want,
 				Registered:   got.Registered,
 				CheckoutRoot: got.CheckoutRoot,
@@ -94,8 +122,10 @@ func TestStoreExec(t *testing.T) {
 
 			advice := BaseAdvice(got)
 			assert.Contains(t, advice, "u1")
-			for _, want := range tt.says {
-				assert.Contains(t, advice, want)
+			if tt.says != nil {
+				for _, want := range tt.says(checkpoint, reported) {
+					assert.Contains(t, advice, want)
+				}
 			}
 			for _, never := range tt.saysNot {
 				assert.NotContains(t, advice, never,
@@ -112,16 +142,40 @@ func TestStoreExec(t *testing.T) {
 	}
 }
 
+// The base is the tree's, never one a worker types. The row cited-runs-real recorded a
+// match from a clean token typed over an edited tracked file: read from the tree, the same
+// checkout is its revision plus the patch digest, a revision-match.
+func TestExecReadsTheBaseFromTheCheckout(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	repo := execRepo(t)
+	clean := repo.Head()
+	repo.WriteTree(map[string]string{"a.txt": "a edited\n"})
+	s := tmpStore(t, repo.Root())
+	seed(t, s, types.Job{ID: "u1", Checkpoint: clean, State: types.StateDeclared})
+
+	got, err := s.Exec(ctx, "u1")
+	require.NoError(t, err)
+
+	rev, digest := types.ParseCheckpointToken(got.ReportedBase)
+	assert.Equal(t, clean, rev, "the base names the checkout's revision")
+	assert.NotEmpty(t, digest, "a dirty tree records its patch digest")
+	assert.Equal(t, checkoutToken(t, repo.Root()), got.ReportedBase, "the base is what `magus vcs checkpoint -o name` prints there")
+	assert.Equal(t, types.BaseRevisionMatch, got.BaseVerdict, "the clean checkpoint and the dirty tree share only the revision")
+}
+
 // A worker registering an id nobody declared has been handed the wrong id. Every other
 // write here creates the row it names, so the message has to say where the real ids are.
 func TestStoreExecRefusesAnUnknownLease(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	s := tmpStore(t, t.TempDir())
-	seed(t, s, types.Job{ID: "declared", Checkpoint: baseA})
+	repo := execRepo(t)
+	s := tmpStore(t, repo.Root())
+	seed(t, s, types.Job{ID: "declared", Checkpoint: repo.Head()})
 
-	_, err := s.Exec(ctx, "typo", baseA)
+	_, err := s.Exec(ctx, "typo")
 	require.ErrorIs(t, err, ErrUnknownJob)
 	assert.Contains(t, err.Error(), hint.LsJobs.String(), "the message names where the declared ids are")
 	assert.Contains(t, err.Error(), "typo")
@@ -132,44 +186,53 @@ func TestStoreExecRefusesAnUnknownLease(t *testing.T) {
 	assert.Equal(t, "declared", got[0].ID)
 }
 
-func TestStoreExecRequiresABase(t *testing.T) {
+// A checkout no version control answers in has no base to record, so the exec is refused
+// and the row is left as it was.
+func TestStoreExecRefusesACheckoutWithNoRevision(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	s := tmpStore(t, t.TempDir())
-	seed(t, s, types.Job{ID: "u1", Checkpoint: baseA})
+	root := t.TempDir()
+	s := tmpStore(t, root)
+	seed(t, s, types.Job{ID: "u1", Checkpoint: baseA, State: types.StateDeclared})
 
-	_, err := s.Exec(ctx, "u1", "   ")
-	require.ErrorIs(t, err, errNoBase)
-	assert.Contains(t, err.Error(), "magus vcs checkpoint -o name", "the message names how to produce one")
+	_, err := s.Exec(ctx, "u1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), root, "the message names the checkout it read")
+	assert.Contains(t, err.Error(), hint.VCSCheckpoint.With("-o name"), "the message names how to see what version control answers")
 
 	got, err := s.List()
 	require.NoError(t, err)
+	assert.Equal(t, types.StateDeclared, got[0].State)
 	assert.Empty(t, got[0].ReportedBase)
 	assert.Empty(t, got[0].BaseVerdict, "an absent verdict is not a judgment")
 }
 
-// Registering twice is ordinary: a worker that rebases reports its new base, and the row
-// carries where it stands NOW rather than where it first stood.
+// Registering twice is ordinary: a worker that moves to another revision records its new
+// base, and the row carries where it stands NOW rather than where it first stood.
 func TestStoreExecIsIdempotentPerBase(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	s := tmpStore(t, t.TempDir())
-	seed(t, s, types.Job{ID: "u1", Checkpoint: baseA, Criteria: "declared goal"})
+	repo := execRepo(t)
+	handed := repo.Head()
+	repo.Commit("elsewhere", map[string]string{"b.txt": "b\n"})
+	s := tmpStore(t, repo.Root())
+	seed(t, s, types.Job{ID: "u1", Checkpoint: handed, Criteria: "declared goal"})
 
-	diverged, err := s.Exec(ctx, "u1", baseB)
+	diverged, err := s.Exec(ctx, "u1")
 	require.NoError(t, err)
 	require.Equal(t, types.BaseDiverged, diverged.BaseVerdict)
 
-	settled, err := s.Exec(ctx, "u1", baseA)
+	repo.Git("checkout", "-q", handed)
+	settled, err := s.Exec(ctx, "u1")
 	require.NoError(t, err)
 	want := stamped(types.Job{
 		ID:           "u1",
 		Criteria:     "declared goal",
-		Checkpoint:   baseA,
+		Checkpoint:   handed,
 		State:        types.StateRunning,
-		ReportedBase: baseA,
+		ReportedBase: handed,
 		BaseVerdict:  types.BaseMatch,
 		Registered:   settled.Registered,
 		CheckoutRoot: settled.CheckoutRoot,
@@ -178,33 +241,36 @@ func TestStoreExecIsIdempotentPerBase(t *testing.T) {
 	assert.Equal(t, want, settled, "registering erased nothing the orchestrator declared and kept the row it first wrote")
 }
 
-// A checkpoint handed as an abbreviated revision names the same commit as the full one a
-// worker reports, so the verdict is read from the revisions the VCS resolves, not from
+// A checkpoint handed as an abbreviated revision names the same commit as the full one the
+// checkout reports, so the verdict is read from the revisions the VCS resolves, not from
 // the two spellings.
 func TestStoreExecResolvesAnAbbreviatedRevision(t *testing.T) {
 	t.Parallel()
 
-	repo := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"})
-	root := repo.Root()
-	rev := repo.Head()
-	short := rev[:9]
-	const digest = "+00112233445566778899aabbccddeeff"
-
 	for _, tt := range []struct {
-		name, checkpoint, reported string
-		want                       types.JobBaseVerdict
+		name  string
+		short bool
+		dirty bool
+		want  types.JobBaseVerdict
 	}{
-		{name: "an abbreviated checkpoint", checkpoint: short, reported: rev, want: types.BaseMatch},
-		{name: "an abbreviated report", checkpoint: rev, reported: short, want: types.BaseMatch},
-		{name: "an abbreviated checkpoint against a dirty tree", checkpoint: short, reported: rev + digest, want: types.BaseRevisionMatch},
-		{name: "a revision the VCS cannot place still diverges", checkpoint: short, reported: baseB, want: types.BaseDiverged},
+		{name: "an abbreviated checkpoint", short: true, want: types.BaseMatch},
+		{name: "an abbreviated checkpoint against a dirty tree", short: true, dirty: true, want: types.BaseRevisionMatch},
+		{name: "a revision the VCS cannot place still diverges", want: types.BaseDiverged},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			s := tmpStore(t, root)
-			seed(t, s, types.Job{ID: "u1", Checkpoint: tt.checkpoint})
-			got, err := s.Exec(t.Context(), "u1", tt.reported)
+			repo := execRepo(t)
+			checkpoint := baseB
+			if tt.short {
+				checkpoint = repo.Head()[:9]
+			}
+			if tt.dirty {
+				repo.WriteTree(map[string]string{"a.txt": "a changed\n"})
+			}
+			s := tmpStore(t, repo.Root())
+			seed(t, s, types.Job{ID: "u1", Checkpoint: checkpoint})
+			got, err := s.Exec(t.Context(), "u1")
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got.BaseVerdict)
 		})
@@ -216,11 +282,12 @@ func TestStoreExecResolvesAnAbbreviatedRevision(t *testing.T) {
 func TestStoreExecRefusesAnEndedJob(t *testing.T) {
 	t.Parallel()
 
+	repo := execRepo(t)
 	for _, state := range []types.JobState{types.StatePass, types.StateFail, types.StateNoReturn} {
-		s := tmpStore(t, t.TempDir())
-		seed(t, s, types.Job{ID: "u1", Checkpoint: baseA, State: state})
+		s := tmpStore(t, repo.Root())
+		seed(t, s, types.Job{ID: "u1", Checkpoint: repo.Head(), State: state})
 
-		_, err := s.Exec(t.Context(), "u1", baseA)
+		_, err := s.Exec(t.Context(), "u1")
 		require.Error(t, err, state)
 		got, err := s.List()
 		require.NoError(t, err)
@@ -246,7 +313,7 @@ func TestStoreExecCountsUntrackedFilesAsThePatch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			ctx := t.Context()
-			repo := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"})
+			repo := execRepo(t)
 			root := repo.Root()
 			rev := repo.Head()
 			for name, body := range tt.edits {
@@ -254,12 +321,10 @@ func TestStoreExecCountsUntrackedFilesAsThePatch(t *testing.T) {
 			}
 			res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
 			require.NoError(t, err)
-			cp, err := vcs.Checkpoint(ctx, root, res, false)
-			require.NoError(t, err)
 
 			s := tmpStore(t, root)
 			seed(t, s, types.Job{ID: "u1", Checkpoint: rev, State: types.StateDeclared})
-			got, err := s.Exec(ctx, "u1", cp.Token())
+			got, err := s.Exec(ctx, "u1")
 			require.NoError(t, err)
 
 			assert.Equal(t, types.BaseRevisionMatch, got.BaseVerdict)
@@ -277,13 +342,13 @@ func TestStoreExecRefusesAJobAnotherCheckoutHolds(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	loc, other := twoCheckouts(t)
+	loc, other, head := twoCheckouts(t)
 	ana := NewStore(loc)
-	seed(t, ana, types.Job{ID: "u1", Checkpoint: baseA, State: types.StateDeclared})
-	taken, err := ana.Exec(ctx, "u1", baseA)
+	seed(t, ana, types.Job{ID: "u1", Checkpoint: head, State: types.StateDeclared})
+	taken, err := ana.Exec(ctx, "u1")
 	require.NoError(t, err)
 
-	_, err = NewStore(other).Exec(ctx, "u1", baseB)
+	_, err = NewStore(other).Exec(ctx, "u1")
 	require.ErrorIs(t, err, ErrHeldElsewhere)
 	for _, want := range []string{"u1", taken.CheckoutRoot, "running", "ago", hint.JobExit.With("u1"), hint.JobApply.String()} {
 		assert.Contains(t, err.Error(), want)
@@ -291,10 +356,10 @@ func TestStoreExecRefusesAJobAnotherCheckoutHolds(t *testing.T) {
 
 	got, err := ana.List()
 	require.NoError(t, err)
-	assert.Equal(t, baseA, taken.ReportedBase)
+	assert.Equal(t, head, taken.ReportedBase)
 	assert.Equal(t, taken, got[0], "the refusal leaves the holder's row, checkout included, as it was")
 
-	again, err := ana.Exec(ctx, "u1", baseA)
+	again, err := ana.Exec(ctx, "u1")
 	require.NoError(t, err, "the holder's own checkout takes it again")
 	assert.Equal(t, taken.CheckoutRoot, again.CheckoutRoot)
 }
@@ -305,10 +370,10 @@ func TestStoreExecTakesAJobDeclaredAgainAfterItEnded(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	loc, other := twoCheckouts(t)
+	loc, other, head := twoCheckouts(t)
 	ana := NewStore(loc)
-	seed(t, ana, types.Job{ID: "u1", Checkpoint: baseA, State: types.StateDeclared})
-	_, err := ana.Exec(ctx, "u1", baseA)
+	seed(t, ana, types.Job{ID: "u1", Checkpoint: head, State: types.StateDeclared})
+	_, err := ana.Exec(ctx, "u1")
 	require.NoError(t, err)
 	_, err = Exit(ctx, ana, "u1", nil, nil)
 	require.NoError(t, err)
@@ -320,38 +385,38 @@ func TestStoreExecTakesAJobDeclaredAgainAfterItEnded(t *testing.T) {
 	assert.Empty(t, revived.ReportedBase)
 	assert.Empty(t, revived.BaseVerdict)
 
-	ben, err := NewStore(other).Exec(ctx, "u1", baseA)
+	ben, err := NewStore(other).Exec(ctx, "u1")
 	require.NoError(t, err)
 	assert.Equal(t, other.Root, ben.CheckoutRoot)
 	assert.Equal(t, types.StateRunning, ben.State)
 }
 
-// twoCheckouts places two worktrees of one repository, which share its job store.
 // A fork records the forking checkout, but nobody has taken the job yet, so a worker in
 // another checkout takes it: the refusal is for a job an exec already holds.
 func TestStoreExecTakesAJobForkedInAnotherCheckout(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	loc, other := twoCheckouts(t)
+	loc, other, head := twoCheckouts(t)
 	forker := NewStore(loc)
 	// A hook may also record a base before anyone takes the job; it is still declared.
-	seed(t, forker, types.Job{ID: "u1", Checkpoint: baseA, State: types.StateDeclared, CheckoutRoot: loc.Root, ReportedBase: baseA})
+	seed(t, forker, types.Job{ID: "u1", Checkpoint: head, State: types.StateDeclared, CheckoutRoot: loc.Root, ReportedBase: head})
 
-	got, err := NewStore(other).Exec(ctx, "u1", baseB)
+	got, err := NewStore(other).Exec(ctx, "u1")
 	require.NoError(t, err)
 	assert.Equal(t, types.StateRunning, got.State)
 	assert.NotEqual(t, loc.Root, got.CheckoutRoot, "the worker's checkout takes it")
 }
 
-func twoCheckouts(t *testing.T) (main, worktree Location) {
+// twoCheckouts places two worktrees of one repository, which share its job store, and
+// returns the revision both are on.
+func twoCheckouts(t *testing.T) (main, worktree Location, head string) {
 	t.Helper()
-	main = tmpLoc(t, t.TempDir())
+	repo := execRepo(t)
+	main = tmpLoc(t, repo.Root())
 	worktree = main
-	worktree.Root = t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(worktree.Root, ".git"),
-		[]byte("gitdir: "+filepath.Join(main.Root, ".git", "worktrees", "w")+"\n"), 0o644))
-	return main, worktree
+	worktree.Root = repo.AddWorktree("w").Root()
+	return main, worktree, repo.Head()
 }
 
 // A holder bound to its job takes it like anyone else: the move to running is the exec,
@@ -359,10 +424,11 @@ func twoCheckouts(t *testing.T) (main, worktree Location) {
 func TestStoreExecByItsBoundHolderStartsTheJob(t *testing.T) {
 	t.Parallel()
 
-	loc := tmpLoc(t, t.TempDir())
-	seed(t, NewStore(loc), types.Job{ID: "u1", Checkpoint: baseA, State: types.StateDeclared})
+	repo := execRepo(t)
+	loc := tmpLoc(t, repo.Root())
+	seed(t, NewStore(loc), types.Job{ID: "u1", Checkpoint: repo.Head(), State: types.StateDeclared})
 
-	got, err := boundStore(loc, "u1").Exec(t.Context(), "u1", baseA)
+	got, err := boundStore(loc, "u1").Exec(t.Context(), "u1")
 	require.NoError(t, err)
 	assert.Equal(t, types.StateRunning, got.State)
 }

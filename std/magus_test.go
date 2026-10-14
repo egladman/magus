@@ -449,7 +449,7 @@ func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
 	ctx := job.WithSnapshot(ws, job.Snapshot{Rows: []types.Job{pinned}})
 	_, err = MagusPutJob(ctx, pinned.ID, map[string]any{"state": "pass"})
 	assert.ErrorContains(t, err, "read-only")
-	_, _, err = MagusRegisterJob(ctx, pinned.ID, "abc123")
+	_, _, err = MagusRegisterJob(ctx, pinned.ID)
 	assert.ErrorContains(t, err, "read-only")
 	_, err = MagusClearJob(ctx)
 	assert.ErrorContains(t, err, "read-only")
@@ -477,7 +477,7 @@ func TestJobListMeasuresOverlapFootprints(t *testing.T) {
 	for id, paths := range map[string][]any{"a": {"api/*.go"}, "b": {"api/x.go"}} {
 		_, err := MagusPutJob(ctx, id, map[string]any{"checkpoint": rev, "write_paths": paths, "check": "test .", "state": "running"})
 		require.NoError(t, err)
-		_, _, err = MagusRegisterJob(ctx, id, rev)
+		_, _, err = MagusRegisterJob(ctx, id)
 		require.NoError(t, err)
 	}
 

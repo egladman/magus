@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -544,12 +545,52 @@ func bindCaller(t *testing.T, ctx context.Context, who hookAttribution, id strin
 	require.NoError(t, job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Bind(who.caller(), id))
 }
 
-// execHere records id as taken in the fixture's checkout, as `magus job exec` does.
+// execHere records id as taken in the fixture's checkout, as `magus job exec` does. The
+// checkout is committed to git first, since exec reads its base from the tree.
 func execHere(t *testing.T, ctx context.Context, id string) {
 	t.Helper()
 	at := hookLocation(ctx, Dependencies{})
-	_, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Exec(ctx, id, "rev")
+	commitCheckout(t, at.workspace)
+	_, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Exec(ctx, id)
 	require.NoError(t, err)
+}
+
+// commitCheckout makes root a git checkout with everything it holds committed, and returns
+// HEAD: a registered base is read from the checkout itself.
+func commitCheckout(t *testing.T, root string) string {
+	t.Helper()
+	if _, err := os.Stat(filepath.Join(root, ".git")); err != nil {
+		fixtureGit(t, root, "init", "-q", "-b", "main")
+	}
+	fixtureGit(t, root, "add", "-A")
+	fixtureGit(t, root, "commit", "-q", "--allow-empty", "-m", "fixture")
+	return fixtureGit(t, root, "rev-parse", "HEAD")
+}
+
+// linkedWorktree adds a worktree of the git checkout at main and returns it. Its link names
+// main by the path given rather than the one git resolves, since that path is what main's
+// job store is keyed on, and the two checkouts share the store only when the keys agree.
+func linkedWorktree(t *testing.T, main string) string {
+	t.Helper()
+	wt := filepath.Join(t.TempDir(), "worker")
+	fixtureGit(t, main, "worktree", "add", "-q", "-b", "worker", wt)
+	require.NoError(t, os.WriteFile(filepath.Join(wt, ".git"),
+		[]byte("gitdir: "+filepath.Join(main, ".git", "worktrees", "worker")+"\n"), 0o644))
+	return wt
+}
+
+// fixtureGit runs git in dir with no global or system config, so a developer's settings
+// never reach a fixture, and returns its trimmed output.
+func fixtureGit(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	isolated := []string{"-C", dir, "-c", "user.name=magus test", "-c", "user.email=test@example.com",
+		"-c", "commit.gpgsign=false", "-c", "core.excludesFile=" + os.DevNull,
+		"-c", "maintenance.auto=false", "-c", "gc.auto=0"}
+	cmd := exec.Command("git", append(isolated, args...)...)
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
+	return strings.TrimSpace(string(out))
 }
 
 // hookJSON renders an envelope the way a host writes it to the hook's stdin.
@@ -755,7 +796,8 @@ func TestSpawnRuleSeesTheGuardsJobRows(t *testing.T) {
 // the child's later calls are graded under that lease, and the child's first call records
 // its checkout's base for a job that never reported one.
 func TestSpawnTitleAttributesTheChildToItsJob(t *testing.T) {
-	const base = "4f1c2e9+0d3b7a51"
+	// base stands for the checkout's own HEAD, which each case reads once it has one.
+	const base = "<the checkout's HEAD>"
 	type outcome struct {
 		Lease        string
 		Denied       bool
@@ -791,13 +833,15 @@ func TestSpawnTitleAttributesTheChildToItsJob(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, root := fleetFixture(t, tc.row)
 			at := hookLocation(ctx, Dependencies{})
-			deps := Dependencies{CheckoutBase: func(_ context.Context, got string) string {
-				assert.Equal(t, root, got, "the base is read from the checkout the child runs in")
-				return base
-			}}
+			deps := Dependencies{}
 			target := filepath.Join(root, "internal", "guard", "guard.go")
 			require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
 			require.NoError(t, os.WriteFile(target, []byte("package guard\n"), 0o644))
+			head := commitCheckout(t, root)
+			want := tc.want
+			if want.ReportedBase == base {
+				want.ReportedBase = head
+			}
 
 			Judge(ctx, deps, Request{Input: finishedSpawn(t, tc.title, "brisk-heron", "sonnet", tc.isolation, "a1b2c3"), Host: "claude-code"})
 			edit := map[string]any{"file_path": target, "old_string": "package guard", "new_string": "package guard // edited"}
@@ -811,7 +855,7 @@ func TestSpawnTitleAttributesTheChildToItsJob(t *testing.T) {
 			rows, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
 			require.NoError(t, err)
 			require.Len(t, rows, 1)
-			assert.Equal(t, tc.want, outcome{
+			assert.Equal(t, want, outcome{
 				Lease:        v.Lease,
 				Denied:       v.Decision == "deny",
 				ReportedBase: rows[0].ReportedBase,
@@ -836,18 +880,16 @@ func TestAttributionDoesNotReachTheParent(t *testing.T) {
 // calls are still graded under the job, with its base recorded from its own checkout and
 // the lease on every trail event.
 func TestAWorkerInItsOwnWorktreeIsGradedUnderItsJob(t *testing.T) {
-	const base = "9c0ffee+1a2b3c4d"
 	row := types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
 	spawnerCtx, spawnerRoot := fleetFixture(t, row)
-	workerRoot, workerCache := t.TempDir(), t.TempDir()
+	spawnerHead := commitCheckout(t, spawnerRoot)
 	// A linked worktree of the spawner's repository, which is what shares the job store.
-	require.NoError(t, os.WriteFile(filepath.Join(workerRoot, ".git"),
-		[]byte("gitdir: "+filepath.Join(spawnerRoot, ".git", "worktrees", "worker")+"\n"), 0o644))
+	workerRoot, workerCache := linkedWorktree(t, spawnerRoot), t.TempDir()
+	fixtureGit(t, workerRoot, "commit", "-q", "--allow-empty", "-m", "the worker's own")
+	workerHead := fixtureGit(t, workerRoot, "rev-parse", "HEAD")
+	require.NotEqual(t, spawnerHead, workerHead, "the worker's checkout is on a revision of its own")
 	workerCtx := WithLocation(t.Context(), workerCache, workerRoot, workerRoot)
-	deps := Dependencies{CheckoutBase: func(_ context.Context, got string) string {
-		assert.Equal(t, workerRoot, got, "the base is the worker's checkout")
-		return base
-	}}
+	deps := Dependencies{}
 
 	Judge(spawnerCtx, deps, Request{Input: finishedSpawn(t, "orchestrator/fix guard-facts", "guard-facts", "opus", "worktree", "a1b2c3"), Host: "claude-code"})
 
@@ -873,7 +915,8 @@ func TestAWorkerInItsOwnWorktreeIsGradedUnderItsJob(t *testing.T) {
 	rows, err := job.NewStore(job.Location{CacheDir: workerCache, Root: workerRoot}).List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, base, rows[0].ReportedBase)
+	rev, _ := types.ParseCheckpointToken(rows[0].ReportedBase)
+	assert.Equal(t, workerHead, rev, "the base is read from the worker's checkout, not the spawner's")
 
 	events := trailEvents(t, workerCache, trail.KindAgentCommand)
 	require.Len(t, events, 2)
@@ -888,11 +931,10 @@ func TestAWorkerInItsOwnWorktreeIsGradedUnderItsJob(t *testing.T) {
 func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
 	row := types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
 	_, spawnerRoot := fleetFixture(t, row)
-	workerRoot := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(workerRoot, ".git"),
-		[]byte("gitdir: "+filepath.Join(spawnerRoot, ".git", "worktrees", "worker")+"\n"), 0o644))
+	head := commitCheckout(t, spawnerRoot)
+	workerRoot := linkedWorktree(t, spawnerRoot)
 	worker := location{cacheDir: t.TempDir(), workspace: workerRoot, dir: workerRoot}
-	deps := Dependencies{CheckoutBase: func(context.Context, string) string { return "9c0ffee" }}
+	deps := Dependencies{}
 
 	require.True(t, registerAgentBase(t.Context(), deps, worker, row.ID))
 	assert.False(t, registerAgentBase(t.Context(), deps, worker, row.ID), "a job registers once")
@@ -911,7 +953,7 @@ func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
 		WritePaths:   row.WritePaths,
 		State:        types.StateRunning,
 		Holder:       got.Holder,
-		ReportedBase: "9c0ffee",
+		ReportedBase: head,
 		BaseVerdict:  got.BaseVerdict,
 		RegisteredBy: got.RegisteredBy,
 		Registered:   got.Registered,
@@ -926,33 +968,45 @@ func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
 // rather than staying frozen on a diverged creation base; a worker whose own commit moved
 // a matching checkout is not re-registered, since its commit would read as a divergence.
 func TestRegisterAgentBaseFollowsADivergedCheckout(t *testing.T) {
-	const created, checkpoint = "24114cc", "07e1c16"
+	// Commits of one fixture repository, by role: the checkpoint the job was handed, the
+	// revision the worktree was created on, and one more.
+	const checkpoint, created, other = "checkpoint", "created", "other"
 	for _, tc := range []struct {
-		name               string
-		verdict            types.JobBaseVerdict
-		reported, revision string
-		wantBase           string
-		wantVerdict        types.JobBaseVerdict
+		name string
+		// reported is where the checkout stood when it first registered, and live where it
+		// stands at the call; "" for live is a checkout whose revision cannot be read.
+		reported, live string
+		wantBase       string
+		wantVerdict    types.JobBaseVerdict
 	}{
-		{"switched onto its checkpoint", types.BaseDiverged, created, checkpoint, checkpoint, types.BaseMatch},
-		{"switched onto another base", types.BaseDiverged, created, "5ee1abc", "5ee1abc", types.BaseDiverged},
-		{"still where it registered", types.BaseDiverged, created, created, created, types.BaseDiverged},
-		{"a commit on its checkpoint", types.BaseMatch, checkpoint, "c0ffee1", checkpoint, types.BaseMatch},
-		{"no revision to read", types.BaseDiverged, created, "", created, types.BaseDiverged},
+		{"switched onto its checkpoint", created, checkpoint, checkpoint, types.BaseMatch},
+		{"switched onto another base", created, other, other, types.BaseDiverged},
+		{"still where it registered", created, created, created, types.BaseDiverged},
+		{"a commit on its checkpoint", checkpoint, other, checkpoint, types.BaseMatch},
+		{"no revision to read", created, "", created, types.BaseDiverged},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			row := types.Job{ID: "lease-life", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, Checkpoint: checkpoint}
+			row := types.Job{ID: "lease-life", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
 			ctx, root := fleetFixture(t, row)
 			at := hookLocation(ctx, Dependencies{})
+			revs := map[string]string{}
+			for _, role := range []string{checkpoint, created, other} {
+				revs[role] = commitCheckout(t, root)
+			}
 			store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
-			_, err := store.Exec(ctx, row.ID, tc.reported)
+			_, err := store.Update(ctx, row.ID, func(u *types.Job) { u.Checkpoint = revs[checkpoint] })
 			require.NoError(t, err)
+			fixtureGit(t, root, "checkout", "-q", revs[tc.reported])
+			_, err = store.Exec(ctx, row.ID)
+			require.NoError(t, err)
+			if tc.live != "" {
+				fixtureGit(t, root, "checkout", "-q", revs[tc.live])
+			}
 			deps := Dependencies{
 				Revision: func(_ context.Context, dir, rev string) string {
 					assert.Equal(t, []string{root, ""}, []string{dir, rev}, "the revision is read from the worker's checkout")
-					return tc.revision
+					return revs[tc.live]
 				},
-				CheckoutBase: func(context.Context, string) string { return tc.revision },
 			}
 
 			wrote := registerAgentBase(ctx, deps, at, row.ID)
@@ -960,7 +1014,7 @@ func TestRegisterAgentBaseFollowsADivergedCheckout(t *testing.T) {
 			rows, err := store.List()
 			require.NoError(t, err)
 			require.Len(t, rows, 1)
-			assert.Equal(t, []any{tc.wantBase != tc.reported, tc.wantBase, tc.wantVerdict},
+			assert.Equal(t, []any{tc.wantBase != tc.reported, revs[tc.wantBase], tc.wantVerdict},
 				[]any{wrote, rows[0].ReportedBase, rows[0].BaseVerdict})
 		})
 	}
@@ -970,14 +1024,14 @@ func TestRegisterAgentBaseFollowsADivergedCheckout(t *testing.T) {
 // until the row changes: each try reads the checkout's base, a VCS process, for nothing.
 func TestRegisterAgentBaseStopsAfterARefusal(t *testing.T) {
 	row := types.Job{ID: "lease-life", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, CheckoutRoot: t.TempDir()}
-	ctx, _ := fleetFixture(t, row)
+	ctx, root := fleetFixture(t, row)
+	commitCheckout(t, root)
 	at := hookLocation(ctx, Dependencies{})
-	reads := 0
-	deps := Dependencies{CheckoutBase: func(context.Context, string) string { reads++; return "9c0ffee" }}
 
-	assert.False(t, registerAgentBase(ctx, deps, at, row.ID))
-	assert.False(t, registerAgentBase(ctx, deps, at, row.ID))
-	assert.Equal(t, 1, reads, "the refused row is not tried again")
+	require.False(t, refusalRemembered(t, ctx, at, row.ID))
+	assert.False(t, registerAgentBase(ctx, Dependencies{}, at, row.ID))
+	assert.True(t, refusalRemembered(t, ctx, at, row.ID), "the refused row is not tried again")
+	assert.False(t, registerAgentBase(ctx, Dependencies{}, at, row.ID))
 
 	changed := row
 	changed.CheckoutRoot = ""
@@ -991,29 +1045,43 @@ func TestRegisterAgentBaseStopsAfterARefusal(t *testing.T) {
 func TestRegisterAgentBaseRetriesAPassingFailure(t *testing.T) {
 	t.Run("a declared row", func(t *testing.T) {
 		row := types.Job{ID: "lease-life", State: types.StateDeclared, WritePaths: []string{"internal/guard/**"}}
-		ctx, _ := fleetFixture(t, row)
+		ctx, root := fleetFixture(t, row)
+		commitCheckout(t, root)
 		at := hookLocation(ctx, Dependencies{})
-		deps := Dependencies{CheckoutBase: func(context.Context, string) string { return "9c0ffee" }}
 
 		withLapsedLock(t, ctx, at, func(lapsed context.Context) {
-			assert.False(t, registerAgentBase(lapsed, deps, at, row.ID))
+			assert.False(t, registerAgentBase(lapsed, Dependencies{}, at, row.ID))
 		})
-		assert.True(t, registerAgentBase(ctx, deps, at, row.ID), "the lapsed try is not remembered as a refusal")
+		assert.True(t, registerAgentBase(ctx, Dependencies{}, at, row.ID), "the lapsed try is not remembered as a refusal")
 	})
 	t.Run("a row another checkout holds", func(t *testing.T) {
 		row := types.Job{ID: "lease-life", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, CheckoutRoot: t.TempDir()}
-		ctx, _ := fleetFixture(t, row)
+		ctx, root := fleetFixture(t, row)
+		commitCheckout(t, root)
 		at := hookLocation(ctx, Dependencies{})
-		reads := 0
-		deps := Dependencies{CheckoutBase: func(context.Context, string) string { reads++; return "9c0ffee" }}
 
 		withLapsedLock(t, ctx, at, func(lapsed context.Context) {
-			assert.False(t, registerAgentBase(lapsed, deps, at, row.ID))
+			assert.False(t, registerAgentBase(lapsed, Dependencies{}, at, row.ID))
 		})
-		assert.False(t, registerAgentBase(ctx, deps, at, row.ID), "the holder refuses")
-		assert.False(t, registerAgentBase(ctx, deps, at, row.ID))
-		assert.Equal(t, 2, reads, "the lapsed try is tried again, the holder's refusal is not")
+		assert.False(t, refusalRemembered(t, ctx, at, row.ID), "the lapsed try is tried again")
+		assert.False(t, registerAgentBase(ctx, Dependencies{}, at, row.ID), "the holder refuses")
+		assert.True(t, refusalRemembered(t, ctx, at, row.ID), "the holder's refusal is not tried again")
 	})
+}
+
+// refusalRemembered reports whether registerAgentBase remembered the job store refusing
+// id's row as it now stands, which is what keeps it from trying that row again.
+func refusalRemembered(t *testing.T, ctx context.Context, at location, id string) bool {
+	t.Helper()
+	rows, err := leaseRows(ctx, at)
+	require.NoError(t, err)
+	for _, row := range rows {
+		if row.ID == id {
+			return hint.NewGate(at.cacheDir, agentBaseRefusals).AlreadyFired(agentBaseRefusedKind(row, at.workspace))
+		}
+	}
+	t.Fatalf("no row %s", id)
+	return false
 }
 
 // withLapsedLock runs fn with a cancelled context while another process holds the job
@@ -1186,9 +1254,10 @@ func TestASubagentsExecNeverBindsItsParent(t *testing.T) {
 	foreground := strings.Replace(claudeSpawnEnvelope, `"run_in_background":true`, `"run_in_background":false`, 1)
 	require.NotEqual(t, "deny", Judge(ctx, Dependencies{}, Request{Input: foreground, Host: "claude-code"}).Decision)
 
-	exec := Judge(ctx, Dependencies{}, Request{Input: bashCall(t, session, "a1b2c3", "./magus job exec "+research.ID), Host: "claude-code"})
-	require.Equal(t, graded{}, gradedAs(exec), "the child held nothing when it took the job")
-	_, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).Exec(ctx, research.ID, "23558048b")
+	took := Judge(ctx, Dependencies{}, Request{Input: bashCall(t, session, "a1b2c3", "./magus job exec "+research.ID), Host: "claude-code"})
+	require.Equal(t, graded{}, gradedAs(took), "the child held nothing when it took the job")
+	commitCheckout(t, root)
+	_, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).Exec(ctx, research.ID)
 	require.NoError(t, err, "the CLI half of the exec")
 
 	child := Judge(ctx, Dependencies{}, Request{Input: bashCall(t, session, "a1b2c3", "ls"), Host: "claude-code"})
@@ -1216,9 +1285,9 @@ func TestExecBindsTheCallersIdentity(t *testing.T) {
 	ctx, _ := fleetFixture(t, running("session-job"), running("agent-job"), running("tool-job"))
 
 	Judge(ctx, Dependencies{}, Request{Input: "magus job exec session-job", Host: "codex", Session: "s1"})
-	Judge(ctx, Dependencies{}, Request{Input: "magus --root . job exec --base 77aa01c agent-job", Host: "claude-code", Session: "s2", Agent: "a1"})
+	Judge(ctx, Dependencies{}, Request{Input: "magus --root . job exec agent-job", Host: "claude-code", Session: "s2", Agent: "a1"})
 	tool := hookJSON(t, map[string]any{"session_id": "s3", "hook_event_name": "PreToolUse", "tool_name": "mcp__magus__client",
-		"tool_input": map[string]any{"script": `import "magus"; magus\job.register("tool-job", reported_base: "77aa01c");`}})
+		"tool_input": map[string]any{"script": `import "magus"; magus\job.register("tool-job");`}})
 	Judge(ctx, Dependencies{}, Request{Input: tool, Host: "claude-code"})
 
 	got := map[string]string{}

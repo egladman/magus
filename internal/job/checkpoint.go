@@ -60,7 +60,7 @@ func (s *Store) DeclaredCheckpoint(ctx context.Context, rows []types.Job, id, to
 				token, shortRevision(head), real)
 		}
 	} else if digest != "" {
-		live, err := s.checkoutToken(ctx)
+		live, err := s.CheckoutToken(ctx)
 		if err != nil {
 			return "", fmt.Errorf("job: checkpoint %q carries a digest, and this checkout's tree could not be read to check it: %w", token, err)
 		}
@@ -98,9 +98,11 @@ func (s *Store) fullRevision(ctx context.Context, rev string) (types.VCSDriver, 
 	return driver, c.ID, nil
 }
 
-// checkoutToken is the store's checkout as `magus vcs checkpoint -o name` prints it, read
-// from the tree: the one source a recorded base, or a checkpoint nobody named, comes from.
-func (s *Store) checkoutToken(ctx context.Context) (string, error) {
+// CheckoutToken is the store's checkout as `magus vcs checkpoint -o name` prints it, read
+// from the tree: `<rev>`, or `<rev>+<digest>` when it is dirty. It is the one source a
+// recorded base, or a checkpoint nobody named, comes from. It fails when the store has no
+// checkout, no version control answers there, or the checkout has no revision yet.
+func (s *Store) CheckoutToken(ctx context.Context) (string, error) {
 	if s.root == "" {
 		return "", errors.New("this job store has no checkout to read")
 	}
@@ -111,6 +113,9 @@ func (s *Store) checkoutToken(ctx context.Context) (string, error) {
 	cp, err := vcs.Checkpoint(ctx, s.root, types.VCSResolution{VCS: driver}, false)
 	if err != nil {
 		return "", err
+	}
+	if cp.Revision == "" {
+		return "", errors.New("the checkout has no revision yet")
 	}
 	return cp.Token(), nil
 }
@@ -133,7 +138,7 @@ func (s *Store) declaredMerge(ctx context.Context, rows []types.Job, id string, 
 	merge(&next)
 	written := next.Checkpoint
 	if i < 0 && !next.ReadOnly && strings.TrimSpace(written) == "" {
-		token, err := s.checkoutToken(ctx)
+		token, err := s.CheckoutToken(ctx)
 		if err != nil {
 			return merge, nil
 		}
