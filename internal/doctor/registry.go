@@ -120,6 +120,13 @@ var allChecks = []checkDef{
 		run:            (*runner).checkRetryDeclarations,
 	},
 	{
+		Name:           "model-tier-fit",
+		Doc:            "a model tier's recorded pass rate on a kind of job, and the line that routed those jobs to it",
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            (*runner).checkModelTierFit,
+	},
+	{
 		Name:           "unexplained-hotspots",
 		Doc:            "whether the files this workspace edits hardest are explained by any note",
 		Evidence:       types.EvidenceInferred,
