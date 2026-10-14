@@ -75,14 +75,59 @@ func TestDeclarationsSkipGoStringsAndComments(t *testing.T) {
 		"/*\n" +
 		"func commented() {\n" +
 		"*/\n" +
+		"\n" +
 		"var after = 1\n"))
 	const script, a, after = "const script = `", "func A() {", "var after = 1"
 	assert.Equal(t, []string{
 		"", "",
 		script, script, script, script, script,
-		a, a, a, a, a, a, a, a, a, a,
+		a, a, a, a, a, a, a, a, a, a, a,
 		after,
 	}, golang.Declarations(lines))
+}
+
+// The doc comment directly above a declaration is the declaration's, as it is when git
+// places the lines (vcs's TestPurePlacementMatchesGit); a comment a blank line away is not.
+func TestDeclarationsHandDocCommentsDown(t *testing.T) {
+	golang, _ := MatchDiffDriver("a.go")
+	const a, b, c = "func A() {", "func B() {", "var c = 3"
+	lines := SplitLines([]byte("func A() {\n}\n\n// apart\n\n// B does it.\n// Twice.\nfunc B() {\n}\n// c\nvar c = 3\n"))
+	assert.Equal(t, []string{a, a, a, a, a, b, b, b, b, c, c}, golang.Declarations(lines))
+}
+
+// A hunk that adds a blank line, a doc comment and a declaration starts with the blank
+// line, which belongs to the declaration it leads into and not to the unchanged one above.
+func TestPlaceHunk(t *testing.T) {
+	golang, _ := MatchDiffDriver("a.go")
+	const keep, fresh = "const A = 1", "const C = 3"
+	lines := SplitLines([]byte("const A = 1\n\n// C is new.\nconst C = 3\nconst B = 2\n"))
+	decls := golang.Declarations(lines)
+	assert.Equal(t, []string{fresh, fresh, fresh}, PlaceHunk(lines, decls, 1, 4), "the hunk's leading blank line")
+	assert.Equal(t, []string{keep, keep}, PlaceHunk(lines, decls, 0, 2), "a blank line that ends the range keeps its name")
+	assert.Equal(t, []string{keep}, PlaceHunk(lines, decls, 1, 2), "nothing follows the blank line")
+	assert.Empty(t, PlaceHunk(lines, decls, 2, 2))
+}
+
+func TestHunksChargeALeadingBlankLineToTheNewDeclaration(t *testing.T) {
+	golang, _ := MatchDiffDriver("a.go")
+	for name, tc := range map[string]struct {
+		insert string
+		decl   string
+	}{
+		"a const with a doc comment": {"\n// C is new.\nconst C = 3\n", "const C = 3"},
+		"a func with a doc comment":  {"\n// C does it.\nfunc C() {\n}\n", "func C() {"},
+		"a func with no doc comment": {"\nfunc C() {\n}\n", "func C() {"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			old := "const A = 1\nconst B = 2\n"
+			cur := "const A = 1\n" + tc.insert + "const B = 2\n"
+			got, ok := Hunks("a.go", []byte(old), []byte(cur), golang)
+			require.True(t, ok)
+			require.Len(t, got, 1)
+			assert.Equal(t, RegionChange{File: FileChange{Path: "a.go"}, Side: RegionNew, Lines: [2]int{2, 1 + strings.Count(tc.insert, "\n")},
+				Declaration: tc.decl, Driver: "golang"}, got[0])
+		})
+	}
 }
 
 func TestHunks(t *testing.T) {

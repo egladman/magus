@@ -145,7 +145,8 @@ func (d DiffDriver) funcname(line string) string {
 // nearest line at or above it d's funcname patterns name, "" above the first one. A line
 // that begins inside a string or comment of the driver's language (see OpaqueLines) names
 // nothing. Lines inside a magusfile's project call, and under a YAML key, are named by their
-// key path (see placeKeys). A driver with no patterns places nothing.
+// key path (see placeKeys), and the doc comment directly above a declaration is named by it
+// (see handLeadersDown). A driver with no patterns places nothing.
 func (d DiffDriver) Declarations(lines []string) []string {
 	out := make([]string, len(lines))
 	if d.Funcname == "" {
@@ -159,7 +160,7 @@ func (d DiffDriver) Declarations(lines []string) []string {
 		}
 		out[i] = current
 	}
-	d.placeKeys(lines, out)
+	d.refine(lines, out)
 	return out
 }
 
@@ -198,10 +199,78 @@ func (d DiffDriver) OpaqueLines(lines []string) []bool {
 // Conform rewrites decls, a placement git's own funcname matching made of lines, so it
 // reads as Declarations does: a declaration that begins on a line OpaqueLines reports gives
 // way to the one enclosing it, and the keys of a magusfile's project call or a YAML file
-// are named by their path (see placeKeys). decls is indexed by line-1 like lines.
+// are named by their path (see placeKeys), and a doc comment goes to the declaration below
+// it (see handLeadersDown). decls is indexed by line-1 like lines.
 func (d DiffDriver) Conform(lines, decls []string) {
 	d.dropOpaque(lines, decls)
+	d.refine(lines, decls)
+}
+
+// refine is what a placement follows from the declarations alone, so Declarations and
+// Conform end alike.
+func (d DiffDriver) refine(lines, decls []string) {
 	d.placeKeys(lines, decls)
+	handLeadersDown(decls, lines, declarationLeaders[d.Name])
+}
+
+// declarationLeaders are the line prefixes, per diff driver, of what is written directly
+// above a declaration and belongs to it: a doc comment, a decorator, an attribute.
+var declarationLeaders = map[string][]string{
+	"golang":     {"//", "/*", "*"},
+	"buzz":       {"//"},
+	"typescript": {"//", "/*", "*", "@"},
+	"python":     {"#", "@"},
+	"rust":       {"//", "/*", "*", "#["},
+	"markdown":   {"<!--"},
+}
+
+// handLeadersDown gives the run of leader lines directly above each declaration to that
+// declaration. git names a line by searching up from it, so without this a doc comment
+// belongs to the declaration above, and a claim on a function does not cover an edit to
+// its own documentation. The run stops at a blank line or any other line, so a comment
+// separated from the declaration by a blank line stays where git put it.
+func handLeadersDown(decls, lines, leaders []string) {
+	if len(leaders) == 0 {
+		return
+	}
+	leads := func(line string) bool {
+		line = strings.TrimLeft(line, " \t")
+		return slices.ContainsFunc(leaders, func(p string) bool { return strings.HasPrefix(line, p) })
+	}
+	for i := 1; i < len(decls); i++ {
+		above := decls[i-1]
+		if decls[i] == above {
+			continue
+		}
+		for j := i - 1; j >= 0 && decls[j] == above && leads(lines[j]); j-- {
+			decls[j] = decls[i]
+		}
+	}
+}
+
+// PlaceHunk returns the declaration of each of lines[from:to], indexed from the first, as
+// decls names them except that the blank lines the range starts with go to the declaration
+// of the first line after them, when the range has one. A hunk that adds a blank line, a
+// doc comment and a declaration between two others starts with the blank line, which a
+// placement searching up from it charges to the declaration above, though nothing in that
+// declaration changed. A blank line anywhere else in the range keeps its name: it sits
+// between lines the change touches, and a function added or deleted with its trailing blank
+// line does not touch the function after it. decls is indexed by line-1 like lines.
+func PlaceHunk(lines, decls []string, from, to int) []string {
+	out := make([]string, to-from)
+	for i := from; i < to && i < len(decls); i++ {
+		out[i-from] = decls[i]
+	}
+	lead := from
+	for lead < to && lead < len(lines) && strings.TrimSpace(lines[lead]) == "" {
+		lead++
+	}
+	if lead < to {
+		for i := from; i < lead; i++ {
+			out[i-from] = out[lead-from]
+		}
+	}
+	return out
 }
 
 // dropOpaque replaces each declaration in decls that begins on a line OpaqueLines reports
@@ -398,12 +467,16 @@ func Hunks(path string, old, new []byte, driver DiffDriver) ([]RegionChange, boo
 	}
 	var regions []RegionChange
 	// emit splits the 0-based lines [from, to) of side into one region per declaration.
-	emit := func(side RegionSide, from, to int, decls []string) {
+	emit := func(side RegionSide, from, to int, lines, decls []string) {
+		var placed []string
+		if decls != nil {
+			placed = PlaceHunk(lines, decls, from, to)
+		}
 		for line := from; line < to; {
 			end, decl, name := to-1, "", ""
 			if decls != nil {
-				decl, name, end = decls[line], driver.Name, line
-				for end+1 < to && decls[end+1] == decl {
+				decl, name, end = placed[line-from], driver.Name, line
+				for end+1 < to && placed[end+1-from] == decl {
 					end++
 				}
 			}
@@ -414,8 +487,8 @@ func Hunks(path string, old, new []byte, driver DiffDriver) ([]RegionChange, boo
 	}
 	io, in := 0, 0
 	for _, p := range append(pairs, [2]int{len(o), len(n)}) {
-		emit(RegionOld, io, p[0], oldDecls)
-		emit(RegionNew, in, p[1], newDecls)
+		emit(RegionOld, io, p[0], o, oldDecls)
+		emit(RegionNew, in, p[1], n, newDecls)
 		io, in = p[0]+1, p[1]+1
 	}
 	return regions, true
