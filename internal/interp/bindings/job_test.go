@@ -39,7 +39,7 @@ func TestJobExitWithoutResultThroughBuzzScript(t *testing.T) {
 import "magus";
 
 export fun abandon() > str !> any {
-    magus\job.put("optional-exit", opts: {"criteria": "exercise omitted result"});
+    magus\job.put("optional-exit", opts: {"criteria": "exercise omitted result", "read_only": true});
     final row = magus\job.exit("optional-exit");
     return row.state;
 }
@@ -78,7 +78,7 @@ func TestJobPutResolvesItsCheckpointThroughBuzzScript(t *testing.T) {
 import "magus";
 
 export fun put(id: str, checkpoint: str) > str !> any {
-    final row = magus\job.put(id, opts: {"criteria": "hold a checkpoint", "checkpoint": checkpoint});
+    final row = magus\job.put(id, opts: {"criteria": "hold a checkpoint", "checkpoint": checkpoint, "read_only": true});
     return row.checkpoint;
 }
 `))

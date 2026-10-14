@@ -395,7 +395,7 @@ func TestLedgerIsServedInProcess(t *testing.T) {
 
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
-	_, err := MagusPutJob(ctx, "u1", map[string]any{"criteria": "ship it", "state": "running"})
+	_, err := MagusPutJob(ctx, "u1", map[string]any{"criteria": "ship it", "state": "running", "read_only": true})
 	require.NoError(t, err)
 
 	report, err := MagusListJob(ctx)
@@ -410,7 +410,7 @@ func TestLedgerIsServedInProcess(t *testing.T) {
 func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
 	testkit.Isolate(t)
 	ws := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
-	_, err := MagusPutJob(ws, "on-disk", map[string]any{"criteria": "not what the guard read"})
+	_, err := MagusPutJob(ws, "on-disk", map[string]any{"criteria": "not what the guard read", "read_only": true})
 	require.NoError(t, err)
 
 	pinned := types.Job{ID: "orchestrator/guard-facts", Criteria: "the seam", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
@@ -551,9 +551,10 @@ func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
 	testkit.Isolate(t)
 
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
-	_, err := MagusPutJob(ctx, "u1", nil)
+	readOnly := map[string]any{"read_only": true}
+	_, err := MagusPutJob(ctx, "u1", readOnly)
 	require.NoError(t, err)
-	_, err = MagusPutJob(ctx, "u2", nil)
+	_, err = MagusPutJob(ctx, "u2", readOnly)
 	require.NoError(t, err)
 
 	cleared, err := MagusClearJob(ctx)
@@ -599,7 +600,7 @@ func TestLedgerBindingAndStoreAgree(t *testing.T) {
 	cacheDir, root := t.TempDir(), t.TempDir()
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: cacheDir, root: root})
 
-	_, err := MagusPutJob(ctx, "u1", map[string]any{"criteria": "shared row"})
+	_, err := MagusPutJob(ctx, "u1", map[string]any{"criteria": "shared row", "read_only": true})
 	require.NoError(t, err)
 
 	store := job.NewStore(job.Location{StateBase: stateBase, CacheDir: cacheDir, Root: root})

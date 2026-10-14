@@ -126,18 +126,14 @@ func isCheckpointDigest(digest string) bool {
 }
 
 // declaredMerge is merge with the checkpoint it writes onto row id held to
-// [Store.DeclaredCheckpoint], storing that checkpoint expanded. A merge creating a writing
-// row that names none records the checkout's own, as `magus job fork` does; where none can
-// be read the row is written without one.
+// [Store.DeclaredCheckpoint], storing that checkpoint expanded. A merge declaring a writing
+// row (a new one, or one that ended) that names none records the checkout's own; where none
+// can be read the row is written without one.
 func (s *Store) declaredMerge(ctx context.Context, rows []types.Job, id string, merge func(*types.Job)) (func(*types.Job), error) {
-	var next types.Job
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
-	if i >= 0 {
-		next = rows[i].Clone()
-	}
+	next, updates := mergeBase(rows, id, merge)
 	merge(&next)
 	written := next.Checkpoint
-	if i < 0 && !next.ReadOnly && strings.TrimSpace(written) == "" {
+	if !updates && !next.ReadOnly && strings.TrimSpace(written) == "" {
 		token, err := s.CheckoutToken(ctx)
 		if err != nil {
 			return merge, nil

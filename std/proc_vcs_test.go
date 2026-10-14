@@ -115,7 +115,7 @@ func TestVcsCmdIsStillLeaseGraded(t *testing.T) {
 	testkit.Isolate(t)
 	repo := testkit.NewRepo(t, nil)
 	ws := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: repo.Root()})
-	_, err := MagusPutJob(ws, "worker", map[string]any{"criteria": "ship it", "state": "running"})
+	_, err := MagusPutJob(ws, "worker", map[string]any{"criteria": "ship it", "state": "running", "read_only": true})
 	require.NoError(t, err)
 	refusal := errors.New("lease-vcs: refused")
 	withVCSLeaseGate(t, func(context.Context, types.Job, string, []string, string, []string) error { return refusal })

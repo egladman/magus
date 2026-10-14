@@ -1108,25 +1108,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		}
 		return jobEnter(ctx, store, row.ID, row.Enter)
 	}
-	var probe types.Job
-	row.Apply(&probe)
-	probe.ID = row.ID
-	// The fork door's own rule: magus\job.put and job apply still create an unscoped row,
-	// which TestForkMergeHoldsANewRowToTheLimits pins for put.
-	if err := job.RefuseUnscoped(probe); err != nil {
-		return usagef("magus job fork: %s", err)
-	}
 	store, err := openJobs(ctx, root, jobOpen{ModelTiers: true})
 	if err != nil {
 		return err
-	}
-	// A writing job is verified against the diff since its checkpoint, so one forked without
-	// a checkpoint could never pass. The fork records this checkout's state instead; where it
-	// cannot be read (no VCS here) the row stays without one and wait says why it cannot verify.
-	if !probe.ReadOnly && probe.Checkpoint == "" {
-		if token, err := checkoutBaseToken(ctx, root); err == nil {
-			row.Checkpoint = token
-		}
 	}
 	// The reader loads the graph only when a gate names a symbol, or when the deletion
 	// candidates ask for it, and the two share one load.
@@ -1139,7 +1123,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	case err != nil:
 		return usagef("magus job fork: %s", err)
 	}
-	derived := slices.DeleteFunc(slices.Clone(stored.WritePaths), func(p string) bool { return slices.Contains(probe.WritePaths, p) })
+	var asked types.Job
+	row.Apply(&asked)
+	derived := slices.DeleteFunc(slices.Clone(stored.WritePaths), func(p string) bool { return slices.Contains(asked.WritePaths, p) })
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {

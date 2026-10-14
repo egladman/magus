@@ -77,19 +77,21 @@ func writeMerge(ctx context.Context, store *Store, id string, merge func(*types.
 }
 
 // refuseMerge holds a merge into job id, against the plan rows, to the rules a fork is held
-// to, and returns the write proof a created row records. A merge that creates the row meets
-// every one: graded, within the jobs limits, unambiguous symbol goals, and write paths that
-// are no directory (MGS3018), ungradable claim (MGS3031), project configuration held whole
-// (MGS3036), shared checkout or unordered shared file (MGS3032), and a check that skips a
-// test of its write paths' packages or that the guard denies its holder. A merge onto an
-// existing row meets the same rules for what it ADDS: the goals and write paths it did not
-// carry, so a path the row already held never blocks an unrelated update.
+// to, and returns the write proof the row records. A merge that creates the row, or brings
+// an ended one back, meets every one: scoped and graded, within the jobs limits,
+// unambiguous symbol goals, and write paths that are no directory (MGS3018), ungradable
+// claim (MGS3031), project configuration held whole (MGS3036), shared checkout or
+// unordered shared file (MGS3032), and a check that skips a test of its write paths'
+// packages or that the guard denies its holder. A merge onto a row that has not ended meets
+// the same rules for what it ADDS: the goals and write paths it did not carry, so a path the
+// row already held never blocks an unrelated update. Its proof is recomputed when its write
+// paths change, and is empty otherwise, which keeps the one it holds.
 //
 // The guard grades the check against rows rather than sweep the store again.
 func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) (types.JobWriteProof, error) {
 	graded := WithSnapshot(ctx, Snapshot{Rows: rows})
-	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 {
-		prev := rows[i]
+	prev, updates := mergeBase(rows, id, merge)
+	if updates {
 		merged := prev.Clone()
 		merge(&merged)
 		if err := RefuseUngraded(merged); err != nil {
@@ -133,10 +135,19 @@ func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string,
 				return "", err
 			}
 		}
-		return "", RefuseDeniedCheck(graded, store, addedChecks(prev, merged, checkChanged))
+		if err := RefuseDeniedCheck(graded, store, addedChecks(prev, merged, checkChanged)); err != nil {
+			return "", err
+		}
+		if slices.Equal(prev.WritePaths, merged.WritePaths) {
+			return "", nil
+		}
+		return store.WriteProof(rows, merged), nil
 	}
-	row := types.Job{ID: id}
+	row := prev
 	merge(&row)
+	if err := RefuseUnscoped(row); err != nil {
+		return "", err
+	}
 	if err := RefuseUngraded(row); err != nil {
 		return "", err
 	}
@@ -168,6 +179,23 @@ func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string,
 		return "", err
 	}
 	return store.WriteProof(rows, row), nil
+}
+
+// mergeBase is the row a merge into id lands on, and whether the merge updates that row
+// rather than declares it. A row that ended and that the merge brings back is declared
+// anew, so it meets every rule a new row meets.
+func mergeBase(rows []types.Job, id string, merge func(*types.Job)) (types.Job, bool) {
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	if i < 0 {
+		return types.Job{ID: id}, false
+	}
+	prev := rows[i].Clone()
+	if !prev.State.Terminal() {
+		return prev, true
+	}
+	next := prev.Clone()
+	merge(&next)
+	return prev, next.State.Terminal()
 }
 
 // addedChecks is merged cut to the checks an update adds to prev: its check when it

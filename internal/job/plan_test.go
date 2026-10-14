@@ -487,8 +487,8 @@ func TestVerifyHoldsTheClaimToTheObservedDiff(t *testing.T) {
 }
 
 // TestForkMergeHoldsANewRowToTheLimits pins that magus\job.put forks under the same
-// limits and default timeout `magus job fork` applies,
-// while a merge onto an existing row stays an update nothing refuses.
+// scope, limits and default timeout `magus job fork` applies, and so does a merge that
+// brings an ended row back, while a merge onto a live row stays an update nothing refuses.
 func TestForkMergeHoldsANewRowToTheLimits(t *testing.T) {
 	t.Parallel()
 
@@ -496,8 +496,12 @@ func TestForkMergeHoldsANewRowToTheLimits(t *testing.T) {
 	s := NewStore(tmpLoc(t, t.TempDir()))
 	limits := config.Jobs{MaxDepth: 1, DefaultTimeout: time.Hour}
 	merge := func(parent string) func(*types.Job) {
-		return func(u *types.Job) { u.Parent, u.State = parent, types.StateDeclared }
+		return func(u *types.Job) { u.Parent, u.State, u.ReadOnly = parent, types.StateDeclared, true }
 	}
+
+	_, err := ForkMerge(ctx, s, "unscoped", func(u *types.Job) { u.State = types.StateDeclared }, limits, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "names no write paths and is not read-only")
 
 	root, err := ForkMerge(ctx, s, "root", merge(""), limits, nil)
 	require.NoError(t, err)
@@ -512,6 +516,40 @@ func TestForkMergeHoldsANewRowToTheLimits(t *testing.T) {
 	updated, err := ForkMerge(ctx, s, "root/a", func(u *types.Job) { u.Model = "opus" }, config.Jobs{MaxLive: 1}, nil)
 	require.NoError(t, err, "an update is not a fork")
 	assert.Equal(t, "opus", updated.Model)
+
+	_, err = ForkMerge(ctx, s, "root/a", func(u *types.Job) { u.State = types.StateFail }, limits, nil)
+	require.NoError(t, err)
+	_, err = ForkMerge(ctx, s, "root/a", merge("root"), config.Jobs{MaxLive: 1}, nil)
+	require.Error(t, err, "a fork onto an ended row is a new fork")
+	assert.Contains(t, err.Error(), "jobs.max_live")
+}
+
+// A merge that moves a live row's write paths recomputes the proof it was forked with:
+// the one it held graded paths it no longer claims.
+func TestForkMergeRecomputesTheWriteProofOfMovedPaths(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	s := NewStore(tmpLoc(t, loadableRoot(t)))
+	writes := func(paths ...string) func(*types.Job) {
+		return func(u *types.Job) {
+			u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, paths
+		}
+	}
+
+	_, err := ForkMerge(ctx, s, "wave/peer", writes("internal/guard/*.go"), config.Jobs{}, nil)
+	require.NoError(t, err)
+	row, err := ForkMerge(ctx, s, "wave/mine", writes("docs/x.md"), config.Jobs{}, nil)
+	require.NoError(t, err)
+	require.Equal(t, types.WriteProofDisjoint, row.WriteProof)
+
+	row, err = ForkMerge(ctx, s, "wave/mine", func(u *types.Job) { u.Model = "opus" }, config.Jobs{}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, types.WriteProofDisjoint, row.WriteProof, "paths that did not move keep their proof")
+
+	row, err = ForkMerge(ctx, s, "wave/mine", writes("docs/x.md", "internal/guard/guard.go"), config.Jobs{}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, types.WriteProofOverlapping, row.WriteProof)
 }
 
 // MGS3018 does not depend on which call wrote the path: a put that adds a directory to a
@@ -681,6 +719,7 @@ func TestApplyWidensALiveJobAndKeepsItsState(t *testing.T) {
 	want.WritePaths = []string{"a.go", "b.go"}
 	want.Updated = got[0].Next.Updated
 	want.Widenings = 1
+	want.WriteProof = types.WriteProofAlone // moved paths are proved again
 	assert.Equal(t, want, got[0].Next)
 	assert.Equal(t, types.StateRunning, got[0].Next.State)
 }
