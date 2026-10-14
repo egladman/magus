@@ -1886,17 +1886,6 @@ func TestApprovedRulesReadAnImportTheWorkingTreeDropped(t *testing.T) {
 	assert.Equal(t, types.GuardDeny, got.Decision)
 }
 
-// The hook does not ask a harness for its host's hook timeout: the answer opens the whole
-// workspace and loads the harness spell, and on a loaded machine that load alone ran every
-// judgment in a session past its budget.
-func TestHookDependenciesAskNoHarnessForAHookTimeout(t *testing.T) {
-	testkit.Isolate(t)
-	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": "import \"magus\";\n"}).Root()
-	resetWorkspaceMemo(t)
-	t.Chdir(root)
-	assert.Nil(t, guardDependencies(t.Context(), "").HostHookTimeout)
-}
-
 // A write to the root magusfile whose judgment ran out of time, its rules loaded through the
 // hook's own dependencies, goes through while no policy change is pending, so a slow
 // committed rule can be fixed, and is refused once a change is pending.

@@ -81,10 +81,6 @@ type Dependencies struct {
 	WriteRule workspace.WriteRule
 	// ApprovedWriteRule is ApprovedSpawnRule for the write rule, resolved per write.
 	ApprovedWriteRule func(ctx context.Context) (workspace.WriteRule, error)
-	// HostHookTimeout is how long host waits on a hook before it stops waiting, as host's
-	// harness declares it; false when it declares none or cannot be loaded. It can load a
-	// harness spell, so it is asked only about a judgment that ran long.
-	HostHookTimeout func(ctx context.Context, host string) (time.Duration, bool)
 	// ModelRows yields the model rows the workspace's harnesses publish through
 	// harness_models, nil when none does. It can load the workspace and its harness
 	// spells, so the guard calls it once, and only for a judgment that needs a window or a
@@ -653,8 +649,7 @@ func hostUnnamed() Verdict {
 // judgment itself once it has resolved the session.
 func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	started := begunJudgment(ctx)
-	hostTimeout := hookTimeout(noHookTimeout)
-	defer func() { started.end(time.Now(), hostTimeout) }()
+	defer func() { started.end() }()
 	if req.Form != "" && strings.TrimSpace(req.Host) == "" {
 		return hostUnnamed()
 	}
@@ -665,14 +660,6 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		ctx, cancel = WithHookDeadline(ctx)
 	}
 	defer cancel()
-	// Bounded by the judgment's own deadline, which has passed by the time the deferred end
-	// runs: a judgment that ran that long does not then wait on a workspace load to say so.
-	hostTimeout = boundedTimeout(ctx, func(ctx context.Context) (time.Duration, bool) {
-		if deps.HostHookTimeout == nil || req.Host == "" {
-			return 0, false
-		}
-		return deps.HostHookTimeout(ctx, req.Host)
-	})
 	ctx = withPhaseLog(ctx, deps.RuleLoad)
 	judgmentPhases(ctx).settle(deps)
 	deps.revisions = &revisionMemo{current: map[string]string{}}
@@ -1374,7 +1361,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	}
 	// Graded by nothing: the notice is fixed, since it is how a session learns its own
 	// checks were skipped.
-	if n := started.abandoned(time.Now(), hostTimeout); n > 0 {
+	if n := started.abandoned(); n > 0 {
 		verdict = applyRuleFailureNote(verdict, unfinishedNote(n), advisoryUnfinished)
 	}
 	// Worded after every arm has spoken, so whichever rule refused is the one held to a

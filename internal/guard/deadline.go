@@ -251,7 +251,7 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 		input, isPath, readOnly = env.Value, isPath || env.IsPath, env.ReadOnlyTool
 	}
 	mark := begunJudgment(ctx)
-	mark.end(time.Now(), noHookTimeout)
+	mark.end()
 	if req.Observe || req.Message || input == "" || (isEnvelope && (env.NothingToJudge || env.LoadedSkill != "")) {
 		return pass
 	}
@@ -273,7 +273,7 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 	}
 	verdict := pass
 	verdict.Lease = req.Lease
-	inARow := mark.lapsed()
+	inARow := mark.recordLapse()
 	builtins := lapsedRules(ctx, base, log, req, env, who, input, isPath, hookLocation(ctx, base).cacheDir)
 	switch {
 	case builtins.Deny != "":
