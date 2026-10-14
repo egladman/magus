@@ -1,8 +1,8 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"flag"
 	"fmt"
@@ -480,7 +480,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 
 	var pre *diffImpact
 	if impact {
-		p, err := collectImpact(ctx, m, rootOverride, rev)
+		p, err := collectImpact(ctx, m, rootOverride, rev, patch, src.kind == inputWorkingTree)
 		if err != nil {
 			return fmt.Errorf("magus diff: %w", err)
 		}
@@ -1815,7 +1815,7 @@ type diffImpact struct {
 	// revision, which is a different fact from a base that is merely old.
 	AdvisorBase *impactAdvisorBase `json:"advisor_base,omitempty" yaml:"advisor_base,omitempty"`
 	Anchors     []review.AnchorHit `json:"anchors,omitempty"      yaml:"anchors,omitempty"`
-	Rationale   []rationaleHit     `json:"rationale,omitempty"    yaml:"rationale,omitempty"`
+	LeftBehind  *impactLeftBehind  `json:"left_behind,omitempty"  yaml:"left_behind,omitempty"`
 	// Evidence is what this changeset's authors asked magus before writing it. It is the
 	// reasoning half of the record types.DiffTouch carries: that one names the files an agent
 	// had READ, this one the questions it put to the graph.
@@ -1898,7 +1898,7 @@ const impactListCap = 10
 // Every lens is best-effort and every failure degrades to that lens's empty form. A impact
 // that refuses to print because the symbol index is cold or no server is running is a
 // impact nobody runs, and this command reports context rather than passing judgement.
-func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev types.Diff) (diffImpact, error) {
+func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev types.Diff, patch string, working bool) (diffImpact, error) {
 	p := diffImpact{Reach: computeImpactReach(rev)}
 
 	// The same bounded git-log walk annotateDiff pays for the churn lenses, so the two
@@ -1940,7 +1940,7 @@ func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev
 		return diffImpact{}, aerr
 	}
 	p.Anchors = anchors
-	p.Rationale = collectRationale(m.Root(), rev)
+	p.LeftBehind = collectLeftBehind(ctx, m, rootOverride, rev, patch, working)
 	// The trail and window trail.AttachTouches walks for the per-file touches, read here for the
 	// questions the authors asked rather than the files they opened.
 	p.Evidence, p.EvidenceGap = trail.Consulted(m.Root(), m.CacheDir(), review.ChangedPaths(rev), trail.DefaultReplayEvents)
@@ -2058,7 +2058,7 @@ func impactLines(p diffImpact) []string {
 		impactCostLines(p.Cost),
 		impactAdvisorLines(p.Advisors, p.AdvisorNotes, p.AdvisorBase),
 		impactAnchorLines(p.Anchors),
-		impactRationaleLines(p.Rationale),
+		impactLeftBehindLines(p.LeftBehind),
 		impactEvidenceLines(p.Evidence, p.EvidenceGap),
 		impactReviewLines(p.Review),
 	}
@@ -2461,67 +2461,108 @@ func (e *earnedSync) finished() []review.Receipt {
 // contains the space too, so it matches itself.
 const compatMarker = "compat(until: "
 
-// rationaleHit is one deliberate decision recorded beside code this change touches.
-type rationaleHit struct {
-	Path string `json:"path"      yaml:"path"`
-	Line int    `json:"line"      yaml:"line"`
-	// Until is the retirement condition the marker declares. It is carried rather than the
-	// whole comment because the condition is the part that tells a reader whether their
-	// edit is the thing that retires it.
-	Until string `json:"until" yaml:"until"`
+// deprecatedMarker opens Go's deprecation paragraph, the other way code says it stays for a
+// caller that has not moved.
+const deprecatedMarker = "Deprecated:"
+
+// impactLeftBehind is what a change keeps alive or leaves unused: the compat(until:) and
+// Deprecated: markers it added, and the symbols that lost their last use in it and are still
+// defined. Facts, not reasons: a marker says how long code stays, never whether it should.
+type impactLeftBehind struct {
+	Markers []leftMarker `json:"markers,omitempty" yaml:"markers,omitempty"`
+	// Unreferenced is readSymbolDelta's Left, known only when UnreferencedKnown is;
+	// UnreferencedReason says why it is not.
+	Unreferenced       []string `json:"unreferenced,omitempty" yaml:"unreferenced,omitempty"`
+	UnreferencedKnown  bool     `json:"unreferenced_known" yaml:"unreferenced_known"`
+	UnreferencedReason string   `json:"unreferenced_reason,omitempty" yaml:"unreferenced_reason,omitempty"`
 }
 
-// rationaleShown bounds the list for the same reason every other section is bounded: a
-// report nobody scrolls to the end of has told the reader less than a count would.
-const rationaleShown = 8
+// leftMarker is one marker an added line carries.
+type leftMarker struct {
+	Path string `json:"path" yaml:"path"`
+	Line int    `json:"line" yaml:"line"`
+	// Marker is compatMarker or deprecatedMarker as written, and Text what follows it: the
+	// retirement condition, or the deprecation's advice.
+	Marker string `json:"marker" yaml:"marker"`
+	Text   string `json:"text" yaml:"text"`
+}
 
-// collectRationale finds the compat(until:) markers in the files this change touches.
-//
-// Notes cover the decisions somebody wrote a note about, which is the small minority. This
-// covers the ones recorded where they are actually kept: in a comment beside the code, under
-// the marker this repository's conventions require. Without this, a reader proposing to undo a
-// decision never meets the explanation sitting two lines above the thing they are changing.
-//
-// FILE-level, not hunk-level, and the wording says so. Deciding whether a marker sits inside
-// a changed region needs the hunk ranges, and a marker fifty lines from your edit still
-// governs the code you are in; claiming otherwise would be a precision this does not have.
-//
-// Generated files are skipped: a marker there was written by whatever produced the file.
-func collectRationale(root string, rev types.Diff) []rationaleHit {
-	var out []rationaleHit
+// collectLeftBehind reads the markers from the patch's added lines, in any file the change
+// did not generate, and the symbols it left unused from the graph. Only a working-tree diff
+// reads symbols: the graph describes the tree on disk, which is the head of no other diff.
+func collectLeftBehind(ctx context.Context, m *magus.Magus, rootOverride string, rev types.Diff, patch string, working bool) *impactLeftBehind {
+	generated := map[string]bool{}
 	for _, f := range rev.Files {
-		if f.Generated() {
+		generated[f.Path] = f.Generated()
+	}
+	l := &impactLeftBehind{Markers: addedMarkers(patch, generated)}
+	if !working {
+		l.UnreferencedReason = "read only for the working tree, the tree the symbol graph describes"
+		return l
+	}
+	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
+	if err != nil || res.Source == types.VCSSourceDisabled || res.VCS == nil {
+		l.UnreferencedReason = "no version control answered here"
+		return l
+	}
+	head, err := res.VCS.FindCommit(ctx, m.Root(), "")
+	if err != nil || head.ID == "" {
+		l.UnreferencedReason = "the checkout has no HEAD to compare with"
+		return l
+	}
+	g, err := loadKnowledgeGraph(ctx, rootOverride, false, false, true)
+	if err != nil {
+		l.UnreferencedReason = fmt.Sprintf("the symbol graph could not be read: %v", err)
+		return l
+	}
+	delta, ok := readSymbolDelta(ctx, m.Root(), g, res.VCS, head.ID, review.ChangedPaths(rev))
+	if !ok {
+		l.UnreferencedReason = fmt.Sprintf("the symbol index does not cover the changed files; `%s` builds it", hint.GraphBuild)
+		return l
+	}
+	l.Unreferenced, l.UnreferencedKnown = delta.Left, true
+	return l
+}
+
+// addedMarkers are the markers on the added lines of patch, in a comment, outside the paths
+// generated marks.
+func addedMarkers(patch string, generated map[string]bool) []leftMarker {
+	var out []leftMarker
+	for _, f := range changeset.ParseHunks(patch) {
+		if generated[f.Path] {
 			continue
 		}
-		out = append(out, compatMarkersIn(root, f.Path)...)
+		for _, h := range f.Hunks {
+			line := h.NewStart
+			for _, raw := range h.Lines {
+				switch {
+				case strings.HasPrefix(raw, "+"):
+					if mk, ok := lineMarker(raw[1:]); ok {
+						mk.Path, mk.Line = f.Path, line
+						out = append(out, mk)
+					}
+					line++
+				case strings.HasPrefix(raw, "-"), strings.HasPrefix(raw, `\`):
+				default:
+					line++
+				}
+			}
+		}
 	}
 	return out
 }
 
-// compatMarkersIn scans one file. An unreadable file yields nothing: a deleted path is the
-// common case and is not worth a line of report.
-func compatMarkersIn(root, rel string) []rationaleHit {
-	fh, err := os.Open(filepath.Join(root, filepath.FromSlash(rel)))
-	if err != nil {
-		return nil
-	}
-	defer fh.Close()
-
-	var out []rationaleHit
-	sc := bufio.NewScanner(fh)
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for line := 1; sc.Scan(); line++ {
-		idx := strings.Index(sc.Text(), compatMarker)
-		if idx < 0 || !inAComment(sc.Text()[:idx]) {
-			continue
+// lineMarker is the marker text carries in a comment, if any.
+func lineMarker(text string) (leftMarker, bool) {
+	if idx := strings.Index(text, compatMarker); idx >= 0 && inAComment(text[:idx]) {
+		if until := compatUntil(text[idx:]); until != "" {
+			return leftMarker{Marker: strings.TrimSpace(compatMarker), Text: until}, true
 		}
-		until := compatUntil(sc.Text()[idx:])
-		if until == "" {
-			continue
-		}
-		out = append(out, rationaleHit{Path: rel, Line: line, Until: until})
 	}
-	return out
+	if idx := strings.Index(text, deprecatedMarker); idx >= 0 && inAComment(text[:idx]) {
+		return leftMarker{Marker: deprecatedMarker, Text: strings.TrimSpace(text[idx+len(deprecatedMarker):])}, true
+	}
+	return leftMarker{}, false
 }
 
 // inAComment reports whether the text preceding a marker opens a comment.
@@ -2555,22 +2596,34 @@ func compatUntil(s string) string {
 	return strings.TrimSpace(rest)
 }
 
-// impactRationaleLines renders the section, including its empty form.
-func impactRationaleLines(hits []rationaleHit) []string {
-	if len(hits) == 0 {
-		return []string{"RATIONALE: no compat(until:) marker in the files you changed"}
+// impactLeftBehindLines renders the section, including its empty forms.
+func impactLeftBehindLines(l *impactLeftBehind) []string {
+	if l == nil {
+		return []string{"LEFT BEHIND: not measured"}
 	}
-	out := []string{fmt.Sprintf("RATIONALE: %d compat(until:) marker%s in files you changed - each names why the code stays",
-		len(hits), plural(len(hits), "", "s"))}
-	shown := hits
-	if len(shown) > rationaleShown {
-		shown = shown[:rationaleShown]
+	var out []string
+	if len(l.Markers) == 0 {
+		out = append(out, "LEFT BEHIND: no compat(until:) or Deprecated: marker added")
+	} else {
+		out = append(out, fmt.Sprintf("LEFT BEHIND: %d compat(until:) or Deprecated: marker%s added",
+			len(l.Markers), plural(len(l.Markers), "", "s")))
+		for _, mk := range impactCap(l.Markers) {
+			out = append(out, fmt.Sprintf("      %s:%d %s %s", mk.Path, mk.Line, mk.Marker, mk.Text))
+		}
+		out = append(out, impactMoreLine(len(l.Markers))...)
 	}
-	for _, h := range shown {
-		out = append(out, fmt.Sprintf("      %s:%d until %s", h.Path, h.Line, h.Until))
-	}
-	if len(hits) > len(shown) {
-		out = append(out, fmt.Sprintf("      and %d more", len(hits)-len(shown)))
+	switch {
+	case !l.UnreferencedKnown:
+		out = append(out, "      symbols left unused: not measured, "+cmp.Or(l.UnreferencedReason, "nothing read them"))
+	case len(l.Unreferenced) == 0:
+		out = append(out, "      no symbol it stopped using is still defined")
+	default:
+		out = append(out, fmt.Sprintf("      %d symbol%s lost the last use here and %s still defined",
+			len(l.Unreferenced), plural(len(l.Unreferenced), "", "s"), plural(len(l.Unreferenced), "is", "are")))
+		for _, name := range impactCap(l.Unreferenced) {
+			out = append(out, "        "+name)
+		}
+		out = append(out, impactMoreLine(len(l.Unreferenced))...)
 	}
 	return out
 }
