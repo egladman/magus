@@ -155,8 +155,8 @@ spellings.
 A row carries `id` and optionally `parent` (the job this one was forked from),
 `criteria` (the prose half; the machine-checkable half is `goals`),
 `checkpoint` (as `magus vcs checkpoint -o name` prints it), `write_paths`,
-`deny_paths`, `read_paths`, `depends_on`, `model`, `check`, `goals`, `state`,
-and `read_only`. A record naming no `state` is stored `declared`. The
+`deny_paths`, `read_paths`, `depends_on`, `breaks`, `model`, `check`, `goals`,
+`state`, and `read_only`. A record naming no `state` is stored `declared`. The
 store adds `schema_version`, the actor that recorded the row, `created`,
 `updated`, `releases`, `unattributed` (paths this job owns that somebody
 outside it wrote, noticed by the guard), `entries` (see
@@ -166,6 +166,16 @@ outside it wrote, noticed by the guard), `entries` (see
 timestamp a client sent would be a fact about that client's clock. `updated`
 moves only on the job's own writes; the guard recording an unattributed write,
 and an entry, leave it alone.
+
+`breaks` lists the flags, JSON keys, exported symbols or stored formats the
+root approved this job breaking, one entry each; a blank entry is refused. An
+empty list means the job breaks nothing on its own authority, so a break outside
+it is a finding to report, not a decision for the holder. Like every other
+field of the record, an `apply` that omits it clears it. A text `fork` also
+lists the unreferenced symbols its write paths cover (`deletion_candidates` in
+`-o json`): candidates to finish or delete, never goals. The graph cannot see
+reflection, interface dispatch or a consumer outside the workspace, so confirm
+each before deleting it. Methods, fields and tests are left out.
 
 There is no `--state` on `fork`. It declares a NEW job, and one nobody has taken
 is `declared`; a holder moves its own job with `magus job exec` and
@@ -348,13 +358,19 @@ live children is as dead as any other untaken job.
 
 The context a delegated agent receives should come from the row, not from the
 orchestrating model's recollection of it. `magus describe job <job>` renders
-that context and nothing else: the goal and acceptance criteria verbatim, the
+that context and nothing else: the interface first (each symbol goal's name,
+expectation, frozen signature and description), then the goal and acceptance
+criteria verbatim, what the job may break, the release stage (the workspace's
+newest root tag, and below 1.0 that a major floor ships as a minor release;
+nothing when no tag is visible), the deletion candidates, the
 write, deny and read paths, the projects those paths reach, the paths a sibling
 job is holding and who holds them, the affinity the graph knows about, the
 single check that job is allowed to run, and the jobs it depends on. A section
 with nothing in it is dropped, which is the mechanism rather than a nicety: `ci`
 cannot leak into a holder's terms because nothing renders it. Two renders of one
-row are byte-identical, which hand-typed prompts are not.
+row are byte-identical, which hand-typed prompts are not. `magus diff` prints the
+same stage under its API floor, so a major floor reads as the minor release it
+ships as before 1.0.
 
 It REFUSES a job whose check is the gate, or a target that chains to one, and
 says so rather than printing terms nobody may act on.
