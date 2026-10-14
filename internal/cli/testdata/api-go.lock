@@ -1,7 +1,4 @@
 github.com/egladman/magus.Advisory func(reason string) TargetOption
-github.com/egladman/magus.ApprovedPolicy type interface
-github.com/egladman/magus.ApprovedPolicy.Pending imethod func(ctx context.Context, scope []string) ([]string, error)
-github.com/egladman/magus.ApprovedPolicy.ReadFile imethod func(ctx context.Context, path string) ([]byte, error)
 github.com/egladman/magus.AssessOptions type struct
 github.com/egladman/magus.AssessOptions.Base field string
 github.com/egladman/magus.AssessOptions.ChangedPaths field []string
@@ -29,7 +26,6 @@ github.com/egladman/magus.ComposeGraph func(ws github.com/egladman/magus/types.W
 github.com/egladman/magus.ComposeOption type func(*compose)
 github.com/egladman/magus.DefaultConcurrency func() int
 github.com/egladman/magus.Drift func(policy github.com/egladman/magus/types.DriftPolicy, reason string) TargetOption
-github.com/egladman/magus.EffectiveGuardProfile func(ctx context.Context, rules *GuardRules, root string) github.com/egladman/magus/types.GuardProfile
 github.com/egladman/magus.Event type struct
 github.com/egladman/magus.Event.Command field *Command "json:\"command,omitempty\""
 github.com/egladman/magus.Event.DiagnosticCode field string "json:\"diagnostic_code,omitempty\""
@@ -54,29 +50,6 @@ github.com/egladman/magus.FormatTemplate const Format = "template"
 github.com/egladman/magus.FormatText const Format = "text"
 github.com/egladman/magus.FormatYAML const Format = "yaml"
 github.com/egladman/magus.GatePipe func(root string, cfg github.com/egladman/magus/internal/config.Config)
-github.com/egladman/magus.GuardBuiltins func(ctx context.Context, rules *GuardRules, root string) map[string]github.com/egladman/magus/internal/guard/builtin.Setting
-github.com/egladman/magus.GuardPolicy type struct
-github.com/egladman/magus.GuardPolicy.Builtins field int
-github.com/egladman/magus.GuardPolicy.CommandRule field bool
-github.com/egladman/magus.GuardPolicy.Digest field string
-github.com/egladman/magus.GuardPolicy.ShellRules field int
-github.com/egladman/magus.GuardPolicy.Sources field []github.com/egladman/magus/internal/interp.SourceFile
-github.com/egladman/magus.GuardPolicy.SpawnRule field bool
-github.com/egladman/magus.GuardPolicy.WriteRule field bool
-github.com/egladman/magus.GuardRules type struct
-github.com/egladman/magus.GuardRules.ApprovedBuiltins method(ptr) func(ctx context.Context) (map[string]github.com/egladman/magus/internal/guard/builtin.Setting, error)
-github.com/egladman/magus.GuardRules.ApprovedCommandRule method(ptr) func(ctx context.Context) (github.com/egladman/magus/internal/workspace.CommandRule, error)
-github.com/egladman/magus.GuardRules.ApprovedContentIDs method(ptr) func(ctx context.Context, paths []string) map[string]string
-github.com/egladman/magus.GuardRules.ApprovedSpawnRule method(ptr) func(ctx context.Context) (github.com/egladman/magus/internal/workspace.SpawnRule, error)
-github.com/egladman/magus.GuardRules.ApprovedWriteRule method(ptr) func(ctx context.Context) (github.com/egladman/magus/internal/workspace.WriteRule, error)
-github.com/egladman/magus.GuardRules.Builtins method(ptr) func() map[string]github.com/egladman/magus/internal/guard/builtin.Setting
-github.com/egladman/magus.GuardRules.CommandRule method(ptr) func() github.com/egladman/magus/internal/workspace.CommandRule
-github.com/egladman/magus.GuardRules.DeclaredBuiltinSettings method(ptr) func() map[string]string
-github.com/egladman/magus.GuardRules.EffectiveBuiltins method(ptr) func(ctx context.Context) (map[string]github.com/egladman/magus/internal/guard/builtin.Setting, error)
-github.com/egladman/magus.GuardRules.Policy method(ptr) func() GuardPolicy
-github.com/egladman/magus.GuardRules.ShellRules method(ptr) func() []github.com/egladman/magus/internal/workspace.ShellRule
-github.com/egladman/magus.GuardRules.SpawnRule method(ptr) func() github.com/egladman/magus/internal/workspace.SpawnRule
-github.com/egladman/magus.GuardRules.WriteRule method(ptr) func() github.com/egladman/magus/internal/workspace.WriteRule
 github.com/egladman/magus.HumanOnly func(reason string) TargetOption
 github.com/egladman/magus.IgnoreGlob func(pattern string) github.com/egladman/magus/types.IgnorePattern
 github.com/egladman/magus.IgnoreLiteral func(pattern string) github.com/egladman/magus/types.IgnorePattern
@@ -106,21 +79,12 @@ github.com/egladman/magus.LazyWorkspace.Workspace method(ptr) func(ctx context.C
 github.com/egladman/magus.Limiter type struct
 github.com/egladman/magus.Limiter.Capacity method(ptr) func() int
 github.com/egladman/magus.ListSpells func(ctx context.Context) ([]github.com/egladman/magus/types.Spell, error)
-github.com/egladman/magus.LoadApprovedBuiltins func(ctx context.Context, root string) (map[string]github.com/egladman/magus/internal/guard/builtin.Setting, error)
-github.com/egladman/magus.LoadApprovedCommandRule func(ctx context.Context, root string) (github.com/egladman/magus/internal/workspace.CommandRule, error)
-github.com/egladman/magus.LoadApprovedProfile func(ctx context.Context, root string) (github.com/egladman/magus/types.GuardProfile, error)
-github.com/egladman/magus.LoadApprovedSpawnRule func(ctx context.Context, root string) (github.com/egladman/magus/internal/workspace.SpawnRule, error)
-github.com/egladman/magus.LoadApprovedWriteRule func(ctx context.Context, root string) (github.com/egladman/magus/internal/workspace.WriteRule, error)
-github.com/egladman/magus.LoadGuardRules func(ctx context.Context, root string, opts github.com/egladman/magus/types.VCSOptions) (*GuardRules, error)
 github.com/egladman/magus.Magus type struct
 github.com/egladman/magus.Magus.Affected method(ptr) func(ctx context.Context, base string) (*github.com/egladman/magus/types.AffectedResult, error)
 github.com/egladman/magus.Magus.AffectedFromPaths method(ptr) func(ctx context.Context, paths []string) (*github.com/egladman/magus/types.AffectedResult, error)
 github.com/egladman/magus.Magus.Affinity method(ptr) func(ctx context.Context, opts github.com/egladman/magus/types.InsightOptions) (github.com/egladman/magus/types.AffinityOutput, error)
 github.com/egladman/magus.Magus.All method(ptr) func() []*github.com/egladman/magus/types.Project
 github.com/egladman/magus.Magus.ApplySandbox method(ptr) func(ctx context.Context) (context.Context, error)
-github.com/egladman/magus.Magus.ApprovedCommandRule method(ptr) func(ctx context.Context) (github.com/egladman/magus/internal/workspace.CommandRule, error)
-github.com/egladman/magus.Magus.ApprovedContentIDs method(ptr) func(ctx context.Context, paths []string) map[string]string
-github.com/egladman/magus.Magus.ApprovedSpawnRule method(ptr) func(ctx context.Context) (github.com/egladman/magus/internal/workspace.SpawnRule, error)
 github.com/egladman/magus.Magus.AssessChange method(ptr) func(ctx context.Context, target string, o AssessOptions) (github.com/egladman/magus/types.RiskReport, error)
 github.com/egladman/magus.Magus.AutoResolvable method(ptr) func(ctx context.Context, path string, base []byte, merged []byte) (verdict string, ok bool)
 github.com/egladman/magus.Magus.AutoResolve method(ptr) func(ctx context.Context, path string, base []byte, ours []byte, theirs []byte) (merged []byte, report string, ok bool)
@@ -138,7 +102,6 @@ github.com/egladman/magus.Magus.ClassifyFiles method(ptr) func(ctx context.Conte
 github.com/egladman/magus.Magus.CleanCache method(ptr) func(ctx context.Context, projects ...*github.com/egladman/magus/types.Project) error
 github.com/egladman/magus.Magus.CleanOutputs method(ptr) func(ctx context.Context, projects []*github.com/egladman/magus/types.Project, dryRun bool) (CleanedOutputs, error)
 github.com/egladman/magus.Magus.Close method(ptr) func() error
-github.com/egladman/magus.Magus.CommandRule method(ptr) func() github.com/egladman/magus/internal/workspace.CommandRule
 github.com/egladman/magus.Magus.ComputeTargetKey method(ptr) func(ctx context.Context, projectPath string, target string, charms []string) (key string, lines []string, err error)
 github.com/egladman/magus.Magus.ConcurrencyNudge method(ptr) func() string
 github.com/egladman/magus.Magus.Conform method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.ConformOutput, error)
@@ -164,7 +127,6 @@ github.com/egladman/magus.Magus.FreshenSymbolIndexes method(ptr) func(ctx contex
 github.com/egladman/magus.Magus.Get method(ptr) func(path string) *github.com/egladman/magus/types.Project
 github.com/egladman/magus.Magus.GetArtifact method(ptr) func(ctx context.Context, v github.com/egladman/magus/internal/cache.ArtifactVersion, dst string) error
 github.com/egladman/magus.Magus.Graph method(ptr) func() (*github.com/egladman/magus/types.Graph, error)
-github.com/egladman/magus.Magus.GuardPolicy method(ptr) func() GuardPolicy
 github.com/egladman/magus.Magus.Harnesses method(ptr) func() []string
 github.com/egladman/magus.Magus.HeldLocks method(ptr) func() []github.com/egladman/magus/types.StatusLock
 github.com/egladman/magus.Magus.Hotspots method(ptr) func(ctx context.Context, opts github.com/egladman/magus/types.InsightOptions) (github.com/egladman/magus/types.HotspotOutput, error)
@@ -173,6 +135,8 @@ github.com/egladman/magus.Magus.ImportCache method(ptr) func(ctx context.Context
 github.com/egladman/magus.Magus.InvocationByID method(ptr) func(inv string) (Invocation, error)
 github.com/egladman/magus.Magus.InvocationEventsByID method(ptr) func(inv string) (Invocation, []Event, error)
 github.com/egladman/magus.Magus.JobLimits method(ptr) func() github.com/egladman/magus/internal/config.Jobs
+github.com/egladman/magus.Magus.JudgeCommand method(ptr) func(ctx context.Context, session string, dir string, command string) (github.com/egladman/magus/types.GuardJudgment, error)
+github.com/egladman/magus.Magus.JudgeWrite method(ptr) func(ctx context.Context, session string, dir string, path string) (github.com/egladman/magus/types.GuardJudgment, error)
 github.com/egladman/magus.Magus.KnowledgeGraph method(ptr) func(ctx context.Context, req github.com/egladman/magus/types.GraphRequest) (*github.com/egladman/magus/internal/graph/knowledge.Graph, error)
 github.com/egladman/magus.Magus.KnowledgeGraphHealthy method(ptr) func() (watching bool, valid bool)
 github.com/egladman/magus.Magus.LastRecordedRun method(ptr) func(ctx context.Context, projectPath string, target string) (github.com/egladman/magus/internal/cache.RecordedRun, error)
@@ -223,8 +187,6 @@ github.com/egladman/magus.Magus.Serve method(ptr) func(ctx context.Context) erro
 github.com/egladman/magus.Magus.ServiceSession method(ptr) func() *github.com/egladman/magus/internal/service.Session
 github.com/egladman/magus.Magus.SetGraphObserver method(ptr) func(o github.com/egladman/magus/types.Observer)
 github.com/egladman/magus.Magus.SetServer method(ptr) func(s Server)
-github.com/egladman/magus.Magus.ShellRules method(ptr) func() []github.com/egladman/magus/internal/workspace.ShellRule
-github.com/egladman/magus.Magus.SpawnRule method(ptr) func() github.com/egladman/magus/internal/workspace.SpawnRule
 github.com/egladman/magus.Magus.SpellImports method(ptr) func() *github.com/egladman/magus/internal/spell/remote.Imports
 github.com/egladman/magus.Magus.Stream method(ptr) func(ctx context.Context, r io.Reader, target string, errFn func(error), opts ...StreamOption) error
 github.com/egladman/magus.Magus.SymbolFreshnessEnv method(ptr) func() []string
@@ -355,6 +317,7 @@ github.com/egladman/magus.WithProcessStdio func(s ProcessStdio) RunOption
 github.com/egladman/magus.WithProvider func(p github.com/egladman/magus/internal/observability.Provider) Option
 github.com/egladman/magus.WithRace func() RunOption
 github.com/egladman/magus.WithRaceReplay func() RunOption
+github.com/egladman/magus.WithSession func(session string) RunOption
 github.com/egladman/magus.WithSink func(s *Sink) RunOption
 github.com/egladman/magus.WithSinkFilter func(terms []string) SinkOption
 github.com/egladman/magus.WithSinkLevel func(level log/slog.Level) SinkOption
@@ -1818,6 +1781,9 @@ github.com/egladman/magus/types.GuardDecision.String method func() string
 github.com/egladman/magus/types.GuardDecision.UnmarshalText method(ptr) func(text []byte) error
 github.com/egladman/magus/types.GuardDecision.Valid method func() bool
 github.com/egladman/magus/types.GuardDecision.Values method func() []string
+github.com/egladman/magus/types.GuardDeniedError type struct
+github.com/egladman/magus/types.GuardDeniedError.Error method(ptr) func() string
+github.com/egladman/magus/types.GuardDeniedError.Judgment field GuardJudgment
 github.com/egladman/magus/types.GuardDeny const GuardDecision = "deny"
 github.com/egladman/magus/types.GuardJudgment type struct
 github.com/egladman/magus/types.GuardJudgment.Context field string "json:\"context,omitempty\""
