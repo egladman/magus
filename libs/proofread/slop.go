@@ -125,7 +125,11 @@ func opening(pattern string) tell {
 // sentence the way replyOpener does, past any emphasis or bracket.
 func (t tell) find(text string) [][]int {
 	if !t.opening {
-		return t.re.FindAllStringIndex(text, -1)
+		return findAllIndex(t.re, text, false)
+	}
+
+	if !mayMatch(t.re, text) {
+		return nil
 	}
 
 	var out [][]int

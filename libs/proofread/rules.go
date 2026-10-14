@@ -260,7 +260,7 @@ func filler(in input) []Finding {
 func fillerSpans(text string, pattern *regexp.Regexp) [][]int {
 	var out [][]int
 
-	for _, at := range pattern.FindAllStringIndex(text, -1) {
+	for _, at := range findAllIndex(pattern, text, false) {
 		if !fillerExempt(text, at) {
 			out = append(out, at)
 		}

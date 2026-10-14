@@ -10,6 +10,47 @@ import (
 	"testing"
 )
 
+// ewtTexts returns the raw text of every EWT test sentence.
+func ewtTexts(tb testing.TB) []string {
+	tb.Helper()
+
+	gz, err := os.ReadFile("testdata/en_ewt-ud-test.conllu.gz")
+	if err != nil {
+		tb.Fatal(err)
+	}
+
+	zr, err := gzip.NewReader(bytes.NewReader(gz))
+	if err != nil {
+		tb.Fatal(err)
+	}
+
+	var texts []string
+
+	sc := bufio.NewScanner(zr)
+	for sc.Scan() {
+		if text, ok := strings.CutPrefix(sc.Text(), "# text = "); ok {
+			texts = append(texts, text)
+		}
+	}
+
+	if err := sc.Err(); err != nil {
+		tb.Fatal(err)
+	}
+
+	return texts
+}
+
+func BenchmarkTokenize(b *testing.B) {
+	texts := ewtTexts(b)
+	b.ReportAllocs()
+
+	for b.Loop() {
+		for _, text := range texts {
+			Tokenize(text)
+		}
+	}
+}
+
 func TestTokenize(t *testing.T) {
 	cases := map[string]struct {
 		text string

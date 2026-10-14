@@ -36,7 +36,7 @@ func dateFormat(in input) []Finding {
 	var dates []datedAt
 
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
-		for _, m := range dateStyle.FindAllStringSubmatchIndex(para.text, -1) {
+		for _, m := range findAllIndex(dateStyle, para.text, true) {
 			for g, name := range dateStyle.SubexpNames() {
 				if name == "" || m[2*g] < 0 {
 					continue

@@ -78,8 +78,11 @@ export fun proofread_build(ctx: magus\Context, args: [str]) > void !> any {
 // Runs the suite; the root merges coverage.out into its coverage badge.
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
+    // readsFiles replaces the project baseline, so it names the fixtures the tests read
+    // as well as the sources.
+    ctx.readsFiles("**/*.go", "go.mod", "go.sum", "testdata/**/*", "postag/gen/model.gz", "postag/testdata/*");
     ctx.writesFiles("coverage.out");
-    go["go-test"](ctx, {"args": ["-covermode=atomic", "-coverprofile=coverage.out", "./..."]});
+    go["go-test"](ctx, {"args": ["-covermode=atomic", "-coverprofile=coverage.out", "./..."] + args});
 }
 
 // Fails on a vulnerable symbol this module calls.

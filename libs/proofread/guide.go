@@ -231,14 +231,19 @@ func condescension(in input) []Finding {
 
 		switch in.kind {
 		case KindGuide:
-			spans = condescending.FindAllStringIndex(para.text, -1)
+			spans = findAllIndex(condescending, para.text, false)
 		default:
-			spans = presuming.FindAllStringIndex(para.text, -1)
+			spans = findAllIndex(presuming, para.text, false)
 			if slices.Contains(reviewed, in.kind) {
-				spans = append(spans, obviously.FindAllStringIndex(para.text, -1)...)
+				spans = append(spans, findAllIndex(obviously, para.text, false)...)
 			}
 
-			for _, start := range sentenceStarts(para.text) {
+			var sentences []int
+			if mayMatch(booster, para.text) {
+				sentences = sentenceStarts(para.text)
+			}
+
+			for _, start := range sentences {
 				if at := booster.FindStringSubmatchIndex(para.text[start:]); at != nil && !within(start, spans) {
 					word := at[2:4]
 					if word[0] < 0 {

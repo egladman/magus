@@ -11,6 +11,24 @@ import (
 	"testing"
 )
 
+func BenchmarkTag(b *testing.B) {
+	texts := ewtTexts(b)
+
+	sentences := make([][]string, len(texts))
+	for i, text := range texts {
+		sentences[i] = Tokenize(text)
+	}
+
+	loadModel()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		for _, words := range sentences {
+			Tag(words)
+		}
+	}
+}
+
 type goldToken struct{ form, upos, xpos string }
 
 func readGold(t *testing.T, path string) [][]goldToken {

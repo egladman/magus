@@ -103,7 +103,7 @@ func wordy(in input) []Finding {
 	var out []Finding
 
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
-		for _, at := range pattern.FindAllStringIndex(para.text, -1) {
+		for _, at := range findAllIndex(pattern, para.text, false) {
 			m := para.text[at[0]:at[1]]
 			want := wordyWant(m)
 

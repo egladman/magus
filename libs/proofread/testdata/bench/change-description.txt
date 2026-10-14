@@ -1,0 +1,27 @@
+Codex and Cursor now run the same proofread reply check, prompt hook and spawn hook as Claude Code, and every agent host reads one instruction file, AGENTS.md. After #584 merged, a pass over what proofread recommends across the repo and a comparison of the Claude Code config with the other harnesses showed that the newer hooks were wired for Claude Code only, and that CLAUDE.md held rules the other hosts never load.
+
+## What changes
+
+- The claude-code, codex and cursor spells declare the proofread reply check at turn end, so `.claude/settings.json` no longer carries it as a hand edit. `proofread-reply.buzz` takes `--agent-name` and answers each host in its own shape: Claude Code gets `additionalContext`, Codex a block decision, Cursor a `followup_message`. Every host runs the `proofread` on PATH.
+- Codex gains `UserPromptSubmit` and a `PreToolUse` hook on `spawn_agent`. Cursor gains `beforeSubmitPrompt` and `Task` on `preToolUse`, so the guard judges a Cursor spawn brief.
+- The scout is read-only by config: `sandbox_mode = "read-only"` for Codex, `permission: edit: deny` for OpenCode.
+- `GuardTemplateVersion` moves to 24, and every template and embedded copy carries the new marker.
+- CLAUDE.md is gone. AGENTS.md carries the repository section, cut to what no guard rule, lint or diagnostic says yet, and the managed block from `internal/agent/agents-section.md` is shorter. Claude Code reads AGENTS.md when no CLAUDE.md exists, from v2.1.277.
+- The Markdown lint judges AGENTS.md and its block as agent instructions, the kind skills already take.
+- `hack/policy/binaries.buzz` leaves a bootstrap into another checkout to internal/guard. It told an agent to move the binary aside, which AGENTS.md forbids, and internal/guard already allows a bootstrap over a binary that cannot load the tree (MGS1021).
+- From proofread's findings: heading-case spares a heading that lists proper nouns, five docs pages lose a vague word, two skills and four tool descriptions are shorter, and the 14 help texts the cli-help lint skipped are reworded with its baseline now empty.
+
+## Not wired, and why
+
+- OpenCode gets no reply check: `session.idle` cannot hand text back to the agent.
+- Codex and Cursor report no subagent usage: Codex stores usage where the hook does not read it, and Cursor's `subagentStop` names no subagent.
+- Only Claude Code has a Skill-tool hook, so Codex and Cursor do not pass `--reports-skills`; a skill gate there would deny every call.
+- The Bash foreground limits stay with Claude Code: they read its Bash `timeout`.
+
+## Not verified
+
+- No live Codex or Cursor session ran these hooks. The `spawn_agent` and `Task` input fields and Cursor's transcript format come from the vendor docs.
+- Cursor records two `agent_spawn` rows per subagent, from `preToolUse` Task and from `subagentStart`. Both stay: dropping `Task` would leave Cursor spawns unjudged.
+
+`magus affected ci` passed on this tree.
+

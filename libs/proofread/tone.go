@@ -79,7 +79,7 @@ func matchFindings(in input, pattern *regexp.Regexp, exempt func(text string, at
 	var out []Finding
 
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
-		for _, at := range pattern.FindAllStringSubmatchIndex(para.text, -1) {
+		for _, at := range findAllIndex(pattern, para.text, true) {
 			if exempt != nil && exempt(para.text, at) {
 				continue
 			}

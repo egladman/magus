@@ -299,7 +299,7 @@ func hedge(in input) []Finding {
 	limits := limitSections(paras)
 
 	for i, para := range paras {
-		for _, at := range hedging.FindAllStringIndex(para.text, -1) {
+		for _, at := range findAllIndex(hedging, para.text, false) {
 			if statesLimit(para, limits[i], at[0]) || singleQuoted(para.text, at[0]) ||
 				reported.MatchString(sentenceBefore(para.text, at[0])) {
 				continue

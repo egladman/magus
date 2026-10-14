@@ -2,9 +2,41 @@ package proofread
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 )
+
+// The inputs are real text from this repository, kept as .txt so the
+// Markdown lint leaves them alone.
+var benchInputs = []struct {
+	file string
+	kind Kind
+}{
+	{"change-description.txt", KindChangeDescription},
+	{"commit-message.txt", KindCommitMessage},
+	{"review-reply.txt", KindReviewReply},
+	{"reference.txt", KindReference},
+}
+
+func BenchmarkJudgeText(b *testing.B) {
+	for _, in := range benchInputs {
+		text, err := os.ReadFile(filepath.Join("testdata", "bench", in.file))
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		b.Run(string(in.kind), func(b *testing.B) {
+			b.SetBytes(int64(len(text)))
+			b.ReportAllocs()
+
+			for b.Loop() {
+				JudgeText(string(text), in.kind)
+			}
+		})
+	}
+}
 
 // Every line below that is not prose carries a word the filler rule refuses,
 // so a line the reader fails to skip shows up as a finding.
