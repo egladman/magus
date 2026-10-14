@@ -3,8 +3,8 @@ title: magus-workspace-rules
 generated_from: internal/agent/skills/magus-workspace-rules/SKILL.md
 description: "Adapt magus's installed agent integration to THIS workspace without breaking it."
 tags: [agents, skills, magus-workspace-rules]
-skill_full_bytes: 11441
-skill_short_bytes: 8919
+skill_full_bytes: 12512
+skill_short_bytes: 9711
 ---
 
 # magus-workspace-rules
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `129` |
 | `knowledge-schema-version` | `19` |
-| `skill-content` | `e5a2132016c1` |
+| `skill-content` | `ccf54c628e03` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -220,6 +220,22 @@ To adapt one, declare an override; change no import and no provider call.
      The token stays a secret ref (`MAGUS_MCP_TOKEN`).
    - Commit the `magus.yaml` entry and the forked spell together.
 
+## Tightening a conformance threshold
+
+A workspace that commits a conformance ratchet (`knowledge.conform.ratchet`) enforces the
+committed value, and the code usually drifts tighter than it. Two readings name the slack:
+the rows of `magus\conform()` with `propose` above zero, and `magus doctor`'s
+`conform-ratchet` check, which gives each row's ratchet `path:line`.
+
+1. Edit only the line doctor names. Copy the proposed `value`, the row's `n` and the
+   percentile, and put the measuring revision in `why`.
+2. Delete each known entry doctor reports as stale.
+3. Re-run doctor and read that the proposal is gone.
+4. Commit the ratchet alone. The commit is the review.
+
+Never pick a number, never loosen a value, and never add a known entry to pass a check:
+fix the code, or ask the person.
+
 ## Prune on a schedule you already have
 
 Run the `magus-context-audit` lens after every `magus agent install --force`.
@@ -273,6 +289,7 @@ generator overwrites its output without asking.
 - Stamp every local instruction
 - Self-improvement: the checklist
 - Adapting a Buzz harness (no magus source edits)
+- Tightening a conformance threshold
 - Prune on a schedule you already have
 - Graduating an instruction upstream
 
@@ -446,6 +463,25 @@ never changes a pinned harness; a newer shipped spell arrives only when someone 
 the lock target with `:update`, and your workspace fork is unaffected until you
 deliberately rebase it. Additive policy that is not host-shaped stays in
 `magus\guard.shell({...})`, not in the harness spell.
+
+## Tightening a conformance threshold
+
+A workspace that commits a conformance ratchet (`knowledge.conform.ratchet`) enforces the
+committed value, and the code usually drifts tighter than it. Two readings name the slack:
+the rows of `magus\conform()` with `propose` above zero, and `magus doctor`'s
+`conform-ratchet` check, which gives each row's ratchet `path:line`.
+
+1. Edit only the line doctor names. Copy the proposed `value`, the row's `n` and the
+   percentile, and put the measuring revision in `why`.
+2. Delete each known entry doctor reports as stale.
+3. Re-run doctor and read that the proposal is gone.
+4. Commit the ratchet alone. The commit is the review.
+
+Never pick a number, never loosen a value, and never add a known entry to pass a check:
+fix the code, or ask the person. The ratchet is the one place a measurement
+becomes policy, so a person reads every change to it. An agent that edits the record to
+make a red check green has moved the bar instead of the code, and the diff looks like a
+routine config change.
 
 ## Prune on a schedule you already have
 
