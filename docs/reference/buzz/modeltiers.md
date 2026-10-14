@@ -16,7 +16,7 @@ The default model-tier declaration: the ModelTier enum, cheapest first, its defa
 
 ### bounds
 
-bounds caps the jobs live at one tier, and the context an economy worker may reach.
+bounds caps the context an economy worker may reach. It caps no tier's live jobs: a
 
 **Signature:** `modeltiers\bounds(tier) -> magus\ModelTierBounds`
 

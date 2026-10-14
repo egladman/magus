@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 27292
-skill_short_bytes: 21069
+skill_full_bytes: 26051
+skill_short_bytes: 20348
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `123` |
+| `agent-skill-version` | `124` |
 | `knowledge-schema-version` | `17` |
-| `skill-content` | `78bd99259b15` |
+| `skill-content` | `2a1e8faa70f2` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -78,10 +78,6 @@ magus affected ci --plan --stdin            # plan PROPOSED paths, before editin
 
 You do not need to be asked to split work: several disjoint write sets
 you can name are reason enough.
-
-Hand every spawn a job row forked first, read-only scouts included. A child bound to
-no row is graded as you are, and no lease bounds you. "Fork the job, then spawn the
-worker" below has the commands.
 
 Fan-out is not inherently expensive. Say what a
 round costs when the user is deciding, and prefer the smallest fan-out that covers
@@ -140,26 +136,16 @@ Then make the declaration gradeable, so the names are a contract, not a suggesti
   symbol the work must reuse. No gate grades reuse itself.
 - `symbol` + `unreferenced` for each helper the shared API replaces.
 
-Signature goals are the default for a job that adds or changes an exported API.
-`symbol` + `signature` holds the name to a declaration, so the interface is a
-contract and not only a name. The recipe:
+A job that adds or changes an exported API gets a `symbol` + `signature` goal by
+default: the root commits the stub, runs `magus graph build`, and forks the
+`signature` goal empty, so the fork records the indexed stub as the contract, beside
+a `changed` goal on the same name.
 
-1. The root commits the stub: the declaration, with no body worth keeping.
-2. Run `magus graph build`, so the index holds the stub.
-3. Fork the job with a `signature` goal and a `changed` goal on the same name. Leave
-   `signature` empty and the fork records the indexed one, which is how the stub
-   becomes the contract.
-
-Name what a job may break in its `breaks` list: the flags, JSON keys, exported
-symbols or stored formats you approved it breaking. An empty list means it breaks
-nothing on its own authority, and a worker that finds a break outside the list
-stops and reports it.
-
-Findings from the magus are work to finish, not noise. The unreferenced symbols
-`magus job fork` lists in the job's write paths (`deletion_candidates` in
-`-o json`) and the symbols `magus job wait` reports left unreferenced are each
-finished or deleted. The graph cannot see reflection, interface dispatch or a
-consumer outside the workspace, so confirm before deleting.
+A job's `breaks` list names the flags, JSON keys, exported symbols or stored formats
+you approved it breaking; a worker that finds a break outside it stops and reports.
+Each unreferenced symbol `magus job fork` lists in the write paths
+(`deletion_candidates`) or `magus job wait` reports is finished or deleted. Confirm
+first: the graph cannot see reflection, interface dispatch or outside consumers.
 
 Check each declared name with `magus refs` before forking. A bare name that resolves
 to more than one definition is graded against one of them, silently.
@@ -276,8 +262,9 @@ private ownership map.
   write paths.
 - A cap the user sets applies to the whole tree, not once per parent.
 
-Keep one integration owner at the root, however deep the job tree.
-A child coordinates its descendants but may not relax the root's criteria.
+Keep one integration owner at the root, however deep the job tree. A child
+coordinates its descendants but may not accept changes outside its own job or relax
+the root's criteria.
 
 ## Seed the partition with magus
 
@@ -418,8 +405,8 @@ magus job exit <job> --stdin <<'EOF'
 EOF
 ```
 
-A typed result makes verification mechanical. Keep unresolved risks mandatory, so a mis-scoped
-worker can say so instead of widening silently.
+A typed result makes verification mechanical. Keep unresolved risks mandatory, so a
+mis-scoped worker can say so instead of widening silently.
 
 A worker writes only its own row and the children it forks. Every other store write
 is the orchestrator's; a refused worker reports it as an unresolved risk and stops.
@@ -482,9 +469,6 @@ As jobs finish:
    editors, a rebuild estimate, advisors and anchored notes. It is context, never a
    verdict. An empty section means nobody could measure it, not that nothing was found.
 7. Run `magus affected ci` and evaluate the top-level acceptance criteria.
-
-Prefer fewer proven-independent jobs over
-wide fan-out and conflict repair.
 ````
 
 
@@ -521,10 +505,6 @@ magus affected ci --plan --stdin            # plan PROPOSED paths, before editin
 
 You do not need to be asked to split work. "Split this across agents" is one way in;
 several disjoint write sets you can name is another.
-
-Hand every spawn a job row forked first, read-only scouts included. A child bound to
-no row is graded as you are, and no lease bounds you. "Fork the job, then spawn the
-worker" below has the commands.
 
 Fan-out is not inherently expensive. What costs is unbounded fan-out:
 workers that hand work on without a shrinking scope, jobs with no acceptance criteria
@@ -623,26 +603,16 @@ Then make the declaration gradeable, so the names are a contract, not a suggesti
   cannot tell the defining file or an import from real use.
 - `symbol` + `unreferenced` for each helper the shared API replaces.
 
-Signature goals are the default for a job that adds or changes an exported API.
-`symbol` + `signature` holds the name to a declaration, so the interface is a
-contract and not only a name. The recipe:
+A job that adds or changes an exported API gets a `symbol` + `signature` goal by
+default: the root commits the stub, runs `magus graph build`, and forks the
+`signature` goal empty, so the fork records the indexed stub as the contract, beside
+a `changed` goal on the same name.
 
-1. The root commits the stub: the declaration, with no body worth keeping.
-2. Run `magus graph build`, so the index holds the stub.
-3. Fork the job with a `signature` goal and a `changed` goal on the same name. Leave
-   `signature` empty and the fork records the indexed one, which is how the stub
-   becomes the contract.
-
-Name what a job may break in its `breaks` list: the flags, JSON keys, exported
-symbols or stored formats you approved it breaking. An empty list means it breaks
-nothing on its own authority, and a worker that finds a break outside the list
-stops and reports it.
-
-Findings from the magus are work to finish, not noise. The unreferenced symbols
-`magus job fork` lists in the job's write paths (`deletion_candidates` in
-`-o json`) and the symbols `magus job wait` reports left unreferenced are each
-finished or deleted. The graph cannot see reflection, interface dispatch or a
-consumer outside the workspace, so confirm before deleting.
+A job's `breaks` list names the flags, JSON keys, exported symbols or stored formats
+you approved it breaking; a worker that finds a break outside it stops and reports.
+Each unreferenced symbol `magus job fork` lists in the write paths
+(`deletion_candidates`) or `magus job wait` reports is finished or deleted. Confirm
+first: the graph cannot see reflection, interface dispatch or outside consumers.
 
 Check each declared name with `magus refs` before forking. A bare name that resolves
 to more than one definition is graded against one of them, silently.
@@ -779,11 +749,9 @@ private ownership map.
   write paths.
 - A cap the user sets applies to the whole tree, not once per parent.
 
-Keep one integration owner at the root, however deep the job tree.
-A child may coordinate its descendants, but it may not accept changes
-outside its own job, relax top-level acceptance criteria, or hide additional
-fan-out from the root. Nest wherever a child has a genuinely separable area and
-enough context to partition it better than its parent.
+Keep one integration owner at the root, however deep the job tree. A child
+coordinates its descendants but may not accept changes outside its own job or relax
+the root's criteria.
 
 ## Seed the partition with magus
 
@@ -942,10 +910,8 @@ magus job exit <job> --stdin <<'EOF'
 EOF
 ```
 
-A typed result makes verification mechanical; the same four facts in prose can only be
-graded by reading, and a worker that ran a filtered subset writes the same
-paragraph as one that did not. Keep unresolved risks mandatory, so a mis-scoped
-worker can say so instead of widening silently.
+A typed result makes verification mechanical. Keep unresolved risks mandatory, so a
+mis-scoped worker can say so instead of widening silently.
 
 A worker writes only its own row and the children it forks. Every other store write
 is the orchestrator's; a refused worker reports it as an unresolved risk and stops.
@@ -1013,11 +979,6 @@ As jobs finish:
    the exit code is unchanged, and a section that is empty means nobody could
    measure it, not that nothing was found.
 7. Run `magus affected ci` and evaluate the top-level acceptance criteria.
-
-Parallelism is an optimization, not the objective. Fewer
-well-isolated jobs are usually cheaper than wide fan-out followed by conflict
-repair, and the graph is evidence for that judgment rather than permission to
-spawn every possible worker.
 ````
 
 

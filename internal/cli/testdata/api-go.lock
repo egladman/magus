@@ -185,7 +185,7 @@ github.com/egladman/magus.Magus.ListTargets method(ptr) func(ctx context.Context
 github.com/egladman/magus.Magus.MachineClaims method(ptr) func(ctx context.Context, targets []github.com/egladman/magus/types.Target, charms []string, extraArgs []string) []github.com/egladman/magus/types.MachineClaim
 github.com/egladman/magus.Magus.MetricsCollector method(ptr) func() (*MetricsCollector, bool)
 github.com/egladman/magus.Magus.MetricsSnapshot method(ptr) func(ctx context.Context) ([]byte, error)
-github.com/egladman/magus.Magus.ModelTierMatrix method(ptr) func() github.com/egladman/magus/internal/workspace.ModelTierMatrix
+github.com/egladman/magus.Magus.ModelTierMatrix method(ptr) func() github.com/egladman/magus/types.ModelTierMatrix
 github.com/egladman/magus.Magus.ModelTiers method(ptr) func() *github.com/egladman/magus/types.ModelTierSet
 github.com/egladman/magus.Magus.OutputAttempts method(ptr) func(ctx context.Context, ref string) ([]OutputDescriptor, error)
 github.com/egladman/magus.Magus.OutputByRef method(ptr) func(ctx context.Context, ref string) ([]byte, OutputDescriptor, error)
@@ -384,7 +384,7 @@ github.com/egladman/magus.WorkspaceRegistry.CommandRule method(ptr) func() githu
 github.com/egladman/magus.WorkspaceRegistry.Harnesses method(ptr) func() []string
 github.com/egladman/magus.WorkspaceRegistry.Keep method(ptr) func(release func())
 github.com/egladman/magus.WorkspaceRegistry.LifecycleProvider method(ptr) func() string
-github.com/egladman/magus.WorkspaceRegistry.ModelTierMatrix method(ptr) func() github.com/egladman/magus/internal/workspace.ModelTierMatrix
+github.com/egladman/magus.WorkspaceRegistry.ModelTierMatrix method(ptr) func() github.com/egladman/magus/types.ModelTierMatrix
 github.com/egladman/magus.WorkspaceRegistry.ModelTiers method(ptr) func() *github.com/egladman/magus/types.ModelTierSet
 github.com/egladman/magus.WorkspaceRegistry.Profile method(ptr) func() github.com/egladman/magus/types.GuardProfile
 github.com/egladman/magus.WorkspaceRegistry.ProjectPaths method(ptr) func() []string
@@ -395,7 +395,7 @@ github.com/egladman/magus.WorkspaceRegistry.SetBuiltins method(ptr) func(declare
 github.com/egladman/magus.WorkspaceRegistry.SetCommandRule method(ptr) func(rule github.com/egladman/magus/internal/workspace.CommandRule)
 github.com/egladman/magus.WorkspaceRegistry.SetDefaultModelTiers method(ptr) func(build func() (*github.com/egladman/magus/types.ModelTierSet, error))
 github.com/egladman/magus.WorkspaceRegistry.SetLifecycleProvider method(ptr) func(spellName string) error
-github.com/egladman/magus.WorkspaceRegistry.SetModelTierMatrix method(ptr) func(m github.com/egladman/magus/internal/workspace.ModelTierMatrix)
+github.com/egladman/magus.WorkspaceRegistry.SetModelTierMatrix method(ptr) func(m github.com/egladman/magus/types.ModelTierMatrix)
 github.com/egladman/magus.WorkspaceRegistry.SetModelTiers method(ptr) func(set *github.com/egladman/magus/types.ModelTierSet)
 github.com/egladman/magus.WorkspaceRegistry.SetProfile method(ptr) func(p github.com/egladman/magus/types.GuardProfile)
 github.com/egladman/magus.WorkspaceRegistry.SetRemoteBackend method(ptr) func(spellName string)
@@ -1925,6 +1925,7 @@ github.com/egladman/magus/types.Job.ID field string "json:\"id\" yaml:\"id\""
 github.com/egladman/magus/types.Job.Integration field *JobIntegration "json:\"integration,omitempty\" yaml:\"integration,omitempty\""
 github.com/egladman/magus/types.Job.LastRun field *JobRun "json:\"last_run,omitempty\" yaml:\"last_run,omitempty\""
 github.com/egladman/magus/types.Job.Model field string "json:\"model,omitempty\" yaml:\"model,omitempty\""
+github.com/egladman/magus/types.Job.ModelTier field *JobModelTier "json:\"model_tier,omitempty\" yaml:\"model_tier,omitempty\""
 github.com/egladman/magus/types.Job.Overdue method func(now int64) bool
 github.com/egladman/magus/types.Job.Parent field string "json:\"parent,omitempty\" yaml:\"parent,omitempty\""
 github.com/egladman/magus/types.Job.ReadOnly field bool "json:\"read_only,omitempty\" yaml:\"read_only,omitempty\""
@@ -2011,6 +2012,7 @@ github.com/egladman/magus/types.JobModelTier.Reason field string "json:\"reason,
 github.com/egladman/magus/types.JobModelTier.Site field string "json:\"site,omitempty\"   yaml:\"site,omitempty\""
 github.com/egladman/magus/types.JobModelTier.Skills field SkillVariant "json:\"skills\"           yaml:\"skills\""
 github.com/egladman/magus/types.JobModelTier.Source field ModelTierSource "json:\"source\"           yaml:\"source\""
+github.com/egladman/magus/types.JobModelTier.String method func() string
 github.com/egladman/magus/types.JobOutcome type struct
 github.com/egladman/magus/types.JobOutcome.ChecksRun field int "json:\"checks_run\"              yaml:\"checks_run\""
 github.com/egladman/magus/types.JobOutcome.ContextTokens field int64 "json:\"context_tokens\"          yaml:\"context_tokens\""
@@ -2685,6 +2687,7 @@ github.com/egladman/magus/types.ModelTierDeclaration.Hosts field map[HarnessKey]
 github.com/egladman/magus/types.ModelTierDeclaration.Site field string
 github.com/egladman/magus/types.ModelTierDeclaration.Skills field []SkillVariant
 github.com/egladman/magus/types.ModelTierDeclarationUnusable const DiagnosticCode = "MGS1052"
+github.com/egladman/magus/types.ModelTierMatrix type func(ctx context.Context, req ModelTierRequest) (*JobModelTier, error)
 github.com/egladman/magus/types.ModelTierRecord type struct
 github.com/egladman/magus/types.ModelTierRecord.ChecksPerJob field float64 "json:\"checks_per_job\"    yaml:\"checks_per_job\""
 github.com/egladman/magus/types.ModelTierRecord.Fail field int "json:\"fail\"              yaml:\"fail\""
@@ -2723,8 +2726,10 @@ github.com/egladman/magus/types.ModelTierSet.All method(ptr) func() []ModelTier
 github.com/egladman/magus/types.ModelTierSet.At method(ptr) func(rank int) (ModelTier, bool)
 github.com/egladman/magus/types.ModelTierSet.Bounds method(ptr) func(t ModelTier) ModelTierBounds
 github.com/egladman/magus/types.ModelTierSet.Default method(ptr) func() ModelTier
+github.com/egladman/magus/types.ModelTierSet.Hosts method(ptr) func() []HarnessKey
 github.com/egladman/magus/types.ModelTierSet.Parse method(ptr) func(name string) (ModelTier, error)
 github.com/egladman/magus/types.ModelTierSet.Resolve method(ptr) func(host HarnessKey, alias string) (ModelTier, bool)
+github.com/egladman/magus/types.ModelTierSet.Site method(ptr) func() string
 github.com/egladman/magus/types.ModelTierSet.Skills method(ptr) func(t ModelTier) SkillVariant
 github.com/egladman/magus/types.ModelTierSource type string
 github.com/egladman/magus/types.ModelTierSource.String method func() string
