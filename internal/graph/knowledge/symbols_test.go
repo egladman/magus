@@ -232,6 +232,24 @@ func TestAssembleSymbolsSizesDefiningFiles(t *testing.T) {
 	assert.Equal(t, map[string]string{"language": "go"}, use.Attrs)
 }
 
+// A body's shape and token count ride its node; a symbol with no shape carries neither.
+func TestAssembleSymbolsCarriesBodyShape(t *testing.T) {
+	syms := []types.KnowledgeSymbol{
+		{Key: "example.com/foo F().", Label: "F", Source: "pkg/foo/foo.go:3", DefEndLine: 9, BodyShape: "a1b2", BodyTokens: 42, Defs: []string{"pkg/foo/foo.go"}},
+		{Key: "example.com/foo C.", Label: "C", Source: "pkg/foo/foo.go:11", Defs: []string{"pkg/foo/foo.go"}},
+	}
+	out := mergeAll([]Shard{assembleSymbols("pkg/foo", syms, nil)}).Output()
+
+	f, ok := nodeByID(out, "symbol:example.com/foo F().")
+	require.True(t, ok)
+	assert.Equal(t, "a1b2", f.Attrs[AttrBodyShape])
+	assert.Equal(t, "42", f.Attrs[attrBodyTokens])
+	c, ok := nodeByID(out, "symbol:example.com/foo C.")
+	require.True(t, ok)
+	assert.NotContains(t, c.Attrs, AttrBodyShape)
+	assert.NotContains(t, c.Attrs, attrBodyTokens)
+}
+
 func TestGraphDefinitions(t *testing.T) {
 	syms := []types.KnowledgeSymbol{
 		{Key: "example.com/foo Bar#", Label: "Bar", Source: "pkg/foo/foo.go:11", DefEndLine: 20, BodyDigest: "abc", Defs: []string{"pkg/foo/foo.go"}},

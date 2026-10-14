@@ -65,7 +65,9 @@ func IndexPath(cacheDir, projectAbsDir, op string) string {
 // FingerprintBodies sets each symbol's BodyDigest from the definition lines under root,
 // reading every defining file once, and sizes that file into SourceLines and SourceBytes
 // from the same read. A symbol whose file or lines cannot be read keeps an empty digest,
-// which a comparison must read as unknown rather than as unchanged.
+// which a comparison must read as unknown rather than as unchanged. A symbol with a body
+// span (a DefEndLine) also gets BodyShape and BodyTokens over the same lines, left empty
+// when its language has no lexer.
 //
 // It reads the working tree, not the index, so an index built before the file was edited
 // fingerprints lines that may no longer hold the symbol. That is the staleness the index
@@ -99,6 +101,12 @@ func FingerprintBodies(root string, syms []types.KnowledgeSymbol) {
 		syms[i].SourceLines, syms[i].SourceBytes = file.nLines, file.size
 		if digest, ok := types.BodyDigest(file.lines, start, max(start, syms[i].DefEndLine)); ok {
 			syms[i].BodyDigest = digest
+		}
+		if syms[i].DefEndLine < start {
+			continue
+		}
+		if shape, tokens, ok := types.BodyShape(file.lines, start, syms[i].DefEndLine, syms[i].Language); ok {
+			syms[i].BodyShape, syms[i].BodyTokens = shape, tokens
 		}
 	}
 }

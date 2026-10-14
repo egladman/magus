@@ -380,6 +380,15 @@ const (
 	AttrBodyDigest = "body_digest"
 )
 
+// AttrBodyShape is the lexical shape of a symbol's definition lines (types.BodyShape), and
+// attrBodyTokens the count of tokens it hashed. Two callables with one shape are copies
+// that differ only in names and literal values. Both are absent for a language with no
+// lexer.
+const (
+	AttrBodyShape  = "body_shape"
+	attrBodyTokens = "body_tokens"
+)
+
 // AttrDoc is a symbol's doc comment as its indexer recorded it, signature block dropped.
 // Unlike every other attr it keeps its newlines and tabs, so a reader sees its paragraphs,
 // lists and code blocks.

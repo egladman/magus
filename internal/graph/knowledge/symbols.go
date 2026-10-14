@@ -183,6 +183,10 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		if sym.BodyDigest != "" {
 			attrs[AttrBodyDigest] = sym.BodyDigest
 		}
+		if sym.BodyShape != "" {
+			attrs[AttrBodyShape] = sym.BodyShape
+			attrs[attrBodyTokens] = strconv.Itoa(sym.BodyTokens)
+		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{
 			ID:     sID,
 			Kind:   types.KindSymbol,

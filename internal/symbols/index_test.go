@@ -50,3 +50,37 @@ func TestFingerprintBodies(t *testing.T) {
 		{Key: "RefOnly"},
 	}, syms)
 }
+
+// Two copies that differ only in names and literal values share a shape, and a body that
+// differs in structure does not. A language with no lexer gets no shape, and neither does a
+// symbol with no body span.
+func TestFingerprintBodiesShapesRenamedCopies(t *testing.T) {
+	root := t.TempDir()
+	src := "package a\n\n" +
+		"func Sum(xs []int) int {\n\tn := 0\n\tfor _, x := range xs {\n\t\tn += x\n\t}\n\treturn n + 1\n}\n\n" +
+		"// Total is Sum renamed.\nfunc Total(vals []int) int {\n\tacc := 0\n\tfor _, v := range vals {\n\t\tacc += v\n\t}\n\treturn acc + 2\n}\n\n" +
+		"func Max(xs []int) int {\n\tn := 0\n\tfor _, x := range xs {\n\t\tn = max(n, x)\n\t}\n\treturn n\n}\n"
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "a"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a", "a.go"), []byte(src), 0o644))
+
+	syms := []types.KnowledgeSymbol{
+		{Key: "Sum", Language: "go", Source: "a/a.go:3", DefEndLine: 9},
+		{Key: "Total", Language: "go", Source: "a/a.go:12", DefEndLine: 18},
+		{Key: "Max", Language: "go", Source: "a/a.go:20", DefEndLine: 26},
+		{Key: "Buzz", Language: "buzz", Source: "a/a.go:3", DefEndLine: 9},
+		{Key: "NoSpan", Language: "go", Source: "a/a.go:3"},
+	}
+	FingerprintBodies(root, syms)
+
+	sum, total, maxFn, buzz, noSpan := syms[0], syms[1], syms[2], syms[3], syms[4]
+	require.NotEmpty(t, sum.BodyShape)
+	assert.Equal(t, sum.BodyShape, total.BodyShape, "renamed copies share a shape")
+	assert.Equal(t, sum.BodyTokens, total.BodyTokens)
+	assert.Positive(t, sum.BodyTokens)
+	assert.NotEqual(t, sum.BodyDigest, total.BodyDigest, "the text differs")
+	assert.NotEqual(t, sum.BodyShape, maxFn.BodyShape, "a different body has a different shape")
+	assert.Empty(t, buzz.BodyShape)
+	assert.Zero(t, buzz.BodyTokens)
+	assert.NotEmpty(t, buzz.BodyDigest, "a digest needs no lexer")
+	assert.Empty(t, noSpan.BodyShape)
+}
