@@ -2156,7 +2156,7 @@ github.com/egladman/magus/types.JobModelTier.Skills field SkillVariant "json:\"s
 github.com/egladman/magus/types.JobModelTier.Source field ModelTierSource "json:\"source\"           yaml:\"source\""
 github.com/egladman/magus/types.JobModelTier.String method func() string
 github.com/egladman/magus/types.JobOutcome type struct
-github.com/egladman/magus/types.JobOutcome.Attempt field int "json:\"attempt,omitempty\"       yaml:\"attempt,omitempty\""
+github.com/egladman/magus/types.JobOutcome.Attempt field int "json:\"attempt,omitzero\"        yaml:\"attempt,omitempty\""
 github.com/egladman/magus/types.JobOutcome.ChecksRun field int "json:\"checks_run\"              yaml:\"checks_run\""
 github.com/egladman/magus/types.JobOutcome.ContextTokens field int64 "json:\"context_tokens\"          yaml:\"context_tokens\""
 github.com/egladman/magus/types.JobOutcome.CostUSD field float64 "json:\"cost_usd\"                yaml:\"cost_usd\""

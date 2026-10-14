@@ -2529,7 +2529,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	checkout := leaseCheckout(ctx, location, actingLease)
 	base := cmp.Or(deps.callDir, checkout)
 	resolve := func(word string) string {
-		if filepath.IsAbs(word) {
+		if filepath.IsAbs(word) || strings.HasPrefix(word, "~") {
 			return word
 		}
 		return filepath.Join(base, word)

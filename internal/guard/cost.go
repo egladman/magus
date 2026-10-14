@@ -879,7 +879,8 @@ func liveRowLookup(ctx context.Context, at location) func(id string) (types.Job,
 // rootWorkClass is the groundwork a shell line does, judged for a session that hands its
 // work out, "" for orchestration work: moving jobs, planning from the graph, integrating,
 // reading a guard verdict, the notes. Unlike delegableClass, a silent run is still a run,
-// and Markdown inside a checkout is still a read; only the instruction files are notes.
+// and Markdown inside a checkout is still a read; only the instruction files, and a read or a
+// search of nothing but paths outside every checkout, are notes.
 // The checks of the rows a thread forked are mainWork's to clear.
 func rootWorkClass(line string, at location) types.DelegableClass {
 	f, err := parseFile(line, DialectBash)
@@ -918,7 +919,13 @@ func invocationWork(c hint.Invocation, stdin string, at location) types.Delegabl
 		return ""
 	}
 	if !isMagusInvocation(c) {
-		return invocationClass(c)
+		class := invocationClass(c)
+		// A search with no path searches the call's directory, which is in the checkout.
+		if paths := invocationPaths(c); class == types.DelegableSearch && len(paths) > 0 &&
+			!slices.ContainsFunc(paths, func(p string) bool { return !notesPath(p, at) }) {
+			return ""
+		}
+		return class
 	}
 	words := magusSubcommandWords(c.Args)
 	if len(words) == 0 {
@@ -1053,10 +1060,14 @@ var instructionFiles = []string{"AGENTS.md", "MAGUS.md", "CLAUDE.md", "SKILL.md"
 
 // notesPath reports a path an orchestrator reads or writes as notes rather than as work: an
 // instruction file, or anything outside every checkout of the workspace's repository (a
-// plan, a memory, a scratch file). A relative path is the call's. A workspace in no git
-// repository has one checkout, itself.
+// plan, a memory, a scratch file). A relative path is the call's, and a home-relative one is
+// the home directory's, so it is a checkout's only when the home holds one; with the home
+// unknown it is in no checkout. A workspace in no git repository has one checkout, itself.
 func notesPath(p string, at location) bool {
 	if slices.Contains(instructionFiles, filepath.Base(p)) {
+		return true
+	}
+	if p = expandHome(p, userHome()); strings.HasPrefix(p, "~") {
 		return true
 	}
 	if !filepath.IsAbs(p) {
@@ -1070,8 +1081,13 @@ func notesPath(p string, at location) bool {
 		return !within(p, at.workspace)
 	}
 	// realPath, so a file in a directory not created yet resolves its symlinks through the
-	// nearest one that exists, as the workspace's did.
-	_, pathCommon, ok := gitCheckout(realPath(filepath.Dir(p)))
+	// nearest one that exists, as the workspace's did. A directory a search names is its
+	// own checkout's, not its parent's.
+	dir := filepath.Dir(p)
+	if info, err := os.Stat(p); err == nil && info.IsDir() {
+		dir = p
+	}
+	_, pathCommon, ok := gitCheckout(realPath(dir))
 	return !ok || pathCommon != common
 }
 

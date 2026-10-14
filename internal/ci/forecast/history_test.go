@@ -45,6 +45,8 @@ func TestHistorySchemaLockIsStructural(t *testing.T) {
 			"source": true, "reason": true, "site": true, "write_files": true, "state": true,
 			"checks_run": true, "context_tokens": true, "cost_usd": true,
 			"duration_ms": true, "ended": true, "rework_rounds": true, "widenings": true,
+			// The attempt's number and the RetryChange case naming what must change first.
+			"attempt": true, "retry": true,
 		},
 		reflect.TypeOf(Constants{}): {"setup_p50_ms": true, "alpha_ms": true},
 		reflect.TypeOf(Run{}): {

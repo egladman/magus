@@ -245,7 +245,7 @@ var Os = Module{
 		},
 		{
 			Name: "retry",
-			Doc:  "Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. An error typed non-retryable stops at once. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}; a wrongly typed or negative option raises.",
+			Doc:  "Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. An error a host call inside fn raised keeps its type, and one typed non-retryable stops at once; a value fn throws itself, a string included, is retried. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}; a wrongly typed or negative option raises.",
 			Args: []Arg{
 				{Name: "max", Type: TypeInt},
 				{Name: "fn", Type: TypeFunc, Func: "fun () > any !> any"},
@@ -558,7 +558,8 @@ func OsWithEnv(ctx context.Context, env map[string]string, cb Callback) error {
 // A key of the wrong type, or a negative value, is an error naming the key.
 //
 // An error [types.ClassifyRetry] calls non-retryable ends the loop at once and is
-// returned as it is.
+// returned as it is. A host error raised inside a Buzz fn keeps its chain across the VM, so
+// it is classified as typed; a value the script throws carries no type and is retryable.
 //
 // This is not [retry.Do] on purpose: fn runs once even on a cancelled context, its value
 // comes back, the knobs are float milliseconds, and the exhaustion text below is a

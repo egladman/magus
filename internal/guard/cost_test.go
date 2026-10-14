@@ -572,6 +572,18 @@ func TestNotesPath(t *testing.T) {
 	assert.False(t, notesPath(filepath.Join(at.workspace, "internal", "new", "a.go"), at), "a file in a directory not created yet")
 	assert.False(t, notesPath("docs/guide.md", at), "relative to the call")
 	assert.False(t, notesPath(filepath.Join(worktree, "a.go"), at), "another checkout of the same repository")
+	assert.True(t, notesPath("~/.claude/plans/p/RESUME.md", at), "under the home directory, not the call's")
+}
+
+// A root reading or searching its own plan folder under ~/.claude does no groundwork: the
+// shell expands `~` before the command runs, so the path is the home's, not the checkout's.
+func TestRootWorkClassPlacesAHomePathOutsideTheCheckout(t *testing.T) {
+	t.Parallel()
+	at, _ := orchestratorFixture(t)
+	assert.Empty(t, rootWorkClass("cat ~/.claude/plans/p/RESUME.md", at))
+	assert.Empty(t, rootWorkClass("rg attempts ~/.claude/plans", at))
+	assert.Equal(t, types.DelegableSearch, rootWorkClass("rg attempts ~/.claude/plans internal", at), "one path inside keeps it groundwork")
+	assert.Equal(t, types.DelegableSearch, rootWorkClass("rg attempts", at), "no path searches the call's directory")
 }
 
 // The check of a live row the thread forked is the orchestrator's to run, and any row's

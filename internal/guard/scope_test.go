@@ -66,3 +66,19 @@ func TestScopeOutside(t *testing.T) {
 	assert.False(t, bare.outside("/work/other/x"))
 	assert.False(t, bare.outside("~/x"))
 }
+
+// A lease declaring `**/*.md` matched ~/.claude/.../RESUME.md: the `~` word was joined under
+// the checkout as if it were a directory there. A home-relative path is never a checkout's.
+func TestWorkspaceRelativePlacesAHomePathOutside(t *testing.T) {
+	root := t.TempDir()
+	_, inside := workspaceRelative(root, "~/.claude/plans/p/RESUME.md")
+	assert.False(t, inside)
+	rel, inside := workspaceRelative(root, "docs/RESUME.md")
+	assert.True(t, inside)
+	assert.Equal(t, "docs/RESUME.md", rel)
+
+	assert.Equal(t, "/home/me/x", expandHome("~/x", "/home/me"))
+	assert.Equal(t, "/home/me", expandHome("~", "/home/me"))
+	assert.Equal(t, "~/x", expandHome("~/x", ""), "an unknown home leaves the word for the caller to place")
+	assert.Equal(t, "a/~/x", expandHome("a/~/x", "/home/me"))
+}

@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `127` |
 | `knowledge-schema-version` | `19` |
-| `skill-content` | `d107f00822ff` |
+| `skill-content` | `3b9715b0a573` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.

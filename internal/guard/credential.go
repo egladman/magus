@@ -1,7 +1,6 @@
 package guard
 
 import (
-	"os"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -117,12 +116,8 @@ func namesTokenState(location location, candidate string) bool {
 	if tokenStateSegmentRe.MatchString(filepath.ToSlash(p)) {
 		return true
 	}
-	if rest, ok := strings.CutPrefix(p, "~/"); ok {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return false
-		}
-		p = filepath.Join(home, rest)
+	if p = expandHome(p, userHome()); strings.HasPrefix(p, "~") {
+		return false
 	}
 	abs := filepath.Clean(filepath.FromSlash(p))
 	if !filepath.IsAbs(abs) {

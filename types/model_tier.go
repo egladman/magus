@@ -378,7 +378,7 @@ type JobOutcome struct {
 	Ended         int64           `json:"ended"                   yaml:"ended"`
 	ReworkRounds  int             `json:"rework_rounds,omitempty" yaml:"rework_rounds,omitempty"`
 	Widenings     int             `json:"widenings,omitempty"     yaml:"widenings,omitempty"`
-	Attempt       int             `json:"attempt,omitempty"       yaml:"attempt,omitempty"`
+	Attempt       int             `json:"attempt,omitzero"        yaml:"attempt,omitempty"`
 	Retry         RetryChange     `json:"retry,omitempty"         yaml:"retry,omitempty"`
 }
 

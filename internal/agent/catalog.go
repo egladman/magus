@@ -379,8 +379,9 @@ import (
 // orchestrator-groundwork enforces by role.
 //
 // 127: magus-multi-agent teaches that a retry is a fork of the same id, read from the
-// previous attempt `describe job` prints, and that an attempt not retryable names what
-// changes first.
+// previous attempt `describe job` prints, that an attempt not retryable names what
+// changes first, and that a goal applied after an exit needs the check run again, which
+// `job wait` prints.
 const SkillVersion = 127
 
 const skillLicense = "GPL-3.0-or-later"

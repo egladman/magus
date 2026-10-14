@@ -897,11 +897,18 @@ func findMagusCheckout(dir string) string {
 // the root under one spelling and the write under another. Comparing them literally makes
 // the rule silently pass, and a deny that fails open is worse than no deny, because it
 // looks enforced.
+//
+// A home-relative path resolves against the home directory, never the root, so a
+// workspace-relative glob such as `**/*.md` never matches `~/.claude/plan.md`; one whose
+// home is unknown is placed nowhere, and so outside.
 func workspaceRelative(root, p string) (string, bool) {
 	if root == "" {
 		return "", false
 	}
-	abs := p
+	abs := expandHome(p, userHome())
+	if strings.HasPrefix(abs, "~") {
+		return "", false
+	}
 	if !filepath.IsAbs(abs) {
 		abs = filepath.Join(root, abs)
 	}

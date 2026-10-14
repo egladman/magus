@@ -22,8 +22,23 @@ type workspaceScope struct {
 // scopeAt is the scope of a call graded at loc. An unreadable home leaves `~` unresolved,
 // which keeps every home-relative path in scope.
 func scopeAt(loc location) workspaceScope {
+	return workspaceScope{root: loc.workspace, home: userHome()}
+}
+
+// expandHome resolves a leading `~` against home, as the shell does before the command sees
+// the word, so `~/x` is never taken for a path under the call's directory. With home
+// unknown, p comes back unexpanded, and each caller says what an unplaceable path means.
+func expandHome(p, home string) string {
+	if home == "" || (p != "~" && !strings.HasPrefix(p, "~/")) {
+		return p
+	}
+	return home + p[1:]
+}
+
+// userHome is the home directory a `~` in a judged path resolves against, "" when unknown.
+func userHome() string {
 	home, _ := os.UserHomeDir()
-	return workspaceScope{root: loc.workspace, home: home}
+	return home
 }
 
 // unresolved prefixes a word whose value the line does not determine, such as a variable
@@ -37,12 +52,7 @@ func (s workspaceScope) outside(p string) bool {
 	if p == "" || strings.HasPrefix(p, unresolved) {
 		return false
 	}
-	if p == "~" || strings.HasPrefix(p, "~/") {
-		if s.home == "" {
-			return false
-		}
-		p = s.home + p[1:]
-	}
+	p = expandHome(p, s.home)
 	if !filepath.IsAbs(p) {
 		return false
 	}

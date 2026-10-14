@@ -113,8 +113,10 @@ Moving a live job's boundary is yours. Change its record and run `{{cmd "job app
   goals, and the job keeps its state{{if .Full}}. A re-fork would hand a taken job out again as
   declared{{end}}.
 - `--dry-run` prints the spec diff and writes nothing.
-- A check you find the job owes mid-flight is a goal you add this way, so
-  `{{cmd "job wait"}}` grades it from a recorded run.
+- A check you find the job owes, mid-flight or after its exit, is a goal you add this way.
+  The write bumps the job's `generation`, so its check must run again before
+  `{{cmd "job wait"}}` passes: the wait refuses evidence filed earlier and prints the check to
+  rerun.
 - A revoked path is recorded as a release with its digest. The worker's next write
   there is refused, naming the revocation.
 - Ending a whole job stays `{{cmd "job exit"}} <job>`. A worker never widens: its refusal
