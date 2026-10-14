@@ -472,6 +472,9 @@ func gitPlaceLines(ctx context.Context, tmp, driver string, funcnames []string, 
 			d.DropOpaque(lines, decls)
 		}
 	}
+	if driver == "buzz" {
+		placeProjectKeys(lines, decls)
+	}
 	handLeadersDown(decls, lines, declarationLeaders[driver])
 	return decls, nil
 }
