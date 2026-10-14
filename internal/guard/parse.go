@@ -288,8 +288,33 @@ func onlyReads(name, script string, args []string) bool {
 		return !slices.ContainsFunc(args, func(a string) bool {
 			return a == "-delete" || a == "-exec" || a == "-execdir" || a == "-ok" || a == "-okdir"
 		})
+	case "git":
+		return !gitRemovesOrMoves(args)
 	}
 	return true
+}
+
+// gitRemovesOrMoves reports a git line that deletes or renames files in the work tree.
+func gitRemovesOrMoves(args []string) bool {
+	sub := parseGit(args).sub
+	return sub == "rm" || sub == "mv"
+}
+
+// vcsPathOperands are the paths a git, hg or sl remove or move is pointed at, and false for
+// any other line. hg's -I and -X take the next word as a pattern.
+func vcsPathOperands(name string, args []string) ([]string, bool) {
+	switch name {
+	case "git":
+		if gitRemovesOrMoves(args) {
+			return operands(parseGit(args).rest, ""), true
+		}
+	case "hg", "sl":
+		switch v := parseVCS(name, args); v.sub {
+		case "remove", "rm", "rename", "mv":
+			return operands(v.rest, "IX"), true
+		}
+	}
+	return nil, false
 }
 
 // writeScanDepth bounds how far a nested script is followed. A payload that parses to
@@ -364,6 +389,11 @@ func commandWriteCandidates(c hint.Invocation, heredoc string) []string {
 	name := path.Base(c.Name)
 	if onlyReads(name, interpreterScript(c.Args, heredoc), c.Args) {
 		return nil
+	}
+	if paths, ok := vcsPathOperands(name, c.Args); ok {
+		// Only the paths: the subcommand and a global's value (`git -C dir`) are words a
+		// write path could name without the line writing them.
+		return paths
 	}
 	words := c.Args
 	if name == "cp" || name == "install" {

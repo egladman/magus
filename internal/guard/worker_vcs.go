@@ -1,6 +1,8 @@
 package guard
 
 import (
+	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -33,18 +35,23 @@ func workerVCSOp(c hint.Invocation) string {
 	return c.Name + " " + sub
 }
 
-// workerGitVerbs read the repository, or touch only the worker's own index and branch.
+// workerGitVerbs read the repository, or touch only the worker's own index and branch. rm
+// and mv touch the tree too, and lease-write grades each path they name.
 var workerGitVerbs = []string{
 	"add", "annotate", "blame", "cat-file", "check-attr", "check-ignore", "check-ref-format",
 	"cherry", "commit", "count-objects", "describe", "diff", "diff-files", "diff-index",
 	"diff-tree", "for-each-ref", "grep", "help", "log", "ls-files", "ls-remote", "ls-tree",
-	"merge-base", "name-rev", "range-diff", "restore", "rev-list", "rev-parse", "shortlog",
-	"show", "show-branch", "show-ref", "stash", "status", "var", "verify-commit",
+	"merge-base", "mv", "name-rev", "range-diff", "restore", "rev-list", "rev-parse", "rm",
+	"shortlog", "show", "show-branch", "show-ref", "stash", "status", "var", "verify-commit",
 	"verify-tag", "version", "whatchanged",
 }
 
 func workerMayRunGit(sub string, rest []string) bool {
 	switch sub {
+	case "rm", "mv":
+		if anyFlag(rest, "", "--pathspec-from-file") || !namesOnlyPaths(operands(rest, "")) {
+			return false
+		}
 	case "branch":
 		return !anyFlag(rest, "dDfmMcCu", "--delete", "--force", "--move", "--copy",
 			"--set-upstream-to", "--unset-upstream", "--edit-description")
@@ -99,13 +106,17 @@ func fetchesIntoLocalRef(rest []string) bool {
 
 var workerHgVerbs = []string{
 	"add", "annotate", "blame", "branch", "branches", "cat", "ci", "commit", "diff", "files",
-	"grep", "heads", "help", "id", "identify", "in", "incoming", "log", "manifest", "out",
-	"outgoing", "parents", "paths", "root", "show", "smartlog", "ssl", "st", "status", "sum",
-	"summary", "tip", "version", "whereami",
+	"grep", "heads", "help", "id", "identify", "in", "incoming", "log", "manifest", "mv", "out",
+	"outgoing", "parents", "paths", "remove", "rename", "rm", "root", "show", "smartlog", "ssl",
+	"st", "status", "sum", "summary", "tip", "version", "whereami",
 }
 
 func workerMayRunHg(sub string, rest []string) bool {
 	switch sub {
+	case "remove", "rm", "rename", "mv":
+		if anyFlag(rest, "IX", "--include", "--exclude") || !namesOnlyPaths(operands(rest, "IX")) {
+			return false
+		}
 	case "bookmark", "bookmarks", "book":
 		return !anyFlag(rest, "dfm", "--delete", "--force", "--rename")
 	case "update", "up", "goto", "co", "checkout":
@@ -141,6 +152,22 @@ func workerMayRunJJ(sub string, rest []string) bool {
 		return hasPositional(rest)
 	}
 	return slices.Contains(workerJJVerbs, sub)
+}
+
+// namesOnlyPaths reports operands that are each a path the line spells out. lease-write
+// grades the words, so a pathspec the VCS expands (`.`, a glob, git's `:` magic, an hg
+// `glob:` pattern) or one climbing out with `..` would remove files no word names.
+func namesOnlyPaths(ops []string) bool {
+	if len(ops) == 0 {
+		return false
+	}
+	for _, op := range ops {
+		clean := path.Clean(filepath.ToSlash(op))
+		if clean == "." || clean == "/" || clean == ".." || strings.HasPrefix(clean, "../") || strings.ContainsAny(op, "*?[:") {
+			return false
+		}
+	}
+	return true
 }
 
 // anyFlag is hasFlag over several flags: any letter of shorts, or any of longs.
