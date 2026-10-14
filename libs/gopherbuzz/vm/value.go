@@ -315,9 +315,9 @@ type fibObj struct {
 
 type iterStateObj struct {
 	list *listObj
-	// enumDef holds an enum being iterated; its cases become enum VALUES, so the
-	// loop variable behaves the same as one written Enum.case.
-	enumDef *enumDefObj
+	// enumCases holds the interned cases of an enum being iterated, so the loop
+	// variable is the same value as one written Enum.case.
+	enumCases []Value
 	// strBytes holds a string being iterated, as its raw BYTES. Upstream iterates a
 	// string bytewise (its str builtins index bytes throughout), and decoding runes
 	// here made iteration LOSSY for a string holding arbitrary binary: every invalid

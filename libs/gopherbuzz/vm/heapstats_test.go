@@ -115,6 +115,28 @@ func TestOwnerClaimStopsAtAnotherOwner(t *testing.T) {
 	owner.Release()
 }
 
+// A definition one session holds is read from another: the case that session
+// interns first stays in the definition's table after it closes.
+func TestEnumCaseLivesAsLongAsItsDefinition(t *testing.T) {
+	var holder, reader Owner
+	def := EnumDefValue("Tier", []string{"low", "high"}, nil)
+	holder.Claim(def)
+	vm := NewVM(t.Context())
+	vm.SetOwner(&reader)
+	high := vm.enumCase(def, 1)
+	reader.Release()
+	if freed(high) {
+		t.Fatal("the reader's release freed a case its definition still holds")
+	}
+	if _, name, ok := NewVM(t.Context()).enumCase(def, 1).EnumCase(); !ok || name != "high" {
+		t.Fatalf("a later reader got case %q, ok=%v; want high", name, ok)
+	}
+	holder.Release()
+	if !freed(high) {
+		t.Fatal("the case outlived its definition's owner")
+	}
+}
+
 // A member stored on a claimed map after the claim is unowned until something
 // hands it over: MapSet does so at once, and a Release given the map as a root
 // finds what reached the map another way.

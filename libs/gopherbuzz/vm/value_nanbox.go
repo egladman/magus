@@ -444,4 +444,15 @@ func (vm *VM) allocFib(ptr *fibObj) Value             { return alloc(vm, tagFib,
 func (vm *VM) allocObject(ptr *objectInst) Value      { return alloc(vm, tagObject, ptr) }
 func (vm *VM) allocObjectDef(ptr *objectDefObj) Value { return alloc(vm, tagObjectDef, ptr) }
 func (vm *VM) allocIterState(ptr *iterStateObj) Value { return alloc(vm, tagIterState, ptr) }
-func (vm *VM) allocEnumVal(ptr *enumValObj) Value     { return alloc(vm, tagEnumVal, ptr) }
+
+// allocEnumVal interns one case of def under def's owner, falling back to vm's while
+// def has none: the case lives in def's table, so it must last as long as def does.
+func (vm *VM) allocEnumVal(def Value, ptr *enumValObj) Value {
+	gHeapMu.Lock()
+	o := gHeapOwner[uint64(def)&idxMaskHeap]
+	gHeapMu.Unlock()
+	if o == nil {
+		o = vm.owner
+	}
+	return encodeHeap(tagEnumVal, gHeapAlloc(ptr, o))
+}

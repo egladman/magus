@@ -211,7 +211,7 @@ func TestValueEnumDef(t *testing.T) {
 	_, again, _ := def.EnumDef()
 	assert.Equal(t, "low", again[0], "the returned cases are a copy, not the definition's own")
 
-	high := NewVM(context.Background()).enumCase(def.asEnumDef(), 1)
+	high := NewVM(context.Background()).enumCase(def, 1)
 	for _, v := range []Value{high, NewMap(), StrValue("Tier"), NullValue()} {
 		name, cases, ok := v.EnumDef()
 		assert.False(t, ok, "%s is not an enum definition", v.Kind())
@@ -223,7 +223,7 @@ func TestValueEnumDef(t *testing.T) {
 func TestValueEnumCase(t *testing.T) {
 	vm := NewVM(context.Background())
 	tier := EnumDefValue("Tier", []string{"low", "high"}, nil)
-	enum, name, ok := vm.enumCase(tier.asEnumDef(), 1).EnumCase()
+	enum, name, ok := vm.enumCase(tier, 1).EnumCase()
 	require.True(t, ok)
 	assert.Equal(t, "Tier", enum)
 	assert.Equal(t, "high", name)
@@ -231,7 +231,7 @@ func TestValueEnumCase(t *testing.T) {
 	// An enum<str> case may assign a value other than its name: EnumCase still
 	// names the case, and EnumValue reads the assigned value.
 	mode := EnumDefValue("Mode", []string{"fast"}, []Value{StrValue("f")})
-	fast := vm.enumCase(mode.asEnumDef(), 0)
+	fast := vm.enumCase(mode, 0)
 	_, name, ok = fast.EnumCase()
 	require.True(t, ok)
 	assert.Equal(t, "fast", name)
@@ -250,7 +250,7 @@ func TestValueEnumCase(t *testing.T) {
 // MapKeyValues keeps each key, an enum case included.
 func TestValueMapKeyValues(t *testing.T) {
 	tier := EnumDefValue("Tier", []string{"low", "high"}, nil)
-	high := NewVM(context.Background()).enumCase(tier.asEnumDef(), 1)
+	high := NewVM(context.Background()).enumCase(tier, 1)
 	m := NewMap()
 	m.asMap().setVal(high, StrValue("by case"))
 	m.asMap().setVal(IntValue(1), StrValue("by int"))
