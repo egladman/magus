@@ -192,7 +192,7 @@ func groundworkFinding(s builtin.Setting, c mainCall) (costFinding, bool) {
 		deny: s.Decision == builtin.Deny && c.orchestration == types.OrchestrationProven,
 		key:  hint.MarkerKind(fmt.Sprintf("%s-%s", denyRuleOrchestratorGroundwork, c.work)),
 		say: fmt.Sprintf("magus workspace: this session hands out work, and %s is groundwork; fork a job for it (a read-only scout for a question) and spawn a worker on it.\n", cmp.Or(groundworkWork[c.work], string(c.work))) +
-			"The session that orchestrates plans from the graph and moves jobs; reading and searching source, editing it and running checks belong to the workers it spawns, and cherry-picks, builds, regeneration and commits to the checkout's integrator, a job whose check is the gate, at any context size.",
+			"The session that orchestrates plans from the graph and moves jobs; reading and searching source, editing it and running checks belong to the workers it spawns, and cherry-picks, builds, regeneration and commits to the checkout's integrator, a subagent spawned `<parent>/integrate <job>` in that checkout, at any context size.",
 	}, true
 }
 

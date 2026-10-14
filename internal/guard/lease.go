@@ -361,10 +361,18 @@ func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command 
 		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || LeaseOwnsGate(me) {
+	if !ok || actingIntegrator(ctx, deps, me) {
 		return denial{}
 	}
-	const gated = "The checkout's integrator, a row whose check is the gate, gates once, in its own tree, after every unit lands."
+	const gated = "The checkout's integrator, " + integratorIs + ", gates once, in its own tree, after every unit lands."
+	if source, names := LeaseGateSource(me); names {
+		return denial{
+			Say: fmt.Sprintf("magus workspace: `%s` is the integrator's gate, and lease %s names it as its check; a job's check is never the gate.",
+				elideCommand(command), me.ID),
+			Why: fmt.Sprintf("%s Lease %s's %s names `%s`, and this caller is not the checkout's integrator. If this unit integrates the checkout, the orchestrator spawns it as `<parent>/%s %s` in that checkout; otherwise %s\n%s",
+				gated, me.ID, source, types.TargetCI, integrateRole, me.ID, leaseActorClause("give this row the narrowest target covering its paths"), leaseActorWhy),
+		}
+	}
 	checks := rowChecks(me)
 	if len(checks) == 0 && me.Validation == "" {
 		return denial{
@@ -397,9 +405,9 @@ const denyRuleWorkerCheckOnly denyRuleName = "worker-check-only"
 // workers to a raw `go test` that nothing graded at all. An install passes because a fresh
 // worktree can run nothing, its check included, until its dependencies are there.
 //
-// Silent where there is nothing to hold the run to: no lease, no live row, a row that owns
-// the gate (the orchestrator's), or a row declaring no check at all, which denyLeaseGate
-// already answers for the gate. Every other verb, and a run that only reports (--plan,
+// Silent where there is nothing to hold the run to: no lease, no live row, the checkout's
+// integrator, which builds, regenerates and gates there, or a row declaring no check at
+// all, which denyLeaseGate already answers for the gate. Every other verb, and a run that only reports (--plan,
 // --dry-run, --graph, --help), passes.
 func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, command string) denial {
 	if actingLease == "" {
@@ -419,7 +427,7 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || LeaseOwnsGate(me) {
+	if !ok || actingIntegrator(ctx, deps, me) {
 		return denial{}
 	}
 	checks := rowChecks(me)
@@ -445,13 +453,13 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 			return denial{
 				Say: fmt.Sprintf("magus workspace: `%s` builds ./magus, the binary judging lease %s's calls; %s.", r.target, me.ID, workerBuildVerdict),
 				Why: onePerBase + "\n" +
-					"When this unit's own changes have to reach that binary, the checkout's integrator, a row whose check is the gate, builds ./magus at this branch's commit and places it here with `" +
+					"When this unit's own changes have to reach that binary, the checkout's integrator builds ./magus at this branch's commit and the orchestrator places it here with `" +
 					strings.Join(placementArgv(me.ID), " ") + "`. Until then the unit is held to " + commands[0] + ", and a need for the new binary goes in your result's unresolved risks.",
 			}
 		}
 		return denial{
 			Say: fmt.Sprintf("magus workspace: `%s` is not lease %s's check; run %s.", r.target, me.ID, commands[0]),
-			Why: fmt.Sprintf("Lease %s's checks: %s. The checkout's integrator, a row whose check is the gate, runs every other target serially, in its own tree, after it integrates the units.\n"+
+			Why: fmt.Sprintf("Lease %s's checks: %s. The checkout's integrator, "+integratorIs+", runs every other target serially, in its own tree, after it integrates the units.\n"+
 				"`%s` runs `%s`, which is neither that check nor a target declaring an output in lease %s's write paths. Another worktree's run of it shares no cache key with this one, so it replays nothing here and holds the machine. Name the target in your result's unresolved risks if the unit needs it.",
 				me.ID, strings.Join(commands, ", "), elideCommand(command), r.target, me.ID),
 		}
@@ -472,7 +480,7 @@ func denyWorkerRawTool(ctx context.Context, deps Dependencies, actingLease, comm
 		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || LeaseOwnsGate(me) {
+	if !ok || actingIntegrator(ctx, deps, me) {
 		return denial{}
 	}
 	checks := rowChecks(me)
@@ -1526,18 +1534,40 @@ func shrinksWritePaths(params map[string]string, row types.Job) bool {
 	return true
 }
 
-// LeaseOwnsGate reports whether a lease's declared check IS the gate, in which case the
-// lease owns it and nothing is refused.
+// integrateRole is the spawn-title role of the worker that integrates its checkout.
+const integrateRole = "integrate"
+
+// integratorIs names the checkout's integrator in a verdict.
+const integratorIs = "the subagent spawned `<parent>/" + integrateRole + " <job>` for a row taken in that checkout"
+
+// integrates reports whether a caller spawned as spawned, acting under row, integrates the
+// checkout at workspace: the title is `<parent>/integrate <job>` naming row, row is live,
+// and row was taken in that checkout. The integrator builds, regenerates and gates there;
+// the root has no spawn title and a worker spawned under a change role in its own worktree
+// has another role, so neither does.
 //
-// The check RECORD decides it whenever the row carries one: a target field cannot be
-// confused by a stray word the way a rendered line can.
-func LeaseOwnsGate(row types.Job) bool {
-	_, owns := LeaseGateSource(row)
-	return owns
+// The role, not the row's check: a job's check is never the gate, so the check cannot say
+// who integrates. One build at a time per checkout is the project lock's, which refuses a
+// second run of a project the checkout is already running and names its holder.
+func integrates(row types.Job, spawned, workspace string) bool {
+	head, _, ok := strings.Cut(spawned, " ")
+	if !ok || path.Base(head) != integrateRole || !row.State.Live() || row.CheckoutRoot == "" || workspace == "" {
+		return false
+	}
+	if titled, ok := spawnTitleRow([]types.Job{row}, spawned); !ok || titled.ID != row.ID {
+		return false
+	}
+	return samePath(row.CheckoutRoot, workspace)
 }
 
-// LeaseGateSource is LeaseOwnsGate plus WHICH declaration named the gate, so a refusal can
-// quote the offending one.
+// actingIntegrator reports whether the caller of this judgment, acting under me, integrates
+// the checkout the call runs in.
+func actingIntegrator(ctx context.Context, deps Dependencies, me types.Job) bool {
+	return integrates(me, spawnedAs(deps.facts, deps.caller.Agent), hookLocation(ctx, deps).workspace)
+}
+
+// LeaseGateSource reports which of a row's declarations names the gate, so a refusal can
+// quote the offending one, and false for a row naming none.
 //
 // It exists because the refusal quoted row.Validation whatever had actually matched, and a
 // row can now name the gate from any of several places: told that its check `go-test api`

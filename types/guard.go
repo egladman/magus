@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// AgentRole is where the calling agent stands, computed from the job store rather than
-// declared by anyone.
+// AgentRole is where the calling agent stands, computed from the job store and the
+// caller's spawn record rather than declared by the caller.
 type AgentRole string
 
 const (
@@ -17,17 +17,21 @@ const (
 	AgentRoleRoot AgentRole = "root"
 	// AgentRoleWorker is a session a lease binds in this checkout.
 	AgentRoleWorker AgentRole = "worker"
+	// AgentRoleIntegrator is the worker that integrates this checkout: a subagent spawned
+	// `<parent>/integrate <job>` for the lease that binds it, whose row was taken here. It
+	// builds, regenerates and gates, where any other worker runs only its check.
+	AgentRoleIntegrator AgentRole = "integrator"
 )
 
 // Values lists the roles a caller may name, excluding the zero value.
 func (r AgentRole) Values() []string {
-	return []string{string(AgentRoleRoot), string(AgentRoleWorker)}
+	return []string{string(AgentRoleRoot), string(AgentRoleWorker), string(AgentRoleIntegrator)}
 }
 
 // Valid reports whether r is a declared role or unset.
 func (r AgentRole) Valid() bool {
 	switch r {
-	case "", AgentRoleRoot, AgentRoleWorker:
+	case "", AgentRoleRoot, AgentRoleWorker, AgentRoleIntegrator:
 		return true
 	}
 	return false
@@ -202,7 +206,8 @@ type CommandRequest struct {
 	// Parent is the description the calling subagent was itself spawned with, empty for a
 	// root session or one whose spawn magus never saw finish.
 	Parent string
-	// Role is worker when a lease binds the calling session in this checkout.
+	// Role is worker when a lease binds the calling session in this checkout, and
+	// integrator when that worker integrates it.
 	Role AgentRole
 	// Lease is the job row a worker acts under, nil for root. A bound id the job store
 	// does not carry comes back with only its ID set.

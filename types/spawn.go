@@ -86,7 +86,8 @@ type SpawnRequest struct {
 	// Parent is the description the CALLING agent was itself spawned with, empty when the
 	// caller is a root session or its spawn was never recorded.
 	Parent string
-	// Role is worker when a lease binds the calling session in this checkout.
+	// Role is worker when a lease binds the calling session in this checkout, and
+	// integrator when that worker integrates it.
 	Role AgentRole
 	// Lease is the job row a worker acts under, nil for root. A bound id the job store
 	// does not carry comes back with only its ID set.

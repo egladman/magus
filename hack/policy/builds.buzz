@@ -1,7 +1,7 @@
 // The one-binary-per-base rules: brief-builds-magus (spawn) and worker-builds-magus
-// (command). The main session builds ./magus once per base commit, in the root checkout, and
-// hack/dev/bootstrap-worktree.buzz copies it into each worker checkout, so neither a brief
-// nor a worker holding a lease may compile it.
+// (command). The checkout's integrator builds ./magus once per base commit, in the landing
+// checkout, and hack/dev/bootstrap-worktree.buzz copies it into each worker checkout, so no
+// other brief or worker holding a lease may compile it.
 namespace agentpolicy\builds;
 
 import "std";
@@ -73,24 +73,26 @@ export fun workerPlacement(built: str, lease: str) > str {
     }
     return "a worker does not build magus; ask the main session to place ./magus\n"
         + "once placed, run `<main checkout>/magus buzz {placementScript} -- --job <id> --from <main checkout>`.\n"
-        + cause + "The main session places one binary per base commit: it builds ./magus once, in the root checkout, "
+        + cause + "There is one binary per base commit: the checkout's integrator builds ./magus once, in the landing checkout, "
         + "and {placementScript} copies it into a worker checkout whenever no Go build input differs. "
         + "A build per worker is two Go compiles each, and a fan-out runs a dozen at once. Use the ./magus "
         + "placed in this checkout; if it cannot load this tree, ask the main session to place a newer one.";
 }
 
 // workerBuildDenial is worker-builds-magus: the denial for a program that compiles magus run
-// by a caller holding the worker lease, "" when it does not or the caller holds none. The
-// main session and a person hold no lease and build freely.
-export fun workerBuildDenial(p: helpers\Program, lease: str) > str {
-    if (lease == "") { return ""; }
+// by a caller holding the worker lease, "" when it does not, the caller holds none, or the
+// caller integrates the checkout. A person holds no lease and builds freely; the root's build
+// is orchestrator-groundwork's to refuse.
+export fun workerBuildDenial(p: helpers\Program, lease: str, integrator: bool = false) > str {
+    if (lease == "" or integrator) { return ""; }
     final built = buildOf(p);
     if (built == "") { return ""; }
     return workerPlacement(built, lease: lease);
 }
 
 // briefDenial is brief-builds-magus: the denial for a spawn brief that tells its worker to
-// compile magus, quoting the line, "" when none does. A line that names the command only to
+// compile magus, quoting the line, "" when none does. spawn.buzz skips it for an integrate
+// spawn, whose holder builds. A line that names the command only to
 // forbid it ("never `go build ./cmd/magus`") is not graded, nor is a fenced block that a
 // negating line introduces.
 export fun briefDenial(brief: str) > str {
@@ -111,8 +113,8 @@ export fun briefDenial(brief: str) > str {
             if (buildOf(p) != "") {
                 return "the brief tells the worker to build magus; drop the step\n"
                     + "the line reads: {line}\n"
-                    + "The main session places one binary per base commit: it builds ./magus once, in the root "
-                    + "checkout, and {placementScript} copies it into each worker checkout. A worker that compiles "
+                    + "There is one binary per base commit: the checkout's integrator builds ./magus once, in the "
+                    + "landing checkout, and {placementScript} copies it into each worker checkout. A worker that compiles "
                     + "it adds two Go builds per worker, and a fan-out runs a dozen at once. The worker uses the "
                     + "./magus already placed, and asks the main session for a newer one if it cannot load the "
                     + "tree. A line that names the command to forbid it (\"never ...\") is not graded.";
@@ -227,7 +229,13 @@ test "a leased worker and an unleased one read the same verdict and command" {
     std\assert(unleased.indexOf("lease") == null, message: "no lease to name");
 }
 
-test "the orchestrator and a person, holding no lease, build freely" {
+test "the checkout's integrator builds under its lease, and the same lease without the role does not" {
+    final build = program(["magus", "run", "go-build", "."]);
+    std\assert(workerBuildDenial(build, lease: "cleanup", integrator: true) == "", message: "the integrator");
+    std\assert(workerBuildDenial(build, lease: "cleanup", integrator: false) != "", message: "a worker under the same lease");
+}
+
+test "a person holding no lease builds freely" {
     foreach (argv in [
         ["go", "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."],
         ["magus", "run", "go-build", "."],

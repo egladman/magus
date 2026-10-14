@@ -52,13 +52,14 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict types.G
 		return verdict, workspaceRuleRecord{}
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
-	role, row := actingRole(ctx, at, lease)
+	spawned := spawnedAs(facts, who.Agent)
+	role, row := actingRole(ctx, at, lease, spawned)
 	thread, from, window := callerCost(at, who, lease, facts)
 	req := types.WriteRequest{
 		Host:          who.Host,
 		Session:       who.Session,
 		Agent:         who.Agent,
-		Parent:        spawnedAs(facts, who.Agent),
+		Parent:        spawned,
 		Role:          role,
 		Lease:         row,
 		Thread:        thread,

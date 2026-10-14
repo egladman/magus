@@ -229,6 +229,11 @@ func TestBriefGradingExplainsAPass(t *testing.T) {
 		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/worker figures/flow", "Run `./magus run diagrams_generate docs` once."), Host: "claude-code"})
 		assert.Equal(t, "pass", v.Decision, v.Context)
 	})
+	t.Run("an integrate spawn is not held to its row's check", func(t *testing.T) {
+		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/integrate figures/flow", "JOB ID: figures/flow\nRun `./magus run go-build .`, then "+offCheck), Host: "claude-code"})
+		assert.NotEqual(t, "deny", v.Decision, v.Reason)
+		assert.Contains(t, v.Context, "the spawn's role is integrate")
+	})
 }
 
 // TestBriefNamesItsRow: the row is found by the lease a brief exports, the job it takes, or
@@ -245,7 +250,6 @@ func TestBriefNamesItsRow(t *testing.T) {
 
 	for name, change := range map[string]func(*types.Job){
 		"a terminal row":           func(j *types.Job) { j.State = types.StatePass },
-		"a row that owns the gate": func(j *types.Job) { j.Check = &types.LeaseCheck{Target: "ci", Project: "."} },
 		"a row declaring no check": func(j *types.Job) { j.Check = nil },
 	} {
 		r := figuresLease()

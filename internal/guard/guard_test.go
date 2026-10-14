@@ -274,7 +274,8 @@ type policyCase struct {
 	worker string
 	// checkout is what the guard reads about a pushing checkout, nil for any other line.
 	checkout *types.CheckoutState
-	// jobs are the rows the job store holds when the input arrives.
+	// jobs are the rows the job store holds when the input arrives. A running row with no
+	// checkout root is taken in the case's own checkout.
 	jobs []types.Job
 	// corruptStore replaces the job store with bytes it cannot decode.
 	corruptStore bool
@@ -329,7 +330,11 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		{rule: "pr-watch", name: "a while loop over the pulls endpoint", input: bash(`while true; do gh api repos/egladman/magus/pulls/300 --jq .merged; sleep 60; done`), decision: decisionDeny, reason: "CI monitor"},
 		{rule: "pr-watch", name: "one read of a pull request's state", input: bash("gh pr view 300 --json state,autoMergeRequest"), decision: decisionPass},
 		{rule: "worker-runs-gate", name: "a review worker runs the gate", input: bash("./magus affected ci --no-default-charms"), worker: "root/review footprint", decision: decisionDeny, reason: "integrate"},
-		{rule: "worker-runs-gate", name: "an integrate worker runs the gate", input: bash("./magus affected ci --no-default-charms"), worker: "root/integrate footprint", decision: decisionPass},
+		{rule: "worker-runs-gate", name: "the checkout's integrator runs the gate", input: bash("./magus affected ci --no-default-charms"), worker: "root/integrate footprint",
+			jobs: []types.Job{{ID: "footprint", State: types.StateRunning, WritePaths: []string{"docs/**"}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}}, lease: "footprint", decision: decisionPass},
+		{rule: "worker-runs-gate", name: "an integrate title with no lease taken here", input: bash("./magus affected ci --no-default-charms"), worker: "root/integrate footprint", decision: decisionDeny, reason: "integrate"},
+		{rule: "worker-builds-magus", name: "the checkout's integrator builds magus", input: bash("./magus run go-build ."), worker: "root/integrate footprint",
+			jobs: []types.Job{{ID: "footprint", State: types.StateRunning, WritePaths: []string{"docs/**"}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}}, lease: "footprint", decision: decisionPass},
 		{rule: "detached-push-unqualified", name: "a detached push to a new branch", input: bash("git push origin HEAD:guard-pr-polling"),
 			checkout: &types.CheckoutState{RemoteBranches: []string{"origin/main"}}, decision: decisionDeny, reason: "HEAD:refs/heads/guard-pr-polling"},
 		{rule: "push-authority", name: "a subagent opens a pull request", input: bash(`gh pr create --title "fix: pin the key" --body "Pins it."`),
@@ -388,6 +393,9 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			}
 			store := job.NewStore(job.Location{CacheDir: cacheDir, Root: hookLocation(ctx, Dependencies{}).workspace})
 			for _, row := range tc.jobs {
+				if row.State == types.StateRunning && row.CheckoutRoot == "" {
+					row.CheckoutRoot = hookLocation(ctx, Dependencies{}).workspace
+				}
 				_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 				require.NoError(t, err)
 			}

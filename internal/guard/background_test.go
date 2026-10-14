@@ -64,10 +64,9 @@ func TestDenyWorkerBackgroundRunRefusesOnlyABackgroundedCheck(t *testing.T) {
 
 	t.Run("silent for anyone but a bound worker", func(t *testing.T) {
 		assert.Empty(t, workerDenial(ctx, deps, "", "./magus run lint docs", background), "no lease")
-		owns := figuresLease()
-		owns.Check = &types.LeaseCheck{Target: "ci", Project: "."}
-		ownsCtx, _ := fleetFixture(t, owns)
-		assert.Empty(t, workerDenial(ownsCtx, deps, owns.ID, "./magus affected ci", background), "the gate's owner")
+		integrated := figuresLease()
+		integratorCtx, integrator := integratorFixture(t, integrated, "root/integrate "+integrated.ID)
+		assert.Empty(t, workerDenial(integratorCtx, integrator, integrated.ID, "./magus affected ci", background), "the checkout's integrator")
 		done := figuresLease()
 		done.State = types.StatePass
 		doneCtx, _ := fleetFixture(t, done)

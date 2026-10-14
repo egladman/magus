@@ -171,7 +171,8 @@ func magusStateWrite(args []string) string {
 // from the envelope, parsed from the line, or taken from what magus recorded; none is
 // inferred from the host.
 func commandRequest(ctx context.Context, in commandRuleInput, who hookAttribution, at location, facts hint.Gate) types.CommandRequest {
-	role, lease := actingRole(ctx, at, in.lease)
+	spawned := spawnedAs(facts, who.Agent)
+	role, lease := actingRole(ctx, at, in.lease, spawned)
 	thread, from, window := callerCost(at, who, in.lease, facts)
 	return types.CommandRequest{
 		Thread:        thread,
@@ -184,7 +185,7 @@ func commandRequest(ctx context.Context, in commandRuleInput, who hookAttributio
 		Description:   in.description,
 		Commands:      commandInvocations(in.command, in.dialect, at.dir),
 		Agent:         who.Agent,
-		Parent:        spawnedAs(facts, who.Agent),
+		Parent:        spawned,
 		Role:          role,
 		Lease:         lease,
 		Dir:           at.dir,
@@ -192,10 +193,10 @@ func commandRequest(ctx context.Context, in commandRuleInput, who hookAttributio
 	}
 }
 
-// actingRole is where a caller acting under lease stands, and the lease's job row. A bound
-// id the job store does not carry comes back with only its ID set, so the rule can tell a
-// dangling binding from no binding.
-func actingRole(ctx context.Context, at location, lease string) (types.AgentRole, *types.Job) {
+// actingRole is where a caller acting under lease, spawned as spawned, stands, and the
+// lease's job row. A bound id the job store does not carry comes back with only its ID set,
+// so the rule can tell a dangling binding from no binding.
+func actingRole(ctx context.Context, at location, lease, spawned string) (types.AgentRole, *types.Job) {
 	if lease == "" {
 		return types.AgentRoleRoot, nil
 	}
@@ -209,6 +210,9 @@ func actingRole(ctx context.Context, at location, lease string) (types.AgentRole
 				break
 			}
 		}
+	}
+	if integrates(*row, spawned, at.workspace) {
+		return types.AgentRoleIntegrator, row
 	}
 	return types.AgentRoleWorker, row
 }

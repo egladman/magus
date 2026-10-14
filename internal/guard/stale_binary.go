@@ -386,7 +386,7 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCa
 	}
 	call.changes = !in.readOnly && !readOnlyLine(in.command, in.dialect) && !recoveryLine(in.command, in.dialect, in.lease)
 	if call.changes && in.lease != "" && scoutLine(in.command, in.dialect) {
-		_, row := actingRole(ctx, at, in.lease)
+		_, row := actingRole(ctx, at, in.lease, "")
 		call.changes = !row.ReadOnly
 	}
 	return call
@@ -469,7 +469,7 @@ func binaryRemedy(own, hasBinary bool, lease string) binaryFix {
 const placementScript = "hack/dev/bootstrap-worktree.buzz"
 
 // onePerBase is why a worker never builds magus, worded as hack/policy/builds.buzz words it.
-const onePerBase = "The main session places one binary per base commit: it builds ./magus once, in the root checkout, " +
+const onePerBase = "There is one binary per base commit: the checkout's integrator builds ./magus once, in the landing checkout, " +
 	"and " + placementScript + " copies it into a worker checkout whenever no Go build input differs. " +
 	"A build per worker is two Go compiles each, and a fan-out runs a dozen at once."
 

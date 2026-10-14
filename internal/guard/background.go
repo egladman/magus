@@ -57,8 +57,8 @@ type workerRun struct {
 }
 
 // workerRuns is the target runs command makes when a bound worker makes them: the acting
-// lease is live, does not own the gate, and is held as a worker. False otherwise, and for a
-// command that runs no target.
+// lease is live and held as a worker, and the caller does not integrate the checkout. False
+// otherwise, and for a command that runs no target.
 func workerRuns(ctx context.Context, deps Dependencies, actingLease, command string) (workerRun, bool) {
 	if actingLease == "" {
 		return workerRun{}, false
@@ -77,7 +77,7 @@ func workerRuns(ctx context.Context, deps Dependencies, actingLease, command str
 		return workerRun{}, false
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || LeaseOwnsGate(me) || workerRole(me, deps.caller) == "" {
+	if !ok || actingIntegrator(ctx, deps, me) || workerRole(me, deps.caller) == "" {
 		return workerRun{}, false
 	}
 	return workerRun{lease: me, runs: runs}, true

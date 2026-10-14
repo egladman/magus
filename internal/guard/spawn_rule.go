@@ -267,7 +267,7 @@ func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at 
 	// The same resolution every lease-scoped rule uses, so the rule and the guard cannot
 	// disagree about who is acting.
 	lease, _ := resolveActingLease(who, at, explicitLease)
-	req.Role, req.Lease = actingRole(ctx, at, lease)
+	req.Role, req.Lease = actingRole(ctx, at, lease, req.Parent)
 	req.Thread, req.ThreadFrom, req.Window = callerCost(at, who, lease, facts)
 	req.Orchestration = callerOrchestration(at, who, req.Thread, req.ThreadFrom, lease)
 	return req

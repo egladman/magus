@@ -276,8 +276,9 @@ type ownBuildOutcome struct {
 	// that needs replacing.
 	staleBootstrap         bool
 	staleBootstrapAdvisory ShellVerdict
-	// lease is the lease the call acts under, "" for the orchestrator or a person. A
-	// worker never builds the binary: there is one per base, and the main session places it.
+	// lease is the lease the call acts under, "" for the orchestrator, a person or the
+	// checkout's integrator. A worker never builds the binary: there is one per base, the
+	// integrator builds it and the main session places it.
 	lease string
 }
 
@@ -392,8 +393,12 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 	// The load is a full workspace open, so only a line that could be let through pays it.
 	recovery := call.recoversMagus() && soleGoCommand(command, d) && cannotLoad(ctx, deps, root)
 	staleBootstrap := call.bootstrapsMagus() && bootstrapLine(command, d) && hasMagusBinary(root) && cannotLoad(ctx, deps, root)
+	lease := deps.lease
+	if me, ok := actingLiveLease(ctx, deps, lease); ok && actingIntegrator(ctx, deps, me) {
+		lease = ""
+	}
 	return &ownBuildOutcome{
-		lease:         deps.lease,
+		lease:         lease,
 		root:          root,
 		bootstrapArgv: argv,
 		bootstrap:     call.bootstrapsMagus(),

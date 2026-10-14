@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
@@ -317,6 +319,93 @@ func TestDenyLeaseScopedGate(t *testing.T) {
 		assert.Contains(t, reason.Say, "declares no check", "the denial must say why: nothing was recorded to run instead")
 		assert.Contains(t, reason.Why, "record a check on this row", "the rationale must name who records one")
 	})
+
+	// A job's check is never the gate, so a row naming it no longer owns it: only the
+	// checkout's integrator gates.
+	t.Run("a row whose check names the gate", func(t *testing.T) {
+		for _, validation := range []string{"ci", "magus affected ci", "magus run ci ."} {
+			lease := narrowLease()
+			lease.Validation = validation
+			named, _ := fleetFixture(t, lease)
+			reason := denyLeaseScopedGate(named, Dependencies{}, lease.ID, "./magus affected ci")
+			require.NotEmpty(t, reason, "%q", validation)
+			assert.Contains(t, reason.Say, "a job's check is never the gate", "%q", validation)
+			assert.Contains(t, reason.Why, "<parent>/integrate "+lease.ID, "%q: names the role that gates", validation)
+		}
+	})
+}
+
+// integratorFixture seeds row as taken in the fixture's checkout, unless it names a
+// checkout root of its own, and returns the context pinning that checkout with the
+// dependencies of the subagent a1 spawned as title.
+func integratorFixture(t *testing.T, row types.Job, title string) (context.Context, Dependencies) {
+	t.Helper()
+	ctx, root := fleetFixture(t)
+	at, ok := ctx.Value(locationKey{}).(location)
+	require.True(t, ok)
+	row.CheckoutRoot = cmp.Or(row.CheckoutRoot, root)
+	_, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: root}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+	require.NoError(t, err)
+	caller := job.Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
+	facts := hint.NewGate(at.cacheDir, FactsKey(caller.Host, caller.Session))
+	writeSpawnedAgent(facts, caller.Agent, spawnedAgent{Description: title})
+	return ctx, Dependencies{caller: caller, facts: facts}
+}
+
+// TestTheCheckoutsIntegratorBuildsAndRegenerates pins who integrates a checkout: the role
+// and the checkout decide, never the row's check. The integrator under a go-test check
+// builds, regenerates, formats, lints and gates; the same lease held by the root, by a
+// change-role worker, or taken in another checkout is a worker held to its check.
+func TestTheCheckoutsIntegratorBuildsAndRegenerates(t *testing.T) {
+	row := narrowLease()
+	row.Validation = ""
+	row.Check = &types.LeaseCheck{Target: "go-test", Project: "."}
+	integrating := []string{
+		"./magus run go-build .",
+		"./magus run generate / -s",
+		"./magus run content-generate docs",
+		"./magus run go::go-fmt .",
+		"./magus run lint .",
+		"./magus affected ci",
+	}
+
+	// The generate targets are left out of the refusals: with no workspace to read, a
+	// `-generate` name stands in for a producer of the write paths and passes any worker.
+	refused := []string{"./magus run go-build .", "./magus run go::go-fmt .", "./magus run lint .", "./magus affected ci"}
+
+	ctx, deps := integratorFixture(t, row, "root/integrate "+row.ID)
+	for _, command := range integrating {
+		assert.Empty(t, denyLeaseScopedGate(ctx, deps, row.ID, command), "the integrator: %s", command)
+	}
+	role, _ := actingRole(ctx, hookLocation(ctx, deps), row.ID, "root/integrate "+row.ID)
+	assert.Equal(t, types.AgentRoleIntegrator, role, "the command rule hears the role")
+
+	root := deps
+	root.caller.Agent = ""
+	for _, command := range refused {
+		assert.True(t, denyLeaseScopedGate(ctx, root, row.ID, command).refused(), "the root holding the integrator's lease never builds: %s", command)
+	}
+
+	for name, title := range map[string]string{
+		"a change-role worker":                  "root/feat " + row.ID,
+		"an integrate title naming another job": "root/integrate harness/other",
+	} {
+		ctx, deps := integratorFixture(t, row, title)
+		for _, command := range refused {
+			assert.True(t, denyLeaseScopedGate(ctx, deps, row.ID, command).refused(), "%s: %s", name, command)
+		}
+		role, _ := actingRole(ctx, hookLocation(ctx, deps), row.ID, title)
+		assert.Equal(t, types.AgentRoleWorker, role, name)
+	}
+
+	t.Run("an integrate title in a checkout the row was not taken in", func(t *testing.T) {
+		isolated := row
+		isolated.CheckoutRoot = t.TempDir()
+		ctx, deps := integratorFixture(t, isolated, "root/integrate "+row.ID)
+		for _, command := range refused {
+			assert.True(t, denyLeaseScopedGate(ctx, deps, row.ID, command).refused(), command)
+		}
+	})
 }
 
 // TestDenyLeaseScopedGateStaysQuiet covers every silence. The rule is a seatbelt for
@@ -338,15 +427,6 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 		lease.State = types.StatePass
 		done, _ := fleetFixture(t, lease)
 		assert.Empty(t, denyLeaseScopedGate(done, Dependencies{}, lease.ID, "./magus affected ci"))
-	})
-
-	t.Run("a row whose validation names the gate", func(t *testing.T) {
-		for _, validation := range []string{"ci", "magus affected ci", "magus run ci ."} {
-			lease := narrowLease()
-			lease.Validation = validation
-			owns, _ := fleetFixture(t, lease)
-			assert.Empty(t, denyLeaseScopedGate(owns, Dependencies{}, lease.ID, "./magus affected ci"), "%q", validation)
-		}
 	})
 
 	// denyLeaseGate alone: every other target is worker-check-only's, graded below.
@@ -524,10 +604,9 @@ func TestWorkerRawTool(t *testing.T) {
 		assert.Empty(t, denyWorkerRawTool(ctx, deps, row.ID, command), name)
 	}
 	assert.Empty(t, denyWorkerRawTool(ctx, deps, "", "go test ./..."), "an unbound caller keeps raw-tool's advice")
-	owner := row
-	owner.ID, owner.Check = "root", &types.LeaseCheck{Target: "ci", Project: "."}
-	ownsGate, _ := fleetFixture(t, owner)
-	assert.Empty(t, denyWorkerRawTool(ownsGate, deps, owner.ID, "go test ./..."), "the orchestrator keeps raw-tool's advice")
+	integratorCtx, integrator := integratorFixture(t, row, "root/integrate "+row.ID)
+	integrator.Spells = deps.Spells
+	assert.Empty(t, denyWorkerRawTool(integratorCtx, integrator, row.ID, "go test ./..."), "the checkout's integrator keeps raw-tool's advice")
 }
 
 // TestWorkerCheckOnly pins what a bound worker may run and what the refusal hands back: the
@@ -568,7 +647,7 @@ func TestWorkerCheckOnly(t *testing.T) {
 		require.NotEmpty(t, reason, tt.name)
 		assert.NotContains(t, reason.Say, "\n", "%s: the verdict is one line", tt.name)
 		assert.Contains(t, reason.Say, "run diagrams_generate docs`.", "%s: the verdict ends in the check's command", tt.name)
-		assert.Contains(t, reason.Why, "The checkout's integrator, a row whose check is the gate, runs every other target serially", tt.name)
+		assert.Contains(t, reason.Why, "The checkout's integrator, the subagent spawned `<parent>/integrate <job>` for a row taken in that checkout, runs every other target serially", tt.name)
 	}
 
 	assert.NotEmpty(t, denyLeaseScopedGate(ctx, deps, row.ID, "./magus run lint docs"), "the role-scoped entry reaches this rule")
@@ -588,7 +667,6 @@ func TestWorkerCheckOnlyStaysQuiet(t *testing.T) {
 	})
 	for name, change := range map[string]func(*types.Job){
 		"a terminal row":           func(j *types.Job) { j.State = types.StatePass },
-		"a row that owns the gate": func(j *types.Job) { j.Check = &types.LeaseCheck{Target: "ci", Project: "."} },
 		"a row declaring no check": func(j *types.Job) { j.Check = nil },
 	} {
 		t.Run(name, func(t *testing.T) {

@@ -12,11 +12,12 @@ import "./hack/policy/builds" as builds;
 
 // Where is where a command runs: the directory the host reported, and the workspace root
 // holding it. Either is "" when unknown. lease is the job the caller works under, "" for the
-// main session or a person.
+// main session or a person; integrator is true when that caller integrates this checkout.
 export object Where {
     dir: str,
     workspace: str,
     lease: str = "",
+    integrator: bool = false,
 }
 
 // Disk answers the three questions the binary rules ask the filesystem, passed in so the
@@ -61,7 +62,7 @@ export fun onDisk() > Disk {
 // main session, leased or not.
 export fun decideBinaries(programs: [helpers\Program], where: Where, disk: Disk, worker: bool) > str {
     foreach (p in programs) {
-        final building = builds\workerBuildDenial(p, lease: where.lease);
+        final building = builds\workerBuildDenial(p, lease: where.lease, integrator: where.integrator);
         if (building != "") { return building; }
         if (worker and p.name == "go" and bootstrap(helpers\goCall(p.args).args)) {
             return builds\workerPlacement("", lease: "");

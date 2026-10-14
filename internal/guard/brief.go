@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"fmt"
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
@@ -168,11 +169,15 @@ var briefTargetPhraseRe = regexp.MustCompile("(?i)\\brun\\s+(?:the\\s+)?`?([A-Za
 // `<parent>/<role> <job>` form), each held to its own check. A brief that reaches no live row
 // passes, since there is no check to hold it to, and so does a run the row allows or a line
 // that forbids it; the verdict's Context then says which, so a pass is never silent about why
-// a magus run in the brief was not graded.
+// a magus run in the brief was not graded. A spawn titled `<parent>/integrate <job>` passes
+// too: its holder integrates the checkout, which runs whatever target lands the work.
 func judgeBriefOffCheck(deps Dependencies, brief briefInput) ShellVerdict {
 	runs := briefRuns(brief.text)
 	if !slices.ContainsFunc(runs, func(r briefRun) bool { return !r.negated }) {
 		return ShellVerdict{}
+	}
+	if head, _, ok := strings.Cut(brief.title, " "); ok && path.Base(head) == integrateRole {
+		return briefUngraded("the spawn's role is "+integrateRole+", and the checkout's integrator runs any target there", runs)
 	}
 	ctx := context.Background()
 	at := hookLocationAt(deps, deps.scope.root)
@@ -235,10 +240,9 @@ func briefHumanOnly(ctx context.Context, deps Dependencies, workspace string, ro
 	return ShellVerdict{}
 }
 
-// gradableRow is a live row that names a check and does not own the gate: one a brief's
-// runs can be held to.
+// gradableRow is a live row that names a check: one a brief's runs can be held to.
 func gradableRow(row types.Job) bool {
-	return row.State.Live() && !LeaseOwnsGate(row) && len(rowChecks(row)) > 0
+	return row.State.Live() && len(rowChecks(row)) > 0
 }
 
 // whyNoBriefRow says why none of ids is a row to hold a brief to.
@@ -254,8 +258,6 @@ func whyNoBriefRow(ids []string, rows []types.Job) string {
 			why = append(why, "job "+id+" is not in the store")
 		case !rows[i].State.Live():
 			why = append(why, "job "+id+" is not live")
-		case LeaseOwnsGate(rows[i]):
-			why = append(why, "job "+id+" owns the gate, which may run anything")
 		default:
 			why = append(why, "job "+id+" declares no check")
 		}
@@ -332,7 +334,7 @@ func briefOffCheckDeny(row types.Job, line, target string) string {
 		names[i] = "`" + c.String() + "`"
 	}
 	return fmt.Sprintf("this brief tells job %s's worker to run `%s`, not its check %s [%s]; fix the brief.\nThe line: %q\n"+
-		"A worker runs only its row's check and the targets that regenerate its write paths; the checkout's integrator, a row whose check is the gate, runs the rest serially, in its own tree, after it integrates the units. A line that names it to forbid it (\"never run ...\") is not graded.",
+		"A worker runs only its row's check and the targets that regenerate its write paths; the checkout's integrator, a subagent spawned `<parent>/integrate <job>`, runs the rest serially, in its own tree, after it integrates the units. A line that names it to forbid it (\"never run ...\") is not graded.",
 		row.ID, target, strings.Join(names, " or "), denyRuleWorkerCheckOnly, elideCommand(strings.TrimSpace(line)))
 }
 
@@ -347,8 +349,8 @@ func briefJobIDs(brief string) []string {
 	return ids
 }
 
-// briefRow is the first live row among ids that names a check and does not own the gate:
-// the worker's row a brief hands out.
+// briefRow is the first live row among ids that names a check: the worker's row a brief
+// hands out.
 func briefRow(ids []string, rows []types.Job) (types.Job, bool) {
 	for _, id := range ids {
 		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
