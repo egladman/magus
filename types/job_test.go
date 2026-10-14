@@ -490,6 +490,27 @@ func TestDeclarationRejectsCyclicGoals(t *testing.T) {
 	assert.Contains(t, err.Error(), "dependencies contain a cycle")
 }
 
+// A path the guard can never match against a workspace-relative one used to be accepted
+// and bound nothing, silently.
+func TestDeclarationRefusesAPathOutsideTheWorkspace(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		decl Declaration
+		want string
+	}{
+		{Declaration{ID: "j", WritePaths: []string{"~/.claude/plans/**"}}, `write_paths[0] "~/.claude/plans/**" begins with ~`},
+		{Declaration{ID: "j", WritePaths: []string{"api/**", "/abs/**"}}, `write_paths[1] "/abs/**" is absolute`},
+		{Declaration{ID: "j", DenyPaths: []string{"../wt/**"}}, `deny_paths[0] "../wt/**" climbs out of the workspace`},
+		{Declaration{ID: "j", ReadPaths: []string{"docs/../../x"}}, `read_paths[0] "docs/../../x" climbs out`},
+	} {
+		err := tt.decl.Validate()
+		require.Error(t, err, tt.want)
+		assert.Contains(t, err.Error(), tt.want)
+	}
+	assert.NoError(t, Declaration{ID: "j", ReadOnly: true, ReadPaths: []string{"docs/../api/**"}}.Validate(),
+		"a path that cleans to one inside the workspace stands")
+}
+
 func TestDeclarationValidatesSignatureGoals(t *testing.T) {
 	t.Parallel()
 

@@ -1071,6 +1071,22 @@ func (r *Declaration) FoldLegacyNames() error {
 	return err
 }
 
+// pathOutsideWorkspace says why a declared path can name no workspace-relative path, or
+// "": the guard matches declarations against paths relative to the workspace root, never
+// expanding a ~ or reading an absolute path in one.
+func pathOutsideWorkspace(p string) string {
+	file, _ := SplitClaim(p)
+	switch clean := path.Clean(file); {
+	case strings.HasPrefix(file, "~"):
+		return "begins with ~"
+	case path.IsAbs(clean):
+		return "is absolute"
+	case clean == ".." || strings.HasPrefix(clean, "../"):
+		return "climbs out of the workspace with .."
+	}
+	return ""
+}
+
 // Validate reports what is wrong with a declared row, or nil.
 func (r Declaration) Validate() error {
 	if !ValidJobID(strings.TrimSpace(r.ID)) {
@@ -1092,6 +1108,17 @@ func (r Declaration) Validate() error {
 	}
 	if r.MaxAttempts < 0 {
 		return fmt.Errorf("%w: max_attempts is %d, and it is a count of forks or 0 for no cap", errInvalidJob, r.MaxAttempts)
+	}
+	for _, field := range []struct {
+		name  string
+		paths []string
+	}{{"write_paths", r.WritePaths}, {"deny_paths", r.DenyPaths}, {"read_paths", r.ReadPaths}} {
+		for i, p := range field.paths {
+			if why := pathOutsideWorkspace(p); why != "" {
+				return fmt.Errorf("%w: %s[%d] %q %s, so it matches no workspace path and bounds nothing; name it relative to the workspace root",
+					errInvalidJob, field.name, i, p, why)
+			}
+		}
 	}
 	check, declared, err := r.check()
 	if err != nil {
