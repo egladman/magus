@@ -719,7 +719,7 @@ func EffectiveGuardProfile(ctx context.Context, rules *GuardRules, root string) 
 	if rules != nil {
 		root = rules.root
 		level = rules.registry.Profile().Effective()
-		reg, err := approvedRegistryIfChanged(ctx, rules.root, ".", rules.opts, secret.New(), rules.sources, true)
+		reg, err := rules.approvedIfChanged(ctx)
 		switch {
 		case err != nil:
 			level = level.Stricter(types.GuardProfileLight)
@@ -756,12 +756,23 @@ func GuardBuiltins(ctx context.Context, rules *GuardRules, root string) map[stri
 	if effective != nil {
 		return effective
 	}
-	// The guard reads nil as the bare defaults, which would drop what the light level sets.
-	light, _ := builtin.ResolveProfile(types.GuardProfileLight, nil)
-	if len(light) == 0 {
+	return lightBuiltins()
+}
+
+// lightBuiltins is every compiled rule's setting at the light level. The guard reads nil as
+// the bare defaults, which would drop what the light level sets, so nil is the answer only
+// when the compiled-in light row does not resolve: a magus bug, which
+// TestGuardBuiltinsFallsBackToTheLightLevel pins away, and which leaves the defaults rather
+// than taking down every hook.
+func lightBuiltins() map[string]builtin.Setting {
+	light, err := builtin.ResolveProfile(types.GuardProfileLight, nil)
+	if err != nil || len(light) == 0 {
 		return nil
 	}
-	effective, _ = builtin.Resolve(light)
+	effective, err := builtin.Resolve(light)
+	if err != nil {
+		return nil
+	}
 	return effective
 }
 
@@ -1112,13 +1123,19 @@ func (g *GuardRules) Policy() GuardPolicy {
 	return buildGuardPolicy(g.ShellRules(), g.SpawnRule() != nil, g.CommandRule() != nil, g.WriteRule() != nil, g.Builtins(), g.sources)
 }
 
+// approvedIfChanged is approvedRegistryIfChanged for these rules: the root project, read
+// against the sources their load read.
+func (g *GuardRules) approvedIfChanged(ctx context.Context) (*workspace.WorkspaceRegistry, error) {
+	return approvedRegistryIfChanged(ctx, g.root, ".", g.opts, secret.New(), g.sources, true)
+}
+
 // ApprovedBuiltins returns the magus\guard.builtins settings as the approved sources
 // declare them, nil when they declare none. When nothing the root load read is pending, or
 // the workspace has no approval authority, that is the working tree's declaration. An
 // error means the approved declaration could not be resolved, which is not the fact that
 // there is none.
 func (g *GuardRules) ApprovedBuiltins(ctx context.Context) (map[string]builtin.Setting, error) {
-	reg, err := approvedRegistryIfChanged(ctx, g.root, ".", g.opts, secret.New(), g.sources, true)
+	reg, err := g.approvedIfChanged(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1139,18 +1156,18 @@ func (g *GuardRules) ApprovedBuiltins(ctx context.Context) (map[string]builtin.S
 // in for it, beside the error: a working tree can still tighten, and cannot loosen past
 // what magus ships. A magus.yaml that does not load raises nothing, also beside the error.
 func (g *GuardRules) EffectiveBuiltins(ctx context.Context) (map[string]builtin.Setting, error) {
-	approved, approvedProfile := g.Builtins(), g.registry.Profile()
+	declared, approvedProfile := g.Builtins(), g.registry.Profile()
 	// One approved load for the declaration and the level both: each costs a VCS status,
 	// and a second load of the root magusfile when the working tree differs.
-	reg, approvedErr := approvedRegistryIfChanged(ctx, g.root, ".", g.opts, secret.New(), g.sources, true)
+	reg, approvedErr := g.approvedIfChanged(ctx)
 	switch {
 	case approvedErr != nil:
-		approved, approvedProfile = nil, ""
+		declared, approvedProfile = nil, ""
 	case reg != nil:
-		approved, approvedProfile = reg.Builtins(), reg.Profile()
+		declared, approvedProfile = reg.Builtins(), reg.Profile()
 	}
 	agents, agentsErr := config.LoadAgents(g.root)
-	approved, err := builtin.ResolveProfile(approvedProfile.Stricter(agents.Profile), approved)
+	approved, err := builtin.ResolveProfile(approvedProfile.Stricter(agents.Profile), declared)
 	if err != nil {
 		return nil, err
 	}
@@ -1189,7 +1206,7 @@ func stricterBuiltins(approved, working map[string]builtin.Setting) (map[string]
 // when no file the root load read differs from its approved content, and a second load of
 // the root magusfile when one does.
 func (g *GuardRules) ApprovedSpawnRule(ctx context.Context) (workspace.SpawnRule, error) {
-	reg, err := approvedRegistryIfChanged(ctx, g.root, ".", g.opts, secret.New(), g.sources, true)
+	reg, err := g.approvedIfChanged(ctx)
 	if err != nil || reg == nil {
 		return nil, err
 	}
@@ -1198,7 +1215,7 @@ func (g *GuardRules) ApprovedSpawnRule(ctx context.Context) (workspace.SpawnRule
 
 // ApprovedCommandRule is ApprovedSpawnRule for the magus\guard.command rule.
 func (g *GuardRules) ApprovedCommandRule(ctx context.Context) (workspace.CommandRule, error) {
-	reg, err := approvedRegistryIfChanged(ctx, g.root, ".", g.opts, secret.New(), g.sources, true)
+	reg, err := g.approvedIfChanged(ctx)
 	if err != nil || reg == nil {
 		return nil, err
 	}
@@ -1207,7 +1224,7 @@ func (g *GuardRules) ApprovedCommandRule(ctx context.Context) (workspace.Command
 
 // ApprovedWriteRule is ApprovedSpawnRule for the magus\guard.write rule.
 func (g *GuardRules) ApprovedWriteRule(ctx context.Context) (workspace.WriteRule, error) {
-	reg, err := approvedRegistryIfChanged(ctx, g.root, ".", g.opts, secret.New(), g.sources, true)
+	reg, err := g.approvedIfChanged(ctx)
 	if err != nil || reg == nil {
 		return nil, err
 	}

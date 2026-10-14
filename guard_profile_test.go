@@ -1,8 +1,10 @@
 package magus
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -85,6 +87,18 @@ func TestEffectiveBuiltinsReadsTheUserTier(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, builtin.Setting{Decision: builtin.Off}, got["whole-tree"], "the declaration still applies")
 	assert.Equal(t, builtin.Setting{Decision: builtin.Off}, GuardBuiltins(t.Context(), rules, "")["whole-tree"])
+}
+
+// A workspace whose level sets nothing still hands the hook the light level's settings, not
+// the bare defaults nil stands for.
+func TestGuardBuiltinsFallsBackToTheLightLevel(t *testing.T) {
+	rules, _ := profileRules(t, types.GuardProfileOff)
+	got := GuardBuiltins(t.Context(), rules, "")
+	require.NotNil(t, got, "the compiled-in light row resolves")
+	assert.Equal(t, lightBuiltins(), got)
+	assert.True(t, slices.ContainsFunc(slices.Collect(maps.Values(got)), func(s builtin.Setting) bool {
+		return s.Profile == types.GuardProfileLight
+	}), "the light row's settings are in it")
 }
 
 // The approved side alone resolves the declaration over the defaults when no working tree
