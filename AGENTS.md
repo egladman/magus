@@ -98,6 +98,8 @@ saying it, delete it here.
   ([doctrine](docs/doctrine.md#a-copy-can-be-the-right-answer)).
 - `TODO`, `FIXME` and `BUG` comments stay; never add `godox` or a linter that
   reports them.
+- No silent defaults: a fallback says that it fell back, and an absent capability fails
+  loudly rather than answering empty (`docs/doctrine.md`).
 - Before fixing behavior that looks wrong, find the test that pins it.
 - The docs site is classless Pico: semantic HTML, few custom classes, no inline
   styles.

@@ -251,8 +251,7 @@ follows.
   absent" (`cmd/magus/stale_index.go`). A target past its ceiling fails with
   [MGS3011](reference/codes/sandbox/MGS3011.md) and is never a skip. A
   setting magus cannot honor fails the command, as
-  [Misconfiguration is an error](#misconfiguration-is-an-error-never-a-warning)
-  requires.
+  [No silent defaults](#no-silent-defaults) requires.
 - **Time delay.** A pause sits in front of an act that cannot be taken back,
   never inside the loop that verifies. The first Ctrl+C only arms a
   three-second window (`confirmWindow`, `cmd/magus/interrupt.go`). The
@@ -457,7 +456,13 @@ workaround runs outside the cache and the sandbox, where magus can no longer
 account for the work. An error that leaves you with no next step is a doctrine
 bug; file it as one.
 
-### Misconfiguration is an error, never a warning
+### No silent defaults
+
+A default that changes what happens without saying so is a bug. Misconfiguration
+is an error, never a warning. Anything a caller must act on is a returned error,
+never a notice or a log line. A fallback says that it fell back. A capability
+that is absent, an engine that is not linked or a file that cannot be read,
+fails loudly and never answers empty.
 
 A setting magus cannot honor fails the command that read it. It is not logged
 and stepped over, not repaired with a default, not carried as a warning nobody
@@ -480,6 +485,11 @@ must obey. A field that reads as a retention window while the code enforces a
 fixed cap, or a flag documented as repeatable that silently keeps the last
 value, is the same defect as the ignored setting. It just fails later, and
 reads as a lie rather than an oversight.
+
+An empty answer is the quietest default. A lookup that returns nothing because
+the engine behind it was never linked, or because a file could not be read,
+tells the caller there is nothing to find, and the caller believes it. Absence
+of the capability is its own error, distinct from absence of a result.
 
 ### Told, never guessed
 
