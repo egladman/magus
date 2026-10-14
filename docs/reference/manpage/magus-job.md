@@ -129,9 +129,6 @@ them and magus describe job prints one job's terms.
 
 ### job exec options
 
-**--base** *magus vcs checkpoint -o name*
-: The base this checkout landed on, as \`magus vcs checkpoint -o name\` prints it (default: read from this checkout)
-
 **--slots** *int* (default: 1)
 : With --timeout: the machine budget slots the command takes while it runs
 
