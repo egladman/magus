@@ -1900,6 +1900,7 @@ github.com/egladman/magus/types.IsGlobMeta func(s string) bool
 github.com/egladman/magus/types.IsLiteralGlob func(pattern string) bool
 github.com/egladman/magus/types.IsMagusMaintained func(path string) bool
 github.com/egladman/magus/types.IsReservedCharm func(name string) bool
+github.com/egladman/magus/types.IsTestPath func(source string) bool
 github.com/egladman/magus/types.Job type struct
 github.com/egladman/magus/types.Job.Attempt field *JobAttempt "json:\"attempt,omitempty\" yaml:\"attempt,omitempty\""
 github.com/egladman/magus/types.Job.BaseVerdict field JobBaseVerdict "json:\"base_verdict,omitempty\" yaml:\"base_verdict,omitempty\""
