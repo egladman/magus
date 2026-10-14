@@ -77,15 +77,18 @@ func gradeClaimedDeclarations(ctx context.Context, workspace string, me types.Jo
 	return writeGrade{}
 }
 
-// gradeConfigNarrowing narrows me's hold on rel, a project's magusfile its write paths cover
-// whole only through a pattern (`**/*.buzz`), to the declarations this write changes: they
+// gradeConfigNarrowing narrows me's hold on rel, a project's magusfile or magus.yaml its
+// write paths cover whole only through a pattern (`**/*.buzz`), to the declarations this write changes: they
 // become claims on me's row and the rest of the file is released with its digest (see
 // job.NarrowConfigHold), so other jobs may claim what me never touched. It runs on every
 // such write and narrows only for a declaration me does not claim yet. A change to a
 // declaration another lease claims is denied as gradeClaimedDeclarations denies one.
 // A write magus cannot place, and a dry run, narrow nothing and keep the path verdict.
 func gradeConfigNarrowing(ctx context.Context, at location, checkout string, me types.Job, owners []types.Job, rel string, fields writeFields) writeGrade {
-	if path.Base(rel) != "magusfile.buzz" && path.Base(path.Dir(rel)) != "magusfiles" {
+	// A name check first: job.NarrowConfigHold asks the tree, which no other write should pay for.
+	switch {
+	case path.Base(rel) == "magusfile.buzz", path.Base(rel) == "magus.yaml", path.Base(path.Dir(rel)) == "magusfiles":
+	default:
 		return writeGrade{}
 	}
 	if !coveredOnlyByPattern(me, rel) {
@@ -122,7 +125,7 @@ func gradeConfigNarrowing(ctx context.Context, at location, checkout string, me 
 	return writeGrade{Decision: decisionAdvise,
 		Context: fmt.Sprintf("magus workspace: lease %s now holds %s by %s; the rest of the file is released for other jobs to claim.",
 			me.ID, rel, quotedClaims(rel, claimsOn(row.WritePaths, rel))),
-		Why: fmt.Sprintf("Your write paths cover %s, a project's magusfile, only through a pattern. Every job that changes the workspace's configuration writes that file, so magus narrows the hold to the declarations you change, on the first write to each. `magus job wait` grades your changes to it against these claims.", rel)}
+		Why: fmt.Sprintf("Your write paths cover %s, a project's configuration, only through a pattern. Every job that changes the workspace's configuration writes that file, so magus narrows the hold to the declarations you change, on the first write to each. `magus job wait` grades your changes to it against these claims.", rel)}
 }
 
 // coveredOnlyByPattern reports whether a pattern among me's whole-file write paths covers

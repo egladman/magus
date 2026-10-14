@@ -29,10 +29,10 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 `
 
-// configFiles is a workspace of two projects under the buzz diff driver, with a Buzz file
-// no project loads and a magus.yaml.
+// configFiles is a workspace of two projects under the buzz and yaml diff drivers, with a
+// Buzz file no project loads and a magus.yaml.
 var configFiles = map[string]string{
-	".gitattributes":          "*.buzz diff=buzz\n",
+	".gitattributes":          "*.buzz diff=buzz\n*.yaml diff=yaml\n",
 	"magus.yaml":              "jobs:\n  stale_after: 2h\n",
 	"magusfile.buzz":          configMagusfile,
 	"libs/lib/magusfile.buzz": "import \"magus\";\n\nmagus\\project({\n    \"name\": \"lib\",\n});\n",
@@ -54,7 +54,8 @@ func TestRefuseWholeFileConfigClaims(t *testing.T) {
 		{"a key claim", []string{"magusfile.buzz#project.targets.test"}, ""},
 		{"a key not written yet", []string{"magusfile.buzz#project.targets.lint"}, ""},
 		{"a pattern", []string{"**/*.buzz"}, ""},
-		{"magus.yaml, whose keys nothing places", []string{"magus.yaml"}, ""},
+		{"magus.yaml whole", []string{"magus.yaml"}, "\"magus.yaml\", such as `magus.yaml#jobs.stale_after`"},
+		{"a magus.yaml key claim", []string{"magus.yaml#jobs.stale_after"}, ""},
 		{"a Buzz file no project loads", []string{"notes.buzz"}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -91,10 +92,16 @@ func TestRefuseWholeFileConfigClaims(t *testing.T) {
 		require.ErrorIs(t, err, types.WritePathConfigWholeFile)
 	})
 
-	t.Run("a checkout that places no Buzz line", func(t *testing.T) {
+	t.Run("a checkout that places no line of either", func(t *testing.T) {
 		t.Parallel()
-		bare := testkit.NewRepo(t, map[string]string{"magusfile.buzz": configMagusfile}).Root()
-		require.NoError(t, RefuseWholeFileConfigClaims(t.Context(), NewStore(tmpLoc(t, bare)), types.Job{ID: "wave/job", WritePaths: []string{"magusfile.buzz"}}))
+		bare := testkit.NewRepo(t, map[string]string{"magusfile.buzz": configMagusfile, "magus.yaml": "jobs:\n  stale_after: 2h\n"}).Root()
+		require.NoError(t, RefuseWholeFileConfigClaims(t.Context(), NewStore(tmpLoc(t, bare)), types.Job{ID: "wave/job", WritePaths: []string{"magusfile.buzz", "magus.yaml"}}))
+	})
+
+	t.Run("a magus.yaml that declares nothing yet", func(t *testing.T) {
+		t.Parallel()
+		empty := testkit.NewRepo(t, map[string]string{".gitattributes": "*.yaml diff=yaml\n", "magus.yaml": "{}\n"}).Root()
+		require.NoError(t, RefuseWholeFileConfigClaims(t.Context(), NewStore(tmpLoc(t, empty)), types.Job{ID: "wave/job", WritePaths: []string{"magus.yaml"}}))
 	})
 }
 
@@ -137,7 +144,7 @@ func TestNarrowConfigHold(t *testing.T) {
 	for _, tc := range []struct {
 		name, id, file, want string
 	}{
-		{"a file no project loads", "cfg", "notes.buzz", "notes.buzz is not a project's magusfile"},
+		{"a file no project loads", "cfg", "notes.buzz", "notes.buzz is not a project's configuration"},
 		{"a row holding the file by its name", "whole", "libs/lib/magusfile.buzz", "no pattern of whole covers libs/lib/magusfile.buzz"},
 		{"an unknown row", "gone", "magusfile.buzz", "unknown lease"},
 	} {
@@ -148,7 +155,7 @@ func TestNarrowConfigHold(t *testing.T) {
 }
 
 // A fork refused over a magusfile another live job holds files one release request per
-// holder and file, however often it is refused.
+// holder and file, however often it is refused; a dry run files none.
 func TestConfigRefusalRequestsOneRelease(t *testing.T) {
 	t.Parallel()
 
@@ -162,6 +169,10 @@ func TestConfigRefusalRequestsOneRelease(t *testing.T) {
 		}, config.Jobs{}, nil)
 		return err
 	}
+
+	_, err := Apply(t.Context(), s, []types.Declaration{{ID: "slots", WritePaths: []string{"magusfile.buzz"}, Check: forkCheck()}}, config.Jobs{}, nil, nil, true)
+	require.ErrorIs(t, err, types.WritePathConfigWholeFile)
+	assert.Empty(t, releaseRequests(t, root), "a dry run is refused the same way and files nothing")
 
 	for range 2 {
 		require.ErrorIs(t, fork("slots", "magusfile.buzz"), types.WritePathConfigWholeFile)

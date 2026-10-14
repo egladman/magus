@@ -73,9 +73,9 @@ func writeMerge(ctx context.Context, store *Store, id string, merge func(*types.
 // refuseMerge holds a merge into job id, against the plan rows, to the rules a fork is held
 // to, and returns the write proof a created row records. A merge that creates the row meets
 // every one: graded, within the jobs limits, unambiguous symbol goals, and write paths that
-// are no directory (MGS3018), ungradable claim (MGS3031), project magusfile held whole
-// (MGS3036), shared checkout or unordered shared file (MGS3032), and a check that skips a test of its write paths' packages or that
-// the guard denies its holder. A merge onto an existing row meets the same rules for what it
+// are no directory (MGS3018), ungradable claim (MGS3031), project configuration held whole
+// (MGS3036), shared checkout or unordered shared file (MGS3032), and a check that skips a
+// test of its write paths' packages or that the guard denies its holder. A merge onto an existing row meets the same rules for what it
 // ADDS: the goals and write paths it did not carry, so a path the row already held never
 // blocks an unrelated update.
 func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) (types.JobWriteProof, error) {
@@ -183,11 +183,16 @@ type Applied struct {
 // [refuseMerge] and to the store's authorization against the plan as the records before it
 // leave it, so a stream refused at its third record writes nothing. A record carrying state
 // or enter is refused: state is status, and an entry is `magus job fork`'s. So is one naming
-// a job that already ended. dryRun returns what would be written and writes nothing.
+// a job that already ended. dryRun returns what would be written and writes nothing, a
+// refusal's release request included.
 func Apply(ctx context.Context, store *Store, records []types.Declaration, limits config.Jobs, read SymbolReader, checkpoint func() string, dryRun bool) ([]Applied, error) {
 	rows, err := store.List()
 	if err != nil {
 		return nil, err
+	}
+	refusing := store
+	if dryRun {
+		refusing = store.dry()
 	}
 	plan := make([]Applied, 0, len(records))
 	merges := make([]func(*types.Job), 0, len(records))
@@ -212,7 +217,7 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 			return nil, err
 		}
 		merge := specMerge(rec, i < 0, checkpoint)
-		proof, err := refuseMerge(ctx, store, rows, rec.ID, merge, limits, read)
+		proof, err := refuseMerge(ctx, refusing, rows, rec.ID, merge, limits, read)
 		if err != nil {
 			return nil, err
 		}
@@ -284,9 +289,9 @@ func specChanges(prev, next types.Job) []string {
 
 // RefuseAddedWritePaths holds the write paths a write adds to a job to the rules a fork's
 // are held to: no directory (MGS3018), no claim a footprint cannot grade (MGS3031), and no
-// project magusfile held whole (MGS3036). A rule that held only at creation would depend on
-// which call wrote the path. added is the job's row carrying only the write paths the
-// write adds, so a path the row already held never blocks an unrelated write.
+// project configuration held whole (MGS3036). A rule that held only at creation would
+// depend on which call wrote the path. added is the job's row carrying only the write paths
+// the write adds, so a path the row already held never blocks an unrelated write.
 func RefuseAddedWritePaths(ctx context.Context, store *Store, added types.Job) error {
 	if len(added.WritePaths) == 0 {
 		return nil

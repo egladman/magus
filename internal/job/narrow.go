@@ -16,19 +16,28 @@ import (
 )
 
 // releaseSource is the attention source of a request asking a job to release part of a
-// project's magusfile that a refused fork needed.
+// project's configuration that a refused fork needed.
 const releaseSource = "magus/job-release"
 
-// projectConfig reports whether rel is a magusfile source this workspace loads: one of
-// describe.WorkspaceLoadFiles, the set RefuseSharedCheckout guards, that declares a
-// project rather than a spell a magusfile imports. magus.yaml is a load file too and is
-// left out, since no diff driver places its keys and nothing smaller than it can be
-// claimed.
+// projectConfig reports whether rel is a project's configuration this workspace loads: a
+// magusfile source or a magus.yaml among describe.WorkspaceLoadFiles, the set
+// RefuseSharedCheckout guards. The spell sources a magusfile imports are left out: they
+// are code a job owns, not a table every job edits.
 func projectConfig(root, rel string) bool {
-	if path.Base(rel) != "magusfile.buzz" && path.Base(path.Dir(rel)) != "magusfiles" {
+	if !configName(rel) {
 		return false
 	}
 	return slices.Contains(describe.WorkspaceLoadFiles(root), rel)
+}
+
+// configName reports whether rel is named as a project's configuration is: magusfile.buzz,
+// a file under magusfiles/, or magus.yaml. projectConfig asks the tree whether it is one.
+func configName(rel string) bool {
+	switch {
+	case path.Base(rel) == "magusfile.buzz", path.Base(rel) == "magus.yaml":
+		return true
+	}
+	return path.Base(path.Dir(rel)) == "magusfiles"
 }
 
 // releasedFile reports whether row released file whole, which ends the hold any pattern
@@ -71,28 +80,28 @@ func claimsOnFile(row types.Job, file string) []string {
 	return out
 }
 
-// NarrowConfigHold rewrites live job id, which holds file (a project's magusfile) through a
-// pattern such as `**/*.buzz`, so it holds `file#<claim>` for each declaration in touched
+// NarrowConfigHold rewrites live job id, which holds file (a project's magusfile or
+// magus.yaml) through a pattern such as `**/*.buzz`, so it holds `file#<claim>` for each declaration in touched
 // it does not claim yet, and records file itself as released with its digest. From then
 // on the pattern no longer holds file for id ([ClaimedDeclarations], WriteProof): another
 // job may claim the declarations id never touched, and `magus job wait` grades id's
 // changes to file against its claims.
 //
 // touched are declarations as the footprint places them (a declaration line, or a key path
-// such as `project.targets.test`); each is claimed by the shortest word naming it alone in
+// such as `project.targets.test` or `jobs.stale_after`); each is claimed by the shortest word naming it alone in
 // the file. The preamble is never claimed. Calling it again adds the declarations not yet
 // claimed and refreshes the release's digest.
 //
 // The write is the store's own, so it is not held to the holder's boundary: the claims sit
-// inside what the pattern already covered. Refused when file is not a project's magusfile,
-// when id is not live, or when no pattern of id covers file.
+// inside what the pattern already covered. Refused when file is not a project's
+// configuration, when id is not live, or when no pattern of id covers file.
 func NarrowConfigHold(ctx context.Context, store *Store, id, file string, touched []string) (types.Job, error) {
 	if store == nil || store.root == "" {
 		return types.Job{}, errors.New("job: no workspace to narrow a hold in")
 	}
 	file = path.Clean(strings.TrimSpace(file))
 	if !projectConfig(store.root, file) {
-		return types.Job{}, fmt.Errorf("job: %s is not a project's magusfile, so no hold on it narrows", file)
+		return types.Job{}, fmt.Errorf("job: %s is not a project's configuration, so no hold on it narrows", file)
 	}
 	var all []string
 	if driver, drivers, why := claimDrivers(ctx, store.root, []string{file}); why == "" && drivers[file] != "" {
@@ -142,13 +151,26 @@ func holdersOf(rows []types.Job, id, file string) []types.Job {
 	return out
 }
 
+// dry is s as a dry run reads it: the same file and seams, with the writes a dry run must
+// not make (the sweep's, and a refusal's release request) skipped.
+func (s *Store) dry() *Store {
+	return &Store{
+		path: s.path, err: s.err, root: s.root, actor: s.actor, cacheDir: s.cacheDir,
+		clock: s.clock, staleAfter: s.staleAfter, notices: s.notices, retain: s.retain, outputs: s.outputs,
+		landed: s.landed, grader: s.grader, dryRun: true,
+	}
+}
+
 // requestRelease files one attention request (outcome waiting) asking holder to release
 // what it does not edit of file, which a refused fork wanted as the claims in wanted. The
 // request is keyed on holder and file alone (see [sessions.RequestID]), so every refusal over
 // the pair lands on one row until the holder or the root disposes of it; the claims ride
-// along as its files. Best effort: the refusal is the answer, and a store that will not
-// take the request files nothing.
+// along as its files. A dry-run store files nothing, and neither does one that will not
+// take the request: the refusal is the answer either way.
 func (s *Store) requestRelease(ctx context.Context, holder, file string, wanted []string) {
+	if s.dryRun {
+		return
+	}
 	dir, err := sessions.Dir(s.root)
 	if err != nil {
 		return

@@ -310,7 +310,7 @@ Two jobs may run together only when:
   (`<file>#<declaration>`, the default; `--depends-on` is for the SAME one).
 - Neither consumes an API or generated artifact the other changes.
 - Shared manifests, lockfiles, schemas, and agent instructions have one owner. A
-  magusfile is shared by key claims (`magusfile.buzz#project.targets.test`).
+  magusfile or magus.yaml is shared by key claims (`magusfile.buzz#project.targets.test`).
 - Dependency and temporal-affinity evidence does not say they should move together.
 
 ONE WORKTREE PER WORKER wherever a write path touches workspace configuration: any

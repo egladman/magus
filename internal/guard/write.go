@@ -262,8 +262,8 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 // write is graded once more, by declaration, when the acting lease's deny paths name a
 // declaration of that file (see gradeDeniedDeclarations), and a write inside its own paths
 // when another live lease claims one (see gradeClaimedDeclarations). A write to a project's
-// magusfile the lease holds only through a pattern narrows that hold to the declarations it
-// changes (see gradeConfigNarrowing).
+// magusfile or magus.yaml the lease holds only through a pattern narrows that hold to the
+// declarations it changes (see gradeConfigNarrowing).
 func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writePath string, fields writeFields) writeGrade {
 	writePath = strings.TrimSpace(writePath)
 	if writePath == "" {

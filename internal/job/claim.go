@@ -95,21 +95,22 @@ func RefuseUngradableClaims(ctx context.Context, store *Store, row types.Job) er
 		row.ID, strings.Join(refused, "; "))
 }
 
-// maxListedClaims bounds the claims an MGS3036 refusal lists: a root magusfile holds
+// maxListedClaims bounds the claims an MGS3036 refusal lists: a root magusfile can hold
 // hundreds of declarations, and a dozen show the form.
 const maxListedClaims = 12
 
-// RefuseWholeFileConfigClaims refuses a fork whose write paths name a project's magusfile
-// whole (MGS3036): a literal path, with no glob and no `#`, to a magusfile source the
-// workspace loads (see projectConfig). Every job that changes the workspace's
-// configuration writes that file, a target's slots or a source glob being one line of it,
-// so one job holding it whole blocks every other for that line. The refusal lists claims
-// the file has, top-level project keys first (`magusfile.buzz#project.targets.test`).
+// RefuseWholeFileConfigClaims refuses a fork whose write paths name a project's
+// configuration whole (MGS3036): a literal path, with no glob and no `#`, to a magusfile
+// source or a magus.yaml the workspace loads (see projectConfig). Every job that changes
+// the workspace's configuration writes that file, a target's slots or a source glob being
+// one line of it, so one job holding it whole blocks every other for that line. The
+// refusal lists claims the file has, magusfile project keys first
+// (`magusfile.buzz#project.targets.test`, `magus.yaml#jobs.stale_after`).
 //
-// A file whose lines this checkout cannot place is left alone, since nothing smaller than
-// it could be claimed. When another live job holds a refused file, one attention request
-// asks it to release what it does not edit (see requestRelease). A nil store, or one with
-// no workspace root, refuses nothing.
+// A file whose lines this checkout cannot place, or that declares nothing yet, is left
+// alone, since nothing smaller than it could be claimed. When another live job holds a refused file, one attention request
+// asks it to release what it does not edit (see requestRelease); a dry-run store files
+// none. A nil store, or one with no workspace root, refuses nothing.
 func RefuseWholeFileConfigClaims(ctx context.Context, store *Store, row types.Job) error {
 	if store == nil || store.root == "" {
 		return nil
@@ -128,7 +129,7 @@ func RefuseWholeFileConfigClaims(ctx context.Context, store *Store, row types.Jo
 			continue
 		}
 		all, ok := declarationsOf(ctx, driver, store.root, file)
-		if !ok {
+		if !ok || len(all) == 0 {
 			continue
 		}
 		refused = append(refused, fmt.Sprintf("%q, such as %s", entry, listClaims(file, all)))
@@ -149,8 +150,8 @@ func RefuseWholeFileConfigClaims(ctx context.Context, store *Store, row types.Jo
 		}
 	}
 	return types.DiagnosticErrorf(types.WritePathConfigWholeFile,
-		"job: %s holds a project's magusfile whole: %s. Every job that changes the workspace's configuration writes"+
-			" that file, so a whole-file hold blocks them all for one line; claim the declarations and project keys"+
+		"job: %s holds a project's configuration whole: %s. Every job that changes the workspace's configuration"+
+			" writes that file, so a whole-file hold blocks them all for one line; claim the declarations and keys"+
 			" the job changes instead",
 		row.ID, strings.Join(refused, "; "))
 }
@@ -213,8 +214,8 @@ func driverPattern(p string) string {
 // (no glob, not a directory, not a project root, with a diff driver) to two live, unordered
 // jobs at once (MGS3032): a candidate entry and a holder's entry name the same file, still
 // intersect (types.PathsIntersect), and neither row is the other's ancestor, descendant, or
-// depends_on partner. When the file is a project's magusfile, the refusal also files one
-// attention request asking the holder to release it (see requestRelease).
+// depends_on partner. When the file is a project's configuration, the refusal also files
+// one attention request asking the holder to release it (see requestRelease).
 //
 // Left alone: a same-checkout or not-yet-taken holder (CheckoutRoot == ""), which
 // RefuseSharedCheckout and the overlap report already watch; a holder that exited, whose
@@ -481,10 +482,12 @@ func ambiguousClaim(file, claim string, matched, all []string) string {
 
 // claimWord is the shortest word of declaration that names it and no other entry of all:
 // a heading's text, else an identifier (preferring one that is called, which is the name),
-// else the whole line. A project key path (`project.targets.test`) is claimed whole.
+// else the whole line. A key path (`project.targets.test`, `jobs.stale_after`) is claimed
+// whole.
 func claimWord(declaration string, all []string) string {
-	// Any one word of a key path also names its siblings.
-	if strings.HasPrefix(declaration, "project.") {
+	// Any one word of a key path also names its siblings. No declaration line a funcname
+	// pattern matches is dotted without a space.
+	if strings.Contains(declaration, ".") && !strings.ContainsAny(declaration, " \t#") {
 		return declaration
 	}
 	names := func(word string) bool {
