@@ -373,6 +373,10 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		unreferenced.MapSet("symbols", vm.ListValue(nil))
 		unreferenced.MapSet("answer", answer)
 
+		modelTiers := vm.NewMap()
+		modelTiers.MapSet("definition", vm.StrValue(""))
+		modelTiers.MapSet("rows", vm.ListValue(nil))
+
 		res := vm.NewMap()
 		res.MapSet("hotspots", insightLens("nodes", "files"))
 		res.MapSet("affinity", insightLens("pairs"))
@@ -380,6 +384,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("trend", insightLens("projects"))
 		res.MapSet("volatility", volatility)
 		res.MapSet("unreferenced", unreferenced)
+		res.MapSet("modelTiers", modelTiers)
 		res.MapSet("graphStats", stats)
 		return res, nil
 	}))

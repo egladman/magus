@@ -269,6 +269,10 @@ func (f *recordingAnalyzer) Duplication(context.Context) (types.DuplicationOutpu
 	return types.DuplicationOutput{}, errors.New("no symbol index")
 }
 
+func (f *recordingAnalyzer) ModelTierLens(context.Context) (types.ModelTierOutput, error) {
+	return types.ModelTierOutput{}, errors.New("no run history")
+}
+
 func TestInsightIsServedInProcess(t *testing.T) {
 	t.Parallel()
 
