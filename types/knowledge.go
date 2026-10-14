@@ -39,7 +39,7 @@ import (
 // because shards load lazily and an edge legitimately arrives before the node that gives
 // its endpoint a kind. Graph.UndeclaredEdges reports violations, and a test over this
 // workspace's own graph fails when a producer widens the vocabulary without declaring it.
-const KnowledgeSchemaVersion = 18
+const KnowledgeSchemaVersion = 19
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
 // generates. Four renderers write one of these spellings: the target-graph index
@@ -537,7 +537,11 @@ type KnowledgeSymbol struct {
 	// that computes BodyDigest. Zero when that read did not happen.
 	SourceLines int
 	SourceBytes int
-	Defs        []string
+	// SourceGenerated reports that the file Source names opens with the generated-code
+	// header [GeneratedSource] reads, from the same read. Its shape is its generator's, so
+	// no conformance check measures it.
+	SourceGenerated bool
+	Defs            []string
 	// Definitions holds each defining file's first definition with that file's own doc, in
 	// Defs order, when Defs names more than one file: a function written once per GOOS has
 	// one key and a doc per file. It lists the file Source names too, so a reader walks one
@@ -581,6 +585,26 @@ func CountLines(b []byte) int {
 // SplitSourceLines splits file content into its lines, the indexing BodyDigest uses:
 // element i is line i+1.
 func SplitSourceLines(b []byte) [][]byte { return bytes.Split(b, []byte("\n")) }
+
+// generatedHeader is the line Go's convention marks generated source with
+// (https://go.dev/s/generatedcode); generators for other languages write it too.
+var generatedHeader = regexp.MustCompile(`^// Code generated .* DO NOT EDIT\.$`)
+
+// GeneratedSource reports whether a file split by SplitSourceLines carries the
+// generated-code header: `// Code generated ... DO NOT EDIT.` on a line of its own before
+// the first line that is neither blank nor a `//` comment.
+func GeneratedSource(lines [][]byte) bool {
+	for _, line := range lines {
+		line = bytes.TrimSuffix(line, []byte("\r"))
+		if generatedHeader.Match(line) {
+			return true
+		}
+		if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 && !bytes.HasPrefix(trimmed, []byte("//")) {
+			return false
+		}
+	}
+	return false
+}
 
 // BodyDigest fingerprints lines start through end (1-based, inclusive) of a file split by
 // SplitSourceLines, the value KnowledgeSymbol.BodyDigest records. ok is false when the

@@ -242,6 +242,22 @@ func TestConformSamplesDropGeneratedAndExcluded(t *testing.T) {
 	}
 }
 
+// A file carrying the generated-code header is generated wherever it sits and whatever
+// declares it.
+func TestConformSamplesDropAHeaderMarkedFile(t *testing.T) {
+	hand := conformSym("/pkg", "Hand().", "pkg/hand.go", 1, 1, 40, "", 0)
+	made := conformSym("/pkg", "Made().", "pkg/made.go", 1, 1, 40, "", 0)
+	made.SourceGenerated = true
+	g := mergeAll([]Shard{assembleSymbols(".", []types.KnowledgeSymbol{hand, made}, nil)})
+
+	key := types.ConformKey{Metric: types.ConformFileLines, Population: types.ConformPopSource}
+	var files []string
+	for _, it := range conformSamples(g, types.ConformOptions{})[key] {
+		files = append(files, itemFile(it.ID))
+	}
+	assert.Equal(t, []string{"pkg/hand.go"}, files)
+}
+
 // conformSizedFiles is a graph of one package whose files have the given line counts.
 func conformSizedFiles(lines ...int) *Graph {
 	var syms []types.KnowledgeSymbol

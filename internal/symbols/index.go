@@ -63,8 +63,8 @@ func IndexPath(cacheDir, projectAbsDir, op string) string {
 }
 
 // FingerprintBodies sets each symbol's BodyDigest from the definition lines under root,
-// reading every defining file once, and sizes that file into SourceLines and SourceBytes
-// from the same read. A symbol whose file or lines cannot be read keeps an empty digest,
+// reading every defining file once, and sizes that file into SourceLines and SourceBytes,
+// and reads its generated-code header into SourceGenerated, from the same read. A symbol whose file or lines cannot be read keeps an empty digest,
 // which a comparison must read as unknown rather than as unchanged. A symbol with a body
 // span (a DefEndLine) also gets BodyShape and BodyTokens over the same lines, left empty
 // when its language has no lexer.
@@ -76,6 +76,7 @@ func FingerprintBodies(root string, syms []types.KnowledgeSymbol) {
 	type sourceFile struct {
 		lines        [][]byte
 		nLines, size int
+		generated    bool
 	}
 	files := map[string]sourceFile{}
 	for i := range syms {
@@ -91,14 +92,15 @@ func FingerprintBodies(root string, syms []types.KnowledgeSymbol) {
 		if !seen {
 			data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
 			if err == nil {
-				file = sourceFile{lines: types.SplitSourceLines(data), nLines: types.CountLines(data), size: len(data)}
+				lines := types.SplitSourceLines(data)
+				file = sourceFile{lines: lines, nLines: types.CountLines(data), size: len(data), generated: types.GeneratedSource(lines)}
 			}
 			files[path] = file
 		}
 		if file.lines == nil {
 			continue
 		}
-		syms[i].SourceLines, syms[i].SourceBytes = file.nLines, file.size
+		syms[i].SourceLines, syms[i].SourceBytes, syms[i].SourceGenerated = file.nLines, file.size, file.generated
 		if digest, ok := types.BodyDigest(file.lines, start, max(start, syms[i].DefEndLine)); ok {
 			syms[i].BodyDigest = digest
 		}

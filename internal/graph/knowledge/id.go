@@ -403,6 +403,10 @@ const (
 	AttrBytes = "bytes"
 )
 
+// attrGenerated marks a file node whose source opens with the generated-code header
+// (types.GeneratedSource), from the read that sizes it. It is "true" or absent.
+const attrGenerated = "generated"
+
 // fileSizeAttrs returns attrs with AttrLines and AttrBytes set, allocating when attrs is nil.
 func fileSizeAttrs(attrs map[string]string, lines, size int) map[string]string {
 	if attrs == nil {

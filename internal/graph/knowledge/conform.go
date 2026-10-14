@@ -278,7 +278,7 @@ func newConformIndex(g *Graph, o types.ConformOptions) *conformIndex {
 
 // population places a workspace file, or reports false for generated or excluded output.
 func (x *conformIndex) population(file string) (types.ConformPopulation, bool) {
-	if conformGenerated(x.o, file) || conformExcludes(x.o, file) {
+	if conformGenerated(x.g, x.o, file) || conformExcludes(x.o, file) {
 		return "", false
 	}
 	if types.IsTestPath(file) {
@@ -292,10 +292,11 @@ func (x *conformIndex) population(file string) (types.ConformPopulation, bool) {
 	return types.ConformPopSource, true
 }
 
-// conformGenerated reports whether file is generated output: declared by a target, under a
-// gen directory, written by a protocol compiler, or a fixture or dependency tree.
-func conformGenerated(o types.ConformOptions, file string) bool {
-	if o.Generated[file] {
+// conformGenerated reports whether file is generated output: declared by a target, opening
+// with the generated-code header, under a gen directory, written by a protocol compiler,
+// or a fixture or dependency tree.
+func conformGenerated(g *Graph, o types.ConformOptions, file string) bool {
+	if o.Generated[file] || g.nodes[fileID(file)].Attrs[attrGenerated] == "true" {
 		return true
 	}
 	base := path.Base(file)
@@ -328,7 +329,7 @@ func conformExcludes(o types.ConformOptions, file string) bool {
 func conformExcluded(g *Graph, o types.ConformOptions) int {
 	n := 0
 	for _, f := range g.nodes {
-		if f.Kind == types.KindFile && f.Attrs[attrLanguage] != "" && !conformGenerated(o, f.Source) && conformExcludes(o, f.Source) {
+		if f.Kind == types.KindFile && f.Attrs[attrLanguage] != "" && !conformGenerated(g, o, f.Source) && conformExcludes(o, f.Source) {
 			n++
 		}
 	}

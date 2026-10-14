@@ -122,12 +122,14 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 	// A file several symbols define is sized by each of them from one read, so the first
 	// record that carries a size is as good as any.
 	sizes := map[string][2]int{}
+	generated := map[string]bool{}
 	for _, sym := range syms {
 		if sym.SourceLines == 0 && sym.SourceBytes == 0 {
 			continue
 		}
 		if path, _, ok := strings.Cut(sym.Source, ":"); ok {
 			sizes[path] = [2]int{sym.SourceLines, sym.SourceBytes}
+			generated[path] = sym.SourceGenerated
 		}
 	}
 	noteFile := func(path, language string) {
@@ -141,6 +143,9 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		}
 		if size, ok := sizes[path]; ok {
 			attrs = fileSizeAttrs(attrs, size[0], size[1])
+		}
+		if generated[path] {
+			attrs[attrGenerated] = "true"
 		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: fileID(path), Kind: types.KindFile, Label: path, Source: path, Attrs: attrs})
 		if owner, ok := owningProjectPath(path, projects); ok {
