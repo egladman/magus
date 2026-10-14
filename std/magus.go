@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -1803,6 +1804,15 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 		return nil, fmt.Errorf("%s: this workspace has no cache directory", member)
 	}
 	loc := job.Location{CacheDir: cd.CacheDir(), Root: ws.Root(), Grader: currentJobGrader()}
+	// Recovered by assertion like workspaceCacheDir; declared here, inside the one
+	// declaration this door owns.
+	type modelTiered interface {
+		ModelTiers() *types.ModelTierSet
+		ModelTierMatrix() workspace.ModelTierMatrix
+	}
+	if tiers, ok := ws.(modelTiered); ok {
+		loc.ModelTiers, loc.ModelTierMatrix = tiers.ModelTiers(), tiers.ModelTierMatrix()
+	}
 	// A Buzz process keeps the lease it was launched under in context. Do not
 	// rediscover it from the mutable environment at each job-store write: a script
 	// could otherwise unset BAGGAGE and become an apparent orchestrator mid-run. It is

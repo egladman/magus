@@ -147,3 +147,40 @@ func TestTermsRendersOnlyTheRow(t *testing.T) {
 	assert.Contains(t, got, "the only check you run")
 	assert.Contains(t, got, row.Validation)
 }
+
+// The tier a fork assigned leads the terms, with the reason and site that chose it, so a
+// holder reads which skill variant it was handed without asking.
+func TestTermsNamesTheModelTierAndItsSource(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		tier types.JobModelTier
+		want string
+	}{
+		{
+			name: "a matrix answer names its reason and site",
+			tier: types.JobModelTier{Name: "economy", Rank: 0, Skills: types.SkillVariantFull, Source: types.ModelTierSourceMatrix, Reason: "small checked job", Site: "magusfile.buzz:20"},
+			want: "job: harness/ledger-per-repo\nmodel tier: economy (rank 0), matrix: \"small checked job\" at magusfile.buzz:20\nskills: full\n",
+		},
+		{
+			name: "a default has no site",
+			tier: types.JobModelTier{Name: "standard", Rank: 1, Skills: types.SkillVariantShort, Source: types.ModelTierSourceDefault, Reason: "the declared default"},
+			want: "job: harness/ledger-per-repo\nmodel tier: standard (rank 1), default: \"the declared default\"\nskills: short\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			row := briefRow()
+			row.ModelTier = &tt.tier
+			assert.True(t, strings.HasPrefix(NewTerms(row, TermsFacts{}).String(), tt.want))
+		})
+	}
+}
+
+func TestTermsPrintsNoModelTierForARowWithout(t *testing.T) {
+	t.Parallel()
+
+	assert.NotContains(t, NewTerms(briefRow(), TermsFacts{}).String(), "model tier")
+}

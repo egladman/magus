@@ -711,6 +711,11 @@ type Job struct {
 	// economy in the skill's table). A free string: hosts name their models differently
 	// and a closed set here would force a lie for the ones that do not fit.
 	Model string `json:"model,omitempty" yaml:"model,omitempty"`
+	// ModelTier is the model tier the store assigned when the row was created or its Model
+	// changed, with the source, reason and site that chose it. Store-computed and
+	// output-only like Releases: a caller's value is replaced by the stored one, and nil
+	// means the workspace declared no model tiers when the row was written.
+	ModelTier *JobModelTier `json:"model_tier,omitempty" yaml:"model_tier,omitempty"`
 	// Check is the one check this lease runs. See [LeaseCheck].
 	Check *LeaseCheck `json:"check,omitempty" yaml:"check,omitempty"`
 	// Validation is Check rendered as the command that runs it.
@@ -1942,6 +1947,10 @@ func (u Job) Clone() Job {
 	c.Releases = slices.Clone(u.Releases)
 	c.Unattributed = slices.Clone(u.Unattributed)
 	c.Entries = slices.Clone(u.Entries)
+	if u.ModelTier != nil {
+		tier := *u.ModelTier
+		c.ModelTier = &tier
+	}
 	if u.Result != nil {
 		result := *u.Result
 		result.Schema = u.Result.clone()

@@ -143,6 +143,9 @@ func NewTerms(row types.Job, facts TermsFacts) Terms {
 func (b Terms) String() string {
 	var s strings.Builder
 	fmt.Fprintf(&s, "job: %s\n", b.Lease.ID)
+	if t := b.Lease.ModelTier; t != nil {
+		fmt.Fprintf(&s, "%s\nskills: %s\n", modelTierLine(*t), t.Skills)
+	}
 
 	writeList(&s, "interface", interfaceLines(b.Lease.Goals))
 	writeBlock(&s, "criteria", b.Lease.Criteria)
@@ -191,6 +194,20 @@ func (b Terms) String() string {
 	writeBlock(&s, "the only check you run", b.Lease.Validation)
 	writeList(&s, "depends on", b.Lease.DependsOn)
 	return s.String()
+}
+
+// modelTierLine is the tier a job was assigned, the source that chose it and, where the
+// source gave them, its reason and the file:line it came from. `magus job fork` prints
+// the same line.
+func modelTierLine(t types.JobModelTier) string {
+	line := fmt.Sprintf("model tier: %s (rank %d), %s", t.Name, t.Rank, t.Source)
+	if t.Reason != "" {
+		line += fmt.Sprintf(": %q", t.Reason)
+	}
+	if t.Site != "" {
+		line += " at " + t.Site
+	}
+	return line
 }
 
 // interfaceLines is one entry per symbol goal: what the job must leave behind, as the

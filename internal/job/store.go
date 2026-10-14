@@ -97,6 +97,9 @@ type Store struct {
 	grader CheckGrader
 	// dryRun is Location.DryRun.
 	dryRun bool
+	// modelTiers and modelTierMatrix are Location's.
+	modelTiers      *types.ModelTierSet
+	modelTierMatrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error)
 }
 
 // Location is where a Store lives: the repository whose rows these are, and the state
@@ -139,6 +142,14 @@ type Location struct {
 	// ended, and no row, notice, probe history or binding record is written. It governs
 	// reads only; a write method still writes.
 	DryRun bool
+	// ModelTiers is the workspace's model tier declaration. With it, a write that creates a
+	// row or changes its Model assigns the row's tier (see [AssignModelTier]); nil assigns
+	// nothing, as does a Store a dry run reads.
+	ModelTiers *types.ModelTierSet
+	// ModelTierMatrix is the function the workspace registered to choose a tier, or nil.
+	// It runs inside the write, while the Store's locks are held, so it must not touch
+	// the Store.
+	ModelTierMatrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error)
 }
 
 // NewStore returns the ledger for loc's repository, adopting the legacy cache-dir
@@ -153,7 +164,8 @@ type Location struct {
 // A resolution failure is held rather than returned: every operation reports it, so a
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
-	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, outputs: loc.Outputs, grader: loc.Grader, dryRun: loc.DryRun}
+	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, outputs: loc.Outputs, grader: loc.Grader, dryRun: loc.DryRun,
+		modelTiers: loc.ModelTiers, modelTierMatrix: loc.ModelTierMatrix}
 	s.path, s.err = jobsPath(loc)
 	return s
 }
@@ -634,6 +646,14 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		row.Schema = prev.Schema
 		row.Version = max(prev.Version, types.JobSchemaVersion)
 		row.Requires = requiredFeatures(row)
+		row.ModelTier = prev.ModelTier
+		if s.modelTiers != nil && (i < 0 || prev.Model != row.Model) {
+			assigned, aerr := s.assignModelTier(ctx, row, f.Jobs)
+			if aerr != nil {
+				return aerr
+			}
+			row.ModelTier = &assigned
+		}
 		if kind != asNarrowing {
 			row.Releases = s.releases(ctx, prev, row, now, prev.Registered != 0 && actor.Lease != id)
 		}
