@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"go/parser"
 	"go/token"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -195,4 +196,30 @@ func skipJSONScanDir(name string) bool {
 	default:
 		return false
 	}
+}
+
+// UnmarshalStrict and StrictDecoder answer a typed input one way: the same refusals, worded
+// the same and placed at an offset.
+func TestUnmarshalStrictRefusesAsStrictDecoderDoes(t *testing.T) {
+	type doc struct {
+		A int `json:"a"`
+	}
+	for name, tc := range map[string]struct{ in, want string }{
+		"a repeated name":     {in: `{"a":1,"a":2}`, want: `duplicate key "a"`},
+		"an undeclared field": {in: `{"a":1,"b":2}`, want: `unknown field "b"`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var got doc
+			var strict *StrictError
+			require.ErrorAs(t, UnmarshalStrict([]byte(tc.in), &got), &strict)
+			assert.Equal(t, tc.want, strict.Error())
+			assert.Positive(t, strict.Offset)
+		})
+	}
+
+	var got doc
+	require.NoError(t, UnmarshalStrict([]byte(`{"a":1}`), &got))
+	assert.Equal(t, 1, got.A)
+	assert.ErrorIs(t, UnmarshalStrict(nil, &got), io.ErrUnexpectedEOF)
+	assert.Error(t, UnmarshalStrict([]byte(`{"a":1} {}`), &got), "a second document is trailing data")
 }

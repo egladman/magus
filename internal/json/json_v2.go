@@ -55,15 +55,24 @@ func Marshal(v any) ([]byte, error)      { return jsonv2.Marshal(v, marshalOpts)
 func Unmarshal(data []byte, v any) error { return jsonv2.Unmarshal(data, v, unmarshalOpts) }
 func Valid(data []byte) bool             { return jsontext.Value(data).IsValid() }
 
-// UnmarshalStrict is Unmarshal for a TYPED INPUT: a member the target does not declare is
-// an error rather than something quietly dropped.
+// UnmarshalStrict is Unmarshal for a TYPED INPUT: a member the target does not declare,
+// or a name repeated within an object, is a [*StrictError] rather than something quietly
+// dropped or overwritten. It is one document read whole through [StrictDecoder].
 //
 // For input a person or an agent composed, never for data magus wrote. A record magus
 // reads back from its own store has to survive being written by a newer magus, so dropping
 // an unknown field is right there; a field the grader never looks at reads to its author
 // as one that was taken into account.
 func UnmarshalStrict(data []byte, v any) error {
-	return jsonv2.Unmarshal(data, v, unmarshalOpts, jsonv2.RejectUnknownMembers(true))
+	d := NewStrictDecoder(data)
+	if err := d.Decode(v); err != nil {
+		// An empty document is a truncated one, as Unmarshal reports it.
+		if errors.Is(err, io.EOF) {
+			return io.ErrUnexpectedEOF
+		}
+		return err
+	}
+	return d.End()
 }
 
 // UnmarshalLossless decodes an untyped JSON document without silently
