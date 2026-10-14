@@ -1166,23 +1166,55 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		notes := jobNotes(ctx, root, []types.Job{stored})[stored.ID]
 		job.RenderRegenerated(os.Stdout, notes.RegeneratedOutside)
 		job.RenderUnrunGates(os.Stdout, notes.UnrunGates)
+		job.RenderDeletionCandidates(os.Stdout, deletionCandidates(ctx, root, stored))
 		job.RenderForegroundOverrun(os.Stdout, notes.ForegroundOverrun)
 		pointAtConsole(ctx, stored.ID)
 		return nil
 	default:
 		notes := jobNotes(ctx, root, []types.Job{stored})[stored.ID]
 		return emitFormatted(opts, forkReport{
-			forkOutput{Job: stored, RegeneratedOutside: notes.RegeneratedOutside, UnrunGates: notes.UnrunGates, ForegroundOverrun: notes.ForegroundOverrun},
-			derived,
+			forkOutput:         forkOutput{Job: stored, RegeneratedOutside: notes.RegeneratedOutside, UnrunGates: notes.UnrunGates, ForegroundOverrun: notes.ForegroundOverrun},
+			DerivedClaims:      derived,
+			DeletionCandidates: deletionCandidates(ctx, root, stored),
 		})
 	}
 }
 
-// forkReport is forkOutput with the write path claims the fork derived from its symbol
-// goals, which are computed at the fork and never stored apart from write_paths.
+// forkReport is forkOutput with what the fork computes and never stores: the write path
+// claims it derived from its symbol goals, and the unreferenced symbols its write paths
+// cover. The candidates are findings to finish or delete, not goals.
 type forkReport struct {
-	forkOutput    `yaml:",inline"`
-	DerivedClaims []string `json:"derived_claims,omitempty" yaml:"derived_claims,omitempty"`
+	forkOutput         `yaml:",inline"`
+	DerivedClaims      []string                  `json:"derived_claims,omitempty" yaml:"derived_claims,omitempty"`
+	DeletionCandidates []types.UnreferencedEntry `json:"deletion_candidates,omitempty" yaml:"deletion_candidates,omitempty"`
+}
+
+// deletionCandidates is the unreferenced symbols in row's write paths, or nil when the
+// symbol index is not there to ask: no index is not the same as nothing to delete, and the
+// fork must not fail for it.
+func deletionCandidates(ctx context.Context, root string, row types.Job) []types.UnreferencedEntry {
+	if row.ReadOnly || len(row.WritePaths) == 0 {
+		return nil
+	}
+	g := knowledgeOnce(root)(ctx)
+	if g == nil {
+		return nil
+	}
+	return job.UnreferencedInPaths(row, g.Unreferenced())
+}
+
+// workspaceStage is the release stage of m's newest root tag, unknown when its VCS lists
+// none.
+func workspaceStage(ctx context.Context, m *magus.Magus) types.ReleaseStage {
+	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
+	if err != nil || res.VCS == nil {
+		return types.ReleaseStage{}
+	}
+	tags, err := res.VCS.Tags(ctx, m.Root(), "")
+	if err != nil {
+		return types.ReleaseStage{}
+	}
+	return types.NewestReleaseStage(tags)
 }
 
 // jobEnter records an entry into job id's path rel, the --stdin record's other shape.
@@ -2035,6 +2067,8 @@ func leaseBoundary(ctx context.Context, root string, row types.Job, leases []typ
 		RegeneratedOutside: notes.RegeneratedOutside,
 		UnrunGates:         notes.UnrunGates,
 		Affinity:           leaseAffinity(ctx, m, affected.Seed),
+		Stage:              workspaceStage(ctx, m),
+		DeletionCandidates: deletionCandidates(ctx, root, row),
 	}
 }
 
@@ -2688,7 +2722,8 @@ func specChange(field string, prev, next types.Job) string {
 		"deny_paths":  {prev.DenyPaths, next.DenyPaths},
 		"read_paths":  {prev.ReadPaths, next.ReadPaths},
 		"depends_on":  {prev.DependsOn, next.DependsOn},
-		"goals":       {goalIDs(prev.Goals), goalIDs(next.Goals)},
+		"breaks":      {prev.Breaks, next.Breaks},
+		"goals":      {goalIDs(prev.Goals), goalIDs(next.Goals)},
 	}
 	pair, ok := lists[field]
 	if !ok {

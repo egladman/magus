@@ -1,0 +1,43 @@
+# What a job may break is part of its row: the fork records it, describe job prints it with
+# the release stage read from the newest tag, and a blank entry is refused rather than
+# dropped. A dry-run apply that clears the list writes nothing.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+exec magus init -local -vcs git
+exec git add -A
+exec git commit -q -m 'start'
+exec git tag v0.4.0
+
+stdin blank.json
+! exec magus job fork --stdin
+stderr 'breaks\[1\] is blank'
+
+stdin breaks.json
+exec magus job fork --stdin
+exec magus describe job wave/shape
+stdout '^may break$'
+stdout '^  --old-flag$'
+stdout '^  api\.Open$'
+stdout '^release stage$'
+stdout '^  newest release v0\.4\.0: below 1\.0 a major floor ships as a minor release$'
+exec magus ls jobs -o json
+stdout '"breaks": \['
+
+stdin clear.json
+exec magus job apply -f - --dry-run
+stdout 'dry run: nothing written'
+exec magus describe job wave/shape
+stdout '^  --old-flag$'
+
+-- blank.json --
+{"schema_version": 12, "id": "wave/shape", "criteria": "reshape it", "write_paths": ["code.go"], "breaks": ["--old-flag", ""]}
+-- breaks.json --
+{"schema_version": 12, "id": "wave/shape", "criteria": "reshape it", "write_paths": ["code.go"], "breaks": ["--old-flag", "api.Open"]}
+-- clear.json --
+{"schema_version": 12, "id": "wave/shape", "criteria": "reshape it", "write_paths": ["code.go"]}
+-- code.go --
+package pkg

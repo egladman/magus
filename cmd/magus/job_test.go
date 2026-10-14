@@ -764,6 +764,21 @@ func TestJobApplyPrintsTheSpecDiffAndKeepsTheState(t *testing.T) {
 	require.Error(t, jobApply(t.Context(), root, nil), "an apply naming no records is a usage error")
 }
 
+func TestSpecChangeNamesWhatBreaksGainedAndLost(t *testing.T) {
+	t.Parallel()
+
+	prev := types.Job{Breaks: []string{"legacy_key", "api.Open"}}
+	next := types.Job{Breaks: []string{"api.Open", "ledger.json"}}
+	assert.Equal(t, "breaks +ledger.json -legacy_key", specChange("breaks", prev, next))
+}
+
+func TestDeletionCandidatesAskNothingOfARowThatWritesNothing(t *testing.T) {
+	t.Parallel()
+
+	assert.Nil(t, deletionCandidates(t.Context(), t.TempDir(), types.Job{ReadOnly: true, WritePaths: []string{"a.go"}}))
+	assert.Nil(t, deletionCandidates(t.Context(), t.TempDir(), types.Job{}))
+}
+
 // bindCheckout records id as the checkout's binding, as the guard does when a caller whose
 // host names no session takes a job there.
 func bindCheckout(t *testing.T, cacheDir, id string) {
