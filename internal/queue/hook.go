@@ -446,6 +446,8 @@ func HookFailed(err error) (why string, code int, ok bool) {
 // runHook runs c, running it again after ExitTempFail. It returns a changeFailure for
 // anything the hook's process tree did, and any other error only when the hook could
 // not run.
+//
+// Not retry.Do: only ExitTempFail reruns, and the queue reads the last run's bare changeFailure.
 func runHook(ctx context.Context, c hookCommand) (procrun.ExecResult, error) {
 	for attempt := 1; ; attempt++ {
 		res, err := c.Run(ctx)
