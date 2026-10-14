@@ -20,12 +20,12 @@ import (
 // level (magus\guard.profile) sets each rule's decision, and the figure it fires at comes
 // from the level and the account's billing unless the workspace states one.
 const (
-	denyRuleRootContextBudget        denyRuleName = "root-context-budget"
-	denyRuleRootHeavyCommand         denyRuleName = "root-heavy-command"
-	denyRuleRootResultCap            denyRuleName = "root-result-cap"
-	denyRuleRootRepeat               denyRuleName = "root-repeat"
-	denyRuleSpawnNamesModel          denyRuleName = "spawn-names-model"
-	denyRuleSpawnPrincipalForEconomy denyRuleName = "spawn-principal-for-economy"
+	denyRuleRootContextBudget   denyRuleName = "root-context-budget"
+	denyRuleRootHeavyCommand    denyRuleName = "root-heavy-command"
+	denyRuleRootResultCap       denyRuleName = "root-result-cap"
+	denyRuleRootRepeat          denyRuleName = "root-repeat"
+	denyRuleSpawnNamesModel     denyRuleName = "spawn-names-model"
+	denyRuleSpawnAboveModelTier denyRuleName = "spawn-above-model-tier"
 )
 
 // ladder is where a rule starts to advise and where it starts to refuse; 0 is never.
@@ -256,9 +256,34 @@ func gradeMainCommand(deps Dependencies, verdict Verdict, in commandRuleInput, w
 	if thread != types.AgentThreadMain {
 		return verdict
 	}
+	gate := hint.NewGate(at.cacheDir, who.callerKey())
+	if f, misdeclared := budgetPastEveryWindow(deps.settingOf(string(denyRuleRootContextBudget)), accountAt(at.workspace).table); misdeclared {
+		return applyFindings(gate, verdict, []costFinding{f}, known)
+	}
 	st := readCostState(facts)
 	call := mainCall{known: known, billing: accountAt(at.workspace).billing, window: contextWindow(st, at), class: delegableClass(in.command), free: costFree(in.command), line: in.command}
-	return applyFindings(hint.NewGate(at.cacheDir, who.callerKey()), verdict, mainFindings(deps.settingOf, st, call), known)
+	return applyFindings(gate, verdict, mainFindings(deps.settingOf, st, call), known)
+}
+
+// budgetPastEveryWindow is the refusal of a root-context-budget tokens figure above the
+// largest window of the model table, which no context reaches, so the rule would never
+// fire. The magusfile load cannot say so: the harness rows that make the table load after
+// it. The table is read only for a stated figure, and one with no window has nothing to
+// bound it by.
+func budgetPastEveryWindow(s builtin.Setting, table func() model.Table) (costFinding, bool) {
+	if s.Decision == builtin.Off || s.Tokens <= 0 {
+		return costFinding{}, false
+	}
+	var largest int64
+	for _, row := range table().Rows() {
+		largest = max(largest, row.Window)
+	}
+	if largest == 0 || int64(s.Tokens) <= largest {
+		return costFinding{}, false
+	}
+	msg := fmt.Sprintf("built-in rule %q: tokens is %d, past the largest context window in the model table (%d); give %d or less in magus\\guard.builtins, or leave it out",
+		denyRuleRootContextBudget, s.Tokens, largest, largest)
+	return costFinding{rule: denyRuleRootContextBudget, deny: true, key: hint.MarkerKind(denyRuleRootContextBudget) + "-misdeclared", say: "magus workspace: " + types.FormatDiagnostic(types.GuardRuleMisdeclared, msg)}, true
 }
 
 // levelSettings is every level's settings with nothing declared over them, which is what
@@ -298,19 +323,23 @@ func shadowVerdicts(st costState, c mainCall) map[types.GuardProfile]types.Guard
 }
 
 // gradeMainSpawn judges a spawn by the main thread under the spawn cost rules: whether it
-// names the model the child runs on, and whether a read-only job runs on one of the
-// costliest.
+// names a model, and whether that model is at the model tier its job was forked at. Tiers
+// compare by rank in the workspace's declaration, never by name or price; a spawn bound to
+// no row, or to a row forked with no declaration, has nothing to compare.
 func gradeMainSpawn(ctx context.Context, deps Dependencies, verdict Verdict, env hookRequest, who hookAttribution, at location, lease string) Verdict {
 	if verdict.Decision == decisionDeny || !env.IsSpawn || lease != "" || at.cacheDir == "" {
 		return verdict
 	}
-	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	thread, known := callerThread(at.cacheDir, who, lease)
 	if thread != types.AgentThreadMain {
 		return verdict
 	}
-	models := accountAt(at.workspace).models
-	row, hasRow := spawnTitleJob(ctx, at, env.Spawn.Description)
+	var forked forkedTier
+	bound := false
+	if row, ok := spawnTitleJob(ctx, at, env.Spawn.Description); ok {
+		forked, bound = boundModelTier(deps, row)
+	}
+	host := types.HarnessKey{ID: who.Host}
 	var findings []costFinding
 	switch s := deps.settingOf(string(denyRuleSpawnNamesModel)); {
 	case s.Decision == builtin.Off:
@@ -318,43 +347,102 @@ func gradeMainSpawn(ctx context.Context, deps Dependencies, verdict Verdict, env
 		findings = append(findings, costFinding{rule: denyRuleSpawnNamesModel, deny: s.Decision == builtin.Deny, key: hint.MarkerKind(denyRuleSpawnNamesModel),
 			say: "magus workspace: this spawn names no model, so the subagent runs on this session's own; name the model the job's work needs.\n" +
 				"A spawn that inherits runs every scout and every search on the costliest model the session uses."})
-	case s.Decision == builtin.Deny && hasRow && row.Model != "" && differentModels(env.DeclaredModel, row.Model, models):
-		findings = append(findings, costFinding{rule: denyRuleSpawnNamesModel, deny: true, key: hint.MarkerKind(denyRuleSpawnNamesModel),
-			say: fmt.Sprintf("magus workspace: this spawn runs %s, and job %s was forked for %s; spawn it on that model, or re-fork the job with the one it needs.", env.DeclaredModel, row.ID, row.Model)})
+	case s.Decision == builtin.Deny && bound:
+		if say := forked.refusal(host, env.DeclaredModel); say != "" {
+			findings = append(findings, costFinding{rule: denyRuleSpawnNamesModel, deny: true, key: hint.MarkerKind(denyRuleSpawnNamesModel), say: say})
+		}
 	}
-	if s := deps.settingOf(string(denyRuleSpawnPrincipalForEconomy)); s.Decision != builtin.Off {
-		runs := cmp.Or(env.DeclaredModel, readCostState(facts).Model)
-		// The host's own read-only agent type stands in for a read-only job at strict.
-		explore := s.Profile == types.GuardProfileStrict && strings.EqualFold(env.Spawn.AgentType, "explore")
-		if (hasRow && row.ReadOnly || explore) && principalPriced(runs, models) {
-			findings = append(findings, costFinding{rule: denyRuleSpawnPrincipalForEconomy, key: hint.MarkerKind(denyRuleSpawnPrincipalForEconomy),
-				say: fmt.Sprintf("magus workspace: this read-only spawn runs on %s, among the costliest models in the table; a cheaper one reads and searches as well.", runs)})
+	if s := deps.settingOf(string(denyRuleSpawnAboveModelTier)); s.Decision != builtin.Off && bound {
+		if say := forked.rankedAbove(host, env.DeclaredModel); say != "" {
+			findings = append(findings, costFinding{rule: denyRuleSpawnAboveModelTier, key: hint.MarkerKind(denyRuleSpawnAboveModelTier), say: say})
 		}
 	}
 	return applyFindings(hint.NewGate(at.cacheDir, who.callerKey()), verdict, findings, known)
 }
 
-// differentModels reports whether a and b name two rows of the table. A name the table
-// does not resolve, such as a tier word, differs from nothing.
-func differentModels(a, b string, t model.Table) bool {
-	ra, okA := resolveModel(a, t)
-	rb, okB := resolveModel(b, t)
-	return okA && okB && ra.ID != rb.ID
+// forkedTier is the model tier a job row was forked at, resolved against the workspace's
+// declaration as it stands.
+type forkedTier struct {
+	job    string
+	record types.JobModelTier
+	tier   types.ModelTier
+	set    *types.ModelTierSet
 }
 
-// principalPriced reports whether id resolves to a row whose input price is above the
-// table's median: the costliest models, by the table rather than by name.
-func principalPriced(id string, t model.Table) bool {
-	row, ok := resolveModel(id, t)
-	if !ok || row.Input == 0 {
-		return false
+// boundModelTier is the tier row was forked at, as tierIn finds it in the workspace's
+// declaration. The declaration is asked for only once a row carries a tier, since reading
+// it opens the workspace.
+func boundModelTier(deps Dependencies, row types.Job) (forkedTier, bool) {
+	if row.ModelTier == nil || deps.ModelTiers == nil {
+		return forkedTier{}, false
 	}
-	var prices []float64
-	for _, r := range t.Rows() {
-		if r.Input > 0 {
-			prices = append(prices, r.Input)
-		}
+	return tierIn(deps.ModelTiers(), row)
+}
+
+// tierIn is the tier row was forked at in set. It is false when the row records none, set
+// is nil, or set no longer has a case of that name at that rank: a row forked before its
+// enum changed is graded by nothing rather than by a guess.
+func tierIn(set *types.ModelTierSet, row types.Job) (forkedTier, bool) {
+	if set == nil || row.ModelTier == nil {
+		return forkedTier{}, false
 	}
-	slices.Sort(prices)
-	return row.Input > prices[len(prices)/2]
+	t, ok := set.At(row.ModelTier.Rank)
+	if !ok || t.Name() != row.ModelTier.Name {
+		return forkedTier{}, false
+	}
+	return forkedTier{job: row.ID, record: *row.ModelTier, tier: t, set: set}, true
+}
+
+// line is the assignment as a verdict names it, with the alias host spawns for it:
+// `economy (rank 0) -> haiku, matrix: "two files" at hack/tiers.buzz:12`.
+func (f forkedTier) line(alias string) string {
+	out := fmt.Sprintf("%s (rank %d) -> %s, %s", f.record.Name, f.record.Rank, alias, f.record.Source)
+	if f.record.Reason != "" {
+		out += fmt.Sprintf(": %q", f.record.Reason)
+	}
+	if f.record.Site != "" {
+		out += " at " + f.record.Site
+	}
+	return out
+}
+
+// refusal is spawn-names-model's refusal at strict of a spawn of model from host, "" when
+// model resolves to a tier of the forked rank or is the model the row itself named. A host
+// the declaration maps no model for is refused too, naming the hosts entry that would map
+// one.
+func (f forkedTier) refusal(host types.HarnessKey, model string) string {
+	if f.record.Model != "" && model == f.record.Model {
+		return ""
+	}
+	alias, err := f.set.Alias(host, f.tier)
+	if err != nil {
+		return fmt.Sprintf("magus workspace: job %s was forked at model tier %s, and %v; add a %s entry to the hosts magus\\job.modelTiers declares, or spawn the job from a harness it maps.",
+			f.job, f.record.Name, err, host.ID)
+	}
+	spawned, ok := f.set.Resolve(host, model)
+	if ok && spawned.Rank() == f.tier.Rank() {
+		return ""
+	}
+	runs := fmt.Sprintf("%s, which harness %s maps to no model tier", model, host.ID)
+	if ok {
+		runs = fmt.Sprintf("%s, model tier %s (rank %d)", model, spawned.Name(), spawned.Rank())
+	}
+	return fmt.Sprintf("magus workspace: this spawn runs %s, and job %s was forked at %s; spawn it on %s, or re-fork the job at the tier its work needs.",
+		runs, f.job, f.line(alias), alias)
+}
+
+// rankedAbove is spawn-above-model-tier's advice for a spawn of model from host, "" unless
+// model resolves to a tier ranking above the forked one.
+func (f forkedTier) rankedAbove(host types.HarnessKey, model string) string {
+	spawned, ok := f.set.Resolve(host, model)
+	if !ok {
+		return ""
+	}
+	if above, err := spawned.Above(f.tier); err != nil || !above {
+		return ""
+	}
+	// Resolve found the host mapped, so Alias cannot fail here.
+	alias, _ := f.set.Alias(host, f.tier)
+	return fmt.Sprintf("magus workspace: this spawn runs %s, model tier %s (rank %d), above job %s's %s; spawn it on %s, or re-fork the row at the tier the work needs so the row records why.",
+		model, spawned.Name(), spawned.Rank(), f.job, f.line(alias), alias)
 }

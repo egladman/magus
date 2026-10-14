@@ -912,15 +912,26 @@ var ruleDocSpawnNamesModel = denyDoc(types.RuleDoc{ //nolint:unused // read thro
 	Name:    string(denyRuleSpawnNamesModel),
 	Catches: "a main thread spawning a subagent without naming the model it runs on",
 	Why: "A spawn that names no model runs the child on the session's own, usually the costliest it uses. " +
-		"At standard it advises once; at strict it refuses, and also refuses a spawn whose model and its job's model both name rows of the model table and differ.",
+		"At standard it advises once; at strict it refuses, and also refuses a spawn whose job row records a model tier when the spawn's model is not at that tier. " +
+		"The model resolves to a tier through the host's aliases in the workspace's model-tier declaration, and the two compare by rank; a host the declaration maps no model for is refused naming the hosts entry to add. " +
+		"The refusal names the row's tier, rank, alias, the source that chose it, its reason and the declaration's site. A spawn bound to no row, or to a row forked with no tiers declared, is judged on the missing model alone.",
 })
 
-var ruleDocSpawnPrincipalForEconomy = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
-	Name:    string(denyRuleSpawnPrincipalForEconomy),
-	Catches: "a read-only job's subagent spawned on one of the costliest models",
-	Why: "A job marked read-only gathers evidence, which a cheaper model does as well. The spawn's model, or the session's own when it names none, counts as costly when its input price is above the median of the model table. " +
-		"At standard it advises once; at strict it also advises on a spawn of the host's read-only explore agent type. It keys on declared facts, never on the prompt, and never refuses, since a read-only design job can need the strongest model.",
+var ruleDocSpawnAboveModelTier = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
+	Name:    string(denyRuleSpawnAboveModelTier),
+	Catches: "a subagent spawned on a model whose tier ranks above the tier its job was forked at",
+	Why: "A job row records the model tier it was forked at and why. A spawn of a model the declaration ranks above that tier spends more than the row chose, and the row no longer says why. " +
+		"It compares ranks in the workspace's declaration, never model names or prices, and says nothing for a model no tier maps. " +
+		"It never refuses: work can outgrow its row, and the remedy is re-forking the row at the tier it needs so the choice is recorded, which only the root can judge.",
 }, false)
+
+var ruleDocModelTierContextCap = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
+	Name:    string(advisoryModelTierContextCap),
+	Catches: "a leased worker writing past the context its job's model tier caps",
+	Why: "A model tier's bounds in the workspace's declaration can cap the context a worker at that tier reaches (maxContext), because a smaller model past a large context does worse work and resends all of it every turn. " +
+		"When a leased worker's context, as its host last reported it, passes the cap of the tier its row was forked at, its next write is advised to report what it has and stop. " +
+		"Set to deny, every write under the lease is refused, as a lease past its deadline is. A tier with no cap, a row with no tier, or a host that reports no context is never judged.",
+}, true)
 
 var ruleDocCompatMarker = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
 	Name:    string(denyRuleCompatMarker),

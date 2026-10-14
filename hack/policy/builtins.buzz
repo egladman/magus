@@ -116,8 +116,8 @@ export final BUILTINS: {str: any} = {
 //     baseline and its 350k refusal half the median peak.
 //   root-heavy-command: 105 streaks of 8 or more delegable root calls ran without a
 //     spawn; those classes were 63% of the root's tool-result characters.
-//   spawn-principal-for-economy: 164 Opus spawns carried a scout, read-only or research
-//     prompt.
+//   spawn-above-model-tier: 164 Opus spawns carried a scout, read-only or research
+//     prompt, work a job row would fork at economy.
 //   stall: 3.0 to 5.1 runs of three or more failed calls per 1,000 calls on every model
 //     tier, and about 30% of every tier's refusals repeated one already given, so no tier
 //     gets its own ladder yet.

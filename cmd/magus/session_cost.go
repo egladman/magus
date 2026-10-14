@@ -24,7 +24,7 @@ var costAdviceRules = []string{
 	"root-heavy-command",
 	"root-result-cap",
 	"root-repeat",
-	"spawn-principal-for-economy",
+	"spawn-above-model-tier",
 }
 
 // The cost sections, in the order they print. A section nobody could measure is listed

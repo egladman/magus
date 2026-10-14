@@ -1,15 +1,17 @@
 package guard
 
 import (
-	"os"
-	"path/filepath"
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -215,27 +217,10 @@ func TestShadowVerdicts(t *testing.T) {
 	assert.Equal(t, types.GuardAdvise, inferred[types.GuardProfileStrict], "an inferred thread is never refused")
 }
 
-func TestPrincipalPricedReadsTheTable(t *testing.T) {
-	t.Parallel()
-	table := fixtureModelTable()
-	assert.True(t, principalPriced("opus", table))
-	assert.True(t, principalPriced("claude-fable-5-1", table))
-	assert.False(t, principalPriced("sonnet", table))
-	assert.False(t, principalPriced("claude-haiku-5-5", table))
-	assert.False(t, principalPriced("", table))
-	assert.True(t, differentModels("sonnet", "opus", table))
-	assert.False(t, differentModels("sonnet", "claude-sonnet-5-5", table))
-	assert.False(t, differentModels("sonnet", "economy", table), "a tier word names no row")
-}
-
 // strictDeps is a workspace at the strict level with nothing else declared.
 func strictDeps(t *testing.T) Dependencies {
 	t.Helper()
-	expanded, err := builtin.ResolveProfile(types.GuardProfileStrict, nil)
-	require.NoError(t, err)
-	resolved, err := builtin.Resolve(expanded)
-	require.NoError(t, err)
-	return Dependencies{Builtins: resolved}
+	return levelDeps(t, types.GuardProfileStrict)
 }
 
 // The cost rules judge the main thread only, refuse it only where its host named it, and
@@ -261,30 +246,179 @@ func TestMainThreadCommandsAreJudgedByTheCostRules(t *testing.T) {
 	assert.Equal(t, string(denyRuleRootHeavyCommand), known.Rule)
 }
 
-// A spawn naming no model is refused at strict, and a read-only job's spawn on one of the
-// costliest models is advised.
+// A spawn naming no model is refused at strict. A row forked with no model tier has no tier
+// to compare a named model against, and the declaration is never opened for it.
 func TestMainThreadSpawnsAreJudgedByTheSpawnRules(t *testing.T) {
-	ctx, root := fleetFixture(t, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared, Model: "haiku"})
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("agents:\n  models:\n"+
-		"    claude-haiku-5-5: {window: 1000000, input: 0.1}\n    claude-opus-5-5: {window: 1000000, input: 4}\n"), 0o600))
+	ctx, _ := fleetFixture(t, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared, Model: "haiku"})
 	deps := strictDeps(t)
+	asked := 0
+	deps.ModelTiers = func() *types.ModelTierSet {
+		asked++
+		return testModelTiers(t, "claude-code")
+	}
 	at := hookLocation(ctx, deps)
 	hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
-	spawn := func(model string) Verdict {
-		input := map[string]any{"description": "orchestrator/scout scout", "prompt": "Read internal/job and report."}
-		if model != "" {
-			input["model"] = model
-		}
-		return Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
-			"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "Agent", "tool_input": input,
-		})})
-	}
 
-	v := spawn("")
+	v := judgeSpawn(ctx, t, deps, "")
 	assert.Equal(t, decisionDeny, v.Decision)
 	assert.Equal(t, string(denyRuleSpawnNamesModel), v.Rule)
 
-	v = spawn("opus")
-	assert.Equal(t, decisionDeny, v.Decision, "the job was forked for another model")
+	v = judgeSpawn(ctx, t, deps, "opus")
+	assert.NotEqual(t, string(denyRuleSpawnNamesModel), v.Rule, "the row records no model tier")
+	assert.NotEqual(t, string(denyRuleSpawnAboveModelTier), v.Rule)
+	assert.Zero(t, asked, "a row with no tier never opens the declaration")
+}
+
+// At strict a spawn runs at the model tier its row was forked at, compared by rank through
+// the host's aliases, and the refusal names the row's whole assignment.
+func TestSpawnNamesModelComparesModelTierRanks(t *testing.T) {
+	set := testModelTiers(t, "claude-code")
+	ctx := tierFixture(t, set, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+	deps := strictDeps(t)
+	deps.ModelTiers = func() *types.ModelTierSet { return set }
+	at := hookLocation(ctx, deps)
+	hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
+
+	v := judgeSpawn(ctx, t, deps, "haiku")
+	assert.NotEqual(t, string(denyRuleSpawnNamesModel), v.Rule, "haiku is the economy alias")
+
+	v = judgeSpawn(ctx, t, deps, "opus")
+	assert.Equal(t, decisionDeny, v.Decision)
 	assert.Equal(t, string(denyRuleSpawnNamesModel), v.Rule)
+	assert.Contains(t, v.Reason, `magus workspace: this spawn runs opus, model tier principal (rank 2), and job scout was forked at `+
+		`economy (rank 0) -> haiku, matrix: "two files" at hack/tiers.buzz:12; spawn it on haiku, or re-fork the job at the tier its work needs.`)
+
+	v = judgeSpawn(ctx, t, deps, "claude-haiku-5-5")
+	assert.Equal(t, decisionDeny, v.Decision, "an id no alias names has no tier")
+	assert.Contains(t, v.Reason, "claude-haiku-5-5, which harness claude-code maps to no model tier")
+}
+
+// A declaration that maps no model for the spawning host is refused at strict, naming the
+// hosts entry to add.
+func TestSpawnNamesModelNamesTheHostEntryToAdd(t *testing.T) {
+	set := testModelTiers(t, "other-host")
+	ctx := tierFixture(t, set, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+	deps := strictDeps(t)
+	deps.ModelTiers = func() *types.ModelTierSet { return set }
+	at := hookLocation(ctx, deps)
+	hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
+
+	v := judgeSpawn(ctx, t, deps, "haiku")
+
+	assert.Equal(t, decisionDeny, v.Decision)
+	assert.Equal(t, string(denyRuleSpawnNamesModel), v.Rule)
+	assert.Contains(t, v.Reason, "maps no model for harness claude-code; its hosts are other-host")
+	assert.Contains(t, v.Reason, "add a claude-code entry to the hosts magus\\job.modelTiers declares")
+}
+
+// A spawn on a tier ranked above its row's is advised, never refused, and one at or below
+// it is not.
+func TestSpawnAboveModelTierAdvisesByRank(t *testing.T) {
+	set := testModelTiers(t, "claude-code")
+	ctx := tierFixture(t, set, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+	deps := levelDeps(t, types.GuardProfileStandard)
+	deps.ModelTiers = func() *types.ModelTierSet { return set }
+	at := hookLocation(ctx, deps)
+	hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
+
+	v := judgeSpawn(ctx, t, deps, "haiku")
+	assert.NotEqual(t, string(denyRuleSpawnAboveModelTier), v.Rule)
+
+	v = judgeSpawn(ctx, t, deps, "opus")
+	assert.Equal(t, decisionAdvise, v.Decision, "it never refuses")
+	assert.Contains(t, v.Context, `this spawn runs opus, model tier principal (rank 2), above job scout's economy (rank 0) -> haiku, matrix: "two files" at hack/tiers.buzz:12`)
+}
+
+// A root-context-budget figure above every window the model table holds is refused as a
+// misdeclaration on the main thread's commands; with no table there is nothing to bound it.
+func TestBudgetTokensPastEveryWindowIsRefused(t *testing.T) {
+	deps := strictDeps(t)
+	deps.Builtins[string(denyRuleRootContextBudget)] = builtin.Setting{Decision: builtin.Deny, Tokens: 2_000_000}
+	judge := func(rows bool) Verdict {
+		ctx, cache := spawnFixture(t)
+		if rows {
+			useFixtureModelRows(hookLocation(ctx, deps))
+		}
+		hostGate(cache, "claude-code").MarkFired(hostAgentsKind)
+		return Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s"})
+	}
+
+	assert.NotEqual(t, string(denyRuleRootContextBudget), judge(false).Rule, "no rows, no window to bound by")
+
+	v := judge(true)
+	assert.Equal(t, decisionDeny, v.Decision)
+	assert.Equal(t, string(denyRuleRootContextBudget), v.Rule)
+	assert.Contains(t, v.Reason, string(types.GuardRuleMisdeclared))
+	assert.Contains(t, v.Reason, `built-in rule "root-context-budget": tokens is 2000000, past the largest context window in the model table (1000000); give 1000000 or less`)
+}
+
+func TestBudgetPastEveryWindowReadsTheTableOnlyForAStatedFigure(t *testing.T) {
+	t.Parallel()
+	reads := 0
+	table := func() model.Table {
+		reads++
+		return fixtureModelTable()
+	}
+	_, refused := budgetPastEveryWindow(builtin.Setting{Decision: builtin.Deny}, table)
+	assert.False(t, refused)
+	assert.Zero(t, reads, "no figure, no table")
+	_, refused = budgetPastEveryWindow(builtin.Setting{Decision: builtin.Off, Tokens: 5_000_000}, table)
+	assert.False(t, refused, "an off rule fires at no figure")
+	_, refused = budgetPastEveryWindow(builtin.Setting{Decision: builtin.Advise, Tokens: 1_000_000}, table)
+	assert.False(t, refused, "the largest window itself is reachable")
+	_, refused = budgetPastEveryWindow(builtin.Setting{Decision: builtin.Advise, Tokens: 1_000_001}, table)
+	assert.True(t, refused)
+}
+
+// levelDeps is a workspace at level with nothing else declared.
+func levelDeps(t *testing.T, level types.GuardProfile) Dependencies {
+	t.Helper()
+	expanded, err := builtin.ResolveProfile(level, nil)
+	require.NoError(t, err)
+	resolved, err := builtin.Resolve(expanded)
+	require.NoError(t, err)
+	return Dependencies{Builtins: resolved}
+}
+
+// testModelTiers is the shipped tier shape with host mapping its aliases and an economy
+// context cap of 100k.
+func testModelTiers(t *testing.T, host string) *types.ModelTierSet {
+	t.Helper()
+	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+		Enum: "ModelTier", Site: "hack/tiers.buzz:3", Cases: []string{"economy", "standard", "principal"}, Default: 1,
+		Bounds: []types.ModelTierBounds{{MaxContext: 100_000}, {}, {}},
+		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort, types.SkillVariantShort},
+		Hosts:  map[types.HarnessKey][]string{{ID: host}: {"haiku", "sonnet", "opus"}},
+	})
+	require.NoError(t, err)
+	return set
+}
+
+// tierFixture forks rows through a job store that assigns their model tiers from set, every
+// one at economy by a matrix, and pins the location there.
+func tierFixture(t *testing.T, set *types.ModelTierSet, rows ...types.Job) context.Context {
+	t.Helper()
+	testkit.Isolate(t)
+	root, cacheDir := t.TempDir(), t.TempDir()
+	matrix := func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error) {
+		return &types.JobModelTier{Name: "economy", Rank: 0, Skills: types.SkillVariantFull, Reason: "two files", Site: "hack/tiers.buzz:12"}, nil
+	}
+	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root, ModelTiers: set, ModelTierMatrix: matrix})
+	for _, row := range rows {
+		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+		require.NoError(t, err)
+	}
+	return context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir, workspace: root})
+}
+
+// judgeSpawn judges a Claude Code main-thread spawn of job scout on model, "" for none.
+func judgeSpawn(ctx context.Context, t *testing.T, deps Dependencies, model string) Verdict {
+	t.Helper()
+	input := map[string]any{"description": "orchestrator/scout scout", "prompt": "Read internal/job and report."}
+	if model != "" {
+		input["model"] = model
+	}
+	return Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
+		"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "Agent", "tool_input": input,
+	})})
 }

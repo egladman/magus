@@ -48,15 +48,16 @@ type Setting struct {
 }
 
 const (
-	compatMarker             = "compat-marker"
-	readNavigation           = "read-navigation"
-	rootContextBudget        = "root-context-budget"
-	rootHeavyCommand         = "root-heavy-command"
-	rootResultCap            = "root-result-cap"
-	rootRepeat               = "root-repeat"
-	spawnNamesModel          = "spawn-names-model"
-	spawnPrincipalForEconomy = "spawn-principal-for-economy"
-	stall                    = "stall"
+	compatMarker        = "compat-marker"
+	modelTierContextCap = "model-tier-context-cap"
+	readNavigation      = "read-navigation"
+	rootContextBudget   = "root-context-budget"
+	rootHeavyCommand    = "root-heavy-command"
+	rootResultCap       = "root-result-cap"
+	rootRepeat          = "root-repeat"
+	spawnNamesModel     = "spawn-names-model"
+	spawnAboveModelTier = "spawn-above-model-tier"
+	stall               = "stall"
 )
 
 // params maps each rule that takes a parameter to the parameters it takes, by the names
@@ -74,10 +75,10 @@ var params = map[string][]string{
 // neverDeny names the rules that only ever explain, so a deny declared for one is a
 // misdeclaration rather than a refusal nobody would see.
 var neverDeny = map[string]string{
-	compatMarker:             "whether code stays for an old caller is the root's call, and refusing the write would not ask it",
-	rootResultCap:            "it reads a result the call already returned",
-	spawnPrincipalForEconomy: "a read-only job can need the strongest model, and nothing on the spawn says which",
-	stall:                    "it routes a block to the root and refuses nothing itself",
+	compatMarker:        "whether code stays for an old caller is the root's call, and refusing the write would not ask it",
+	rootResultCap:       "it reads a result the call already returned",
+	spawnAboveModelTier: "work can outgrow the tier its row was forked at, and only the root can tell when it has",
+	stall:               "it routes a block to the root and refuses nothing itself",
 }
 
 // profiles maps each level to the settings it gives the rules it names. A level leaves
@@ -92,22 +93,22 @@ var profiles = map[types.GuardProfile]map[string]Setting{
 		stall:             {Decision: Advise},
 	},
 	types.GuardProfileStandard: {
-		rootContextBudget:        {Decision: Advise},
-		rootHeavyCommand:         {Decision: Advise},
-		rootResultCap:            {Decision: Advise},
-		rootRepeat:               {Decision: Advise},
-		spawnNamesModel:          {Decision: Advise},
-		spawnPrincipalForEconomy: {Decision: Advise},
-		stall:                    {Decision: Advise},
+		rootContextBudget:   {Decision: Advise},
+		rootHeavyCommand:    {Decision: Advise},
+		rootResultCap:       {Decision: Advise},
+		rootRepeat:          {Decision: Advise},
+		spawnNamesModel:     {Decision: Advise},
+		spawnAboveModelTier: {Decision: Advise},
+		stall:               {Decision: Advise},
 	},
 	types.GuardProfileStrict: {
-		rootContextBudget:        {Decision: Deny},
-		rootHeavyCommand:         {Decision: Deny},
-		rootResultCap:            {Decision: Advise},
-		rootRepeat:               {Decision: Deny},
-		spawnNamesModel:          {Decision: Deny},
-		spawnPrincipalForEconomy: {Decision: Advise},
-		stall:                    {Decision: Advise},
+		rootContextBudget:   {Decision: Deny},
+		rootHeavyCommand:    {Decision: Deny},
+		rootResultCap:       {Decision: Advise},
+		rootRepeat:          {Decision: Deny},
+		spawnNamesModel:     {Decision: Deny},
+		spawnAboveModelTier: {Decision: Advise},
+		stall:               {Decision: Advise},
 	},
 }
 
@@ -205,6 +206,7 @@ var defaults = map[string]Decision{
 	"lease-state":         Advise,
 	"lease-terminal":      Advise,
 	"leased-path":         Advise,
+	modelTierContextCap:   Advise,
 	"new-file":            Advise,
 	"new-source-dir":      Advise,
 	"precedent-search":    Advise,
@@ -224,13 +226,13 @@ var defaults = map[string]Decision{
 
 	// The cost rules and the stall rule are off until a level turns them on, and the
 	// level a workspace gets when it declares none is light.
-	rootContextBudget:        Off,
-	rootHeavyCommand:         Off,
-	rootResultCap:            Off,
-	rootRepeat:               Off,
-	spawnNamesModel:          Off,
-	spawnPrincipalForEconomy: Off,
-	stall:                    Off,
+	rootContextBudget:   Off,
+	rootHeavyCommand:    Off,
+	rootResultCap:       Off,
+	rootRepeat:          Off,
+	spawnNamesModel:     Off,
+	spawnAboveModelTier: Off,
+	stall:               Off,
 
 	"guard-unfinished":         Advise,
 	"workspace-command-failed": Advise,

@@ -64,7 +64,7 @@ type SpawnRequest struct {
 	// Session is the host's session id for the CALLER, empty when it reported none.
 	Session string
 	// Model is the model string the caller named, raw. Empty means it named none and the
-	// host picks; magus maps no model to a tier.
+	// host picks.
 	Model string
 	// AgentType is the subagent type the caller asked for.
 	AgentType string

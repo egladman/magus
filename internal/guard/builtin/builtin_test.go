@@ -36,13 +36,15 @@ func TestDefaults(t *testing.T) {
 		"background-left":      Deny,
 		"background-unbounded": Deny,
 
-		"root-context-budget":         Off,
-		"root-heavy-command":          Off,
-		"root-result-cap":             Off,
-		"root-repeat":                 Off,
-		"spawn-names-model":           Off,
-		"spawn-principal-for-economy": Off,
-		"stall":                       Off,
+		"root-context-budget":    Off,
+		"root-heavy-command":     Off,
+		"root-result-cap":        Off,
+		"root-repeat":            Off,
+		"spawn-names-model":      Off,
+		"spawn-above-model-tier": Off,
+		"stall":                  Off,
+
+		"model-tier-context-cap": Advise,
 	}
 	have := map[string]Decision{}
 	for name := range want {
@@ -307,7 +309,7 @@ func TestResolveNamesEveryTakerOfAParameter(t *testing.T) {
 
 // A rule that only ever explains cannot be declared to refuse.
 func TestResolveRefusesADenyOnARuleThatNeverDenies(t *testing.T) {
-	for _, name := range []string{"compat-marker", "root-result-cap", "spawn-principal-for-economy", "stall"} {
+	for _, name := range []string{"compat-marker", "root-result-cap", "spawn-above-model-tier", "stall"} {
 		_, err := Resolve(map[string]Setting{name: {Decision: Deny}})
 		var de *types.DiagnosticError
 		require.ErrorAs(t, err, &de, name)

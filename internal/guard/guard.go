@@ -91,6 +91,11 @@ type Dependencies struct {
 	// price, never for one that needs only the billing mode. Nil means no rows: a rule
 	// then finds no facts for a model, as for one the table does not know.
 	ModelRows func() []types.ModelFacts
+	// ModelTiers yields the workspace's model-tier declaration, nil when it turned tiers
+	// off or did not load. It opens the workspace whole, so the guard asks only once a job
+	// row the call is bound to records a tier. Nil means no declaration: the tier rules then
+	// have nothing to compare and stay silent.
+	ModelTiers func() *types.ModelTierSet
 	// CheckoutState reads the checkout holding dir for a command rule judging a push or a
 	// commit, nil when its version control cannot report it.
 	CheckoutState func(ctx context.Context, dir string) *types.CheckoutState
@@ -905,6 +910,17 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				adviceKind = cmp.Or(g.Kind, hint.MarkerKind(advisoryLeaseState))
 				said, spoken = deps.heldBy(markers, string(adviceKind)).Once(cmp.Or(g.Key, g.Kind), g.Context), true
 				whys[g.Context] = g.Why
+			}
+		}
+		// Raised to deny it refuses whatever spoke above, as a lease past its deadline does.
+		if verdict.Decision != decisionDeny {
+			if a := adviseModelTierContext(ctx, deps, location, who, facts, actingLease); a.Say != "" {
+				if s, _ := deps.setting(string(advisoryModelTierContextCap)); s.Decision == builtin.Deny {
+					refuseWith(denyRuleName(advisoryModelTierContextCap), denial{Say: a.Say, Why: a.Why})
+				} else if !spoken {
+					said, adviceKind, spoken = deps.heldBy(markers, string(advisoryModelTierContextCap)).Once(advisoryModelTierContextCap, a.Say), advisoryModelTierContextCap, true
+					whys[a.Say] = a.Why
+				}
 			}
 		}
 		if verdict.Decision != decisionDeny {

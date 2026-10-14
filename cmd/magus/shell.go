@@ -336,6 +336,7 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 		CheckoutBase:     checkoutBaseForGuard,
 		CheckoutState:    checkoutStateForGuard,
 		ModelRows:        guardModelRows(ctx, rootOverride),
+		ModelTiers:       guardModelTiers(ctx, rootOverride),
 		VCS: types.VCSOptions{
 			Enabled: globalCfg.VCS.Enabled, Name: globalCfg.VCS.Name, BaseRef: globalCfg.VCS.BaseRef,
 		},
@@ -414,6 +415,28 @@ func guardModelRows(ctx context.Context, rootOverride string) func() []types.Mod
 	}
 	return harnessModelRows(ctx, root, func(ctx context.Context) (types.WorkspaceRepository, error) {
 		return inspectWorkspace(ctx, rootOverride)
+	})
+}
+
+// guardModelTiers is the lazy reader of the model-tier declaration of the workspace found
+// from rootOverride, nil outside a workspace. It opens the workspace whole, as guardModelRows
+// does, and shares that one load: the guard's own rule load keeps only the magus\guard
+// registrations and what they reach, so it holds neither a magus\job.modelTiers call nor
+// the harness spells whose aliases map each tier to a model.
+func guardModelTiers(ctx context.Context, rootOverride string) func() *types.ModelTierSet {
+	if _, err := magus.FindRoot(rootOverride); err != nil {
+		return nil
+	}
+	return sync.OnceValue(func() *types.ModelTierSet {
+		ws, err := inspectWorkspace(ctx, rootOverride)
+		if err != nil {
+			return nil
+		}
+		tiered, ok := ws.(interface{ ModelTiers() *types.ModelTierSet })
+		if !ok {
+			return nil
+		}
+		return tiered.ModelTiers()
 	})
 }
 
