@@ -542,7 +542,7 @@ func freeMagus(args []string) bool {
 	}
 	switch words[0] {
 	case "run", "affected":
-		if magusSilent(args) {
+		if magusFlag(args, "s", "silent") {
 			return true
 		}
 		if words[0] == "run" && len(words) > 1 && (words[1] == "go-build" || words[1] == "go::go-build") {

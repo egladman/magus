@@ -132,6 +132,8 @@ var costBoundLines = map[string]types.DelegableClass{
 	"./magus run test internal/guard":             types.DelegableRun,
 	"./magus run test internal/guard -- -s":       types.DelegableRun,
 	"./magus run test internal/guard -- --silent": types.DelegableRun,
+	"./magus run test internal/guard -s=false":    types.DelegableRun,
+	"./magus affected ci --silent=false":          "",
 	"./magus query output out1":                   types.DelegableRead,
 	"./magus describe job a1 -o json":             "",
 	"./magus describe job a1":                     "",
