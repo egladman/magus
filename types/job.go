@@ -490,12 +490,6 @@ const (
 	WriteProofOverlapping JobWriteProof = "overlapping"
 )
 
-// JobWriteProofs is the closed set, for the reason JobStates is one: the published schema
-// and every reader that renders a row quote it.
-func JobWriteProofs() []JobWriteProof {
-	return []JobWriteProof{WriteProofAlone, WriteProofDisjoint, WriteProofOverlapping}
-}
-
 // LeaseSource is which channel answered the lease a call acts under. Every source but
 // [LeaseSourceEnv] is a record magus wrote or a flag the caller's wiring passed; the
 // environment is the process's claim about itself, so it answers only when nothing else

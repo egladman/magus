@@ -2,8 +2,6 @@ package tty
 
 import (
 	"errors"
-	"io"
-	"os"
 	"sync"
 	"time"
 )
@@ -186,17 +184,6 @@ func StderrNotifier() *Notifier {
 		stderrNotifierVal = NewNotifier(StderrZone(), notifyRows)
 	}
 	return stderrNotifierVal
-}
-
-// ResolveNotifier returns the notification band for w: the process-wide
-// [StderrNotifier] when w IS standard error, and a fresh unshared one
-// otherwise. It is the [ResolveZone] of notifications and makes the same identity
-// check for the same reason.
-func ResolveNotifier(w io.Writer) *Notifier {
-	if w == os.Stderr {
-		return StderrNotifier()
-	}
-	return NewNotifier(NewZone(w, SystemProbe), notifyRows)
 }
 
 // ReleaseStderr stops the process's notification band and hands back every

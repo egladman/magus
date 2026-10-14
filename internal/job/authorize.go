@@ -75,12 +75,6 @@ func (s *Store) As(a Actor) *Store {
 	}
 }
 
-// RefuseUnstampedVerify is the refusal for an [Actor.Unstamped] caller verifying row id,
-// which [Actor.Verifies] answers only as a bool.
-func RefuseUnstampedVerify(id string) error {
-	return refuse(Actor{Unstamped: true}, id, "verifying a row grades its holder's work, and a caller magus cannot name may be that holder")
-}
-
 // grading is what KIND of write reaches [Store.mutate], which decides two things: whether
 // the acting party's boundary applies to it, and which store-owned fields it may set. Both
 // are spelled at every call site rather than defaulted, because a write that reaches the
