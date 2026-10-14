@@ -310,6 +310,24 @@ func TestVCSAddReportsTheReason(t *testing.T) {
 	assert.Contains(t, out, "review before committing: hg diff --stat")
 }
 
+// TestVCSAddHoldsAnotherLeasesPaths: a whole-tree `vcs add` swept a sibling lease's
+// uncommitted sources out of a shared checkout into the caller's commit (2026-10-14).
+func TestVCSAddHoldsAnotherLeasesPaths(t *testing.T) {
+	root := t.TempDir()
+	rows := []types.Job{
+		{ID: "mine", State: types.StateRunning, CheckoutRoot: root, WritePaths: []string{"api/**"}},
+		{ID: "sibling", State: types.StateRunning, CheckoutRoot: root, WritePaths: []string{"web/**"}},
+		{ID: "elsewhere", State: types.StateRunning, CheckoutRoot: t.TempDir(), WritePaths: []string{"docs/**"}},
+		{ID: "ended", State: types.StatePass, CheckoutRoot: root, WritePaths: []string{"cli/**"}},
+	}
+	paths := []string{"api/a.go", "web/b.ts", "docs/c.md", "cli/d.go", "README.md"}
+
+	assert.Equal(t, map[string]string{"web/b.ts": "sibling"}, otherLeasesPaths(rows, root, "mine", paths),
+		"only a live lease writing in this checkout holds a path back from its sibling")
+	assert.Equal(t, map[string]string{"api/a.go": "mine", "web/b.ts": "sibling"}, otherLeasesPaths(rows, root, "", paths),
+		"a caller with no lease stages no lease's work")
+}
+
 // TestCheckpointLineCarriesThePreservedHandle covers the promise --preserve makes in its
 // own usage text. The default rendering used to be byte-identical with and without the
 // flag while one of the two spellings minted an object in the user's repository, so the

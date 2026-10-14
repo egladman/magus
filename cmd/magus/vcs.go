@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/risk"
 	"github.com/egladman/magus/internal/service/console"
@@ -1167,6 +1168,17 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	// undeclared path at once, which is the one that needs a flag because nobody named
 	// them one by one.
 	explicit := len(pos) > 0
+	if !explicit {
+		held, err := heldForOtherLeases(ctx, root, slices.Concat(sources, outputs, undeclared))
+		if err != nil {
+			return err
+		}
+		isHeld := func(p string) bool { _, ok := held[p]; return ok }
+		sources = slices.DeleteFunc(sources, isHeld)
+		outputs = slices.DeleteFunc(outputs, isHeld)
+		undeclared = slices.DeleteFunc(undeclared, isHeld)
+		reportHeld(ctx, held)
+	}
 	maintained, unclaimed := splitMaintained(undeclared)
 	if explicit {
 		// They were asked for by name, so they are not "skipped" and must not be
@@ -1380,6 +1392,58 @@ func stagePaths(ctx context.Context, root string, driver types.VCSDriver, paths 
 		return nil, nil, fmt.Errorf("vcs add: %w", err)
 	}
 	return stageable, dropped, nil
+}
+
+// heldForOtherLeases is the subset of paths a whole-tree `vcs add` leaves unstaged, each
+// with the live lease it belongs to: the ones another lease's write paths cover in this
+// checkout. Two holders sharing a checkout share its dirty tree, and staging the other's
+// uncommitted sources would land them under this caller's commit.
+func heldForOtherLeases(ctx context.Context, root string, paths []string) (map[string]string, error) {
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return nil, fmt.Errorf("vcs add: resolve the cache dir to read which leases share this checkout: %w", err)
+	}
+	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
+	if err != nil {
+		return nil, fmt.Errorf("vcs add: read the job store to keep other leases' work out of this stage: %w", err)
+	}
+	lease, _ := job.ActingLease(cacheDir, types.JobLeaseFromContext(ctx))
+	return otherLeasesPaths(rows, root, lease, paths), nil
+}
+
+// otherLeasesPaths maps each of paths that a live row in the checkout at root, other than
+// lease's own, declares among its write paths to that row's id. Two rows covering one path
+// both name it, unless lease is one of them.
+func otherLeasesPaths(rows []types.Job, root, lease string, paths []string) map[string]string {
+	here := slices.DeleteFunc(slices.Clone(rows), func(r types.Job) bool {
+		return r.CheckoutRoot == "" || !sameDir(r.CheckoutRoot, root)
+	})
+	held := map[string]string{}
+	for _, p := range paths {
+		owner, ok := job.AttributeWrite(here, p)
+		switch {
+		case ok && owner.Job != lease:
+			held[p] = owner.Job
+		case !ok && len(owner.Ambiguous) > 0 && !slices.Contains(owner.Ambiguous, lease):
+			held[p] = strings.Join(owner.Ambiguous, " and ")
+		}
+	}
+	return held
+}
+
+// reportHeld says, on stderr in every output format, which paths a whole-tree stage left
+// for the leases that write them.
+func reportHeld(ctx context.Context, held map[string]string) {
+	byLease := map[string][]string{}
+	for p, lease := range held {
+		byLease[lease] = append(byLease[lease], p)
+	}
+	for _, lease := range slices.Sorted(maps.Keys(byLease)) {
+		paths := byLease[lease]
+		slices.Sort(paths)
+		slog.WarnContext(ctx, fmt.Sprintf("vcs add: held back %d path(s) live lease %s writes in this checkout, so its uncommitted work stays out of this stage: %s; name a path to stage it anyway",
+			len(paths), lease, strings.Join(paths, ", ")), attr.Notice(""), attr.Component("magus"))
+	}
 }
 
 // emitStaging renders the verdict: the structured formats get the value itself, and the
