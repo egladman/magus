@@ -17,6 +17,9 @@ fun describe(r: magus\Rule) > str {
     if (r.decision == "deny") {
         return "A deny rule by default: it refuses " + r.catches + ", and names what to run instead.";
     }
+    if (r.decision == "off") {
+        return "Off by default: once a workspace turns it on, it reports " + r.catches + ".";
+    }
     return "An advisory by default: it explains, and blocks nothing, on " + r.catches + ".";
 }
 
@@ -58,14 +61,38 @@ fun override(r: magus\Rule) > str {
         + "A loosening takes effect once it is committed; a tightening applies at once.\n\n";
 }
 
-// verdictLines is one example verdict line per verdict the rule can give, most refusing
-// first: an off rule prints nothing, and a rule that never refuses never prints deny.
-fun verdictLines(r: magus\Rule) > str {
-    final lines = mut [<str>];
-    foreach (d in ["deny", "advise"]) {
-        if (r.verdicts.indexOf(d) != null) { lines.append(d + " [" + r.name + "]: ...\n"); }
+// shownVerdict is the verdict the example line shows: the one the rule gives by default,
+// or for an off rule the one it gives once on, the least refusing it can.
+fun shownVerdict(r: magus\Rule) > str {
+    if (r.decision != "off") {
+        return r.decision;
     }
-    return lines.join("");
+    if (r.verdicts.indexOf("advise") != null) {
+        return "advise";
+    }
+    return "deny";
+}
+
+// verdictLines is the one example verdict line for shownVerdict, or nothing for a rule
+// that cannot give it.
+fun verdictLines(r: magus\Rule) > str {
+    final shown = shownVerdict(r);
+    if (r.verdicts.indexOf(shown) == null) {
+        return "";
+    }
+    return shown + " [" + r.name + "]: ...\n";
+}
+
+// otherVerdictNote says what a workspace sees after setting a rule to the verdict the
+// example line does not show, or nothing when the rule gives no other.
+fun otherVerdictNote(r: magus\Rule) > str {
+    final shown = shownVerdict(r);
+    foreach (d in ["deny", "advise"]) {
+        if (d != shown and r.verdicts.indexOf(d) != null) {
+            return "A workspace that sets this rule to `" + d + "` sees `" + d + " [" + r.name + "]: ...` instead.\n\n";
+        }
+    }
+    return "";
 }
 
 // upperFirst capitalizes only a leading ASCII letter: several rules open with a
@@ -94,6 +121,7 @@ export fun renderRule(r: magus\Rule) > str {
         + "```text\n"
         + verdictLines(r)
         + "```\n\n"
+        + otherVerdictNote(r)
         + "`magus describe rule " + r.name + "` prints the same entry at a terminal, and\n"
         + "`magus describe rules` lists every rule this workspace enforces.\n\n"
         + "## See also\n\n"
@@ -509,6 +537,15 @@ test "a rule that never refuses offers no deny" {
     std\assert(page.indexOf("magus\\guard.builtins(\{\"stall\": \"advise\"})") != null, message: page);
     std\assert(page.indexOf("```text\nadvise [stall]: ...\n```") != null, message: page);
     std\assert(page.indexOf("deny [stall]") == null and page.indexOf("off [stall]") == null, message: page);
+    std\assert(page.indexOf("\nOff by default: once a workspace turns it on, it reports a blocked worker.\n") != null, message: page);
+    std\assert(page.indexOf("An advisory by default") == null, message: page);
+    std\assert(page.indexOf("sees `") == null, message: "no other verdict to note: " + page);
+}
+
+test "a rule settable either way shows its default verdict and notes the other" {
+    final page = renderRule(pipeRule());
+    std\assert(page.indexOf("```text\nadvise [raw-pipe]: ...\n```\n\nA workspace that sets this rule to `deny` sees `deny [raw-pipe]: ...` instead.\n") != null, message: page);
+    std\assert(page.indexOf("\ndeny [raw-pipe]: ...\n```") == null, message: "deny is not a default: " + page);
 }
 
 test "a fixed rule says a workspace cannot set it" {
@@ -554,8 +591,9 @@ test "a deny rule with a why renders its page" {
         + "\n"
         + "```text\n"
         + "deny [sleep-loop]: ...\n"
-        + "advise [sleep-loop]: ...\n"
         + "```\n"
+        + "\n"
+        + "A workspace that sets this rule to `advise` sees `advise [sleep-loop]: ...` instead.\n"
         + "\n"
         + "`magus describe rule sleep-loop` prints the same entry at a terminal, and\n"
         + "`magus describe rules` lists every rule this workspace enforces.\n"
