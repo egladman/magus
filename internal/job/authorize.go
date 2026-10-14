@@ -1,6 +1,7 @@
 package job
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"slices"
@@ -59,6 +60,18 @@ func ActingActor(cacheDir string) Actor {
 		return Actor{Unstamped: true}
 	}
 	return Actor{Lease: claim}
+}
+
+// RunLease is the lease [ActingLease] resolves for work running on ctx. The claim is the
+// lease of the process that asked for the work: the one [types.JobLeaseFromContext]
+// carries when the daemon runs it for a client, since the daemon's own environment names
+// nobody's lease, and this process's BAGGAGE otherwise.
+func RunLease(ctx context.Context, cacheDir string) (string, types.LeaseSource) {
+	claim := types.JobLeaseFromContext(ctx)
+	if claim == "" {
+		claim = trail.LeaseFromEnv()
+	}
+	return ActingLease(cacheDir, claim)
 }
 
 // Bound reports whether this actor is held to a worker's boundary: a worker acting under a

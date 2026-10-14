@@ -11,7 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -45,6 +47,33 @@ func TestApplySandboxAttachesTheWorkspacePolicy(t *testing.T) {
 	require.NotNil(t, p)
 	assert.Equal(t, types.SandboxModeBestEffort, p.Mode)
 	assert.Equal(t, types.SandboxModeBestEffort, m.SandboxMode())
+}
+
+// The daemon applies the sandbox for a run it adopted, and its own environment names
+// nobody's lease, so the client's lease on ctx is the boundary the policy narrows to.
+func TestApplySandboxNarrowsToTheLeaseOnTheContext(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv(trail.EnvBaggage, "")
+	m := openSandboxed(t, types.SandboxModeBestEffort)
+	store := job.NewStore(job.Location{CacheDir: m.CacheDir(), Root: m.ws.Root})
+	for _, id := range []string{"fleet/client", "fleet/daemon"} {
+		_, err := store.Update(t.Context(), id, func(cur *types.Job) {
+			*cur = types.Job{ID: id, Parent: "fleet/root", State: types.StateRunning, WritePaths: []string{"pkg/**"}}
+		})
+		require.NoError(t, err)
+	}
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/daemon")
+	leaseOf := func(ctx context.Context) string {
+		t.Helper()
+		ctx, err := m.ApplySandbox(ctx)
+		require.NoError(t, err)
+		p := sandbox.PolicyFromContext(ctx)
+		require.NotNil(t, p)
+		return p.Lease
+	}
+
+	assert.Equal(t, "fleet/client", leaseOf(types.WithJobLease(t.Context(), "fleet/client")))
+	assert.Equal(t, "fleet/daemon", leaseOf(t.Context()), "with no lease on ctx the environment's claim stands")
 }
 
 // Required is refused where the kernel cannot confine the children, before any run

@@ -35,7 +35,6 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	runPkg "github.com/egladman/magus/internal/proc/run"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -1015,16 +1014,11 @@ func (c *Cache) emitUnchangedFailureHint(ctx context.Context, hash string) strin
 	return HintUnchangedFailure
 }
 
-// actingLease is the job lease a run recorded here acts under: the checkout's binding
-// outranks the claim, which a worker can rewrite from its own shell. The claim is the
-// client's lease on ctx when the daemon runs the work for it, since the daemon's own
-// environment names nobody's lease, and this process's environment otherwise.
+// actingLease is the job lease a run recorded here acts under, resolved as the sandbox
+// resolves it: the checkout's binding outranks the claim, which a worker can rewrite from
+// its own shell.
 func (c *Cache) actingLease(ctx context.Context) string {
-	claim := types.JobLeaseFromContext(ctx)
-	if claim == "" {
-		claim = trail.LeaseFromEnv()
-	}
-	lease, _ := job.ActingLease(c.dir, claim)
+	lease, _ := job.RunLease(ctx, c.dir)
 	return lease
 }
 

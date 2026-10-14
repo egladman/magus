@@ -9,7 +9,6 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/sandbox"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -53,7 +52,7 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 	if err != nil {
 		return ctx, err
 	}
-	lease, from := job.ActingLease(loc.CacheDir, trail.LeaseFromEnv())
+	lease, from := job.RunLease(ctx, loc.CacheDir)
 	p = sandbox.NarrowToLease(ctx, p, loc, lease, from)
 	confines, err := p.KernelConfines()
 	if err != nil {
