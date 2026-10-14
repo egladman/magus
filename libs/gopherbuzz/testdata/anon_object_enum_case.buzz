@@ -1,0 +1,8 @@
+// @expect: 1:0:7
+// A `.case` inside an anonymous literal resolves against its obj{} annotation's
+// field type, at a return and at a declaration; upstream prints the same.
+enum Tier { low, high }
+fun pick() > obj{ tier: Tier, rank: int } { return .{ tier = .high, rank = 7 }; }
+final picked = pick();
+final declared: obj{ tier: Tier } = .{ tier = .low };
+final __r = "{picked.tier.value}:{declared.tier.value}:{picked.rank}";

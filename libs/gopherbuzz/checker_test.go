@@ -383,6 +383,45 @@ final c = Color.Yellow;
 `, `has no case "Yellow"`)
 }
 
+// An anonymous literal checked against an `obj{ ... }` annotation resolves each
+// field against the declared field type, as upstream's
+// TypeChecker.populateAnonymousObject does for any object target, anonymous or
+// named. Upstream Buzz 0.6.0-dev+049a7de runs every program here.
+func TestCheck_AnonymousObjectTypeInfersEnumCase(t *testing.T) {
+	const tier = "enum Tier { low, high }\n"
+	for name, src := range map[string]string{
+		"return":      `fun pick() > obj{ tier: Tier, name: str } { return .{ tier = .high, name = "x" }; }`,
+		"declaration": `final b: obj{ tier: Tier } = .{ tier = .low };`,
+		"discard":     `fun f() > void { _: obj{ tier: Tier } = .{ tier = .low }; }`,
+		"nested":      `fun pick() > obj{ inner: obj{ tier: Tier }, tiers: [Tier] } { return .{ inner = .{ tier = .high }, tiers = [.low] }; }`,
+		"optional":    `fun pick() > obj{ tier: Tier?, n: int } { return .{ n = 1, tier = .low }; }`,
+		"lambda":      `final pick = fun () > obj{ tier: Tier } { return .{ tier = .high }; };`,
+		"method":      `object Box { fun pick() > obj{ tier: Tier } { return .{ tier = .low }; } }`,
+		"generic":     `fun wrap::<T>(data: T) > obj{ data: T } { return .{ data = data }; }`,
+		"function":    `fun pick() > obj{ f: fun () > str, tier: Tier } { return .{ f = fun () > str => "x", tier = .low }; }`,
+	} {
+		t.Run(name, func(t *testing.T) { checkOK(t, tier+src) })
+	}
+}
+
+// Upstream rejects an anonymous literal that does not fit its obj{} annotation:
+// E66 "Return value: got type `.{ tier: str }`, expected `.{ tier: Tier }`" at a
+// return, E4 "Wrong variable type" at a declaration. A missing field fails even
+// when it is optional.
+func TestCheck_AnonymousObjectTypeMismatch(t *testing.T) {
+	const tier = "enum Tier { low, high }\n"
+	for name, tc := range map[string]struct{ src, want string }{
+		"str for an enum field": {`fun pick() > obj{ tier: Tier } { return .{ tier = "high" }; }`, "wrong property type: field tier"},
+		"declared str":          {`final b: obj{ tier: Tier } = .{ tier = "low" };`, "wrong property type: field tier"},
+		"extra field":           {`fun pick() > obj{ a: int } { return .{ a = 1, b = 2 }; }`, `has no field "b"`},
+		"missing field":         {`fun pick() > obj{ a: int, b: int } { return .{ a = 1 }; }`, `missing field "b"`},
+		"missing optional":      {`fun pick() > obj{ a: int, b: int? } { return .{ a = 1 }; }`, `missing field "b"`},
+		"unknown case":          {`fun pick() > obj{ tier: Tier } { return .{ tier = .mid }; }`, `has no case "mid"`},
+	} {
+		t.Run(name, func(t *testing.T) { checkErr(t, tier+tc.src, tc.want) })
+	}
+}
+
 func TestCheck_InjectedGlobalMemberCall(t *testing.T) {
 	// A host embedding gopherbuzz can inject a namespace global (the magusfile
 	// pattern, where the magus host binds `magus`). Such a global is pre-registered

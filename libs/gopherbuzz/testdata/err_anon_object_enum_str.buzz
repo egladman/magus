@@ -1,0 +1,5 @@
+// @error: wrong property type: field tier
+// Upstream E66: "Return value: got type `.{ tier: str }`, expected `.{ tier: Tier }`".
+enum Tier { low, high }
+fun pick() > obj{ tier: Tier } { return .{ tier = "high" }; }
+final __r = 0;
