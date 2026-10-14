@@ -234,6 +234,14 @@ var Magus = Module{
 			Impl:    MagusPrecedents,
 		},
 		{
+			Name:    "conform",
+			Doc:     "The conform lens as data: {definition, rows, stale, excluded, answer, indexes}, keyed as JSON is. Each row is {key, n, p50, p90, p95, p99, live, value, anchor, propose, known, source, violations}: key names a metric (file-lines, func-lines, type-methods, file-symbols, dep-fanout, clone-tokens, export-scope), a population (source, main, test) and a scope; value is what a check enforces, the committed ratchet value when source is ratchet and the configured anchor otherwise; live is the configured percentile today; violations are the files, symbols, packages or clone groups past value that no known entry accepts, each {id, source, measure}. propose is zero, or a tighter value a person may commit to the ratchet record knowledge.conform.ratchet names; it is never looser than value, and nothing enforces live. stale lists known entries that no longer violate, which a person deletes. excluded counts the files knowledge.conform.exclude hides. answer is unknown, never a pass, when a symbol index is missing. indexes is each declared symbol index as `magus status` judges it, judged just before the graph is read, as magus\\precedents reports it: an index not `up-to-date` gave the rows something old, so a gate on them checks indexes first. Declared outputs are never counted. Read in-process from the workspace on the context; raises MGS1022 outside one, and raises on a ratchet record that is missing, malformed or looser than its anchor.",
+			Args:    nil,
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Raises:  true,
+			Impl:    MagusConform,
+		},
+		{
 			Name:    "symbols",
 			Doc:     "Every non-test, non-generated symbol's declaration and doc comment in the workspace's merged symbol indexes, whatever language indexed them, as data: {symbols, indexes}, keyed as JSON is, with no Buzz object mirroring it. Each symbol is {node, source, language, name, kind, owner, doc}: source is the declaration's path and line, since an index records no position inside a doc; kind is function, method, type, interface, struct or value, or empty when the naming index read no shape; owner is the enclosing type of a member; doc is the whole comment with its lines kept. Nothing here judges the text: a magusfile rule reads it and decides. indexes is each declared symbol index as `magus status` judges it, judged just before the graph is read, as magus\\precedents reports it: an index not `up-to-date` gave the symbols nothing or something old, so a gate on them checks indexes first. Test files and declared outputs are never listed. Read in-process from the workspace on the context; raises MGS1022 outside one.",
 			Args:    nil,
@@ -1744,6 +1752,13 @@ func buildInsightReport(ctx context.Context, a types.InsightAnalyzer, iopts type
 	if dr, derr := a.Duplication(ctx); derr == nil {
 		report.Duplication = dr
 	}
+	// Not best-effort like its siblings: the lens fails only on a configuration it cannot
+	// honor, and a report that hid that would read as a conforming workspace.
+	cr, err := a.Conform(ctx)
+	if err != nil {
+		return types.InsightReport{}, err
+	}
+	report.Conform = cr
 	return report, nil
 }
 

@@ -360,6 +360,36 @@ func MagusPrecedents(ctx context.Context) (map[string]any, error) {
 	})
 }
 
+// conformReport is magus\conform's answer: the lens beside the freshness of the indexes it
+// was drawn from, flattened so a script reads both as one map.
+type conformReport struct {
+	types.ConformOutput
+	Indexes []types.SymbolIndexStatus `json:"indexes"`
+}
+
+// MagusConform backs magus\conform: the conform lens over the merged symbol indexes under
+// knowledge.conform, and each declared index's freshness, judged as judgedGraph describes.
+// Generated files are never counted. It reports and writes nothing: a person commits a
+// proposed value. A ratchet record that is missing, malformed or looser than its anchor is an
+// error. The answer is a ConformOutput with an indexes list, as a map.
+func MagusConform(ctx context.Context) (map[string]any, error) {
+	ig, err := judgedGraph(ctx, "conform")
+	if err != nil {
+		return nil, err
+	}
+	opts, err := ig.ws.ConformOptions()
+	if err != nil {
+		return nil, fmt.Errorf("magus\\conform: %w", err)
+	}
+	opts.Generated = ig.generated
+	if err := opts.Validate(); err != nil {
+		return nil, fmt.Errorf("magus\\conform: %w", err)
+	}
+	out := ig.kg.Conform(opts)
+	out.Definition = types.ConformDefinition
+	return reportMap(conformReport{ConformOutput: out, Indexes: ig.indexes})
+}
+
 // MagusSymbols backs magus\symbols: every declaration in the merged symbol indexes with its
 // doc comment, and each declared index's freshness, judged as judgedGraph describes. Test and
 // generated files are never listed. The answer is a SymbolReport as a map.

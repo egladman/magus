@@ -2,11 +2,14 @@ package magus
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -256,6 +259,67 @@ func duplicationHistory(group types.DuplicationGroup, scan []project.ScannedComm
 		}
 	}
 	return h
+}
+
+// Conform is the code-shape lens: how large and how coupled the workspace's code is, one row
+// per metric and population, judged against the value knowledge.conform enforces (the
+// committed ratchet record, else the configured anchor). Like Duplication it reads the symbol
+// graph under the coverage verdict, so a half-indexed workspace answers unknown instead of
+// passing; unlike it, a configuration it cannot honor is an error, a ratchet record that is
+// missing, malformed or looser than its anchor included.
+//
+// It proposes and never sets: a row's Propose is the tighter value a person may commit, and
+// nothing here reads a live percentile back as a limit or writes the record.
+func (m *Magus) Conform(ctx context.Context) (types.ConformOutput, error) {
+	opts, err := m.ConformOptions()
+	if err != nil {
+		return types.ConformOutput{}, fmt.Errorf("conform: %w", err)
+	}
+	if err := opts.Validate(); err != nil {
+		return types.ConformOutput{}, fmt.Errorf("conform: %w", err)
+	}
+	g, err := m.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
+	if err != nil {
+		return types.ConformOutput{}, err
+	}
+	if opts.Generated, err = m.declaredOutputs(ctx, g); err != nil {
+		return types.ConformOutput{}, fmt.Errorf("conform: %w", err)
+	}
+	out := g.Conform(opts)
+	out.Definition = types.ConformDefinition
+	if out.Answer.Verdict == types.VerdictUnknown {
+		return out, nil
+	}
+	gaps, probed := m.SymbolGaps(ctx)
+	var reason types.KnowledgeUnknownReason
+	if !probed {
+		reason = types.ReasonCoverageUnknown
+	}
+	out.Answer = types.ClassifyAnswer(len(out.Rows) > 0, reason, gaps)
+	return out, nil
+}
+
+// declaredOutputs is the set of workspace files g holds that a target declares as an output,
+// which no conform population counts.
+func (m *Magus) declaredOutputs(ctx context.Context, g *knowledge.Graph) (map[string]bool, error) {
+	var files []string
+	for _, n := range g.Nodes() {
+		if n.Kind == types.KindFile {
+			files = append(files, n.Source)
+		}
+	}
+	slices.Sort(files)
+	entries, err := m.ClassifyFiles(ctx, slices.Compact(files))
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]bool{}
+	for _, e := range entries {
+		if e.Role == types.DiffRoleOutput {
+			out[e.Path] = true
+		}
+	}
+	return out, nil
 }
 
 // Trend is the rising/cooling lens: each project's churn in the recent vs earlier

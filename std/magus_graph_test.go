@@ -445,3 +445,86 @@ func TestSymbolsReportsNoSymbolsAsAnEmptyList(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []any{}, got["symbols"], "an empty workspace reads as an empty list, never null")
 }
+
+// sizedGoFile declares a Go file of lines lines in g, as the index ingestion sizes one.
+func sizedGoFile(g *knowledge.Graph, file string, lines int) {
+	g.AddNode(types.KnowledgeNode{ID: "file:" + file, Kind: types.KindFile, Label: file, Source: file,
+		Attrs: map[string]string{types.AttrLanguage: "go", knowledge.AttrLines: fmt.Sprint(lines)}})
+}
+
+// conformAtAnchor is the shipped knowledge.conform with source files held to an anchor of 100 lines.
+func conformAtAnchor() *types.ConformOptions {
+	o := config.Defaults().Knowledge.Conform.Options()
+	o.Limits[types.ConformKey{Metric: types.ConformFileLines, Population: types.ConformPopSource}] =
+		types.ConformLimit{Percentile: 95, Anchor: 100}
+	return &o
+}
+
+func conformReportOf(t *testing.T, got map[string]any) conformReport {
+	t.Helper()
+	b, err := json.Marshal(got)
+	require.NoError(t, err)
+	var report conformReport
+	require.NoError(t, json.Unmarshal(b, &report))
+	return report
+}
+
+func TestConformReportsRowsBesideIndexFreshness(t *testing.T) {
+	t.Parallel()
+	g := knowledge.NewGraph()
+	errValue(g, "internal/a/e0.go", 3, "ErrA")
+	sizedGoFile(g, "internal/a/big.go", 300)
+	sizedGoFile(g, "internal/a/small.go", 10)
+	sizedGoFile(g, "internal/a/gen.go", 900)
+	stale := types.SymbolIndexStatus{Project: types.ProjectRef{Path: "libs/x"}, Op: "scip", Language: "go", Freshness: types.SymbolIndexStale}
+	ws := &precedentGraphs{
+		builtGraphWorkspace: &builtGraphWorkspace{g: g, cacheDir: t.TempDir()},
+		indexes:             []types.SymbolIndexStatus{stale},
+		outputs:             map[string]bool{"internal/a/gen.go": true},
+		conform:             conformAtAnchor(),
+	}
+
+	got, err := MagusConform(types.WithWorkspace(t.Context(), ws))
+	require.NoError(t, err)
+	report := conformReportOf(t, got)
+	assert.Equal(t, types.ConformDefinition, report.Definition)
+	assert.Equal(t, []types.SymbolIndexStatus{stale}, report.Indexes, "the index verdict rides beside the rows")
+	assert.True(t, ws.readAfter, "freshness is read after the freshen")
+	lines := types.ConformKey{Metric: types.ConformFileLines, Population: types.ConformPopSource}
+	i := slices.IndexFunc(report.Rows, func(r types.ConformRow) bool { return r.Key == lines })
+	require.GreaterOrEqual(t, i, 0, "rows: %v", report.Rows)
+	row := report.Rows[i]
+	assert.Equal(t, 2, row.N, "a declared output is never counted")
+	assert.Equal(t, 100, row.Value)
+	assert.Equal(t, types.ConformFromAnchor, row.Source)
+	assert.Equal(t, []types.ConformItem{{ID: "internal/a/big.go", Source: "internal/a/big.go:1", Measure: 300}}, row.Violations)
+	assert.Zero(t, row.Propose, "a live percentile above the enforced value is never proposed")
+}
+
+func TestConformWithoutSymbolsIsUnknownNotAPass(t *testing.T) {
+	t.Parallel()
+	ws := &precedentGraphs{builtGraphWorkspace: &builtGraphWorkspace{g: knowledge.NewGraph(), cacheDir: t.TempDir()}}
+	got, err := MagusConform(types.WithWorkspace(t.Context(), ws))
+	require.NoError(t, err)
+	answer := conformReportOf(t, got).Answer
+	assert.Equal(t, types.VerdictUnknown, answer.Verdict)
+	assert.Equal(t, types.ReasonSymbolIndexMissing, answer.Reason)
+}
+
+func TestConformMisconfigurationIsAnError(t *testing.T) {
+	t.Parallel()
+	g := knowledge.NewGraph()
+	errValue(g, "internal/a/e0.go", 3, "ErrA")
+	ws := &precedentGraphs{builtGraphWorkspace: &builtGraphWorkspace{g: g, cacheDir: t.TempDir()}}
+
+	ws.conformErr = errors.New("conform.json: line 1: schema 2: want 1")
+	_, err := MagusConform(types.WithWorkspace(t.Context(), ws))
+	assert.ErrorContains(t, err, "schema 2", "a record that cannot be read is an error")
+
+	ws.conformErr = nil
+	bad := conformAtAnchor()
+	bad.MinSample = 0
+	ws.conform = bad
+	_, err = MagusConform(types.WithWorkspace(t.Context(), ws))
+	assert.ErrorContains(t, err, "min_sample", "a policy that fails validation is an error even with no record to read")
+}

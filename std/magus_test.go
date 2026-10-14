@@ -237,8 +237,10 @@ func raiseOpts(cause any, url string) map[string]any {
 // options it was handed so a test can prove they arrived.
 type recordingAnalyzer struct {
 	types.WorkspaceRepository
-	got       types.InsightOptions
-	failTrend bool
+	got         types.InsightOptions
+	failTrend   bool
+	failConform error
+	conformLens types.ConformOutput
 }
 
 func (f *recordingAnalyzer) Hotspots(_ context.Context, o types.InsightOptions) (types.HotspotOutput, error) {
@@ -266,6 +268,10 @@ func (f *recordingAnalyzer) Unreferenced(context.Context) (types.UnreferencedOut
 
 func (f *recordingAnalyzer) Duplication(context.Context) (types.DuplicationOutput, error) {
 	return types.DuplicationOutput{}, errors.New("no symbol index")
+}
+
+func (f *recordingAnalyzer) Conform(context.Context) (types.ConformOutput, error) {
+	return f.conformLens, f.failConform
 }
 
 func (f *recordingAnalyzer) ModelTierLens(context.Context) (types.ModelTierOutput, error) {
@@ -373,6 +379,22 @@ func TestInsightReportKeepsTheBestEffortSections(t *testing.T) {
 	a.failTrend = true
 	_, err = buildInsightReport(t.Context(), a, types.InsightOptions{})
 	require.Error(t, err)
+}
+
+// TestInsightReportCarriesConformAndItsMisconfiguration pins that the conform lens rides the
+// report, and that a configuration it cannot honor fails the report rather than hiding as a
+// clean section.
+func TestInsightReportCarriesConformAndItsMisconfiguration(t *testing.T) {
+	t.Parallel()
+
+	a := &recordingAnalyzer{conformLens: types.ConformOutput{Definition: "conform"}}
+	report, err := buildInsightReport(t.Context(), a, types.InsightOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "conform", report.Conform.Definition)
+
+	a.failConform = errors.New("conform: hack/policy/conform.json: no such file")
+	_, err = buildInsightReport(t.Context(), a, types.InsightOptions{})
+	assert.ErrorContains(t, err, "conform.json")
 }
 
 // ledgerWorkspace is a workspace that can back a job Store: it

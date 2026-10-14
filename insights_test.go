@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -157,6 +158,34 @@ func TestDuplicationHistoryCountsFilesChangingTogether(t *testing.T) {
 
 	sameFile := types.DuplicationGroup{Members: []types.DuplicationSite{{Source: "a.go:1"}, {Source: "a.go:40"}}}
 	assert.Nil(t, duplicationHistory(sameFile, scan))
+}
+
+// TestConformLensWithoutAnIndexIsUnknownAndMisconfigurationIsAnError pins both ends of the
+// lens: a workspace with no symbol index answers unknown with the lens's definition, never an
+// empty pass, and a ratchet record the configuration names but the tree lacks is an error
+// that names it, never a lens that quietly falls back to the anchors.
+func TestConformLensWithoutAnIndexIsUnknownAndMisconfigurationIsAnError(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("// root\n"), 0o644))
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".")
+
+	open := func(cfg config.Config) *Magus {
+		ws, err := Inspect(t.Context(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(cfg))
+		require.NoError(t, err)
+		return ws.(*Magus)
+	}
+
+	out, err := open(config.Defaults()).Conform(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, types.ConformDefinition, out.Definition)
+	assert.Equal(t, types.VerdictUnknown, out.Answer.Verdict, "no index means unknown, never a pass")
+	assert.Equal(t, types.ReasonSymbolIndexMissing, out.Answer.Reason)
+
+	cfg := config.Defaults()
+	cfg.Knowledge.Conform.Ratchet = "hack/policy/conform.json"
+	_, err = open(cfg).Conform(t.Context())
+	assert.ErrorContains(t, err, "hack/policy/conform.json")
 }
 
 // TestModelTierLensReportsWhatTheJobHistoryHolds pins the lens against the history file the
