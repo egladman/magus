@@ -78,13 +78,15 @@ Every metric and span carries these resource attributes:
 Low-cardinality aggregate view of the on-disk content-addressed cache; no
 per-project attribute.
 
-| Metric                       | Instrument | Unit     | Attributes              | Meaning                                                                     |
-| ---------------------------- | ---------- | -------- | ----------------------- | --------------------------------------------------------------------------- |
-| `magus.cache.hits`           | counter    | `{call}` | `outcome=hit`           | Cache replays (a `Cache.Run` served from disk)                              |
-| `magus.cache.misses`         | counter    | `{call}` | `outcome=miss`          | Genuine builds (no entry found)                                             |
-| `magus.cache.errors`         | counter    | `{call}` | `outcome=error`         | Build steps that failed                                                     |
-| `magus.cache.duration`       | histogram  | `s`      | `outcome ∈ {hit, miss}` | Wall-clock of a single `Cache.Run`                                          |
-| `magus.cache.saved.duration` | histogram  | `s`      | -                       | What a hit **avoided**: the duration the entry recorded when it was written |
+| Metric                       | Instrument | Unit     | Attributes             | Meaning                                                                     |
+| ---------------------------- | ---------- | -------- | ---------------------- | --------------------------------------------------------------------------- |
+| `magus.cache.reads`          | counter    | `{call}` | `result`               | One per `Cache.Run`, by how it ended                                        |
+| `magus.cache.duration`       | histogram  | `s`      | `result ∈ {hit, miss}` | Wall-clock of a single `Cache.Run`                                          |
+| `magus.cache.saved.duration` | histogram  | `s`      | -                      | What a hit **avoided**: the duration the entry recorded when it was written |
+
+`result ∈ {hit, miss, error}`: `hit` is a replay from disk, `miss` a genuine build
+(no entry found) that succeeded, and `error` a step that failed or was refused
+before it started. A failed step records no duration.
 
 `magus.cache.duration` says what a hit **cost**; `magus.cache.saved.duration` says
 what it **saved**, one observation per hit. Its sum is the wall-clock the cache
@@ -96,26 +98,23 @@ rule the `cache_saved_ms` field in `magus status` follows.
 ### Remote cache
 
 The [shared backend](cache/remote.md) (S3, GitHub Actions, ...), exported only
-when one is wired via `magus\cache.remote(...)`. These mirror the local-cache
-vocabulary under a `.remote` prefix so a remote hit is **never** folded into the
-local counters: a remote hit is still a _local_ miss, because the remote fetch
-only runs after the local store misses. Instrumentation wraps the backend
-interface, so it applies to every backend (including ones you write) with no
-backend changes.
+when one is wired via `magus\cache.remote(...)`. These live under a `.remote`
+prefix so a remote hit is **never** folded into `magus.cache.reads`: a remote hit
+is still a _local_ miss, because the remote fetch only runs after the local store
+misses. Instrumentation wraps the backend interface, so it applies to every
+backend (including ones you write) with no backend changes.
 
-| Metric                        | Instrument | Unit     | Attributes                         | Meaning                                                                 |
-| ----------------------------- | ---------- | -------- | ---------------------------------- | ----------------------------------------------------------------------- |
-| `magus.cache.remote.hits`     | counter    | `{call}` | `op=get`, `outcome=hit`            | Remote `get` returned an entry                                          |
-| `magus.cache.remote.misses`   | counter    | `{call}` | `op=get`, `outcome=miss`           | Remote `get` found nothing                                              |
-| `magus.cache.remote.errors`   | counter    | `{call}` | `op ∈ {get, put}`, `outcome=error` | A remote operation failed                                               |
-| `magus.cache.remote.duration` | histogram  | `s`      | `op ∈ {get, put}`, `outcome`       | Wall-clock of a single remote operation                                 |
-| `magus.cache.remote.io.size`  | histogram  | `By`     | `op ∈ {get, put}`                  | Bytes transferred, recorded on hits and puts only (egress/ingress cost) |
+| Metric                        | Instrument | Unit     | Attributes                       | Meaning                                                                 |
+| ----------------------------- | ---------- | -------- | -------------------------------- | ----------------------------------------------------------------------- |
+| `magus.cache.remote.ops`      | counter    | `{call}` | `method ∈ {get, put}`, `outcome` | One per remote operation, by what the backend answered                  |
+| `magus.cache.remote.duration` | histogram  | `s`      | `method ∈ {get, put}`, `outcome` | Wall-clock of a single remote operation                                 |
+| `magus.cache.remote.io.size`  | histogram  | `By`     | `method ∈ {get, put}`            | Bytes transferred, recorded on hits and puts only (egress/ingress cost) |
 
 `outcome ∈ {hit, miss, stored, exists, error}`; `stored` is a successful `put`, and
 `exists` a `put` the store answered with "already stored" (another writer holds the
-key). **Remote hit-rate** is `hits / (hits + misses)`. **Put success** is the
-`magus.cache.remote.duration` count for `op=put` minus
-`magus.cache.remote.errors` for `op=put`.
+key). A `get` answers `hit`, `miss` or `error`; a `put` answers `stored`, `exists` or
+`error`. **Remote hit-rate** is `outcome=hit / (outcome=hit + outcome=miss)` over
+`method=get`, and **put success** is `stored + exists` over `method=put`.
 
 These metrics meter the **transport**: what the backend answered. The end-of-run
 `remote:` line (the `run.remote` record) meters **outcomes**, so the two differ by
@@ -126,26 +125,24 @@ lookups appear in neither.
 
 ### Graph
 
-| Metric                       | Instrument | Unit     | Attributes       | Meaning                            |
-| ---------------------------- | ---------- | -------- | ---------------- | ---------------------------------- |
-| `magus.graph.queries`        | counter    | `{call}` | `op`, `strategy` | Number of graph query operations   |
-| `magus.graph.query.duration` | histogram  | `s`      | `op`, `strategy` | Wall-clock of a single graph query |
+| Metric                       | Instrument | Unit | Attributes       | Meaning                            |
+| ---------------------------- | ---------- | ---- | ---------------- | ---------------------------------- |
+| `magus.graph.query.duration` | histogram  | `s`  | `op`, `strategy` | Wall-clock of a single graph query |
 
 `strategy` is present only when the query reports one. `op=build` is the full
-graph build.
+graph build. The histogram's count is the number of queries.
 
 ### Target runs
 
 Per-project, per-spell. `magus.project` has unbounded cardinality; see
 [Cardinality](#cardinality).
 
-| Metric                  | Instrument | Unit     | Attributes                                                             | Meaning                                    |
-| ----------------------- | ---------- | -------- | ---------------------------------------------------------------------- | ------------------------------------------ |
-| `magus.target.runs`     | counter    | `{call}` | `magus.project`, `magus.spell`, `magus.target`, `outcome`, `cache.hit` | Target executions, including cache replays |
-| `magus.target.duration` | histogram  | `s`      | same                                                                   | Wall-clock of a single target execution    |
+| Metric                  | Instrument | Unit | Attributes                                                             | Meaning                                                          |
+| ----------------------- | ---------- | ---- | ---------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `magus.target.duration` | histogram  | `s`  | `magus.project`, `magus.spell`, `magus.target`, `outcome`, `cache.hit` | Wall-clock of a single target execution, including cache replays |
 
-`outcome ∈ {success, error}` · `cache.hit ∈ {true, false}` · one row is emitted
-per resolved spell per project.
+`outcome ∈ {ok, error}` · `cache.hit ∈ {true, false}` · one row is emitted per
+resolved spell per project. The histogram's count is the number of target runs.
 
 ### Concurrency pool
 
@@ -174,7 +171,6 @@ what it counts, not for all three.
 | `magus.attention.disposition.duration`       | histogram  | `s`              | `severity`                              | How long a request waited, from raised to disposed  |
 | `magus.review.remarks`                       | counter    | `{remark}`       | `author ∈ {unattributed, agent}`        | A remark drafted on a change                        |
 | `magus.review.publishes`                     | counter    | `{publish}`      | `verdict`, `downgraded ∈ {true, false}` | A review published, by the verdict that landed      |
-| `magus.review.merged_while_reading`          | counter    | `{merge}`        | none                                    | A review merged while its reader was reading        |
 | `magus.review.merged_while_reading.duration` | histogram  | `s`              | none                                    | Time from the reader's mark to the merge            |
 | `magus.agent.context.tokens`                 | histogram  | `{token}`        | `thread`, `model`                       | Context size a caller reported on a tool call       |
 | `magus.agent.delegable.chars`                | counter    | `{char}`         | `class`                                 | Result characters a subagent could have fetched     |
@@ -211,13 +207,13 @@ write to one store. `magus.review.publishes` is deliberately **not**: how a chan
 was judged, split by who wrote it, is the first half of a threshold that blocks
 work by author kind, and magus does not build the instrument that invites one.
 
-`magus.review.merged_while_reading` and its `.duration` measure review time lost to
-a merge. They are recorded by the `check-review` job, so a merge is counted on the
-first tick after it lands, and only when the reader had marked **that** review as
-being read (the `reading` op on the console's review route). The mark is local and
-cleared once reported, so a merge is counted once. Neither instrument carries an
+`magus.review.merged_while_reading.duration` measures review time lost to a merge;
+its count is the merges. It is recorded by the `check-review` job, so a merge is
+counted on the first tick after it lands, and only when the reader had marked
+**that** review as being read (the `reading` op on the console's review route). The
+mark is local and cleared once reported, so a merge is counted once. It carries no
 attribute: a review id or repository name is unbounded, and the duration is the
-whole fact. Like every metric here they reach a backend only when telemetry
+whole fact. Like every metric here it reaches a backend only when telemetry
 export is on.
 
 ## Traces (spans)
@@ -241,9 +237,9 @@ remote round-trip is visible instead of opaque time inside the target.
 
 ## Cardinality
 
-`magus.target.runs` and `magus.target.duration` include `magus.project`, which is
-unbounded in large monorepos. If your setup has thousands of projects, drop or
-relabel the attribute at the collector:
+`magus.target.duration` includes `magus.project`, which is unbounded in large
+monorepos. If your setup has thousands of projects, drop or relabel the
+attribute at the collector:
 
 ```yaml
 # OpenTelemetry Collector - attributes processor
@@ -255,10 +251,10 @@ processors:
 ```
 
 Alternatively, use an SDK View at startup to drop the attribute before it leaves
-the process. Three other instruments carry a workspace-sized attribute and the
+the process. Four other instruments carry a workspace-sized attribute and the
 same recipe applies: `magus.sandbox.checks` and `magus.sandbox.env.dropped`
-carry `magus.project`, and `magus.buzz.spell.resolve.duration` and the
-`magus.buzz.spell.builtins.*` family carry `spell`, a workspace-authored name.
+carry `magus.project`, and `magus.buzz.spell.resolve.duration` and
+`magus.buzz.spell.builtins.warm` carry `spell`, a workspace-authored name.
 Every other metric omits them. The remote
 `get`/`put` **spans** carry `magus.project`, but spans are sampled and not
 aggregated into time series, so they don't create cardinality the way a metric

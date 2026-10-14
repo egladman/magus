@@ -268,20 +268,22 @@ func TestSetGraphObserver_Invoked(t *testing.T) {
 
 	var builds int
 	obs := mocks.NewMockObserver(t)
-	obs.EXPECT().OnBuild(mock.Anything).Run(func(types.BuildStats) { builds++ }).Return().Maybe()
-	obs.EXPECT().OnQuery(mock.Anything).Return().Maybe()
-	obs.EXPECT().OnError(mock.Anything).Return().Maybe()
+	obs.EXPECT().Observe(mock.Anything).Run(func(e types.GraphEvent) {
+		if e.Op == types.GraphOpBuild {
+			builds++
+		}
+	}).Return().Maybe()
 	m.SetGraphObserver(obs)
 	_, err = m.Graph()
 	require.NoError(t, err)
-	assert.NotZero(t, builds, "SetGraphObserver: OnBuild never called after Graph()")
+	assert.NotZero(t, builds, "SetGraphObserver: no build observed after Graph()")
 
 	// Clear the observer; subsequent Graph() must not increment.
 	before := builds
 	m.SetGraphObserver(nil)
 	_, err = m.Graph()
 	require.NoError(t, err)
-	assert.Equal(t, before, builds, "SetGraphObserver(nil): OnBuild called after clearing observer")
+	assert.Equal(t, before, builds, "SetGraphObserver(nil): a build observed after clearing observer")
 }
 
 func TestStepFor_RootProject(t *testing.T) {
@@ -904,7 +906,7 @@ func TestSharedProviderVisibleAcrossMagus(t *testing.T) {
 	// registry build would)...
 	mBuild.Telemetry().RecordTargetRun(ctx, 0.5,
 		observability.Attr{Key: "magus.target", Value: "build"},
-		observability.Attr{Key: "outcome", Value: "success"},
+		observability.Attr{Key: "outcome", Value: string(observability.OutcomeOK)},
 	)
 
 	// ...and read it back through the "bridge" workspace's collector (as the dashboard does).
@@ -914,20 +916,20 @@ func TestSharedProviderVisibleAcrossMagus(t *testing.T) {
 	rm, err := coll.Collect(ctx)
 	require.NoError(t, err)
 
-	var targetRuns int64
+	var targetRuns uint64
 	for _, sm := range rm.ScopeMetrics {
 		for _, m := range sm.Metrics {
-			if m.Name != "magus.target.runs" {
+			if m.Name != "magus.target.duration" {
 				continue
 			}
-			sum, isSum := m.Data.(metricdata.Sum[int64])
-			require.True(t, isSum, "magus.target.runs should be an int64 sum")
-			for _, dp := range sum.DataPoints {
-				targetRuns += dp.Value
+			hist, isHist := m.Data.(metricdata.Histogram[float64])
+			require.True(t, isHist, "magus.target.duration should be a float64 histogram")
+			for _, dp := range hist.DataPoints {
+				targetRuns += dp.Count
 			}
 		}
 	}
-	assert.Equal(t, int64(1), targetRuns,
+	assert.Equal(t, uint64(1), targetRuns,
 		"a target run recorded via one Magus must be visible through the other's shared-provider collector")
 }
 
@@ -1066,52 +1068,15 @@ func TestForEachSpell_MagusfileShadowsSpellOp(t *testing.T) {
 		"the magusfile target must run alone; the shadowed spell op must not also run")
 }
 
-// recordingProvider is a minimal observability.Provider fake: every method except
-// Shutdown is a no-op, and Shutdown records whether it ran (and can be told to error).
+// recordingProvider is a telemetry provider that records whether Shutdown ran (and can be
+// told to error); every other method is observability.Nop's.
 type recordingProvider struct {
+	observability.Nop
 	shutdownCalled bool
 	shutdownErr    error
 }
 
-func (p *recordingProvider) Enabled() bool                                                       { return true }
-func (p *recordingProvider) RecordCacheHit(context.Context, ...observability.Attr)               {}
-func (p *recordingProvider) RecordCacheMiss(context.Context, ...observability.Attr)              {}
-func (p *recordingProvider) RecordAgentCall(context.Context, observability.AgentCall)            {}
-func (p *recordingProvider) RecordCacheError(context.Context, ...observability.Attr)             {}
-func (p *recordingProvider) RecordCacheDuration(context.Context, float64, ...observability.Attr) {}
-func (p *recordingProvider) RecordCacheSaved(context.Context, float64)                           {}
-func (p *recordingProvider) RecordGraphQuery(context.Context, float64, ...observability.Attr)    {}
-func (p *recordingProvider) RecordRemoteOp(context.Context, observability.RemoteOp)              {}
-func (p *recordingProvider) StartSpan(ctx context.Context, _ string, _ ...observability.Attr) (context.Context, func(error)) {
-	return ctx, func(error) {}
-}
-func (p *recordingProvider) RecordTargetRun(context.Context, float64, ...observability.Attr) {}
-func (p *recordingProvider) RecordPoolAcquire(context.Context, float64, int64)               {}
-func (p *recordingProvider) RecordPoolRelease(context.Context, int64)                        {}
-func (p *recordingProvider) RecordPoolWaiting(context.Context, int64)                        {}
-func (p *recordingProvider) RecordMCPCall(context.Context, observability.MCPCall)            {}
-func (p *recordingProvider) RecordSandboxApply(context.Context, float64, string, string)     {}
-func (p *recordingProvider) RecordSandboxRules(context.Context, observability.SandboxRules)  {}
-func (p *recordingProvider) RecordSandboxCheck(context.Context, string, string, string)      {}
-func (p *recordingProvider) RecordSandboxEnvDropped(context.Context, string, int64)          {}
-func (p *recordingProvider) RecordBuzzExec(context.Context, float64, string, string)         {}
-func (p *recordingProvider) RecordBuzzCompile(context.Context, float64, string, string)      {}
-func (p *recordingProvider) RecordBuzzHostCall(context.Context, observability.BuzzHostCall)  {}
-func (p *recordingProvider) RecordBuzzSessionReuse(context.Context, string)                  {}
-func (p *recordingProvider) RecordBuzzSessionIdle(context.Context, int64)                    {}
-func (p *recordingProvider) RecordBuzzSessionEviction(context.Context, string)               {}
-func (p *recordingProvider) RecordBuzzSessionWarm(context.Context, float64, string)          {}
-func (p *recordingProvider) RecordBuzzImport(context.Context, float64, string, string)       {}
-func (p *recordingProvider) RecordBuzzSpellResolve(context.Context, float64, string, string) {}
-func (p *recordingProvider) RecordBuzzSpellBuiltinsWarm(context.Context, float64, string)    {}
-func (p *recordingProvider) RecordBuzzJITRun(context.Context)                                {}
-func (p *recordingProvider) RecordBuzzVMFault(context.Context, string)                       {}
-func (p *recordingProvider) RecordLeaseRegistration(context.Context, string)                 {}
-func (p *recordingProvider) RecordAttentionDisposition(context.Context, float64, string)     {}
-func (p *recordingProvider) RecordReviewRemark(context.Context, string)                      {}
-func (p *recordingProvider) RecordReviewPublish(context.Context, string, bool)               {}
-func (p *recordingProvider) RecordReviewMergedWhileReading(context.Context, float64)         {}
-func (p *recordingProvider) Snapshot(context.Context) ([]byte, error)                        { return nil, nil }
+func (p *recordingProvider) Enabled() bool { return true }
 func (p *recordingProvider) Shutdown(context.Context) error {
 	p.shutdownCalled = true
 	return p.shutdownErr

@@ -7,6 +7,8 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/egladman/magus/types"
 )
 
 // ID identifies a node; stable for the lifetime of a Graph, assigned in lexicographic order.
@@ -76,23 +78,24 @@ func (b *Builder) AddEdge(from, to ID) error {
 // BuildOption configures a Build call.
 type BuildOption func(*buildCfg)
 
-type buildCfg struct{ obs Observer }
+type buildCfg struct{ obs types.Observer }
 
-// WithObserver attaches obs to the resulting Graph (query → OnQuery; build → OnBuild).
-func WithObserver(o Observer) BuildOption {
+// WithObserver attaches o to the resulting Graph: it observes the build and every
+// top-level query.
+func WithObserver(o types.Observer) BuildOption {
 	return func(c *buildCfg) { c.obs = o }
 }
 
 // Build detects cycles (Kahn's algorithm) and returns an immutable Graph. Builder must not be reused.
 func (b *Builder) Build(opts ...BuildOption) (*Graph, error) {
-	cfg := &buildCfg{obs: NoopObserver{}}
+	cfg := &buildCfg{obs: types.NoopObserver{}}
 	for _, o := range opts {
 		o(cfg)
 	}
 	start := time.Now()
 	n := int32(len(b.builderPaths))
 	if n == 0 {
-		cfg.obs.OnBuild(BuildStats{Duration: time.Since(start)})
+		cfg.obs.Observe(types.GraphEvent{Op: types.GraphOpBuild, Duration: time.Since(start)})
 		return &Graph{obs: cfg.obs}, nil
 	}
 
@@ -162,7 +165,7 @@ func (b *Builder) Build(opts ...BuildOption) (*Graph, error) {
 		}
 	}
 	if int32(len(topo)) != n {
-		cfg.obs.OnError(ErrCycle)
+		cfg.obs.Observe(types.GraphEvent{Op: types.GraphOpBuild, Err: ErrCycle})
 		return nil, ErrCycle
 	}
 
@@ -180,7 +183,8 @@ func (b *Builder) Build(opts ...BuildOption) (*Graph, error) {
 		topo:     topo,
 		obs:      cfg.obs,
 	}
-	cfg.obs.OnBuild(BuildStats{
+	cfg.obs.Observe(types.GraphEvent{
+		Op:       types.GraphOpBuild,
 		Nodes:    int(n),
 		Edges:    edgeCount,
 		Duration: time.Since(start),
@@ -219,7 +223,7 @@ type Graph struct {
 	cl          *bitClosure // lazy transitive closure
 	closureOnce sync.Once
 
-	obs Observer
+	obs types.Observer
 }
 
 // Len returns the number of nodes.
@@ -291,7 +295,7 @@ func (g *Graph) closure() *bitClosure {
 	g.closureOnce.Do(func() {
 		start := time.Now()
 		g.cl = buildClosure(g)
-		g.obs.OnQuery(QueryEvent{
+		g.obs.Observe(types.GraphEvent{
 			Op:       "closure_build",
 			Nodes:    int(g.n),
 			Strategy: "bitset",

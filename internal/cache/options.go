@@ -126,11 +126,6 @@ func WithMachineAdmissionRequired() Option {
 // RunOption configures a single Cache.Run (or RunAll) invocation.
 type RunOption func(*runCtx)
 
-// OnHit fires after a cache hit replay.
-func OnHit(fn func(*Result)) RunOption {
-	return func(rc *runCtx) { rc.onHit = fn }
-}
-
 // AuditReplay judges the absolute paths a cache hit just restored. A hit never invokes
 // the step's function, so a check that wraps the function sees nothing a replay writes;
 // this is where that check gets the replay. A non-nil error fails the step after the
@@ -139,18 +134,9 @@ func AuditReplay(fn func(ctx context.Context, s Step, written []string) error) R
 	return func(rc *runCtx) { rc.auditReplay = fn }
 }
 
-// OnMiss fires after a successful cache miss (fn returned no error).
-func OnMiss(fn func(*Result)) RunOption {
-	return func(rc *runCtx) { rc.onMiss = fn }
-}
-
-// OnError fires when fn returns an error.
-func OnError(fn func(error)) RunOption {
-	return func(rc *runCtx) { rc.onError = fn }
-}
-
-// OnResult fires after every Cache.Run regardless of outcome (after OnHit/OnMiss/OnError).
-// Multiple OnResult options accumulate; all fire in registration order.
+// OnResult fires after every Cache.Run regardless of outcome: a hit replay, a miss whose fn
+// succeeded, a failure (err non-nil), and a step refused before it started (err non-nil, an
+// otherwise empty Result). Multiple OnResult options accumulate; all fire in registration order.
 func OnResult(fn func(*Step, *Result, error)) RunOption {
 	return func(rc *runCtx) { rc.onResults = append(rc.onResults, fn) }
 }

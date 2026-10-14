@@ -8,7 +8,6 @@ import (
 
 	"github.com/egladman/magus/internal/handler"
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
@@ -47,7 +46,12 @@ type Handler struct {
 	handler.Base
 	root    string
 	version string
-	tel     observability.Provider
+	tel     dispositionRecorder
+}
+
+// dispositionRecorder is the slice of observability.Provider the attention route records into.
+type dispositionRecorder interface {
+	RecordAttentionDisposition(ctx context.Context, secs float64, sev string)
 }
 
 // NewHandler returns the /api/v1/attention handler for the repository at root.
@@ -60,7 +64,7 @@ type Handler struct {
 // through THIS route are measured (the CLI's `magus session dispose` closes requests in a
 // one-shot process with no collector), which is why the instrument is a wait-time distribution
 // and not a queue depth that would read as the whole queue and be neither.
-func NewHandler(root, version string, log *slog.Logger, tel observability.Provider) *Handler {
+func NewHandler(root, version string, log *slog.Logger, tel dispositionRecorder) *Handler {
 	h := &Handler{root: root, version: version, tel: tel}
 	h.Base = handler.New(h.serve, log)
 	return h

@@ -888,18 +888,18 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		return nil, errors.Join(err, m.closeBroker())
 	}
 	m.cache = c
-	m.limiter().SetHooks(
-		func(waitNs int64, n int) {
-			m.tel.RecordPoolAcquire(ctx, float64(waitNs)/1e9, int64(n))
-		},
-		func(n int) {
-			m.tel.RecordPoolRelease(ctx, int64(n))
-		},
-		func(delta int) {
-			m.tel.RecordPoolWaiting(ctx, int64(delta))
-			m.slotWaits.Add(delta)
-		},
-	)
+	m.limiter().SetHooks(func(ev cache.PoolEvent) {
+		if ev.Queued != 0 {
+			m.tel.RecordPoolSlots(ctx, observability.PoolQueued, int64(ev.Queued))
+			m.slotWaits.Add(ev.Queued)
+		}
+		if ev.Running > 0 {
+			m.tel.RecordPoolWait(ctx, ev.Wait.Seconds())
+		}
+		if ev.Running != 0 {
+			m.tel.RecordPoolSlots(ctx, observability.PoolRunning, int64(ev.Running))
+		}
+	})
 	return m, nil
 }
 

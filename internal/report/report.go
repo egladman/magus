@@ -468,24 +468,25 @@ func GraphObserver(w *Writer) types.Observer {
 
 type graphObserver struct{ w *Writer }
 
-func (o *graphObserver) OnBuild(s types.BuildStats) {
-	_ = Record(o.w, GraphBuild{
-		Nodes:      s.Nodes,
-		DurationMs: s.Duration.Milliseconds(),
-	})
-}
-
-func (o *graphObserver) OnQuery(e types.QueryEvent) {
-	_ = Record(o.w, GraphQuery{
-		Op:          e.Op,
-		Nodes:       e.Nodes,
-		Seeds:       e.Seeds,
-		Strategy:    e.Strategy,
-		ResultCount: e.ResultCount,
-		DurationMs:  e.Duration.Milliseconds(),
-	})
-}
-
-func (o *graphObserver) OnError(err error) {
-	_ = Record(o.w, GraphError{Message: err.Error()})
+// Observe appends e as a GraphError when it failed, a GraphBuild for a build, and a
+// GraphQuery otherwise.
+func (o *graphObserver) Observe(e types.GraphEvent) {
+	switch {
+	case e.Err != nil:
+		_ = Record(o.w, GraphError{Op: e.Op, Message: e.Err.Error()})
+	case e.Op == types.GraphOpBuild:
+		_ = Record(o.w, GraphBuild{
+			Nodes:      e.Nodes,
+			DurationMs: e.Duration.Milliseconds(),
+		})
+	default:
+		_ = Record(o.w, GraphQuery{
+			Op:          e.Op,
+			Nodes:       e.Nodes,
+			Seeds:       e.Seeds,
+			Strategy:    e.Strategy,
+			ResultCount: e.ResultCount,
+			DurationMs:  e.Duration.Milliseconds(),
+		})
+	}
 }

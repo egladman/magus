@@ -445,7 +445,7 @@ func TestCommandRuleAdviceStandsDownOnAServedCommand(t *testing.T) {
 // sleeps slow on the first one past free: a load that compiles more than free phases stands
 // in for a cold compile of the approved policy.
 type slowCompiles struct {
-	observability.Provider
+	observability.Nop
 	free   int32
 	slow   time.Duration
 	phases atomic.Int32
@@ -453,17 +453,11 @@ type slowCompiles struct {
 
 func (*slowCompiles) Enabled() bool { return true }
 
-func (p *slowCompiles) RecordBuzzCompile(context.Context, float64, string, string) {
+func (p *slowCompiles) RecordBuzzCompile(context.Context, observability.BuzzCompile) {
 	if p.phases.Add(1) == p.free+1 {
 		time.Sleep(p.slow)
 	}
 }
-
-func (*slowCompiles) RecordBuzzImport(context.Context, float64, string, string)      {}
-func (*slowCompiles) RecordBuzzExec(context.Context, float64, string, string)        {}
-func (*slowCompiles) RecordBuzzJITRun(context.Context)                               {}
-func (*slowCompiles) RecordBuzzHostCall(context.Context, observability.BuzzHostCall) {}
-func (*slowCompiles) RecordBuzzVMFault(context.Context, string)                      {}
 
 // A cold compile of the approved policy that runs past its share of the hook's deadline
 // costs that one hook: the compile it paid for is kept, so the next hook compiles nothing

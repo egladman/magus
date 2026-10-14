@@ -654,7 +654,7 @@ export function mapSnapshot(snap: Snapshot): MetricsView {
 // chart diffs adjacent samples for a per-interval rate.
 //
 // The cache tallies do NOT share a baseline across those two sources: the metrics
-// Backfill carries the global monotonic OTel counter (magus.cache.hits), while the
+// Backfill carries the global monotonic OTel counter (magus.cache.reads), while the
 // live status synthesis carries the sum of the currently-warm workspaces' cache
 // counters. `cacheSrc` records which one so the cache-rate chart can refuse to diff
 // across the crossover (a mismatched-baseline diff shows a spurious gap or spike);

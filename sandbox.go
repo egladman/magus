@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -111,22 +112,16 @@ func warnKernelUnavailable(ctx context.Context) {
 
 // recordRules reports the allow-rules p was built from under the workspace scope.
 func recordRules(ctx context.Context, prov observability.Provider, p *sandbox.Policy) {
-	var read, write, exec int64
+	access := map[filesystem.Access]int64{}
 	for _, r := range p.FS.Rules {
-		if r.Read {
-			read++
-		}
-		if r.Write {
-			write++
-		}
-		if r.Exec {
-			exec++
+		for _, a := range []filesystem.Access{filesystem.Read, filesystem.Write, filesystem.Exec} {
+			if r.Grants(a) {
+				access[a]++
+			}
 		}
 	}
 	prov.RecordSandboxRules(ctx, observability.SandboxRules{
-		Read:     read,
-		Write:    write,
-		Exec:     exec,
+		Access:   access,
 		EnvExact: int64(len(p.Env.Names)),
 		EnvGlob:  int64(len(p.Env.Prefixes)),
 		Scope:    "workspace",

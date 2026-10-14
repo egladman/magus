@@ -23,10 +23,8 @@ func TestNew_DisabledIsNoOp(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, p, "New(disabled) returned nil Provider")
 	assert.False(t, p.Enabled(), "disabled Provider reports Enabled() == true")
-	p.RecordCacheHit(context.Background())
-	p.RecordCacheMiss(context.Background())
-	p.RecordCacheError(context.Background())
-	p.RecordCacheDuration(context.Background(), 1.5)
+	p.RecordCacheRead(context.Background(), observability.CacheHit)
+	p.RecordCacheDuration(context.Background(), 1.5, observability.CacheHit)
 	require.NoError(t, p.Shutdown(context.Background()))
 }
 
@@ -56,8 +54,8 @@ func newCache(t *testing.T) (root string, c *cache.Cache) {
 // nil-vs-disabled boundary documented on CacheRunOptions: a Provider
 // reporting Enabled()==false still returns the options (callers can
 // wire them unconditionally), but the underlying record calls are
-// no-ops via disabledProvider — the cache.Run pipeline exercises
-// every disabled-provider record method through a hit path.
+// no-ops via observability.Nop: the cache.Run pipeline exercises
+// every record method the cache options call through a hit path.
 func TestCacheRunOptions_DisabledProviderIsInert(t *testing.T) {
 	p, err := New(context.Background(), observability.Config{Enabled: false})
 	require.NoError(t, err)
@@ -76,7 +74,7 @@ func TestCacheRunOptions_DisabledProviderIsInert(t *testing.T) {
 	}
 	opts := observability.CacheRunOptions(context.Background(), p)
 
-	// Drive a miss then a hit so OnMiss + OnHit + OnError-adjacent
+	// Drive a miss then a hit so both results
 	// paths fire on the disabled provider. No assertion on counters
 	// (it is inert) — the test is that nothing panics and Run
 	// completes.

@@ -83,19 +83,21 @@ func TestBuildDupEdgeOK(t *testing.T) {
 	assert.Equal(t, 2, g.Len())
 }
 
-// TestObserverOnErrorFiresOnCycle verifies Build calls obs.OnError with
+// TestObserverSeesFailedBuildOnCycle verifies Build reports a failed build carrying
 // ErrCycle when cycle detection trips.
-func TestObserverOnErrorFiresOnCycle(t *testing.T) {
+func TestObserverSeesFailedBuildOnCycle(t *testing.T) {
 	t.Parallel()
 	obs := mocks.NewMockObserver(t)
-	obs.EXPECT().OnError(mock.MatchedBy(func(err error) bool { return errors.Is(err, ErrCycle) })).Return().Once()
+	obs.EXPECT().Observe(mock.MatchedBy(func(e types.GraphEvent) bool {
+		return e.Op == types.GraphOpBuild && errors.Is(e.Err, ErrCycle)
+	})).Return().Once()
 
 	b := New()
 	a := b.AddNode("a")
 	c := b.AddNode("c")
 	_ = b.AddEdge(a, c)
 	_ = b.AddEdge(c, a)
-	_, err := b.Build(WithObserver(graphObsAdapter{o: obs}))
+	_, err := b.Build(WithObserver(obs))
 	require.Error(t, err, "Build: expected ErrCycle")
 }
 
@@ -192,11 +194,11 @@ func TestNCCDEmpty(t *testing.T) {
 func TestNCCDEmptyEmitsEvent(t *testing.T) {
 	t.Parallel()
 	obs := mocks.NewMockObserver(t)
-	obs.EXPECT().OnBuild(mock.Anything).Return().Once()
-	obs.EXPECT().OnQuery(mock.MatchedBy(func(e types.QueryEvent) bool { return e.Op == "nccd" })).Return().Once()
+	obs.EXPECT().Observe(mock.MatchedBy(func(e types.GraphEvent) bool { return e.Op == types.GraphOpBuild })).Return().Once()
+	obs.EXPECT().Observe(mock.MatchedBy(func(e types.GraphEvent) bool { return e.Op == "nccd" })).Return().Once()
 
 	b := New()
-	g, err := b.Build(WithObserver(graphObsAdapter{o: obs}))
+	g, err := b.Build(WithObserver(obs))
 	require.NoError(t, err, "Build")
 	_ = g.NCCD()
 }

@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/types"
 )
 
@@ -130,9 +131,38 @@ func TestAgentFamiliesCollect(t *testing.T) {
 	assert.Equal(t, 1, attrs[0].Len(), "severity is the only attribute; a session id must never join it")
 }
 
-// TestReviewMergedWhileReadingCollects reads back the count and the duration of reviews that
-// merged under a reader, and that neither carries an attribute: a review id or repository name
-// is unbounded, and how long the reader had been at it is the whole fact.
+// TestCacheReadsCollect pins magus.cache.reads: one counter whose result attribute says how
+// each Cache.Run ended, so hits, misses and errors sum to the runs.
+func TestCacheReadsCollect(t *testing.T) {
+	p, coll := collectLocal(t)
+	ctx := context.Background()
+
+	p.RecordCacheRead(ctx, observability.CacheHit)
+	p.RecordCacheRead(ctx, observability.CacheHit)
+	p.RecordCacheRead(ctx, observability.CacheMiss)
+	p.RecordCacheRead(ctx, observability.CacheError)
+	p.RecordCacheDuration(ctx, 0.5, observability.CacheMiss)
+
+	rm, err := coll.Collect(ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, map[attribute.Set]int64{
+		attribute.NewSet(attribute.String("result", "hit")):   2,
+		attribute.NewSet(attribute.String("result", "miss")):  1,
+		attribute.NewSet(attribute.String("result", "error")): 1,
+	}, sumAttrs(t, rm, "magus.cache.reads"))
+	_, _, attrs, ok := histFloat64(t, rm, "magus.cache.duration")
+	require.True(t, ok, "magus.cache.duration missing")
+	assert.Equal(t, []attribute.Set{attribute.NewSet(attribute.String("result", "miss"))}, attrs)
+	for _, gone := range []string{"magus.cache.hits", "magus.cache.misses", "magus.cache.errors"} {
+		_, present := sumInt64(t, rm, gone)
+		assert.False(t, present, "%s folded into magus.cache.reads", gone)
+	}
+}
+
+// TestReviewMergedWhileReadingCollects reads back the duration of reviews that merged under a
+// reader, and that it carries no attribute: a review id or repository name is unbounded, and
+// how long the reader had been at it is the whole fact. The histogram's count is the merges.
 func TestReviewMergedWhileReadingCollects(t *testing.T) {
 	p, coll := collectLocal(t)
 	ctx := context.Background()
@@ -142,16 +172,14 @@ func TestReviewMergedWhileReadingCollects(t *testing.T) {
 	rm, err := coll.Collect(ctx)
 	require.NoError(t, err)
 
-	merged, ok := sumInt64(t, rm, "magus.review.merged_while_reading")
-	require.True(t, ok, "magus.review.merged_while_reading missing")
-	assert.Equal(t, int64(1), merged)
-
 	count, sum, attrs, ok := histFloat64(t, rm, "magus.review.merged_while_reading.duration")
 	require.True(t, ok, "magus.review.merged_while_reading.duration missing")
 	assert.Equal(t, uint64(1), count)
 	assert.InDelta(t, 90.0, sum, 1e-9)
 	require.Len(t, attrs, 1)
 	assert.Equal(t, 0, attrs[0].Len())
+	_, present := sumInt64(t, rm, "magus.review.merged_while_reading")
+	assert.False(t, present, "the counter restated the histogram's count")
 }
 
 // TestPoolInstrumentsCollect exercises the magus.pool.slots.running gauge and the
@@ -161,11 +189,12 @@ func TestPoolInstrumentsCollect(t *testing.T) {
 	ctx := context.Background()
 
 	// Two slots acquired, one released => running net 1.
-	p.RecordPoolAcquire(ctx, 0.01, 2)
-	p.RecordPoolRelease(ctx, 1)
+	p.RecordPoolWait(ctx, 0.01)
+	p.RecordPoolSlots(ctx, observability.PoolRunning, 2)
+	p.RecordPoolSlots(ctx, observability.PoolRunning, -1)
 	// Three callers begin waiting, one acquires => queued net 2.
-	p.RecordPoolWaiting(ctx, 3)
-	p.RecordPoolWaiting(ctx, -1)
+	p.RecordPoolSlots(ctx, observability.PoolQueued, 3)
+	p.RecordPoolSlots(ctx, observability.PoolQueued, -1)
 
 	rm, err := coll.Collect(ctx)
 	require.NoError(t, err)
@@ -178,37 +207,77 @@ func TestPoolInstrumentsCollect(t *testing.T) {
 	require.True(t, ok, "magus.pool.slots.queued missing")
 	assert.Equal(t, int64(2), queued)
 
+	count, _, _, ok := histFloat64(t, rm, "magus.pool.wait.duration")
+	require.True(t, ok, "magus.pool.wait.duration missing")
+	assert.Equal(t, uint64(1), count)
+
 	// The old spelling must be gone.
 	_, present := sumInt64(t, rm, "magus.pool.slots.inflight")
 	assert.False(t, present, "the retired magus.pool.slots.inflight must not be emitted")
 }
 
-// TestRemoteStoredOutcome confirms a "stored" put outcome now increments a counter (it
-// previously fell through the hit/miss/error switch and vanished from the export).
-func TestRemoteStoredOutcome(t *testing.T) {
+// TestRemoteOpsCountEveryOutcome pins magus.cache.remote.ops: every outcome a backend answers
+// is counted under its method, "exists" included, which the per-outcome counters dropped.
+func TestRemoteOpsCountEveryOutcome(t *testing.T) {
 	p, coll := collectLocal(t)
 	ctx := context.Background()
 
-	p.RecordRemoteOp(ctx, observability.RemoteOp{Method: "put", Outcome: "stored", Duration: 0.02, Bytes: 512})
+	p.RecordRemoteOp(ctx, observability.RemoteOp{Method: "get", Outcome: observability.RemoteHit, Duration: 0.01, Bytes: 64})
+	p.RecordRemoteOp(ctx, observability.RemoteOp{Method: "put", Outcome: observability.RemoteStored, Duration: 0.02, Bytes: 512})
+	p.RecordRemoteOp(ctx, observability.RemoteOp{Method: "put", Outcome: observability.RemoteExists, Duration: 0.02})
 
 	rm, err := coll.Collect(ctx)
 	require.NoError(t, err)
 
-	stores, ok := sumInt64(t, rm, "magus.cache.remote.stores")
-	require.True(t, ok, "magus.cache.remote.stores missing")
-	assert.Equal(t, int64(1), stores)
+	assert.Equal(t, map[attribute.Set]int64{
+		attribute.NewSet(attribute.String("method", "get"), attribute.String("outcome", "hit")):    1,
+		attribute.NewSet(attribute.String("method", "put"), attribute.String("outcome", "stored")): 1,
+		attribute.NewSet(attribute.String("method", "put"), attribute.String("outcome", "exists")): 1,
+	}, sumAttrs(t, rm, "magus.cache.remote.ops"))
 }
 
-// TestBuzzFamiliesCollect records one observation across the new Buzz/MCP/Sandbox families and
+// TestBuzzSessionPoolCollects pins the one pool-event counter and the idle gauge it drives: a
+// reuse drains one idle session, a return adds one, a cold checkout and an eviction move nothing.
+func TestBuzzSessionPoolCollects(t *testing.T) {
+	p, coll := collectLocal(t)
+	ctx := context.Background()
+
+	for _, ev := range []observability.SessionPoolEvent{
+		observability.PoolCold, observability.PoolReturned, observability.PoolReturned,
+		observability.PoolReused, observability.PoolEvicted,
+	} {
+		p.RecordBuzzSessionPool(ctx, ev)
+	}
+
+	rm, err := coll.Collect(ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, map[attribute.Set]int64{
+		attribute.NewSet(attribute.String("event", "cold")):     1,
+		attribute.NewSet(attribute.String("event", "returned")): 2,
+		attribute.NewSet(attribute.String("event", "reused")):   1,
+		attribute.NewSet(attribute.String("event", "evicted")):  1,
+	}, sumAttrs(t, rm, "magus.buzz.session.pool.events"))
+	idle, ok := sumInt64(t, rm, "magus.buzz.session.pool.idle")
+	require.True(t, ok, "magus.buzz.session.pool.idle missing")
+	assert.Equal(t, int64(1), idle)
+}
+
+// TestBuzzFamiliesCollect records one observation across the Buzz/MCP/Sandbox families and
 // confirms the collection succeeds (no duplicate-instrument error) and carries them.
 func TestBuzzFamiliesCollect(t *testing.T) {
 	p, coll := collectLocal(t)
 	ctx := context.Background()
 
-	p.RecordMCPCall(ctx, observability.MCPCall{Tool: "graph", Outcome: "success", InputBytes: 100, OutputBytes: 200, Duration: 0.03})
-	p.RecordSandboxRules(ctx, observability.SandboxRules{Read: 3, Write: 2, Exec: 1, EnvExact: 4, EnvGlob: 5, Scope: "target"})
+	p.RecordMCPCall(ctx, observability.MCPCall{Tool: "graph", Outcome: observability.OutcomeOK, InputBytes: 100, OutputBytes: 200, Duration: 0.03})
+	p.RecordSandboxRules(ctx, observability.SandboxRules{
+		Access:   map[filesystem.Access]int64{filesystem.Read: 3, filesystem.Write: 2, filesystem.Exec: 0},
+		EnvExact: 4,
+		EnvGlob:  5,
+		Scope:    "target",
+	})
 	p.RecordSandboxCheck(ctx, "read", "allow", "//app")
-	p.RecordBuzzHostCall(ctx, observability.BuzzHostCall{Callable: "proc.exec", Outcome: "success", Duration: 0.01})
+	p.RecordBuzzHostCall(ctx, observability.BuzzHostCall{Callable: "proc.exec", Outcome: observability.OutcomeError, Duration: 0.01})
 	p.RecordBuzzSpellBuiltinsWarm(ctx, 0.05, "build")
 	p.RecordBuzzJITRun(ctx)
 
@@ -219,17 +288,24 @@ func TestBuzzFamiliesCollect(t *testing.T) {
 	require.True(t, ok, "magus.buzz.jit.runs missing")
 	assert.Equal(t, int64(1), jit)
 
-	// The spell-builtins warm counter must be registered under its own name, distinct from
-	// the same-family warm-duration histogram (magus.buzz.spell.builtins.warm); a name clash
-	// would drop it from the collection.
-	builtins, ok := sumInt64(t, rm, "magus.buzz.spell.builtins.count")
-	require.True(t, ok, "magus.buzz.spell.builtins.count missing")
-	assert.Equal(t, int64(1), builtins)
+	assert.Equal(t, map[attribute.Set]int64{
+		attribute.NewSet(attribute.String("access", "read"), attribute.String("scope", "target")):  3,
+		attribute.NewSet(attribute.String("access", "write"), attribute.String("scope", "target")): 2,
+	}, sumAttrs(t, rm, "magus.sandbox.rules"), "a zero count adds no series")
 
-	// Confirm the MCP calls counter recorded the call.
-	calls, ok := sumInt64(t, rm, "magus.mcp.tool.calls")
-	require.True(t, ok, "magus.mcp.tool.calls missing")
-	assert.Equal(t, int64(1), calls)
+	// A histogram's count is the call count, so the duration histograms carry what the
+	// dropped counters did, outcome included.
+	count, _, attrs, ok := histFloat64(t, rm, "magus.mcp.tool.duration")
+	require.True(t, ok, "magus.mcp.tool.duration missing")
+	assert.Equal(t, uint64(1), count)
+	assert.Equal(t, []attribute.Set{attribute.NewSet(attribute.String("tool", "graph"), attribute.String("outcome", "ok"))}, attrs)
+	_, _, attrs, ok = histFloat64(t, rm, "magus.buzz.host.call.duration")
+	require.True(t, ok, "magus.buzz.host.call.duration missing")
+	assert.Equal(t, []attribute.Set{attribute.NewSet(attribute.String("callable", "proc.exec"), attribute.String("outcome", "error"))}, attrs)
+	for _, gone := range []string{"magus.mcp.tool.calls", "magus.buzz.host.call.count", "magus.buzz.spell.builtins.count"} {
+		_, present := sumInt64(t, rm, gone)
+		assert.False(t, present, "%s restated a histogram's count", gone)
+	}
 }
 
 // sumAttrs returns each data point of an Int64 sum named name as its attribute set and value.

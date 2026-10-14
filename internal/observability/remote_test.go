@@ -96,7 +96,7 @@ func TestInstrumentRemoteBackend_PutExists(t *testing.T) {
 	err := b.PutArtifact(context.Background(), "p", "h", bytes.NewReader([]byte("world")))
 	require.ErrorIs(t, err, cache.ErrRemoteExists)
 	require.Len(t, rec.remoteOps, 1)
-	assert.Equal(t, "exists", rec.remoteOps[0].Outcome)
+	assert.Equal(t, RemoteExists, rec.remoteOps[0].Outcome)
 }
 
 // HasArtifact reaches the wrapped backend, so backfill works with telemetry on.
@@ -116,7 +116,7 @@ func TestInstrumentRemoteBackend_GetError(t *testing.T) {
 	_, err := b.GetArtifact(context.Background(), "p", "h")
 	assert.Error(t, err)
 	require.Len(t, rec.remoteOps, 1)
-	assert.Equal(t, "error", rec.remoteOps[0].Outcome)
+	assert.Equal(t, RemoteError, rec.remoteOps[0].Outcome)
 }
 
 func TestInstrumentRemoteBackend_Put(t *testing.T) {

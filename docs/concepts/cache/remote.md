@@ -398,11 +398,11 @@ gate built with. This repository's `ci.yaml` does exactly that, saving from main
 When [telemetry](../telemetry.md) is enabled, magus instruments every remote
 `get`/`put` automatically, with no provider changes, since the wrapping
 happens around the `RemoteBackend` interface, not inside the spell. You get the
-`magus.cache.remote.{hits,misses,errors,duration,io.size}` metrics (hit-rate,
-latency, bytes moved) plus a `magus.cache.remote.get`/`.put` span per operation,
-so a slow fetch or upload shows up inline in the build trace. Remote metrics live
-under their own `.remote` prefix and are never folded into the local
-`magus.cache.*` counters. See the
+`magus.cache.remote.{ops,duration,io.size}` metrics (operations by method and
+outcome, latency, bytes moved) plus a `magus.cache.remote.get`/`.put` span per
+operation, so a slow fetch or upload shows up inline in the build trace. Remote
+metrics live under their own `.remote` prefix and are never folded into the local
+`magus.cache.reads` counter. See the
 [telemetry reference](../telemetry.md#remote-cache) for the full instrument list.
 
 ## Writing your own provider

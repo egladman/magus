@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -642,4 +643,36 @@ func BenchmarkRecord_filtered(b *testing.B) {
 	for range b.N {
 		_ = Record(w, e)
 	}
+}
+
+// TestGraphObserverWritesEachKind pins the record each graph event becomes: a build is
+// graph.build, any other op graph.query, and a failure graph.error naming its op.
+func TestGraphObserverWritesEachKind(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := NewWriter(&buf, WithBlockOnFull())
+	obs := GraphObserver(w)
+	obs.Observe(types.GraphEvent{Op: types.GraphOpBuild, Nodes: 3, Edges: 2})
+	obs.Observe(types.GraphEvent{Op: "affected", Nodes: 3, Seeds: 1, ResultCount: 2})
+	obs.Observe(types.GraphEvent{Op: types.GraphOpBuild, Err: errors.New("dependency cycle")})
+	require.NoError(t, w.Close())
+
+	type line struct {
+		Type  string `json:"type"`
+		Op    string `json:"op"`
+		Nodes int    `json:"nodes"`
+		Error string `json:"error"`
+	}
+	var got []line
+	sc := bufio.NewScanner(&buf)
+	for sc.Scan() {
+		var l line
+		require.NoError(t, json.Unmarshal(sc.Bytes(), &l), "unmarshal %q", sc.Bytes())
+		got = append(got, l)
+	}
+	assert.Equal(t, []line{
+		{Type: TypeGraphBuild, Nodes: 3},
+		{Type: TypeGraphQuery, Op: "affected", Nodes: 3},
+		{Type: TypeGraphError, Op: types.GraphOpBuild, Error: "dependency cycle"},
+	}, got)
 }

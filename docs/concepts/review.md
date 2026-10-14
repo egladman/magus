@@ -298,9 +298,9 @@ one you sent. For any other host the line is empty. A review that has already me
 the mark.
 
 If the review merges while the mark is set, the `check-review` job reports `review.merged`,
-even when nobody commented, and clears the mark. Two opt-in telemetry metrics count what it
-cost: `magus.review.merged_while_reading` and `magus.review.merged_while_reading.duration`.
-They carry no attribute and reach a backend only when telemetry export is on; see
+even when nobody commented, and clears the mark. The opt-in telemetry metric
+`magus.review.merged_while_reading.duration` counts what it cost. It carries no attribute
+and reaches a backend only when telemetry export is on; see
 [Telemetry](telemetry.md#agents-and-review).
 
 ## After it merges

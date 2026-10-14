@@ -6,6 +6,8 @@ import (
 	"math"
 	"slices"
 	"time"
+
+	"github.com/egladman/magus/types"
 )
 
 // Reachable reports whether u can reach v (O(1) after closure build).
@@ -31,7 +33,7 @@ func (g *Graph) ReverseClosure(dst []ID, seeds []ID) []ID {
 		result = cl.ReverseClosure(dst, seeds, g.n)
 	}
 
-	g.obs.OnQuery(QueryEvent{
+	g.obs.Observe(types.GraphEvent{
 		Op:          "reverse_closure",
 		Nodes:       int(g.n),
 		Seeds:       len(seeds),
@@ -76,7 +78,7 @@ func (g *Graph) BlastRadius() []int32 {
 	cl := g.closure()
 	result := cl.BlastRadius()
 
-	g.obs.OnQuery(QueryEvent{
+	g.obs.Observe(types.GraphEvent{
 		Op:          "blast_radius",
 		Nodes:       int(g.n),
 		Strategy:    "bitset",
@@ -92,7 +94,7 @@ func (g *Graph) NCCD() float64 {
 	n := int(g.n)
 
 	defer func() {
-		g.obs.OnQuery(QueryEvent{
+		g.obs.Observe(types.GraphEvent{
 			Op:       "nccd",
 			Nodes:    n,
 			Strategy: "bitset",
@@ -168,7 +170,7 @@ func (g *Graph) PathsFromSeeds(target ID, seeds []ID, out []AffectedPath) []Affe
 
 	slices.SortFunc(out, func(a, b AffectedPath) int { return cmp.Compare(a.Seed, b.Seed) })
 
-	g.obs.OnQuery(QueryEvent{
+	g.obs.Observe(types.GraphEvent{
 		Op:          "paths_from_seeds",
 		Nodes:       int(g.n),
 		Seeds:       len(seeds),
@@ -207,7 +209,7 @@ func (g *Graph) NearCycles(ctx context.Context, maxDepth int) []NearCycle {
 
 	for nodeA := ID(0); int(nodeA) < int(g.n); nodeA++ {
 		if ctx != nil && ctx.Err() != nil {
-			g.obs.OnError(ctx.Err())
+			g.obs.Observe(types.GraphEvent{Op: "near_cycles", Err: ctx.Err()})
 			break
 		}
 		clear(visited)
@@ -263,7 +265,7 @@ func (g *Graph) NearCycles(ctx context.Context, maxDepth int) []NearCycle {
 		return cmp.Compare(len(a.BackPath), len(b.BackPath))
 	})
 
-	g.obs.OnQuery(QueryEvent{
+	g.obs.Observe(types.GraphEvent{
 		Op:          "near_cycles",
 		Nodes:       int(g.n),
 		Strategy:    "bfs",

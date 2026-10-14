@@ -88,17 +88,6 @@ func intHist(name string, bounds []float64, counts []uint64, sum int64) metricda
 	}
 }
 
-// intCounter builds a monotonic int64 sum metric.
-func intCounter(name string, value int64) metricdata.Metrics {
-	return metricdata.Metrics{
-		Name: name,
-		Data: metricdata.Sum[int64]{
-			Temporality: metricdata.CumulativeTemporality,
-			IsMonotonic: true,
-			DataPoints:  []metricdata.DataPoint[int64]{{Value: value}},
-		},
-	}
-}
 
 func total(counts []uint64) uint64 {
 	var n uint64
@@ -119,12 +108,14 @@ func TestAggregate(t *testing.T) {
 				// bounds [0.1], counts [3,0]: 3 observations in (0,0.1]; sum 0.3.
 				floatHist(instRemoteDuration, []float64{0.1}, []uint64{3, 0}, 0.3),
 				intHist(instRemoteIOSize, []float64{1024}, []uint64{2, 0}, 4096),
-				intCounter(instRemoteHits, 2),
-				intCounter(instRemoteMisses, 1),
-				intCounter(instRemoteErrors, 0),
+				sumMetric(instRemoteOps,
+					idp(2, kvSet("method", "get", "outcome", "hit")),
+					idp(1, kvSet("method", "get", "outcome", "miss")),
+					// A put the store already held is neither a hit, a miss nor an error.
+					idp(1, kvSet("method", "put", "outcome", "exists")),
+				),
 				// Sample-only counters must not leak into the derived Snapshot.
-				intCounter(instCacheHits, 7),
-				intCounter(instTargetRuns, 10),
+				sumMetric(instCacheReads, idp(7, kvSet("result", "hit"))),
 			},
 		}},
 	}
@@ -191,16 +182,16 @@ func TestTargetStats(t *testing.T) {
 	assert.InDelta(t, 0.0, bb.CacheHitRate, 1e-9)
 }
 
-// TestMCPToolStats rolls the magus.mcp.tool.* instruments into one MCPToolStat per tool.
+// TestMCPToolStats rolls the magus.mcp.tool.* instruments into one MCPToolStat per tool; calls
+// and errors are the duration histogram's counts.
 func TestMCPToolStats(t *testing.T) {
 	rm := scope(
-		sumMetric(instMCPCalls,
-			idp(3, kvSet("tool", "graph", "outcome", "success")),
-			idp(1, kvSet("tool", "graph", "outcome", "error")),
-		),
 		iHistMetric(instMCPInput, iHistDP([]float64{1000}, []uint64{4, 0}, 400, kvSet("tool", "graph"))),
 		iHistMetric(instMCPOutput, iHistDP([]float64{2000}, []uint64{4, 0}, 800, kvSet("tool", "graph"))),
-		fHistMetric(instMCPDuration, fHistDP([]float64{1}, []uint64{4, 0}, 0.4, kvSet("tool", "graph", "outcome", "success"))),
+		fHistMetric(instMCPDuration,
+			fHistDP([]float64{1}, []uint64{3, 0}, 0.3, kvSet("tool", "graph", "outcome", "ok")),
+			fHistDP([]float64{1}, []uint64{1, 0}, 0.1, kvSet("tool", "graph", "outcome", "error")),
+		),
 	)
 
 	rows := mcpToolStats(rm)
@@ -221,13 +212,20 @@ func TestMCPToolStats(t *testing.T) {
 // TestBuzzStats rolls the magus.buzz.* families into a single Buzz message.
 func TestBuzzStats(t *testing.T) {
 	rm := scope(
-		fHistMetric(instBuzzExec, fHistDP([]float64{1}, []uint64{2, 0}, 0.6, kvSet("mode", "run", "outcome", "success"))),
+		fHistMetric(instBuzzExec, fHistDP([]float64{1}, []uint64{2, 0}, 0.6, kvSet("mode", "run", "outcome", "ok"))),
 		fHistMetric(instBuzzCompile, fHistDP([]float64{1}, []uint64{3, 0}, 0.3, kvSet("phase", "parse", "mode", "run"))),
-		sumMetric(instBuzzHostCallCount, idp(5, kvSet("callable", "proc.exec", "outcome", "success"))),
-		fHistMetric(instBuzzHostCallDur, fHistDP([]float64{1}, []uint64{5, 0}, 0.5, kvSet("callable", "proc.exec"))),
-		sumMetric(instBuzzSessionReuse, idp(7, kvSet("outcome", "reused"))),
+		fHistMetric(instBuzzHostCallDur,
+			fHistDP([]float64{1}, []uint64{4, 0}, 0.4, kvSet("callable", "proc.exec", "outcome", "ok")),
+			fHistDP([]float64{1}, []uint64{1, 0}, 0.1, kvSet("callable", "proc.exec", "outcome", "error")),
+		),
+		// A cold checkout is not a reuse: session_pool_reuse counts acquires served idle.
+		sumMetric(instBuzzSessionPool,
+			idp(7, kvSet("event", "reused")),
+			idp(3, kvSet("event", "cold")),
+			idp(1, kvSet("event", "evicted")),
+			idp(6, kvSet("event", "returned")),
+		),
 		sumMetric(instBuzzSessionIdle, idp(2, kvSet())),
-		sumMetric(instBuzzSessionEvict, idp(1, kvSet("source", "ttl"))),
 		sumMetric(instBuzzJITRuns, idp(9, kvSet())),
 		sumMetric(instBuzzVMFaults, idp(4, kvSet("kind", "panic"))),
 	)

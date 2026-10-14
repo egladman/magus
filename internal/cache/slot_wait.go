@@ -6,7 +6,7 @@ import (
 )
 
 // SlotWaitMeter totals the wall time during which at least one caller was queued on a
-// [Limiter], fed the deltas its onWait hook reports. The zero value is ready and it is
+// [Limiter], fed the Queued deltas its hook reports. The zero value is ready and it is
 // safe for concurrent use.
 //
 // Wall time rather than a sum of waits: ten targets queued together for five seconds
@@ -20,7 +20,7 @@ type SlotWaitMeter struct {
 	waited time.Duration
 }
 
-// Add applies one onWait delta: +n as a caller starts waiting for n slots, -n once its
+// Add applies one Queued delta: +n as a caller starts waiting for n slots, -n once its
 // acquire returns.
 func (m *SlotWaitMeter) Add(delta int) {
 	m.mu.Lock()

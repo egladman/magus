@@ -179,28 +179,22 @@ func TestLimiterFairQueueing(t *testing.T) {
 	assert.Equal(t, 0, l.Snapshot().Running, "post-fairness-test running")
 }
 
-// TestLimiterHooks verifies that SetHooks fires onAcquire on every
-// successful Acquire and onRelease on every Release.
+// TestLimiterHooks verifies that the hook SetHooks installs hears every acquire as +1
+// running and every release as -1 running.
 func TestLimiterHooks(t *testing.T) {
 	t.Parallel()
 	l := NewLimiter(2)
 
-	var acqNs []int64
-	var relN []int
+	var running []int
 	var mu sync.Mutex
-	l.SetHooks(
-		func(waitNs int64, n int) {
-			mu.Lock()
-			acqNs = append(acqNs, waitNs)
-			mu.Unlock()
-		},
-		func(n int) {
-			mu.Lock()
-			relN = append(relN, n)
-			mu.Unlock()
-		},
-		nil,
-	)
+	l.SetHooks(func(ev PoolEvent) {
+		if ev.Running == 0 {
+			return
+		}
+		mu.Lock()
+		running = append(running, ev.Running)
+		mu.Unlock()
+	})
 
 	_ = l.Acquire(context.Background())
 	_ = l.Acquire(context.Background())
@@ -208,14 +202,17 @@ func TestLimiterHooks(t *testing.T) {
 	l.Release()
 
 	mu.Lock()
-	assert.Len(t, acqNs, 2, "onAcquire fired the wrong number of times")
-	assert.Len(t, relN, 2, "onRelease fired the wrong number of times")
+	assert.Equal(t, []int{1, 1, -1, -1}, running)
 	mu.Unlock()
 
 	// Contended case: second Acquire on a full pool should observe wait > 0.
 	l2 := NewLimiter(1)
-	var waitedNs int64
-	l2.SetHooks(func(ns int64, _ int) { waitedNs = ns }, nil, nil)
+	var waited atomic.Int64
+	l2.SetHooks(func(ev PoolEvent) {
+		if ev.Running > 0 {
+			waited.Store(int64(ev.Wait))
+		}
+	})
 	_ = l2.Acquire(context.Background()) // fill pool
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -232,19 +229,19 @@ func TestLimiterHooks(t *testing.T) {
 	}
 	l2.Release() // unblock the now-blocked goroutine
 	wg.Wait()
-	assert.NotZero(t, waitedNs, "contended acquire reported wait == 0ns")
+	assert.NotZero(t, waited.Load(), "contended acquire reported wait == 0ns")
 }
 
-// TestLimiterWaitingHook verifies the onWait hook mirrors the internal queued counter
+// TestLimiterWaitingHook verifies the hook's Queued deltas mirror the internal queued counter
 // exactly: it fires +n the instant a caller begins waiting and -n once its Acquire returns,
-// so the net inflight of onWait tracks Snapshot().Queued at every step.
+// so their running sum tracks Snapshot().Queued at every step.
 func TestLimiterWaitingHook(t *testing.T) {
 	t.Parallel()
 	l := NewLimiter(1)
 	var net atomic.Int64
-	l.SetHooks(nil, nil, func(delta int) { net.Add(int64(delta)) })
+	l.SetHooks(func(ev PoolEvent) { net.Add(int64(ev.Queued)) })
 
-	// Uncontended: onWait still fires +1 (before Acquire) and -1 (on return), netting 0.
+	// Uncontended: the hook still hears +1 (before Acquire) and -1 (on return), netting 0.
 	require.NoError(t, l.Acquire(context.Background()))
 	assert.Equal(t, int64(0), net.Load(), "uncontended acquire should net zero waiting")
 
@@ -258,15 +255,15 @@ func TestLimiterWaitingHook(t *testing.T) {
 	for l.Snapshot().Queued == 0 {
 		runtime.Gosched()
 	}
-	// Queued and the onWait hook are separate atomics that AcquireN updates a couple of
-	// instructions apart (it increments queued, THEN calls onWait), so waiting on Queued
+	// Queued and the hook's sum are separate atomics that AcquireN updates a couple of
+	// instructions apart (it increments queued, THEN calls the hook), so waiting on Queued
 	// alone exits inside that window and samples net == 0 against Queued == 1. Waiting for
 	// both makes the assertion below about the two agreeing rather than a race with the
 	// update itself. The slot is held for the duration, so the waiter cannot proceed and
 	// the pair cannot move again before it is read.
 	require.Eventually(t, func() bool { return l.Snapshot().Queued > 0 && net.Load() > 0 },
 		time.Second, time.Millisecond, "the blocked caller must register as waiting")
-	assert.Equal(t, int64(l.Snapshot().Queued), net.Load(), "onWait net must mirror Queued")
+	assert.Equal(t, int64(l.Snapshot().Queued), net.Load(), "the Queued sum must mirror Queued")
 
 	l.Release() // unblock the waiter
 	wg.Wait()

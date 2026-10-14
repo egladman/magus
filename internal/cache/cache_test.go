@@ -147,8 +147,8 @@ func TestCacheHitReplaysLogToStderrNotStdout(t *testing.T) {
 }
 
 // TestRunSnapshotFailureReportsLikeRunErr verifies that a snapshot failure
-// after a successful fn is reported the same way an fn failure is: onError
-// fires, OnResult fires with the error, the Error stat is incremented, and
+// after a successful fn is reported the same way an fn failure is: OnResult
+// fires with the error, the Error stat is incremented, and
 // recordOutput runs (result.Ref is set). Before the fix, this path returned
 // bare, so observers and the journal never saw the step finish.
 func TestRunSnapshotFailureReportsLikeRunErr(t *testing.T) {
@@ -166,11 +166,9 @@ func TestRunSnapshotFailureReportsLikeRunErr(t *testing.T) {
 		return os.WriteFile(out, []byte("built"), 0o644)
 	}
 
-	var onErrorErr error
 	var onResultErr error
 	var onResultCalled bool
 	opts := []RunOption{
-		OnError(func(err error) { onErrorErr = err }),
 		OnResult(func(_ *Step, _ *Result, err error) {
 			onResultCalled = true
 			onResultErr = err
@@ -180,7 +178,6 @@ func TestRunSnapshotFailureReportsLikeRunErr(t *testing.T) {
 	r, err := c.Run(context.Background(), step, fn, opts...)
 	require.Error(t, err, "snapshot failure must surface as Run's error")
 
-	assert.Error(t, onErrorErr, "onError must fire on a snapshot failure")
 	assert.True(t, onResultCalled, "OnResult must fire on a snapshot failure")
 	assert.Error(t, onResultErr, "OnResult must receive the snapshot error")
 	assert.Equal(t, 1, c.Stats().Error, "the Error stat must count a snapshot failure")
@@ -1728,7 +1725,10 @@ func ExampleCache_RunAll() {
 		context.Background(), steps,
 		func(_ context.Context, _ Step) error { return nil },
 		WithLimiter(NewLimiter(4)),
-		OnMiss(func(r *Result) {
+		OnResult(func(_ *Step, r *Result, err error) {
+			if err != nil || r.Hit {
+				return
+			}
 			mu.Lock()
 			missed = append(missed, r.ProjectPath)
 			mu.Unlock()

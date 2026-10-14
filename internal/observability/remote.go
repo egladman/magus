@@ -47,18 +47,18 @@ func (b *instrumentedBackend) GetArtifact(ctx context.Context, namespace, key st
 	start := time.Now()
 	rc, err := b.RemoteBackend.GetArtifact(ctx, namespace, key)
 	if errors.Is(err, cache.ErrRemoteMiss) {
-		b.p.RecordRemoteOp(ctx, RemoteOp{Method: "get", Outcome: "miss", Duration: time.Since(start).Seconds()})
+		b.p.RecordRemoteOp(ctx, RemoteOp{Method: "get", Outcome: RemoteMiss, Duration: time.Since(start).Seconds()})
 		end(nil)
 		return nil, err
 	}
 	if err != nil {
-		b.p.RecordRemoteOp(ctx, RemoteOp{Method: "get", Outcome: "error", Duration: time.Since(start).Seconds()})
+		b.p.RecordRemoteOp(ctx, RemoteOp{Method: "get", Outcome: RemoteError, Duration: time.Since(start).Seconds()})
 		end(err)
 		return nil, err
 	}
 	counted := &countingReadCloser{CountingReader: cache.CountingReader{Reader: rc}, closer: rc}
 	counted.onClose = func(n int64) {
-		b.p.RecordRemoteOp(ctx, RemoteOp{Method: "get", Outcome: "hit", Duration: time.Since(start).Seconds(), Bytes: n})
+		b.p.RecordRemoteOp(ctx, RemoteOp{Method: "get", Outcome: RemoteHit, Duration: time.Since(start).Seconds(), Bytes: n})
 		end(nil)
 	}
 	return counted, nil
@@ -70,15 +70,15 @@ func (b *instrumentedBackend) PutArtifact(ctx context.Context, namespace, key st
 	cr := &cache.CountingReader{Reader: r}
 	start := time.Now()
 	err := b.RemoteBackend.PutArtifact(ctx, namespace, key, cr)
-	outcome := "stored"
+	outcome := RemoteStored
 	switch {
 	case errors.Is(err, cache.ErrRemoteExists):
-		outcome = "exists"
+		outcome = RemoteExists
 	case err != nil:
-		outcome = "error"
+		outcome = RemoteError
 	}
 	b.p.RecordRemoteOp(ctx, RemoteOp{Method: "put", Outcome: outcome, Duration: time.Since(start).Seconds(), Bytes: cr.N})
-	if outcome == "exists" {
+	if outcome == RemoteExists {
 		end(nil)
 	} else {
 		end(err)

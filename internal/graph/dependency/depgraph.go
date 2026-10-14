@@ -129,19 +129,6 @@ func (e *engine) Nodes() []string {
 	return out
 }
 
-// graphObsAdapter bridges types.Observer to Observer.
-type graphObsAdapter struct{ o types.Observer }
-
-func (a graphObsAdapter) OnBuild(s BuildStats) {
-	a.o.OnBuild(types.BuildStats{Nodes: s.Nodes, Edges: s.Edges, Duration: s.Duration})
-}
-
-func (a graphObsAdapter) OnQuery(e QueryEvent) {
-	a.o.OnQuery(types.QueryEvent{Op: e.Op, Nodes: e.Nodes, Seeds: e.Seeds, Strategy: e.Strategy, ResultCount: e.ResultCount, Duration: e.Duration})
-}
-
-func (a graphObsAdapter) OnError(err error) { a.o.OnError(err) }
-
 // Build constructs the dependency graph for the workspace.
 //
 // The observer from w.GraphObserver() is composed with any WithGraphObserver
@@ -181,7 +168,7 @@ func Build(w *types.Workspace, opts ...types.GraphOption) (*types.Graph, error) 
 		return nil, &types.UnregisteredDepError{Missing: missing}
 	}
 
-	g, err := b.Build(WithObserver(graphObsAdapter{cfg.Obs}))
+	g, err := b.Build(WithObserver(cfg.Obs))
 	if err != nil {
 		return nil, fmt.Errorf("magus/depgraph: build graph: %w", err)
 	}

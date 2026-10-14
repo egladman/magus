@@ -314,8 +314,8 @@ func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 	rec := mocks.NewMockProvider(t)
 	rec.EXPECT().Enabled().Return(true).Maybe()
 	rec.EXPECT().RecordBuzzJITRun(mock.Anything).Maybe()
-	rec.EXPECT().RecordBuzzExec(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Run(func(ctx context.Context, _ float64, _, _ string) {
+	rec.EXPECT().RecordBuzzExec(mock.Anything, mock.Anything).
+		Run(func(ctx context.Context, _ observability.BuzzExec) {
 			policies = append(policies, sandbox.PolicyFromContext(ctx))
 		}).
 		Times(2)

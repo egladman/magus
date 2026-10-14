@@ -24,12 +24,12 @@ const (
 	ModeRepl      = "repl"
 )
 
-// execOutcome labels a completed Buzz execution for magus.buzz.exec.
-func execOutcome(err error) string {
+// outcomeOf labels a completed Buzz call by its error.
+func outcomeOf(err error) observability.Outcome {
 	if err != nil {
-		return "error"
+		return observability.OutcomeError
 	}
-	return "ok"
+	return observability.OutcomeOK
 }
 
 // providerFrom returns ctx's telemetry provider only when it is enabled. A nil
@@ -70,7 +70,7 @@ func TimeExec(ctx context.Context, mode string, fn func() error) error {
 	}
 	start := time.Now()
 	err := fn()
-	p.RecordBuzzExec(ctx, time.Since(start).Seconds(), mode, execOutcome(err))
+	p.RecordBuzzExec(ctx, observability.BuzzExec{Mode: mode, Outcome: outcomeOf(err), Duration: time.Since(start).Seconds()})
 	recordJITDelta(ctx, p)
 	return err
 }
@@ -84,7 +84,7 @@ func TimeCall(ctx context.Context, mode string, fn func() (vm.Value, error)) (vm
 	}
 	start := time.Now()
 	v, err := fn()
-	p.RecordBuzzExec(ctx, time.Since(start).Seconds(), mode, execOutcome(err))
+	p.RecordBuzzExec(ctx, observability.BuzzExec{Mode: mode, Outcome: outcomeOf(err), Duration: time.Since(start).Seconds()})
 	recordJITDelta(ctx, p)
 	return v, err
 }
@@ -110,11 +110,11 @@ type compileObserver struct {
 }
 
 func (o compileObserver) Phase(phase buzz.CompilePhase, elapsed time.Duration, _ error) {
-	o.p.RecordBuzzCompile(o.ctx, elapsed.Seconds(), phase.String(), o.mode)
+	o.p.RecordBuzzCompile(o.ctx, observability.BuzzCompile{Phase: phase.String(), Mode: o.mode, Duration: elapsed.Seconds()})
 }
 
 func (o compileObserver) Import(_ string, outcome buzz.ImportOutcome, elapsed time.Duration, err error) {
-	o.p.RecordBuzzImport(o.ctx, elapsed.Seconds(), outcome.String(), execOutcome(err))
+	o.p.RecordBuzzImport(o.ctx, observability.BuzzImport{Kind: outcome.String(), Outcome: outcomeOf(err), Duration: elapsed.Seconds()})
 }
 
 // NewPoolObserver returns a PoolObserver that reports Buzz session-pool lifecycle
@@ -129,33 +129,30 @@ func NewPoolObserver(ctx context.Context) buzz.PoolObserver {
 	return poolObserver{p: p}
 }
 
-// poolObserver maps the pool's absolute idle counts to the idle gauge's deltas by
-// event: a reused acquire drains one idle session (-1), a non-evicting release
-// returns one (+1); a cold acquire and an evicting release leave the idle set
-// unchanged (the fresh session goes straight to in-use, the evicted one is closed).
+// poolObserver reports each checkout and release as one pool event; the provider derives the
+// idle gauge from the events.
 type poolObserver struct {
 	p observability.Provider
 }
 
-func (o poolObserver) SessionAcquire(ctx context.Context, reused bool, _ int) {
-	if reused {
-		o.p.RecordBuzzSessionReuse(ctx, "reused")
-		o.p.RecordBuzzSessionIdle(ctx, -1)
-		return
+func (o poolObserver) SessionAcquire(ctx context.Context, kind buzz.SessionAcquireKind, _ int) {
+	ev := observability.PoolCold
+	if kind == buzz.SessionReused {
+		ev = observability.PoolReused
 	}
-	o.p.RecordBuzzSessionReuse(ctx, "cold")
+	o.p.RecordBuzzSessionPool(ctx, ev)
 }
 
 func (o poolObserver) SessionWarm(ctx context.Context, elapsed time.Duration, _ error) {
 	o.p.RecordBuzzSessionWarm(ctx, elapsed.Seconds(), "pool")
 }
 
-func (o poolObserver) SessionRelease(ctx context.Context, evicted bool, _ int) {
-	if evicted {
-		o.p.RecordBuzzSessionEviction(ctx, "pool")
-		return
+func (o poolObserver) SessionRelease(ctx context.Context, kind buzz.SessionReleaseKind, _ int) {
+	ev := observability.PoolReturned
+	if kind == buzz.SessionEvicted {
+		ev = observability.PoolEvicted
 	}
-	o.p.RecordBuzzSessionIdle(ctx, 1)
+	o.p.RecordBuzzSessionPool(ctx, ev)
 }
 
 // NewHostCallObserver returns a DirectObserver that records magus.buzz.host.call
@@ -178,13 +175,9 @@ type hostCallObserver struct {
 }
 
 func (o hostCallObserver) DirectCall(name string, elapsed time.Duration, err error) {
-	outcome := "success"
-	if err != nil {
-		outcome = "error"
-	}
 	o.p.RecordBuzzHostCall(o.ctx, observability.BuzzHostCall{
 		Callable: name,
-		Outcome:  outcome,
+		Outcome:  outcomeOf(err),
 		Duration: elapsed.Seconds(),
 	})
 }

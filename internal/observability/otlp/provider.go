@@ -29,12 +29,12 @@ import (
 	"github.com/egladman/magus/internal/observability"
 )
 
-// New returns a Provider backed by the configured OTLP collector.
-// When cfg.Enabled is false it returns a no-op disabledProvider without opening any connection.
+// New returns a Provider backed by the configured OTLP collector. With cfg.Enabled and
+// cfg.LocalCollect both false it returns [observability.Nop] without opening any connection.
 func New(ctx context.Context, cfg observability.Config) (observability.Provider, error) {
 	// Disabled with no local collection requested: a true no-op (the common CLI path).
 	if !cfg.Enabled && !cfg.LocalCollect {
-		return disabledProvider{}, nil
+		return observability.Nop{}, nil
 	}
 	// External export requires an endpoint; local-only collection (the server's dashboard
 	// feed) does not.
@@ -85,9 +85,7 @@ func New(ctx context.Context, cfg observability.Config) (observability.Provider,
 	meter := mp.Meter("github.com/egladman/magus/internal/observability")
 
 	r := reg{m: meter}
-	hits := r.i64c("magus.cache.hits", "Number of magus cache hits.", "{call}")
-	misses := r.i64c("magus.cache.misses", "Number of magus cache misses.", "{call}")
-	errs := r.i64c("magus.cache.errors", "Number of target runs that failed.", "{call}")
+	reads := r.i64c("magus.cache.reads", "Cache.Run results, by whether the step hit, missed or failed.", "{call}")
 	dur := r.f64h("magus.cache.duration", "Wall-clock duration of a single Cache.Run, in seconds.")
 	// The savings lens: magus.cache.duration says what a hit COST, this says what it AVOIDED.
 	// One observation per hit, so the histogram's sum is the wall-clock the cache has saved and
@@ -95,29 +93,19 @@ func New(ctx context.Context, cfg observability.Config) (observability.Provider,
 	// cache.Stats.SavedMs, which until now only ever reached an end-of-run footer.
 	saved := r.f64h("magus.cache.saved.duration", "Wall-clock duration a cache hit replayed instead of running, in seconds.")
 	graphQueryDur := r.f64h("magus.graph.query.duration", "Wall-clock duration of a single graph query, in seconds.")
-	graphQueryCount := r.i64c("magus.graph.queries", "Number of graph query operations.", "{call}")
 
-	targetRuns := r.i64c("magus.target.runs", "Number of target executions, including cache replays.", "{call}")
 	targetDur := r.f64h("magus.target.duration", "Wall-clock duration of a single target execution, in seconds.")
 
 	poolWait := r.f64h("magus.pool.wait.duration", "Time a target spent waiting to acquire a concurrency slot, in seconds.")
 	poolRunning := r.i64ud("magus.pool.slots.running", "Number of concurrency slots currently running.", "{slot}")
 	poolQueued := r.i64ud("magus.pool.slots.queued", "Number of callers currently queued to acquire a concurrency slot.", "{slot}")
 
-	// Remote cache backend (S3, GitHub Actions, ...). These mirror the local
-	// magus.cache.{hits,misses,errors,duration} vocabulary under a .remote prefix
-	// so a remote hit is never conflated with a local one — they live in different
-	// counters. magus.cache.remote.io.size is the dimension local caching lacks:
-	// bytes moved over the network, which maps to egress cost.
-	remoteHits := r.i64c("magus.cache.remote.hits", "Number of remote cache hits (get returned an entry).", "{call}")
-	remoteMisses := r.i64c("magus.cache.remote.misses", "Number of remote cache misses (get found no entry).", "{call}")
-	remoteErrs := r.i64c("magus.cache.remote.errors", "Number of failed remote cache operations.", "{call}")
+	// Remote cache backend (S3, GitHub Actions, ...), under a .remote prefix so a remote hit
+	// is never conflated with a local one. magus.cache.remote.io.size is the dimension local
+	// caching lacks: bytes moved over the network, which maps to egress cost.
+	remoteOps := r.i64c("magus.cache.remote.ops", "Remote cache operations, by method and what the backend answered.", "{call}")
 	remoteDur := r.f64h("magus.cache.remote.duration", "Wall-clock duration of a single remote cache operation, in seconds.")
 	remoteBytes := r.i64h("magus.cache.remote.io.size", "Bytes transferred by a single remote cache get or put.", "By")
-	// A successful put reports outcome "stored" (see remote.go); it is neither a hit nor a
-	// miss, so it needs its own tally. Without this counter a put's outcome vanishes from the
-	// OTLP export even though its duration and bytes were recorded.
-	remoteStores := r.i64c("magus.cache.remote.stores", "Number of remote cache puts that stored an entry.", "{call}")
 	if r.err != nil {
 		return nil, r.err
 	}
@@ -144,35 +132,28 @@ func New(ctx context.Context, cfg observability.Config) (observability.Provider,
 	}
 
 	return &otelProvider{
-		mp:              mp,
-		capture:         capT,
-		manual:          manual,
-		mShutdown:       mShutdown,
-		tShutdown:       tShutdown,
-		tracer:          tracer,
-		hits:            hits,
-		misses:          misses,
-		errs:            errs,
-		dur:             dur,
-		saved:           saved,
-		graphQueryDur:   graphQueryDur,
-		graphQueryCount: graphQueryCount,
-		targetRuns:      targetRuns,
-		targetDur:       targetDur,
-		poolWait:        poolWait,
-		poolRunning:     poolRunning,
-		poolQueued:      poolQueued,
-		remoteHits:      remoteHits,
-		remoteMisses:    remoteMisses,
-		remoteErrs:      remoteErrs,
-		remoteDur:       remoteDur,
-		remoteBytes:     remoteBytes,
-		remoteStores:    remoteStores,
-		mcp:             mcp,
-		sandbox:         sandbox,
-		buzz:            buzz,
-		agent:           agent,
-		agentCost:       agentCost,
+		mp:            mp,
+		capture:       capT,
+		manual:        manual,
+		mShutdown:     mShutdown,
+		tShutdown:     tShutdown,
+		tracer:        tracer,
+		reads:         reads,
+		dur:           dur,
+		saved:         saved,
+		graphQueryDur: graphQueryDur,
+		targetDur:     targetDur,
+		poolWait:      poolWait,
+		poolRunning:   poolRunning,
+		poolQueued:    poolQueued,
+		remoteOps:     remoteOps,
+		remoteDur:     remoteDur,
+		remoteBytes:   remoteBytes,
+		mcp:           mcp,
+		sandbox:       sandbox,
+		buzz:          buzz,
+		agent:         agent,
+		agentCost:     agentCost,
 	}, nil
 }
 
@@ -185,24 +166,17 @@ type otelProvider struct {
 	tShutdown func(context.Context) error
 	tracer    trace.Tracer
 
-	hits            metric.Int64Counter
-	misses          metric.Int64Counter
-	errs            metric.Int64Counter
-	dur             metric.Float64Histogram
-	saved           metric.Float64Histogram
-	graphQueryDur   metric.Float64Histogram
-	graphQueryCount metric.Int64Counter
-	targetRuns      metric.Int64Counter
-	targetDur       metric.Float64Histogram
-	poolWait        metric.Float64Histogram
-	poolRunning     metric.Int64UpDownCounter
-	poolQueued      metric.Int64UpDownCounter
-	remoteHits      metric.Int64Counter
-	remoteMisses    metric.Int64Counter
-	remoteErrs      metric.Int64Counter
-	remoteDur       metric.Float64Histogram
-	remoteBytes     metric.Int64Histogram
-	remoteStores    metric.Int64Counter
+	reads         metric.Int64Counter
+	dur           metric.Float64Histogram
+	saved         metric.Float64Histogram
+	graphQueryDur metric.Float64Histogram
+	targetDur     metric.Float64Histogram
+	poolWait      metric.Float64Histogram
+	poolRunning   metric.Int64UpDownCounter
+	poolQueued    metric.Int64UpDownCounter
+	remoteOps     metric.Int64Counter
+	remoteDur     metric.Float64Histogram
+	remoteBytes   metric.Int64Histogram
 
 	mcp     mcpInstruments
 	sandbox sandboxInstruments
@@ -214,20 +188,13 @@ type otelProvider struct {
 
 func (*otelProvider) Enabled() bool { return true }
 
-func (p *otelProvider) RecordCacheHit(ctx context.Context, attrs ...observability.Attr) {
-	p.hits.Add(ctx, 1, metric.WithAttributes(toKV(attrs)...))
+func (p *otelProvider) RecordCacheRead(ctx context.Context, result observability.CacheResult, attrs ...observability.Attr) {
+	kv := append(toKV(attrs), attribute.String("result", string(result)))
+	p.reads.Add(ctx, 1, metric.WithAttributes(kv...))
 }
 
-func (p *otelProvider) RecordCacheMiss(ctx context.Context, attrs ...observability.Attr) {
-	p.misses.Add(ctx, 1, metric.WithAttributes(toKV(attrs)...))
-}
-
-func (p *otelProvider) RecordCacheError(ctx context.Context, attrs ...observability.Attr) {
-	p.errs.Add(ctx, 1, metric.WithAttributes(toKV(attrs)...))
-}
-
-func (p *otelProvider) RecordCacheDuration(ctx context.Context, secs float64, attrs ...observability.Attr) {
-	p.dur.Record(ctx, secs, metric.WithAttributes(toKV(attrs)...))
+func (p *otelProvider) RecordCacheDuration(ctx context.Context, secs float64, result observability.CacheResult) {
+	p.dur.Record(ctx, secs, metric.WithAttributes(attribute.String("result", string(result))))
 }
 
 func (p *otelProvider) RecordCacheSaved(ctx context.Context, secs float64) {
@@ -235,9 +202,7 @@ func (p *otelProvider) RecordCacheSaved(ctx context.Context, secs float64) {
 }
 
 func (p *otelProvider) RecordGraphQuery(ctx context.Context, secs float64, attrs ...observability.Attr) {
-	kv := metric.WithAttributes(toKV(attrs)...)
-	p.graphQueryDur.Record(ctx, secs, kv)
-	p.graphQueryCount.Add(ctx, 1, kv)
+	p.graphQueryDur.Record(ctx, secs, metric.WithAttributes(toKV(attrs)...))
 }
 
 func (p *otelProvider) StartSpan(ctx context.Context, name string, attrs ...observability.Attr) (context.Context, func(error)) {
@@ -262,18 +227,9 @@ func (p *otelProvider) StartSpan(ctx context.Context, name string, attrs ...obse
 func (p *otelProvider) RecordRemoteOp(ctx context.Context, op observability.RemoteOp) {
 	kv := metric.WithAttributes(
 		attribute.String("method", op.Method),
-		attribute.String("outcome", op.Outcome),
+		attribute.String("outcome", string(op.Outcome)),
 	)
-	switch op.Outcome {
-	case "hit":
-		p.remoteHits.Add(ctx, 1, kv)
-	case "miss":
-		p.remoteMisses.Add(ctx, 1, kv)
-	case "stored":
-		p.remoteStores.Add(ctx, 1, kv)
-	case "error":
-		p.remoteErrs.Add(ctx, 1, kv)
-	}
+	p.remoteOps.Add(ctx, 1, kv)
 	p.remoteDur.Record(ctx, op.Duration, kv)
 	if op.Bytes > 0 {
 		p.remoteBytes.Record(ctx, op.Bytes, metric.WithAttributes(attribute.String("method", op.Method)))
@@ -281,22 +237,20 @@ func (p *otelProvider) RecordRemoteOp(ctx context.Context, op observability.Remo
 }
 
 func (p *otelProvider) RecordTargetRun(ctx context.Context, secs float64, attrs ...observability.Attr) {
-	kv := metric.WithAttributes(toKV(attrs)...)
-	p.targetRuns.Add(ctx, 1, kv)
-	p.targetDur.Record(ctx, secs, kv)
+	p.targetDur.Record(ctx, secs, metric.WithAttributes(toKV(attrs)...))
 }
 
-func (p *otelProvider) RecordPoolAcquire(ctx context.Context, waitSecs float64, n int64) {
-	p.poolWait.Record(ctx, waitSecs)
-	p.poolRunning.Add(ctx, n)
+func (p *otelProvider) RecordPoolWait(ctx context.Context, secs float64) {
+	p.poolWait.Record(ctx, secs)
 }
 
-func (p *otelProvider) RecordPoolRelease(ctx context.Context, n int64) {
-	p.poolRunning.Add(ctx, -n)
-}
-
-func (p *otelProvider) RecordPoolWaiting(ctx context.Context, delta int64) {
-	p.poolQueued.Add(ctx, delta)
+func (p *otelProvider) RecordPoolSlots(ctx context.Context, state observability.PoolSlotState, delta int64) {
+	switch state {
+	case observability.PoolQueued:
+		p.poolQueued.Add(ctx, delta)
+	case observability.PoolRunning:
+		p.poolRunning.Add(ctx, delta)
+	}
 }
 
 func (p *otelProvider) Shutdown(ctx context.Context) error {
@@ -317,51 +271,6 @@ func (p *otelProvider) Shutdown(ctx context.Context) error {
 	}
 	return errors.Join(errs...)
 }
-
-// disabledProvider honors the Provider contract without opening any connection.
-type disabledProvider struct{}
-
-func (disabledProvider) Enabled() bool                                               { return false }
-func (disabledProvider) RecordCacheHit(_ context.Context, _ ...observability.Attr)   {}
-func (disabledProvider) RecordCacheMiss(_ context.Context, _ ...observability.Attr)  {}
-func (disabledProvider) RecordCacheError(_ context.Context, _ ...observability.Attr) {}
-func (disabledProvider) RecordCacheDuration(_ context.Context, _ float64, _ ...observability.Attr) {
-}
-func (disabledProvider) RecordCacheSaved(_ context.Context, _ float64)                          {}
-func (disabledProvider) RecordGraphQuery(_ context.Context, _ float64, _ ...observability.Attr) {}
-func (disabledProvider) RecordRemoteOp(_ context.Context, _ observability.RemoteOp)             {}
-func (disabledProvider) StartSpan(ctx context.Context, _ string, _ ...observability.Attr) (context.Context, func(error)) {
-	return ctx, func(error) {}
-}
-func (disabledProvider) RecordTargetRun(_ context.Context, _ float64, _ ...observability.Attr) {}
-func (disabledProvider) RecordPoolAcquire(_ context.Context, _ float64, _ int64)               {}
-func (disabledProvider) RecordPoolRelease(_ context.Context, _ int64)                          {}
-func (disabledProvider) RecordPoolWaiting(_ context.Context, _ int64)                          {}
-func (disabledProvider) RecordMCPCall(_ context.Context, _ observability.MCPCall)              {}
-func (disabledProvider) RecordAgentCall(_ context.Context, _ observability.AgentCall)          {}
-func (disabledProvider) RecordSandboxApply(_ context.Context, _ float64, _, _ string)          {}
-func (disabledProvider) RecordSandboxRules(_ context.Context, _ observability.SandboxRules)    {}
-func (disabledProvider) RecordSandboxCheck(_ context.Context, _, _, _ string)                  {}
-func (disabledProvider) RecordSandboxEnvDropped(_ context.Context, _ string, _ int64)          {}
-func (disabledProvider) RecordBuzzExec(_ context.Context, _ float64, _, _ string)              {}
-func (disabledProvider) RecordBuzzCompile(_ context.Context, _ float64, _, _ string)           {}
-func (disabledProvider) RecordBuzzHostCall(_ context.Context, _ observability.BuzzHostCall)    {}
-func (disabledProvider) RecordBuzzSessionReuse(_ context.Context, _ string)                    {}
-func (disabledProvider) RecordBuzzSessionIdle(_ context.Context, _ int64)                      {}
-func (disabledProvider) RecordBuzzSessionEviction(_ context.Context, _ string)                 {}
-func (disabledProvider) RecordBuzzSessionWarm(_ context.Context, _ float64, _ string)          {}
-func (disabledProvider) RecordBuzzImport(_ context.Context, _ float64, _, _ string)            {}
-func (disabledProvider) RecordBuzzSpellResolve(_ context.Context, _ float64, _, _ string)      {}
-func (disabledProvider) RecordBuzzSpellBuiltinsWarm(_ context.Context, _ float64, _ string)    {}
-func (disabledProvider) RecordBuzzJITRun(_ context.Context)                                    {}
-func (disabledProvider) RecordBuzzVMFault(_ context.Context, _ string)                         {}
-func (disabledProvider) RecordLeaseRegistration(_ context.Context, _ string)                   {}
-func (disabledProvider) RecordAttentionDisposition(_ context.Context, _ float64, _ string)     {}
-func (disabledProvider) RecordReviewRemark(_ context.Context, _ string)                        {}
-func (disabledProvider) RecordReviewPublish(_ context.Context, _ string, _ bool)               {}
-func (disabledProvider) RecordReviewMergedWhileReading(_ context.Context, _ float64)           {}
-func (disabledProvider) Snapshot(_ context.Context) ([]byte, error)                            { return nil, nil }
-func (disabledProvider) Shutdown(_ context.Context) error                                      { return nil }
 
 func toKV(attrs []observability.Attr) []attribute.KeyValue {
 	out := make([]attribute.KeyValue, len(attrs))

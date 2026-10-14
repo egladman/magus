@@ -22,9 +22,9 @@ func TestLocalCollectSnapshot(t *testing.T) {
 	t.Cleanup(func() { _ = p.Shutdown(context.Background()) })
 
 	ctx := context.Background()
-	p.RecordCacheHit(ctx, observability.Attr{Key: "outcome", Value: "hit"})
-	p.RecordCacheHit(ctx, observability.Attr{Key: "outcome", Value: "hit"})
-	p.RecordCacheMiss(ctx, observability.Attr{Key: "outcome", Value: "miss"})
+	p.RecordCacheRead(ctx, observability.CacheHit)
+	p.RecordCacheRead(ctx, observability.CacheHit)
+	p.RecordCacheRead(ctx, observability.CacheMiss)
 	// Spans are export-only; in local-collect mode StartSpan must be a safe no-op.
 	_, end := p.StartSpan(ctx, "noop")
 	end(nil)
@@ -35,8 +35,8 @@ func TestLocalCollectSnapshot(t *testing.T) {
 
 	var req colmetricpb.ExportMetricsServiceRequest
 	require.NoError(t, proto.Unmarshal(raw, &req), "snapshot is not OTLP protobuf")
-	assert.Equal(t, int64(2), sumCounter(&req, "magus.cache.hits"))
-	assert.Equal(t, int64(1), sumCounter(&req, "magus.cache.misses"))
+	assert.Equal(t, int64(2), sumCounter(&req, "magus.cache.reads", "result", "hit"))
+	assert.Equal(t, int64(1), sumCounter(&req, "magus.cache.reads", "result", "miss"))
 }
 
 // TestDisabledSnapshotNil confirms a fully-disabled provider (no export, no local collect)
@@ -49,15 +49,20 @@ func TestDisabledSnapshotNil(t *testing.T) {
 	assert.Nil(t, raw)
 }
 
-// sumCounter walks the OTLP metrics tree for a Sum metric by name and returns its first data
-// point's integer value, or -1 when absent.
-func sumCounter(req *colmetricpb.ExportMetricsServiceRequest, name string) int64 {
+// sumCounter walks the OTLP metrics tree for a Sum metric by name and returns the integer
+// value of its data point whose attribute key is value, or -1 when absent.
+func sumCounter(req *colmetricpb.ExportMetricsServiceRequest, name, key, value string) int64 {
 	for _, rm := range req.GetResourceMetrics() {
 		for _, sm := range rm.GetScopeMetrics() {
 			for _, m := range sm.GetMetrics() {
-				if m.GetName() == name {
-					if dps := m.GetSum().GetDataPoints(); len(dps) > 0 {
-						return dps[0].GetAsInt()
+				if m.GetName() != name {
+					continue
+				}
+				for _, dp := range m.GetSum().GetDataPoints() {
+					for _, kv := range dp.GetAttributes() {
+						if kv.GetKey() == key && kv.GetValue().GetStringValue() == value {
+							return dp.GetAsInt()
+						}
 					}
 				}
 			}

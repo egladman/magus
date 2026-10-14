@@ -315,9 +315,6 @@ type Result struct {
 type runCtx struct {
 	step    *Step
 	limiter *Limiter
-	onHit   func(*Result)
-	onMiss  func(*Result)
-	onError func(error)
 	// auditReplay judges the paths a hit just wrote; see AuditReplay.
 	auditReplay func(ctx context.Context, s Step, written []string) error
 	// localHit is the step's key when it was admitted as a local hit; see replayLocal.
@@ -803,9 +800,6 @@ func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, 
 	}
 	c.log.InfoContext(ctx, "cache.hit", attrs...)
 	result.Ref = ref
-	if rc.onHit != nil {
-		rc.onHit(&result)
-	}
 	rc.fireResults(rc.step, &result, nil)
 	return result, true
 }
@@ -864,9 +858,6 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 				slog.String("log", lp),
 			)...,
 		)
-		if rc.onError != nil {
-			rc.onError(err)
-		}
 		rc.fireResults(rc.step, &result, err)
 		return result, ReportedError{Err: err}
 	}
@@ -952,9 +943,6 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 			slog.String("ref", ref),
 		)...,
 	)
-	if rc.onMiss != nil {
-		rc.onMiss(&result)
-	}
 	rc.fireResults(rc.step, &result, nil)
 	return result, nil
 }

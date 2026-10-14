@@ -34,9 +34,11 @@ func fixtureRM() metricdata.ResourceMetrics {
 		ScopeMetrics: []metricdata.ScopeMetrics{{
 			Metrics: []metricdata.Metrics{
 				floatHist(instTargetDuration, []float64{1, 2}, []uint64{0, 10, 0}, 15),
-				intCounter(instCacheHits, 7),
-				intCounter(instCacheMisses, 3),
-				intCounter(instTargetRuns, 10),
+				sumMetric(instCacheReads,
+					idp(7, kvSet("result", "hit")),
+					idp(3, kvSet("result", "miss")),
+					idp(2, kvSet("result", "error")),
+				),
 			},
 		}},
 	}
