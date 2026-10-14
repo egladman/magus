@@ -6,7 +6,7 @@
 // spawn, what each guard profile would have decided, and the cache-read price of it all
 // where the account is metered and every model is in the table.
 //
-//	magus buzz hack/dev/root-cost.buzz -- [--all]
+//	magus buzz hack/dev/summarize-root-cost.buzz -- [--all]
 //
 // A section a session could not measure is not counted as zero: each total says how many
 // sessions measured it, and a section no session measured prints as not measured. --all
@@ -20,7 +20,7 @@ import "std";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/dev/root-cost.buzz -- [--all]";
+final USAGE = "usage: magus buzz hack/dev/summarize-root-cost.buzz -- [--all]";
 final HELP = "cost: none\n{USAGE}";
 
 // PROFILES is the order shadow verdicts print in, least to most refusing.
@@ -235,7 +235,7 @@ export fun main(args: [str]) > void !> any {
         return;
     }
     if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-        throw "root-cost: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+        throw "summarize-root-cost: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
     }
     final listArgs = mut ["ls", "-o", "json"];
     if (parsed.values["--all"] != null) {
