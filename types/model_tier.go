@@ -1,6 +1,7 @@
 package types
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"maps"
@@ -303,6 +304,14 @@ const (
 	// ModelTierSourceDefault is the declaration's default.
 	ModelTierSourceDefault ModelTierSource = "default"
 )
+
+// ModelTierMatrix chooses the model tier of one job from its typed request, for
+// magus\job.modelTier. A nil answer leaves the declared default to decide. The job store
+// is read-only while it runs, and it runs once, when the job is forked.
+//
+// An error means the matrix itself failed (it raised, or returned a choice the
+// declaration cannot use), never that it declined: declining is a nil answer.
+type ModelTierMatrix func(ctx context.Context, req ModelTierRequest) (*JobModelTier, error)
 
 // ModelTierRequest is what a matrix function reads to choose a job's tier: the row's
 // typed declaration plus the workspace's recorded outcomes. ParentRank and DeclaredRank

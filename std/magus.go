@@ -25,7 +25,6 @@ import (
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -1808,7 +1807,7 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	// declaration this door owns.
 	type modelTiered interface {
 		ModelTiers() *types.ModelTierSet
-		ModelTierMatrix() workspace.ModelTierMatrix
+		ModelTierMatrix() types.ModelTierMatrix
 	}
 	if tiers, ok := ws.(modelTiered); ok {
 		loc.ModelTiers, loc.ModelTierMatrix = tiers.ModelTiers(), tiers.ModelTierMatrix()

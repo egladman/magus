@@ -389,7 +389,7 @@ func defaultModelTierSet(ctx context.Context) (*types.ModelTierSet, error) {
 
 // buzzModelTierMatrix checks the answer against the declaration in force when it is
 // called, since the modelTiers and modelTier calls may come in either order.
-func buzzModelTierMatrix(sess *buzz.Session, reg *workspace.WorkspaceRegistry, matrix vm.Value, site string) workspace.ModelTierMatrix {
+func buzzModelTierMatrix(sess *buzz.Session, reg *workspace.WorkspaceRegistry, matrix vm.Value, site string) types.ModelTierMatrix {
 	return func(ctx context.Context, req types.ModelTierRequest) (choice *types.JobModelTier, err error) {
 		set := reg.ModelTiers()
 		if set == nil {

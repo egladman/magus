@@ -290,7 +290,7 @@ func TestWorkspaceRegistry_ModelTierMatrixReplaces(t *testing.T) {
 	r := NewWorkspaceRegistry()
 	assert.Nil(t, r.ModelTierMatrix())
 
-	matrix := func(reason string) ModelTierMatrix {
+	matrix := func(reason string) types.ModelTierMatrix {
 		return func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error) {
 			return &types.JobModelTier{Reason: reason}, nil
 		}

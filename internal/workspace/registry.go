@@ -71,7 +71,7 @@ type WorkspaceRegistry struct {
 	// something asks for the tiers of a workspace whose magusfile declared none.
 	defaultModelTiers func() (*types.ModelTierSet, error)
 	// modelTierMatrix is the function a magusfile registered via magus\job.modelTier, or nil.
-	modelTierMatrix ModelTierMatrix
+	modelTierMatrix types.ModelTierMatrix
 }
 
 // ShellRule is one additive shell rule declared by magus\guard.shell. Fields match
@@ -99,14 +99,6 @@ type CommandRule func(ctx context.Context, req types.CommandRequest, facts hint.
 // WriteRule judges one agent file write for magus\guard.write, with the same facts and
 // error contract as SpawnRule.
 type WriteRule func(ctx context.Context, req types.WriteRequest, facts hint.Gate) (types.GuardVerdict, error)
-
-// ModelTierMatrix chooses the model tier of one job from its typed request, for
-// magus\job.modelTier. A nil answer leaves the declared default to decide. The job store
-// is read-only while it runs, and it runs once, when the job is forked.
-//
-// An error means the matrix itself failed (it raised, or returned a choice the
-// declaration cannot use), never that it declined: declining is a nil answer.
-type ModelTierMatrix func(ctx context.Context, req types.ModelTierRequest) (*types.JobModelTier, error)
 
 // NewWorkspaceRegistry returns an empty WorkspaceRegistry.
 func NewWorkspaceRegistry() *WorkspaceRegistry {
@@ -466,14 +458,14 @@ func (r *WorkspaceRegistry) ModelTiers() *types.ModelTierSet {
 }
 
 // SetModelTierMatrix records the magus\job.modelTier function, on the terms of SetSpawnRule.
-func (r *WorkspaceRegistry) SetModelTierMatrix(m ModelTierMatrix) {
+func (r *WorkspaceRegistry) SetModelTierMatrix(m types.ModelTierMatrix) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.modelTierMatrix = m
 }
 
 // ModelTierMatrix returns the magus\job.modelTier function, or nil when none was registered.
-func (r *WorkspaceRegistry) ModelTierMatrix() ModelTierMatrix {
+func (r *WorkspaceRegistry) ModelTierMatrix() types.ModelTierMatrix {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.modelTierMatrix
