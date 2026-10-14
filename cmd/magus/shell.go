@@ -312,14 +312,16 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 	stop()
 	shellRules, shellDialect := workspaceShellRules(rules)
 	index := newGuardLookups(rootOverride)
+	inspect := func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
+		if root == "" {
+			return inspectWorkspace(ctx, rootOverride)
+		}
+		return magus.Inspect(ctx, root,
+			magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
+	}
 	deps := guard.Dependencies{
-		Inspect: func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
-			if root == "" {
-				return inspectWorkspace(ctx, rootOverride)
-			}
-			return magus.Inspect(ctx, root,
-				magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
-		},
+		Inspect:          inspect,
+		HumanOnlyRecord:  guardHumanOnlyRecord(rootOverride, inspect),
 		CacheDir:         guardCacheDir(rootOverride),
 		NotesShared:      globalCfg.Knowledge.Notes.Shared,
 		ShellRules:       shellRules,
@@ -379,6 +381,34 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 		return magus.LoadApprovedWriteRule(ctx, root)
 	}
 	return deps, nil
+}
+
+// guardHumanOnlyRecord answers what the workspace at root, "" for the one found from
+// rootOverride, declares human_only from the knowledge store's record of it (see
+// magus.RecordedHumanOnly). Each call holds a lazy workspace of its own, whose one walk of
+// the tree is taken now: a daemon grading checks keeps these dependencies for hours, and
+// a walk kept from an earlier call would vouch for a record the tree has since moved past.
+// The record is read without opening the workspace; open is there only because a lazy
+// workspace must say how it would be opened.
+func guardHumanOnlyRecord(rootOverride string, inspect func(context.Context, string) (types.WorkspaceRepository, error)) func(context.Context, string) (types.HumanOnlyIndex, bool) {
+	return func(ctx context.Context, root string) (types.HumanOnlyIndex, bool) {
+		ask := root
+		if root == "" {
+			found, err := magus.FindRoot(rootOverride)
+			if err != nil {
+				return types.HumanOnlyIndex{}, false
+			}
+			root = found
+		}
+		lw := magus.NewLazyWorkspace(root, func(ctx context.Context) (*magus.Magus, error) {
+			ws, err := inspect(ctx, ask)
+			if err != nil {
+				return nil, err
+			}
+			return asMagus(ws)
+		})
+		return magus.RecordedHumanOnly(ctx, lw, globalCfg)
+	}
 }
 
 // harnessModelRows is the lazy reader of the model rows the harnesses wired in the

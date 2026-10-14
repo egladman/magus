@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -51,6 +52,48 @@ func benchWorkspace(t *testing.T) Dependencies {
 	return Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
 }
 
+// benchRecord is benchWorkspace's declarations as the knowledge store records them.
+func benchRecord() types.HumanOnlyIndex {
+	return types.HumanOnlyIndex{
+		Projects: []string{".", "evals"},
+		Targets: []types.HumanOnlyTarget{
+			{TargetRef: types.TargetRef{Project: ".", Target: "agent-bench-run"}, Reason: benchReason, SkipCache: true,
+				ReachedBy: []types.TargetRef{{Project: ".", Target: "bench-all"}}},
+			{TargetRef: types.TargetRef{Project: "evals", Target: "grade"}, Reason: "spends model tokens per case",
+				ReachedBy: []types.TargetRef{{Project: ".", Target: "evals-all"}}},
+		},
+	}
+}
+
+// benchRecorded is benchWorkspace with a current record of it, which the rule reads in
+// place of opening the workspace.
+func benchRecorded(t *testing.T) Dependencies {
+	deps := benchWorkspace(t)
+	deps.HumanOnlyRecord = func(context.Context, string) (types.HumanOnlyIndex, bool) { return benchRecord(), true }
+	return deps
+}
+
+// humanOnlySources are the two places the rule learns what a workspace declares: the
+// opened workspace and the knowledge store's record of it. Every verdict must come out
+// byte for byte the same from either.
+var humanOnlySources = []struct {
+	name string
+	deps func(*testing.T) Dependencies
+}{
+	{"inspect", benchWorkspace},
+	{"record", benchRecorded},
+}
+
+// judgedAlike runs judge once per source and requires the same answer from each.
+func judgedAlike(t *testing.T, judge func(t *testing.T, deps func(*testing.T) Dependencies) string) {
+	t.Helper()
+	answers := map[string]string{}
+	for _, src := range humanOnlySources {
+		t.Run(src.name, func(t *testing.T) { answers[src.name] = judge(t, src.deps) })
+	}
+	assert.Equal(t, answers["inspect"], answers["record"], "the record and the opened workspace answer alike")
+}
+
 // benchWorker is a leased worker whose own check is the human-only target, so
 // worker-check-only passes the run and human-only is the rule that answers.
 func benchWorker() types.Job {
@@ -86,25 +129,29 @@ func TestHumanOnlyVerdicts(t *testing.T) {
 		{"a leased worker", "magus run agent-bench-run .", true, true, "deny",
 			[]string{benchReason, "bound to job bench/run", "Workers do not spend"}},
 		{"a chain reaching it", "magus run bench-all .", false, true, "deny",
-			[]string{"- .:agent-bench-run: " + benchReason, "run the targets it composes that are not human-only"}},		{"a chain reaching one in another project", "magus run evals-all .", false, true, "deny",
+			[]string{"- .:agent-bench-run: " + benchReason, "run the targets it composes that are not human-only"}},
+		{"a chain reaching one in another project", "magus run evals-all .", false, true, "deny",
 			[]string{"- evals:grade: spends model tokens per case"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			row := benchWorker()
-			ctx, _ := fleetFixture(t, row)
-			req := Request{Input: tt.command, RendersAsk: tt.rendersAsk}
-			if tt.lease {
-				req.Lease = row.ID
-			}
-			v := Judge(ctx, benchWorkspace(t), req)
-			assert.Equal(t, verdictWithRule(tt.want, string(denyRuleHumanOnly)), unworded(v))
-			full := v.Reason
-			if tt.want == "deny" {
-				full = storedVerdict(t, hookLocation(ctx, Dependencies{}).cacheDir, v.Reason)
-			}
-			for _, s := range tt.contains {
-				assert.Contains(t, full, s)
-			}
+			judgedAlike(t, func(t *testing.T, deps func(*testing.T) Dependencies) string {
+				row := benchWorker()
+				ctx, _ := fleetFixture(t, row)
+				req := Request{Input: tt.command, RendersAsk: tt.rendersAsk}
+				if tt.lease {
+					req.Lease = row.ID
+				}
+				v := Judge(ctx, deps(t), req)
+				assert.Equal(t, verdictWithRule(tt.want, string(denyRuleHumanOnly)), unworded(v))
+				full := v.Reason
+				if tt.want == "deny" {
+					full = storedVerdict(t, hookLocation(ctx, Dependencies{}).cacheDir, v.Reason)
+				}
+				for _, s := range tt.contains {
+					assert.Contains(t, full, s)
+				}
+				return v.Decision + "\n" + full
+			})
 		})
 	}
 }
@@ -126,61 +173,135 @@ func TestHumanOnlyJudgesAClientScript(t *testing.T) {
 		{"a script that does not parse", `magus\run(`, "deny", "- evals:grade: spends model tokens per case"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, _ := fleetFixture(t)
-			v := Judge(ctx, benchWorkspace(t), Request{Input: client(t, tt.script), Host: "claude-code", RendersAsk: true})
-			assert.Equal(t, verdictWithRule(tt.want, string(denyRuleHumanOnly)), unworded(v))
-			full := v.Reason
-			if tt.want == "deny" {
-				full = storedVerdict(t, hookLocation(ctx, Dependencies{}).cacheDir, v.Reason)
-				assert.Contains(t, full, "cannot read")
-			}
-			assert.Contains(t, full, tt.contains)
+			judgedAlike(t, func(t *testing.T, deps func(*testing.T) Dependencies) string {
+				ctx, _ := fleetFixture(t)
+				v := Judge(ctx, deps(t), Request{Input: client(t, tt.script), Host: "claude-code", RendersAsk: true})
+				assert.Equal(t, verdictWithRule(tt.want, string(denyRuleHumanOnly)), unworded(v))
+				full := v.Reason
+				if tt.want == "deny" {
+					full = storedVerdict(t, hookLocation(ctx, Dependencies{}).cacheDir, v.Reason)
+					assert.Contains(t, full, "cannot read")
+				}
+				assert.Contains(t, full, tt.contains)
+				return v.Decision + "\n" + full
+			})
 		})
 	}
 
-	ctx, _ := fleetFixture(t)
-	v := Judge(ctx, benchWorkspace(t), Request{Input: client(t, `magus\run(["test", "."]);`), Host: "claude-code", RendersAsk: true})
-	assert.NotEqual(t, string(denyRuleHumanOnly), v.Rule, "a run reaching no human-only target is left alone")
+	for _, src := range humanOnlySources {
+		ctx, _ := fleetFixture(t)
+		v := Judge(ctx, src.deps(t), Request{Input: client(t, `magus\run(["test", "."]);`), Host: "claude-code", RendersAsk: true})
+		assert.NotEqual(t, string(denyRuleHumanOnly), v.Rule, "%s: a run reaching no human-only target is left alone", src.name)
+	}
 }
 
 // TestHumanOnlyLeavesOtherRunsAlone pins that the rule fires only on a declared target a
 // parsed run reaches: another target, a report about the run, and a project that does not
 // declare it all pass.
 func TestHumanOnlyLeavesOtherRunsAlone(t *testing.T) {
+	for _, src := range humanOnlySources {
+		ctx, _ := fleetFixture(t)
+		deps := src.deps(t)
+		for _, command := range []string{
+			"magus run test .",
+			"magus run agent-bench-run . --plan",
+			"magus run agent-bench-run evals",
+			"magus explain target:.:agent-bench-run",
+			"echo magus run agent-bench-run .",
+		} {
+			decision, reason := gradeHumanOnly(ctx, deps, "", command)
+			assert.Empty(t, decision, "%s, %q: %s", src.name, command, reason)
+		}
+	}
+}
+
+// humanOnlyLines are run lines across the rule's cases: named, composed, across projects,
+// through affected, several on one line, and reaching nothing.
+var humanOnlyLines = []string{
+	"magus run agent-bench-run .",
+	"magus affected agent-bench-run",
+	"magus run bench-all .",
+	"magus run evals-all .",
+	"magus run grade evals",
+	"magus run grade",
+	"magus run bench-all . && magus run evals-all .",
+	"magus run agent-bench-run . ; magus run bench-all .",
+	"magus run agent-bench-run nosuchproject",
+	"magus run test .",
+}
+
+// TestHumanOnlyCurrentRecordOpensNothing pins the latency half: a record the knowledge
+// store can vouch for answers every line exactly as the opened workspace would, and the
+// workspace is never opened to do it.
+func TestHumanOnlyCurrentRecordOpensNothing(t *testing.T) {
+	ctx, _ := fleetFixture(t)
+	opened := benchWorkspace(t)
+	recorded := Dependencies{
+		Inspect: func(context.Context, string) (types.WorkspaceRepository, error) {
+			t.Error("a current record opened the workspace")
+			return nil, errors.New("not opened")
+		},
+		HumanOnlyRecord: func(context.Context, string) (types.HumanOnlyIndex, bool) { return benchRecord(), true },
+	}
+	for _, line := range humanOnlyLines {
+		wantDecision, wantReason := gradeHumanOnly(ctx, opened, "", line)
+		decision, reason := gradeHumanOnly(ctx, recorded, "", line)
+		assert.Equal(t, wantDecision, decision, line)
+		assert.Equal(t, wantReason, reason, line)
+	}
+
+	recorded.HumanOnlyRecord = func(context.Context, string) (types.HumanOnlyIndex, bool) {
+		return types.HumanOnlyIndex{Projects: []string{"."}}, true
+	}
+	decision, _ := gradeHumanOnly(ctx, recorded, "", "magus run agent-bench-run .")
+	assert.Empty(t, decision, "a workspace recorded as declaring none reaches nothing, unopened")
+}
+
+// TestHumanOnlyOpensTheWorkspaceWhenTheRecordCannotVouch pins the other half: a record the
+// store cannot prove current is never an answer, and the rule judges from the opened
+// workspace as it did before there was one.
+func TestHumanOnlyOpensTheWorkspaceWhenTheRecordCannotVouch(t *testing.T) {
 	ctx, _ := fleetFixture(t)
 	deps := benchWorkspace(t)
-	for _, command := range []string{
-		"magus run test .",
-		"magus run agent-bench-run . --plan",
-		"magus run agent-bench-run evals",
-		"magus explain target:.:agent-bench-run",
-		"echo magus run agent-bench-run .",
-	} {
-		decision, reason := gradeHumanOnly(ctx, deps, "", command)
-		assert.Empty(t, decision, "%q: %s", command, reason)
+	inspect := deps.Inspect
+	opens := 0
+	deps.Inspect = func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
+		opens++
+		return inspect(ctx, root)
 	}
+	deps.HumanOnlyRecord = func(context.Context, string) (types.HumanOnlyIndex, bool) {
+		return types.HumanOnlyIndex{Projects: []string{"."}}, false
+	}
+	decision, reason := gradeHumanOnly(ctx, deps, "", "magus run agent-bench-run .")
+	assert.Equal(t, "ask", decision)
+	assert.Contains(t, reason, benchReason)
+	assert.Equal(t, 1, opens)
 }
 
 // TestHumanOnlyNeverYieldsToPreauth pins that a command magus itself served is still put
 // to the person: the cost is theirs, not the suggestion's.
 func TestHumanOnlyNeverYieldsToPreauth(t *testing.T) {
-	ctx, _ := fleetFixture(t)
-	gate := hint.NewGate(hookLocation(ctx, Dependencies{}).cacheDir, "")
-	serveNext(t, gate, "run-target", "magus", "run", "agent-bench-run", ".")
-	require.Equal(t, "run-target", servedNextPreauthorizes(gate, "magus run agent-bench-run ."))
+	for _, src := range humanOnlySources {
+		ctx, _ := fleetFixture(t)
+		gate := hint.NewGate(hookLocation(ctx, Dependencies{}).cacheDir, "")
+		serveNext(t, gate, "run-target", "magus", "run", "agent-bench-run", ".")
+		require.Equal(t, "run-target", servedNextPreauthorizes(gate, "magus run agent-bench-run ."))
 
-	v := Judge(ctx, benchWorkspace(t), Request{Input: "magus run agent-bench-run .", RendersAsk: true})
-	assert.Equal(t, verdictWithRule("ask", string(denyRuleHumanOnly)), unworded(v))
+		v := Judge(ctx, src.deps(t), Request{Input: "magus run agent-bench-run .", RendersAsk: true})
+		assert.Equal(t, verdictWithRule("ask", string(denyRuleHumanOnly)), unworded(v), src.name)
+	}
 }
 
 // TestHumanOnlySetToAdviseLetsTheRunProceed pins the loosening a workspace may declare:
 // the reason is told and nobody is asked.
 func TestHumanOnlySetToAdviseLetsTheRunProceed(t *testing.T) {
-	ctx, _ := fleetFixture(t)
-	deps := benchWorkspace(t)
-	deps.Builtins = map[string]builtin.Setting{string(denyRuleHumanOnly): {Decision: builtin.Advise}}
-	v := Judge(ctx, deps, Request{Input: "magus run agent-bench-run .", RendersAsk: true})
-	assert.NotContains(t, []string{"ask", "deny"}, v.Decision)
+	for _, src := range humanOnlySources {
+		ctx, _ := fleetFixture(t)
+		deps := src.deps(t)
+		deps.Builtins = map[string]builtin.Setting{string(denyRuleHumanOnly): {Decision: builtin.Advise}}
+		v := Judge(ctx, deps, Request{Input: "magus run agent-bench-run .", RendersAsk: true})
+		assert.NotContains(t, []string{"ask", "deny"}, v.Decision, src.name)
+	}
 }
 
 // TestHumanOnlyReasonCarriesTheRecord pins the facts magus adds to the declaration: the
@@ -194,30 +315,34 @@ func TestHumanOnlyReasonCarriesTheRecord(t *testing.T) {
 	require.NoError(t, h.Save(ctx, history))
 	t.Setenv("MAGUS_HISTORY_PATH", history)
 
-	decision, reason := gradeHumanOnly(ctx, benchWorkspace(t), "", "magus run agent-bench-run .")
-	assert.Equal(t, "ask", decision)
-	assert.Contains(t, reason, "Recorded: p75 6m12s over 4 runs; never cached (skip_cache).")
+	for _, src := range humanOnlySources {
+		decision, reason := gradeHumanOnly(ctx, src.deps(t), "", "magus run agent-bench-run .")
+		assert.Equal(t, "ask", decision, src.name)
+		assert.Contains(t, reason, "Recorded: p75 6m12s over 4 runs; never cached (skip_cache).", src.name)
+	}
 }
 
 // TestBriefCommandRefusesAHumanOnlyRun pins the spawn half: a brief telling a bound worker
 // to run a human-only target is refused before the worker exists to be refused.
 func TestBriefCommandRefusesAHumanOnlyRun(t *testing.T) {
-	row := benchWorker()
-	ctx, root := fleetFixture(t, row)
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
-	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
-	deps := benchWorkspace(t)
-	deps.CacheDir = func(string) (string, error) { return cacheDir, nil }
-	deps.scope = workspaceScope{root: root}
+	for _, src := range humanOnlySources {
+		row := benchWorker()
+		ctx, root := fleetFixture(t, row)
+		require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
+		cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
+		deps := src.deps(t)
+		deps.CacheDir = func(string) (string, error) { return cacheDir, nil }
+		deps.scope = workspaceScope{root: root}
 
-	brief := "JOB ID: " + row.ID + "\nRun the benchmark:\n\n```sh\nmagus run agent-bench-run .\n```\n"
-	v := judgeBriefOffCheck(deps, briefInput{text: brief})
-	assert.Equal(t, denyRuleBriefCommand, v.Rule.Name)
-	assert.Equal(t, string(denyRuleHumanOnly), v.Rule.Arg)
-	assert.Contains(t, v.Deny, "job bench/run's worker to run `.:agent-bench-run`, which a person runs")
-	assert.Contains(t, v.Why, benchReason)
+		brief := "JOB ID: " + row.ID + "\nRun the benchmark:\n\n```sh\nmagus run agent-bench-run .\n```\n"
+		v := judgeBriefOffCheck(deps, briefInput{text: brief})
+		assert.Equal(t, denyRuleBriefCommand, v.Rule.Name, src.name)
+		assert.Equal(t, string(denyRuleHumanOnly), v.Rule.Arg, src.name)
+		assert.Contains(t, v.Deny, "job bench/run's worker to run `.:agent-bench-run`, which a person runs", src.name)
+		assert.Contains(t, v.Why, benchReason, src.name)
 
-	forbidding := "JOB ID: " + row.ID + "\nNever run `magus run agent-bench-run .` yourself.\n"
-	assert.NotEqual(t, string(denyRuleHumanOnly), judgeBriefOffCheck(deps, briefInput{text: forbidding}).Rule.Arg,
-		"a line that forbids the run teaches the opposite")
+		forbidding := "JOB ID: " + row.ID + "\nNever run `magus run agent-bench-run .` yourself.\n"
+		assert.NotEqual(t, string(denyRuleHumanOnly), judgeBriefOffCheck(deps, briefInput{text: forbidding}).Rule.Arg,
+			"%s: a line that forbids the run teaches the opposite", src.name)
+	}
 }

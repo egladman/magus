@@ -96,6 +96,11 @@ type Dependencies struct {
 	// row the call is bound to records a tier. Nil means no declaration: the tier rules then
 	// have nothing to compare and stay silent.
 	ModelTiers func() *types.ModelTierSet
+	// HumanOnlyRecord answers what the workspace at root declares human_only from the
+	// record the knowledge store keeps of it, without opening the workspace; "" is the
+	// caller's own. false means it cannot prove the record current, and the rule opens
+	// the workspace through Inspect instead. Nil means no record: every judgment opens it.
+	HumanOnlyRecord func(ctx context.Context, root string) (types.HumanOnlyIndex, bool)
 	// CheckoutState reads the checkout holding dir for a command rule judging a push or a
 	// commit, nil when its version control cannot report it.
 	CheckoutState func(ctx context.Context, dir string) *types.CheckoutState
@@ -227,6 +232,38 @@ func (d Dependencies) inspect(ctx context.Context, root string) (types.Workspace
 	ws, err := awaitDeadline(wait, func() (types.WorkspaceRepository, error) { return d.Inspect(open, root) })
 	log.record(timedPhase(phaseInspect, time.Since(start), budget, err != nil && wait.Err() != nil))
 	return ws, err
+}
+
+// humanOnlyRecord is HumanOnlyRecord, timed as its own phase and bounded as inspect is: a
+// read that does not answer in time answers false, as does every later one in the
+// judgment, and the rule falls back to the open.
+func (d Dependencies) humanOnlyRecord(ctx context.Context, root string) (types.HumanOnlyIndex, bool) {
+	if d.HumanOnlyRecord == nil {
+		return types.HumanOnlyIndex{}, false
+	}
+	type answer struct {
+		ix types.HumanOnlyIndex
+		ok bool
+	}
+	log := judgmentPhases(ctx)
+	if log.lapsed(phaseHumanOnlyRecord) {
+		return types.HumanOnlyIndex{}, false
+	}
+	log.underway(phaseHumanOnlyRecord)
+	budget := inspectBudget
+	if deadline, ok := ctx.Deadline(); ok {
+		budget = min(budget, max(time.Until(deadline)-judgeReserve, 0))
+	}
+	wait, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+	start := time.Now()
+	read := context.WithoutCancel(ctx)
+	a, err := awaitDeadline(wait, func() (answer, error) {
+		ix, ok := d.HumanOnlyRecord(read, root)
+		return answer{ix, ok}, nil
+	})
+	log.record(timedPhase(phaseHumanOnlyRecord, time.Since(start), budget, err != nil))
+	return a.ix, err == nil && a.ok
 }
 
 func (d Dependencies) cacheDir(root string) (string, error) {
