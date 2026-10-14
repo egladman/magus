@@ -86,15 +86,8 @@ func TestResolveBilling(t *testing.T) {
 
 	quota := Agents{Billing: types.AgentBillingQuota}
 	assert.Equal(t, types.AgentBillingQuota, quota.ResolveBilling(none), "with nothing detected the declaration stands")
-	require.NoError(t, quota.BillingMismatch(none))
-
 	assert.Equal(t, types.AgentBillingMetered, Agents{}.ResolveBilling(metered))
-	require.NoError(t, Agents{}.BillingMismatch(metered), "nothing declared contradicts nothing")
-	require.NoError(t, Agents{Billing: types.AgentBillingMetered}.BillingMismatch(metered))
-
 	assert.Equal(t, types.AgentBillingMetered, quota.ResolveBilling(metered), "the detected mode stands")
-	assert.EqualError(t, quota.BillingMismatch(metered),
-		"agents.billing is quota, but the agent host bills per token (one of ANTHROPIC_API_KEY, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX is set); set agents.billing to metered, or unset it")
 }
 
 // The workspace's magus.yaml wins for billing, as layering always does, but a profile

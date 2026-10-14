@@ -17,7 +17,6 @@
   when unset, as `MarshalText` does. The root package's `GuardProfile` is
   `EffectiveGuardProfile`.
 - **Breaking for SDK callers: `config.Agents.ResolveBilling` returns only the mode.**
-  `BillingMismatch` reports a declared mode the environment contradicts.
 - **Breaking: `magus session show -o json` reshapes its cost sections.** `share` and
   `ignored` are no longer encoded, since they follow from the counts beside them. `shadow`
   counts each profile's verdicts under `decisions`, keyed by verdict, in place of

@@ -2,7 +2,6 @@ package config
 
 import (
 	"cmp"
-	"fmt"
 	"maps"
 	"path/filepath"
 	"slices"
@@ -83,20 +82,9 @@ func DetectBilling(getenv func(string) string) types.AgentBilling {
 
 // ResolveBilling is the billing mode in effect: what the environment shows, else what
 // agents.billing declares. A declaration the environment contradicts yields the detected
-// mode; BillingMismatch reports it.
+// mode.
 func (a Agents) ResolveBilling(getenv func(string) string) types.AgentBilling {
 	return cmp.Or(DetectBilling(getenv), a.Billing)
-}
-
-// BillingMismatch is the error naming both modes when agents.billing declares one the
-// environment contradicts, nil otherwise: the declared value is not what is happening,
-// and pricing advice by it would be wrong.
-func (a Agents) BillingMismatch(getenv func(string) string) error {
-	detected := DetectBilling(getenv)
-	if detected == "" || a.Billing == "" || a.Billing == detected {
-		return nil
-	}
-	return fmt.Errorf("agents.billing is %s, but the agent host bills per token (one of %s is set); set agents.billing to %s, or unset it", a.Billing, strings.Join(meteredEnv, ", "), detected)
 }
 
 // LoadAgents reads the agents section the guard applies in the workspace at root: the
