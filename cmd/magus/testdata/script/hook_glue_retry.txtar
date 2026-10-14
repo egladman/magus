@@ -83,7 +83,7 @@ cat > /dev/null
 echo 'signal: killed' >&2
 exit 137
 -- command.json --
-{"session_id": "s1", "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls"}}
+{"session_id": "s1", "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls", "timeout": 30000}}
 -- write.json --
 {"session_id": "s1", "hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "README.md", "content": "x\n"}}
 -- cursor-shell.json --
