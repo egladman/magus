@@ -1193,6 +1193,28 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				}
 			}
 		}
+		// Not stood down by a pre-authorization: the person owns what a human-only run
+		// costs, whoever suggested it. An ask is graded as the deny it stands in for.
+		if verdict.Decision != decisionDeny {
+			decision, reason := gradeHumanOnly(ctx, deps, actingLease, input)
+			if decision != "" {
+				if _, refused := pending.hold(deps, ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleHumanOnly}}); !refused {
+					decision = ""
+				}
+			}
+			switch decision {
+			case decisionAsk:
+				verdict.Decision, verdict.Context, verdict.Reason = decisionAsk, "", reason
+				if !req.RendersAsk {
+					verdict.Decision, verdict.Reason = decisionDeny, askUnrenderedDeny("running `"+elideCommand(input)+"`")
+					whys[verdict.Reason] = reason + "\n" + askUnrendered
+				}
+				verdict.Rule = string(denyRuleHumanOnly)
+			case decisionDeny:
+				verdict.Decision, verdict.Context, verdict.Reason = decisionDeny, "", reason
+				verdict.Rule = string(denyRuleHumanOnly)
+			}
+		}
 		// The push gate, upgraded from the advisory gitGuard returned when the run log proves
 		// no green gate covers this commit: the person is asked through the host's prompt,
 		// or a leased worker is refused outright (see gradePushWithoutGate).
@@ -1221,7 +1243,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			case decisionAsk:
 				verdict.Decision, verdict.Context, verdict.Reason = decisionAsk, "", reason
 				if !req.RendersAsk {
-					verdict.Decision, verdict.Reason = decisionDeny, askUnrenderedDeny(commit)
+					verdict.Decision, verdict.Reason = decisionDeny, askUnrenderedDeny("pushing "+commit+" ungated")
 					whys[verdict.Reason] = reason + "\n" + askUnrendered
 				}
 				verdict.Rule = string(denyRulePushUngated)

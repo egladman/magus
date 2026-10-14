@@ -198,6 +198,9 @@ func judgeBriefOffCheck(deps Dependencies, brief briefInput) ShellVerdict {
 	if len(graded) == 0 {
 		return briefUngraded(whyNoBriefRow(ids, rows), runs)
 	}
+	if v := briefHumanOnly(ctx, deps, at.workspace, graded[0], runs); v.Deny != "" {
+		return v
+	}
 	targets := sync.OnceValue(func() []types.TargetEntry {
 		ws, err := deps.inspect(ctx, at.workspace)
 		if err != nil || ws == nil {
@@ -223,6 +226,27 @@ func judgeBriefOffCheck(deps Dependencies, brief briefInput) ShellVerdict {
 		notes = append(notes, briefPassNotes(runs, row, produces, defines)...)
 	}
 	return briefPassVerdict(notes)
+}
+
+// briefHumanOnly refuses a brief telling row's worker to run a line that reaches a
+// human_only target, which human-only would refuse the worker whatever its check.
+func briefHumanOnly(ctx context.Context, deps Dependencies, workspace string, row types.Job, runs []briefRun) ShellVerdict {
+	for _, r := range runs {
+		if r.negated {
+			continue
+		}
+		pairs := humanOnlyReach(ctx, deps, workspace, []targetRun{r.run})
+		if len(pairs) == 0 {
+			continue
+		}
+		return ShellVerdict{
+			Deny: fmt.Sprintf("this brief tells job %s's worker to run `%s`, which a person runs [%s]; fix the brief.\nThe line: %q",
+				row.ID, pairs[0].ref(), denyRuleHumanOnly, elideCommand(strings.TrimSpace(r.line))),
+			Why:  "The workspace declares it human_only: " + pairs[0].reason + "\nA leased worker is refused it whoever asks.",
+			Rule: denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleHumanOnly)},
+		}
+	}
+	return ShellVerdict{}
 }
 
 // gradableRow is a live row that names a check and does not own the gate: one a brief's

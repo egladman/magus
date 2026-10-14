@@ -204,6 +204,18 @@ var ruleDocPushUngated = denyDoc(types.RuleDoc{ //nolint:unused // read through 
 		"A push that follows a commit, merge, cherry-pick, am, rebase, reset or pull on the same line (git, hg, sl or jj; joined by `;`, `&&`, `||`, a newline or a subshell) is denied for everyone: the revision is read before the line runs, so a gate recorded at that HEAD says nothing about the commit that goes out. Run the commit alone and push in the next call, where the push is graded at the real HEAD.",
 })
 
+var ruleDocHumanOnly = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+	Name:    string(denyRuleHumanOnly),
+	Catches: "an agent's magus run reaching a target the workspace declares human_only: the person is asked, a leased worker refused",
+	Why: "Some targets cost what only a person may decide to spend: a benchmark against a paid model API, a suite that drives real hosts on real logins. " +
+		"A magusfile marks one with `human_only` and a reason saying what a run costs. Each `magus run` and `magus affected` on the line is expanded the way the engine would run it: over the projects it names, or every project for `affected` or a run naming none, and down each target's ctx.needs chain. " +
+		"A run naming a human-only target itself, from a session no job lease binds, gets the verdict `ask`: the host's own approval prompt shows the reason, the target's recorded p75 and run count and whether it is cached, and approving runs it once. A hook that cannot put an ask in front of the person refuses instead. " +
+		"A leased worker is refused and nobody is asked: workers do not spend for the orchestrator. " +
+		"A run that reaches one through another target's chain is refused for everyone, naming each human-only target it reaches: a run reporting green over work it skipped is a pass the push gate would trust. " +
+		"A command magus itself suggested is judged too, since the person, not the suggestion, owns the cost. " +
+		"A person's own terminal never meets the guard, so nothing changes there. Set to advise, the reason is told and the run proceeds.",
+})
+
 var ruleDocInlineAlias = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
 	Name:    string(denyRuleInlineAlias),
 	Catches: "a VCS alias defined inline (`git -c alias.x=...`), which hides the command it runs",

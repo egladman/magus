@@ -239,16 +239,16 @@ func builtFrom(version, commit string) bool {
 	return false
 }
 
-// askUnrendered is the rationale of askUnrenderedDeny, beside the push's own verdict.
-const askUnrendered = "This hook predates approval prompts, so it cannot ask the person and the push is refused instead. " +
-	"Merge what `magus describe harness` prints or refresh the hook template from the magus docs, then push again; or push from your own terminal."
+// askUnrendered is the rationale of askUnrenderedDeny, beside the asking rule's own verdict.
+const askUnrendered = "This hook predates approval prompts, so it cannot ask the person and the call is refused instead. " +
+	"Merge what `magus describe harness` prints or refresh the hook template from the magus docs, then try again; or run it from your own terminal."
 
-// askUnrenderedDeny refuses a push of commit whose verdict would be ask when the caller did
-// not declare that it renders one. Such a hook predates the decision, renders it as
-// nothing, and its host reads nothing as allow, so the push is refused instead of
-// published unasked.
-func askUnrenderedDeny(commit string) string {
-	return "this hook predates approval prompts and cannot ask about pushing " + commit + " ungated; merge what `magus describe harness` prints."
+// askUnrenderedDeny refuses a call whose verdict would be ask when the caller did not
+// declare that it renders one. Such a hook predates the decision, renders it as nothing,
+// and its host reads nothing as allow, so the call is refused instead of run unasked.
+// subject names the call as the ask would have, such as "pushing abc1234 ungated".
+func askUnrenderedDeny(subject string) string {
+	return "this hook predates approval prompts and cannot ask about " + subject + "; merge what `magus describe harness` prints."
 }
 
 // gradePushWithoutGate is the verdict for a push at commit when no green gate covers it:

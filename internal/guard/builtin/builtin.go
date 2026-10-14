@@ -155,6 +155,7 @@ var defaults = map[string]Decision{
 	"heredoc-write":         Deny,
 	"hook-wiring-write":     Deny,
 	"hooks-off":             Deny,
+	"human-only":            Deny,
 	"inline-alias":          Deny,
 	"lease-gate":            Deny,
 	"lease-harness":         Deny,

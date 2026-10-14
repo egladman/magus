@@ -10,7 +10,7 @@ import (
 
 func TestDefaults(t *testing.T) {
 	got := Defaults()
-	assert.Len(t, got, 108)
+	assert.Len(t, got, 109)
 	want := map[string]Decision{
 		"read-navigation":      Advise,
 		"brief-command":        Advise,
@@ -18,6 +18,7 @@ func TestDefaults(t *testing.T) {
 		"whole-tree":           Deny,
 		"lease-write":          Deny,
 		"push-ungated":         Deny,
+		"human-only":           Deny,
 		"lease-state":          Advise,
 		"push-gate":            Advise,
 		"sleep-poll":           Advise,
