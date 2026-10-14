@@ -297,6 +297,14 @@ var modules = []Module{
 		},
 	},
 	{
+		Name: "modeltiers",
+		Doc:  "The default model-tier declaration: the ModelTier enum, cheapest first, its default, and the bounds and skill variant of each tier.",
+		Methods: []Method{
+			{Name: "bounds", Doc: "bounds caps the jobs live at one tier, and the context an economy worker may reach.", Sig: "modeltiers\\bounds(tier) -> magus\\ModelTierBounds"},
+			{Name: "skills", Doc: "skills is the skill variant a tier's workers load. Economy gets the full bodies: a", Sig: "modeltiers\\skills(tier) -> magus\\SkillVariant"},
+		},
+	},
+	{
 		Name: "net",
 		Doc:  "TCP readiness and port allocation: wait for a service to accept connections, and find a free port.",
 		Methods: []Method{

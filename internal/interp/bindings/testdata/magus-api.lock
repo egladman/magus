@@ -54,6 +54,8 @@ job
 job.clear
 job.exit
 job.list
+job.modelTier
+job.modelTiers
 job.put
 job.register
 job.wait

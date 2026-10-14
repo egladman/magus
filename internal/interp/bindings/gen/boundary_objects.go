@@ -2901,6 +2901,94 @@ func ObjectJobRun(v types.JobRun) vm.Value {
 	return out
 }
 
+func ObjectJobModelTier(v types.JobModelTier) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("rank", vm.IntValue(int64(v.Rank)))
+	out.MapSet("skills", vm.StrValue(string(v.Skills)))
+	out.MapSet("source", vm.StrValue(string(v.Source)))
+	out.MapSet("reason", vm.StrValue(v.Reason))
+	out.MapSet("site", vm.StrValue(v.Site))
+	out.MapSet("model", vm.StrValue(v.Model))
+	return out
+}
+
+func ObjectModelTierRecord(v types.ModelTierRecord) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("rank", vm.IntValue(int64(v.Rank)))
+	out.MapSet("modelTier", vm.StrValue(v.ModelTier))
+	out.MapSet("kind", vm.StrValue(string(v.Kind)))
+	out.MapSet("jobs", vm.IntValue(int64(v.Jobs)))
+	out.MapSet("pass", vm.IntValue(int64(v.Pass)))
+	out.MapSet("fail", vm.IntValue(int64(v.Fail)))
+	out.MapSet("noReturn", vm.IntValue(int64(v.NoReturn)))
+	out.MapSet("passLower", vm.FloatValue(float64(v.PassLower)))
+	out.MapSet("checksPerJob", vm.FloatValue(float64(v.ChecksPerJob)))
+	out.MapSet("forksPerID", vm.FloatValue(float64(v.ForksPerID)))
+	out.MapSet("reworkPerJob", vm.FloatValue(float64(v.ReworkPerJob)))
+	out.MapSet("wideningsPerJob", vm.FloatValue(float64(v.WideningsPerJob)))
+	out.MapSet("meanCostUSD", vm.FloatValue(float64(v.MeanCostUSD)))
+	out.MapSet("medianTokens", vm.IntValue(int64(v.MedianTokens)))
+	return out
+}
+
+func ObjectModelTierRequest(v types.ModelTierRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("parent", vm.StrValue(v.Parent))
+	out.MapSet("criteria", vm.StrValue(v.Criteria))
+	out.MapSet("readOnly", vm.BoolValue(v.ReadOnly))
+	optCheck := vm.Null
+	if v.Check != nil {
+		optCheck = ObjectLeaseCheck((*v.Check))
+	}
+	out.MapSet("check", optCheck)
+	itemsGoals := make([]vm.Value, len(v.Goals))
+	for indexGoals := range v.Goals {
+		itemsGoals[indexGoals] = ObjectGoal(v.Goals[indexGoals])
+	}
+	out.MapSet("goals", vm.ListValue(itemsGoals))
+	out.MapSet("kind", vm.StrValue(string(v.Kind)))
+	itemsWritePaths := make([]vm.Value, len(v.WritePaths))
+	for indexWritePaths := range v.WritePaths {
+		itemsWritePaths[indexWritePaths] = vm.StrValue(v.WritePaths[indexWritePaths])
+	}
+	out.MapSet("writePaths", vm.ListValue(itemsWritePaths))
+	itemsWriteProjects := make([]vm.Value, len(v.WriteProjects))
+	for indexWriteProjects := range v.WriteProjects {
+		itemsWriteProjects[indexWriteProjects] = vm.StrValue(v.WriteProjects[indexWriteProjects])
+	}
+	out.MapSet("writeProjects", vm.ListValue(itemsWriteProjects))
+	itemsReadPaths := make([]vm.Value, len(v.ReadPaths))
+	for indexReadPaths := range v.ReadPaths {
+		itemsReadPaths[indexReadPaths] = vm.StrValue(v.ReadPaths[indexReadPaths])
+	}
+	out.MapSet("readPaths", vm.ListValue(itemsReadPaths))
+	itemsDependsOn := make([]vm.Value, len(v.DependsOn))
+	for indexDependsOn := range v.DependsOn {
+		itemsDependsOn[indexDependsOn] = vm.StrValue(v.DependsOn[indexDependsOn])
+	}
+	out.MapSet("dependsOn", vm.ListValue(itemsDependsOn))
+	out.MapSet("writeFiles", vm.IntValue(int64(v.WriteFiles)))
+	optParentRank := vm.Null
+	if v.ParentRank != nil {
+		optParentRank = vm.IntValue(int64((*v.ParentRank)))
+	}
+	out.MapSet("parentRank", optParentRank)
+	optDeclaredRank := vm.Null
+	if v.DeclaredRank != nil {
+		optDeclaredRank = vm.IntValue(int64((*v.DeclaredRank)))
+	}
+	out.MapSet("declaredRank", optDeclaredRank)
+	out.MapSet("declaredModel", vm.StrValue(v.DeclaredModel))
+	itemsHistory := make([]vm.Value, len(v.History))
+	for indexHistory := range v.History {
+		itemsHistory[indexHistory] = ObjectModelTierRecord(v.History[indexHistory])
+	}
+	out.MapSet("history", vm.ListValue(itemsHistory))
+	return out
+}
+
 func ObjectJob(v types.Job) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("schemaVersion", vm.IntValue(int64(v.Schema.Version)))

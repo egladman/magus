@@ -61,6 +61,25 @@ export enum<str> SymbolIndexFreshness {
     unvouched = "unvouched",
 }
 
+export enum<str> JobKind {
+    check = "check",
+    symbol = "symbol",
+    paths = "paths",
+    script = "script",
+    prose = "prose",
+}
+
+export enum<str> SkillVariant {
+    short = "short",
+    full = "full",
+}
+
+export enum<str> ModelTierSource {
+    row = "row",
+    matrix = "matrix",
+    default = "default",
+}
+
 export object Affected {
     base: str = "",
     changed: [str] = [],
@@ -1030,6 +1049,10 @@ export object WriteRequest {
     newText: str = "",
 }
 
+export object HarnessKey {
+    id: str = "",
+}
+
 export object JobOverlapFootprint {
     verdict: str = "",
     shared: [str] = [],
@@ -1141,6 +1164,57 @@ export object JobStatus {
     undeclaredExports: [str] = [],
     leftUnreferenced: [str] = [],
     symbolDeltaKnown: bool = false,
+}
+
+export object ModelTierRecord {
+    rank: int = 0,
+    modelTier: str = "",
+    kind: JobKind = JobKind.check,
+    jobs: int = 0,
+    pass: int = 0,
+    fail: int = 0,
+    noReturn: int = 0,
+    passLower: double = 0.0,
+    checksPerJob: double = 0.0,
+    forksPerID: double = 0.0,
+    reworkPerJob: double = 0.0,
+    wideningsPerJob: double = 0.0,
+    meanCostUSD: double = 0.0,
+    medianTokens: int = 0,
+}
+
+export object ModelTierRequest {
+    id: str = "",
+    parent: str = "",
+    criteria: str = "",
+    readOnly: bool = false,
+    check: LeaseCheck? = null,
+    goals: [Goal] = [],
+    kind: JobKind = JobKind.check,
+    writePaths: [str] = [],
+    writeProjects: [str] = [],
+    readPaths: [str] = [],
+    dependsOn: [str] = [],
+    writeFiles: int = 0,
+    parentRank: int? = null,
+    declaredRank: int? = null,
+    declaredModel: str = "",
+    history: [ModelTierRecord] = [],
+}
+
+export object ModelTierBounds {
+    maxLive: int = 0,
+    maxContext: int = 0,
+}
+
+export object JobModelTier {
+    name: str = "",
+    rank: int = 0,
+    skills: SkillVariant = SkillVariant.short,
+    source: ModelTierSource = ModelTierSource.row,
+    reason: str = "",
+    site: str = "",
+    model: str = "",
 }
 
 export object CharmDeclaration {
@@ -1661,7 +1735,7 @@ export object guard {
 
 // Agent-host harness selection. A harness is a spell that exports the harness_config / harness_skills / harness_entries contract, the same family as cache.remote and ci.provider.
 export object harness {
-    static extern fun provider(spell: {str: any}) > void;
+    static extern fun provider(spell: {str: any}) > HarnessKey;
 }
 
 // Secret provider selection, and the credentials read through it.
@@ -1691,6 +1765,8 @@ export object job {
     static extern fun clear() > int !> any;
     static extern fun exit(id: str, result: {str: any} = {<str: any>}) > Job !> any;
     static extern fun list() > JobList !> any;
+    static extern fun modelTier(matrix: fun (req: ModelTierRequest) > any !> any) > void;
+    static extern fun modelTiers(tiers: any, default: any = null, hosts: any = null, bounds: any = null, skills: any = null) > void;
     static extern fun put(id: str, opts: {str: any} = {<str: any>}) > Job !> any;
     static extern fun register(id: str, reported_base: str) > {str: any} !> any;
     static extern fun wait(id: str, result: {str: any} = {<str: any>}) > JobStatus !> any;
