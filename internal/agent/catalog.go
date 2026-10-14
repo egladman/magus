@@ -374,7 +374,10 @@ import (
 //
 // 125: magus-multi-agent teaches the workspace's declared model tiers, what a row records of
 // its tier, and that `job fork --model` takes a tier or a model.
-const SkillVersion = 125
+//
+// 126: magus-multi-agent says the root does no groundwork from its first call, which
+// orchestrator-groundwork enforces by role.
+const SkillVersion = 126
 
 const skillLicense = "GPL-3.0-or-later"
 

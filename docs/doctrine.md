@@ -228,6 +228,24 @@ finished. The measure is the model-tier lens: the economy tier's pass rate
 should rise over time. This prevents a tool that looks capable only while
 someone else pays for the reasoning.
 
+### The orchestrator plans; workers do the work
+
+A session that hands out work keeps to planning, coordinating and integrating.
+Reading and searching source, editing it, and running checks belong to the
+workers it spawns, at any context size. Size and cost never decide whether;
+they only tune the advice given to a session that has handed nothing out.
+magus knows a session orchestrates from what it recorded, a job row it forked
+or a spawn bound to one; without that record the guard advises and never
+refuses.
+
+The mechanism is the guard's `orchestrator-groundwork` rule. It refuses a
+proven orchestrator's searches, source reads, diffs, runs, fetches and edits,
+and passes its job verbs, graph reads and integration. A person at the
+keyboard is the [human in the loop](#human-in-the-loop), not an orchestrator,
+and is never judged by it. This prevents the root whose context fills with
+work a worker would have returned as one finding, and which then pays for that
+work on every call after it.
+
 ### A copy can be the right answer
 
 Merge duplicates only when they share semantics, policy knobs, and bugs: a bug
