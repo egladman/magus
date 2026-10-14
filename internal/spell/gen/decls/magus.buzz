@@ -640,7 +640,6 @@ export object ConformKnown {
     metric: str = "",
     items: [str] = [],
     reason: str = "",
-    line: int = 0,
 }
 
 export object Conform {

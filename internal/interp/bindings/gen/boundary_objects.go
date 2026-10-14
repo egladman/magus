@@ -554,7 +554,6 @@ func ObjectConformKnown(v types.ConformKnown) vm.Value {
 	}
 	out.MapSet("items", vm.ListValue(itemsItems))
 	out.MapSet("reason", vm.StrValue(v.Reason))
-	out.MapSet("line", vm.IntValue(int64(v.Line)))
 	return out
 }
 

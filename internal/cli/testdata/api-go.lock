@@ -838,6 +838,7 @@ github.com/egladman/magus/types.ConformGates.Bar field float64
 github.com/egladman/magus/types.ConformGates.MaxFindings field int
 github.com/egladman/magus/types.ConformGates.MinCohort field int
 github.com/egladman/magus/types.ConformGates.MinShare field float64
+github.com/egladman/magus/types.ConformGates.Override method func(minCohort int, minShare float64) ConformGates
 github.com/egladman/magus/types.ConformItem type struct
 github.com/egladman/magus/types.ConformItem.ID field string "json:\"id\"      yaml:\"id\""
 github.com/egladman/magus/types.ConformItem.Measure field int "json:\"measure\" yaml:\"measure\""
@@ -848,7 +849,7 @@ github.com/egladman/magus/types.ConformKey.Population field ConformPopulation "j
 github.com/egladman/magus/types.ConformKey.Scope field string "json:\"scope,omitempty\" yaml:\"scope,omitempty\""
 github.com/egladman/magus/types.ConformKnown type struct
 github.com/egladman/magus/types.ConformKnown.Items field []string "json:\"items\"  yaml:\"items\""
-github.com/egladman/magus/types.ConformKnown.Line field int "json:\"-\"      yaml:\"-\""
+github.com/egladman/magus/types.ConformKnown.Line field int "json:\"-\"      yaml:\"-\"      buzz:\"-\""
 github.com/egladman/magus/types.ConformKnown.Metric field ConformMetric "json:\"metric\" yaml:\"metric\""
 github.com/egladman/magus/types.ConformKnown.Reason field string "json:\"reason\" yaml:\"reason\""
 github.com/egladman/magus/types.ConformLimit type struct

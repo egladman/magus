@@ -14,15 +14,15 @@ A main thread running the same delegable command again with no write since.
 
 ## Why
 
-An identical search, read, diff, run or fetch with no file written since returns what the context already holds. At standard the second run is advised once; at strict it is advised and the third is refused. A file write starts the count over. A calls parameter replaces the level's count.
+An identical search, read, diff, run or fetch with no file written since returns what the context already holds. At standard and strict the second run is advised once, and a file write starts the count over. It never refuses, and it skips a session that hands out work: there every repeat is groundwork, which orchestrator-groundwork judges. A calls parameter replaces the level's count.
 
 ## Default and override
 
 By default this rule takes the decision `off`. A workspace sets it by name, in its root
-magusfile, to `deny`, `advise` or `off`:
+magusfile, to `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"root-repeat": "deny"})
+magus\guard.builtins({"root-repeat": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -34,8 +34,6 @@ A verdict names its rule in brackets, which is how you got here:
 ```text
 advise [root-repeat]: ...
 ```
-
-A workspace that sets this rule to `deny` sees `deny [root-repeat]: ...` instead.
 
 `magus describe rule root-repeat` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
