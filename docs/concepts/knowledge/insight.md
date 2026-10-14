@@ -65,6 +65,34 @@ Each lens is a field on the report:
   so without it the lens would be most reassuring exactly where it knows least.
   Alongside them the report carries the knowledge graph's shape, the same numbers
   [`magus graph stats`](../../reference/manpage/magus-graph.md) prints.
+- `conform`: how large and how coupled the code is, measured over the same graph, one
+  row per metric and population. Like `unreferenced` it takes no window, and a missing or
+  stale symbol index answers `unknown`, never a pass. Read it through the report or
+  `magus\conform()`, which also returns each symbol index's freshness.
+
+  A row has a metric: file lines, function lines, methods per type, top-level
+  declarations per file, workspace imports per package, tokens in a body whose shape
+  another body shares, or exported symbols nothing outside their package uses. It has a
+  population too: `source`, `main` (Go's `package main`) or `test`, measured apart so
+  moving code into tests cannot shift the source numbers. Generated files and the globs
+  in `knowledge.conform.exclude` belong to none; `excluded` counts what the globs hid, so
+  a widened exclusion shows.
+
+  Each row sets two values side by side. `live` is the configured percentile of the code
+  today. `value` is what a check enforces, and `source` says where it came from: `ratchet`
+  when a person committed it to the record `knowledge.conform.ratchet` names, `anchor`
+  when nothing is committed and the configured bound applies. They differ on purpose.
+  Nothing enforces a live percentile, because a threshold that follows the code loosens
+  as the code grows. `violations` lists what sits past `value`, apart from the `known`
+  entries the record accepts; `stale` lists known entries that no longer violate, which
+  a person deletes.
+
+  `propose` is the lens's only suggestion: the live percentile, offered when at least
+  `min_sample` items back it and it sits `step` below `value`. It is never looser than
+  `value`. The lens proposes and a person commits: you copy the proposed value, its
+  sample size and percentile into the record, and the commit is the review. Nothing here
+  edits the record or the configuration, and a committed value looser than its anchor,
+  or a record that is missing or malformed, is an error rather than a quiet fallback.
 
 ## Bounding the scan
 
