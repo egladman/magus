@@ -96,7 +96,9 @@ read-only.
 | host harness | the verdict is right but ARRIVES wrong: bad suggestion, wrong wiring, no hook at all | human |
 | upstream | the guard refused something it cannot prove is wrong | human, as an issue |
 
-A candidate is not a decision, and never an argument for weakening a guard rule.
+A candidate is not a decision, and never an argument for weakening a guard rule. The
+"who acts" column is the human in the loop: the agent drafts, and a person decides
+what changes how the workspace's agents are held.
 
 ### Make the change (the workspace owns every byte of it)
 

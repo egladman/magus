@@ -199,7 +199,7 @@ var ruleDocPushUngated = denyDoc(types.RuleDoc{ //nolint:unused // read through 
 	Why: "The advisory this replaced fired on EVERY push, having read nothing: it told a caller who had just gated and a caller who had never gated the same sentence, which is a toll rather than a reminder. " +
 		"This one reads the run log, so the finding is a fact: which invocations ran the gate, which commit each was built from, and how it finished. That is what makes stopping the call legitimate here where the rest of this tier only advises. " +
 		"It matches on the COMMIT and not the exact tree, deliberately: an exact match would expire on the first comment typo after a green run, which is the delta the cadence already says to push, and a rule that fires there is one people route around. " +
-		"Publishing work in progress is legitimate and indistinguishable from an oversight, so a session no job lease binds gets the verdict `ask`: the host's own approval prompt puts the push in front of the person, and approving it publishes. A marker the agent types is not consent, so nothing it says clears this. " +
+		"Publishing work in progress is legitimate and indistinguishable from an oversight, so a session no job lease binds gets the verdict `ask`: the host's own approval prompt puts the push in front of the person, the human in the loop for publishing, and approving it publishes. A marker the agent types is not consent, so nothing it says clears this. " +
 		"A session bound to a lease is a worker, and workers do not publish: it gets `deny`, and nobody is asked. " +
 		"A push that follows a commit, merge, cherry-pick, am, rebase, reset or pull on the same line (git, hg, sl or jj; joined by `;`, `&&`, `||`, a newline or a subshell) is denied for everyone: the revision is read before the line runs, so a gate recorded at that HEAD says nothing about the commit that goes out. Run the commit alone and push in the next call, where the push is graded at the real HEAD.",
 })
@@ -207,7 +207,7 @@ var ruleDocPushUngated = denyDoc(types.RuleDoc{ //nolint:unused // read through 
 var ruleDocHumanOnly = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
 	Name:    string(denyRuleHumanOnly),
 	Catches: "a magus run reaching a human_only target: the person is asked, a leased worker refused",
-	Why: "Some targets cost what only a person may decide to spend: a benchmark against a paid model API, a suite that drives real hosts on real logins. " +
+	Why: "Some targets cost what only a person may decide to spend: a benchmark against a paid model API, a suite that drives real hosts on real logins. This is the human in the loop for cost. " +
 		"A magusfile marks one with `human_only` and a reason saying what a run costs. Each `magus run` and `magus affected` on the line is expanded the way the engine would run it: over the projects it names, or every project for `affected` or a run naming none, and down each target's ctx.needs chain. " +
 		"A run naming a human-only target itself, from a session no job lease binds, gets the verdict `ask`: the host's own approval prompt shows the reason, the target's recorded p75 and run count and whether it is cached, and approving runs it once. A hook that cannot put an ask in front of the person refuses instead. " +
 		"A leased worker is refused and nobody is asked: workers do not spend for the orchestrator. " +

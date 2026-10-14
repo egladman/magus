@@ -36,7 +36,9 @@ the work.
 Fan out only after the collision check below REPORTS the jobs disjoint; looking
 separate is not that check. With only one coherent write set, keep the work local.
 The root agent owns the goal, the budget, the topology, integration, and final
-verification, and never hands those out.
+verification, and never hands those out. Above the root is the human in the loop:
+what lands, what is published and what a round may spend are the person's calls, so
+the root reports to them and does not decide them.
 
 ## Coalesce what the write sets allow
 
