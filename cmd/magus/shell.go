@@ -411,21 +411,29 @@ func guardHumanOnlyRecord(rootOverride string, inspect func(context.Context, str
 	}
 }
 
-// harnessModelRows is the lazy reader of the model rows the harnesses wired in the
-// workspace at root publish through harness_models. The first call opens the workspace
-// through inspect and loads each harness spell, and its answer is kept for the rest, so a
-// judgment that never asks for a row pays for none of it. A workspace that does not load,
-// wires no harness or wires none that publishes rows yields no rows, which the guard reads
-// as no facts about a model rather than an error.
-func harnessModelRows(ctx context.Context, root string, inspect func(context.Context) (types.WorkspaceRepository, error)) func() []types.ModelFacts {
-	return sync.OnceValue(func() []types.ModelFacts {
+// onceInspected is the lazy reader of what read takes from the workspace inspect opens. The
+// first call opens it and the answer is kept for the rest, so a judgment that never asks
+// pays for nothing. A workspace that does not open yields T's zero value.
+func onceInspected[T any](ctx context.Context, inspect func(context.Context) (types.WorkspaceRepository, error), read func(context.Context, types.WorkspaceRepository) T) func() T {
+	return sync.OnceValue(func() T {
 		ws, err := inspect(ctx)
 		if err != nil {
-			return nil
+			var zero T
+			return zero
 		}
+		return read(ctx, ws)
+	})
+}
+
+// harnessModelRows is the lazy reader of the model rows the harnesses wired in the
+// workspace at root publish through harness_models; the first call loads each harness
+// spell. A workspace that does not load, wires no harness or wires none that publishes rows
+// yields no rows, which the guard reads as no facts about a model rather than an error.
+func harnessModelRows(ctx context.Context, root string, inspect func(context.Context) (types.WorkspaceRepository, error)) func() []types.ModelPricing {
+	return onceInspected(ctx, inspect, func(ctx context.Context, ws types.WorkspaceRepository) []types.ModelPricing {
 		wired := workspaceHarnessNames(ws)
-		ctx := agent.ContextWithWiredHarnesses(types.WithWorkspace(ctx, ws), wired)
-		var rows []types.ModelFacts
+		ctx = agent.ContextWithWiredHarnesses(types.WithWorkspace(ctx, ws), wired)
+		var rows []types.ModelPricing
 		for _, id := range wired {
 			if d, _, err := agent.LoadHarness(ctx, root, id); err == nil {
 				rows = append(rows, d.Models...)
@@ -437,7 +445,7 @@ func harnessModelRows(ctx context.Context, root string, inspect func(context.Con
 
 // guardModelRows is harnessModelRows for the workspace found from rootOverride, opened as
 // the guard's other rules open it, so one load serves them all. nil outside a workspace.
-func guardModelRows(ctx context.Context, rootOverride string) func() []types.ModelFacts {
+func guardModelRows(ctx context.Context, rootOverride string) func() []types.ModelPricing {
 	root, err := magus.FindRoot(rootOverride)
 	if err != nil {
 		return nil
@@ -462,14 +470,9 @@ func guardModelTiers(ctx context.Context, rootOverride string) func() *types.Mod
 }
 
 // workspaceModelTiers is the lazy reader of the model tiers the workspace inspect opens
-// declares. The first call opens it and the answer is kept, so a judgment that never asks
-// pays for nothing. A workspace that does not load or declares no tiers yields nil.
+// declares. A workspace that does not load or declares no tiers yields nil.
 func workspaceModelTiers(ctx context.Context, inspect func(context.Context) (types.WorkspaceRepository, error)) func() *types.ModelTierSet {
-	return sync.OnceValue(func() *types.ModelTierSet {
-		ws, err := inspect(ctx)
-		if err != nil {
-			return nil
-		}
+	return onceInspected(ctx, inspect, func(_ context.Context, ws types.WorkspaceRepository) *types.ModelTierSet {
 		tiered, ok := ws.(interface{ ModelTiers() *types.ModelTierSet })
 		if !ok {
 			return nil

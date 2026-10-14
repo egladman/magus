@@ -256,7 +256,7 @@ func gradeMainCommand(deps Dependencies, verdict Verdict, in commandRuleInput, w
 		return verdict
 	}
 	gate := hint.NewGate(at.cacheDir, who.callerKey())
-	if f, misdeclared := budgetPastEveryWindow(deps.settingOf(string(denyRuleRootContextBudget)), accountAt(at.workspace).table); misdeclared {
+	if f, misdeclared := budgetPastEveryWindow(deps.settingOf(string(denyRuleRootContextBudget)), at.modelTable); misdeclared {
 		return applyFindings(gate, verdict, []costFinding{f}, from)
 	}
 	st := readCostState(facts)

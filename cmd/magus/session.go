@@ -974,7 +974,7 @@ func sessionModelTable(root string) model.Table {
 	rows := harnessModelRows(context.Background(), root, func(ctx context.Context) (types.WorkspaceRepository, error) {
 		return magus.Inspect(ctx, root, magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
 	})
-	return model.Table{}.Merge(rows()).Merge(globalCfg.Agents.ModelOverrides())
+	return model.InEffect(rows(), globalCfg.Agents.ModelOverrides())
 }
 
 // sessionTrailHere folds this checkout's trail for the session, or nil when it holds

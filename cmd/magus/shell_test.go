@@ -1766,6 +1766,42 @@ func TestWorkspaceModelTiersOpenTheWorkspaceOnceAndOnlyWhenAsked(t *testing.T) {
 	}
 }
 
+// The read sees the workspace the one open returned and the reader's ctx; an open that
+// fails is T's zero value and never reaches the read.
+func TestOnceInspectedOpensOnceAndReadsWhatOpened(t *testing.T) {
+	type key struct{}
+	ws := struct{ types.WorkspaceRepository }{}
+	for _, tc := range []struct {
+		name  string
+		err   error
+		want  string
+		reads int
+	}{
+		{"an open workspace", nil, "read", 1},
+		{"a workspace that will not load", errors.New("magusfile.buzz does not load"), "", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.WithValue(t.Context(), key{}, "judgment")
+			opened, reads := 0, 0
+			get := onceInspected(ctx, func(context.Context) (types.WorkspaceRepository, error) {
+				opened++
+				return ws, tc.err
+			}, func(ctx context.Context, got types.WorkspaceRepository) string {
+				reads++
+				assert.Equal(t, ws, got)
+				assert.Equal(t, "judgment", ctx.Value(key{}))
+				return "read"
+			})
+
+			assert.Zero(t, opened, "building the reader reads nothing")
+			assert.Equal(t, tc.want, get())
+			assert.Equal(t, tc.want, get())
+			assert.Equal(t, 1, opened)
+			assert.Equal(t, tc.reads, reads)
+		})
+	}
+}
+
 // Outside a workspace the guard has no tier reader, and the tier rules have nothing to
 // compare.
 func TestGuardModelTiersIsNilOutsideAWorkspace(t *testing.T) {

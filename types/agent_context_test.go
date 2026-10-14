@@ -81,9 +81,9 @@ func TestGuardProfileStricter(t *testing.T) {
 	}
 }
 
-func TestModelFactsFactor(t *testing.T) {
-	stepped := ModelFacts{PriceStep: 100_000, StepFactor: 5}
-	assert.InDelta(t, 1.0, stepped.Factor(100_000), 0, "the step is above the threshold, not at it")
-	assert.InDelta(t, 5.0, stepped.Factor(100_001), 0)
-	assert.InDelta(t, 1.0, ModelFacts{}.Factor(900_000), 0)
+func TestModelPricingPriceMultiplier(t *testing.T) {
+	stepped := ModelPricing{LongContext: &PriceStep{Above: 100_000, Multiplier: 5}}
+	assert.InDelta(t, 1.0, stepped.PriceMultiplier(100_000), 0, "the step is above the threshold, not at it")
+	assert.InDelta(t, 5.0, stepped.PriceMultiplier(100_001), 0)
+	assert.InDelta(t, 1.0, ModelPricing{}.PriceMultiplier(900_000), 0, "a nil LongContext is no step")
 }

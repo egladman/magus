@@ -337,11 +337,12 @@ func TestBudgetTokensPastEveryWindowIsRefused(t *testing.T) {
 	deps.Builtins[string(denyRuleRootContextBudget)] = builtin.Setting{Decision: builtin.Deny, Tokens: 2_000_000}
 	judge := func(rows bool) Verdict {
 		ctx, cache := spawnFixture(t)
+		d := deps
 		if rows {
-			useFixtureModelRows(hookLocation(ctx, deps))
+			d.ModelRows = fixtureModelSource
 		}
 		hostGate(cache, "claude-code").MarkFired(hostAgentsKind)
-		return Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s"})
+		return Judge(ctx, d, Request{Input: "ls", Host: "claude-code", Session: "s"})
 	}
 
 	assert.NotEqual(t, string(denyRuleRootContextBudget), judge(false).Rule, "no rows, no window to bound by")

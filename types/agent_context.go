@@ -244,9 +244,18 @@ type ContextWindow struct {
 	Source ContextSource
 }
 
-// ModelFacts is one model's row in the table magus prices agent context against. Prices
-// are USD per million tokens.
-type ModelFacts struct {
+// USDPerMTok is a token price in US dollars per million tokens.
+type USDPerMTok float64
+
+// PriceStep is a long-context surcharge: every price is multiplied by Multiplier once a
+// call's prompt passes Above tokens, cache reads and writes counting toward it.
+type PriceStep struct {
+	Above      int64
+	Multiplier float64
+}
+
+// ModelPricing is one model's row in the table magus prices agent context against.
+type ModelPricing struct {
 	// ID is the model id the row matches, and every id that extends it with a date,
 	// a provider prefix or a context suffix.
 	ID string
@@ -254,23 +263,20 @@ type ModelFacts struct {
 	Window int64
 	// Input, CacheWrite5m, CacheWrite1h, CacheRead and Output are the standard prices.
 	// A field left 0 is unknown, never free.
-	Input        float64
-	CacheWrite5m float64
-	CacheWrite1h float64
-	CacheRead    float64
-	Output       float64
-	// PriceStep is the prompt size in tokens above which every price is multiplied by
-	// StepFactor, cache reads and writes counting toward it; 0 when the model has no
-	// such step.
-	PriceStep  int64
-	StepFactor float64
+	Input        USDPerMTok
+	CacheWrite5m USDPerMTok
+	CacheWrite1h USDPerMTok
+	CacheRead    USDPerMTok
+	Output       USDPerMTok
+	// LongContext is the model's long-context surcharge, nil when it has none.
+	LongContext *PriceStep
 }
 
-// Factor is the price multiplier a call sending prompt tokens pays: StepFactor above
-// PriceStep, else 1.
-func (f ModelFacts) Factor(prompt int64) float64 {
-	if f.PriceStep > 0 && prompt > f.PriceStep && f.StepFactor > 0 {
-		return f.StepFactor
+// PriceMultiplier is the multiplier a call sending promptTokens pays on every price:
+// LongContext.Multiplier above LongContext.Above, else 1.
+func (p ModelPricing) PriceMultiplier(promptTokens int64) float64 {
+	if s := p.LongContext; s != nil && s.Above > 0 && promptTokens > s.Above && s.Multiplier > 0 {
+		return s.Multiplier
 	}
 	return 1
 }

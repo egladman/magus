@@ -9,19 +9,20 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-var fixtureRows = []types.ModelFacts{
+var fixtureRows = []types.ModelPricing{
 	{ID: "claude-opus-5-5", Window: 1_000_000, Input: 4, Output: 20},
-	{ID: "claude-haiku-5-5", Window: 1_000_000, Input: 0.1, CacheRead: 0.01, Output: 0.5, PriceStep: 100_000, StepFactor: 5},
+	{ID: "claude-haiku-5-5", Window: 1_000_000, Input: 0.1, CacheRead: 0.01, Output: 0.5, LongContext: &types.PriceStep{Above: 100_000, Multiplier: 5}},
 	{ID: "claude-haiku-4-5", Window: 200_000, Input: 1, Output: 5},
 }
 
-func fixtureTable() Table { return Table{}.Merge(fixtureRows) }
+func fixtureTable() Table { return InEffect(fixtureRows, nil) }
 
 func TestZeroTableHasNoFacts(t *testing.T) {
 	_, ok := Table{}.Lookup("claude-opus-5-5")
 
 	assert.False(t, ok, "no rows is no facts, never a free or zero-sized model")
 	assert.Empty(t, Table{}.Rows())
+	assert.Empty(t, InEffect(nil, nil).Rows())
 }
 
 func TestModelLookupMatchesHostSpellings(t *testing.T) {
@@ -48,10 +49,10 @@ func TestModelLookupMatchesHostSpellings(t *testing.T) {
 // The longest matching row wins, so a row for a model family never shadows one for a
 // release inside it.
 func TestModelLookupPrefersLongestRow(t *testing.T) {
-	table := Table{}.Merge([]types.ModelFacts{
+	table := InEffect([]types.ModelPricing{
 		{ID: "claude-opus-5", Window: 500_000},
 		{ID: "claude-opus-5-5", Window: 1_000_000},
-	})
+	}, nil)
 	f, ok := table.Lookup("claude-opus-5-5-20260401")
 	require.True(t, ok)
 	assert.Equal(t, "claude-opus-5-5", f.ID)
@@ -60,35 +61,36 @@ func TestModelLookupPrefersLongestRow(t *testing.T) {
 	assert.Equal(t, "claude-opus-5", f.ID)
 }
 
-func TestModelMergeOverlaysAndAdds(t *testing.T) {
-	base := fixtureTable()
-	merged := base.Merge([]types.ModelFacts{
+func TestInEffectOverlaysAndAdds(t *testing.T) {
+	harness := []types.ModelPricing{
+		{ID: "claude-opus-5-5", Window: 1_000_000, Input: 4, Output: 20},
+		{ID: "claude-haiku-5-5", Window: 1_000_000, Input: 0.1, CacheRead: 0.01, Output: 0.5, LongContext: &types.PriceStep{Above: 100_000, Multiplier: 5}},
+	}
+	overrides := []types.ModelPricing{
 		{ID: "Claude-Haiku-5-5", Window: 2_000_000, CacheRead: 0.02},
-		{ID: "claude-next-1", Window: 3_000_000, PriceStep: 50_000, StepFactor: 2},
-	})
-	haiku, ok := merged.Lookup("claude-haiku-5-5")
-	require.True(t, ok)
-	assert.Equal(t, int64(2_000_000), haiku.Window)
-	assert.InDelta(t, 0.02, haiku.CacheRead, 0)
-	assert.InDelta(t, 0.50, haiku.Output, 0, "a field the override leaves 0 keeps the earlier value")
-	assert.Equal(t, int64(100_000), haiku.PriceStep)
+		{ID: "claude-opus-5-5", LongContext: &types.PriceStep{Above: 200_000, Multiplier: 2}},
+		{ID: "claude-next-1", Window: 3_000_000, LongContext: &types.PriceStep{Above: 50_000, Multiplier: 2}},
+	}
 
-	next, ok := merged.Lookup("claude-next-1")
-	require.True(t, ok)
-	assert.InDelta(t, 2.0, next.Factor(60_000), 0)
+	table := InEffect(harness, overrides)
 
-	original, _ := base.Lookup("claude-haiku-5-5")
-	assert.Equal(t, int64(1_000_000), original.Window, "Merge leaves the receiver alone")
-	assert.Len(t, merged.Rows(), len(fixtureRows)+1)
+	assert.Equal(t, []types.ModelPricing{
+		{ID: "claude-opus-5-5", Window: 1_000_000, Input: 4, Output: 20, LongContext: &types.PriceStep{Above: 200_000, Multiplier: 2}},
+		{ID: "claude-haiku-5-5", Window: 2_000_000, Input: 0.1, CacheRead: 0.02, Output: 0.5, LongContext: &types.PriceStep{Above: 100_000, Multiplier: 5}},
+		{ID: "claude-next-1", Window: 3_000_000, LongContext: &types.PriceStep{Above: 50_000, Multiplier: 2}},
+	}, table.Rows(), "an override's 0 field and nil LongContext keep the harness value")
+	assert.Equal(t, int64(1_000_000), harness[1].Window, "InEffect leaves its arguments alone")
+	assert.Equal(t, "Claude-Haiku-5-5", overrides[0].ID, "InEffect leaves its arguments alone")
 }
 
-// A harness row is merged before agents.models, so a person's row wins field by field.
-func TestModelMergeLayersHarnessRowsUnderAgentsModels(t *testing.T) {
-	table := Table{}.
-		Merge([]types.ModelFacts{{ID: "claude-opus-5-5", Window: 1_000_000, Input: 4, Output: 20}}).
-		Merge([]types.ModelFacts{{ID: "claude-opus-5-5", Input: 3}})
+// Harness rows go in before agents.models, so a person's row wins field by field.
+func TestInEffectLayersHarnessRowsUnderAgentsModels(t *testing.T) {
+	table := InEffect(
+		[]types.ModelPricing{{ID: "claude-opus-5-5", Window: 1_000_000, Input: 4, Output: 20}},
+		[]types.ModelPricing{{ID: "claude-opus-5-5", Input: 3}},
+	)
 
 	f, ok := table.Lookup("claude-opus-5-5")
 	require.True(t, ok)
-	assert.Equal(t, types.ModelFacts{ID: "claude-opus-5-5", Window: 1_000_000, Input: 3, Output: 20}, f)
+	assert.Equal(t, types.ModelPricing{ID: "claude-opus-5-5", Window: 1_000_000, Input: 3, Output: 20}, f)
 }

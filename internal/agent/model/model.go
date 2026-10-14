@@ -8,31 +8,33 @@ import (
 )
 
 // Table is the model rows agent context is measured against. The zero Table has no rows;
-// Merge builds one from the rows a workspace's harnesses publish, then the person's
-// agents.models. No row is built into magus.
+// InEffect builds one. No row is built into magus.
 type Table struct {
-	rows []types.ModelFacts
+	rows []types.ModelPricing
 }
 
-// Merge returns t with overrides applied, as agents.models in magus.yaml declares them.
-// An override whose ID is a row's ID sets that row's non-zero fields and keeps the rest;
-// any other ID adds a row. t is not modified.
-func (t Table) Merge(overrides []types.ModelFacts) Table {
-	rows := slices.Clone(t.rows)
-	for _, o := range overrides {
-		o.ID = strings.ToLower(o.ID)
-		i := slices.IndexFunc(rows, func(r types.ModelFacts) bool { return r.ID == o.ID })
-		if i < 0 {
-			rows = append(rows, o)
-			continue
+// InEffect is the table a workspace prices against: the rows its harnesses publish, then
+// the person's agents.models over them. A row whose ID an earlier row has sets that row's
+// non-zero fields and keeps the rest, a non-nil LongContext replacing the whole step; any
+// other ID adds a row. IDs match case-insensitively.
+func InEffect(harness, overrides []types.ModelPricing) Table {
+	var rows []types.ModelPricing
+	for _, layer := range [][]types.ModelPricing{harness, overrides} {
+		for _, o := range layer {
+			o.ID = strings.ToLower(o.ID)
+			i := slices.IndexFunc(rows, func(r types.ModelPricing) bool { return r.ID == o.ID })
+			if i < 0 {
+				rows = append(rows, o)
+				continue
+			}
+			rows[i] = overlay(rows[i], o)
 		}
-		rows[i] = overlay(rows[i], o)
 	}
 	return Table{rows: rows}
 }
 
-func overlay(base, o types.ModelFacts) types.ModelFacts {
-	set := func(dst *float64, v float64) {
+func overlay(base, o types.ModelPricing) types.ModelPricing {
+	set := func(dst *types.USDPerMTok, v types.USDPerMTok) {
 		if v != 0 {
 			*dst = v
 		}
@@ -40,15 +42,14 @@ func overlay(base, o types.ModelFacts) types.ModelFacts {
 	if o.Window != 0 {
 		base.Window = o.Window
 	}
-	if o.PriceStep != 0 {
-		base.PriceStep = o.PriceStep
+	if o.LongContext != nil {
+		base.LongContext = o.LongContext
 	}
 	set(&base.Input, o.Input)
 	set(&base.CacheWrite5m, o.CacheWrite5m)
 	set(&base.CacheWrite1h, o.CacheWrite1h)
 	set(&base.CacheRead, o.CacheRead)
 	set(&base.Output, o.Output)
-	set(&base.StepFactor, o.StepFactor)
 	return base
 }
 
@@ -58,9 +59,9 @@ func overlay(base, o types.ModelFacts) types.ModelFacts {
 // match, while claude-opus-5 does not match claude-opus-5-5. Of several matching rows the
 // longest ID wins. False when no row matches, which a caller reads as "no facts", never
 // as a zero-sized or free model.
-func (t Table) Lookup(id string) (types.ModelFacts, bool) {
+func (t Table) Lookup(id string) (types.ModelPricing, bool) {
 	id = strings.ToLower(id)
-	var best types.ModelFacts
+	var best types.ModelPricing
 	found := false
 	for _, r := range t.rows {
 		if matches(id, r.ID) && (!found || len(r.ID) > len(best.ID)) {
@@ -112,6 +113,6 @@ func digit(c byte) bool { return c >= '0' && c <= '9' }
 func alnum(c byte) bool { return digit(c) || (c >= 'a' && c <= 'z') }
 
 // Rows returns the table's rows in declaration order. The slice is the caller's.
-func (t Table) Rows() []types.ModelFacts {
+func (t Table) Rows() []types.ModelPricing {
 	return slices.Clone(t.rows)
 }

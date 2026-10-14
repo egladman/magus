@@ -157,7 +157,7 @@ func cheapestTierModel(ctx context.Context, id string) string {
 }
 
 // harnessModelRow is one row of a harness_models return, in the snake_case the spell
-// writes; types.ModelFacts carries no wire tags.
+// writes; types.ModelPricing carries no wire tags.
 type harnessModelRow struct {
 	ID           string  `json:"id"`
 	Window       int64   `json:"window"`
@@ -171,20 +171,27 @@ type harnessModelRow struct {
 }
 
 // decodeHarnessModels reads a harness_models return into model rows. A row without an id
-// is an error: it could match nothing and would hide a misspelled key.
-func decodeHarnessModels(data any) ([]types.ModelFacts, error) {
+// is an error: it could match nothing and would hide a misspelled key. So is a row
+// setting only one of price_step and step_factor, a step no price could honor.
+func decodeHarnessModels(data any) ([]types.ModelPricing, error) {
 	var rows []harnessModelRow
 	if err := decodeHarnessJSON(data, &rows); err != nil {
 		return nil, err
 	}
-	out := make([]types.ModelFacts, len(rows))
+	out := make([]types.ModelPricing, len(rows))
 	for i, r := range rows {
 		if strings.TrimSpace(r.ID) == "" {
 			return nil, fmt.Errorf("row %d has no id", i+1)
 		}
-		out[i] = types.ModelFacts{
-			ID: r.ID, Window: r.Window, Input: r.Input, CacheWrite5m: r.CacheWrite5m, CacheWrite1h: r.CacheWrite1h,
-			CacheRead: r.CacheRead, Output: r.Output, PriceStep: r.PriceStep, StepFactor: r.StepFactor,
+		if (r.PriceStep > 0) != (r.StepFactor > 0) {
+			return nil, fmt.Errorf("row %d (%s) sets one of price_step and step_factor without the other", i+1, r.ID)
+		}
+		out[i] = types.ModelPricing{
+			ID: r.ID, Window: r.Window, Input: types.USDPerMTok(r.Input), CacheWrite5m: types.USDPerMTok(r.CacheWrite5m),
+			CacheWrite1h: types.USDPerMTok(r.CacheWrite1h), CacheRead: types.USDPerMTok(r.CacheRead), Output: types.USDPerMTok(r.Output),
+		}
+		if r.PriceStep > 0 {
+			out[i].LongContext = &types.PriceStep{Above: r.PriceStep, Multiplier: r.StepFactor}
 		}
 	}
 	return out, nil

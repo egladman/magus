@@ -83,10 +83,11 @@ type Dependencies struct {
 	ApprovedWriteRule func(ctx context.Context) (workspace.WriteRule, error)
 	// ModelRows yields the model rows the workspace's harnesses publish through
 	// harness_models, nil when none does. It can load the workspace and its harness
-	// spells, so the guard calls it once, and only for a judgment that needs a window or a
-	// price, never for one that needs only the billing mode. Nil means no rows: a rule
-	// then finds no facts for a model, as for one the table does not know.
-	ModelRows func() []types.ModelFacts
+	// spells, so it must load them once however often it is called; the guard calls it
+	// only for a judgment that needs a window or a price, never for one that needs only
+	// the billing mode. Nil means no rows: a rule then finds no facts for a model, as for
+	// one the table does not know. It is read per judgment and never kept past one.
+	ModelRows func() []types.ModelPricing
 	// ModelTiers yields the workspace's model-tier declaration, nil when it turned tiers
 	// off or did not load. It opens the workspace whole, so the guard asks only once a job
 	// row the call is bound to records a tier. Nil means no declaration: the tier rules then
@@ -1980,6 +1981,8 @@ type location struct {
 	// not: a session opened in a subdirectory stands in a different project than the
 	// workspace root does, and that difference is the whole of what focus judges.
 	dir string
+	// models is the judged request's Dependencies.ModelRows.
+	models func() []types.ModelPricing
 }
 
 type locationKey struct{}
@@ -2365,8 +2368,11 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 // a guard unit test never writes its checkout's real activity trail; hookContextAt pins the
 // checkout a host's envelope named the same way.
 func hookLocation(ctx context.Context, deps Dependencies) location {
-	if location, ok := ctx.Value(locationKey{}).(location); ok {
-		return location
+	if at, ok := ctx.Value(locationKey{}).(location); ok {
+		if at.models == nil {
+			at.models = deps.ModelRows
+		}
+		return at
 	}
 	return hookLocationAt(deps, "")
 }
@@ -2396,8 +2402,7 @@ func hookLocationAt(deps Dependencies, dir string) location {
 			dir = wd
 		}
 	}
-	useModelRows(root, deps.ModelRows)
-	return location{cacheDir: cacheDir, workspace: root, dir: dir}
+	return location{cacheDir: cacheDir, workspace: root, dir: dir, models: deps.ModelRows}
 }
 
 // hookContextAt pins the trail location to the checkout holding cwd, the directory the host

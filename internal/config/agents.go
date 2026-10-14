@@ -41,21 +41,26 @@ type AgentModel struct {
 	// CacheRead is the price of a cache read.
 	CacheRead float64 `json:"cache_read" yaml:"cache_read" validate:"gte=0"`
 	// PriceStep is the prompt size in tokens above which every price is multiplied by
-	// StepFactor; 0 for none.
-	PriceStep int64 `json:"price_step" yaml:"price_step" validate:"gte=0"`
+	// StepFactor; 0 for none. Set, it replaces the harness row's whole step.
+	PriceStep int64 `json:"price_step" yaml:"price_step" validate:"required_with=StepFactor,gte=0"`
 	// StepFactor is the multiplier above PriceStep, required with it.
 	StepFactor float64 `json:"step_factor" yaml:"step_factor" validate:"required_with=PriceStep,omitempty,gte=1"`
 }
 
-// ModelOverrides returns Models as the rows model.Table.Merge applies, sorted by id.
-func (a Agents) ModelOverrides() []types.ModelFacts {
-	out := make([]types.ModelFacts, 0, len(a.Models))
+// ModelOverrides returns Models as the overrides model.InEffect applies, sorted by id.
+func (a Agents) ModelOverrides() []types.ModelPricing {
+	out := make([]types.ModelPricing, 0, len(a.Models))
 	for _, id := range slices.Sorted(maps.Keys(a.Models)) {
 		m := a.Models[id]
-		out = append(out, types.ModelFacts{
-			ID: id, Window: m.Window, Input: m.Input, Output: m.Output, CacheWrite5m: m.CacheWrite5m,
-			CacheWrite1h: m.CacheWrite1h, CacheRead: m.CacheRead, PriceStep: m.PriceStep, StepFactor: m.StepFactor,
-		})
+		row := types.ModelPricing{
+			ID: id, Window: m.Window, Input: types.USDPerMTok(m.Input), Output: types.USDPerMTok(m.Output),
+			CacheWrite5m: types.USDPerMTok(m.CacheWrite5m), CacheWrite1h: types.USDPerMTok(m.CacheWrite1h),
+			CacheRead: types.USDPerMTok(m.CacheRead),
+		}
+		if m.PriceStep > 0 {
+			row.LongContext = &types.PriceStep{Above: m.PriceStep, Multiplier: m.StepFactor}
+		}
+		out = append(out, row)
 	}
 	return out
 }

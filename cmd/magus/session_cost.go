@@ -354,8 +354,8 @@ func dollarsOf(main []trail.SessionCall, table model.Table) (*dollarEstimate, st
 	est := &dollarEstimate{Billing: types.AgentBillingMetered}
 	var prev trail.SessionCall
 	for i, call := range samples {
-		facts, ok := table.Lookup(call.ContextModel)
-		if !ok || facts.CacheRead == 0 {
+		pricing, ok := table.Lookup(call.ContextModel)
+		if !ok || pricing.CacheRead == 0 {
 			return nil, fmt.Sprintf("model %q is not in the model table: add it under agents.models in magus.yaml", call.ContextModel)
 		}
 		if i > 0 && call.ContextTokens == prev.ContextTokens && call.ContextModel == prev.ContextModel {
@@ -363,7 +363,7 @@ func dollarsOf(main []trail.SessionCall, table model.Table) (*dollarEstimate, st
 		}
 		prev = call
 		est.Calls++
-		est.FloorUSD += float64(call.ContextTokens) / 1e6 * facts.CacheRead * facts.Factor(call.ContextTokens)
+		est.FloorUSD += float64(call.ContextTokens) / 1e6 * float64(pricing.CacheRead) * pricing.PriceMultiplier(call.ContextTokens)
 	}
 	return est, ""
 }

@@ -90,7 +90,7 @@ func callerContext(at location, who hookAttribution, thread types.AgentThread, f
 		return nil
 	}
 	if c.Window == 0 {
-		if row, ok := resolveModel(c.Model, accountAt(at.workspace).table()); ok {
+		if row, ok := resolveModel(c.Model, at.modelTable()); ok {
 			c.Window = row.Window
 		}
 	}
@@ -101,22 +101,10 @@ func callerContext(at location, who hookAttribution, thread types.AgentThread, f
 // account agents run under.
 type account struct {
 	billing types.AgentBilling
-	// models holds the rows agents.models declares and nothing else; table adds the rows
-	// the workspace's harnesses publish. Reading them takes a workspace load, so a call
-	// that needs only billing must not trigger it.
-	models model.Table
-	// harness yields the harness rows, once; nil when the workspace registered none.
-	harness func() []types.ModelFacts
-	read    time.Time
-}
-
-// table is every model row in effect: the workspace's harness rows, then agents.models
-// over them. The harness rows load on the first call.
-func (a account) table() model.Table {
-	if a.harness == nil {
-		return a.models
-	}
-	return model.Table{}.Merge(a.harness()).Merge(a.models.Rows())
+	// overrides are the rows agents.models declares. The harness rows are not kept here:
+	// they belong to the request judged, and location.modelTable layers these over them.
+	overrides []types.ModelPricing
+	read      time.Time
 }
 
 // accountTTL bounds how long a process trusts a read of magus.yaml; a daemon judging for
@@ -124,18 +112,6 @@ func (a account) table() model.Table {
 const accountTTL = 10 * time.Second
 
 var accounts sync.Map
-
-// modelRowSources holds, per workspace root, the lazy reader of the rows its harnesses
-// publish, as Dependencies.ModelRows supplies it.
-var modelRowSources sync.Map
-
-// useModelRows records rows as the source of the harness model rows for the workspace at
-// root. A nil rows leaves the source alone.
-func useModelRows(root string, rows func() []types.ModelFacts) {
-	if rows != nil && root != "" {
-		modelRowSources.Store(root, rows)
-	}
-}
 
 // accountAt is the billing mode and agents.models rows in effect for the workspace at
 // root. A magus.yaml that does not load leaves billing unknown and no rows, and a declared
@@ -145,12 +121,9 @@ func accountAt(root string) account {
 		return got.(account)
 	}
 	a := account{read: time.Now()}
-	if src, ok := modelRowSources.Load(root); ok {
-		a.harness = src.(func() []types.ModelFacts)
-	}
 	if agents, err := config.LoadAgents(root); err == nil {
 		a.billing = agents.ResolveBilling(os.Getenv)
-		a.models = model.Table{}.Merge(agents.ModelOverrides())
+		a.overrides = agents.ModelOverrides()
 	} else {
 		a.billing = config.DetectBilling(os.Getenv)
 	}
@@ -158,19 +131,30 @@ func accountAt(root string) account {
 	return a
 }
 
+// modelTable is every model row in effect for the request judged at at: the rows its
+// harnesses publish, then the workspace's agents.models over them. The harness rows can
+// take a workspace load, so a call that needs only billing reads accountAt instead.
+func (at location) modelTable() model.Table {
+	var harness []types.ModelPricing
+	if at.models != nil {
+		harness = at.models()
+	}
+	return model.InEffect(harness, accountAt(at.workspace).overrides)
+}
+
 // resolveModel finds id's row: by Table.Lookup, else as an alias a host takes in place of
 // an id, one dash-separated word of a row's id with no version in it, which names the
 // first such row.
-func resolveModel(id string, t model.Table) (types.ModelFacts, bool) {
+func resolveModel(id string, t model.Table) (types.ModelPricing, bool) {
 	if id == "" {
-		return types.ModelFacts{}, false
+		return types.ModelPricing{}, false
 	}
 	if row, ok := t.Lookup(id); ok {
 		return row, true
 	}
 	alias := strings.ToLower(strings.TrimSpace(id))
 	if strings.ContainsAny(alias, "0123456789-.") {
-		return types.ModelFacts{}, false
+		return types.ModelPricing{}, false
 	}
 	for _, row := range t.Rows() {
 		for _, word := range strings.Split(row.ID, "-") {
@@ -179,7 +163,7 @@ func resolveModel(id string, t model.Table) (types.ModelFacts, bool) {
 			}
 		}
 	}
-	return types.ModelFacts{}, false
+	return types.ModelPricing{}, false
 }
 
 // costState is what magus keeps about a session's main thread for the cost rules. It is
@@ -722,7 +706,7 @@ func contextWindow(st costState, at location) int64 {
 	if st.Window > 0 {
 		return st.Window
 	}
-	if row, ok := resolveModel(st.Model, accountAt(at.workspace).table()); ok {
+	if row, ok := resolveModel(st.Model, at.modelTable()); ok {
 		return row.Window
 	}
 	return 0

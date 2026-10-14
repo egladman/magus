@@ -25,14 +25,17 @@ func TestAgentsDecodesAndValidates(t *testing.T) {
   profile: strict
   models:
     claude-next-1: {window: 2000000, input: 3, output: 15, cache_write_5m: 3.75, cache_write_1h: 6, cache_read: 0.3, price_step: 200000, step_factor: 2}
+    claude-flat-1: {window: 1000000, input: 1}
 `)
 	cfg, err := LoadFile(path, true)
 	require.NoError(t, err)
 	assert.Equal(t, types.AgentBillingMetered, cfg.Agents.Billing)
 	assert.Equal(t, types.GuardProfileStrict, cfg.Agents.Profile)
-	assert.Equal(t, []types.ModelFacts{{ID: "claude-next-1", Window: 2_000_000, Input: 3, Output: 15, CacheWrite5m: 3.75,
-		CacheWrite1h: 6, CacheRead: 0.3, PriceStep: 200_000, StepFactor: 2}},
-		cfg.Agents.ModelOverrides())
+	assert.Equal(t, []types.ModelPricing{
+		{ID: "claude-flat-1", Window: 1_000_000, Input: 1},
+		{ID: "claude-next-1", Window: 2_000_000, Input: 3, Output: 15, CacheWrite5m: 3.75,
+			CacheWrite1h: 6, CacheRead: 0.3, LongContext: &types.PriceStep{Above: 200_000, Multiplier: 2}},
+	}, cfg.Agents.ModelOverrides(), "a model with no price_step has no LongContext")
 }
 
 // Each value the guard could not honor fails the load: an agents section that reads as
@@ -53,6 +56,7 @@ func TestAgentsMisconfigurationIsAnError(t *testing.T) {
 		{"negative cache write price", "agents:\n  models:\n    m: {window: 1000, cache_write_1h: -1}\n", "agents.models[m].cache_write_1h: must be >= 0"},
 		{"negative price", "agents:\n  models:\n    m: {window: 1000, cache_read: -0.1}\n", "agents.models[m].cache_read: must be >= 0"},
 		{"step without factor", "agents:\n  models:\n    m: {window: 1000, price_step: 100}\n", "agents.models[m].step_factor: failed required_with"},
+		{"factor without step", "agents:\n  models:\n    m: {window: 1000, step_factor: 2}\n", "agents.models[m].price_step: failed required_with"},
 		{"factor below 1", "agents:\n  models:\n    m: {window: 1000, price_step: 100, step_factor: 0.5}\n", "agents.models[m].step_factor: must be >= 1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

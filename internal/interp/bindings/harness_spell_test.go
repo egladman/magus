@@ -262,12 +262,12 @@ func TestDecodeHarnessJSONRefusesAListForAMapField(t *testing.T) {
 
 func TestHarnessSpellsShipModelRowsOnlyForClaudeCode(t *testing.T) {
 	rows := loadShippedHarness(t, "claude-code").Models
-	assert.Equal(t, []types.ModelFacts{
+	assert.Equal(t, []types.ModelPricing{
 		{ID: "claude-fable-5-1", Window: 1_000_000, Input: 10, CacheWrite5m: 12.5, CacheWrite1h: 20, CacheRead: 0.25, Output: 50},
 		{ID: "claude-opus-5-5", Window: 1_000_000, Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.2, Output: 20},
 		{ID: "claude-sonnet-5-5", Window: 1_000_000, Input: 2, CacheWrite5m: 2.5, CacheWrite1h: 4, CacheRead: 0.1, Output: 10},
 		{ID: "claude-haiku-5-5", Window: 1_000_000, Input: 0.1, CacheWrite5m: 0.125, CacheWrite1h: 0.2, CacheRead: 0.01, Output: 0.5,
-			PriceStep: 100_000, StepFactor: 5},
+			LongContext: &types.PriceStep{Above: 100_000, Multiplier: 5}},
 		{ID: "claude-haiku-4-5", Window: 200_000, Input: 1, CacheWrite5m: 1.25, CacheWrite1h: 2, CacheRead: 0.1, Output: 5},
 	}, rows)
 	for _, id := range []string{"codex", "cursor", "opencode"} {
@@ -282,8 +282,21 @@ func TestDecodeHarnessModelsReadsSnakeCaseRows(t *testing.T) {
 	}})
 
 	require.NoError(t, err)
-	assert.Equal(t, []types.ModelFacts{{ID: "m-1", Window: 200000, Input: 1.5, CacheWrite5m: 2, CacheWrite1h: 3,
-		CacheRead: 0.1, Output: 7, PriceStep: 100000, StepFactor: 2}}, got)
+	assert.Equal(t, []types.ModelPricing{{ID: "m-1", Window: 200000, Input: 1.5, CacheWrite5m: 2, CacheWrite1h: 3,
+		CacheRead: 0.1, Output: 7, LongContext: &types.PriceStep{Above: 100000, Multiplier: 2}}}, got)
+}
+
+func TestDecodeHarnessModelsRefusesAHalfStep(t *testing.T) {
+	for name, row := range map[string]map[string]any{
+		"step without factor": {"id": "m-1", "price_step": 100000.0},
+		"factor without step": {"id": "m-1", "step_factor": 2.0},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := decodeHarnessModels([]any{row})
+
+			assert.EqualError(t, err, "row 1 (m-1) sets one of price_step and step_factor without the other")
+		})
+	}
 }
 
 func TestDecodeHarnessModelsRefusesARowWithoutAnID(t *testing.T) {

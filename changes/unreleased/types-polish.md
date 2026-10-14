@@ -17,6 +17,13 @@
   when unset, as `MarshalText` does. The root package's `GuardProfile` is
   `EffectiveGuardProfile`.
 - **Breaking for SDK callers: `config.Agents.ResolveBilling` returns only the mode.**
+- **Breaking for SDK callers: `types.ModelFacts` is `types.ModelPricing`.** Prices are
+  `types.USDPerMTok`, `Factor` is `PriceMultiplier`, and `PriceStep` with `StepFactor` is
+  `LongContext`, a `*types.PriceStep` that is nil for a model with no step. The
+  `agents.models` keys in magus.yaml and the `harness_models` row keys are unchanged.
+- **Breaking: an `agents.models` step replaces the harness row's whole step.** An entry
+  setting `step_factor` alone, which kept the harness row's `price_step`, is an error;
+  give both. A `harness_models` row setting only one of the two is an error too.
 - **Breaking: `magus session show -o json` reshapes its cost sections.** `share` and
   `ignored` are no longer encoded, since they follow from the counts beside them. `shadow`
   counts each profile's verdicts under `decisions`, keyed by verdict, in place of

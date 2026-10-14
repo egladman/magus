@@ -233,56 +233,56 @@ func TestReadTranscriptReadsARollout(t *testing.T) {
 
 // fixtureModelRows stand in for the rows a harness spell publishes; no table is built into
 // the guard.
-var fixtureModelRows = []types.ModelFacts{
+var fixtureModelRows = []types.ModelPricing{
 	{ID: "claude-fable-5-1", Window: 1_000_000, Input: 10, CacheWrite5m: 12.50, CacheWrite1h: 20, CacheRead: 0.25, Output: 50},
 	{ID: "claude-opus-5-5", Window: 1_000_000, Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.20, Output: 20},
 	{ID: "claude-sonnet-5-5", Window: 1_000_000, Input: 2, CacheWrite5m: 2.50, CacheWrite1h: 4, CacheRead: 0.10, Output: 10},
 	{ID: "claude-haiku-5-5", Window: 1_000_000, Input: 0.10, CacheWrite5m: 0.125, CacheWrite1h: 0.20, CacheRead: 0.01, Output: 0.50,
-		PriceStep: 100_000, StepFactor: 5},
+		LongContext: &types.PriceStep{Above: 100_000, Multiplier: 5}},
 	{ID: "claude-haiku-4-5", Window: 200_000, Input: 1, CacheWrite5m: 1.25, CacheWrite1h: 2, CacheRead: 0.10, Output: 5},
 }
 
-func fixtureModelTable() model.Table { return model.Table{}.Merge(fixtureModelRows) }
+func fixtureModelTable() model.Table { return model.InEffect(fixtureModelRows, nil) }
 
-// useFixtureModelRows registers fixtureModelRows as the harness rows of the workspace at
-// at, as a harness's harness_models would through Dependencies.ModelRows.
-func useFixtureModelRows(at location) {
-	useModelRows(at.workspace, func() []types.ModelFacts { return fixtureModelRows })
-}
+func fixtureModelSource() []types.ModelPricing { return fixtureModelRows }
 
-// The harness rows cost a workspace load, so accountAt leaves them unread; agents.models
+// The harness rows cost a workspace load, so billing leaves them unread; agents.models
 // then overrides them field by field.
-func TestAccountReadsHarnessRowsOnlyForTheTableAndUnderAgentsModels(t *testing.T) {
+func TestModelTableReadsHarnessRowsOnlyForTheTableAndUnderAgentsModels(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	root := hookLocation(ctx, Dependencies{}).workspace
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"),
-		[]byte("agents:\n  billing: metered\n  models:\n    claude-opus-5-5: {window: 1000000, input: 3}\n"), 0o600))
 	loads := 0
-	useModelRows(root, func() []types.ModelFacts {
+	at := hookLocation(ctx, Dependencies{ModelRows: func() []types.ModelPricing {
 		loads++
 		return fixtureModelRows
-	})
+	}})
+	require.NoError(t, os.WriteFile(filepath.Join(at.workspace, "magus.yaml"),
+		[]byte("agents:\n  billing: metered\n  models:\n    claude-opus-5-5: {window: 1000000, input: 3}\n"), 0o600))
 
-	a := accountAt(root)
-
-	assert.Equal(t, types.AgentBillingMetered, a.billing)
+	assert.Equal(t, types.AgentBillingMetered, accountAt(at.workspace).billing)
 	assert.Zero(t, loads, "billing alone never loads the harness rows")
-	opus, ok := a.table().Lookup("claude-opus-5-5")
+	opus, ok := at.modelTable().Lookup("claude-opus-5-5")
 	require.True(t, ok)
 	assert.Equal(t, 1, loads)
-	assert.InDelta(t, 3, opus.Input, 0, "agents.models wins")
-	assert.InDelta(t, 20, opus.Output, 0, "a field it leaves 0 keeps the harness row")
-	_, ok = a.table().Lookup("claude-haiku-5-5")
+	assert.Equal(t, types.ModelPricing{ID: "claude-opus-5-5", Window: 1_000_000, Input: 3, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.20, Output: 20},
+		opus, "agents.models wins, and a field it leaves 0 keeps the harness row")
+	_, ok = at.modelTable().Lookup("claude-haiku-5-5")
 	assert.True(t, ok, "rows agents.models does not mention stay")
 }
 
-func TestAccountWithNoHarnessRowsKnowsNoModel(t *testing.T) {
+// The account is cached per workspace root, and the harness rows are not part of it: each
+// judgment reads its own request's rows, so a cached account never holds a request's
+// closure or the ctx it captured.
+func TestModelTableReadsEachRequestsOwnRows(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	root := hookLocation(ctx, Dependencies{}).workspace
+	first := hookLocation(ctx, Dependencies{ModelRows: fixtureModelSource})
+	_, ok := first.modelTable().Lookup("claude-opus-5-5")
+	require.True(t, ok)
 
-	_, ok := accountAt(root).table().Lookup("claude-opus-5-5")
+	second := hookLocation(ctx, Dependencies{})
 
-	assert.False(t, ok, "no rows is no facts")
+	require.Equal(t, first.workspace, second.workspace)
+	_, ok = second.modelTable().Lookup("claude-opus-5-5")
+	assert.False(t, ok, "a request supplying no rows knows no model, whatever an earlier one supplied")
 }
 
 func TestResolveModelTakesAnAlias(t *testing.T) {
@@ -304,8 +304,7 @@ func TestResolveModelTakesAnAlias(t *testing.T) {
 // trail and counts once in the metrics; an observation of the same call counts nothing.
 func TestObserveCallRecordsAJudgedCallOnce(t *testing.T) {
 	ctx, cache := spawnFixture(t)
-	at := hookLocation(ctx, Dependencies{})
-	useFixtureModelRows(at)
+	at := hookLocation(ctx, Dependencies{ModelRows: fixtureModelSource})
 	transcript := filepath.Join(t.TempDir(), "main.jsonl")
 	appendLines(t, transcript,
 		`{"type":"assistant","message":{"model":"claude-opus-5-5","usage":{"input_tokens":1,"cache_read_input_tokens":99999,"cache_creation_input_tokens":0},"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"git diff"}}]}}`,
@@ -357,8 +356,7 @@ func TestObserveCallRecordsAJudgedCallOnce(t *testing.T) {
 // The request a workspace rule is handed carries the caller's thread and context.
 func TestCommandRequestCarriesTheThread(t *testing.T) {
 	ctx, cache := spawnFixture(t)
-	at := hookLocation(ctx, Dependencies{})
-	useFixtureModelRows(at)
+	at := hookLocation(ctx, Dependencies{ModelRows: fixtureModelSource})
 	who := hookAttribution{Host: "claude-code", Session: "s"}
 	facts := hint.NewGate(cache, who.factsKey())
 	writeCostState(facts, costState{Tokens: 300_000, Model: "claude-sonnet-5-5"})

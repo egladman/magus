@@ -78,7 +78,7 @@ type HarnessDescriptor struct {
 	Limits         HarnessLimits      `json:"limits,omitzero"`
 	// Models are the rows of the models this host runs, as its harness_models op returns
 	// them; nil for a harness that publishes none.
-	Models []types.ModelFacts `json:"models,omitempty"`
+	Models []types.ModelPricing `json:"models,omitempty"`
 }
 
 // HarnessLimits are how long the host waits, in milliseconds: on a shell command in the
