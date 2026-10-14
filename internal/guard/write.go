@@ -263,7 +263,8 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 // declaration of that file (see gradeDeniedDeclarations), and a write inside its own paths
 // when another live lease claims one (see gradeClaimedDeclarations). A write to a project's
 // magusfile or magus.yaml the lease holds only through a pattern narrows that hold to the
-// declarations it changes (see gradeConfigNarrowing).
+// declarations it changes (see gradeConfigNarrowing). A write the lease's boundary allowed
+// that adds a compat marker is advised (see gradeCompatMarker).
 func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writePath string, fields writeFields) writeGrade {
 	writePath = strings.TrimSpace(writePath)
 	if writePath == "" {
@@ -326,7 +327,14 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		if narrowed := gradeConfigNarrowing(ctx, location, checkout, me, owners, rel, fields); narrowed.Decision != "" {
 			return narrowed
 		}
-		return g
+		// Graded whatever g says, so the root's row is filed even when another advisory
+		// takes the verdict.
+		who := hookAttribution{Host: deps.caller.Host, Session: deps.caller.Session, Agent: deps.caller.Agent}
+		compat := gradeCompatMarker(ctx, deps, location, who, me.ID, filepath.Join(checkout, filepath.FromSlash(rel)), fields)
+		if g.Decision != "" {
+			return g
+		}
+		return compat
 	}
 	// An id that is valid but names no LIVE row lands here too, and that is the intent: a
 	// lease whose plan already ended has no boundary left to grade against, and denying on

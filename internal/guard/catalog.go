@@ -474,8 +474,7 @@ var ruleDocLeaseVcs = denyDoc(types.RuleDoc{ //nolint:unused // read through the
 	Name:    string(denyRuleLeaseVCS),
 	Catches: "a worker lease mutating version control, or committing outside its own branch and checkout",
 	Why: "The orchestrator lands every unit from the worker's tree, so a worker that pushes, stashes, reverts, resets, cleans, rebases, merges or removes a worktree changes the state it is integrated from, and a whole-tree revert destroys a sibling's uncommitted work. " +
-		"A worker may run only what reads the repository or touches its own index and branch: status, diff, log and the other reads, add, restore of named paths, switch or checkout without a force, branch creation, a fetch into remote-tracking refs; any other verb, an alias from config included, is refused. " +
-		"A commit is the one exception beyond those: allowed only in the lease's checkout_root, when that is a secondary checkout on a named branch other than the base, with any backend. " +
+		"A worker may run only what reads the repository or touches its own index and branch: status, diff, log and the other reads, add, restore of named paths, switch or checkout without a force, branch creation, a fetch into remote-tracking refs; any other verb, an alias from config included, is refused. " +		"A commit is the one exception beyond those: allowed only in the lease's checkout_root, when that is a secondary checkout on a named branch other than the base, with any backend. " +
 		"A git cherry-pick and a git apply are graded as a commit is, since `git diff | git apply -3 && git commit -C` lands the same change as the cherry-pick. " +
 		"On a detached HEAD the refusal names `git switch <job>`, or `git switch -c <job>` when the orchestrator made no branch for the job. " +
 		"Every spelling is placed alike: `git -C <dir>`, `--git-dir`, `GIT_DIR=`, a `cd` before it, and vcs\\cmd from a Buzz script under the lease. " +
@@ -927,6 +926,14 @@ var ruleDocSpawnPrincipalForEconomy = adviseDoc(types.RuleDoc{ //nolint:unused /
 	Catches: "a read-only job's subagent spawned on one of the costliest models",
 	Why: "A job marked read-only gathers evidence, which a cheaper model does as well. The spawn's model, or the session's own when it names none, counts as costly when its input price is above the median of the model table. " +
 		"At standard it advises once; at strict it also advises on a spawn of the host's read-only explore agent type. It keys on declared facts, never on the prompt, and never refuses, since a read-only design job can need the strongest model.",
+}, false)
+
+var ruleDocCompatMarker = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
+	Name:    string(denyRuleCompatMarker),
+	Catches: "a leased worker adding a marker that keeps code for older data or callers",
+	Why: "Whether code stays for an old caller is a judgment about who still consumes the old behavior, which a worker cannot see from its write paths and the root can. " +
+		"When a write a worker's lease allowed leaves more of a marker than it found (`compat(until:` and `Deprecated:` unless a markers parameter names others), the worker is told the root decides and to name it in unresolved_risks, and one attention row per lease states the job, the file, the marker and the model it ran on. " +
+		"It never refuses and never asks the host: the write is not wrong, the decision is not the worker's. A session acting under no lease, a person or the root, is never told.",
 }, false)
 
 var ruleDocStall = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills

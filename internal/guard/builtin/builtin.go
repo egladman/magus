@@ -39,6 +39,9 @@ type Setting struct {
 	Calls int
 	// Chars is the size of one tool result in characters.
 	Chars int
+	// Markers are text a rule notices a write adding, each matched literally. Resolve
+	// fills the rule's own list when none is declared.
+	Markers []string
 	// Profile is the level whose row gave this setting, empty for one the workspace
 	// declared or a compiled default. A rule whose figures depend on the level and the
 	// account's billing reads it when no parameter is set.
@@ -46,6 +49,7 @@ type Setting struct {
 }
 
 const (
+	compatMarker             = "compat-marker"
 	readNavigation           = "read-navigation"
 	rootContextBudget        = "root-context-budget"
 	rootHeavyCommand         = "root-heavy-command"
@@ -59,6 +63,7 @@ const (
 // params maps each rule that takes a parameter to the parameters it takes, by the names
 // magus\guard.builtins spells them.
 var params = map[string][]string{
+	compatMarker:      {"markers"},
 	readNavigation:    {"lines"},
 	rootContextBudget: {"tokens"},
 	rootHeavyCommand:  {"calls"},
@@ -70,6 +75,7 @@ var params = map[string][]string{
 // neverDeny names the rules that only ever explain, so a deny declared for one is a
 // misdeclaration rather than a refusal nobody would see.
 var neverDeny = map[string]string{
+	compatMarker:             "whether code stays for an old caller is the root's call, and refusing the write would not ask it",
 	rootResultCap:            "it reads a result the call already returned",
 	spawnPrincipalForEconomy: "a read-only job can need the strongest model, and nothing on the spawn says which",
 	stall:                    "it routes a block to the root and refuses nothing itself",
@@ -183,6 +189,7 @@ var defaults = map[string]Decision{
 	// advisories, not the lease-* denies above.
 	"capture-filter":      Advise,
 	"check-timeout":       Advise,
+	compatMarker:          Advise,
 	"checkpoint-state":    Advise,
 	"dependency-install":  Advise,
 	"dependency-update":   Advise,
@@ -233,6 +240,12 @@ var defaults = map[string]Decision{
 	"workspace-write-failed":   Advise,
 }
 
+// defaultMarkers are what a rule taking markers notices when the workspace names none: the
+// labels code kept for older data or callers carries.
+var defaultMarkers = map[string][]string{
+	compatMarker: {"compat(until:", "Deprecated:"},
+}
+
 // fixed maps each rule a workspace may not set, with any value, to why. Its entries are
 // notices that report on the workspace's own rules, so a setting would let a workspace
 // silence the report or promote it to a refusal. Every name is also in defaults.
@@ -264,7 +277,7 @@ func Defaults() map[string]Decision {
 func Resolve(declared map[string]Setting) (map[string]Setting, error) {
 	out := make(map[string]Setting, len(defaults))
 	for name, d := range defaults {
-		out[name] = Setting{Decision: d}
+		out[name] = Setting{Decision: d, Markers: slices.Clone(defaultMarkers[name])}
 	}
 	var errs []error
 	for _, name := range slices.Sorted(maps.Keys(declared)) {
@@ -272,6 +285,9 @@ func Resolve(declared map[string]Setting) (map[string]Setting, error) {
 		if err := validate(name, s); err != nil {
 			errs = append(errs, err)
 			continue
+		}
+		if len(s.Markers) == 0 {
+			s.Markers = slices.Clone(defaultMarkers[name])
 		}
 		out[name] = s
 	}
@@ -319,19 +335,7 @@ func validate(name string, s Setting) error {
 			continue
 		}
 		if !slices.Contains(params[name], p.param) {
-			var takers []string
-			for rule, ps := range params {
-				if slices.Contains(ps, p.param) {
-					takers = append(takers, rule)
-				}
-			}
-			slices.Sort(takers)
-			if len(takers) == 1 {
-				return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-					"built-in rule %q takes no %s parameter; only %s does", name, p.param, takers[0])
-			}
-			return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-				"built-in rule %q takes no %s parameter; only %s do", name, p.param, strings.Join(takers, ", "))
+			return takesNo(name, p.param)
 		}
 		if p.value < p.min {
 			return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
@@ -343,7 +347,32 @@ func validate(name string, s Setting) error {
 				name, p.param, p.value, p.max, p.max)
 		}
 	}
+	if len(s.Markers) > 0 && !slices.Contains(params[name], "markers") {
+		return takesNo(name, "markers")
+	}
+	if slices.ContainsFunc(s.Markers, func(m string) bool { return strings.TrimSpace(m) == "" }) {
+		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+			"built-in rule %q: a marker is blank; give the text to notice, or leave markers out", name)
+	}
 	return nil
+}
+
+// takesNo is the misdeclaration of param on a rule that does not take it, naming every
+// rule that does.
+func takesNo(name, param string) error {
+	var takers []string
+	for rule, ps := range params {
+		if slices.Contains(ps, param) {
+			takers = append(takers, rule)
+		}
+	}
+	slices.Sort(takers)
+	if len(takers) == 1 {
+		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+			"built-in rule %q takes no %s parameter; only %s does", name, param, takers[0])
+	}
+	return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+		"built-in rule %q takes no %s parameter; only %s do", name, param, strings.Join(takers, ", "))
 }
 
 // Stricter returns whichever of a and b refuses more, ranking off < advise < deny. At the
@@ -373,6 +402,12 @@ func Stricter(a, b Setting) Setting {
 	out.Tokens = lower(a.Tokens, b.Tokens)
 	out.Calls = lower(a.Calls, b.Calls)
 	out.Chars = lower(a.Chars, b.Chars)
+	out.Markers = slices.Clone(a.Markers)
+	for _, m := range b.Markers {
+		if !slices.Contains(out.Markers, m) {
+			out.Markers = append(out.Markers, m)
+		}
+	}
 	if b.Profile != "" && (a.Profile == "" || b.Profile.Rank() > a.Profile.Rank()) {
 		out.Profile = b.Profile
 	}

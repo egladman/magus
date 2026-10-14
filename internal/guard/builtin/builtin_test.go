@@ -10,8 +10,9 @@ import (
 
 func TestDefaults(t *testing.T) {
 	got := Defaults()
-	assert.Len(t, got, 109)
+	assert.Len(t, got, 110)
 	want := map[string]Decision{
+		"compat-marker":        Advise,
 		"read-navigation":      Advise,
 		"brief-command":        Advise,
 		"stage-all":            Advise,
@@ -65,7 +66,56 @@ func TestResolveFillsDefaults(t *testing.T) {
 	}
 	want["read-navigation"] = Setting{Decision: Deny, Lines: 120}
 	want["whole-tree"] = Setting{Decision: Off}
+	want["compat-marker"] = Setting{Decision: Advise, Markers: []string{"compat(until:", "Deprecated:"}}
 	assert.Equal(t, want, got)
+}
+
+// A rule's own markers fill a declaration that names none, so turning the rule on never
+// turns it deaf; a declared list replaces them.
+func TestResolveFillsTheMarkersARuleTakes(t *testing.T) {
+	got, err := Resolve(map[string]Setting{"compat-marker": {Decision: Advise}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"compat(until:", "Deprecated:"}, got["compat-marker"].Markers)
+	got["compat-marker"].Markers[0] = "edited"
+
+	declared, err := Resolve(map[string]Setting{"compat-marker": {Decision: Off, Markers: []string{"legacy:"}}})
+	require.NoError(t, err)
+	assert.Equal(t, Setting{Decision: Off, Markers: []string{"legacy:"}}, declared["compat-marker"])
+
+	again, err := Resolve(nil)
+	require.NoError(t, err)
+	assert.Equal(t, "compat(until:", again["compat-marker"].Markers[0], "Resolve hands out a copy")
+}
+
+func TestResolveChecksMarkers(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		rule string
+		s    Setting
+		want string
+	}{
+		{"markers on a rule without it", "stage-all", Setting{Decision: Advise, Markers: []string{"x"}},
+			`built-in rule "stage-all" takes no markers parameter; only compat-marker does`},
+		{"a blank marker", "compat-marker", Setting{Decision: Advise, Markers: []string{"compat(until:", " "}},
+			`built-in rule "compat-marker": a marker is blank; give the text to notice, or leave markers out`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Resolve(map[string]Setting{tc.rule: tc.s})
+			var de *types.DiagnosticError
+			require.ErrorAs(t, err, &de)
+			assert.Equal(t, types.GuardRuleMisdeclared, de.Code)
+			assert.Equal(t, tc.want, de.Msg)
+		})
+	}
+}
+
+// Of two lists at one decision the union stands, since more markers notice more.
+func TestStricterJoinsMarkers(t *testing.T) {
+	a := Setting{Decision: Advise, Markers: []string{"compat(until:", "Deprecated:"}}
+	b := Setting{Decision: Advise, Markers: []string{"Deprecated:", "legacy:"}}
+	assert.Equal(t, []string{"compat(until:", "Deprecated:", "legacy:"}, Stricter(a, b).Markers)
+	assert.Equal(t, []string{"Deprecated:", "legacy:", "compat(until:"}, Stricter(b, a).Markers)
+	assert.Equal(t, Setting{Decision: Off}, Stricter(Setting{Decision: Off}, Setting{Decision: Off}))
 }
 
 func TestResolveRefusesMisdeclarations(t *testing.T) {
@@ -247,7 +297,7 @@ func TestResolveNamesEveryTakerOfAParameter(t *testing.T) {
 
 // A rule that only ever explains cannot be declared to refuse.
 func TestResolveRefusesADenyOnARuleThatNeverDenies(t *testing.T) {
-	for _, name := range []string{"root-result-cap", "spawn-principal-for-economy", "stall"} {
+	for _, name := range []string{"compat-marker", "root-result-cap", "spawn-principal-for-economy", "stall"} {
 		_, err := Resolve(map[string]Setting{name: {Decision: Deny}})
 		var de *types.DiagnosticError
 		require.ErrorAs(t, err, &de, name)
