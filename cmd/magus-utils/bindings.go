@@ -140,23 +140,34 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	fmt.Fprintln(&body, "\t_ = sess")
 	fmt.Fprintln(&body, "\tm := vm.NewMap()")
 
-	for _, f := range m.Fields {
-		emitBuzzField(&body, f, implPkg)
-	}
 	// Discarded: this emitter is here to NAME the shared encoders and to reject an
 	// undeclared return, not to write one. The bodies are emitted once for the whole
 	// package by `magus-utils boundaryobjects`.
 	objects := newBuzzValueEmitter()
+	var members bytes.Buffer
+	for _, f := range m.Fields {
+		emitBuzzField(&members, f, implPkg)
+	}
 	for _, meth := range m.Methods {
 		// An Extern member has no Impl to wrap; internal/interp/bindings MapSets it
 		// onto the namespace at run time. It is declared, not trampolined.
 		if meth.Extern {
 			continue
 		}
-		if err := emitBuzzMethod(&body, m, meth, objects, implPkg); err != nil {
+		if err := emitBuzzMethod(&members, m, meth, objects, implPkg); err != nil {
 			return nil, err
 		}
 	}
+	// One resolver per registration, which is one per session: the cases it hands out
+	// are the ones this session's enum definitions interned.
+	if objects.usesEnums {
+		importPath := m.Path
+		if importPath == "" {
+			importPath = m.Name
+		}
+		fmt.Fprintf(&body, "\tenums := ffi.SessionEnums(ctx, sess, %q)\n", importPath)
+	}
+	body.Write(members.Bytes())
 
 	fmt.Fprintln(&body, "\treturn m")
 	fmt.Fprintln(&body, "}")
@@ -538,14 +549,18 @@ func buzzValConv(t std.TypeTag, src string) string {
 type buzzValueEmitter struct {
 	funcs      bytes.Buffer
 	emitted    map[reflect.Type]bool
+	enumReach  map[reflect.Type]bool
 	usesTypes  bool
 	usesSpells bool
 	usesTime   bool
 	usesFFI    bool
+	// usesEnums records that a call this emitter rendered passes `enums`, so the
+	// trampoline file must declare it.
+	usesEnums bool
 }
 
 func newBuzzValueEmitter() *buzzValueEmitter {
-	return &buzzValueEmitter{emitted: map[reflect.Type]bool{}}
+	return &buzzValueEmitter{emitted: map[reflect.Type]bool{}, enumReach: map[reflect.Type]bool{}}
 }
 
 func (e *buzzValueEmitter) valueFunc(t reflect.Type, src string) (string, error) {
@@ -554,13 +569,16 @@ func (e *buzzValueEmitter) valueFunc(t reflect.Type, src string) (string, error)
 		if err := e.emitStruct(t); err != nil {
 			return "", err
 		}
-		return e.funcName(t) + "(" + src + ")", nil
+		return e.call(t, src), nil
 	case reflect.Slice:
 		if t.Elem().Kind() != reflect.Struct {
 			return "", fmt.Errorf("object return %s is not a slice of structs", t)
 		}
 		if err := e.emitStruct(t.Elem()); err != nil {
 			return "", err
+		}
+		if e.reachesEnum(t.Elem()) {
+			return "ffi.ObjectSlice(" + src + ", func(v " + e.qualify(t.Elem()) + ") vm.Value { return " + e.call(t.Elem(), "v") + " })", nil
 		}
 		return "ffi.ObjectSlice(" + src + ", " + e.funcName(t.Elem()) + ")", nil
 	default:
@@ -581,7 +599,12 @@ func (e *buzzValueEmitter) emitStruct(t reflect.Type) error {
 	e.markPkg(t)
 
 	var body bytes.Buffer
-	fmt.Fprintf(&body, "func %s(v %s) vm.Value {\n", e.funcName(t), e.qualify(t))
+	if e.reachesEnum(t) {
+		e.usesFFI = true
+		fmt.Fprintf(&body, "func %s(v %s, enums ffi.EnumCases) vm.Value {\n", e.funcName(t), e.qualify(t))
+	} else {
+		fmt.Fprintf(&body, "func %s(v %s) vm.Value {\n", e.funcName(t), e.qualify(t))
+	}
 	fmt.Fprintln(&body, "\tout := vm.NewMap()")
 	for _, bf := range boundaryFields(t) {
 		f := bf.StructField
@@ -630,6 +653,10 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value, path string, t reflect.
 		return "vm.StrValue(" + formatted + ")", nil
 	}
 
+	if en, ok := buzzEnum(t); ok {
+		return fmt.Sprintf("enums.Case(%q, string(%s))", en.Name, value), nil
+	}
+
 	switch t.Kind() {
 	case reflect.String:
 		// A NAMED string (types.CheckStatus, types.TargetRunState) is a distinct
@@ -652,7 +679,7 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value, path string, t reflect.
 		if err := e.emitStruct(t); err != nil {
 			return "", err
 		}
-		return e.funcName(t) + "(" + value + ")", nil
+		return e.call(t, value), nil
 	case reflect.Slice, reflect.Array:
 		out, index := e.name("items", path), e.name("index", path)
 		fmt.Fprintf(w, "%s%s := make([]vm.Value, len(%s))\n", indent, out, value)
@@ -714,6 +741,60 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value, path string, t reflect.
 // directly; a member bound at run time has no trampoline to inline the conversion into.
 func (e *buzzValueEmitter) funcName(t reflect.Type) string {
 	return "Object" + t.Name()
+}
+
+// call renders a call of t's encoder on src, passing `enums` through when t reaches an
+// enum field.
+func (e *buzzValueEmitter) call(t reflect.Type, src string) string {
+	if e.reachesEnum(t) {
+		e.usesEnums = true
+		return e.funcName(t) + "(" + src + ", enums)"
+	}
+	return e.funcName(t) + "(" + src + ")"
+}
+
+// reachesEnum reports whether encoding t writes an enum field anywhere below it. Such
+// an encoder takes the session's ffi.EnumCases: an enum case is interned on the
+// definition the session holds, so no session-free encoder can produce one, and a
+// bare str in its place compares unequal to every case a magusfile names.
+func (e *buzzValueEmitter) reachesEnum(t reflect.Type) bool {
+	if reach, seen := e.enumReach[t]; seen {
+		return reach
+	}
+	reach := e.walkEnums(t, map[reflect.Type]bool{})
+	e.enumReach[t] = reach
+	return reach
+}
+
+// walkEnums is reachesEnum's search. It caches only a true answer on the way down:
+// a false one found while a type that contains itself was being visited may be false
+// only because that cycle was cut.
+func (e *buzzValueEmitter) walkEnums(t reflect.Type, visiting map[reflect.Type]bool) bool {
+	if reach, seen := e.enumReach[t]; seen {
+		return reach
+	}
+	if visiting[t] {
+		return false
+	}
+	visiting[t] = true
+	reach := false
+	switch t.Kind() {
+	case reflect.String:
+		_, reach = buzzEnum(t)
+	case reflect.Pointer, reflect.Slice, reflect.Array, reflect.Map:
+		reach = e.walkEnums(t.Elem(), visiting)
+	case reflect.Struct:
+		for _, bf := range boundaryFields(t) {
+			if e.walkEnums(bf.Type, visiting) {
+				reach = true
+				break
+			}
+		}
+	}
+	if reach {
+		e.enumReach[t] = true
+	}
+	return reach
 }
 
 // name builds a temporary's identifier from the field path rather than a running

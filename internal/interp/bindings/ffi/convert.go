@@ -502,8 +502,9 @@ type BoundaryType struct {
 	Name string
 	// Zero is the zero value, for a test to populate through reflection.
 	Zero any
-	// Encode is the generated encoder, bound to Zero's concrete type.
-	Encode func(any) vm.Value
+	// Encode is the generated encoder, bound to Zero's concrete type. A type with no
+	// enum field below it ignores enums.
+	Encode func(v any, enums EnumCases) vm.Value
 }
 
 // ObjectSlice marshals a list of boundary values through the encoder generated for the

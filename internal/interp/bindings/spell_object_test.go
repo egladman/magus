@@ -115,6 +115,21 @@ func TestSpellHandleRoundTripKeepsTheSymbolIndexer(t *testing.T) {
 	}, got)
 }
 
+// A workspace-local spell's sandbox survives the by-value handle round trip with each
+// entry's access mode, which crosses as its backing str (ffi.EnumBacking) because the
+// handle is built with no session to intern a case in.
+func TestSpellHandleRoundTripKeepsTheSandbox(t *testing.T) {
+	sandbox := &spells.Sandbox{Allow: []spells.SandboxAllow{
+		{Base: spells.SandboxBaseUserCache, Path: "go-build", Mode: spells.SandboxAccessRW},
+		{Base: spells.SandboxBaseHome, Path: "sdk", Mode: spells.SandboxAccessRX},
+	}}
+	h := spellHandleFromMeta(spells.Descriptor{Name: "myspell", Sandbox: sandbox})
+
+	got, err := spell.DecodeHandle(h)
+	require.NoError(t, err)
+	assert.Equal(t, sandbox, got.Sandbox)
+}
+
 // execCtxValue builds what ctx.withEnv/withCwd produce: a marked map carrying only
 // execution overrides.
 func execCtxValue(env map[string]string, cwd string) vm.Value {

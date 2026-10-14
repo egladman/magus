@@ -100,7 +100,7 @@ func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.V
 // test TestMagusAPIMatchesBindings enforces that parity. Members the dry run
 // doesn't meaningfully act on are stubbed; only structure-declaring members
 // (magus.project, and the ctx.needs/ctx.glob a target declares) are modeled into the graph.
-func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
+func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	m := vm.NewMap()
 
 	m.MapSet("project", fn("magus.project", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
@@ -509,12 +509,12 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	m.MapSet("layer", fn("magus.layer", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		return bindinggen.ObjectLayer(types.Layer{Name: firstStr(args)}), nil
 	}))
-	m.MapSet("neighborhood", fn("magus.neighborhood", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("neighborhood", fn("magus.neighborhood", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		return bindinggen.ObjectKnowledgeNeighborhoodOutput(types.KnowledgeNeighborhoodOutput{
 			Definition: types.KnowledgeNeighborhoodDefinition,
 			Focus:      firstStr(args),
 			Answer:     types.KnowledgeAnswer{Verdict: types.VerdictUnknown, Reason: types.ReasonCoverageUnknown},
-		}), nil
+		}, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	m.MapSet("output", shaped("magus.output", map[string]vm.Value{
 		"ref": vm.StrValue(""), "project": vm.StrValue(""), "target": vm.StrValue(""),

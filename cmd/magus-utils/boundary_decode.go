@@ -383,6 +383,10 @@ func (e *decodeEmitter) listFile(entries []boundaryType) ([]byte, error) {
 	fmt.Fprintln(&b, "import (")
 	fmt.Fprintln(&b, `	"reflect"`)
 	fmt.Fprintln(&b)
+	objects := newBuzzValueEmitter()
+	if slices.ContainsFunc(entries, func(entry boundaryType) bool { return objects.reachesEnum(entry.Type) }) {
+		fmt.Fprintln(&b, `	"github.com/egladman/magus/internal/interp/bindings/ffi"`)
+	}
 	fmt.Fprintln(&b, `	"github.com/egladman/magus/internal/interp/bindings/gen"`)
 	fmt.Fprintln(&b, `	vm "github.com/egladman/magus/libs/gopherbuzz/vm"`)
 	if e.pkgs["spells"] {
@@ -399,8 +403,14 @@ func (e *decodeEmitter) listFile(entries []boundaryType) ([]byte, error) {
 	for _, entry := range entries {
 		t := entry.Type
 		q := e.qualify(t)
-		fmt.Fprintf(&b, "\t{Name: %q, Zero: %s{}, Encode: func(v any) vm.Value { return gen.Object%s(v.(%s)) }, Decode: func(v vm.Value) (any, error) { return Decode%s(v) }},\n",
-			entry.Name, q, t.Name(), q, t.Name())
+		// A round trip is by-value data Go decodes back, so an enum field crosses as its
+		// backing str.
+		enums := ""
+		if objects.reachesEnum(t) {
+			enums = ", ffi.EnumBacking"
+		}
+		fmt.Fprintf(&b, "\t{Name: %q, Zero: %s{}, Encode: func(v any) vm.Value { return gen.Object%s(v.(%s)%s) }, Decode: func(v vm.Value) (any, error) { return Decode%s(v) }},\n",
+			entry.Name, q, t.Name(), q, enums, t.Name())
 	}
 	fmt.Fprintln(&b, "}")
 	fmt.Fprintln(&b)

@@ -138,29 +138,35 @@ func TestObjectModuleEntryEmptyLists(t *testing.T) {
 	}, objectMap(t, ObjectModuleEntry(types.ModuleEntry{Name: "fs"})))
 }
 
-// A field typed as a DEFINED type over string must cross as a PLAIN string. A Go type
-// switch matches on identity, so a named string matches neither `case string` nor
-// `case []string`; before the generator converted these, `check.status == "fail"` in a
-// magusfile compared against null. Asserted on the encoder because that conversion is
-// the generator's contract.
-func TestObjectNamedStringsCrossAsPlainStrings(t *testing.T) {
+// A field the declarations type as an enum crosses as the case the session's resolver
+// hands back, never as its str: a str compares unequal to every case, so
+// `check.status == CheckStatus.fail` in a magusfile would never match. Asserted on the
+// encoder because routing the field through the resolver is the generator's contract.
+func TestObjectEnumFieldsCrossAsTheResolversCase(t *testing.T) {
+	enums := namingEnums{}
 	for _, tc := range []struct {
 		name  string
 		got   map[string]any
 		field string
 		want  string
 	}{
-		{"Check.status", objectMap(t, ObjectCheck(types.Check{Status: types.CheckFail})), "status", "fail"},
-		{"TargetRun.state", objectMap(t, ObjectStatusTargetRun(types.StatusTargetRun{State: types.TargetRunPassed})), "state", "passed"},
+		{"Check.status", objectMap(t, ObjectCheck(types.Check{Status: types.CheckFail}, enums)), "status", "CheckStatus.fail"},
+		{"TargetRun.state", objectMap(t, ObjectStatusTargetRun(types.StatusTargetRun{State: types.TargetRunPassed}, enums)), "state", "TargetRunState.passed"},
+		{"ModelTierRequest.kind", objectMap(t, ObjectModelTierRequest(types.ModelTierRequest{Kind: types.JobKindSymbol}, enums)), "kind", "JobKind.symbol"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, ok := tc.got[tc.field]
 			require.True(t, ok, "field must be present")
-			assert.IsType(t, "", got, "must be a plain string, not the named type, or it crosses as null")
 			assert.Equal(t, tc.want, got)
 		})
 	}
 }
+
+// namingEnums stands in for a session: it answers each enum field with the enum and
+// value it was asked for, so a test reads which resolver call an encoder made.
+type namingEnums struct{}
+
+func (namingEnums) Case(enum, value string) vm.Value { return vm.StrValue(enum + "." + value) }
 
 func objectMap(t *testing.T, v vm.Value) map[string]any {
 	t.Helper()

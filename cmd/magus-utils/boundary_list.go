@@ -31,6 +31,7 @@ func runBoundaryList(args []string) error {
 
 	var rows []string
 	usesSpells := false
+	objects := newBuzzValueEmitter()
 	for _, e := range boundaryTypes {
 		if !e.RuntimeObject {
 			continue
@@ -43,8 +44,8 @@ func runBoundaryList(args []string) error {
 		// The encoder is named after the Go type, matching buzzValueEmitter.funcName.
 		// Carried as a closure rather than left for the test to look up: a method could
 		// be reached through an interface assertion, and a free function cannot.
-		rows = append(rows, fmt.Sprintf("\t{Name: %q, Zero: %s{}, Encode: func(v any) vm.Value { return Object%s(v.(%s)) }},",
-			e.Name, qualified, t.Name(), qualified))
+		rows = append(rows, fmt.Sprintf("\t{Name: %q, Zero: %s{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return %s }},",
+			e.Name, qualified, objects.call(t, "v.("+qualified+")")))
 	}
 	sort.Strings(rows)
 

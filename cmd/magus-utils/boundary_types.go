@@ -261,7 +261,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "JobModelTier", Type: reflect.TypeFor[types.JobModelTier](), RuntimeObject: true},
 	{Name: "ModelTierRecord", Type: reflect.TypeFor[types.ModelTierRecord](), RuntimeObject: true},
 	{Name: "ModelTierRequest", Type: reflect.TypeFor[types.ModelTierRequest](), RuntimeObject: true},
-	{Name: "Job",Type: reflect.TypeFor[types.Job](), RuntimeObject: true},
+	{Name: "Job", Type: reflect.TypeFor[types.Job](), RuntimeObject: true},
 	// Declaration is Job's INPUT twin: a magusfile can construct one, but nothing hands one
 	// back out, so it carries no RuntimeObject encoder.
 	{Name: "Declaration", Type: reflect.TypeFor[types.Declaration]()},

@@ -49,20 +49,20 @@ func ObjectArchiveEntry(v types.ArchiveEntry) vm.Value {
 	return out
 }
 
-func ObjectPatchOp(v spells.PatchOp) vm.Value {
+func ObjectPatchOp(v spells.PatchOp, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("op", vm.StrValue(string(v.Op)))
+	out.MapSet("op", enums.Case("PatchOpKind", string(v.Op)))
 	out.MapSet("path", vm.StrValue(v.Path))
 	out.MapSet("value", vm.StrValue(v.Value))
 	out.MapSet("fromPtr", vm.StrValue(v.From))
 	return out
 }
 
-func ObjectCharm(v spells.Charm) vm.Value {
+func ObjectCharm(v spells.Charm, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	itemsOps := make([]vm.Value, len(v.Ops))
 	for indexOps := range v.Ops {
-		itemsOps[indexOps] = ObjectPatchOp(v.Ops[indexOps])
+		itemsOps[indexOps] = ObjectPatchOp(v.Ops[indexOps], enums)
 	}
 	out.MapSet("ops", vm.ListValue(itemsOps))
 	return out
@@ -376,11 +376,11 @@ func ObjectProjectRef(v types.ProjectRef) vm.Value {
 	return out
 }
 
-func ObjectKnowledgeSymbolGap(v types.KnowledgeSymbolGap) vm.Value {
+func ObjectKnowledgeSymbolGap(v types.KnowledgeSymbolGap, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("project", ObjectProjectRef(v.Project))
 	out.MapSet("language", vm.StrValue(v.Language))
-	out.MapSet("state", vm.StrValue(string(v.State)))
+	out.MapSet("state", enums.Case("SymbolIndexFreshness", string(v.State)))
 	out.MapSet("detail", vm.StrValue(v.Detail))
 	out.MapSet("hint", vm.StrValue(v.Hint))
 	return out
@@ -400,13 +400,13 @@ func ObjectKnowledgeIndexCause(v types.KnowledgeIndexCause) vm.Value {
 	return out
 }
 
-func ObjectKnowledgeAnswer(v types.KnowledgeAnswer) vm.Value {
+func ObjectKnowledgeAnswer(v types.KnowledgeAnswer, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("verdict", vm.StrValue(string(v.Verdict)))
 	out.MapSet("reason", vm.StrValue(string(v.Reason)))
 	itemsGaps := make([]vm.Value, len(v.Gaps))
 	for indexGaps := range v.Gaps {
-		itemsGaps[indexGaps] = ObjectKnowledgeSymbolGap(v.Gaps[indexGaps])
+		itemsGaps[indexGaps] = ObjectKnowledgeSymbolGap(v.Gaps[indexGaps], enums)
 	}
 	out.MapSet("gaps", vm.ListValue(itemsGaps))
 	itemsStaleIndexes := make([]vm.Value, len(v.StaleIndexes))
@@ -427,7 +427,7 @@ func ObjectKnowledgeAnswer(v types.KnowledgeAnswer) vm.Value {
 	return out
 }
 
-func ObjectUnreferencedOutput(v types.UnreferencedOutput) vm.Value {
+func ObjectUnreferencedOutput(v types.UnreferencedOutput, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StrValue(v.Definition))
 	itemsSymbols := make([]vm.Value, len(v.Symbols))
@@ -435,7 +435,7 @@ func ObjectUnreferencedOutput(v types.UnreferencedOutput) vm.Value {
 		itemsSymbols[indexSymbols] = ObjectUnreferencedEntry(v.Symbols[indexSymbols])
 	}
 	out.MapSet("symbols", vm.ListValue(itemsSymbols))
-	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer))
+	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer, enums))
 	return out
 }
 
@@ -495,7 +495,7 @@ func ObjectDuplicationGroup(v types.DuplicationGroup) vm.Value {
 	return out
 }
 
-func ObjectDuplicationOutput(v types.DuplicationOutput) vm.Value {
+func ObjectDuplicationOutput(v types.DuplicationOutput, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StrValue(v.Definition))
 	itemsGroups := make([]vm.Value, len(v.Groups))
@@ -503,19 +503,19 @@ func ObjectDuplicationOutput(v types.DuplicationOutput) vm.Value {
 		itemsGroups[indexGroups] = ObjectDuplicationGroup(v.Groups[indexGroups])
 	}
 	out.MapSet("groups", vm.ListValue(itemsGroups))
-	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer))
+	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer, enums))
 	return out
 }
 
-func ObjectInsightReport(v types.InsightReport) vm.Value {
+func ObjectInsightReport(v types.InsightReport, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("hotspots", ObjectHotspotOutput(v.Hotspots))
 	out.MapSet("affinity", ObjectAffinityOutput(v.Affinity))
 	out.MapSet("ownership", ObjectOwnershipOutput(v.Ownership))
 	out.MapSet("trend", ObjectTrendOutput(v.Trend))
 	out.MapSet("volatility", ObjectVolatilityReport(v.Volatility))
-	out.MapSet("unreferenced", ObjectUnreferencedOutput(v.Unreferenced))
-	out.MapSet("duplication", ObjectDuplicationOutput(v.Duplication))
+	out.MapSet("unreferenced", ObjectUnreferencedOutput(v.Unreferenced, enums))
+	out.MapSet("duplication", ObjectDuplicationOutput(v.Duplication, enums))
 	return out
 }
 
@@ -561,7 +561,7 @@ func ObjectKnowledgeEdge(v types.KnowledgeEdge) vm.Value {
 	return out
 }
 
-func ObjectKnowledgeQueryOutput(v types.KnowledgeQueryOutput) vm.Value {
+func ObjectKnowledgeQueryOutput(v types.KnowledgeQueryOutput, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StrValue(v.Definition))
 	out.MapSet("schemaVersion", vm.IntValue(int64(v.SchemaVersion)))
@@ -584,7 +584,7 @@ func ObjectKnowledgeQueryOutput(v types.KnowledgeQueryOutput) vm.Value {
 		itemsLinks[indexLinks] = ObjectKnowledgeEdge(v.Links[indexLinks])
 	}
 	out.MapSet("links", vm.ListValue(itemsLinks))
-	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer))
+	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer, enums))
 	return out
 }
 
@@ -604,7 +604,7 @@ func ObjectKnowledgeEdgeRef(v types.KnowledgeEdgeRef) vm.Value {
 	return out
 }
 
-func ObjectKnowledgeExplainOutput(v types.KnowledgeExplainOutput) vm.Value {
+func ObjectKnowledgeExplainOutput(v types.KnowledgeExplainOutput, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StrValue(v.Definition))
 	out.MapSet("schemaVersion", vm.IntValue(int64(v.SchemaVersion)))
@@ -621,7 +621,7 @@ func ObjectKnowledgeExplainOutput(v types.KnowledgeExplainOutput) vm.Value {
 	}
 	out.MapSet("in", vm.ListValue(itemsIn))
 	out.MapSet("docsURL", vm.StrValue(v.DocsURL))
-	out.MapSet("resolution", vm.StrValue(string(v.Resolution)))
+	out.MapSet("resolution", enums.Case("KnowledgeResolution", string(v.Resolution)))
 	return out
 }
 
@@ -661,7 +661,7 @@ func ObjectKnowledgeRefSite(v types.KnowledgeRefSite) vm.Value {
 	return out
 }
 
-func ObjectKnowledgeRefsOutput(v types.KnowledgeRefsOutput) vm.Value {
+func ObjectKnowledgeRefsOutput(v types.KnowledgeRefsOutput, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StrValue(v.Definition))
 	out.MapSet("schemaVersion", vm.IntValue(int64(v.SchemaVersion)))
@@ -679,7 +679,7 @@ func ObjectKnowledgeRefsOutput(v types.KnowledgeRefsOutput) vm.Value {
 		itemsRefs[indexRefs] = ObjectKnowledgeRefSite(v.Refs[indexRefs])
 	}
 	out.MapSet("refs", vm.ListValue(itemsRefs))
-	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer))
+	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer, enums))
 	return out
 }
 
@@ -763,7 +763,7 @@ func ObjectImportGraph(v types.ImportGraph) vm.Value {
 	return out
 }
 
-func ObjectSymbolIndexDigest(v types.SymbolIndexDigest) vm.Value {
+func ObjectSymbolIndexDigest(v types.SymbolIndexDigest, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("digest", vm.StrValue(v.Digest))
 	out.MapSet("indexed", vm.BoolValue(v.Indexed))
@@ -774,7 +774,7 @@ func ObjectSymbolIndexDigest(v types.SymbolIndexDigest) vm.Value {
 	out.MapSet("projects", vm.ListValue(itemsProjects))
 	itemsGaps := make([]vm.Value, len(v.Gaps))
 	for indexGaps := range v.Gaps {
-		itemsGaps[indexGaps] = ObjectKnowledgeSymbolGap(v.Gaps[indexGaps])
+		itemsGaps[indexGaps] = ObjectKnowledgeSymbolGap(v.Gaps[indexGaps], enums)
 	}
 	out.MapSet("gaps", vm.ListValue(itemsGaps))
 	return out
@@ -866,12 +866,12 @@ func ObjectKnowledgeFold(v types.KnowledgeFold) vm.Value {
 	return out
 }
 
-func ObjectKnowledgeNeighborhoodOutput(v types.KnowledgeNeighborhoodOutput) vm.Value {
+func ObjectKnowledgeNeighborhoodOutput(v types.KnowledgeNeighborhoodOutput, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StrValue(v.Definition))
 	out.MapSet("schemaVersion", vm.IntValue(int64(v.SchemaVersion)))
 	out.MapSet("focus", vm.StrValue(v.Focus))
-	out.MapSet("resolution", vm.StrValue(string(v.Resolution)))
+	out.MapSet("resolution", enums.Case("KnowledgeResolution", string(v.Resolution)))
 	out.MapSet("options", ObjectKnowledgeNeighborhoodOptions(v.Options))
 	itemsNodes := make([]vm.Value, len(v.Nodes))
 	for indexNodes := range v.Nodes {
@@ -888,7 +888,7 @@ func ObjectKnowledgeNeighborhoodOutput(v types.KnowledgeNeighborhoodOutput) vm.V
 		itemsFolds[indexFolds] = ObjectKnowledgeFold(v.Folds[indexFolds])
 	}
 	out.MapSet("folds", vm.ListValue(itemsFolds))
-	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer))
+	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer, enums))
 	return out
 }
 
@@ -993,10 +993,10 @@ func ObjectImpactResult(v types.ImpactResult) vm.Value {
 	return out
 }
 
-func ObjectCheck(v types.Check) vm.Value {
+func ObjectCheck(v types.Check, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StrValue(v.Name))
-	out.MapSet("status", vm.StrValue(string(v.Status)))
+	out.MapSet("status", enums.Case("CheckStatus", string(v.Status)))
 	out.MapSet("message", vm.StrValue(v.Message))
 	itemsDetails := make([]vm.Value, len(v.Details))
 	for indexDetails := range v.Details {
@@ -1025,7 +1025,7 @@ func ObjectDiffPublicPath(v types.DiffPublicPath) vm.Value {
 	return out
 }
 
-func ObjectDiffSymbol(v types.DiffSymbol) vm.Value {
+func ObjectDiffSymbol(v types.DiffSymbol, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StrValue(v.ID))
 	out.MapSet("label", vm.StrValue(v.Label))
@@ -1044,7 +1044,7 @@ func ObjectDiffSymbol(v types.DiffSymbol) vm.Value {
 	out.MapSet("baseSignature", vm.StrValue(v.BaseSignature))
 	itemsChecks := make([]vm.Value, len(v.Checks))
 	for indexChecks := range v.Checks {
-		itemsChecks[indexChecks] = ObjectCheck(v.Checks[indexChecks])
+		itemsChecks[indexChecks] = ObjectCheck(v.Checks[indexChecks], enums)
 	}
 	out.MapSet("checks", vm.ListValue(itemsChecks))
 	itemsPublicThrough := make([]vm.Value, len(v.PublicThrough))
@@ -1110,7 +1110,7 @@ func ObjectDiffThreadRef(v types.DiffThreadRef) vm.Value {
 	return out
 }
 
-func ObjectDiffFile(v types.DiffFile) vm.Value {
+func ObjectDiffFile(v types.DiffFile, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StrValue(v.Path))
 	out.MapSet("project", vm.StrValue(v.Project))
@@ -1123,7 +1123,7 @@ func ObjectDiffFile(v types.DiffFile) vm.Value {
 	out.MapSet("coverage", optCoverage)
 	itemsSymbols := make([]vm.Value, len(v.Symbols))
 	for indexSymbols := range v.Symbols {
-		itemsSymbols[indexSymbols] = ObjectDiffSymbol(v.Symbols[indexSymbols])
+		itemsSymbols[indexSymbols] = ObjectDiffSymbol(v.Symbols[indexSymbols], enums)
 	}
 	out.MapSet("symbols", vm.ListValue(itemsSymbols))
 	itemsHunks := make([]vm.Value, len(v.Hunks))
@@ -1133,7 +1133,7 @@ func ObjectDiffFile(v types.DiffFile) vm.Value {
 	out.MapSet("hunks", vm.ListValue(itemsHunks))
 	itemsLayout := make([]vm.Value, len(v.Layout))
 	for indexLayout := range v.Layout {
-		itemsLayout[indexLayout] = ObjectCheck(v.Layout[indexLayout])
+		itemsLayout[indexLayout] = ObjectCheck(v.Layout[indexLayout], enums)
 	}
 	out.MapSet("layout", vm.ListValue(itemsLayout))
 	out.MapSet("visibility", vm.StrValue(v.Visibility))
@@ -1190,9 +1190,9 @@ func ObjectDiffHunkRef(v types.DiffHunkRef) vm.Value {
 	return out
 }
 
-func ObjectDiffWhy(v types.DiffWhy) vm.Value {
+func ObjectDiffWhy(v types.DiffWhy, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("relation", vm.StrValue(string(v.Relation)))
+	out.MapSet("relation", enums.Case("DiffWhyRelation", string(v.Relation)))
 	out.MapSet("step", vm.IntValue(int64(v.Step)))
 	out.MapSet("symbol", vm.StrValue(v.Symbol))
 	itemsCycle := make([]vm.Value, len(v.Cycle))
@@ -1204,34 +1204,34 @@ func ObjectDiffWhy(v types.DiffWhy) vm.Value {
 	return out
 }
 
-func ObjectDiffStepHunk(v types.DiffStepHunk) vm.Value {
+func ObjectDiffStepHunk(v types.DiffStepHunk, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("ref", ObjectDiffHunkRef(v.Ref))
 	out.MapSet("label", vm.StrValue(v.Label))
-	out.MapSet("why", ObjectDiffWhy(v.Why))
+	out.MapSet("why", ObjectDiffWhy(v.Why, enums))
 	return out
 }
 
-func ObjectDiffStep(v types.DiffStep) vm.Value {
+func ObjectDiffStep(v types.DiffStep, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("number", vm.IntValue(int64(v.Number)))
 	itemsHunks := make([]vm.Value, len(v.Hunks))
 	for indexHunks := range v.Hunks {
-		itemsHunks[indexHunks] = ObjectDiffStepHunk(v.Hunks[indexHunks])
+		itemsHunks[indexHunks] = ObjectDiffStepHunk(v.Hunks[indexHunks], enums)
 	}
 	out.MapSet("hunks", vm.ListValue(itemsHunks))
 	return out
 }
 
-func ObjectDiffGroup(v types.DiffGroup) vm.Value {
+func ObjectDiffGroup(v types.DiffGroup, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("kind", vm.StrValue(string(v.Kind)))
+	out.MapSet("kind", enums.Case("DiffGroupKind", string(v.Kind)))
 	out.MapSet("label", vm.StrValue(v.Label))
 	out.MapSet("hunkCount", vm.IntValue(int64(v.HunkCount)))
 	out.MapSet("reach", vm.IntValue(int64(v.Reach)))
 	itemsSteps := make([]vm.Value, len(v.Steps))
 	for indexSteps := range v.Steps {
-		itemsSteps[indexSteps] = ObjectDiffStep(v.Steps[indexSteps])
+		itemsSteps[indexSteps] = ObjectDiffStep(v.Steps[indexSteps], enums)
 	}
 	out.MapSet("steps", vm.ListValue(itemsSteps))
 	return out
@@ -1260,11 +1260,11 @@ func ObjectDiffOrderCount(v types.DiffOrderCount) vm.Value {
 	return out
 }
 
-func ObjectDiffOrder(v types.DiffOrder) vm.Value {
+func ObjectDiffOrder(v types.DiffOrder, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	itemsGroups := make([]vm.Value, len(v.Groups))
 	for indexGroups := range v.Groups {
-		itemsGroups[indexGroups] = ObjectDiffGroup(v.Groups[indexGroups])
+		itemsGroups[indexGroups] = ObjectDiffGroup(v.Groups[indexGroups], enums)
 	}
 	out.MapSet("groups", vm.ListValue(itemsGroups))
 	out.MapSet("count", ObjectDiffOrderCount(v.Count))
@@ -1298,28 +1298,28 @@ func ObjectDiagnostic(v types.Diagnostic) vm.Value {
 	return out
 }
 
-func ObjectDiffUncovered(v types.DiffUncovered) vm.Value {
+func ObjectDiffUncovered(v types.DiffUncovered, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("project", vm.StrValue(v.Project))
-	out.MapSet("reason", vm.StrValue(string(v.Reason)))
+	out.MapSet("reason", enums.Case("DiffUncoveredReason", string(v.Reason)))
 	return out
 }
 
-func ObjectDiffUnread(v types.DiffUnread) vm.Value {
+func ObjectDiffUnread(v types.DiffUnread, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("readState", vm.StrValue(string(v.ReadState)))
+	out.MapSet("readState", enums.Case("DiffReadState", string(v.ReadState)))
 	out.MapSet("reason", vm.StrValue(v.Reason))
 	out.MapSet("hunks", vm.IntValue(int64(v.Hunks)))
 	out.MapSet("unread", vm.IntValue(int64(v.Unread)))
 	return out
 }
 
-func ObjectDiff(v types.Diff) vm.Value {
+func ObjectDiff(v types.Diff, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("base", vm.StrValue(v.Base))
 	itemsFiles := make([]vm.Value, len(v.Files))
 	for indexFiles := range v.Files {
-		itemsFiles[indexFiles] = ObjectDiffFile(v.Files[indexFiles])
+		itemsFiles[indexFiles] = ObjectDiffFile(v.Files[indexFiles], enums)
 	}
 	out.MapSet("files", vm.ListValue(itemsFiles))
 	itemsSeedProjects := make([]vm.Value, len(v.SeedProjects))
@@ -1344,7 +1344,7 @@ func ObjectDiff(v types.Diff) vm.Value {
 	out.MapSet("api", optAPI)
 	optOrder := vm.Null
 	if v.Order != nil {
-		optOrder = ObjectDiffOrder((*v.Order))
+		optOrder = ObjectDiffOrder((*v.Order), enums)
 	}
 	out.MapSet("order", optOrder)
 	out.MapSet("reviewed", ObjectDiffReviewed(v.Reviewed))
@@ -1355,12 +1355,12 @@ func ObjectDiff(v types.Diff) vm.Value {
 	out.MapSet("conformanceError", optConformanceError)
 	itemsUncovered := make([]vm.Value, len(v.Uncovered))
 	for indexUncovered := range v.Uncovered {
-		itemsUncovered[indexUncovered] = ObjectDiffUncovered(v.Uncovered[indexUncovered])
+		itemsUncovered[indexUncovered] = ObjectDiffUncovered(v.Uncovered[indexUncovered], enums)
 	}
 	out.MapSet("uncovered", vm.ListValue(itemsUncovered))
 	optUnread := vm.Null
 	if v.Unread != nil {
-		optUnread = ObjectDiffUnread((*v.Unread))
+		optUnread = ObjectDiffUnread((*v.Unread), enums)
 	}
 	out.MapSet("unread", optUnread)
 	return out
@@ -1375,12 +1375,12 @@ func ObjectDoctorSummary(v types.DoctorSummary) vm.Value {
 	return out
 }
 
-func ObjectDoctorReport(v types.DoctorReport) vm.Value {
+func ObjectDoctorReport(v types.DoctorReport, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("workspace", vm.StrValue(v.Workspace))
 	itemsChecks := make([]vm.Value, len(v.Checks))
 	for indexChecks := range v.Checks {
-		itemsChecks[indexChecks] = ObjectCheck(v.Checks[indexChecks])
+		itemsChecks[indexChecks] = ObjectCheck(v.Checks[indexChecks], enums)
 	}
 	out.MapSet("checks", vm.ListValue(itemsChecks))
 	out.MapSet("summary", ObjectDoctorSummary(v.Summary))
@@ -1653,7 +1653,7 @@ func ObjectHint(v spells.Hint) vm.Value {
 	return out
 }
 
-func ObjectCommand(v spells.Command) vm.Value {
+func ObjectCommand(v spells.Command, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("bin", vm.StrValue(v.Bin))
 	itemsArgs := make([]vm.Value, len(v.Args))
@@ -1674,7 +1674,7 @@ func ObjectCommand(v spells.Command) vm.Value {
 	out.MapSet("needsArgs", vm.StrValue(v.NeedsArgs))
 	mappedCharms := vm.NewMap()
 	for keyCharms, itemCharms := range v.Charms {
-		mappedCharms.MapSet(keyCharms, ObjectCharm(itemCharms))
+		mappedCharms.MapSet(keyCharms, ObjectCharm(itemCharms, enums))
 	}
 	out.MapSet("charms", mappedCharms)
 	itemsSources := make([]vm.Value, len(v.Sources))
@@ -1682,7 +1682,7 @@ func ObjectCommand(v spells.Command) vm.Value {
 		itemsSources[indexSources] = vm.StrValue(v.Sources[indexSources])
 	}
 	out.MapSet("sources", vm.ListValue(itemsSources))
-	out.MapSet("external", vm.StrValue(string(v.External)))
+	out.MapSet("external", enums.Case("External", string(v.External)))
 	out.MapSet("sourcesEach", vm.BoolValue(v.SourcesEach))
 	out.MapSet("capture", vm.BoolValue(v.Capture))
 	out.MapSet("quiet", vm.BoolValue(v.Quiet))
@@ -1704,11 +1704,11 @@ func ObjectCommand(v spells.Command) vm.Value {
 	return out
 }
 
-func ObjectSymbolIndexer(v spells.SymbolIndexer) vm.Value {
+func ObjectSymbolIndexer(v spells.SymbolIndexer, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("format", vm.StrValue(string(v.Format)))
+	out.MapSet("format", enums.Case("SymbolFormat", string(v.Format)))
 	out.MapSet("op", vm.StrValue(v.Op))
-	out.MapSet("command", ObjectCommand(v.Command))
+	out.MapSet("command", ObjectCommand(v.Command, enums))
 	itemsUses := make([]vm.Value, len(v.Uses))
 	for indexUses := range v.Uses {
 		itemsUses[indexUses] = vm.StrValue(v.Uses[indexUses])
@@ -1726,7 +1726,7 @@ func ObjectSymbolIndexer(v spells.SymbolIndexer) vm.Value {
 	return out
 }
 
-func ObjectSandboxAllow(v spells.SandboxAllow) vm.Value {
+func ObjectSandboxAllow(v spells.SandboxAllow, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StrValue(v.Name))
 	out.MapSet("env", vm.StrValue(v.Env))
@@ -1734,7 +1734,7 @@ func ObjectSandboxAllow(v spells.SandboxAllow) vm.Value {
 	out.MapSet("bin", vm.StrValue(v.Bin))
 	out.MapSet("path", vm.StrValue(v.Path))
 	out.MapSet("requires", vm.StrValue(v.Requires))
-	out.MapSet("mode", vm.StrValue(string(v.Mode)))
+	out.MapSet("mode", enums.Case("SandboxAccess", string(v.Mode)))
 	return out
 }
 
@@ -1760,11 +1760,11 @@ func ObjectSandboxCache(v spells.SandboxCache) vm.Value {
 	return out
 }
 
-func ObjectSandbox(v spells.Sandbox) vm.Value {
+func ObjectSandbox(v spells.Sandbox, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	itemsAllow := make([]vm.Value, len(v.Allow))
 	for indexAllow := range v.Allow {
-		itemsAllow[indexAllow] = ObjectSandboxAllow(v.Allow[indexAllow])
+		itemsAllow[indexAllow] = ObjectSandboxAllow(v.Allow[indexAllow], enums)
 	}
 	out.MapSet("allow", vm.ListValue(itemsAllow))
 	out.MapSet("env", ObjectSandboxEnv(v.Env))
@@ -2669,11 +2669,11 @@ func ObjectMCPTool(v types.MCPTool) vm.Value {
 	return out
 }
 
-func ObjectStatusTargetRun(v types.StatusTargetRun) vm.Value {
+func ObjectStatusTargetRun(v types.StatusTargetRun, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("project", vm.StrValue(v.Project))
 	out.MapSet("target", vm.StrValue(v.Target))
-	out.MapSet("state", vm.StrValue(string(v.State)))
+	out.MapSet("state", enums.Case("TargetRunState", string(v.State)))
 	formattedStartedAt := ""
 	if !v.StartedAt.IsZero() {
 		formattedStartedAt = v.StartedAt.Format(time.RFC3339Nano)
@@ -2689,7 +2689,7 @@ func ObjectStatusTargetRun(v types.StatusTargetRun) vm.Value {
 	return out
 }
 
-func ObjectStatusRun(v types.StatusRun) vm.Value {
+func ObjectStatusRun(v types.StatusRun, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("inv", vm.StrValue(v.Inv))
 	out.MapSet("trigger", vm.StrValue(v.Trigger))
@@ -2700,7 +2700,7 @@ func ObjectStatusRun(v types.StatusRun) vm.Value {
 	out.MapSet("startedAt", vm.StrValue(formattedStartedAt))
 	itemsTargets := make([]vm.Value, len(v.Targets))
 	for indexTargets := range v.Targets {
-		itemsTargets[indexTargets] = ObjectStatusTargetRun(v.Targets[indexTargets])
+		itemsTargets[indexTargets] = ObjectStatusTargetRun(v.Targets[indexTargets], enums)
 	}
 	out.MapSet("targets", vm.ListValue(itemsTargets))
 	return out
@@ -2909,23 +2909,23 @@ func ObjectJobRun(v types.JobRun) vm.Value {
 	return out
 }
 
-func ObjectJobModelTier(v types.JobModelTier) vm.Value {
+func ObjectJobModelTier(v types.JobModelTier, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StrValue(v.Name))
 	out.MapSet("rank", vm.IntValue(int64(v.Rank)))
-	out.MapSet("skills", vm.StrValue(string(v.Skills)))
-	out.MapSet("source", vm.StrValue(string(v.Source)))
+	out.MapSet("skills", enums.Case("SkillVariant", string(v.Skills)))
+	out.MapSet("source", enums.Case("ModelTierSource", string(v.Source)))
 	out.MapSet("reason", vm.StrValue(v.Reason))
 	out.MapSet("site", vm.StrValue(v.Site))
 	out.MapSet("model", vm.StrValue(v.Model))
 	return out
 }
 
-func ObjectModelTierRecord(v types.ModelTierRecord) vm.Value {
+func ObjectModelTierRecord(v types.ModelTierRecord, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("rank", vm.IntValue(int64(v.Rank)))
 	out.MapSet("modelTier", vm.StrValue(v.ModelTier))
-	out.MapSet("kind", vm.StrValue(string(v.Kind)))
+	out.MapSet("kind", enums.Case("JobKind", string(v.Kind)))
 	out.MapSet("jobs", vm.IntValue(int64(v.Jobs)))
 	out.MapSet("pass", vm.IntValue(int64(v.Pass)))
 	out.MapSet("fail", vm.IntValue(int64(v.Fail)))
@@ -2940,7 +2940,7 @@ func ObjectModelTierRecord(v types.ModelTierRecord) vm.Value {
 	return out
 }
 
-func ObjectModelTierRequest(v types.ModelTierRequest) vm.Value {
+func ObjectModelTierRequest(v types.ModelTierRequest, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StrValue(v.ID))
 	out.MapSet("parent", vm.StrValue(v.Parent))
@@ -2956,7 +2956,7 @@ func ObjectModelTierRequest(v types.ModelTierRequest) vm.Value {
 		itemsGoals[indexGoals] = ObjectGoal(v.Goals[indexGoals])
 	}
 	out.MapSet("goals", vm.ListValue(itemsGoals))
-	out.MapSet("kind", vm.StrValue(string(v.Kind)))
+	out.MapSet("kind", enums.Case("JobKind", string(v.Kind)))
 	itemsWritePaths := make([]vm.Value, len(v.WritePaths))
 	for indexWritePaths := range v.WritePaths {
 		itemsWritePaths[indexWritePaths] = vm.StrValue(v.WritePaths[indexWritePaths])
@@ -2991,7 +2991,7 @@ func ObjectModelTierRequest(v types.ModelTierRequest) vm.Value {
 	out.MapSet("declaredModel", vm.StrValue(v.DeclaredModel))
 	itemsHistory := make([]vm.Value, len(v.History))
 	for indexHistory := range v.History {
-		itemsHistory[indexHistory] = ObjectModelTierRecord(v.History[indexHistory])
+		itemsHistory[indexHistory] = ObjectModelTierRecord(v.History[indexHistory], enums)
 	}
 	out.MapSet("history", vm.ListValue(itemsHistory))
 	return out
