@@ -648,13 +648,7 @@ type builtGraphWorkspace struct {
 
 func (f *builtGraphWorkspace) All() []*types.Project { return f.projects }
 
-func (f *builtGraphWorkspace) KnowledgeGraph(context.Context, bool) (*knowledge.Graph, error) {
-	return f.g, nil
-}
-func (f *builtGraphWorkspace) KnowledgeGraphWithSymbols(context.Context) (*knowledge.Graph, error) {
-	return f.g, nil
-}
-func (f *builtGraphWorkspace) KnowledgeGraphWithSymbolsForRef(context.Context, string) (*knowledge.Graph, error) {
+func (f *builtGraphWorkspace) KnowledgeGraph(context.Context, types.GraphRequest) (*knowledge.Graph, error) {
 	return f.g, nil
 }
 func (f *builtGraphWorkspace) SymbolGaps(context.Context) ([]types.KnowledgeSymbolGap, bool) {

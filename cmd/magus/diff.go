@@ -717,7 +717,7 @@ func attachLayout(ctx context.Context, m *magus.Magus, rev *types.Diff, opts typ
 	fail := func(err error) {
 		rev.Notes = append(rev.Notes, "layout: the package checks could not run: "+err.Error())
 	}
-	graph, err := m.KnowledgeGraphWithSymbols(ctx)
+	graph, err := m.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		fail(err)
 		return

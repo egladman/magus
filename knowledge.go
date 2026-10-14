@@ -2228,26 +2228,32 @@ func (m *Magus) warmKnowledgeGraph() *warmGraph {
 	return m.warmGraph
 }
 
-// KnowledgeGraph returns the workspace knowledge graph. In the server, once
-// WatchKnowledgeGraph is running, this answers from a warm in-memory graph without
-// re-parsing magusfiles; otherwise (and on refresh) it rebuilds cache-first. It is
-// always fresh: the warm graph is served only while a watcher can invalidate it.
-func (m *Magus) KnowledgeGraph(ctx context.Context, refresh bool) (*knowledge.Graph, error) {
-	return m.warmKnowledgeGraph().Get(ctx, refresh)
-}
-
-// KnowledgeGraphWithSymbols returns a graph that INCLUDES the lazily-loaded @symbols
-// shards, for a symbol-seeded MCP query (magus\query on symbols, magus\refs). It
-// builds cache-first into a FRESH graph (not the shared warm graph) and merges
-// symbols into it, so the warm graph the other MCP tools answer from is never
-// polluted with a workspace's (potentially huge) symbol set.
-func (m *Magus) KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph, error) {
+// KnowledgeGraph returns the workspace knowledge graph req asks for.
+//
+// Without symbols it answers from the warm in-memory graph: in the server, once
+// WatchKnowledgeGraph is running, without re-parsing magusfiles; otherwise (and on
+// refresh) by a cache-first rebuild. It is always fresh, since the warm graph is served
+// only while a watcher can invalidate it.
+//
+// With symbols (magus\query on symbols, magus\refs) it builds cache-first into a FRESH
+// graph and merges the @symbols shards into it, so the warm graph the other MCP tools
+// answer from is never polluted with a workspace's (potentially huge) symbol set. A scope
+// that targets one symbol merges only the shards that mention it.
+func (m *Magus) KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
+	if !req.Symbols.Loaded() {
+		return m.warmKnowledgeGraph().Get(ctx, req.Refresh)
+	}
 	root := m.Root()
-	g, err := BuildKnowledgeGraph(ctx, m, root, m.cfg, false, slog.Default())
+	g, err := BuildKnowledgeGraph(ctx, m, root, m.cfg, req.Refresh, slog.Default())
 	if err != nil {
 		return nil, err
 	}
-	if err := MergeWorkspaceSymbols(ctx, m, root, m.cfg, g, slog.Default()); err != nil {
+	if ref := req.Symbols.Ref(); ref != "" {
+		err = MergeWorkspaceSymbolsForRef(ctx, m, root, m.cfg, g, ref, slog.Default())
+	} else {
+		err = MergeWorkspaceSymbols(ctx, m, root, m.cfg, g, slog.Default())
+	}
+	if err != nil {
 		return nil, err
 	}
 	return g, nil
@@ -2258,7 +2264,7 @@ func (m *Magus) KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph
 // indexes are rebuilt: `magus graph build` and the server's auto-indexer.
 func (m *Magus) WriteGuardIndex(ctx context.Context) error {
 	at := knowledge.ReadGuardCheckout(ctx, m.Root())
-	g, err := m.KnowledgeGraphWithSymbols(ctx)
+	g, err := m.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return err
 	}
@@ -2266,22 +2272,6 @@ func (m *Magus) WriteGuardIndex(ctx context.Context) error {
 		return s.Freshness == types.SymbolIndexStale || s.Freshness == types.SymbolIndexUnvouched
 	})
 	return knowledge.WriteGuardIndex(resolveCacheDir(m.Root(), m.cfg), m.Root(), g, fresh, at)
-}
-
-// KnowledgeGraphWithSymbolsForRef is KnowledgeGraphWithSymbols for magus\refs: it
-// merges only the symbol shards that mention ref (targeted reverse lookup) when ref
-// is an exact symbol ID, or all of them for a fuzzy name. Also fresh-not-warm, so the
-// shared warm graph stays symbol-free.
-func (m *Magus) KnowledgeGraphWithSymbolsForRef(ctx context.Context, ref string) (*knowledge.Graph, error) {
-	root := m.Root()
-	g, err := BuildKnowledgeGraph(ctx, m, root, m.cfg, false, slog.Default())
-	if err != nil {
-		return nil, err
-	}
-	if err := MergeWorkspaceSymbolsForRef(ctx, m, root, m.cfg, g, ref, slog.Default()); err != nil {
-		return nil, err
-	}
-	return g, nil
 }
 
 // WatchKnowledgeGraph starts a file watcher that keeps the warm knowledge graph

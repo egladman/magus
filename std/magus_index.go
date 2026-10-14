@@ -13,7 +13,7 @@ import (
 // symbolIndexWorkspace is the part of *magus.Magus magus\symbolIndexDigest reads,
 // recovered by assertion because std cannot import root magus.
 type symbolIndexWorkspace interface {
-	KnowledgeGraph(ctx context.Context, refresh bool) (*knowledge.Graph, error)
+	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
 	SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool)
 	CacheDir() string
 }
@@ -31,7 +31,7 @@ func MagusSymbolIndexDigest(ctx context.Context) (types.SymbolIndexDigest, error
 	if !ok {
 		return types.SymbolIndexDigest{}, fmt.Errorf("magus\\symbolIndexDigest: this workspace has no knowledge graph")
 	}
-	if _, err := w.KnowledgeGraph(ctx, false); err != nil {
+	if _, err := w.KnowledgeGraph(ctx, types.GraphRequest{}); err != nil {
 		return types.SymbolIndexDigest{}, err
 	}
 	d, err := knowledge.NewStore(w.CacheDir(), true, 0, nil, nil).SymbolIndexDigest()

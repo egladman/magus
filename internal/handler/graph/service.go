@@ -13,15 +13,15 @@ import (
 )
 
 // resolver is the slice of the workspace GraphService needs, the same one the MCP graph
-// tools take: the two graph flavors plus the coverage probe. *magus.Magus satisfies it.
+// tools take: the graph, with or without symbols, plus the coverage probe. *magus.Magus
+// satisfies it.
 //
 // SymbolGaps is not optional decoration. Every verb here can be asked about a code symbol,
 // and the symbol shards are loaded lazily, so a lookup that returns nothing has two very
 // different meanings: no such node, or nobody looked. The probe is what lets the response
 // say which, and it is the whole reason Answer rides the query result.
 type resolver interface {
-	KnowledgeGraph(ctx context.Context, refresh bool) (*knowledge.Graph, error)
-	KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph, error)
+	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
 	SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool)
 	Affected(ctx context.Context, base string) (*types.AffectedResult, error)
 }
@@ -40,10 +40,10 @@ var _ graphv1alpha1connect.GraphServiceHandler = (*Service)(nil)
 // keeps the default export lazy.
 func (s *Service) graph(ctx context.Context, input string) (*knowledge.Graph, bool, error) {
 	if knowledge.SeedsLazyLayer(input) {
-		g, err := s.ws.KnowledgeGraphWithSymbols(ctx)
+		g, err := s.ws.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 		return g, true, err
 	}
-	g, err := s.ws.KnowledgeGraph(ctx, false)
+	g, err := s.ws.KnowledgeGraph(ctx, types.GraphRequest{})
 	return g, false, err
 }
 
@@ -168,7 +168,7 @@ func (s *Service) FindDependents(
 	}
 	// The warm graph, always. depends_on edges never touch the @symbols shards, so loading them
 	// would cost the shard read and change nothing about the answer.
-	g, err := s.ws.KnowledgeGraph(ctx, false)
+	g, err := s.ws.KnowledgeGraph(ctx, types.GraphRequest{})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -213,7 +213,7 @@ func (s *Service) GetGraphStats(
 	// Stats counts the whole graph, so it must not be computed over a symbol-loaded flavor on
 	// some calls and the warm one on others: the node count would move with the caller's
 	// unrelated query history. Always the warm graph.
-	g, err := s.ws.KnowledgeGraph(ctx, false)
+	g, err := s.ws.KnowledgeGraph(ctx, types.GraphRequest{})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

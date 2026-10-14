@@ -47,11 +47,7 @@ type cannedResolver struct {
 	affErr error
 }
 
-func (f cannedResolver) KnowledgeGraph(context.Context, bool) (*knowledge.Graph, error) {
-	return f.g, f.err
-}
-
-func (f cannedResolver) KnowledgeGraphWithSymbols(context.Context) (*knowledge.Graph, error) {
+func (f cannedResolver) KnowledgeGraph(context.Context, types.GraphRequest) (*knowledge.Graph, error) {
 	return f.g, f.err
 }
 

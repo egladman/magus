@@ -1416,7 +1416,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 	}
 	freshErr := m.freshenSymbolIndexes(ctx, touched)
 	out.Uncovered = uncoveredProjects(out.Files, m.symbolCapableIn(touched))
-	graph, gerr := m.KnowledgeGraphWithSymbols(ctx)
+	graph, gerr := m.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	// indexed is the real question, and it is NOT "did a graph load". A graph loads fine with
 	// no symbol shards in it, so gating on a non-nil graph reports every file's reach as a
 	// measured zero on exactly the workspaces that have no index, which is the collapse the

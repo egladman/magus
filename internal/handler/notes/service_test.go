@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	store "github.com/egladman/magus/internal/notes"
 	notesv1 "github.com/egladman/magus/proto/gen/go/magus/notes/v1alpha1"
+	"github.com/egladman/magus/types"
 )
 
 // coldWorkspace is a workspace whose knowledge graph will not load, the ordinary state on a
@@ -22,7 +23,7 @@ type coldWorkspace struct{ root string }
 
 func (w coldWorkspace) Root() string { return w.root }
 
-func (w coldWorkspace) KnowledgeGraphWithSymbols(context.Context) (*knowledge.Graph, error) {
+func (w coldWorkspace) KnowledgeGraph(context.Context, types.GraphRequest) (*knowledge.Graph, error) {
 	return nil, assert.AnError
 }
 

@@ -206,11 +206,13 @@ func TestDirLayerAndNeighborhoodOptionsAreStrict(t *testing.T) {
 type countingGraphs struct {
 	*builtGraphWorkspace
 	builds int
+	reqs   []types.GraphRequest
 }
 
-func (c *countingGraphs) KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph, error) {
+func (c *countingGraphs) KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
 	c.builds++
-	return c.builtGraphWorkspace.KnowledgeGraphWithSymbols(ctx)
+	c.reqs = append(c.reqs, req)
+	return c.builtGraphWorkspace.KnowledgeGraph(ctx, req)
 }
 
 // One evaluation builds the graph once however many members it calls; the next
@@ -230,6 +232,23 @@ func TestGraphMembersShareOneBuildPerEvaluation(t *testing.T) {
 	_, err = MagusDir(types.WithEvalMemo(eval), "internal/httpx")
 	require.NoError(t, err)
 	assert.Equal(t, 2, ws.builds, "a new evaluation rebuilds")
+}
+
+// A refs lookup asks for the shards of its own symbol, and one evaluation builds that
+// scope once while a different symbol builds its own.
+func TestRefsMemoizesPerSymbolScope(t *testing.T) {
+	t.Parallel()
+	ws := &countingGraphs{builtGraphWorkspace: types.WorkspaceFromContext(dirContext(t)).(*builtGraphWorkspace)}
+	eval := types.WithEvalMemo(types.WithWorkspace(t.Context(), ws))
+	for range 2 {
+		_, err := MagusRefs(eval, graphSymbol, nil)
+		require.NoError(t, err)
+	}
+	assert.Equal(t, []types.GraphRequest{{Symbols: types.SymbolsFor(graphSymbol)}}, ws.reqs)
+
+	_, err := MagusRefs(eval, "symbol:example.com/x Bar#", nil)
+	require.NoError(t, err)
+	assert.Equal(t, 2, ws.builds, "a second symbol is a second scope")
 }
 
 // precedentGraphs is a workspace whose indexes have the given freshness and whose declared

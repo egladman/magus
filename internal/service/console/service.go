@@ -351,16 +351,16 @@ func (s *Service) DiffWith(ctx context.Context, paths []string, opts types.DiffO
 }
 
 // knowledgeGraph resolves the workspace graph, honoring the test seam. withSymbols loads
-// the @symbols shards; the production path routes to KnowledgeGraphWithSymbols only when
+// the @symbols shards; the production path requests the @symbols scope only when
 // they are actually needed so the default export stays lazy.
 func (s *Service) knowledgeGraph(ctx context.Context, withSymbols bool) (*knowledge.Graph, error) {
 	if s.knowledgeGraphFn != nil {
 		return s.knowledgeGraphFn(ctx, withSymbols)
 	}
 	if withSymbols {
-		return s.magus.KnowledgeGraphWithSymbols(ctx)
+		return s.magus.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	}
-	return s.magus.KnowledgeGraph(ctx, false)
+	return s.magus.KnowledgeGraph(ctx, types.GraphRequest{})
 }
 
 // TargetGraph returns the describe-graph view (targets flavor). The error return

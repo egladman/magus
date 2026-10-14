@@ -176,7 +176,7 @@ func (m *Magus) ModelTierLens(ctx context.Context) (types.ModelTierOutput, error
 // unreferenced code would render as a clean report; without the verdict, the lens would
 // be most reassuring exactly where it knows least.
 func (m *Magus) Unreferenced(ctx context.Context) (types.UnreferencedOutput, error) {
-	g, err := m.KnowledgeGraphWithSymbols(ctx)
+	g, err := m.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return types.UnreferencedOutput{}, err
 	}
@@ -199,7 +199,7 @@ func (m *Magus) Unreferenced(ctx context.Context) (types.UnreferencedOutput, err
 // coverage verdict as Unreferenced: a workspace half of whose projects were never indexed
 // shows half its duplication, and the answer says so rather than reading as clean.
 func (m *Magus) Duplication(ctx context.Context) (types.DuplicationOutput, error) {
-	g, err := m.KnowledgeGraphWithSymbols(ctx)
+	g, err := m.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return types.DuplicationOutput{}, err
 	}

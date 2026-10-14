@@ -40,7 +40,7 @@ import (
 // Satisfied structurally by *magus.Magus.
 type workspace interface {
 	Root() string
-	KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph, error)
+	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
 }
 
 // Service implements notesv1alpha1connect.NotesServiceHandler over the on-disk note stores.
@@ -172,7 +172,7 @@ func (s *Service) GetNote(ctx context.Context, req *connect.Request[notesv1.GetN
 // Per request rather than cached, because the server holds a warm graph already and a stale
 // answer about whether an anchor resolves is exactly the wrong thing to cache twice.
 func (s *Service) resolver(ctx context.Context) (*knowledge.NoteResolver, map[string]types.KnowledgeNode) {
-	g, err := s.ws.KnowledgeGraphWithSymbols(ctx)
+	g, err := s.ws.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil || g == nil {
 		return nil, nil
 	}

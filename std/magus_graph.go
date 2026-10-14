@@ -21,9 +21,7 @@ import (
 // satisfies it, and it is recovered from the workspace on the context by assertion for
 // the same reason Analyzer is: std cannot import root magus.
 type knowledgeGraphs interface {
-	KnowledgeGraph(ctx context.Context, refresh bool) (*knowledge.Graph, error)
-	KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph, error)
-	KnowledgeGraphWithSymbolsForRef(ctx context.Context, symbol string) (*knowledge.Graph, error)
+	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
 	SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool)
 }
 
@@ -49,21 +47,16 @@ type memoGraphs struct {
 	memo *types.EvalMemo
 }
 
-func (m memoGraphs) KnowledgeGraph(ctx context.Context, refresh bool) (*knowledge.Graph, error) {
-	if refresh {
-		return m.g.KnowledgeGraph(ctx, true)
+// KnowledgeGraph builds once per distinct scope; a refresh always rebuilds.
+func (m memoGraphs) KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
+	if req.Refresh {
+		return m.g.KnowledgeGraph(ctx, req)
 	}
-	return memoGraph(m.memo, "graph", func() (*knowledge.Graph, error) { return m.g.KnowledgeGraph(ctx, false) })
-}
-
-func (m memoGraphs) KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph, error) {
-	return memoGraph(m.memo, "graph+symbols", func() (*knowledge.Graph, error) { return m.g.KnowledgeGraphWithSymbols(ctx) })
-}
-
-// KnowledgeGraphWithSymbolsForRef merges only the shards mentioning symbol, a subset of
-// every shard, so it reuses the full merge rather than caching one graph per symbol.
-func (m memoGraphs) KnowledgeGraphWithSymbolsForRef(ctx context.Context, _ string) (*knowledge.Graph, error) {
-	return m.KnowledgeGraphWithSymbols(ctx)
+	key := "graph"
+	if req.Symbols.Loaded() {
+		key = "graph+symbols:" + req.Symbols.Ref()
+	}
+	return memoGraph(m.memo, key, func() (*knowledge.Graph, error) { return m.g.KnowledgeGraph(ctx, req) })
 }
 
 func (m memoGraphs) SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool) {
@@ -115,12 +108,7 @@ func MagusQuery(ctx context.Context, query string, opts map[string]any) (types.K
 		return types.KnowledgeQueryOutput{}, err
 	}
 	seeded := knowledge.SeedsLazyLayer(query)
-	var kg *knowledge.Graph
-	if seeded {
-		kg, err = g.KnowledgeGraphWithSymbols(ctx)
-	} else {
-		kg, err = g.KnowledgeGraph(ctx, false)
-	}
+	kg, err := loadGraph(ctx, g, seeded)
 	if err != nil {
 		return types.KnowledgeQueryOutput{}, err
 	}
@@ -160,10 +148,11 @@ func MagusExplain(ctx context.Context, node string) (types.KnowledgeExplainOutpu
 
 // loadGraph reads the domain graph, with the symbol shards merged when seeded.
 func loadGraph(ctx context.Context, g knowledgeGraphs, seeded bool) (*knowledge.Graph, error) {
+	var req types.GraphRequest
 	if seeded {
-		return g.KnowledgeGraphWithSymbols(ctx)
+		req.Symbols = types.AllSymbols
 	}
-	return g.KnowledgeGraph(ctx, false)
+	return g.KnowledgeGraph(ctx, req)
 }
 
 // MagusPath backs magus\path: the shortest chain of edges between node and to, the
@@ -213,7 +202,7 @@ func MagusRefs(ctx context.Context, symbol string, opts map[string]any) (types.K
 	if err != nil {
 		return types.KnowledgeRefsOutput{}, err
 	}
-	kg, err := g.KnowledgeGraphWithSymbolsForRef(ctx, symbol)
+	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.SymbolsFor(symbol)})
 	if err != nil {
 		return types.KnowledgeRefsOutput{}, err
 	}
@@ -246,7 +235,7 @@ func MagusStats(ctx context.Context, kind string) (types.KnowledgeStats, error) 
 	if err != nil {
 		return types.KnowledgeStats{}, err
 	}
-	kg, err := g.KnowledgeGraph(ctx, false)
+	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{})
 	if err != nil {
 		return types.KnowledgeStats{}, err
 	}
@@ -260,7 +249,7 @@ func MagusImportGraph(ctx context.Context) (types.ImportGraph, error) {
 	if err != nil {
 		return types.ImportGraph{}, err
 	}
-	kg, err := g.KnowledgeGraphWithSymbols(ctx)
+	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return types.ImportGraph{}, err
 	}
@@ -310,7 +299,7 @@ func judgedGraph(ctx context.Context, member string) (indexedGraph, error) {
 			}
 		}
 	}
-	kg, err := g.KnowledgeGraphWithSymbols(ctx)
+	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return indexedGraph{}, err
 	}
@@ -389,7 +378,7 @@ func MagusDir(ctx context.Context, dir string) (types.Dir, error) {
 	if err != nil {
 		return types.Dir{}, err
 	}
-	kg, err := g.KnowledgeGraphWithSymbols(ctx)
+	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return types.Dir{}, err
 	}
@@ -426,7 +415,7 @@ func MagusDirs(ctx context.Context, glob string, opts map[string]any) ([]types.D
 	if err != nil {
 		return nil, err
 	}
-	kg, err := g.KnowledgeGraphWithSymbols(ctx)
+	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return nil, err
 	}
@@ -447,7 +436,7 @@ func MagusLayer(ctx context.Context, name string) (types.Layer, error) {
 	if err != nil {
 		return types.Layer{}, err
 	}
-	kg, err := g.KnowledgeGraphWithSymbols(ctx)
+	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return types.Layer{}, err
 	}
@@ -493,7 +482,7 @@ func MagusNeighborhood(ctx context.Context, focus string, opts map[string]any) (
 	if err != nil {
 		return types.KnowledgeNeighborhoodOutput{}, err
 	}
-	kg, err := g.KnowledgeGraphWithSymbols(ctx)
+	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return types.KnowledgeNeighborhoodOutput{}, err
 	}
