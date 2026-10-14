@@ -9,6 +9,8 @@
 //   workspace there is no query output to point at, and the read is allowed.
 // host-terminals (deny): creating or reading a directory named terminals.
 //   A host session folder is not a run; magus status reads the project lock.
+// host-cursor-rules (deny, writes only): a .mdc file under a .cursor/rules directory.
+//   This repository delivers Cursor guidance through hooks and skills.
 namespace agentpolicy\host;
 
 import "std";
@@ -25,6 +27,10 @@ final captureDenial = "reading a run log or task capture by cat or by a range dr
 final terminalsDenial = "a directory named terminals is a host session folder, not a run; read the project lock: `magus status`.\n"
     + "Status reports who holds the lock, what they are running, and how long they have held it. "
     + "Do not create a terminals directory and do not read its files.";
+
+final cursorRulesDenial = "this repository delivers Cursor guidance through hooks and skills, not .cursor/rules/*.mdc files.\n"
+    + "A rule file is invisible to `magus harness verify` and vanishes when .cursor/ is treated as disposable host state. "
+    + "See docs/guides/integrations/agents/cursor.md.";
 
 // captureBytes is the largest task capture decideHost scans for refs; a bigger one gets
 // the generic denial. A workspace rule that outlives its 3 second budget is skipped, which
@@ -156,10 +162,13 @@ fun invocationIds(matches: [[str]]) > [str] {
 }
 
 // writePath is the denial for a write whose path is a capture or sits in a
-// terminals directory, "" when the path is ordinary source.
+// terminals directory or is a Cursor rule file, "" when the path is ordinary source.
 export fun writePath(path: str) > str {
     if (isCapture(path)) {
         return captureDenial;
+    }
+    if (isCursorRule(path)) {
+        return cursorRulesDenial;
     }
     if (hasComponent(path, name: "terminals")) {
         return terminalsDenial;
@@ -288,6 +297,20 @@ fun isLogDir(path: str) > bool {
     var p = slashed(path);
     while (p.endsWith("/")) { p = p.sub(0, len: p.len() - 1); }
     return p == ".magus/logs" or p.endsWith("/.magus/logs");
+}
+
+// isCursorRule is a .mdc file anywhere under a .cursor/rules directory.
+fun isCursorRule(path: str) > bool {
+    final parts = slashed(path).split("/");
+    if (!parts[parts.len() - 1].endsWith(".mdc")) {
+        return false;
+    }
+    foreach (i, part in parts) {
+        if (part == ".cursor" and i + 2 < parts.len() and parts[i + 1] == "rules") {
+            return true;
+        }
+    }
+    return false;
 }
 
 fun hasComponent(path: str, name: str) > bool {
@@ -503,4 +526,13 @@ test "a write into a terminals directory or a run log is denied; source is not" 
     std\assert(shaped(".magus/logs/abc.log").indexOf("magus query output") != null, message: "a log");
     std\assert(shaped("internal/guard/shell.go") == "", message: "source");
     std\assert(shaped("internal/term.go") == "", message: "a name that only starts the same way");
+}
+
+test "a Cursor rule file is denied, pointing at the Cursor guide; other .cursor files and other .mdc files are not" {
+    foreach (path in [".cursor/rules/magus.mdc", "/repo/.cursor/rules/nested/a.mdc", "C:\\repo\\.cursor\\rules\\magus.mdc"]) {
+        std\assert(shaped(path).indexOf("docs/guides/integrations/agents/cursor.md") != null, message: path);
+    }
+    foreach (path in [".cursor/hooks.json", ".cursor/rules/notes.md", "docs/rules/magus.mdc", "cursor/rules/magus.mdc", ".cursor/rules.mdc"]) {
+        std\assert(shaped(path) == "", message: path);
+    }
 }
