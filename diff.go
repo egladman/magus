@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"go/ast"
@@ -46,14 +47,16 @@ func (m *Magus) DiffAgainst(ctx context.Context, paths []string, base types.Know
 }
 
 // DiffWith is [Magus.Diff] with the options [types.DiffOptions] describes: the changeset's own
-// patch, a baseline to compare against, and the conformance checks' silence gates. A review of
+// patch, a baseline to compare against, and the conformance checks' silence gates, which
+// default to knowledge.conform.gates and which opts overrides for the one call. A review of
 // anything but the working tree passes its patch, since without a baseline the patch is what
 // says which symbols the change adds; with neither, the working tree's patch is read.
 func (m *Magus) DiffWith(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error) {
 	return m.diff(ctx, paths, diffConfig{
 		baseline: opts.Baseline, baselineLabel: opts.BaselineLabel,
 		patch: opts.Patch, patchGiven: opts.Patch != "",
-		minCohort: opts.MinCohort, minShare: opts.MinShare,
+		minCohort: cmp.Or(opts.MinCohort, m.cfg.Knowledge.Conform.Gates.MinCohort),
+		minShare:  cmp.Or(opts.MinShare, m.cfg.Knowledge.Conform.Gates.MinShare),
 		skipOrder: opts.SkipOrder,
 	})
 }
@@ -289,7 +292,7 @@ func attachConformance(byPath map[string]*types.DiffFile, head *knowledge.Graph,
 	}
 	found := head.Conformance(knowledge.ConformanceChange{
 		Subjects: subjects, Introduced: introduced, Generated: in.generated, Renamed: renamed,
-		Read: in.read, MinCohort: in.minCohort, MinShare: in.minShare,
+		Read: in.read, Gates: types.ConformGates{MinCohort: in.minCohort, MinShare: in.minShare},
 	})
 	for _, id := range slices.Sorted(maps.Keys(found)) {
 		def, ok := defs[id]
