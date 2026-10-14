@@ -756,13 +756,17 @@ var Magus = Module{
 					Doc: "Record or advance one row, merging only the fields opts names: parent, " +
 						"criteria, checkpoint, write_paths, deny_paths, read_paths, depends_on, model, " +
 						"check (`<target> <project> [-- args]`, or the rendered `magus run` line as " +
-						"validation, never both), state (declared, running, exited, pass, fail, no_return), read_only. A " +
+						"validation, never both), state (declared, running, exited, pass, fail, no_return), read_only, " +
+						"max_attempts (how many times the job may be forked, its first fork included; 0 clears " +
+						"the cap; checked only when an ended row is forked again, since magus never retries a job " +
+						"on its own). A " +
 						"key opts omits is left untouched, so a later put in a job's lifecycle (e.g. " +
 						"{state = \"running\"}) advances it without erasing what an earlier put " +
 						"declared; a key present with an empty value is an explicit clear. id is the " +
 						"row's identity to upsert on - the value an orchestrator should also put in " +
 						"the worker's prompt, so the console can join activity to the row. " +
-						"created/updated/releases/write_proof are stamped by the store and cannot be set " +
+						"created/updated/releases/write_proof, generation, attempts, prior and rejection " +
+						"are stamped by the store and cannot be set " +
 						"here. A put that CREATES a row raises when its write_paths cover a file the " +
 						"workspace has to load (a magusfile, a magus.yaml, an imported spell source) " +
 						"while another live job with write paths is bound to this checkout: that job " +

@@ -377,7 +377,11 @@ import (
 //
 // 126: magus-multi-agent says the root does no groundwork from its first call, which
 // orchestrator-groundwork enforces by role.
-const SkillVersion = 126
+//
+// 127: magus-multi-agent teaches that a retry is a fork of the same id, read from the
+// previous attempt `describe job` prints, and that an attempt not retryable names what
+// changes first.
+const SkillVersion = 127
 
 const skillLicense = "GPL-3.0-or-later"
 

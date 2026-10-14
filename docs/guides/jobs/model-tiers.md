@@ -197,6 +197,9 @@ ten or more jobs of the same kind. The history is the same set of numbers
 `magus insight` reports and the `model-tier-fit` check in `magus doctor` judges,
 so the matrix and a person read one record.
 The same file is the compiled example under `std/examples/magus`.
+Beside `passLower` over every ending, `firstPassLower` bounds the pass rate of first
+attempts alone (`first_pass_lower` in `magus insight`), so a tier that passes only
+once a job is forked again reads lower there.
 
 Read-only and unchecked jobs fall through to the default, because a job nothing
 can verify is the wrong place to try a cheaper model.

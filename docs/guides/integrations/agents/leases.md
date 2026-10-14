@@ -156,13 +156,15 @@ A row carries `id` and optionally `parent` (the job this one was forked from),
 `criteria` (the prose half; the machine-checkable half is `goals`),
 `checkpoint` (as `magus vcs checkpoint -o name` prints it), `write_paths`,
 `deny_paths`, `read_paths`, `depends_on`, `breaks`, `model`, `check`, `goals`,
-`state`, and `read_only`. A record naming no `state` is stored `declared`. The
-store adds `schema_version`, the actor that recorded the row, `created`,
-`updated`, `releases`, `unattributed` (paths this job owns that somebody
-outside it wrote, noticed by the guard), `entries` (see
+`state`, `read_only`, and `max_attempts` (see
+[attempts and generations](#attempts-and-generations)). A record naming no
+`state` is stored `declared`. The store adds `schema_version`, the actor that
+recorded the row, `created`, `updated`, `releases`, `unattributed` (paths this
+job owns that somebody outside it wrote, noticed by the guard), `entries` (see
 [entering a job's path](#entering-a-jobs-path)), `write_proof`, `checkout_root` (where
-`magus job exec` took the job), and `end_reason` (why magus ended it, see
-[jobs magus ends itself](#jobs-magus-ends-itself)), all output-only: a
+`magus job exec` took the job), `end_reason` (why magus ended it, see
+[jobs magus ends itself](#jobs-magus-ends-itself)), and `generation`,
+`attempts`, `prior` and `rejection`, all output-only: a
 timestamp a client sent would be a fact about that client's clock. `updated`
 moves only on the job's own writes; the guard recording an unattributed write,
 and an entry, leave it alone.
@@ -353,6 +355,41 @@ magus does for a job does, so a job other agents keep writing near still ages.
 Two habits follow. Remove a worker's worktree only once its job is done, and
 advance a root row you are still forking under, since an untaken root with no
 live children is as dead as any other untaken job.
+
+### Attempts and generations
+
+A job's `generation` counts changes to what it declares, the way a Kubernetes
+object's `metadata.generation` does: it is `1` when the job is forked and one
+more each time a `fork` or `apply` changes a declared field. A move of `state`,
+a registration, a deadline and anything else the store writes leave it alone.
+Every result, run and grade records the generation it was taken at as
+`observed_generation`, so evidence filed before the spec changed reads as
+prior, never as current. `magus job wait` never passes on it: it says which
+generation the evidence came from and names the check to run again, and
+`magus describe job` labels it `prior evidence`.
+
+`magus job fork <id>` on a job that ended starts its next attempt, and that is
+the only retry there is: keep the id, since a new one loses the history. The
+attempt that ended is folded into `prior`, newest last, three at most: how it
+ended and at which tier, its rework rounds and widenings, the goals and
+violations of its last rejected wait (`rejection`), its unresolved risks, the
+guard's denials of its holder, and the refs of its failed runs. `attempts`
+numbers the live one, and its result, runs and counters start over, so the next
+ending counts its own attempt alone. The next holder reads all of it in
+`magus describe job`; no transcript is kept.
+
+Nothing retries on its own. magus classifies each ended attempt and stops
+there: an attempt the guard denied a path outside the job's boundary needs a
+widening first, and a goal unmet in two attempts running needs a person. Either
+reads `not retryable until <change>: <reason>`. Make the change (`magus job
+apply` to widen, a config edit, a person's call) or do the job locally; never
+fork it again unchanged.
+
+`max_attempts` caps how many times the job may be forked, its first fork
+included, as a Kubernetes Job's `backoffLimit` does. `0` is no cap. It is
+checked only when an ended job is forked again: a fork past it is refused,
+naming the attempts used, and a record raising `max_attempts` in the same fork
+passes.
 
 ## Give the holder its terms
 

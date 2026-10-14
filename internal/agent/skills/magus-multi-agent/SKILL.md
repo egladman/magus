@@ -191,10 +191,10 @@ definitive end without capping depth:
 - **Every job carries acceptance criteria down.** A child inherits its parent's
   criteria plus its own. A job nobody can evaluate cannot end; that, not the nesting,
   makes depth dangerous.
-- **A job that fails its criteria twice is not re-issued.** The root re-scopes it,
-  or serializes it behind whatever keeps breaking it{{if .Full}}. Two jobs with an undeclared
-  dependency each break the other's criteria, and re-issuing the failing one satisfies
-  every instruction above while alternating forever; the budget is what ends it{{end}}.
+- **A retry is `{{cmd "job fork"}} <same id>`, never a new id.** The next holder reads the previous
+  attempt in `{{cmd "describe job"}}`, never a transcript. One marked not retryable names what changes
+  first (`{{cmd "job apply"}}` to widen, a config edit, or you): make it, or do the job locally; never
+  re-fork it unchanged. A goal unmet twice marks it so: the root re-scopes the job, or serializes it behind whatever keeps breaking it{{if .Full}}. Two jobs with an undeclared dependency each break the other's criteria, and re-forking the failing one satisfies every instruction above while alternating forever; the budget is what ends it{{end}}.
 - **Whatever the parent does not hand out, the parent still owns.** A strict subset
   leaks by construction. Split "no caller of X remains" into per-project jobs, and
   the callers in no project belong to nobody. Every job passes and the goal is

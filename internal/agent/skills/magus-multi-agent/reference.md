@@ -120,6 +120,17 @@ Moving a live job's boundary is yours. Change its record and run `{{cmd "job app
 - Ending a whole job stays `{{cmd "job exit"}} <job>`. A worker never widens: its refusal
   names `{{cmd "describe job"}}` and tells it to ask you.
 
+A job that ended is retried by forking its id again, `{{cmd "job fork"}} <id>`. That starts
+its next attempt and folds the one that ended into the row's `prior`: its unmet goals,
+violations, the guard's denials, unresolved risks and failing run refs, which
+`{{cmd "describe job"}}` prints for the next holder. A new id loses that history. magus never
+retries on its own; it marks an attempt not retryable when repeating it unchanged cannot
+help, and names what changes first: widen with `{{cmd "job apply"}}`, edit the config, or
+decide it yourself. Then fork it, or do the job locally. A spec change bumps the row's
+`generation`, and `{{cmd "job wait"}}` never passes evidence filed at an earlier one: rerun the
+check it names. `max_attempts` on the record caps the forks; past it a fork is refused
+until its record raises the cap.
+
 Advance the row on every state change. `{{cmd "ls jobs"}}` then shows which live jobs
 claim intersecting `write_paths` and how long since each row was touched. A reported
 overlap is a pair you either intended or must repartition.
