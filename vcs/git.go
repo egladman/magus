@@ -2604,22 +2604,29 @@ func (v gitVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (
 // need not exist. The .gitignore files inside the tree are not listed, since anything
 // that reads the tree already sees them.
 func (v gitVCS) IgnoreSources(ctx context.Context, root string) ([]string, error) {
-	exclude, err := gitOutput(ctx, root, gitOpts{}, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude")
+	return gitConfigSources(ctx, root, "info/exclude", "core.excludesFile", "ignore")
+}
+
+// gitConfigSources lists the repository file at gitPath, which a linked worktree shares
+// with its main checkout, and the global file the config key names, or git's XDG default
+// xdgName when the key is unset. A listed file need not exist.
+func gitConfigSources(ctx context.Context, root, gitPath, key, xdgName string) ([]string, error) {
+	local, err := gitOutput(ctx, root, gitOpts{}, "rev-parse", "--path-format=absolute", "--git-path", gitPath)
 	if err != nil {
-		return nil, fmt.Errorf("git rev-parse --git-path info/exclude: %w", err)
+		return nil, fmt.Errorf("git rev-parse --git-path %s: %w", gitPath, err)
 	}
-	global, err := gitOutput(ctx, root, gitOpts{}, "config", "--path", "--get", "core.excludesFile")
+	global, err := gitOutput(ctx, root, gitOpts{}, "config", "--path", "--get", key)
 	switch {
 	case err == nil:
 	case exitCode(err) == 1: // unset: git falls back to its XDG location
-		global, err = gitXDGConfigFile("ignore")
+		global, err = gitXDGConfigFile(xdgName)
 		if err != nil {
 			return nil, err
 		}
 	default:
-		return nil, fmt.Errorf("git config core.excludesFile: %w", err)
+		return nil, fmt.Errorf("git config %s: %w", key, err)
 	}
-	out := []string{strings.TrimSpace(exclude)}
+	out := []string{strings.TrimSpace(local)}
 	if g := strings.TrimSpace(global); g != "" {
 		out = append(out, g)
 	}
@@ -4123,14 +4130,14 @@ func (v gitVCS) Unbundle(ctx context.Context, root, file string) error {
 // revisions it is handed, so a cache of Regions can key on it: every funcname pattern the
 // placement runs with, magus's defaults and each diff.<driver>.funcname and xfuncname the
 // repository sees, then the path and content of each attribute file outside the tree that
-// picks a file's diff driver (see gitAttributeSources). A missing attribute file reads as
+// picks a file's diff driver (info/attributes and core.attributesFile). A missing attribute file reads as
 // empty.
 func (gitVCS) RegionsConfig(ctx context.Context, root string) (string, error) {
 	args, err := gitFuncnameConfig(ctx, root)
 	if err != nil {
 		return "", err
 	}
-	sources, err := gitAttributeSources(ctx, root)
+	sources, err := gitConfigSources(ctx, root, "info/attributes", "core.attributesFile", "attributes")
 	if err != nil {
 		return "", err
 	}
@@ -4144,31 +4151,4 @@ func (gitVCS) RegionsConfig(ctx context.Context, root string) (string, error) {
 		fmt.Fprintf(&b, "\x00%s\x00%d\x00%s", path, len(content), content)
 	}
 	return b.String(), nil
-}
-
-// gitAttributeSources lists the attribute files outside the working tree that git reads
-// besides the tree's .gitattributes: the repository's info/attributes, which a linked
-// worktree shares with its main checkout, and core.attributesFile, or git's XDG default when
-// that is unset. A listed file need not exist.
-func gitAttributeSources(ctx context.Context, root string) ([]string, error) {
-	local, err := gitOutput(ctx, root, gitOpts{}, "rev-parse", "--path-format=absolute", "--git-path", "info/attributes")
-	if err != nil {
-		return nil, fmt.Errorf("git rev-parse --git-path info/attributes: %w", err)
-	}
-	global, err := gitOutput(ctx, root, gitOpts{}, "config", "--path", "--get", "core.attributesFile")
-	switch {
-	case err == nil:
-	case exitCode(err) == 1: // unset: git falls back to its XDG location
-		global, err = gitXDGConfigFile("attributes")
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, fmt.Errorf("git config core.attributesFile: %w", err)
-	}
-	out := []string{strings.TrimSpace(local)}
-	if g := strings.TrimSpace(global); g != "" {
-		out = append(out, g)
-	}
-	return out, nil
 }
