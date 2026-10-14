@@ -473,3 +473,32 @@ func TestParseTarget(t *testing.T) {
 	assertTarget("rust::build", "rust", "build")
 	assertTarget("::lint", "", "lint") // empty spell — treated as no filter
 }
+
+func TestOutputDstSilentTee(t *testing.T) {
+	const record = "{\n  \"N\": 7\n}\n"
+	cases := []struct {
+		name       string
+		silent     bool
+		wantStdout string
+	}{
+		{"silent leaves stdout empty", true, ""},
+		{"not silent mirrors to stdout", false, record},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Cleanup(snapshotGlobals())
+			teeTarget := t.TempDir() + "/out.json"
+			global.tee = teeTarget
+			global.silent = tc.silent
+
+			stdout := captureStdout(t, func() {
+				require.NoError(t, emitFormatted(OutputOptions{Format: outputJSON}, struct{ N int }{N: 7}))
+			})
+
+			assert.Equal(t, tc.wantStdout, stdout)
+			got, err := os.ReadFile(teeTarget)
+			require.NoError(t, err)
+			assert.Equal(t, record, string(got), "the tee file always holds the record")
+		})
+	}
+}

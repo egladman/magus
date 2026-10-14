@@ -18,6 +18,16 @@ import (
 	"github.com/egladman/magus/internal/json"
 )
 
+// structuredStdout is where structured output goes besides the --tee file. --silent
+// with --tee means the caller captures the record in the file and wants stdout empty,
+// so it does not pay for the same record twice in its context.
+func structuredStdout() io.Writer {
+	if global.silent && global.tee != "" {
+		return io.Discard
+	}
+	return os.Stdout
+}
+
 // outputDst returns the writer for structured output; mirrors to --tee file when set.
 func outputDst() (io.Writer, func() error, error) {
 	if global.tee == "" {
@@ -27,7 +37,7 @@ func outputDst() (io.Writer, func() error, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("--tee: %w", err)
 	}
-	return io.MultiWriter(os.Stdout, f), f.Close, nil
+	return io.MultiWriter(structuredStdout(), f), f.Close, nil
 }
 
 // openSink builds the invocation's one sink for its -o format, over stdout (mirrored to
@@ -37,7 +47,7 @@ func openSink(ctx context.Context, opts OutputOptions) (*magus.Sink, func() erro
 	stdout := io.Writer(os.Stdout)
 	tee := &lazyFile{path: global.tee}
 	if global.tee != "" {
-		stdout = io.MultiWriter(os.Stdout, tee)
+		stdout = io.MultiWriter(structuredStdout(), tee)
 	}
 	sinkOpts := []magus.SinkOption{magus.WithSinkLevel(globalCfg.Log.SlogLevel()), magus.WithSinkFilter(globalCfg.Report.Filter)}
 	if opts.Format == outputText && pipeStageFromContext(ctx).writesRecords() {
