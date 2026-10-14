@@ -715,23 +715,19 @@ func busyWaitFires(command string, d Dialect) bool {
 // rather than killed, and polls on.
 func waitsIn(n syntax.Node, body []*syntax.Stmt, d Dialect) bool {
 	if _, ok := n.(*syntax.WhileClause); ok {
-		return sleepsIn(body, d)
+		return runsIn(body, d, "sleep")
 	}
-	return bodyOnlySleeps(body, d) || leavesIn(body, d)
+	return bodyOnlySleeps(body, d) || runsIn(body, d, "break", "exit", "return")
 }
 
-// leavesIn reports whether body runs break, exit or return anywhere, nested commands included.
-func leavesIn(body []*syntax.Stmt, d Dialect) bool {
+// runsIn reports whether body runs any of names anywhere, nested commands included.
+func runsIn(body []*syntax.Stmt, d Dialect, names ...string) bool {
+	named := func(inv hint.Invocation) bool { return slices.Contains(names, path.Base(inv.Name)) }
 	found := false
 	for _, stmt := range body {
 		syntax.Walk(stmt, func(n syntax.Node) bool {
-			if call, ok := n.(*syntax.CallExpr); ok {
-				for _, inv := range peelWrappers(literalWords(call.Args), d) {
-					switch path.Base(inv.Name) {
-					case "break", "exit", "return":
-						found = true
-					}
-				}
+			if call, ok := n.(*syntax.CallExpr); ok && slices.ContainsFunc(peelWrappers(literalWords(call.Args), d), named) {
+				found = true
 			}
 			return !found
 		})
@@ -748,27 +744,9 @@ func pollingLoop(n syntax.Node, d Dialect) ([]*syntax.Stmt, bool) {
 	case *syntax.WhileClause:
 		return n.Do, true
 	case *syntax.ForClause:
-		return n.Do, sleepsIn(n.Do, d)
+		return n.Do, runsIn(n.Do, d, "sleep")
 	}
 	return nil, false
-}
-
-// sleepsIn reports whether body runs sleep anywhere, nested commands included.
-func sleepsIn(body []*syntax.Stmt, d Dialect) bool {
-	found := false
-	for _, stmt := range body {
-		syntax.Walk(stmt, func(n syntax.Node) bool {
-			if call, ok := n.(*syntax.CallExpr); ok {
-				for _, inv := range peelWrappers(literalWords(call.Args), d) {
-					if path.Base(inv.Name) == "sleep" {
-						found = true
-					}
-				}
-			}
-			return !found
-		})
-	}
-	return found
 }
 
 // bodyOnlySleeps reports whether a loop body does nothing but sleep, which is what
