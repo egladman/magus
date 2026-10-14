@@ -699,7 +699,7 @@ export function mapSample(s: ProtoSample): SampleView {
 }
 
 // ---- insight view-model (magus.insight.v1alpha1) ---------------------------------
-// InsightService.GetInsight returns the five lenses as a generated proto message, so
+// InsightService.GetInsight returns the six lenses as a generated proto message, so
 // this axis has no hand-written wire shape: mapInsight folds magus.insight.v1alpha1.Insight
 // into the camelCase view-models the tiles read. Times are google.protobuf.Timestamp
 // with a zero time.Time mapped to UNSET at the server boundary, so an absent time is
@@ -765,6 +765,27 @@ export interface VolatilityView {
   threshold: number;
   targets: VolatilityRowView[];
 }
+// One (model tier, job kind) pair's recorded outcomes. rank is the tier's place in the
+// current declaration, -1 for a tier it no longer names. passLower is the Wilson lower bound of
+// the pass rate; the per-job figures are means over the pair's jobs.
+export interface ModelTierRowView {
+  label: string; // "<tier> / <kind>"
+  rank: number;
+  jobs: number;
+  pass: number;
+  fail: number;
+  noReturn: number;
+  passLower: number;
+  checksPerJob: number;
+  forksPerId: number;
+  reworkPerJob: number;
+  wideningsPerJob: number;
+  meanCostUsd: number;
+  medianTokens: number;
+}
+export interface ModelTierView {
+  rows: ModelTierRowView[];
+}
 
 // ---- toolchain view-model (magus.tool.v1alpha1) ----------------------------------
 //
@@ -817,6 +838,8 @@ export interface InsightView {
   ownership: OwnershipRowView[];
   trend: TrendRowView[];
   volatility: VolatilityView | null;
+  // Null when no job outcome was ever recorded, as volatility is null for no run history.
+  modelTiers: ModelTierView | null;
 }
 
 export function mapInsight(w: Insight): InsightView {
@@ -870,6 +893,25 @@ export function mapInsight(w: Insight): InsightView {
             volatileCount: v.volatileCount,
             samples: v.samples,
             lastPass: fmtDate(v.lastPassTime),
+          })),
+        }
+      : null,
+    modelTiers: w.modelTiers
+      ? {
+          rows: w.modelTiers.rows.map((r) => ({
+            label: r.modelTier + " / " + r.kind,
+            rank: r.rank,
+            jobs: r.jobs,
+            pass: r.pass,
+            fail: r.fail,
+            noReturn: r.noReturn,
+            passLower: r.passLower,
+            checksPerJob: r.checksPerJob,
+            forksPerId: r.forksPerId,
+            reworkPerJob: r.reworkPerJob,
+            wideningsPerJob: r.wideningsPerJob,
+            meanCostUsd: r.meanCostUsd,
+            medianTokens: Number(r.medianTokens),
           })),
         }
       : null,

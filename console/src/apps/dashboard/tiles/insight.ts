@@ -1,4 +1,4 @@
-// insight.ts - the Insight section: the five insight lenses as tiles, fed by the
+// insight.ts - the Insight section: the six insight lenses as tiles, fed by the
 // on-demand /api/v1/insight poll (state.insight). Consolidated in one file because
 // they are one feature reading one store slice; each is still an independent Tile
 // ({ el, update, destroy }) and each heading deep-links its glossary term.
@@ -13,7 +13,9 @@
 //   - Ownership:  primary-author share, bus-factor-1 and stale flags.
 //   - Trend:      per-project rising/cooling delta.
 //   - Volatility: the volatile-targets table (replaces the old inert placeholder).
+//   - Model tiers: what each model tier achieved per kind of job, beside the work it took.
 //
+
 // The tables are the shared SortableTable, so wide tables scroll inside their own
 // overflow-x container and every numeric column is exact and sortable. Boolean flags
 // render as a plain word ("hidden" / "yes" / "volatile") or "-", and sort by the flag.
@@ -23,6 +25,7 @@ import type {
   FileHotspotView,
   HotspotNodeView,
   AffinityPairView,
+  ModelTierRowView,
   OwnershipRowView,
   TrendRowView,
   VolatilityRowView,
@@ -434,6 +437,120 @@ function volatilityTile(): Tile {
   };
 }
 
+// ---- Model tiers -----------------------------------------------------------
+
+// A pass rate as a percentage, the Wilson lower bound beside it. The lower bound is the
+// number the doctor check judges by, so the tile and `magus doctor` name the same pairs.
+const pct = (n: number): string => (n * 100).toFixed(0) + "%";
+const oneDecimal = (n: number): string => n.toFixed(1);
+
+const modelTierCols: Column<ModelTierRowView>[] = [
+  { key: "label", label: "Tier / kind", text: (r) => r.label, sort: (r) => r.label },
+  { key: "jobs", label: "Jobs", numeric: true, text: (r) => fmtCount(r.jobs), sort: (r) => r.jobs },
+  {
+    key: "pass",
+    label: "Pass rate",
+    numeric: true,
+    text: (r) => pct(r.jobs > 0 ? r.pass / r.jobs : 0),
+    sort: (r) => (r.jobs > 0 ? r.pass / r.jobs : 0),
+  },
+  {
+    key: "lower",
+    label: "Pass lower bound",
+    numeric: true,
+    text: (r) => pct(r.passLower),
+    sort: (r) => r.passLower,
+  },
+  { key: "fail", label: "Fail", numeric: true, text: (r) => fmtCount(r.fail), sort: (r) => r.fail },
+  {
+    key: "noreturn",
+    label: "No return",
+    numeric: true,
+    text: (r) => fmtCount(r.noReturn),
+    sort: (r) => r.noReturn,
+  },
+  {
+    key: "checks",
+    label: "Checks per job",
+    numeric: true,
+    text: (r) => oneDecimal(r.checksPerJob),
+    sort: (r) => r.checksPerJob,
+  },
+  {
+    key: "forks",
+    label: "Forks per id",
+    numeric: true,
+    text: (r) => oneDecimal(r.forksPerId),
+    sort: (r) => r.forksPerId,
+  },
+  {
+    key: "rework",
+    label: "Rework per job",
+    numeric: true,
+    text: (r) => oneDecimal(r.reworkPerJob),
+    sort: (r) => r.reworkPerJob,
+  },
+  {
+    key: "widenings",
+    label: "Widenings per job",
+    numeric: true,
+    text: (r) => oneDecimal(r.wideningsPerJob),
+    sort: (r) => r.wideningsPerJob,
+  },
+  {
+    key: "cost",
+    label: "Mean cost",
+    numeric: true,
+    text: (r) => (r.meanCostUsd > 0 ? "$" + r.meanCostUsd.toFixed(2) : "-"),
+    sort: (r) => r.meanCostUsd,
+  },
+  {
+    key: "tokens",
+    label: "Median tokens",
+    numeric: true,
+    text: (r) => (r.medianTokens > 0 ? fmtCount(r.medianTokens) : "-"),
+    sort: (r) => r.medianTokens,
+  },
+];
+
+function modelTiersTile(): Tile {
+  const card = new Card("insight-model-tiers", "Model tiers", {
+    note: "what each tier achieved",
+    why:
+      "How jobs fared at each model tier, by kind of job: pass rate with its lower bound, and the" +
+      " checks, re-forks, rework rounds and widened write paths they took to get there. It only" +
+      " reports. Changing a tier is an edit to the declaration or matrix that `magus doctor` names.",
+  });
+  const table = new SortableTable<ModelTierRowView>(modelTierCols, {
+    label: "Job outcomes per model tier and job kind",
+    sortKey: "jobs",
+    emptyText: "No finished jobs recorded yet.",
+  });
+  tableScroller(table.el, "Model tier outcomes, scrolls sideways");
+  card.body.append(table.el);
+  return {
+    el: card.el,
+    update(s: DashboardState) {
+      if (!s.insight) {
+        table.setUnresolved(s.insightNote);
+        card.setNote("");
+        return;
+      }
+      table.setUnresolved(null);
+      const m = s.insight.modelTiers;
+      if (!m) {
+        card.setNote("no jobs recorded");
+        table.setRows([]);
+        return;
+      }
+      const jobs = m.rows.reduce((n, r) => n + r.jobs, 0);
+      card.setNote(`${m.rows.length} tier and kind pairs, ${jobs} jobs`);
+      table.setRows(m.rows);
+    },
+    destroy() {},
+  };
+}
+
 // ---- section ---------------------------------------------------------------
 
 // insightSection builds the labeled "Insight" band (heading + a manual refresh
@@ -456,7 +573,7 @@ export function insightSection(
   head.append(title);
   head.append(
     helpGlyph(
-      "Where a codebase's attention and risk concentrate: five lenses read git history, volatility reads run outcomes.",
+      "Where a codebase's attention and risk concentrate: four lenses read git history, volatility reads run outcomes, and model tiers read finished jobs.",
       "Insight",
     ),
   );
@@ -488,6 +605,7 @@ export function insightSection(
     ownershipTile(),
     trendTile(),
     volatilityTile(),
+    modelTiersTile(),
   ];
   return {
     el: band,
