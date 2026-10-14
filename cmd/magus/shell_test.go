@@ -69,10 +69,11 @@ func TestShellStdinJudgesWithOnlyTheFlagsItIsGiven(t *testing.T) {
 	assert.True(t, global.quiet, "the caller's flags are back once the call returns")
 }
 
-// verdictDecisionRe finds every decision literal the guard assigns, in either
-// spelling the code uses: the struct-literal `Decision: "pass"` and the
-// assignment `verdict.Decision = "deny"`.
-var verdictDecisionRe = regexp.MustCompile(`Decision(?::|\s*=)\s*"(\w+)"`)
+// verdictDecisionRe finds every decision the guard assigns, in either spelling
+// the code uses: the struct-literal `Decision: decisionPass` and the assignment
+// `verdict.Decision = decisionDeny`. Each decisionX constant spells its value,
+// so the lowercased suffix is the decision.
+var verdictDecisionRe = regexp.MustCompile(`Decision(?::|\s*=)\s*decision(\w+)`)
 
 // fleetFixture stands up a workspace root and a lease ledger holding leases, and
 // returns the context pinning both, the workspace root, and the resolved cache dir.
@@ -174,10 +175,11 @@ func TestGuardDecisionsCoverEveryVerdictTheHookEmits(t *testing.T) {
 		require.NoError(t, rerr)
 		for _, m := range verdictDecisionRe.FindAllStringSubmatch(string(body), -1) {
 			found = true
-			assert.True(t, listed[m[1]],
+			decision := strings.ToLower(m[1])
+			assert.True(t, listed[decision],
 				"%s emits the verdict decision %q, which agent.GuardDecisions does not list.\n"+
 					"Add it there first: the host-parity gate asks every glue to declare a stance per\n"+
-					"decision, and a decision missing from the contract is one no host was asked about.", src, m[1])
+					"decision, and a decision missing from the contract is one no host was asked about.", src, decision)
 		}
 	}
 	require.True(t, found, "found no decision literals in guard*.go; verdictDecisionRe no longer matches how the guard assigns a decision")
