@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -15,16 +16,29 @@ import (
 	"github.com/egladman/magus/internal/ward"
 )
 
-// The reasons the binary judging a call cannot read the tree's guard policy, as
-// unloadCause names them.
+// unloadKind is why the binary judging a call cannot read the tree's guard policy.
+type unloadKind int
+
 const (
-	// causeStale is a load failure shaped like a binary older than the tree: a name the
+	// unloadNone is a tree that loaded, or a failure only its author fixes (a typo).
+	unloadNone unloadKind = iota
+	// unloadStale is a load failure shaped like a binary older than the tree: a name the
 	// magusfile reaches for that this build has never heard of.
-	causeStale = "stale"
-	// causeNoBinary is a load failure in a checkout that holds no ./magus, so whatever
+	unloadStale
+	// unloadNoBinary is a load failure in a checkout that holds no ./magus, so whatever
 	// judges the call is a magus installed somewhere else.
-	causeNoBinary = "no-binary"
+	unloadNoBinary
+	// unloadSkewedSpell is a ./magus built on the other side of a spell's addition or
+	// removal, which may be newer than the tree as well as older.
+	unloadSkewedSpell
 )
+
+// unloadReason is what unloadCause found. Spell is the spell the tree carries and the
+// binary does not ship, "" for none; a checkout with no ./magus can have one too.
+type unloadReason struct {
+	Kind  unloadKind
+	Spell string
+}
 
 // The rules denyUnloaded refuses under, while no side of the workspace's guard policy loads.
 const (
@@ -41,19 +55,24 @@ const (
 var guardRuleCall = []byte(`magus\guard.`)
 
 // unloadCause says why the working tree's policy did not load in a way only a different
-// binary fixes, or "" when the failure is something else (a typo in a magusfile) or the
-// tree loaded. A checkout holding no ./magus counts whatever the error says: the judge is
-// a PATH binary nobody pinned to this tree.
-func unloadCause(loadFailure error, root string) string {
-	switch {
-	case loadFailure == nil || root == "":
-		return ""
-	case ward.IsStaleBinary(loadFailure):
-		return causeStale
-	case !hasMagusBinary(root):
-		return causeNoBinary
+// binary fixes, unloadNone when the failure is something else (a typo in a magusfile) or
+// the tree loaded. A checkout holding no ./magus counts whatever the error says: the judge
+// is a PATH binary nobody pinned to this tree.
+func unloadCause(loadFailure error, root string) unloadReason {
+	if loadFailure == nil || root == "" {
+		return unloadReason{}
 	}
-	return ""
+	if ward.IsStaleBinary(loadFailure) {
+		return unloadReason{Kind: unloadStale}
+	}
+	spell := skewedSpell(loadFailure, root)
+	switch {
+	case !hasMagusBinary(root):
+		return unloadReason{Kind: unloadNoBinary, Spell: spell}
+	case spell != "":
+		return unloadReason{Kind: unloadSkewedSpell, Spell: spell}
+	}
+	return unloadReason{}
 }
 
 // declaresGuardRule reports whether root's magusfile visibly registers a guard rule. It
@@ -209,17 +228,17 @@ func awkReadOnly(args []string) bool {
 			i++
 		case strings.HasPrefix(a, "-F") || strings.HasPrefix(a, "-v"):
 		case a == "--":
-			return i+1 < len(args) && awkProgramReads(args[i+1])
+			return i+1 < len(args) && awkProgramReadOnly(args[i+1])
 		case strings.HasPrefix(a, "-"):
 			return false
 		default:
-			return awkProgramReads(a)
+			return awkProgramReadOnly(a)
 		}
 	}
 	return false
 }
 
-func awkProgramReads(program string) bool {
+func awkProgramReadOnly(program string) bool {
 	return !strings.ContainsAny(program, ">|") && !strings.Contains(program, "system")
 }
 
@@ -373,14 +392,17 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCa
 }
 
 // staleBinaryDenial is the deny for a call that changes state while the binary judging it
-// cannot load the tree's guard policy: the cause and the likeliest fix inline, the call,
-// the failures and the fallbacks behind the ref.
-func staleBinaryDenial(call judgedCall, cause string, failures []string, own bool, root string) denial {
+// cannot load the tree's guard policy for reason: the cause and the likeliest fix inline,
+// the call, the failures and the fallbacks behind the ref.
+func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, own bool, root string) denial {
 	hasBinary := hasMagusBinary(root)
 	fix := binaryRemedy(own, hasBinary, call.lease)
 	problem := "the magus judging this is older than this workspace and cannot load its guard policy"
 	switch {
-	case cause == causeNoBinary, own && !hasBinary:
+	case reason.Kind == unloadSkewedSpell:
+		problem = "./magus was built from another commit than this tree: it ships no spell " + strconv.Quote(reason.Spell) +
+			", which the tree carries, so it cannot load its guard policy"
+	case reason.Kind == unloadNoBinary, own && !hasBinary:
 		problem = "this checkout has no ./magus to load its guard policy"
 	case own && hasBinary:
 		problem = "./magus is older than this workspace and cannot load its guard policy"

@@ -42,7 +42,7 @@ func judgeUnloaded(ctx context.Context, deps Dependencies, line string) Verdict 
 // It returns the full verdict stored behind the ref.
 func shortDeny(t *testing.T, cacheDir string, v Verdict, rule denyRuleName, say string) string {
 	t.Helper()
-	assert.Equal(t, verdictWithRule("deny", string(rule)), unworded(v))
+	assert.Equal(t, verdictWithRule(decisionDeny, string(rule)), unworded(v))
 	ref := verdictRef.FindString(v.Reason)
 	require.NotEmpty(t, ref, "the deny cites its stored verdict: %q", v.Reason)
 	shown, cited, ok := strings.Cut(v.Reason, "\nfull verdict: ")
@@ -63,7 +63,7 @@ func servedDeny(t *testing.T, cacheDir string, v Verdict, rule denyRuleName, say
 	require.Len(t, v.Next, 1, v.Reason)
 	assert.Equal(t, next, v.Next[0])
 	v.Next = nil
-	assert.Equal(t, verdictWithRule("deny", string(rule)), unworded(v))
+	assert.Equal(t, verdictWithRule(decisionDeny, string(rule)), unworded(v))
 	shown, cited, ok := strings.Cut(v.Reason, "\nfull verdict: ")
 	require.True(t, ok, v.Reason)
 	ref := verdictRef.FindString(cited)
@@ -112,7 +112,7 @@ func TestFreshWorktreeWithoutABinaryDeniesWrites(t *testing.T) {
 		"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
 	} {
 		v := judgeUnloaded(ctx, deps, line)
-		assert.NotEqual(t, "deny", v.Decision, "%s: %s", line, v.Reason)
+		assert.NotEqual(t, decisionDeny, v.Decision, "%s: %s", line, v.Reason)
 	}
 
 	edit := Judge(ctx, deps, Request{Input: filepath.Join(root, "main.go"), IsPath: true, Host: "claude-code", Session: "s1"})
@@ -138,7 +138,7 @@ func TestUnloadedTreeWithoutAVisibleRuleDeniesNothing(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	ownCheckout(t, ctx, false)
 	v := judgeUnloaded(ctx, unloadedDepsFor(errMissingMember), "touch notes.txt")
-	assert.NotEqual(t, "deny", v.Decision, v.Reason)
+	assert.NotEqual(t, decisionDeny, v.Decision, v.Reason)
 }
 
 // A ./magus older than the tree denies an edit, a spawn, a push and a state-writing magus
@@ -166,7 +166,7 @@ func TestStaleBinaryDeniesEveryWriteSeam(t *testing.T) {
 		"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
 	} {
 		v := judgeUnloaded(ctx, deps, line)
-		assert.NotEqual(t, "deny", v.Decision, "%s: %s", line, v.Reason)
+		assert.NotEqual(t, decisionDeny, v.Decision, "%s: %s", line, v.Reason)
 	}
 }
 
@@ -204,7 +204,7 @@ func TestStaleBinaryRemedyFollowsTheCaller(t *testing.T) {
 	assert.NotContains(t, stored, "go-build")
 
 	placed := Judge(ctx, deps, Request{Input: workerPlacementRun, Host: "claude-code", Session: "s1", Lease: "lease-a"})
-	assert.NotEqual(t, "deny", placed.Decision, placed.Reason)
+	assert.NotEqual(t, decisionDeny, placed.Decision, placed.Reason)
 
 	for i, line := range []string{
 		"./magus run go-build .",
@@ -212,7 +212,7 @@ func TestStaleBinaryRemedyFollowsTheCaller(t *testing.T) {
 		"go build -o magus ./cmd/magus",
 	} {
 		v := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "w" + strconv.Itoa(i), Lease: "lease-a"})
-		assert.Equal(t, "deny", v.Decision, line)
+		assert.Equal(t, decisionDeny, v.Decision, line)
 		assert.NotContains(t, v.Reason, "rebuild ./magus", line)
 	}
 }
@@ -233,14 +233,14 @@ func TestStaleBinaryLetsAReadOnlyScoutRecord(t *testing.T) {
 		"export BAGGAGE=magus.lease=scout && ./magus job exit scout --stdin <<'EOF'\n{}\nEOF",
 	} {
 		v := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: line, Lease: "scout"})
-		assert.NotEqual(t, "deny", v.Decision, "%s: %s", line, v.Reason)
+		assert.NotEqual(t, decisionDeny, v.Decision, "%s: %s", line, v.Reason)
 
 		writer := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "writer " + line, Lease: "lease-a"})
-		assert.Equal(t, "deny", writer.Decision, line)
+		assert.Equal(t, decisionDeny, writer.Decision, line)
 	}
 	for _, line := range []string{"./magus buzz probe.buzz", "./magus job fork x --read-only", "./magus job exit scout > out.json"} {
 		v := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: line, Lease: "scout"})
-		assert.Equal(t, "deny", v.Decision, line)
+		assert.Equal(t, decisionDeny, v.Decision, line)
 	}
 }
 
@@ -256,7 +256,7 @@ func TestBootstrapIsTheMainSessionsNotAWorkers(t *testing.T) {
 	deps := strict(testDependencies())
 
 	orchestrator := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "s1"})
-	assert.Equal(t, "advise", orchestrator.Decision, orchestrator.Reason)
+	assert.Equal(t, decisionAdvise, orchestrator.Decision, orchestrator.Reason)
 
 	worker := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "s1", Lease: "lease-a"})
 	stored := servedDeny(t, hookLocation(ctx, Dependencies{}).cacheDir, worker, denyRuleRawTool,
@@ -274,10 +274,10 @@ func TestBootstrapWhileStaleIsTheMainSessionsNotAWorkers(t *testing.T) {
 	line := "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
 
 	orchestrator := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "s1"})
-	assert.Equal(t, "advise", orchestrator.Decision, orchestrator.Reason)
+	assert.Equal(t, decisionAdvise, orchestrator.Decision, orchestrator.Reason)
 
 	worker := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "s1", Lease: "lease-a"})
-	assert.Equal(t, "deny", worker.Decision, worker.Reason)
+	assert.Equal(t, decisionDeny, worker.Decision, worker.Reason)
 }
 
 // Each hook row records the magus that judged the call and the directory the host said it
@@ -387,12 +387,12 @@ func TestUnloadCause(t *testing.T) {
 	stale := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "older")
 	typo := errors.New("magusfile.buzz:3:1: expected expression")
 
-	assert.Equal(t, causeStale, unloadCause(stale, withBinary))
-	assert.Equal(t, causeStale, unloadCause(errMissingMember, withBinary), "the uncoded missing member reads as stale")
-	assert.Equal(t, causeNoBinary, unloadCause(typo, bare), "any failure in a checkout with no ./magus")
-	assert.Equal(t, "", unloadCause(typo, withBinary), "a typo is the author's to fix")
-	assert.Equal(t, "", unloadCause(nil, bare))
-	assert.Equal(t, "", unloadCause(stale, ""))
+	assert.Equal(t, unloadReason{Kind: unloadStale}, unloadCause(stale, withBinary))
+	assert.Equal(t, unloadReason{Kind: unloadStale}, unloadCause(errMissingMember, withBinary), "the uncoded missing member reads as stale")
+	assert.Equal(t, unloadReason{Kind: unloadNoBinary}, unloadCause(typo, bare), "any failure in a checkout with no ./magus")
+	assert.Equal(t, unloadReason{}, unloadCause(typo, withBinary), "a typo is the author's to fix")
+	assert.Equal(t, unloadReason{}, unloadCause(nil, bare))
+	assert.Equal(t, unloadReason{}, unloadCause(stale, ""))
 }
 
 func TestDeclaresGuardRule(t *testing.T) {
@@ -501,7 +501,7 @@ func TestReadOnlyLine(t *testing.T) {
 }
 
 // awk reads when its program is on the line and neither redirects, pipes nor calls system().
-// The first line is the one the 10-13 lockout denied as state-changing.
+// The first line is a read pipeline a lapse once denied as state-changing.
 func TestReadOnlyLineReadsAnAwkProgram(t *testing.T) {
 	for _, line := range []string{
 		`sed -n 340,360p f; sed -n 955,990p g; grep -n x g | awk -F: '{print $1}'`,
@@ -562,7 +562,7 @@ func TestStaleBinaryDeniesStateChangingMCPTools(t *testing.T) {
 		"diff non-text": mcpEnvelope(t, "diff", map[string]any{"op": 7}),
 	} {
 		v := Judge(ctx, deps, Request{Input: call, Host: "claude-code", Session: "s1"})
-		assert.NotEqual(t, "deny", v.Decision, "%s: %s", name, v.Reason)
+		assert.NotEqual(t, decisionDeny, v.Decision, "%s: %s", name, v.Reason)
 	}
 }
 
@@ -578,7 +578,7 @@ func TestStaleBinaryMCPDenyFollowsTheCaller(t *testing.T) {
 	assert.NotContains(t, stored, "go-build")
 
 	reads := Judge(ctx, deps, Request{Input: mcpEnvelope(t, "status", map[string]any{}), Host: "claude-code", Session: "s1", Lease: "lease-a"})
-	assert.NotEqual(t, "deny", reads.Decision, reads.Reason)
+	assert.NotEqual(t, decisionDeny, reads.Decision, reads.Reason)
 }
 
 // Every magus MCP tool is classified, so a new one cannot reach a stale binary unjudged.

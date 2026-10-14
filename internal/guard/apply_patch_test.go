@@ -25,24 +25,35 @@ func TestApplyPatchWritePaths(t *testing.T) {
 	t.Parallel()
 
 	t.Run("every section is a path, a move names both ends", func(t *testing.T) {
-		files := parsePatch(multiFilePatch)
-		assert.Equal(t, []string{
-			"internal/guard/new.go", "internal/guard/old.go", "internal/guard/renamed.go", "internal/guard/gone.go",
-		}, patchWritePaths(files))
+		assert.Equal(t, []patchFile{
+			{Path: "internal/guard/new.go", Op: patchOpAdd, Added: []string{"package guard", "", "const x = 1"}},
+			{Path: "internal/guard/old.go", Op: patchOpUpdate},
+			{Path: "internal/guard/renamed.go", Op: patchOpMove},
+			{Path: "internal/guard/gone.go", Op: patchOpDelete},
+		}, parsePatch(multiFilePatch))
 	})
 	t.Run("a path named twice counts once", func(t *testing.T) {
 		files := parsePatch("*** Begin Patch\n*** Update File: a.go\n*** Update File: a.go\n*** End Patch\n")
-		assert.Equal(t, []string{"a.go"}, patchWritePaths(files))
+		assert.Equal(t, []patchFile{{Path: "a.go", Op: patchOpUpdate}}, files)
 	})
 	t.Run("CRLF line ends", func(t *testing.T) {
 		files := parsePatch("*** Begin Patch\r\n*** Add File: a.txt\r\n+one\r\n*** End Patch\r\n")
-		assert.Equal(t, []string{"a.txt"}, patchWritePaths(files))
+		assert.Equal(t, []patchFile{{Path: "a.txt", Op: patchOpAdd, Added: []string{"one"}}}, files)
 		assert.Equal(t, "one\n", patchContent(files))
 	})
 	t.Run("only a patch is a patch", func(t *testing.T) {
-		assert.Nil(t, envelopePatch(map[string]any{"command": "git status"}))
-		assert.Nil(t, envelopePatch(map[string]any{"command": "echo '*** Begin Patch'"}))
-		assert.False(t, envelopeHoldsPatch(map[string]any{"patchText": "no marker"}))
+		for _, input := range []map[string]any{
+			{"command": "git status"},
+			{"command": "echo '*** Begin Patch'"},
+			{"patchText": "no marker"},
+		} {
+			files, ok := envelopePatch(input)
+			assert.False(t, ok, input)
+			assert.Nil(t, files, input)
+		}
+		files, ok := envelopePatch(map[string]any{"patchText": "*** Begin Patch\n*** End Patch\n"})
+		assert.True(t, ok, "a patch that names no file is still a patch")
+		assert.Empty(t, files)
 	})
 	t.Run("content is read only from a patch that creates one file", func(t *testing.T) {
 		assert.Equal(t, "package guard\n\nconst x = 1\n", patchContent(parsePatch(

@@ -220,7 +220,7 @@ func (d Dependencies) inspect(ctx context.Context, root string) (types.Workspace
 	if log.lapsed(phaseInspect) {
 		return nil, context.DeadlineExceeded
 	}
-	log.underway(phaseInspect)
+	log.begin(phaseInspect)
 	budget := inspectBudget
 	if deadline, ok := ctx.Deadline(); ok {
 		budget = min(budget, max(time.Until(deadline)-judgeReserve, 0))
@@ -249,7 +249,7 @@ func (d Dependencies) humanOnlyRecord(ctx context.Context, root string) (types.H
 	if log.lapsed(phaseHumanOnlyRecord) {
 		return types.HumanOnlyIndex{}, false
 	}
-	log.underway(phaseHumanOnlyRecord)
+	log.begin(phaseHumanOnlyRecord)
 	budget := inspectBudget
 	if deadline, ok := ctx.Deadline(); ok {
 		budget = min(budget, max(time.Until(deadline)-judgeReserve, 0))
@@ -1231,7 +1231,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// way the skill gates are: the parser decides WHAT the command is, and the arm
 		// with a location decides what the workspace knows about it.
 		if verdict.Rule == string(advisoryPushGate) && preauth == "" {
-			cover, commit := pushCoverage(ctx, deps, location, input, shellD, callDir)
+			cover, commit, moved := pushCoverage(ctx, deps, location, input, shellD, callDir)
 			// The same worker test lease-vcs uses: a root session holding a parentless row
 			// publishes, so it is asked like a person rather than refused like a worker. A
 			// row that cannot be read stays a worker.
@@ -1241,6 +1241,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			}
 			// An ask is graded as the deny it stands in for: demoted, nobody is asked.
 			decision, reason := gradePushWithoutGate(cover, commit, worker)
+			if moved {
+				decision, reason = decisionDeny, movedPushReason
+			}
 			if decision != "" {
 				if _, refused := pending.hold(deps, ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRulePushUngated}}); !refused {
 					decision = ""
@@ -1602,10 +1605,10 @@ func envelopeEdits(input map[string]any) []textEdit {
 // tool_input, so nothing here can pick them up.
 //
 // A patch names its files in its own text, so the first of those wins over any key; the
-// rest are [patchWritePaths]'s.
+// rest are judgePatchRest's.
 func envelopeWritePath(input map[string]any) string {
-	if paths := patchWritePaths(envelopePatch(input)); len(paths) > 0 {
-		return paths[0]
+	if files, _ := envelopePatch(input); len(files) > 0 {
+		return files[0].Path
 	}
 	if p := envelopeString(input, "file_path"); p != "" {
 		return p
@@ -1680,6 +1683,7 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 	tool := magusToolCall(env.ToolName)
 	spawnPrompt, isSpawn := envelopeSpawn(env.ToolInput)
 	continueTarget, continueMessage, continuesAgent := envelopeContinuation(env.ToolInput)
+	files, isPatch := envelopePatch(env.ToolInput)
 	switch {
 	case tool != "":
 		// An MCP call to one of magus's own tools, normalized to the one shape every
@@ -1690,10 +1694,9 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		// client and status among them, reaching no rule at all.
 		req.Value = buildCall(tool, env.ToolInput, env.Cwd)
 		req.MCPTool, req.ReadOnlyTool = tool, mcpReadsOnly(tool, env.ToolInput)
-	case envelopeHoldsPatch(env.ToolInput):
+	case isPatch:
 		// A patch is a write, whichever field the host put it in. Ahead of the command arm
 		// because one host sends it as `command`, where it would be judged as a shell line.
-		files := envelopePatch(env.ToolInput)
 		if len(files) == 0 {
 			req.NothingToJudge = true
 			break
@@ -2030,7 +2033,7 @@ func rereadJobStoreRows(ctx context.Context, at location) context.Context {
 	if log.lapsed(phaseJobRows) {
 		return job.WithSnapshot(ctx, job.Snapshot{Err: context.DeadlineExceeded})
 	}
-	log.underway(phaseJobRows)
+	log.begin(phaseJobRows)
 	budget := jobRowsBudget
 	deadline, bounded := ctx.Deadline()
 	switch {
@@ -2048,7 +2051,7 @@ func rereadJobStoreRows(ctx context.Context, at location) context.Context {
 	if err != nil && wait.Err() != nil {
 		log.record(timedPhase(phaseJobRows, time.Since(start), budget, true))
 	} else {
-		log.underway("")
+		log.idle()
 	}
 	return job.WithSnapshot(ctx, job.Snapshot{Rows: rows, Err: err})
 }

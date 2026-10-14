@@ -15,7 +15,6 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
 )
 
@@ -145,6 +144,7 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies
 		shares[phaseWorktreeRule] = 1
 	}
 	ask := func(by, phase string, rule ruleCall) {
+		log.begin(phase)
 		budget, bounded := shares.take(ctx, phase)
 		if out.answer.Decision == types.GuardDeny {
 			return
@@ -177,6 +177,7 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies
 	}
 	approvedLoaded := false
 	if resolveApproved != nil {
+		log.begin(phaseApprovedResolve)
 		budget, bounded := shares.take(ctx, phaseApprovedResolve)
 		var rule ruleCall
 		var err error
@@ -290,17 +291,11 @@ func denyUnloaded(asked *rulesAnswer, call judgedCall, at location) bool {
 	}
 	own := ownSourceRoot(at.workspace)
 	recorded := recordedRule(at.cacheDir, call.seam)
-	cause := unloadCause(asked.loadFailure, at.workspace)
-	spell := ""
-	if cause == "" {
-		spell = skewedSpell(asked.loadFailure, at.workspace)
-	}
+	reason := unloadCause(asked.loadFailure, at.workspace)
 	var d denial
 	switch {
-	case call.changes && spell != "" && (recorded || declaresGuardRule(at.workspace)):
-		d, asked.rule = skewedSpellDenial(call, spell, failureLines(asked.failures), at.workspace), denyRuleStaleBinary
-	case call.changes && cause != "" && (recorded || declaresGuardRule(at.workspace)):
-		d, asked.rule = staleBinaryDenial(call, cause, failureLines(asked.failures), own, at.workspace), denyRuleStaleBinary
+	case call.changes && reason.Kind != unloadNone && (recorded || declaresGuardRule(at.workspace)):
+		d, asked.rule = staleBinaryDenial(call, reason, failureLines(asked.failures), own, at.workspace), denyRuleStaleBinary
 	case call.verb != "" && recorded:
 		d, asked.rule = unloadedDenial(call, asked.failures, own, hasMagusBinary(at.workspace)), denyRulePolicyUnloaded
 	default:
@@ -334,16 +329,6 @@ func skewedSpell(loadFailure error, root string) string {
 		return ""
 	}
 	return m[1]
-}
-
-// skewedSpellDenial is staleBinaryDenial for a ./magus built on the other side of a spell's
-// addition or removal, which may be newer than the tree as well as older. The fix is the
-// same either way: a ./magus built from this tree.
-func skewedSpellDenial(call judgedCall, spell string, failures []string, root string) denial {
-	d := staleBinaryDenial(call, causeStale, failures, true, root)
-	d.Say = "./magus was built from another commit than this tree: it ships no spell " + strconv.Quote(spell) +
-		", which the tree carries, so it cannot load its guard policy; " + binaryRemedy(true, hasMagusBinary(root), call.lease).say + "."
-	return d
 }
 
 // failureLines renders each failure as the side and the head of its error. An error
@@ -510,13 +495,10 @@ type judgingBinary struct {
 	hasBinary bool
 	// same reports that path is the checkout's own ./magus.
 	same bool
-	// stale reports that the load failure is the binary being older than the tree; fix is
-	// then the remedy to name.
-	stale bool
-	// skewedSpell is the spell the tree carries and the binary does not ship, "" for none;
-	// fix is then the remedy to name.
-	skewedSpell string
-	fix         string
+	// unload is why the binary cannot load the tree, stale or a skewed spell; fix is then
+	// the remedy to name. A missing ./magus is hasBinary's to tell.
+	unload unloadReason
+	fix    string
 }
 
 // judgingBinaryNote names the magus that judged the call and how it relates to the
@@ -534,9 +516,17 @@ func judgingBinaryNote(deps Dependencies, at location, loadFailure error, lease 
 			b, errB := os.Stat(filepath.Join(j.root, "magus"))
 			j.same = errA == nil && errB == nil && os.SameFile(a, b)
 		}
-		if j.stale = ward.IsStaleBinary(loadFailure); j.stale {
+		j.unload = unloadCause(loadFailure, j.root)
+		if j.unload.Kind == unloadNoBinary {
+			j.unload.Kind = unloadNone
+			if j.unload.Spell != "" {
+				j.unload.Kind = unloadSkewedSpell
+			}
+		}
+		switch j.unload.Kind {
+		case unloadStale:
 			j.fix = binaryRemedy(ownSourceRoot(j.root), j.hasBinary, lease).say
-		} else if j.skewedSpell = skewedSpell(loadFailure, j.root); j.skewedSpell != "" {
+		case unloadSkewedSpell:
 			j.fix = binaryRemedy(true, j.hasBinary, lease).say
 		}
 	}
@@ -560,9 +550,9 @@ func (j judgingBinary) String() string {
 		who += ", which is not this checkout's ./magus."
 	}
 	switch {
-	case j.skewedSpell != "":
-		return who + " It ships no spell " + strconv.Quote(j.skewedSpell) + ", which the tree carries, so it was built from another commit. Fix: " + j.fix + "."
-	case !j.stale:
+	case j.unload.Kind == unloadSkewedSpell:
+		return who + " It ships no spell " + strconv.Quote(j.unload.Spell) + ", which the tree carries, so it was built from another commit. Fix: " + j.fix + "."
+	case j.unload.Kind != unloadStale:
 		return who
 	case j.hasBinary && !j.same:
 		return who + " It is older than the tree: the hook uses ./magus when the call runs inside this checkout and ./magus is executable. Otherwise " + j.fix + "."

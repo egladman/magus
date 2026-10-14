@@ -117,7 +117,7 @@ func TestLoadFailureDenyNamesTheRebuildInMagusOwnCheckout(t *testing.T) {
 		"If the rebuild cannot load the tree either, bootstrap over it, alone on its line: "+
 		"`GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`. If the error names a magusfile line instead, fix that line.\n"+
 		"see: "+ruleDocsBase+"stale-binary/", stored)
-	d := staleBinaryDenial(judgedCall{seam: seamCommand, what: "`git push`"}, causeStale, failureLines(staleFailures), true, root)
+	d := staleBinaryDenial(judgedCall{seam: seamCommand, what: "`git push`"}, unloadReason{Kind: unloadStale}, failureLines(staleFailures), true, root)
 	assert.Equal(t, d.full()+"\nsee: "+ruleDocsBase+"stale-binary/", stored)
 }
 
@@ -165,9 +165,9 @@ func TestLoadFailureOfATypoDeniesOnlyGatedVerbs(t *testing.T) {
 	assert.Contains(t, stored, "\nThe likeliest cause is a ./magus older than the tree.\n")
 
 	other := Judge(ctx, deps, Request{Input: "ls -la", Host: "claude-code", Session: "s1"})
-	assert.Equal(t, verdictWithRule("advise", string(advisoryCommandRuleFailed)), unworded(other))
+	assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryCommandRuleFailed)), unworded(other))
 	change := Judge(ctx, deps, Request{Input: "touch NOTES.md", Host: "claude-code", Session: "s1"})
-	assert.NotEqual(t, "deny", change.Decision, "a typo leaves state-changing commands on the built-in rules")
+	assert.NotEqual(t, decisionDeny, change.Decision, "a typo leaves state-changing commands on the built-in rules")
 }
 
 // Every other command, the fix included, passes with the note that the policy judged
@@ -188,7 +188,7 @@ func TestLoadFailurePassesOtherCommandsWithTheNote(t *testing.T) {
 			recordLoadedPolicy(t, cacheDir)
 
 			v := Judge(ctx, unloadedDeps(), Request{Input: line, Host: "claude-code", Session: "s1"})
-			assert.Equal(t, verdictWithRule("advise", string(advisoryCommandRuleFailed)), unworded(v))
+			assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryCommandRuleFailed)), unworded(v))
 			assert.Contains(t, v.Context, note)
 		})
 	}
@@ -196,10 +196,10 @@ func TestLoadFailurePassesOtherCommandsWithTheNote(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)
 		recordLoadedPolicy(t, cacheDir)
 		first := Judge(ctx, unloadedDeps(), Request{Input: "ls", Host: "claude-code", Session: "s1"})
-		assert.Equal(t, Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "advise", Context: note, Rule: string(advisoryCommandRuleFailed)}, first)
+		assert.Equal(t, Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: note, Rule: string(advisoryCommandRuleFailed)}, first)
 		repeat := Judge(ctx, unloadedDeps(), Request{Input: "ls", Host: "claude-code", Session: "s1"})
 		assert.Equal(t, Verdict{
-			SchemaVersion: agent.GuardSchemaVersion, Decision: "advise", Rule: string(advisoryCommandRuleFailed),
+			SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Rule: string(advisoryCommandRuleFailed),
 			Context: "Only the built-in rules applied to this command. A workspace command rule is still failing, as told earlier in this session.",
 		}, repeat)
 	})
@@ -280,7 +280,7 @@ func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
 }
 
 // skewedSpellLoad is what a ./magus built after the vale spell was removed reported for a
-// tree that still imported it, on 10-07.
+// tree that still imported it.
 var skewedSpellLoad = errors.New(`magusfile: magusfile: magusfile.buzz: no spell "vale" to import as "magus/spell/vale", ` +
 	`did you mean "bash" (import "magus/spell/bash") (built-in spells: bash, buf, buzz)`)
 
@@ -320,13 +320,13 @@ func TestSkewedBinaryIsAWorkspaceRuleErrorEveryCall(t *testing.T) {
 
 			change := Judge(ctx, deps, Request{Input: "touch NOTES.md", Host: "claude-code", Session: "change"})
 			if c.say == "" {
-				assert.NotEqual(t, "deny", change.Decision)
+				assert.NotEqual(t, decisionDeny, change.Decision)
 			} else {
 				shortDeny(t, cacheDir, change, denyRuleStaleBinary, c.say)
 			}
 
 			first := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
-			assert.Equal(t, verdictWithRule("advise", string(advisoryCommandRuleFailed)), unworded(first))
+			assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryCommandRuleFailed)), unworded(first))
 			assert.Contains(t, first.Context, "Judged by "+deps.Binary+" ("+version+"), this checkout's ./magus.")
 			if c.judged != "" {
 				assert.Contains(t, first.Context, c.judged)
@@ -342,7 +342,7 @@ func TestSkewedBinaryIsAWorkspaceRuleErrorEveryCall(t *testing.T) {
 		ctx, _ := spawnFixture(t)
 		root := hookLocation(ctx, Dependencies{}).workspace
 		require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "vale"), 0o755))
-		assert.Empty(t, skewedSpell(skewedSpellLoad, root))
+		assert.Empty(t, unloadCause(skewedSpellLoad, root).Spell)
 	})
 }
 
@@ -365,7 +365,7 @@ func TestJudgingBinaryNoteForAWorkerAsksTheMainSession(t *testing.T) {
 func TestLoadFailureWithoutARecordPasses(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	v := Judge(ctx, unloadedDeps(), Request{Input: "gh pr merge 412 --admin", Host: "claude-code", Session: "s1"})
-	assert.Equal(t, verdictWithRule("advise", string(advisoryCommandRuleFailed)), unworded(v))
+	assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryCommandRuleFailed)), unworded(v))
 }
 
 // A record that registered no command rule protects no command.
@@ -373,7 +373,7 @@ func TestLoadFailureOfAnUnregisteredSeamPasses(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	RecordPolicy(t.Context(), cacheDir, "/w", PolicyState{Digest: "d1", SpawnRule: true}, false)
 	v := Judge(ctx, unloadedDeps(), Request{Input: "git push", Host: "claude-code", Session: "s1"})
-	assert.Equal(t, "advise", v.Decision)
+	assert.Equal(t, decisionAdvise, v.Decision)
 }
 
 // A rule that loaded and then raised stays fail-open with its notice: only a policy that
@@ -395,7 +395,7 @@ func TestLoadFailureOfOneRuleStaysOpen(t *testing.T) {
 			ctx, cacheDir := spawnFixture(t)
 			recordLoadedPolicy(t, cacheDir)
 			v := Judge(ctx, tc.deps, Request{Input: "gh pr merge 412 --admin", Host: "claude-code", Session: "s1"})
-			assert.Equal(t, "advise", v.Decision)
+			assert.Equal(t, decisionAdvise, v.Decision)
 			assert.Contains(t, v.Context, "the rule raised: boom")
 		})
 	}
@@ -410,7 +410,7 @@ func TestLoadFailureDeniesASpawn(t *testing.T) {
 	v := Judge(ctx, unloadedDeps(), Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, staleElsewhereSay)
 	d := staleBinaryDenial(judgedCall{seam: seamSpawn, verb: "a subagent spawn", what: "a subagent spawn", changes: true},
-		causeStale, failureLines(staleFailures), false, hookLocation(ctx, Dependencies{}).workspace)
+		unloadReason{Kind: unloadStale}, failureLines(staleFailures), false, hookLocation(ctx, Dependencies{}).workspace)
 	assert.Equal(t, d.full()+"\nsee: "+ruleDocsBase+"stale-binary/", stored)
 	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
 	require.Len(t, spawns, 1)
@@ -418,7 +418,7 @@ func TestLoadFailureDeniesASpawn(t *testing.T) {
 	assert.Equal(t, staleFailures, readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures)
 
 	cont := Judge(ctx, unloadedDeps(), Request{Input: claudeContinueEnvelope, Host: "claude-code"})
-	assert.Equal(t, verdictWithRule("advise", string(advisorySpawnRuleFailed)), unworded(cont))
+	assert.Equal(t, verdictWithRule(decisionAdvise, string(advisorySpawnRuleFailed)), unworded(cont))
 }
 
 // A file write waits too while the binary cannot load the tree: the fix is a rebuild, not
@@ -436,7 +436,7 @@ func TestLoadFailureOfATypoPassesAWriteWithTheNote(t *testing.T) {
 	recordLoadedPolicy(t, cacheDir)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("#!/bin/sh\n"), 0o755))
 	v := Judge(ctx, unloadedDepsFor(errors.New("magusfile.buzz:3:1: expected expression")), Request{Input: filepath.Join(root, "CHANGELOG.md"), IsPath: true, Host: "claude-code", Session: "s1"})
-	assert.Equal(t, verdictWithRule("advise", string(advisoryWriteRuleFailed)), unworded(v))
+	assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryWriteRuleFailed)), unworded(v))
 	assert.Contains(t, v.Context, "Only the built-in rules applied to this write.")
 }
 
@@ -447,17 +447,17 @@ func TestWorkspaceRuleFailureNoteRidesEveryVerdict(t *testing.T) {
 		name     string
 		in, want Verdict
 	}{
-		{"a deny", Verdict{Decision: "deny", Reason: "no", Rule: "r"}, Verdict{Decision: "deny", Reason: "no\n\nnote", Rule: "r"}},
-		{"an ask", Verdict{Decision: "ask", Reason: "approve?", Rule: "r"}, Verdict{Decision: "ask", Reason: "approve?\n\nnote", Rule: "r"}},
-		{"an advise", Verdict{Decision: "advise", Context: "hint", Rule: "r"}, Verdict{Decision: "advise", Context: "hint\n\nnote", Rule: "r"}},
-		{"a pass", Verdict{Decision: "pass"}, Verdict{Decision: "advise", Context: "note", Rule: string(advisoryCommandRuleFailed)}},
+		{"a deny", Verdict{Decision: decisionDeny, Reason: "no", Rule: "r"}, Verdict{Decision: decisionDeny, Reason: "no\n\nnote", Rule: "r"}},
+		{"an ask", Verdict{Decision: decisionAsk, Reason: "approve?", Rule: "r"}, Verdict{Decision: decisionAsk, Reason: "approve?\n\nnote", Rule: "r"}},
+		{"an advise", Verdict{Decision: decisionAdvise, Context: "hint", Rule: "r"}, Verdict{Decision: decisionAdvise, Context: "hint\n\nnote", Rule: "r"}},
+		{"a pass", Verdict{Decision: decisionPass}, Verdict{Decision: decisionAdvise, Context: "note", Rule: string(advisoryCommandRuleFailed)}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Equal(t, tc.want, applyRuleFailureNote(tc.in, "note", advisoryCommandRuleFailed))
 		})
 	}
-	assert.Equal(t, Verdict{Decision: "deny", Reason: "no"}, applyRuleFailureNote(Verdict{Decision: "deny", Reason: "no"}, "", advisoryCommandRuleFailed))
+	assert.Equal(t, Verdict{Decision: decisionDeny, Reason: "no"}, applyRuleFailureNote(Verdict{Decision: decisionDeny, Reason: "no"}, "", advisoryCommandRuleFailed))
 }
 
 // An approved deny under a broken working tree names what did not run.
@@ -471,7 +471,7 @@ func TestWorkspaceRuleApprovedDenyCarriesTheNote(t *testing.T) {
 	v := Judge(ctx, deps, Request{Input: "gh run watch 1", Host: "claude-code", Session: "s1"})
 	assert.Equal(t, Verdict{
 		SchemaVersion: agent.GuardSchemaVersion,
-		Decision:      "deny",
+		Decision:      decisionDeny,
 		Reason: "no watching\n\nThe working tree's magus\\guard.command rule judged nothing: " + staleFailures[0].Error + "\n\n" +
 			"Only the built-in rules and the approved magus\\guard.command rule applied to this command.",
 		Rule: workspaceCommandRule,
@@ -480,15 +480,15 @@ func TestWorkspaceRuleApprovedDenyCarriesTheNote(t *testing.T) {
 
 // A named answer reports under its own name; an unnamed one keeps the seam's.
 func TestApplyWorkspaceAnswerReportsANamedRule(t *testing.T) {
-	pass := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
+	pass := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 	named := rulesAnswer{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "no", Rule: "pull-request-text"}, by: decidedByWorktree}
 	v, by := applyWorkspaceAnswer(pass, "", named, workspaceCommandRule)
-	assert.Equal(t, Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: "no", Rule: "workspace:pull-request-text"}, v)
+	assert.Equal(t, Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: "no", Rule: "workspace:pull-request-text"}, v)
 	assert.Equal(t, decidedByWorktree, by)
 
 	named.answer.Decision = types.GuardAdvise
 	v, _ = applyWorkspaceAnswer(pass, "", named, workspaceWriteRule)
-	assert.Equal(t, Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "advise", Context: "no", Rule: "workspace:pull-request-text"}, v)
+	assert.Equal(t, Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: "no", Rule: "workspace:pull-request-text"}, v)
 
 	unnamed := rulesAnswer{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "no"}, by: decidedByWorktree}
 	v, _ = applyWorkspaceAnswer(pass, "", unnamed, workspaceCommandRule)
@@ -556,7 +556,7 @@ func TestUnnamedWorkspaceDenyIsUntouched(t *testing.T) {
 	probe := &commandRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "no listing"}}
 	for range 2 {
 		v := Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: "ls", Host: "claude-code", Session: "s1"})
-		assert.Equal(t, Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: "no listing", Rule: workspaceCommandRule}, v)
+		assert.Equal(t, Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: "no listing", Rule: workspaceCommandRule}, v)
 	}
 }
 

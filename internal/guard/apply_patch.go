@@ -6,58 +6,62 @@ import (
 	"strings"
 )
 
+// patchOp is what a file section of an apply_patch body does to its path.
+type patchOp int
+
+const (
+	patchOpAdd patchOp = iota
+	patchOpUpdate
+	patchOpDelete
+	// patchOpMove is the destination of an update that moves its file.
+	patchOpMove
+)
+
 // patchFile is one file section of an apply_patch body.
 type patchFile struct {
 	Path string
-	// Added is the body of an `*** Add File:` section with the leading "+" removed.
-	// Empty for every other section.
+	Op   patchOp
+	// Added is the body of an add section with the leading "+" removed. Empty for every
+	// other section.
 	Added []string
-	// IsAdd is whether the section creates the file.
-	IsAdd bool
 }
 
-const (
-	patchBegin  = "*** Begin Patch"
-	patchAdd    = "*** Add File:"
-	patchUpdate = "*** Update File:"
-	patchDelete = "*** Delete File:"
-	patchMove   = "*** Move to:"
-)
+const patchBegin = "*** Begin Patch"
+
+// patchSections are the header lines that open a file section, by the op each names.
+var patchSections = []struct {
+	header string
+	op     patchOp
+}{
+	{header: "*** Add File:", op: patchOpAdd},
+	{header: "*** Update File:", op: patchOpUpdate},
+	{header: "*** Delete File:", op: patchOpDelete},
+	{header: "*** Move to:", op: patchOpMove},
+}
 
 // patchTexts are the tool_input fields a host puts a patch in: one host sends it as
 // `command`, another as `patchText`.
 var patchTexts = []string{"patchText", "command"}
 
-// envelopePatch reads the files a patch tool_input names, or nil when tool_input holds no
-// patch. A field is a patch only when it opens with the patch marker, so a shell line in
-// `command` is never mistaken for one.
+// envelopePatch reads the files a patch tool_input names. ok reports that tool_input holds
+// a patch at all, which may name no file. A field is a patch only when it opens with the
+// patch marker, so a shell line in `command` is never mistaken for one.
 //
 // A section that moves a file yields two entries, the source and the destination, since
 // both are written.
-func envelopePatch(input map[string]any) []patchFile {
+func envelopePatch(input map[string]any) (files []patchFile, ok bool) {
 	for _, key := range patchTexts {
 		if text := envelopeString(input, key); isPatchText(text) {
-			return parsePatch(text)
+			return parsePatch(text), true
 		}
 	}
-	return nil
+	return nil, false
 }
 
 // isPatchText reports whether text is an apply_patch body, which a shell rule must not
 // read: the added lines are file content, and a denied command quoted in one is not run.
 func isPatchText(text string) bool {
 	return strings.HasPrefix(strings.TrimSpace(text), patchBegin)
-}
-
-// envelopeHoldsPatch is whether tool_input carries a patch body, even one that names no
-// file.
-func envelopeHoldsPatch(input map[string]any) bool {
-	for _, key := range patchTexts {
-		if isPatchText(envelopeString(input, key)) {
-			return true
-		}
-	}
-	return false
 }
 
 // parsePatch lists the file sections of a patch in order, each path once. A path the
@@ -67,45 +71,28 @@ func parsePatch(text string) []patchFile {
 	seen := map[string]bool{}
 	// current is the add section whose "+" lines are being collected, -1 outside one.
 	current := -1
-	add := func(path string, isAdd bool) {
-		path = strings.TrimSpace(path)
-		current = -1
-		if path == "" || seen[path] {
-			return
-		}
-		seen[path] = true
-		files = append(files, patchFile{Path: path, IsAdd: isAdd})
-		if isAdd {
-			current = len(files) - 1
-		}
-	}
 	for line := range strings.SplitSeq(text, "\n") {
 		line = strings.TrimRight(line, "\r")
-		switch {
-		case strings.HasPrefix(line, patchAdd):
-			add(strings.TrimPrefix(line, patchAdd), true)
-		case strings.HasPrefix(line, patchUpdate):
-			add(strings.TrimPrefix(line, patchUpdate), false)
-		case strings.HasPrefix(line, patchDelete):
-			add(strings.TrimPrefix(line, patchDelete), false)
-		case strings.HasPrefix(line, patchMove):
-			add(strings.TrimPrefix(line, patchMove), false)
-		case strings.HasPrefix(line, "*** "):
-			current = -1
-		case current >= 0 && strings.HasPrefix(line, "+"):
-			files[current].Added = append(files[current].Added, line[1:])
+		if !strings.HasPrefix(line, "*** ") {
+			if current >= 0 && strings.HasPrefix(line, "+") {
+				files[current].Added = append(files[current].Added, line[1:])
+			}
+			continue
+		}
+		current = -1
+		for _, s := range patchSections {
+			path, ok := strings.CutPrefix(line, s.header)
+			if path = strings.TrimSpace(path); !ok || path == "" || seen[path] {
+				continue
+			}
+			seen[path] = true
+			files = append(files, patchFile{Path: path, Op: s.op})
+			if s.op == patchOpAdd {
+				current = len(files) - 1
+			}
 		}
 	}
 	return files
-}
-
-// patchWritePaths is the path of every file section, in patch order.
-func patchWritePaths(files []patchFile) []string {
-	paths := make([]string, 0, len(files))
-	for _, f := range files {
-		paths = append(paths, f.Path)
-	}
-	return paths
 }
 
 // patchContent is the text a patch writes when it creates exactly one file and does
@@ -120,7 +107,7 @@ func patchContent(files []patchFile) string {
 
 // addedContent is the text an add section creates its file with, "" for any other section.
 func (f patchFile) addedContent() string {
-	if !f.IsAdd || len(f.Added) == 0 {
+	if f.Op != patchOpAdd || len(f.Added) == 0 {
 		return ""
 	}
 	return strings.Join(f.Added, "\n") + "\n"

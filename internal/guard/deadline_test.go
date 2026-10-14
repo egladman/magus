@@ -91,10 +91,10 @@ func TestJudgeWithinAnswersAStuckJudgmentByTheDeadline(t *testing.T) {
 		decision string
 		tool     string
 	}{
-		"a command that changes state": {Request{Input: "touch notes.txt"}, "deny", hookToolCommand},
-		"a file write":                 {Request{Input: "notes.txt", IsPath: true}, "deny", hookToolWrite},
-		"a command that reads":         {Request{Input: "ls -la"}, "advise", hookToolCommand},
-		"a host's read":                {Request{Input: read}, "advise", hookToolCommand},
+		"a command that changes state": {req: Request{Input: "touch notes.txt"}, decision: decisionDeny, tool: hookToolCommand},
+		"a file write":                 {req: Request{Input: "notes.txt", IsPath: true}, decision: decisionDeny, tool: hookToolWrite},
+		"a command that reads":         {req: Request{Input: "ls -la"}, decision: decisionAdvise, tool: hookToolCommand},
+		"a host's read":                {req: Request{Input: read}, decision: decisionAdvise, tool: hookToolCommand},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -113,10 +113,10 @@ func TestJudgeWithinAnswersAStuckJudgmentByTheDeadline(t *testing.T) {
 			})
 			assert.Less(t, time.Since(start), 2*time.Second)
 			assert.Equal(t, verdictWithRule(c.decision, string(advisoryUnfinished)), unworded(v))
-			if c.decision == "deny" {
+			if c.decision == decisionDeny {
 				assert.Contains(t, v.Reason, "the guard's judgment did not finish within 7s. A call that changes state is denied rather than let through unjudged; retry it.")
 			} else {
-				assert.Equal(t, unjudgedNote, v.Context)
+				assert.Equal(t, unjudgedNote(), v.Context)
 			}
 
 			rows := trailEvents(t, cacheDir, trail.KindAgentCommand)
@@ -173,11 +173,11 @@ func TestLapsedRuleLoadDeniesAWriteAndAdvisesARead(t *testing.T) {
 
 	ctx, _ := spawnFixture(t)
 	write := Judge(ctx, deps, Request{Host: "claude-code", Session: "s1", Input: "notes.txt", IsPath: true})
-	assert.Equal(t, "deny", write.Decision)
+	assert.Equal(t, decisionDeny, write.Decision)
 	assert.Contains(t, write.Reason, "magus ran out of time judging this file write: loading this workspace's guard rules did not finish within 6.5s.")
 
 	read := Judge(ctx, deps, Request{Host: "claude-code", Session: "s1", Input: "ls"})
-	assert.Equal(t, "advise", read.Decision)
+	assert.Equal(t, decisionAdvise, read.Decision)
 	assert.Contains(t, read.Context, "The working tree's magus\\guard.command rule judged nothing: the magusfile did not load within 6.5s")
 }
 
@@ -211,7 +211,7 @@ func TestDryRunLapseIsNotGraded(t *testing.T) {
 		return types.GuardVerdict{}, ctx.Err()
 	}
 	v := Judge(ctx, Dependencies{WriteRule: loops}, Request{Input: filepath.Join(root, "notes.txt"), IsPath: true, DryRun: true})
-	assert.Equal(t, "deny", v.Decision)
+	assert.Equal(t, decisionDeny, v.Decision)
 	assert.Contains(t, v.Reason, "magus did not finish grading this file write: ")
 	assert.Contains(t, v.Reason, "so it is not graded. A dry run is bounded at 2m0s")
 }
@@ -241,7 +241,7 @@ func TestJudgeWithinDegradesAfterConsecutiveLapses(t *testing.T) {
 		assert.Equal(t, decisionDeny, lapse().Decision)
 	}
 	degraded := lapse()
-	assert.Equal(t, verdictWithRule("advise", string(advisoryUnfinished)), unworded(degraded))
+	assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryUnfinished)), unworded(degraded))
 	assert.Contains(t, degraded.Context, "on 3 judgments in a row in this session, so this command ran with no rule judging it")
 	assert.Contains(t, degraded.Context, "This one stalled in its load_rules phase")
 	assert.Contains(t, degraded.Context, "`magus server status`")
@@ -263,8 +263,24 @@ func TestJudgeWithinDegradesAfterConsecutiveLapses(t *testing.T) {
 	assert.True(t, rows[0].Phases[0].Lapsed)
 }
 
-// A lapse denies only a line that can change state: the pipeline of sed, grep and awk the
-// 10-13 lockout denied reads, and goes through with the note.
+// An uncounted lapse denies, as do the first lapsesBeforeDegrade; the next names the cause
+// once and every later one only says the guard is still not judging.
+func TestStageFor(t *testing.T) {
+	t.Parallel()
+	for inARow, want := range map[int]lapseStage{
+		0:                       lapseDenies,
+		1:                       lapseDenies,
+		lapsesBeforeDegrade:     lapseDenies,
+		lapsesBeforeDegrade + 1: lapseDegrades,
+		lapsesBeforeDegrade + 2: lapseStillDegraded,
+		lapsesBeforeDegrade + 9: lapseStillDegraded,
+	} {
+		assert.Equal(t, want, stageFor(inARow), inARow)
+	}
+}
+
+// A lapse denies only a line that can change state: a pipeline of sed, grep and awk reads,
+// and goes through with the note.
 func TestUnjudgedPassesAReadOnlyPipeline(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	ctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
@@ -276,13 +292,13 @@ func TestUnjudgedPassesAReadOnlyPipeline(t *testing.T) {
 		<-release
 		return Verdict{}
 	})
-	assert.Equal(t, verdictWithRule("advise", string(advisoryUnfinished)), unworded(v))
-	assert.Equal(t, unjudgedNote, v.Context)
+	assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryUnfinished)), unworded(v))
+	assert.Equal(t, unjudgedNote(), v.Context)
 }
 
-// A workspace open that never answers, the stall behind the 10-13 lockout, no longer holds a
-// write's judgment past its deadline: every rule that opens the workspace goes silent, the
-// first by its own bound and the rest at once, and the verdict is on time.
+// A workspace open that never answers does not hold a write's judgment past its deadline:
+// every rule that opens the workspace goes silent, the first by its own bound and the rest
+// at once, and the verdict is on time.
 func TestJudgeWithinAnswersAWriteWhoseWorkspaceOpenStalls(t *testing.T) {
 	ctx, root, _ := writeFixture(t)
 	release := make(chan struct{})
