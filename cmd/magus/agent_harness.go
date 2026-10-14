@@ -303,11 +303,11 @@ func agentHarnessVerifyCmd(ctx context.Context, rootOverride string, args []stri
 		}
 		// A missing approval prompt fails even a skills-only host: the guard then refuses
 		// every call that needs the person's approval, and verify is where that is said.
-		if result.PromptStatus != "" && result.PromptStatus != agent.HarnessVerified && firstFail == nil {
-			firstFail = fmt.Errorf("magus agent harness verify: %s approval prompt for %s (%s)", result.PromptStatus, result.ID, result.PromptReason)
+		if result.Prompt.Failing() && firstFail == nil {
+			firstFail = fmt.Errorf("magus agent harness verify: %s approval prompt for %s (%s)", result.Prompt.Status, result.ID, result.Prompt.Reason)
 		}
-		if result.SettingStatus != "" && result.SettingStatus != agent.HarnessVerified && firstFail == nil {
-			firstFail = fmt.Errorf("magus agent harness verify: %s settings for %s (%s)", result.SettingStatus, result.ID, result.SettingReason)
+		if result.Setting.Failing() && firstFail == nil {
+			firstFail = fmt.Errorf("magus agent harness verify: %s settings for %s (%s)", result.Setting.Status, result.ID, result.Setting.Reason)
 		}
 		if result.Plugin.Failing() && firstFail == nil {
 			firstFail = fmt.Errorf("magus agent harness verify: %s plugin for %s (%s)", result.Plugin.Status, result.ID, result.Plugin.Reason)
@@ -361,19 +361,19 @@ func writeHarnessVerification(w io.Writer, typed agent.HarnessVerification) erro
 	if err == nil {
 		_, err = fmt.Fprintln(w)
 	}
-	if err == nil && typed.PromptStatus != "" {
-		_, err = fmt.Fprintf(w, "%s %s approval prompt", typed.PromptStatus, typed.ID)
-		if err == nil && typed.PromptReason != "" {
-			_, err = fmt.Fprintf(w, " (%s)", typed.PromptReason)
+	if err == nil && typed.Prompt.Status != "" {
+		_, err = fmt.Fprintf(w, "%s %s approval prompt", typed.Prompt.Status, typed.ID)
+		if err == nil && typed.Prompt.Reason != "" {
+			_, err = fmt.Fprintf(w, " (%s)", typed.Prompt.Reason)
 		}
 		if err == nil {
 			_, err = fmt.Fprintln(w)
 		}
 	}
-	if err == nil && typed.SettingStatus != "" {
-		_, err = fmt.Fprintf(w, "%s %s settings", typed.SettingStatus, typed.ID)
-		if err == nil && typed.SettingReason != "" {
-			_, err = fmt.Fprintf(w, " (%s)", typed.SettingReason)
+	if err == nil && typed.Setting.Status != "" {
+		_, err = fmt.Fprintf(w, "%s %s settings", typed.Setting.Status, typed.ID)
+		if err == nil && typed.Setting.Reason != "" {
+			_, err = fmt.Fprintf(w, " (%s)", typed.Setting.Reason)
 		}
 		if err == nil {
 			_, err = fmt.Fprintln(w)
@@ -388,8 +388,8 @@ func writeHarnessVerification(w io.Writer, typed agent.HarnessVerification) erro
 			_, err = fmt.Fprintln(w)
 		}
 	}
-	if err == nil && typed.MCPStatus != "" {
-		_, err = fmt.Fprintf(w, "%s %s mcp guidance: %s", typed.MCPStatus, typed.ID, typed.MCPReason)
+	if err == nil && typed.MCP.Status != "" {
+		_, err = fmt.Fprintf(w, "%s %s mcp guidance: %s", typed.MCP.Status, typed.ID, typed.MCP.Reason)
 		if err == nil {
 			_, err = fmt.Fprintln(w)
 		}

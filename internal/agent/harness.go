@@ -149,21 +149,19 @@ type HarnessVerification struct {
 	Status     HarnessStatus `json:"status"`
 	Reason     string        `json:"reason,omitempty"`
 	Guarded    bool          `json:"guarded,omitempty"`
-	MCPStatus  HarnessStatus `json:"mcp_status,omitempty"`
-	MCPReason  string        `json:"mcp_reason,omitempty"`
-	// PromptStatus is whether the host-native approval prompts the descriptor keeps are in
-	// place, empty when it keeps none. Uncovered means an ask verdict reaches nobody there,
+	// MCP is whether the descriptor's MCP setup guidance is valid, zero when it declares none.
+	// Verified never means host wiring: the person owns the host's MCP client config.
+	MCP HarnessCheck `json:"mcp,omitzero"`
+	// Prompt is whether the host-native approval prompts the descriptor keeps are in
+	// place, zero when it keeps none. Uncovered means an ask verdict reaches nobody there,
 	// so the templates refuse the call instead.
-	PromptStatus HarnessStatus `json:"prompt_status,omitempty"`
-	PromptReason string        `json:"prompt_reason,omitempty"`
-	// AgentStatus is whether the subagent files the descriptor renders are current, empty
+	Prompt HarnessCheck `json:"prompt,omitzero"`
+	// Agent is whether the subagent files the descriptor renders are current, zero
 	// when it renders none.
-	AgentStatus HarnessStatus `json:"agent_status,omitempty"`
-	AgentReason string        `json:"agent_reason,omitempty"`
-	// SettingStatus is whether the plain host settings the descriptor keeps are in place,
-	// empty when it keeps none.
-	SettingStatus HarnessStatus `json:"setting_status,omitempty"`
-	SettingReason string        `json:"setting_reason,omitempty"`
+	Agent HarnessCheck `json:"agent,omitzero"`
+	// Setting is whether the plain host settings the descriptor keeps are in place,
+	// zero when it keeps none.
+	Setting HarnessCheck `json:"setting,omitzero"`
 	// Plugin is whether each Claude Code plugin the workspace enables through the
 	// descriptor's settings is installed for this person, zero when the descriptor enables
 	// none or the workspace has not turned it on. Uncovered names the install command.
@@ -569,7 +567,7 @@ func posixQuote(s string) string {
 // It reports an explicit status so callers cannot mistake an absent hook for a
 // healthy one. Coverage is a config that still carries the declared fragments
 // and invokes magus somehow (a shipped script basename, magus shell, or
-// magus session). A skills-only descriptor has nothing to wire. PromptStatus reports the
+// magus session). A skills-only descriptor has nothing to wire. Prompt reports the
 // host-native approval prompts separately, since a host can guard every call and still
 // never ask the person about one.
 func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, error) {

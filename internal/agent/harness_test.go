@@ -779,8 +779,8 @@ func TestPlanHarnessPlansNativePrompts(t *testing.T) {
 
 	before, err := VerifyHarness(untimedProbes(), root, "prompter")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessUncovered, before.PromptStatus)
-	assert.Contains(t, before.PromptReason, ".codex/rules/magus.rules")
+	assert.Equal(t, HarnessUncovered, before.Prompt.Status)
+	assert.Contains(t, before.Prompt.Reason, ".codex/rules/magus.rules")
 
 	plan := mergeHarness(t, root, "prompter")
 	assert.Equal(t, map[string]types.HarnessFile{
@@ -808,8 +808,8 @@ func TestPlanHarnessPlansNativePrompts(t *testing.T) {
 
 	after, err := VerifyHarness(untimedProbes(), root, "prompter")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessVerified, after.PromptStatus)
-	assert.Empty(t, after.PromptReason)
+	assert.Equal(t, HarnessVerified, after.Prompt.Status)
+	assert.Empty(t, after.Prompt.Reason)
 }
 
 // TestPlanHarnessRefusesAPromptThePersonOverrode pins that no plan overwrites a value someone
@@ -828,7 +828,7 @@ func TestPlanHarnessRefusesAPromptThePersonOverrode(t *testing.T) {
 
 	result, err := VerifyHarness(untimedProbes(), root, "prompter")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessUncovered, result.PromptStatus)
+	assert.Equal(t, HarnessUncovered, result.Prompt.Status)
 }
 
 // TestHarnessDescriptorRejectsAMalformedPrompt pins that a prompt names exactly one of a file
@@ -876,8 +876,8 @@ func TestPlanHarnessPlansSettings(t *testing.T) {
 
 	before, err := VerifyHarness(untimedProbes(), root, "moder")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessUncovered, before.SettingStatus)
-	assert.Contains(t, before.SettingReason, "extraKnownMarketplaces.magus")
+	assert.Equal(t, HarnessUncovered, before.Setting.Status)
+	assert.Contains(t, before.Setting.Reason, "extraKnownMarketplaces.magus")
 
 	plan := mergeHarness(t, root, "moder")
 	marketplace := map[string]any{"source": map[string]any{"source": "github", "repo": "egladman/magus"}}
@@ -909,8 +909,8 @@ func TestPlanHarnessPlansSettings(t *testing.T) {
 
 	after, err := VerifyHarness(untimedProbes(), root, "moder")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessVerified, after.SettingStatus)
-	assert.Empty(t, after.SettingReason)
+	assert.Equal(t, HarnessVerified, after.Setting.Status)
+	assert.Empty(t, after.Setting.Reason)
 }
 
 // TestPlanHarnessRefusesASettingThePersonChanged pins that no plan overwrites a value
@@ -928,7 +928,7 @@ func TestPlanHarnessRefusesASettingThePersonChanged(t *testing.T) {
 
 	result, err := VerifyHarness(untimedProbes(), root, "moder")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessUncovered, result.SettingStatus)
+	assert.Equal(t, HarnessUncovered, result.Setting.Status)
 }
 
 // writeClaudePluginStore stands in for the plugin store Claude Code keeps per person, under
@@ -954,7 +954,7 @@ func TestVerifyHarnessReportsAnEnabledPluginNobodyInstalled(t *testing.T) {
 
 	result, err := VerifyHarness(untimedProbes(), root, "moder")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessVerified, result.SettingStatus, "the settings are in place; the install is the gap")
+	assert.Equal(t, HarnessVerified, result.Setting.Status, "the settings are in place; the install is the gap")
 	assert.Equal(t, HarnessUncovered, result.Plugin.Status)
 	assert.Contains(t, result.Plugin.Reason, "/plugin install magus --marketplace egladman/magus")
 	assert.Contains(t, result.Plugin.Reason, "magus@magus")
@@ -1396,8 +1396,8 @@ func TestPlanHarnessWritesAgentFilesOnceAndThenNothing(t *testing.T) {
 
 	before, err := VerifyHarness(untimedProbes(), root, "scribe")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessUncovered, before.AgentStatus)
-	assert.Contains(t, before.AgentReason, ".scribe/agents/magus-scout.md")
+	assert.Equal(t, HarnessUncovered, before.Agent.Status)
+	assert.Contains(t, before.Agent.Reason, ".scribe/agents/magus-scout.md")
 
 	plan := mergeHarness(t, root, "scribe")
 	assert.Equal(t, map[string]types.HarnessFile{
@@ -1411,8 +1411,8 @@ func TestPlanHarnessWritesAgentFilesOnceAndThenNothing(t *testing.T) {
 
 	after, err := VerifyHarness(untimedProbes(), root, "scribe")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessVerified, after.AgentStatus)
-	assert.Empty(t, after.AgentReason)
+	assert.Equal(t, HarnessVerified, after.Agent.Status)
+	assert.Empty(t, after.Agent.Reason)
 }
 
 // A spell that leaves an agent's model to the host names the person's setting once, however
@@ -1462,7 +1462,7 @@ func TestHarnessDescriptorWithoutAgentsPlansAndVerifiesNone(t *testing.T) {
 	requireCurrent(t, root, "plain")
 	result, err := VerifyHarness(untimedProbes(), root, "plain")
 	require.NoError(t, err)
-	assert.Empty(t, result.AgentStatus)
+	assert.Empty(t, result.Agent.Status)
 }
 
 func TestHarnessDescriptorRejectsAMalformedAgentFile(t *testing.T) {

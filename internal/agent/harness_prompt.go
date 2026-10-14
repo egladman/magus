@@ -184,16 +184,15 @@ func verifyHarnessAgents(root string, d HarnessDescriptor, result *HarnessVerifi
 		file, err := planWholeFile(root, a.Path, a.Content)
 		switch {
 		case err != nil:
-			result.AgentStatus, result.AgentReason = HarnessUncovered, err.Error()
+			result.Agent = HarnessCheck{Status: HarnessUncovered, Reason: err.Error()}
 			return
 		case len(file.Changes) > 0:
-			result.AgentStatus = HarnessUncovered
-			result.AgentReason = a.Path + " is missing or differs from what the spell renders; merge what `magus describe harness " + d.ID + "` prints"
+			result.Agent = HarnessCheck{Status: HarnessUncovered, Reason: a.Path + " is missing or differs from what the spell renders; merge what `magus describe harness " + d.ID + "` prints"}
 			return
 		}
 	}
 	if len(d.Agents) > 0 {
-		result.AgentStatus = HarnessVerified
+		result.Agent = HarnessCheck{Status: HarnessVerified}
 	}
 }
 
@@ -207,15 +206,14 @@ func verifyHarnessPrompts(root string, d HarnessDescriptor, result *HarnessVerif
 		file, err := planHarnessPrompt(root, p)
 		switch {
 		case err != nil:
-			result.PromptStatus, result.PromptReason = HarnessUncovered, err.Error()
+			result.Prompt = HarnessCheck{Status: HarnessUncovered, Reason: err.Error()}
 			return
 		case len(file.Changes) > 0:
-			result.PromptStatus = HarnessUncovered
-			result.PromptReason = "missing " + promptLocation(p) + ", so the host never asks the person before the call; merge what `magus describe harness " + d.ID + "` prints"
+			result.Prompt = HarnessCheck{Status: HarnessUncovered, Reason: "missing " + promptLocation(p) + ", so the host never asks the person before the call; merge what `magus describe harness " + d.ID + "` prints"}
 			return
 		}
 	}
-	result.PromptStatus = HarnessVerified
+	result.Prompt = HarnessCheck{Status: HarnessVerified}
 }
 
 // HarnessSetting is one plain value a harness keeps in a host's JSON config, read by the host
@@ -268,13 +266,12 @@ func verifyHarnessSettings(root string, d HarnessDescriptor, result *HarnessVeri
 		file, err := planHarnessSetting(root, s)
 		switch {
 		case err != nil:
-			result.SettingStatus, result.SettingReason = HarnessUncovered, err.Error()
+			result.Setting = HarnessCheck{Status: HarnessUncovered, Reason: err.Error()}
 			return
 		case len(file.Changes) > 0:
-			result.SettingStatus = HarnessUncovered
-			result.SettingReason = "missing " + settingLocation(s) + "; merge what `magus describe harness " + d.ID + "` prints"
+			result.Setting = HarnessCheck{Status: HarnessUncovered, Reason: "missing " + settingLocation(s) + "; merge what `magus describe harness " + d.ID + "` prints"}
 			return
 		}
 	}
-	result.SettingStatus = HarnessVerified
+	result.Setting = HarnessCheck{Status: HarnessVerified}
 }
