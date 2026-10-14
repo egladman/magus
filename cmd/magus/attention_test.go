@@ -73,7 +73,7 @@ func blockedEvent(message string) types.Event {
 }
 
 func fileBlock(root string, ev types.Event) error {
-	_, err := fileAttention(root, ev)
+	_, err := fileAttention(context.Background(), root, ev)
 	return err
 }
 
@@ -151,7 +151,7 @@ func TestFileAttentionKeepsTheIDWhenTheFilesChange(t *testing.T) {
 
 	again := blockedEvent("needs a decision")
 	again.Where.Files = []types.FileRef{{Value: "some/other.go"}}
-	held, err := fileAttention(root, again)
+	held, err := fileAttention(t.Context(), root, again)
 	require.NoError(t, err)
 	assert.True(t, held)
 	assert.Equal(t, ids, openRequestIDs(t, root))
@@ -402,7 +402,7 @@ func TestFileAttentionRefusesAnEventWithNoSourceID(t *testing.T) {
 	ev := blockedEvent("needs a decision")
 	ev.Source.ID = ""
 	logged := captureWarnings(t, func() {
-		held, err := fileAttention(root, ev)
+		held, err := fileAttention(t.Context(), root, ev)
 		require.NoError(t, err, "a missing source.id must not fail the notification")
 		assert.False(t, held, "no row holds it, so the notification must still fire")
 	})
@@ -417,7 +417,7 @@ func TestFileAttentionSkipsWhenThereIsNoRepository(t *testing.T) {
 	// An empty root with no discoverable workspace: notify still notifies, and the
 	// request has nowhere durable to live rather than landing in a store keyed on "".
 	t.Chdir(t.TempDir())
-	held, err := fileAttention("", blockedEvent("needs a decision"))
+	held, err := fileAttention(t.Context(), "", blockedEvent("needs a decision"))
 	require.NoError(t, err)
 	assert.False(t, held)
 }

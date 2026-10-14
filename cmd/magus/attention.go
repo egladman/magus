@@ -280,7 +280,7 @@ func disposeError(err error, ref, dir string) error {
 // held reports that the queue already held this block before the call, so a person
 // has been told once. It is false for a new row, for news, for a block that has
 // no row to live in (no source id, no repository), and on error.
-func fileAttention(root string, ev types.Event) (held bool, err error) {
+func fileAttention(ctx context.Context, root string, ev types.Event) (held bool, err error) {
 	if ev.Outcome != types.OutcomeWaiting && ev.Outcome != types.OutcomePermission {
 		return false, nil
 	}
@@ -306,8 +306,7 @@ func fileAttention(root string, ev types.Event) (held bool, err error) {
 	// Lease and files are not inputs to the id, on purpose; see sessions.RequestID.
 	// They ride the payload so the queue can say whose work is blocked, and which
 	// paths the event named, without the row's identity moving when either changes.
-	// fileAttention takes no ctx, so the hook's own BAGGAGE is the claim.
-	lease, leaseFrom, err := checkoutLease(context.Background(), root)
+	lease, leaseFrom, err := checkoutLease(ctx, root)
 	if err != nil {
 		return false, err
 	}

@@ -61,7 +61,7 @@ func notifyCmd(ctx context.Context, root string, in io.Reader, out io.Writer, ar
 	}
 	normalizeEvent(&ev)
 
-	held, err := fileAttention(root, ev)
+	held, err := fileAttention(ctx, root, ev)
 	if err != nil {
 		noteAttentionOpenFailure(err)
 	}
