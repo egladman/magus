@@ -178,15 +178,16 @@ norm, and states a fact with its counts rather than a rule. The action's
 `conformance-min-cohort` and `conformance-min-share` inputs override those two gates for one
 run. The checks:
 
-| check               | it reports                                                                                                                                                                                                                       |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `naming-affix`      | a function or type missing the leading or trailing word pair most declarations of its shape that share a word with it carry                                                                                                      |
-| `name-collision`    | a name at a project's top level that a target, spell, op, charm or diagnostic already carries                                                                                                                                    |
-| `rename-leftover`   | a renamed symbol whose old two-word-or-longer name still appears in the files that reference it                                                                                                                                  |
-| `param-order`       | a function taking two parameters in the reverse of the order most functions in its scope that take both do                                                                                                                       |
-| `conform-threshold` | a symbol past the value `knowledge.conform` enforces, or past the base's because the change raised it or listed the symbol as known                                                                                              |
-| `call-sequence`     | a function calling the same workspace functions in the same order as another, over a run longer than the `call-sequence` value for its population: share the sequence in one function, or record a known entry with its reason   |
-| `sibling-sprawl`    | a method or function joining siblings whose names differ in one complementary word (`RecordCacheHit`, `RecordCacheMiss`); it weighs shared parameters, three types carrying the family, and a type past its `type-methods` value |
+| check               | it reports                                                                                                                                                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `naming-affix`      | a function or type missing the leading or trailing word pair most declarations of its shape that share a word with it carry                                                                                                                       |
+| `name-collision`    | a name at a project's top level that a target, spell, op, charm or diagnostic already carries                                                                                                                                                     |
+| `rename-leftover`   | a renamed symbol whose old two-word-or-longer name still appears in the files that reference it                                                                                                                                                   |
+| `param-order`       | a function taking two parameters in the reverse of the order most functions in its scope that take both do                                                                                                                                        |
+| `conform-threshold` | a symbol past the value `knowledge.conform` enforces, or past the base's because the change raised it or listed the symbol as known                                                                                                               |
+| `call-sequence`     | a function calling the same workspace functions in the same order as another, over a run longer than the `call-sequence` value for its population: share the sequence in one function, or record a known entry with its reason                    |
+| `sibling-sprawl`    | a method or function joining siblings whose names differ in one complementary word (`RecordCacheHit`, `RecordCacheMiss`); it weighs shared parameters, three types carrying the family, and a type past its `type-methods` value                  |
+| `shared-loop`       | a function shared past `shared-body`, `caller-spread` or `shared-reach` that one caller's branch or option bends, or a re-signed one that gains such a knob: give each caller a copy with one line saying why, or record a mode-knobs known entry |
 
 The checks read what every language's index holds (names, kinds, scopes, references) and,
 where a language reports it, the declaration's shape: `param-order` needs a language whose
@@ -205,6 +206,17 @@ a tighter one. `sibling-sprawl` needs a family of three, or two that three types
 two members the change did not add; a lone family clears the bar only with one of its three
 weights. Folding the family into one member that takes the word as a value is the usual
 remedy.
+
+`shared-loop` is the mirror of a clone, also advice: a function whose callers do not share its
+knobs. A knob is a parameter the body switches on or tests bare, or, on a function three or
+more packages call, an options field or `With` function only one of them uses; a decision
+table, a body that is one switch, has none. It fires on a function with a knob whose body is
+past `shared-body` and whose callers are past `caller-spread` import hops apart (the function's
+own package removed) or more than `shared-reach` packages, and on a re-signed function two
+packages or files call that branches on a parameter. The index holds no base signature, so a
+re-signed function's every knob is named, whether or not the change added it. Keep a shared
+function only when its callers share failure semantics and policy knobs, so a bug in one is a
+bug in the other.
 
 A directory the change creates gets three more checks, read from `magus diff`'s `layout` on
 the first changed file in it. A directory is new when every file the index places under it

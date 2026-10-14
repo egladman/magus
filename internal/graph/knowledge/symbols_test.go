@@ -250,6 +250,23 @@ func TestAssembleSymbolsCarriesBodyShape(t *testing.T) {
 	assert.NotContains(t, c.Attrs, attrBodyTokens)
 }
 
+// What a body branches on rides its node as a comma list; a body branching on nothing
+// carries no attr.
+func TestAssembleSymbolsCarriesBranchIdents(t *testing.T) {
+	syms := []types.KnowledgeSymbol{
+		{Key: "example.com/foo F().", Label: "F", Source: "pkg/foo/foo.go:3", DefEndLine: 9, BranchIdents: []string{"mode", "strict"}, Defs: []string{"pkg/foo/foo.go"}},
+		{Key: "example.com/foo G().", Label: "G", Source: "pkg/foo/foo.go:11", DefEndLine: 12, Defs: []string{"pkg/foo/foo.go"}},
+	}
+	out := mergeAll([]Shard{assembleSymbols("pkg/foo", syms, nil)}).Output()
+
+	f, ok := nodeByID(out, "symbol:example.com/foo F().")
+	require.True(t, ok)
+	assert.Equal(t, "mode,strict", f.Attrs[attrBranchIdents])
+	g, ok := nodeByID(out, "symbol:example.com/foo G().")
+	require.True(t, ok)
+	assert.NotContains(t, g.Attrs, attrBranchIdents)
+}
+
 func TestGraphDefinitions(t *testing.T) {
 	syms := []types.KnowledgeSymbol{
 		{Key: "example.com/foo Bar#", Label: "Bar", Source: "pkg/foo/foo.go:11", DefEndLine: 20, BodyDigest: "abc", Defs: []string{"pkg/foo/foo.go"}},

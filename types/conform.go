@@ -34,6 +34,16 @@ const (
 	// ConformCallSequence is the longest ordered run of workspace callees a function shares
 	// with any other function.
 	ConformCallSequence ConformMetric = "call-sequence"
+	// ConformSharedBody is the line count of a function two or more other packages call.
+	ConformSharedBody ConformMetric = "shared-body"
+	// ConformSharedReach is how many packages besides its own call a function.
+	ConformSharedReach ConformMetric = "shared-reach"
+	// ConformCallerSpread is the most import hops between two packages calling one
+	// function, with the function's own package removed.
+	ConformCallerSpread ConformMetric = "caller-spread"
+	// ConformModeKnobs counts the knobs of a function shared past the coupling rule: a
+	// parameter its body branches on, or an option one caller package alone sets.
+	ConformModeKnobs ConformMetric = "mode-knobs"
 )
 
 // ConformPopulation is the set of files a metric is measured over. Each is measured apart,

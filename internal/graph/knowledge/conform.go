@@ -20,6 +20,8 @@ import (
 // and judges each row against the value o.Effective enforces: the committed ratchet value,
 // else the configured anchor. A live percentile is reported and may be proposed, never
 // enforced. A key with no configured value is measured only: no violations, no proposal.
+// The mode-knobs row holds only the functions the coupling rule finds over-shared, so its n
+// is how many there are, zero included.
 //
 // Rows come back sorted by metric, population and scope, and every list inside them in a
 // fixed order, so two runs over one graph agree byte for byte. A graph with no symbols
@@ -31,6 +33,9 @@ func (g *Graph) Conform(o types.ConformOptions) types.ConformOutput {
 		return types.ConformOutput{Answer: types.ClassifyAnswer(false, types.ReasonSymbolIndexMissing, nil)}
 	}
 	samples := conformSamples(g, o)
+	loops, knobbed := sharedLoops(g, o)
+	maps.Copy(samples, loops)
+	samples[couplingKey(types.ConformModeKnobs)] = knobbed
 	groups := cloneGroups(g, o)
 	known := conformKnownItems(o.Ratchet.Known)
 	// past holds, per metric, every item some enforced row found past its value: a known

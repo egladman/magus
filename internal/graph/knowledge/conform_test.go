@@ -143,6 +143,7 @@ func TestConformMeasuresEveryMetricAndPopulation(t *testing.T) {
 		"file-lines main ", "file-lines source ", "file-lines test ",
 		"file-symbols main ", "file-symbols source ", "file-symbols test ",
 		"func-lines main ", "func-lines source ", "func-lines test ",
+		"mode-knobs source ", "shared-reach source ",
 		"type-methods source ",
 	}, keys, "generated, excluded and fixture files form no row and add no sample")
 	assert.Equal(t, types.VerdictFound, out.Answer.Verdict)

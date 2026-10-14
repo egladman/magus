@@ -242,6 +242,9 @@ const (
 	// CheckSiblingSprawl is a method or function joining a family of siblings whose names
 	// differ in one complementary word (Hit, Miss, Error).
 	CheckSiblingSprawl = "sibling-sprawl"
+	// CheckSharedLoop is a function shared by callers that do not share its knobs: one
+	// caller's branch or option bends a body the rest also run.
+	CheckSharedLoop = "shared-loop"
 	// CheckPackageFiles is a new directory holding one source file where most directories of
 	// its language beside it hold more.
 	CheckPackageFiles = "package-files"

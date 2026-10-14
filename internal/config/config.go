@@ -824,9 +824,10 @@ func (c ConformConfig) Options() types.ConformOptions {
 // figures, except clone-tokens: its anchor is the smallest body worth one shared home,
 // just above the typical function (p50 58), and call-sequence: 7 is the run just below
 // maint-review's measured precision cut (a shared run of 8 callees caught B1, B7 and
-// B15), not a p99. The percentile is where a proposal measures: p99 for test files,
-// function lengths and call sequences, since a long table test is deliberate, p50 for
-// clones, p95 elsewhere. They name no path: an exclusion or a scope is one workspace's
+// B15), not a p99. The coupling keys pool source and main code under source, and
+// mode-knobs is a list, so its anchor is 0. The percentile is where a proposal measures:
+// p99 for test files, function lengths and call sequences, since a long table test is
+// deliberate, p50 for clones, p90 for a shared body, p95 elsewhere. They name no path: an exclusion or a scope is one workspace's
 // layout, so it lives in that workspace's magus.yaml.
 func conformDefaults() ConformConfig {
 	limit := func(percentile float64, anchor int) ConformLimitConfig {
@@ -849,6 +850,10 @@ func conformDefaults() ConformConfig {
 			types.ConformCloneTokens:  {src: limit(50, 80), main: limit(50, 80)},
 			types.ConformDepFanout:    {src: limit(95, 62)},
 			types.ConformCallSequence: {src: limit(99, 7), main: limit(99, 7)},
+			types.ConformSharedBody:   {src: limit(90, 94)},
+			types.ConformSharedReach:  {src: limit(95, 7)},
+			types.ConformCallerSpread: {src: limit(95, 3)},
+			types.ConformModeKnobs:    {src: limit(0, 0)},
 		},
 	}
 }

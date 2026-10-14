@@ -39,7 +39,7 @@ import (
 // because shards load lazily and an edge legitimately arrives before the node that gives
 // its endpoint a kind. Graph.UndeclaredEdges reports violations, and a test over this
 // workspace's own graph fails when a producer widens the vocabulary without declaring it.
-const KnowledgeSchemaVersion = 19
+const KnowledgeSchemaVersion = 20
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
 // generates. Four renderers write one of these spellings: the target-graph index
@@ -533,6 +533,10 @@ type KnowledgeSymbol struct {
 	// when the lines could not be read or the language has no lexer.
 	BodyShape  string
 	BodyTokens int
+	// BranchIdents are BranchIdents' identifiers over the same lines: what the body switches
+	// on or tests bare. Nil for a decision table, and when the lines could not be read or the
+	// language has no lexer.
+	BranchIdents []string
 	// SourceLines and SourceBytes size the file Source names, counted from the same read
 	// that computes BodyDigest. Zero when that read did not happen.
 	SourceLines int
@@ -661,6 +665,86 @@ func BodyShape(lines [][]byte, start, end int, language string) (digest string, 
 	}
 	sum := sha256.Sum256(shape)
 	return hex.EncodeToString(sum[:8]), tokens, true
+}
+
+// BranchIdents returns the identifiers lines start through end, indexed as BodyDigest
+// indexes them, use bare as a switch subject or an if or else-if condition, optionally
+// negated (`switch mode {`, `if !strict {`), sorted and distinct. A selector subject
+// (`switch r.Level`) and a condition with an operator never count. It returns nil for a
+// decision table, a body whose one top-level statement is that switch or if chain, since
+// branching is then the function's whole job; for a range that does not fit the file; and
+// for a language with no lexer here (only "go" has one).
+func BranchIdents(lines [][]byte, start, end int, language string) []string {
+	if start < 1 || end < start || end > len(lines) || language != "go" {
+		return nil
+	}
+	src := bytes.Join(lines[start-1:end], []byte("\n"))
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(src))
+	var s scanner.Scanner
+	s.Init(file, src, func(token.Position, string) {}, 0)
+	type scanned struct {
+		tok token.Token
+		lit string
+	}
+	var toks []scanned
+	for {
+		_, tok, lit := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+		toks = append(toks, scanned{tok, lit})
+	}
+
+	// The body opens at the first brace outside the signature's parentheses and brackets;
+	// a statement starts at depth 1 after that brace or a semicolon.
+	var idents []string
+	depth, nest, statements := 0, 0, 0
+	first := token.ILLEGAL
+	startsStatement := false
+	for i, t := range toks {
+		switch t.tok {
+		case token.LPAREN, token.LBRACK:
+			nest++
+		case token.RPAREN, token.RBRACK:
+			nest--
+		case token.LBRACE:
+			if depth > 0 || nest == 0 {
+				depth++
+				startsStatement = depth == 1
+				continue
+			}
+		case token.RBRACE:
+			if depth > 0 {
+				depth--
+			}
+		case token.SEMICOLON:
+			startsStatement = depth == 1
+			continue
+		}
+		if startsStatement && depth == 1 && t.tok != token.RBRACE {
+			statements++
+			if statements == 1 {
+				first = t.tok
+			}
+		}
+		startsStatement = false
+		if t.tok != token.IF && t.tok != token.SWITCH {
+			continue
+		}
+		j := i + 1
+		if j < len(toks) && toks[j].tok == token.NOT {
+			j++
+		}
+		if j+1 < len(toks) && toks[j].tok == token.IDENT && toks[j+1].tok == token.LBRACE {
+			idents = append(idents, toks[j].lit)
+		}
+	}
+	if statements == 1 && (first == token.IF || first == token.SWITCH) || len(idents) == 0 {
+		return nil
+	}
+	slices.Sort(idents)
+	return slices.Compact(idents)
 }
 
 // KnowledgePackage is one third-party dependency read out of a project's manifest:

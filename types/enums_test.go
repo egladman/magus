@@ -25,7 +25,10 @@ func TestEnumConformSetsClose(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t,
-		[]string{"file-lines", "func-lines", "type-methods", "file-symbols", "dep-fanout", "clone-tokens", "export-scope", "call-sequence"},
+		[]string{
+			"file-lines", "func-lines", "type-methods", "file-symbols", "dep-fanout", "clone-tokens", "export-scope",
+			"call-sequence", "shared-body", "shared-reach", "caller-spread", "mode-knobs",
+		},
 		ConformMetric("").Values())
 	assert.Equal(t, []string{"source", "main", "test"}, ConformPopulation("").Values())
 	assert.Equal(t, []string{"ratchet", "anchor"}, ConformSource("").Values())

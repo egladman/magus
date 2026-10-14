@@ -97,6 +97,7 @@ type conformanceCheck interface {
 
 var conformanceChecks = []conformanceCheck{
 	affixCheck{}, collisionCheck{}, renameCheck{}, orderCheck{}, thresholdCheck{}, callSeqCheck{}, sprawlCheck{},
+	couplingCheck{},
 }
 
 // finding is one scored observation about the declaration subject names.

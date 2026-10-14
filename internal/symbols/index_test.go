@@ -65,6 +65,29 @@ func TestFingerprintBodiesMarksGeneratedSource(t *testing.T) {
 	assert.False(t, syms[1].SourceGenerated)
 }
 
+// A body's bare switch subjects and if conditions ride its record; a selector subject and a
+// decision table carry none.
+func TestFingerprintBodiesReadsBranchIdents(t *testing.T) {
+	root := t.TempDir()
+	src := "package a\n\n" +
+		"func Run(mode string, strict bool) {\n\tswitch mode {\n\t}\n\tif !strict {\n\t}\n\tdone()\n}\n\n" +
+		"func Level(r Record) {\n\tswitch r.Level {\n\t}\n\tdone()\n}\n\n" +
+		"func Remedy(kind string) string {\n\tswitch kind {\n\tdefault:\n\t\treturn kind\n\t}\n}\n"
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "a"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a", "a.go"), []byte(src), 0o644))
+
+	syms := []types.KnowledgeSymbol{
+		{Key: "Run", Language: "go", Source: "a/a.go:3", DefEndLine: 9},
+		{Key: "Level", Language: "go", Source: "a/a.go:11", DefEndLine: 15},
+		{Key: "Remedy", Language: "go", Source: "a/a.go:17", DefEndLine: 22},
+	}
+	FingerprintBodies(root, syms)
+
+	assert.Equal(t, []string{"mode", "strict"}, syms[0].BranchIdents)
+	assert.Nil(t, syms[1].BranchIdents, "r.Level is a field, not a parameter")
+	assert.Nil(t, syms[2].BranchIdents, "the body is one switch")
+}
+
 // Two copies that differ only in names and literal values share a shape, and a body that
 // differs in structure does not. A language with no lexer gets no shape, and neither does a
 // symbol with no body span.

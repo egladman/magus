@@ -332,6 +332,55 @@ func TestBodyShape(t *testing.T) {
 	}
 }
 
+func TestBranchIdents(t *testing.T) {
+	for _, tc := range []struct {
+		name, src string
+		want      []string
+	}{
+		{
+			name: "a bare switch and a negated if",
+			src:  "func Run(mode string, strict bool) error {\n\tswitch mode {\n\tcase \"a\":\n\t}\n\tif !strict {\n\t\treturn nil\n\t}\n\treturn check(mode)\n}",
+			want: []string{"mode", "strict"},
+		},
+		{
+			name: "an else-if chain inside a loop",
+			src:  "func F(xs []int, quiet, loud bool) {\n\tfor range xs {\n\t\tif quiet {\n\t\t} else if loud {\n\t\t}\n\t}\n\tdone()\n}",
+			want: []string{"loud", "quiet"},
+		},
+		{
+			name: "a selector subject and an operator are not bare",
+			src:  "func (h *H) Handle(r Record) {\n\tswitch r.Level {\n\t}\n\tif err != nil {\n\t}\n\th.n++\n}",
+		},
+		{
+			name: "a switch with a statement after it",
+			src:  "func remedy(kind string) string {\n\tswitch kind {\n\tcase \"a\":\n\t\treturn \"x\"\n\t}\n\treturn \"\"\n}",
+			want: []string{"kind"},
+		},
+		{
+			name: "a body that is one switch",
+			src:  "func remedy(kind string) string {\n\tswitch kind {\n\tcase \"a\":\n\t\treturn \"x\"\n\tdefault:\n\t\treturn \"\"\n\t}\n}",
+		},
+		{
+			name: "a body that is one if chain",
+			src:  "func pick(a bool) int {\n\tif a {\n\t\treturn 1\n\t} else {\n\t\treturn 2\n\t}\n}",
+		},
+		{
+			name: "a signature holding braces",
+			src:  "func G(opts struct{ on bool }, on bool) {\n\tif on {\n\t}\n\tuse(opts)\n}",
+			want: []string{"on"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lines := SplitSourceLines([]byte(tc.src))
+			assert.Equal(t, tc.want, BranchIdents(lines, 1, len(lines), "go"))
+		})
+	}
+
+	lines := SplitSourceLines([]byte("func F(on bool) {\n\tif on {\n\t}\n\tg()\n}"))
+	assert.Nil(t, BranchIdents(lines, 1, 9, "go"), "the range does not fit")
+	assert.Nil(t, BranchIdents(lines, 1, len(lines), "python"), "no lexer")
+}
+
 func TestMarkerFamilyIsClosed(t *testing.T) {
 	assert.Equal(t, []string{"diagram", "calls", "skills", "observed", "harness"}, MarkerFamily("").Values())
 	assert.True(t, MarkerCalls.Valid())

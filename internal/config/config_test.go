@@ -129,6 +129,17 @@ func TestConformDefaults(t *testing.T) {
 		types.ConformPopSource: {Percentile: 99, Anchor: 7},
 		types.ConformPopMain:   {Percentile: 99, Anchor: 7},
 	}, c.Checks[types.ConformCallSequence], "7 sits below the run of 8 that caught B1, B7 and B15; tests are never measured")
+	assert.Equal(t, map[types.ConformMetric]map[types.ConformPopulation]ConformLimitConfig{
+		types.ConformSharedBody:   {types.ConformPopSource: {Percentile: 90, Anchor: 94}},
+		types.ConformSharedReach:  {types.ConformPopSource: {Percentile: 95, Anchor: 7}},
+		types.ConformCallerSpread: {types.ConformPopSource: {Percentile: 95, Anchor: 3}},
+		types.ConformModeKnobs:    {types.ConformPopSource: {Percentile: 0, Anchor: 0}},
+	}, map[types.ConformMetric]map[types.ConformPopulation]ConformLimitConfig{
+		types.ConformSharedBody:   c.Checks[types.ConformSharedBody],
+		types.ConformSharedReach:  c.Checks[types.ConformSharedReach],
+		types.ConformCallerSpread: c.Checks[types.ConformCallerSpread],
+		types.ConformModeKnobs:    c.Checks[types.ConformModeKnobs],
+	}, "the coupling keys pool source and main; a knob past the rule is a list item")
 }
 
 func TestConformDefaultsAreNotShared(t *testing.T) {
