@@ -29,6 +29,15 @@ stdout 'wave/lint'
 ! stdout 'wave/bench'
 ! stdout 'wave/goal'
 
+# An apply that adds the goal to a live row is graded as the fork was, dry run or not.
+! exec magus job apply -f apply.json --dry-run
+stderr 'wave/lint''s goal paid''s check `magus run bench \.` is a target a person runs \(human-only\)'
+! exec magus job apply -f apply.json
+stderr 'wave/lint''s goal paid''s check'
+exec magus ls jobs -o json
+stdout 'wave/lint'
+! stdout 'bench'
+
 -- bench.buzz --
 import "magus";
 
@@ -46,6 +55,10 @@ export fun bench(ctx: magus\Context, args: [str]) > void {}
 export fun lint(ctx: magus\Context, args: [str]) > void {}
 -- goal.json --
 {"schema_version": 12, "id": "wave/goal", "criteria": "run it", "write_paths": ["code.go"],
+ "goals": [{"id": "paid", "kind": "check", "check": {"target": "bench", "project": "."}}]}
+-- apply.json --
+{"schema_version": 12, "id": "wave/lint", "criteria": "lint it", "write_paths": ["code.go"],
+ "check": {"target": "lint", "project": "."},
  "goals": [{"id": "paid", "kind": "check", "check": {"target": "bench", "project": "."}}]}
 -- code.go --
 package pkg

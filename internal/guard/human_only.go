@@ -86,12 +86,17 @@ func gradeHumanOnly(ctx context.Context, deps Dependencies, actingLease, command
 		return decisionDeny, b.String()
 	}
 	var facts strings.Builder
+	reasons := make([]string, 0, len(pairs))
 	for _, p := range pairs {
-		fmt.Fprintf(&facts, "`%s` is run by a person: %s. %s\n", humanOnlyRun(p, runs), strings.TrimRight(p.reason, "."), humanOnlyHistory(ctx, at.workspace, p))
+		reason := strings.TrimRight(p.reason, ".")
+		reasons = append(reasons, reason)
+		fmt.Fprintf(&facts, "`%s` is run by a person: %s. %s\n", humanOnlyRun(p, runs), reason, humanOnlyHistory(ctx, at.workspace, p))
 	}
-	// The worker test push-ungated uses: a row that cannot be read stays a worker.
+	// The worker test push-ungated uses: a row that cannot be read stays a worker. The
+	// declared reasons ride the first line, the one a fork quotes when it refuses the check.
 	if me, ok := actingLiveLease(ctx, deps, actingLease); actingLease != "" && (!ok || workerRole(me, deps.caller) != "") {
-		return decisionDeny, "`" + line + "` runs a target a person runs, and this session is bound to job " + actingLease +
+		return decisionDeny, "`" + line + "` runs a target a person runs (" + strings.Join(reasons, "; ") +
+			"), and this session is bound to job " + actingLease +
 			"; name the run in your result's unresolved risks.\nWorkers do not spend for the orchestrator.\n" + facts.String()
 	}
 	return decisionAsk, facts.String() + "Approving runs it once. To run it yourself: " + line
