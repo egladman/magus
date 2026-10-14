@@ -173,7 +173,8 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	lifecycle := buildLifecycle(ctx, obs)
 	magus.MapSet("lifecycle", lifecycle)
 	magus.MapSet("workspace", buildWorkspace(ctx, obs))
-	magus.MapSet("job", buildJob(obs))
+	jobMap := buildJob(ctx, sess, obs)
+	magus.MapSet("job", jobMap)
 	magus.MapSet("service", buildService(obs))
 	magus.MapSet("vcs", buildVCS(obs))
 	magus.MapSet("trail", buildTrail(obs))
@@ -247,6 +248,8 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 		guard.MapSet("command", magusfileOnly(obs, `magus\guard.command`))
 		guard.MapSet("write", magusfileOnly(obs, `magus\guard.write`))
 		harness.MapSet("provider", magusfileOnly(obs, `magus\harness.provider`))
+		jobMap.MapSet("modelTiers", magusfileOnly(obs, `magus\job.modelTiers`))
+		jobMap.MapSet("modelTier", magusfileOnly(obs, `magus\job.modelTier`))
 	}
 	if len(withheld) > 0 {
 		magus = dropMembers(magus, withheld)

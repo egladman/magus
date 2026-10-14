@@ -632,10 +632,11 @@ var Magus = Module{
 			Name: "harness",
 			Doc:  "Agent-host harness selection. A harness is a spell that exports the harness_config / harness_skills / harness_entries contract, the same family as cache.remote and ci.provider.",
 			Methods: []Method{{
-				Name:   "provider",
-				Doc:    "Wire an imported harness spell for this workspace. A workspace may use several (one per agent host), same append-on-repeat shape as workspace.provider. Declared at the top level of the root magusfile.",
-				Args:   []Arg{{Name: "spell", Type: TypeAnyMap}},
-				Extern: true,
+				Name:    "provider",
+				Doc:     "Wire an imported harness spell for this workspace. A workspace may use several (one per agent host), same append-on-repeat shape as workspace.provider. Declared at the top level of the root magusfile. Returns the harness's HarnessKey, which keys the hosts map of magus\\job.modelTiers; a call that ignores it wires the harness as before.",
+				Args:    []Arg{{Name: "spell", Type: TypeAnyMap}},
+				Returns: []Ret{{Type: TypeAnyMap, Object: "HarnessKey"}},
+				Extern:  true,
 			}},
 		},
 		{
@@ -850,8 +851,8 @@ var Magus = Module{
 					Name: "modelTiers",
 					Doc: "Declare the model tiers a fork assigns: an enum of your own, cheapest case first, " +
 						"which magus reads once at load. tiers is that enum and default one of its cases. " +
-						"hosts maps each harness the magusfile wired with magus\\harness.provider, as a " +
-						"magus\\HarnessKey, to a function from a tier to the model alias that harness spawns; " +
+						"hosts maps each harness the magusfile wired, keyed by the HarnessKey " +
+						"magus\\harness.provider returns, to a function from a tier to the model alias that harness spawns; " +
 						"bounds maps a tier to its magus\\ModelTierBounds (maxLive, maxContext; a zero field is " +
 						"no cap); skills maps a tier to the magus\\SkillVariant its workers load. Write each " +
 						"function as an exhaustive match over the enum, so a tier added later fails " +

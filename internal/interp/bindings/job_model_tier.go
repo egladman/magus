@@ -35,8 +35,9 @@ declareDefault(modeltiers\ModelTier, modeltiers\defaultTier, modeltiers\bounds, 
 
 // registerModelTiers binds magus\job.modelTiers onto jobMap:
 //
+//	final cc = magus\harness.provider(claudecode);
 //	magus\job.modelTiers(ModelTier, default: ModelTier.standard,
-//	    hosts: {claude.key: claudeModel}, bounds: bounds, skills: skills);
+//	    hosts: {cc: claudeModel}, bounds: bounds, skills: skills);
 //
 // The functions run here, once per case, and are not kept. Every misdeclaration is
 // MGS1052, so a declaration that failed to register cannot leave a workspace that reads
@@ -268,10 +269,12 @@ func declareTierHosts(ctx context.Context, sess *buzz.Session, enum string, case
 	return out, nil
 }
 
+// decodeHarnessKey reads a HarnessKey as magus\harness.provider returns it (a map with an
+// id) or as a magusfile writes it (an instance).
 func decodeHarnessKey(v vm.Value) (types.HarnessKey, error) {
-	if v.ObjectTypeName() != harnessKeyObject {
+	if v.ObjectTypeName() != harnessKeyObject && !v.IsMap() {
 		return types.HarnessKey{}, modelTierUnusable(modelTiersMember,
-			"a hosts key must be a magus\\HarnessKey, such as magus\\HarnessKey{ id = \"claude-code\" }, got %s", describeValue(v))
+			"a hosts key must be the magus\\HarnessKey magus\\harness.provider returns, got %s", describeValue(v))
 	}
 	fields, _ := v.MapView()
 	id, _ := fields.MapGet("id")

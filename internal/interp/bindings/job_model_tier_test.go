@@ -93,6 +93,24 @@ magus\job.modelTiers(Level, default: Level.high,
 	assert.Equal(t, "small", alias)
 }
 
+func TestModelTiersHostsAreKeyedByWhatProviderReturns(t *testing.T) {
+	reg, err := loadModelTiers(t, levelsDecl+`
+magus\harness.provider({"name": "cursor"});
+final cc = magus\harness.provider({"name": "claude-code"});
+magus\job.modelTiers(Level, default: Level.low,
+    hosts: {cc: model}, bounds: bounds, skills: skills);
+`)
+	require.NoError(t, err, "a provider call that discards its key still wires the harness")
+	assert.Equal(t, []string{"cursor", "claude-code"}, reg.Harnesses())
+
+	set := reg.ModelTiers()
+	alias, err := set.Alias(types.HarnessKey{ID: "claude-code"}, set.Default())
+	require.NoError(t, err)
+	assert.Equal(t, "small", alias)
+	_, err = set.Alias(types.HarnessKey{ID: "cursor"}, set.Default())
+	require.ErrorContains(t, err, "hosts are claude-code", "the discarded key maps nothing")
+}
+
 func TestModelTiersWithoutAHostsMapMapNoHarness(t *testing.T) {
 	reg, err := loadModelTiers(t, levelsDecl+`
 magus\job.modelTiers(Level, default: Level.low, bounds: bounds, skills: skills);
@@ -160,7 +178,7 @@ magus\job.modelTiers(Level, default: Other.low, bounds: bounds, skills: skills);
 			"has not wired", []string{"claude-code"}},
 		{"a host keyed by a string", `magus\job.modelTiers(Level, default: Level.low,
     hosts: {"claude-code": model}, bounds: bounds, skills: skills);`,
-			"must be a magus\\HarnessKey", []string{"claude-code"}},
+			"must be the magus\\HarnessKey", []string{"claude-code"}},
 		{"two tiers with one alias", `
 fun same(level: Level) > str { return "one"; }
 magus\job.modelTiers(Level, default: Level.low,

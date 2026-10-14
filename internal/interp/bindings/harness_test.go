@@ -21,6 +21,18 @@ func TestBuildHarness(t *testing.T) {
 		assert.Equal(t, []string{"cursor"}, reg.Harnesses())
 	})
 
+	t.Run("provider returns the harness key", func(t *testing.T) {
+		reg := workspace.NewWorkspaceRegistry()
+		harness := buildHarness(workspace.ContextWithRegistry(context.Background(), reg), nil)
+		handle := vm.NewMap()
+		handle.MapSet("name", vm.StrValue("cursor"))
+		key, err := callSession(t).CallValue(context.Background(), requireDirect(t, harness, "provider"), []vm.Value{handle})
+		require.NoError(t, err)
+		id, ok := key.MapGet("id")
+		require.True(t, ok)
+		assert.Equal(t, "cursor", id.AsString())
+	})
+
 	t.Run("duplicate provider is ignored", func(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
 		harness := buildHarness(workspace.ContextWithRegistry(context.Background(), reg), nil)
