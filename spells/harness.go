@@ -43,9 +43,10 @@ const (
 	// Optional: a host without a subagent file format omits it and receives none.
 	//
 	// magus invokes it with Params {"agents": [...]}, each agent a map of name, description,
-	// instructions, read_only and class. The spell returns [{path, content}]: whole
-	// workspace-relative files the descriptor owns. How a class maps to a model is the
-	// spell's to decide, since only the host knows its own model names.
+	// instructions, read_only and, when the workspace maps a model to this harness's
+	// cheapest tier, model: that host's own alias for it. The spell returns [{path,
+	// content}]: whole workspace-relative files the descriptor owns. An agent with no model
+	// key is rendered without a model line, so the host's default applies.
 	HarnessAgentsContract = "harness_agents"
 
 	// HarnessSettingsContract returns plain host settings a harness keeps in place:
