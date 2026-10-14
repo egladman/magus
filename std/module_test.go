@@ -9,7 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMain(m *testing.M) { testkit.Main(m) }
+func TestMain(m *testing.M) {
+	// magusfile-api-generate rewrites the std API lock through this variable.
+	testkit.Main(m, "UPDATE_STD_API_LOCK")
+}
 
 // The covImpl* functions below are Method Impls and Field Resolvers of every shape
 // validateMethod and validateField accept or reject. They are package-level rather

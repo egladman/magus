@@ -15,10 +15,6 @@ import (
 // std host module, one dotted name per line, sorted.
 var stdAPILockPath = filepath.Join("gen", "std-api.lock")
 
-// updateStdAPILock is read at package init because TestMain runs testkit.Main, which
-// scrubs the environment before any test starts.
-var updateStdAPILock = os.Getenv("UPDATE_STD_API_LOCK") != ""
-
 // stdAPINames lists the Buzz-facing member names of every std module: methods as
 // <module>.<method>, namespace members as <module>.<namespace>.<member> and fields
 // as <module>.<field>. The magus module is left out because magus-api.lock owns it.
@@ -52,7 +48,7 @@ func stdAPINames(t *testing.T) []string {
 func TestStdAPILocked(t *testing.T) {
 	got := stdAPINames(t)
 
-	if updateStdAPILock {
+	if os.Getenv("UPDATE_STD_API_LOCK") != "" {
 		require.NoError(t, os.MkdirAll(filepath.Dir(stdAPILockPath), 0o755))
 		require.NoError(t, os.WriteFile(stdAPILockPath, []byte(strings.Join(got, "\n")+"\n"), 0o644))
 		t.Logf("wrote %s (%d members)", stdAPILockPath, len(got))
