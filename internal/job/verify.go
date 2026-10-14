@@ -98,6 +98,9 @@ type Observed struct {
 	AddedExports     []string
 	LeftUnreferenced []string
 	SymbolDeltaKnown bool
+	// anyLease accepts a run recorded under any lease. Integration grades runs in the
+	// integrator's own tree, where its validators run checks under their own leases.
+	anyLease bool
 }
 
 // GreenGate is a passing ci gate and what changed since it.
@@ -540,9 +543,8 @@ func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAtt
 	if why, ok := seen.Stale[attemptKey(attempt)]; ok {
 		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q predates the job's last write: it proves the work only if %s", status.OutputRef, why))
 	}
-	// An unleased run is accepted: the orchestrator runs a check under no lease, as
-	// `job wait --integration` does.
-	if attempt.Lease != "" && attempt.Lease != row.ID {
+	// An unleased run is accepted: the orchestrator runs a check under no lease.
+	if !seen.anyLease && attempt.Lease != "" && attempt.Lease != row.ID {
 		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q acted under lease %q, not this job's lease %q, so it is another job's evidence",
 			status.OutputRef, attempt.Lease, row.ID))
 	}
@@ -909,7 +911,8 @@ func verifySubjectGate(gate types.Goal, seen Observed) types.GateStatus {
 // cannot say. A nil symbols leaves those goals unmet, never passed.
 //
 // `changed` symbol goals, paths goals, the diff and the footprint belong to the holder's
-// checkout and were graded there. It leaves State alone and works on an ended row, so a
+// checkout and were graded there. A run under any lease is accepted: the runs are the
+// caller's, made by whatever validators it ran in its tree. It leaves State alone and works on an ended row, so a
 // pass where the work was written and a failure once merged stay two readable facts.
 // Evidence naming a goal the row does not hold as a check is an error, and nothing is
 // recorded.
@@ -961,7 +964,7 @@ func WaitIntegration(ctx context.Context, store *Store, id string, rep types.Job
 				return types.JobIntegration{}, err
 			}
 		}
-		status := verifyGate(row, gate, ref, attempt, Observed{})
+		status := verifyGate(row, gate, ref, attempt, Observed{anyLease: true})
 		grade.Verified = grade.Verified && status.Verified
 		grade.Gates = append(grade.Gates, status)
 	}

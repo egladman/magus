@@ -902,6 +902,31 @@ func TestWaitIntegrationRefusesEvidenceForAGoalItDoesNotHold(t *testing.T) {
 	assert.Nil(t, rows[0].Integration, "a refused grade records nothing")
 }
 
+// The integrator's validators run the checks in its tree under their own leases, so a
+// run under another lease grades integration; plain wait still refuses it.
+func TestWaitIntegrationAcceptsARunUnderAnotherLease(t *testing.T) {
+	t.Parallel()
+
+	s := integrationRow(t, types.StatePass)
+	byRef := runs(map[string][2]string{"out1": {"test", "."}, "out2": {"lint", "docs"}})
+	resolve := func(ctx context.Context, ref string) (types.JobAttempt, error) {
+		att, err := byRef(ctx, ref)
+		att.Lease = "root/validate"
+		return att, err
+	}
+	grade, err := WaitIntegration(t.Context(), s, "w", integrationEvidence(), resolve, "/merged", nil)
+	require.NoError(t, err)
+	assert.True(t, grade.Verified, "%+v", grade.Gates)
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	att, err := resolve(t.Context(), "out1")
+	require.NoError(t, err)
+	plain := verifyGate(rows[0], rows[0].EffectiveGoals()[0], "out1", att, Observed{})
+	assert.False(t, plain.Verified)
+	assert.Contains(t, strings.Join(plain.Violations, "\n"), `"root/validate"`)
+}
+
 // Symbol goals a merge can break are graded against the integrator's graph, and `changed`,
 // which is the holder's diff, is not graded there at all.
 func TestWaitIntegrationGradesSymbolGoalsAgainstTheCheckoutsGraph(t *testing.T) {
