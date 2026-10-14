@@ -477,15 +477,15 @@ func TestHitRate(t *testing.T) {
 	assert.Equal(t, 1.0, hitRate(5, 0))
 }
 
-// TestAdvanceHitWindow drives all four eviction branches once the window is
+// TestHitWindowObserve drives all four eviction branches once the window is
 // full: hit evicting a miss, miss evicting a hit, and the two cap-in-place
 // paths where the window is already saturated with the same outcome.
-func TestAdvanceHitWindow(t *testing.T) {
+func TestHitWindowObserve(t *testing.T) {
 	t.Parallel()
 
 	t.Run("under cap just increments", func(t *testing.T) {
 		hc, mc := 1, 1
-		advanceHitWindow(&hc, &mc, true)
+		(&hitWindow{&hc, &mc}).Observe(true)
 		assert.Equal(t, 2, hc)
 		assert.Equal(t, 1, mc)
 	})
@@ -494,7 +494,7 @@ func TestAdvanceHitWindow(t *testing.T) {
 		// Full window with a miss present: a new hit should trade the miss out
 		// so the total stays at HitWindow.
 		hc, mc := HitWindow-1, 1
-		advanceHitWindow(&hc, &mc, true)
+		(&hitWindow{&hc, &mc}).Observe(true)
 		assert.Equal(t, HitWindow, hc)
 		assert.Equal(t, 0, mc)
 		assert.Equal(t, HitWindow, hc+mc, "total capped")
@@ -502,7 +502,7 @@ func TestAdvanceHitWindow(t *testing.T) {
 
 	t.Run("miss evicts a hit at cap", func(t *testing.T) {
 		hc, mc := 1, HitWindow-1
-		advanceHitWindow(&hc, &mc, false)
+		(&hitWindow{&hc, &mc}).Observe(false)
 		assert.Equal(t, 0, hc)
 		assert.Equal(t, HitWindow, mc)
 		assert.Equal(t, HitWindow, hc+mc, "total capped")
@@ -512,14 +512,14 @@ func TestAdvanceHitWindow(t *testing.T) {
 		// No misses to evict: the increment then self-decrement leaves the
 		// window unchanged at all hits.
 		hc, mc := HitWindow, 0
-		advanceHitWindow(&hc, &mc, true)
+		(&hitWindow{&hc, &mc}).Observe(true)
 		assert.Equal(t, HitWindow, hc)
 		assert.Equal(t, 0, mc)
 	})
 
 	t.Run("all-misses window caps in place on miss", func(t *testing.T) {
 		hc, mc := 0, HitWindow
-		advanceHitWindow(&hc, &mc, false)
+		(&hitWindow{&hc, &mc}).Observe(false)
 		assert.Equal(t, 0, hc)
 		assert.Equal(t, HitWindow, mc)
 	})

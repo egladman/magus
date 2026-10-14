@@ -487,7 +487,7 @@ func (h *History) Update(now time.Time, projectSamples []Sample, shardSamples []
 		st := targets[s.Target]
 
 		if s.Hit {
-			advanceHitWindow(&st.HitCount, &st.MissCount, true)
+			(&hitWindow{&st.HitCount, &st.MissCount}).Observe(true)
 			st.HitRate = hitRate(st.HitCount, st.MissCount)
 			if len(s.Tags) > 0 {
 				if st.Buckets == nil {
@@ -495,13 +495,13 @@ func (h *History) Update(now time.Time, projectSamples []Sample, shardSamples []
 				}
 				for _, tag := range s.Tags {
 					b := st.Buckets[tag]
-					advanceHitWindow(&b.HitCount, &b.MissCount, true)
+					(&hitWindow{&b.HitCount, &b.MissCount}).Observe(true)
 					b.HitRate = hitRate(b.HitCount, b.MissCount)
 					st.Buckets[tag] = b
 				}
 			}
 		} else {
-			advanceHitWindow(&st.HitCount, &st.MissCount, false)
+			(&hitWindow{&st.HitCount, &st.MissCount}).Observe(false)
 			st.HitRate = hitRate(st.HitCount, st.MissCount)
 			st = ApplyDuration(st, s.DurationMs, now)
 			if len(s.Tags) > 0 {
@@ -510,7 +510,7 @@ func (h *History) Update(now time.Time, projectSamples []Sample, shardSamples []
 				}
 				for _, tag := range s.Tags {
 					b := st.Buckets[tag]
-					advanceHitWindow(&b.HitCount, &b.MissCount, false)
+					(&hitWindow{&b.HitCount, &b.MissCount}).Observe(false)
 					b.HitRate = hitRate(b.HitCount, b.MissCount)
 					b.Recent = appendCapped(b.Recent, s.DurationMs)
 					b.Samples++
@@ -563,23 +563,27 @@ func (h *History) Update(now time.Time, projectSamples []Sample, shardSamples []
 	h.UpdatedAt = now
 }
 
-// advanceHitWindow increments the hit or miss counter, capped at HitWindow using eviction of the opposite type.
-func advanceHitWindow(hitCount, missCount *int, hit bool) {
+// hitWindow views the persisted HitCount and MissCount of a Stats or BucketStats as one
+// window capped at HitWindow observations.
+type hitWindow struct{ hits, misses *int }
+
+// Observe counts a hit or a miss. Past the cap it evicts one observation of the opposite
+// kind to keep the new one's signal, or of the same kind when the window holds only that.
+func (w *hitWindow) Observe(hit bool) {
 	if hit {
-		*hitCount++
+		*w.hits++
 	} else {
-		*missCount++
+		*w.misses++
 	}
-	if *hitCount+*missCount > HitWindow {
-		// Evict the opposite type to preserve the new observation's signal.
-		if hit && *missCount > 0 {
-			*missCount--
-		} else if !hit && *hitCount > 0 {
-			*hitCount--
+	if *w.hits+*w.misses > HitWindow {
+		if hit && *w.misses > 0 {
+			*w.misses--
+		} else if !hit && *w.hits > 0 {
+			*w.hits--
 		} else if hit {
-			*hitCount-- // window already all hits; cap in place
+			*w.hits--
 		} else {
-			*missCount-- // window already all misses; cap in place
+			*w.misses--
 		}
 	}
 }
