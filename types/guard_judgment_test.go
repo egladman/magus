@@ -1,6 +1,7 @@
 package types
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,4 +47,16 @@ func TestNextStepYAMLOmitsEmptyFields(t *testing.T) {
 	got, err := yaml.Marshal(NextStep{ID: "a", Run: "magus ls"})
 	require.NoError(t, err)
 	assert.Equal(t, "id: a\nrun: magus ls\n", string(got))
+}
+
+// A refused run reports the deny itself: its reason as the message, and the whole judgment
+// for a caller that reads the rule or the remedy.
+func TestGuardDeniedErrorCarriesTheJudgment(t *testing.T) {
+	deny := GuardJudgment{Decision: "deny", Reason: "run it through the target", Rule: "raw-tool"}
+	var err error = &GuardDeniedError{Judgment: deny}
+
+	assert.Equal(t, deny.Reason, err.Error())
+	var denied *GuardDeniedError
+	require.ErrorAs(t, fmt.Errorf("run: %w", err), &denied)
+	assert.Equal(t, deny, denied.Judgment)
 }

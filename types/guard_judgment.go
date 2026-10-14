@@ -29,3 +29,12 @@ type GuardJudgment struct {
 	// lease, and pre-authorized for the calls after it. Reason renders it too.
 	Next []NextStep `json:"next,omitempty"`
 }
+
+// GuardDeniedError is a call refused because the guard denied it. Judgment is the whole
+// deny, so a caller can show its Rule and act on its Next instead of parsing the message.
+type GuardDeniedError struct {
+	Judgment GuardJudgment
+}
+
+// Error is the deny's Reason, which already names what to run instead.
+func (e *GuardDeniedError) Error() string { return e.Judgment.Reason }
