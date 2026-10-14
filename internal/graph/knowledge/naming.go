@@ -18,20 +18,26 @@ import (
 // advisor's target half, the norm is derived from the tree and never declared, so every finding
 // states its counts.
 //
-// Silence is the default, and it is the hard part. A norm needs a cohort of at least MinCohort
-// declarations agreeing at MinShare or more; a workspace that has not decided yields nothing. The
-// change's own new declarations never count toward a norm, so a change cannot manufacture the
+// Silence is the default, and it is the hard part. A norm needs a cohort of at least Gates.MinCohort
+// declarations agreeing at Gates.MinShare or more; a workspace that has not decided yields nothing.
+// The change's own new declarations never count toward a norm, so a change cannot manufacture the
 // convention it is then measured against.
-const (
-	conformanceMinCohort = 5
-	conformanceMinShare  = 0.8
-	// conformanceBar is the score a finding needs to be reported at all. Below it a finding is a
-	// guess, and a guess shown beside facts teaches readers to skim both.
-	conformanceBar = 0.5
-	// conformanceMaxFindings caps what one change reports, strongest first.
-	conformanceMaxFindings = 5
-	conformanceExamples    = 3
-)
+const conformanceExamples = 3
+
+// defaultGates fill the zero fields of a Gates value. They repeat the defaults of config's
+// knowledge.conform.gates, which the graph cannot import; TestDefaultGatesMatchConfig fails
+// when the two drift.
+var defaultGates = types.ConformGates{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5}
+
+// resolveGates fills each zero field of g from defaultGates.
+func resolveGates(g types.ConformGates) types.ConformGates {
+	return types.ConformGates{
+		MinCohort:   cmp.Or(g.MinCohort, defaultGates.MinCohort),
+		MinShare:    cmp.Or(g.MinShare, defaultGates.MinShare),
+		Bar:         cmp.Or(g.Bar, defaultGates.Bar),
+		MaxFindings: cmp.Or(g.MaxFindings, defaultGates.MaxFindings),
+	}
+}
 
 // ConformanceChange describes the change [Graph.Conformance] observes.
 type ConformanceChange struct {
@@ -47,15 +53,21 @@ type ConformanceChange struct {
 	// Read returns a workspace file's text as the change leaves it. nil skips the one check that
 	// searches text, for a renamed symbol's former name.
 	Read func(path string) (string, bool)
-	// MinCohort and MinShare are the silence gates: how many declarations a norm needs, and the
-	// share of them that must agree. Zero takes the defaults, 5 and 0.8.
-	MinCohort int
-	MinShare  float64
+	// Gates are the silence gates and the report bar and cap. A zero field takes the default of
+	// knowledge.conform.gates.
+	Gates types.ConformGates
+	// Conform is the threshold policy the threshold check judges subjects against. With no
+	// RatchetPath the check is silent.
+	Conform types.ConformOptions
+	// RatchetBase is the ratchet record at the diff's base, nil when the base has none. The
+	// threshold check compares it with Conform.Ratchet to see what the change moves.
+	RatchetBase *types.ConformRatchet
 }
 
 // Conformance runs every conformance check over the change and returns what clears the bar,
-// keyed by the subject each finding is about. At most conformanceMaxFindings are returned across the change, strongest first, ties
-// broken by check name, message and subject so two runs over one graph agree byte for byte.
+// keyed by the subject each finding is about. At most Gates.MaxFindings are returned across the
+// change, strongest first, ties broken by check name, message and subject so two runs over one
+// graph agree byte for byte.
 //
 // Each finding is a [types.Check] with Status advice and Evidence inferred: a fact about the
 // index, never a rule. It reads only language-neutral facts (name, kind, scope, calls,
@@ -73,7 +85,7 @@ func (g *Graph) Conformance(c ConformanceChange) map[string][]types.Check {
 	var all []named
 	for _, chk := range conformanceChecks {
 		for _, f := range chk.run(x) {
-			if f.score >= conformanceBar {
+			if f.score >= x.gates.Bar {
 				all = append(all, named{chk.name(), f})
 			}
 		}
@@ -83,7 +95,7 @@ func (g *Graph) Conformance(c ConformanceChange) map[string][]types.Check {
 			cmp.Compare(a.message, b.message), cmp.Compare(a.subject, b.subject))
 	})
 	out := map[string][]types.Check{}
-	for _, f := range all[:min(len(all), conformanceMaxFindings)] {
+	for _, f := range all[:min(len(all), x.gates.MaxFindings)] {
 		out[f.subject] = append(out[f.subject], types.Check{
 			Name: f.check, Status: types.CheckAdvice, Message: f.message, Details: f.details,
 			Evidence: types.EvidenceInferred,
@@ -101,7 +113,7 @@ type conformanceCheck interface {
 }
 
 var conformanceChecks = []conformanceCheck{
-	affixCheck{}, collisionCheck{}, renameCheck{}, orderCheck{},
+	affixCheck{}, collisionCheck{}, renameCheck{}, orderCheck{}, thresholdCheck{},
 }
 
 // finding is one scored observation about the declaration subject names.
@@ -158,6 +170,7 @@ func (d *namingDecl) file() string {
 type namingIndex struct {
 	g        *Graph
 	change   ConformanceChange
+	gates    types.ConformGates
 	cohort   int
 	share    float64
 	byID     map[string]*namingDecl
@@ -170,11 +183,13 @@ type namingIndex struct {
 }
 
 func newNamingIndex(g *Graph, c ConformanceChange) *namingIndex {
+	gates := resolveGates(c.Gates)
 	x := &namingIndex{
 		g:      g,
 		change: c,
-		cohort: cmp.Or(c.MinCohort, conformanceMinCohort),
-		share:  cmp.Or(c.MinShare, conformanceMinShare),
+		gates:  gates,
+		cohort: gates.MinCohort,
+		share:  gates.MinShare,
 		byID:   map[string]*namingDecl{},
 		groups: map[string][]*namingDecl{},
 	}

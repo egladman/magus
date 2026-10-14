@@ -85,6 +85,13 @@ func depCase(dir string, imports ...string) types.Case {
 	return types.Case{Node: precedentNamespace(dir, "go"), Source: dir, Imports: imports}
 }
 
+// fanoutConform configures the dep-fanout ceiling as an anchor and nothing else.
+func fanoutConform(anchor int) types.ConformOptions {
+	return types.ConformOptions{Limits: map[types.ConformKey]types.ConformLimit{
+		{Metric: types.ConformDepFanout, Population: types.ConformPopSource}: {Percentile: 95, Anchor: anchor},
+	}}
+}
+
 func fileCase(file string) types.Case { return types.Case{Node: "file:" + file, Source: file} }
 
 func precedentRow(t *testing.T, rows []types.Precedent, family types.PrecedentFamily, scope types.PrecedentScope) types.Precedent {
@@ -348,7 +355,7 @@ func TestPrecedentsNeverCountAGeneratedFileInAMixedPackage(t *testing.T) {
 			Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
 			Follow: 1, Cohort: 1, Share: 1, Cited: []types.Case{depCase("cmd/app", "internal/a")},
 		},
-	}, f.g.Precedents(PrecedentOptions{Generated: map[string]bool{"internal/a/zz_generated.go": true}}),
+	}, f.g.Precedents(PrecedentOptions{Generated: map[string]bool{"internal/a/zz_generated.go": true}, Conform: fanoutConform(1)}),
 		"internal/a's generated file importing cmd/app is its generator's decision, not a departure")
 }
 
@@ -403,13 +410,10 @@ func TestPrecedentsJudgeTestPackagesOnlyWhereALanguagePackagesByDirectory(t *tes
 	assert.Empty(t, f.g.Precedents(PrecedentOptions{}))
 }
 
-// TestPrecedentsFanoutIsADistributionOverImporters holds a cohort of 20, the smallest whose
-// nearest-rank p95 sits below its max, so the one heavy importer departs.
-func TestPrecedentsFanoutIsADistributionOverImporters(t *testing.T) {
-	t.Parallel()
-
-	f := newPrecedentFixture()
-	var all []string
+// fanoutCohort is 19 packages importing one internal package each and cmd/big importing
+// twelve: a cohort of 20, whose nearest-rank p95 is 1.
+func fanoutCohort() (f *precedentFixture, all []string) {
+	f = newPrecedentFixture()
 	for i := range 12 {
 		dir := fmt.Sprintf("internal/p%d", i)
 		all = append(all, dir)
@@ -426,7 +430,13 @@ func TestPrecedentsFanoutIsADistributionOverImporters(t *testing.T) {
 	}
 	// A package that never imports the layer is not in its cohort.
 	f.pkg("cmd/none", 1)
+	return f, all
+}
 
+func TestPrecedentsFanoutDepartsPastTheConfiguredCeiling(t *testing.T) {
+	t.Parallel()
+
+	f, all := fanoutCohort()
 	internal := types.PrecedentScope{Layers: []string{"internal"}}
 	assert.Equal(t, types.Precedent{
 		Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
@@ -435,7 +445,52 @@ func TestPrecedentsFanoutIsADistributionOverImporters(t *testing.T) {
 			depCase("cmd/c00", "internal/p0"), depCase("cmd/c01", "internal/p0"), depCase("cmd/c02", "internal/p0"),
 		},
 		Departures: []types.Case{depCase("cmd/big", all...)},
-	}, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentDepFanout, internal))
+	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conform: fanoutConform(1)}), types.PrecedentDepFanout, internal))
+}
+
+// TestPrecedentsFanoutNeverFollowsTheLiveDistribution: the cohort's own p95 is 1, and a ceiling
+// of 12 holds anyway, so a package cannot loosen the bound by joining the heavy end.
+func TestPrecedentsFanoutNeverFollowsTheLiveDistribution(t *testing.T) {
+	t.Parallel()
+
+	f, all := fanoutCohort()
+	internal := types.PrecedentScope{Layers: []string{"internal"}}
+	assert.Equal(t, types.Precedent{
+		Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 12},
+		Follow: 20, Cohort: 20, Share: 1, Established: true,
+		Cited: []types.Case{
+			depCase("cmd/big", all...), depCase("cmd/c00", "internal/p0"), depCase("cmd/c01", "internal/p0"),
+		},
+	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conform: fanoutConform(12)}), types.PrecedentDepFanout, internal))
+}
+
+func TestPrecedentsFanoutEnforcesTheCommittedValueOverTheAnchor(t *testing.T) {
+	t.Parallel()
+
+	f, all := fanoutCohort()
+	o := fanoutConform(12)
+	o.Ratchet = types.ConformRatchet{Schema: 1, Thresholds: []types.ConformThreshold{{
+		ConformKey: types.ConformKey{Metric: types.ConformDepFanout, Population: types.ConformPopSource, Scope: "internal"},
+		Value:      2,
+	}}}
+	internal := types.PrecedentScope{Layers: []string{"internal"}}
+	assert.Equal(t, types.Precedent{
+		Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 2},
+		Follow: 19, Cohort: 20, Share: 19.0 / 20, Established: true,
+		Cited: []types.Case{
+			depCase("cmd/c00", "internal/p0"), depCase("cmd/c01", "internal/p0"), depCase("cmd/c02", "internal/p0"),
+		},
+		Departures: []types.Case{depCase("cmd/big", all...)},
+	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conform: o}), types.PrecedentDepFanout, internal))
+}
+
+func TestPrecedentsFanoutHasNoRowWithoutAConfiguredCeiling(t *testing.T) {
+	t.Parallel()
+
+	f, _ := fanoutCohort()
+	for _, r := range f.g.Precedents(PrecedentOptions{}) {
+		assert.NotEqual(t, types.PrecedentDepFanout, r.Family, "no ceiling is configured, so none is claimed")
+	}
 }
 
 func TestPrecedentsFanoutIsGatedOnItsCohortAlone(t *testing.T) {
@@ -455,11 +510,11 @@ func TestPrecedentsFanoutIsGatedOnItsCohortAlone(t *testing.T) {
 		Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
 		Follow: 4, Cohort: 4, Share: 1, Cited: cited[:3],
 	}
-	assert.Equal(t, want, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentDepFanout, internal),
+	assert.Equal(t, want, precedentRow(t, f.g.Precedents(PrecedentOptions{Conform: fanoutConform(1)}), types.PrecedentDepFanout, internal),
 		"four importers are under the minimum cohort of five")
 
 	f.pkg("cmd/c4", 1)
 	f.imports("cmd/c4", "internal/a")
 	want.Follow, want.Cohort, want.Established = 5, 5, true
-	assert.Equal(t, want, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentDepFanout, internal))
+	assert.Equal(t, want, precedentRow(t, f.g.Precedents(PrecedentOptions{Conform: fanoutConform(1)}), types.PrecedentDepFanout, internal))
 }

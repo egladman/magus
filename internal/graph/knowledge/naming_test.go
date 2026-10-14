@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/changeset"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/types"
@@ -740,7 +741,7 @@ func TestConformanceMeasure(t *testing.T) {
 	for _, chk := range conformanceChecks {
 		var kept []finding
 		for _, f := range chk.run(x) {
-			if f.score >= conformanceBar {
+			if f.score >= defaultGates.Bar {
 				kept = append(kept, f)
 			}
 		}
@@ -836,4 +837,17 @@ func TestConformanceMeasureRenames(t *testing.T) {
 	}
 	t.Logf("%d commits, %d composed names changed in place on a declaration line, %d renames, %d with leftovers",
 		len(commits), candidates, renames, findings)
+}
+
+func TestDefaultGatesMatchConfig(t *testing.T) {
+	assert.Equal(t, config.Defaults().Knowledge.Conform.Options().Gates, defaultGates)
+}
+
+func TestResolveGatesFillsOnlyTheZeroFields(t *testing.T) {
+	got := resolveGates(types.ConformGates{MinCohort: 7, Bar: 0.9})
+
+	assert.Equal(t, types.ConformGates{
+		MinCohort: 7, MinShare: defaultGates.MinShare, Bar: 0.9, MaxFindings: defaultGates.MaxFindings,
+	}, got)
+	assert.Equal(t, defaultGates, resolveGates(types.ConformGates{}))
 }
