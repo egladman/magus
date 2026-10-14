@@ -456,6 +456,7 @@ github.com/egladman/magus/types.AgentRole.String method func() string
 github.com/egladman/magus/types.AgentRole.UnmarshalText method(ptr) func(text []byte) error
 github.com/egladman/magus/types.AgentRole.Valid method func() bool
 github.com/egladman/magus/types.AgentRole.Values method func() []string
+github.com/egladman/magus/types.AgentRoleIntegrator const AgentRole = "integrator"
 github.com/egladman/magus/types.AgentRoleRoot const AgentRole = "root"
 github.com/egladman/magus/types.AgentRoleWorker const AgentRole = "worker"
 github.com/egladman/magus/types.AgentThread type string

@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 26956
-skill_short_bytes: 21259
+skill_full_bytes: 27167
+skill_short_bytes: 21448
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `127` |
+| `agent-skill-version` | `129` |
 | `knowledge-schema-version` | `19` |
-| `skill-content` | `3b9715b0a573` |
+| `skill-content` | `b171ad90ac34` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -89,8 +89,8 @@ verification, and never hands those out. Above the root is the human in the loop
 what lands, what is published and what a round may spend are the person's calls, so
 the root reports to them and does not decide them. From its first call the root does no
 groundwork: no reading, searching or editing of source, no test or lint runs of its own.
-It plans from the graph, moves jobs and integrates; groundwork it needs, a read-only
-scout included, is a job. The guard enforces this by role, at any context size.
+It plans from the graph and moves jobs; groundwork it needs, a read-only scout
+included, is a job, and so is integration. The guard enforces this by role.
 
 ## Coalesce what the write sets allow
 
@@ -268,9 +268,9 @@ private ownership map.
   write paths.
 - A cap the user sets applies to the whole tree, not once per parent.
 
-Keep one integration owner at the root, however deep the job tree. A child
-coordinates its descendants but may not accept changes outside its own job or relax
-the root's criteria.
+Keep one integration owner per landing checkout, the integrator, never the root. A
+child coordinates its descendants but may not accept changes outside its own job or
+relax the root's criteria.
 
 ## Seed the partition with magus
 
@@ -447,7 +447,8 @@ only when it needs to know. Never message a worker to ask how it is going, only 
 
 ## Integrate and verify
 
-As jobs finish:
+The root never builds. The integrator is a role, never a check: spawned `<parent>/integrate
+<job>` unisolated in the landing checkout, it cherry-picks, builds, regenerates and commits. As jobs finish:
 
 1. Compare the store against the ACTUAL diff since each job's checkpoint, not the
    paths it reported (`magus graph diff --rev <revision>` for the domain). A differing
@@ -525,8 +526,8 @@ verification, and never hands those out. Above the root is the human in the loop
 what lands, what is published and what a round may spend are the person's calls, so
 the root reports to them and does not decide them. From its first call the root does no
 groundwork: no reading, searching or editing of source, no test or lint runs of its own.
-It plans from the graph, moves jobs and integrates; groundwork it needs, a read-only
-scout included, is a job. The guard enforces this by role, at any context size.
+It plans from the graph and moves jobs; groundwork it needs, a read-only scout
+included, is a job, and so is integration. The guard enforces this by role.
 
 ## Contents
 
@@ -579,7 +580,7 @@ the loop's partition and collision decisions, and does not replace the loop. Run
 4. Hand out work, within any cap the user set.
 5. Observe agents and Magus processes through their separate control planes.
 6. Evaluate evidence and revise ownership or ordering until the criteria pass.
-7. Integrate centrally and run the release gate.
+7. Hand integration and the release gate to the checkout's integrator.
 
 Acceptance evidence is an output ref the root reopens (`magus query output <ref>`),
 never a worker's prose. A worker that ran a filtered subset, or quietly restated its
@@ -756,9 +757,9 @@ private ownership map.
   write paths.
 - A cap the user sets applies to the whole tree, not once per parent.
 
-Keep one integration owner at the root, however deep the job tree. A child
-coordinates its descendants but may not accept changes outside its own job or relax
-the root's criteria.
+Keep one integration owner per landing checkout, the integrator, never the root. A
+child coordinates its descendants but may not accept changes outside its own job or
+relax the root's criteria.
 
 ## Seed the partition with magus
 
@@ -953,7 +954,8 @@ only when it needs to know. Never message a worker to ask how it is going, only 
 
 ## Integrate and verify
 
-As jobs finish:
+The root never builds. The integrator is a role, never a check: spawned `<parent>/integrate
+<job>` unisolated in the landing checkout, it cherry-picks, builds, regenerates and commits. As jobs finish:
 
 1. Compare the store against the ACTUAL diff since each job's checkpoint, not the
    paths it reported (`magus graph diff --rev <revision>` for the domain). A differing
