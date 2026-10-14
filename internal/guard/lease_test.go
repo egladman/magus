@@ -2069,6 +2069,16 @@ func TestDenyWriteOutsideLeaseLeavesScratchOutsideTheCheckout(t *testing.T) {
 	assert.NotEmpty(t, denyWriteOutsideLease(ctx, from(root), "lease-b", "rm notes.txt"), "the same word inside it")
 }
 
+// A worker leased in its own worktree, whose hook resolves the session's checkout, had its
+// own write read relative to the session's checkout, so scope-drift advised it.
+func TestLeaseCoversWriteReadsTheLeasesOwnCheckout(t *testing.T) {
+	wt := t.TempDir()
+	ctx, root := fleetFixture(t, types.Job{ID: "w", State: types.StateRunning, WritePaths: []string{"x.go"}, CheckoutRoot: wt, Registered: 1})
+	at := hookLocation(ctx, Dependencies{})
+	assert.True(t, leaseCoversWrite(ctx, "w", at, filepath.Join(wt, "x.go")))
+	assert.False(t, leaseCoversWrite(ctx, "w", at, filepath.Join(root, "x.go")), "the session checkout's x.go is not the lease's")
+}
+
 // A relative operand names a path under the directory the call runs in.
 func TestDenyWriteOutsideLeaseResolvesFromTheCallDir(t *testing.T) {
 	ctx, root := fleetFixture(t, writePathFleet()...)
