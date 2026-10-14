@@ -18,7 +18,7 @@ hook config.
 | always-on rules | `AGENTS.md` (you paste the block; magus never writes it)                       |
 | skills          | `.agents/skills`, short and full forms                                         |
 | guard wiring    | `.cursor/hooks.json`                                                           |
-| quiet output    | not set: Cursor has no env setting and the guard rewrites no command           |
+| quiet output    | not set: Cursor has no env setting; export `MAGUS_LOG_SILENT=true` yourself    |
 | shell commands  | `preToolUse`: deny and advise reach the model; the command runs as sent        |
 | file writes     | deny and advise both reach the model                                           |
 | MCP calls       | `beforeMCPExecution` (deny/ask), advise on `postToolUse`                       |
@@ -185,9 +185,8 @@ as on every other host. The tool name is part of the key because Cursor reuses o
 day.
 
 The shell is gated on `preToolUse`, and a command that passes runs exactly as Cursor
-sent it. Cursor already gives a command empty stdin (probed live), so the stdin
-rewrite Claude Code gets has nothing to do here, and magus does not transform what a
-host sends. `beforeShellExecution` then sees the same line, recognizes it as already
+sent it. Cursor already gives a command empty stdin (probed live), and magus
+transforms nothing a host sends, on this host or any other. `beforeShellExecution` then sees the same line, recognizes it as already
 judged, and allows it; it judges only a command `preToolUse` never saw, which keeps
 it as the fallback.
 

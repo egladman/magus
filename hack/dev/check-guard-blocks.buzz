@@ -320,9 +320,6 @@ export fun classify(code: int, stdout: str, stderr: str, overran: bool) > Observ
     if (context != "") {
         return Observed{ verdict = "advise", rule = ruleOf(context), note = "" };
     }
-    if (specific["updatedInput"] != null) {
-        return Observed{ verdict = "pass", rule = "", note = "rewritten, so magus judged it" };
-    }
     return Observed{ verdict = "pass", rule = "", note = "" };
 }
 
@@ -827,8 +824,6 @@ test "Claude Code and Codex replies classify the way the host reads them" {
     assert\equal("{block.verdict} {block.rule}", want: "deny stage-all", message: "codex block");
     final advise = classify(0, stdout: `\{"hookSpecificOutput":\{"additionalContext":"use refs"\}\}`, stderr: "", overran: false);
     assert\equal(advise.verdict, want: "advise", message: "advise");
-    final rewrite = classify(0, stdout: `\{"hookSpecificOutput":\{"updatedInput":\{"command":"x"\}\}\}`, stderr: "", overran: false);
-    assert\equal("{rewrite.verdict} {rewrite.note}", want: "pass rewritten, so magus judged it", message: "rewrite");
     final dead = classify(0, stdout: `\{"hookSpecificOutput":\{"additionalContext":"magus guard is NOT running: magus is not on PATH"\}\}`, stderr: "", overran: false);
     assert\equal(dead.verdict, want: "dead", message: "notice");
     assert\equal(classify(127, stdout: "", stderr: "magus: not found", overran: false).verdict, want: "dead", message: "127");

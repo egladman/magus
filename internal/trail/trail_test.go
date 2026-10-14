@@ -259,22 +259,6 @@ func TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction(t *testing.T) {
 	}, gotResponse)
 }
 
-// The command blob keeps what the host was asked to run; the response says the guard
-// rewrote it to run with stdin closed.
-func TestAppendAgentCommand_RecordsAClosedStdin(t *testing.T) {
-	dir := t.TempDir()
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "grep x", Decision: "pass", StdinClosed: true})
-
-	events, err := ReadRecent(dir, 1)
-	require.NoError(t, err)
-	require.Len(t, events, 1)
-	response, err := ReadBlob(dir, events[0].ResponseRef)
-	require.NoError(t, err)
-	var gotResponse agentCommandResponse
-	require.NoError(t, json.Unmarshal(response, &gotResponse))
-	require.Equal(t, agentCommandResponse{SchemaVersion: agentCommandSchemaVersion, Decision: "pass", StdinClosed: true}, gotResponse)
-}
-
 func TestAppendAgentCommand_RecordsTheCostFacts(t *testing.T) {
 	dir := t.TempDir()
 	want := agentFacts{
