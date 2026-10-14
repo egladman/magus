@@ -210,7 +210,7 @@ type Step struct {
 	// go-build target's entry.
 	Spell           string
 	SpellDefVersion string // built-in spell registry fingerprint; forces miss on a spell change
-	// BinaryBuild identifies the running binary's build (proc.BinaryBuild), set only for a
+	// BinaryBuild identifies the running binary's build (buildid.Build), set only for a
 	// step whose body asks that binary for its answer (a magus\describe call, a nested
 	// magus). Such an answer moves when the binary is rebuilt from changed code, with no
 	// file in the tree to key on. Empty writes no key line, so every other step keeps its

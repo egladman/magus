@@ -23,7 +23,7 @@ import (
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/journal"
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/proc/buildid"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
@@ -790,7 +790,7 @@ export fun plain() > void {}
 	p := m.Get(".")
 	require.NotNil(t, p, "root project")
 
-	build := proc.BinaryBuild()
+	build := buildid.Build()
 	require.NotEmpty(t, build)
 	for _, target := range []string{"rules-generate", "index-generate", "nested"} {
 		assert.Equal(t, build, m.buildStep(p, target).BinaryBuild, target)

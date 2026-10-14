@@ -28,7 +28,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
-	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/proc/buildid"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/race"
 	"github.com/egladman/magus/internal/report"
@@ -637,7 +637,7 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// cacheable rather than having to opt out with skip_cache.
 	step.Observations = append(step.Observations, p.TargetObservations[target]...)
 	if m.binaryAnswerTargets[types.TargetRef{Project: p.Path, Target: target}] {
-		step.BinaryBuild = proc.BinaryBuild()
+		step.BinaryBuild = buildid.Build()
 	}
 	updates := make([]types.Glob, 0, len(p.TargetUpdates[target]))
 	for _, ref := range p.TargetUpdates[target] {

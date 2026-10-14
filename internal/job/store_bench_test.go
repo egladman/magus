@@ -140,7 +140,7 @@ func editedCheckouts(b *testing.B) (rows []types.Job, overlaps []types.JobOverla
 func BenchmarkRegionsSinceWarm(b *testing.B) {
 	rows, _, root, rev, files := editedCheckouts(b)
 	driver := gitDriver(b, root)
-	cache := withFootprintCache(b.Context(), footprintCache{dir: b.TempDir()}.forRow(rows[0]))
+	cache := withFootprintCache(b.Context(), footprintCache{dir: b.TempDir(), build: testBuild}.forRow(rows[0]))
 	if _, ok, why := regionsSince(cache, driver, root, rev, files); !ok {
 		b.Fatal(why)
 	}
@@ -167,7 +167,7 @@ func BenchmarkOverlapFootprintsWarm(b *testing.B) {
 	rows, overlaps, root, _, _ := editedCheckouts(b)
 	require.Len(b, overlaps, 1)
 	driver := gitDriver(b, root)
-	cache := withFootprintCache(b.Context(), footprintCache{dir: b.TempDir()})
+	cache := withFootprintCache(b.Context(), footprintCache{dir: b.TempDir(), build: testBuild})
 	if got := OverlapFootprints(cache, driver, rows, overlaps); got[0].Footprint.Verdict == types.FootprintUnknown {
 		b.Fatal(got[0].Footprint.Reason)
 	}

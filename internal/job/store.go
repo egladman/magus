@@ -12,6 +12,7 @@
 package job
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -31,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc/buildid"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -145,13 +147,12 @@ type Location struct {
 	// ended, and no row, notice, probe history or binding record is written. It governs
 	// reads only; a write method still writes.
 	DryRun bool
-	// Build identifies the running build (proc.BinaryBuild). It keys the footprint cache, so
-	// a rebuilt binary under a long-lived daemon never reads the old code's results as its
-	// own. Empty caches nothing: a Store that cannot name its build computes every
-	// footprint. It is a field because this package cannot import internal/proc.
+	// Build identifies the build whose results the footprint cache holds, so a rebuilt
+	// binary under a long-lived daemon never reads the old code's results as its own.
+	// Empty is the running build ([buildid.Build]); a test names another.
 	Build string
 	// ModelTiers is the workspace's model tier declaration. With it, a write that creates a
-	// row or changes its Model assigns the row's tier (see [AssignModelTier]); nil assigns
+	// row or changes its Model assigns the row's tier (see [resolveModelTier]); nil assigns
 	// nothing, as does a Store a dry run reads.
 	ModelTiers *types.ModelTierSet
 	// ModelTierMatrix is the function the workspace registered to choose a tier, or nil.
@@ -176,7 +177,7 @@ type Location struct {
 // A resolution failure is held rather than returned: every operation reports it, so a
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
-	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, outputs: loc.Outputs, grader: loc.Grader, dryRun: loc.DryRun, build: loc.Build,
+	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, outputs: loc.Outputs, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildid.Build()),
 		modelTiers: loc.ModelTiers, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners}
 	s.path, s.err = jobsPath(loc)
 	return s
