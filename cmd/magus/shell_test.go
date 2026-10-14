@@ -1139,8 +1139,8 @@ func TestHookCmdJudgesTheMCPLedgerInput(t *testing.T) {
 		"fork on another row":   {client(`magus\job.put("harness/other", opts: {"write_paths": ["**"]});`), "deny\n"},
 		"fork widening its own": {client(`magus\job.put(` + own + `, opts: {"write_paths": ["**"]});`), "deny\n"},
 		"clearing the board":    {client(`magus\job.clear();`), "deny\n"},
-		"exec elsewhere":        {client(`magus\job.register("harness/other", reported_base: "abc123");`), "deny\n"},
-		"exec its own base":     {client(`magus\job.register(` + own + `, reported_base: "abc123");`), "pass\n"},
+		"exec elsewhere":        {client(`magus\job.register("harness/other");`), "deny\n"},
+		"exec its own":          {client(`magus\job.register(` + own + `);`), "pass\n"},
 		"listing the plan":      {client(`magus\job.list();`), "pass\n"},
 		"giving paths back":     {client(`magus\job.put(` + own + `, opts: {"write_paths": ["cmd/magus/**"]});`), "pass\n"},
 		// A shrink beside a forged checkpoint or rewritten criteria is not a plain shrink.

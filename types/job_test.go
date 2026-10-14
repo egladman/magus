@@ -337,6 +337,32 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	}, orig)
 }
 
+// A run's args sit one level down, in the attempt and in each goal's attempt, so they
+// alias the store's array unless Clone copies them too. Asserted across two clones for the
+// reason TestJobCloneCopiesEverySliceField gives.
+func TestJobCloneCopiesAttemptArgs(t *testing.T) {
+	t.Parallel()
+
+	args := func() []string { return append(make([]string, 0, 4), "-run", "TestOne") }
+	orig := Job{
+		ID:           "a",
+		Attempt:      &JobAttempt{Ref: "out1", ExtraArgs: args()},
+		GateAttempts: []JobGateAttempt{{GateID: "unit", Attempt: JobAttempt{Ref: "out2", ExtraArgs: args()}}},
+	}
+
+	first, second := orig.Clone(), orig.Clone()
+	first.Attempt.ExtraArgs = append(first.Attempt.ExtraArgs, "first")
+	first.GateAttempts[0].Attempt.ExtraArgs = append(first.GateAttempts[0].Attempt.ExtraArgs, "first")
+	second.Attempt.ExtraArgs = append(second.Attempt.ExtraArgs, "second")
+	second.GateAttempts[0].Attempt.ExtraArgs = append(second.GateAttempts[0].Attempt.ExtraArgs, "second")
+	first.Attempt.ExtraArgs[0] = "-bench"
+
+	assert.Equal(t, []string{"-bench", "TestOne", "first"}, first.Attempt.ExtraArgs)
+	assert.Equal(t, []string{"-run", "TestOne", "first"}, first.GateAttempts[0].Attempt.ExtraArgs)
+	assert.Equal(t, []string{"-run", "TestOne"}, orig.Attempt.ExtraArgs)
+	assert.Equal(t, []string{"-run", "TestOne"}, orig.GateAttempts[0].Attempt.ExtraArgs)
+}
+
 // slices.Clone preserves nil, which is what keeps a row that stored null from coming back
 // as [] through the JSON door.
 func TestJobCloneKeepsNilSlicesNil(t *testing.T) {

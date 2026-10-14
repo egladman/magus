@@ -1507,7 +1507,7 @@ func TestDenyLeaseScopedRebind(t *testing.T) {
 		"./magus job exec harness/other":                             "take the lease on another job",
 		"magus -s job exec harness/other":                            "take the lease on another job",
 		"magus --root /tmp/x job exec harness/other":                 "take the lease on another job",
-		"magus job exec --base rev1 harness/other":                   "take the lease on another job",
+		"magus job exec -o json harness/other":                       "take the lease on another job",
 		"magus job wait harness/other":                               "verify a job",
 		"magus job fork":                                             "declare a job",
 		"client op=clear":                                            "drop every job",
