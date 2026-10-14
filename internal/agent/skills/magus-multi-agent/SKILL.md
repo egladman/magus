@@ -220,12 +220,12 @@ re-forked one tier up, not retried at the same one.{{if .Full}} "Only ever spawn
 weaker" was tried and withdrawn, because same-strength offload is legitimate, so this
 is a starting point and not a ceiling.{{end}}
 
-Model NAMES belong to the host, never to magus: name your host's model or an agent
-definition the user owns. Point a default-subagent setting at the economy model.
+Tiers are the workspace's: a magusfile enum (`magus\job.modelTiers`, shipped as economy,
+standard, principal) maps each to every harness's model alias. `--model` takes a tier or a
+model; the row records tier, rank, source (row, matrix, default) and why, and the guard
+compares a spawn's tier by rank. magus never picks a model live: re-fork to change a tier.
 
-Map work to provider capabilities without assuming model names:
-
-| Model | Assign |
+| Shipped tier | Assign |
 |---|---|
 | principal | architecture, ambiguous ownership, public APIs, migrations, security, integration |
 | standard | isolated implementation with a clear contract and a bounded set of projects |
@@ -351,7 +351,7 @@ an editor magus cannot attribute{{end}}.
 2. Fork one job per unit, from flags:
 
    ```sh
-   magus job fork api-store --model <model> \
+   magus job fork api-store --model <tier or model> \
      --criteria "accounts move to the new store; nothing names the old one" \
      --write-paths 'api/store.go,api/store_test.go,db/migrations/*.sql' \
      --check "go-test api -- -run TestStore" \

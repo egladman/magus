@@ -75,11 +75,17 @@ agents:
 
 ### Model facts come from three places, in order
 
-_Done._ The host payload comes first, then `agents.models`, then a table magus ships in
-`internal/agent/model`, keyed by model id prefix. A window the host states is never
-second-guessed. A model that matches no row gets no dollar wording and no window-relative
-threshold, and the absolute token thresholds still apply. `magus doctor` reports a table
-older than 120 days. The table is hand-written and never fetched at run time.
+_Done._ The host payload comes first, then `agents.models`, then the rows each harness
+spell the workspace wires publishes through its `harness_models` op; `claude-code` ships the
+Claude rows. A window the host states is never second-guessed. A model that matches no row
+gets no dollar wording and no window-relative threshold, and the absolute token thresholds
+still apply. No model name or price is compiled into magus, so a spell's rows are as current
+as the spell, and nothing is fetched at run time.
+
+A `root-context-budget` `tokens` figure above every window in the table is an error, said as
+a refusal of the main thread's commands. The magusfile load cannot raise it, because the
+harness rows that make the table load after the magusfile, so the guard raises it where the
+table is known.
 
 ### The root is the main thread
 
@@ -99,31 +105,52 @@ advice costs one line.
 
 ### The rules and their levels
 
-_Planned._ Six rules join the compiled defaults, each disableable by name and each firing
+_Done._ Six rules join the compiled defaults, each disableable by name and each firing
 once per session per threshold:
 
-| rule                        | light                            | standard                                                            | strict                                                                        |
-| --------------------------- | -------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| root-context-budget         | advise once at half the window   | advise at 250k metered, 400k quota, 300k unknown                    | advise at 150k, 250k or 200k; deny delegable commands from 300k, 450k or 350k |
-| root-heavy-command          | off                              | advise after 8 delegable calls since a spawn                        | advise at 5, deny from 8                                                      |
-| root-result-cap             | advise once above 40k characters | 20k, once per tool class                                            | 10k, once per tool class                                                      |
-| root-repeat                 | off                              | advise on the second identical read or command                      | deny the third                                                                |
-| spawn-names-model           | off                              | advise on a spawn naming no model                                   | deny a spawn naming none, or one differing from its job's model               |
-| spawn-principal-for-economy | off                              | advise when a read-only job's spawn names or inherits Opus or Fable | the same, plus Explore-type spawns; never deny                                |
+| rule                   | light                            | standard                                                       | strict                                                                        |
+| ---------------------- | -------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| root-context-budget    | advise once at half the window   | advise at 250k metered, 400k quota, 300k unknown               | advise at 150k, 250k or 200k; deny delegable commands from 300k, 450k or 350k |
+| root-heavy-command     | off                              | advise after 8 delegable calls since a spawn                   | advise at 5, deny from 8                                                      |
+| root-result-cap        | advise once above 40k characters | 20k, once per tool class                                       | 10k, once per tool class                                                      |
+| root-repeat            | off                              | advise on the second identical read or command                 | deny the third                                                                |
+| spawn-names-model      | off                              | advise on a spawn naming no model                              | deny a spawn naming none, or one not at its job row's model tier              |
+| spawn-above-model-tier | off                              | advise on a spawn whose model tier ranks above its job row's   | the same; never deny                                                          |
 
 The delegable commands are recursive search, `cat` and `sed -n` of source, a whole-file host
 read, `git diff` and `git log -p` without `--stat` or `--name-only`, non-gate `magus run`
 and web fetches. The root may always spawn, run the `magus job` verbs, read a ref with
 `magus query output`, run the final gate, load a skill, read orientation files and edit.
 
-`spawn-principal-for-economy` keys on declared facts, the job's `read_only` and the host's
-agent type, and never denies, because a read-only design job can need Opus. A workspace that
-wants prompt-shape matching writes it as its own `magus\guard.spawn` rule, which already
-receives the prompt.
+### The spawn rules read model tiers
+
+_Done._ A job row records the model tier it was forked at: its name and rank in the
+workspace's model-tier declaration (`magus\job.modelTiers`, or the shipped `magus/modeltiers`
+module), the source that chose it, the reason and the declaration's line. The spawn rules
+resolve a spawn's model to a tier through the spawning harness's aliases in that declaration
+and compare ranks, never model names or prices.
+
+- `spawn-names-model` at `strict` refuses a spawn whose tier is not its row's. The refusal
+  names the assignment whole, such as `economy (rank 0) -> haiku, matrix: "two files" at
+  hack/tiers.buzz:12`. A harness the declaration maps no model for is refused naming the
+  `hosts` entry to add.
+- `spawn-above-model-tier` advises on a spawn whose tier ranks above its row's, and never
+  denies: work can outgrow its row, and the remedy is a re-fork that records why.
+- `model-tier-context-cap` advises a leased worker whose reported context passes its tier's
+  `maxContext` bound, and set to deny refuses the worker's writes, as a passed deadline does.
+  It advises at every level by default; the shipped declaration caps only economy.
+
+A row forked with no declaration, or a spawn bound to no row, has nothing to compare, so the
+rules stay silent: a workspace with no tiers and no harness spells sees none of this. Magus
+never picks or changes a tier on its own. A rule reports or refuses; the row changes only
+when someone re-forks it or edits the declaration or the matrix.
+
+A workspace that wants prompt-shape matching writes it as its own `magus\guard.spawn` rule,
+which already receives the prompt.
 
 ### The stall rule
 
-_Planned._ A worker that is blocked on something only the root can clear needs one clear
+_Done_ at level 3; _planned_ for the levels above it. A worker that is blocked on something only the root can clear needs one clear
 exit, not a longer wait. The `stall` rule classifies a refusal the rules already make as
 fixable by the worker or not. When an unfixable one fires for a leased worker, the verdict
 ends with "exit the job with this as an unresolved risk", and one attention row is filed per
@@ -139,8 +166,7 @@ lease and rule, so the root and the person see the block once.
 
 ### Record what happened, so profiles are tuned from data
 
-_Done_ for the trail fields and the `session show` cost sections; _planned_ for shadow
-verdicts and metrics. Each agent call records its thread, context tokens, model, billing
+_Done._ Each agent call records its thread, context tokens, model, billing
 and result size. Each root call records what every level would have decided, whichever is
 active, so "how often would `strict` have denied" has an answer with no experiment. Reports
 fold into `magus session show` and its JSON, and metrics go through the existing OTEL path.
@@ -149,12 +175,14 @@ fold into `magus session show` and its JSON, and metrics go through the existing
 | ------------------------------------------------------------------------------ | --------- |
 | `magus\guard.profile`, the levels, and the stricter-wins merge                 | done      |
 | `agents.billing`, `agents.profile`, `agents.models` and host billing detection | done      |
-| the model table, `agents.models` merge and the doctor age check                | done      |
+| model rows from harness spells, under `agents.models`                          | done      |
 | thread, context and billing on guard requests and trail records                | done      |
 | cost sections in `magus session show`                                          | done      |
-| the six cost rules and the level table                                         | planned   |
-| the `stall` rule at level 3, and the levels above it                           | planned   |
-| shadow verdicts per level, and OTEL metrics                                    | planned   |
+| the six cost rules and the level table                                         | done      |
+| the spawn rules by model tier rank, and `model-tier-context-cap`               | done      |
+| the `stall` rule at level 3                                                    | done      |
+| the `stall` levels above level 3                                               | planned   |
+| shadow verdicts per level, and OTEL metrics                                    | done      |
 | per-model stall ladders                                                        | not built |
 
 ### Doctrine checked
@@ -168,8 +196,9 @@ fold into `magus session show` and its JSON, and metrics go through the existing
   Each advisory fires once per session per threshold, because an advisory that fires on
   every call is a toll.
 - [Misconfiguration is an error, never a warning](../doctrine.md#misconfiguration-is-an-error-never-a-warning):
-  relied on. An unknown level is MGS1045, a model row with no window fails at load, and a
-  declared `quota` under a metered environment is an error.
+  relied on. An unknown level is MGS1045, a model row with no window fails at load, a
+  declared `quota` under a metered environment is an error, and so is a budget `tokens`
+  figure past every window in the table.
 - [Agents propose, humans dispose](../doctrine.md#agents-propose-humans-dispose): relied on.
   A stall files a row for the root and the person to read, and never picks the remedy.
 - [Told, never guessed](../doctrine.md#told-never-guessed): departed from, in two places.
@@ -199,11 +228,15 @@ fold into `magus session show` and its JSON, and metrics go through the existing
   at one 40 thousand character result, and only reaches a person already running an agent
   with magus hooks. Reopen if a measured share of `light` advisories draws a complaint.
 - **Matching spawn prompts for economy.** A pattern over 164 prompts is a guess, and a
-  read-only design job looks the same as a search job. Reopen with a field that says which
-  a job is.
+  read-only design job looks the same as a search job. The job row's model tier is the
+  field that says which a job is, so the spawn rules read it instead.
+- **Ranking models by price.** The first `spawn-above-model-tier`, then named
+  `spawn-principal-for-economy`, called a model costly when its input price sat above the
+  table's median. A price says nothing about which work a model suits, and the median moves
+  whenever a row is added. Ranks in a declaration the workspace owns say it outright.
 - **Fetching prices at run time.** The Models API needs a key a subscription user lacks,
-  and a hook already misses its 10 second budget under load. Reopen if the table goes stale
-  faster than the 120 day age check and `agents.models` can cover.
+  and a hook already misses its 10 second budget under load. Reopen if harness spells' rows
+  go stale faster than a spell release and `agents.models` can cover.
 - **Stall behavior per model before data.** The 14 days to 2026-10-13 showed 3.0 to 5.1 runs
   of three or more failed calls per thousand across Haiku, Sonnet, Opus and Fable, and about
   30 percent of every tier's refusals repeated one already given. The Haiku sample is 33
@@ -224,8 +257,11 @@ and a denial from the gauge among them, are rows in
 - Reading the main transcript on a post-tool hook changes an old invariant, that magus never
   reads that file. The read is bounded to a tail and runs after the call, so a pre-call rule
   reads recorded state only.
-- The shipped model table needs an update when a model's price changes, or a person's
-  `agents.models` row, and the doctor check says when it has aged.
+- A harness spell's model rows need an update when a model's price changes, or a person's
+  `agents.models` row in the meantime.
+- Grading a spawn against its row's tier, or a worker's context against its tier's cap,
+  opens the workspace to read the declaration, once per hook process and only for a row
+  that records a tier; the cap is then kept for the session.
 
 ## Open questions
 
