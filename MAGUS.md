@@ -41,7 +41,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph (schema v18). Query it instead of grepping:
+This workspace has a knowledge graph (schema v19). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind=spell, project=pkg/foo, relation=uses, free text, kind!=op
@@ -63,7 +63,7 @@ magus graph export -o json  # the whole graph
 | method     | built in | `magus query kind=method`     |                                                                                                                       |
 | diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS1021`, `MGS3030`                                                                                       |
 | doc        |    1000+ | `magus query kind=doc`        | `docs/reference/rules/index.md`, `docs/guides/integrations/agents/guard.md`, `docs/reference/manpage/magus-doctor.md` |
-| dir        |     500+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/proofread`                                              |
+| dir        |     600+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/proofread`                                              |
 | file       |     400+ | `magus query kind=file`       | `libs/figure/figure.buzz`, `magusfile.buzz`, `hack/ci/pull-requests.buzz`                                             |
 | function   |    3000+ | `magus query kind=function`   | `apiBase`, `main`, `describe`                                                                                         |
 | import     |     100+ | `magus query kind=import`     | `std`, `magus`, `fs`                                                                                                  |

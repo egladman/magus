@@ -1470,6 +1470,10 @@ github.com/egladman/magus/types.EditedFile.Path field string "json:\"path\"     
 github.com/egladman/magus/types.EmitDiagnostic func(ctx context.Context, ev DiagnosticEvent)
 github.com/egladman/magus/types.EndReasonSessionEnded const untyped string = "its holder's session ended"
 github.com/egladman/magus/types.EndedAncestor func(rows []Job, id string) (Job, bool)
+github.com/egladman/magus/types.EngineNotLinked const DiagnosticCode = "MGS1104"
+github.com/egladman/magus/types.EngineNotLinkedError type struct
+github.com/egladman/magus/types.EngineNotLinkedError.Error method(ptr) func() string
+github.com/egladman/magus/types.EngineNotLinkedError.Op field string
 github.com/egladman/magus/types.EnsureReturnCapture func(ctx context.Context) context.Context
 github.com/egladman/magus/types.EntryPoint type string
 github.com/egladman/magus/types.EntryPointCLI const EntryPoint = "cli"
@@ -1711,6 +1715,7 @@ github.com/egladman/magus/types.GateStatus.Violations field []string "json:\"vio
 github.com/egladman/magus/types.GateSuperseded const DiagnosticCode = "MGS3014"
 github.com/egladman/magus/types.GeneratedPathReporter type interface
 github.com/egladman/magus/types.GeneratedPathReporter.GeneratedPaths imethod func(ctx context.Context, root string, rev string, paths []string) (map[string]bool, error)
+github.com/egladman/magus/types.GeneratedSource func(lines [][]byte) bool
 github.com/egladman/magus/types.Glob type struct
 github.com/egladman/magus/types.Glob.Compare method func(other Glob) int
 github.com/egladman/magus/types.Glob.Except field []string "json:\"except,omitempty\" yaml:\"except,omitempty\""
@@ -2530,7 +2535,7 @@ github.com/egladman/magus/types.KnowledgeRoutingProject type struct
 github.com/egladman/magus/types.KnowledgeRoutingProject.KeyTargets field []string "json:\"key_targets,omitempty\" yaml:\"key_targets,omitempty\""
 github.com/egladman/magus/types.KnowledgeRoutingProject.Path field string "json:\"path\"                  yaml:\"path\""
 github.com/egladman/magus/types.KnowledgeRoutingProject.TargetCount field int "json:\"target_count\"          yaml:\"target_count\""
-github.com/egladman/magus/types.KnowledgeSchemaVersion const untyped int = 18
+github.com/egladman/magus/types.KnowledgeSchemaVersion const untyped int = 19
 github.com/egladman/magus/types.KnowledgeStaleIndex type struct
 github.com/egladman/magus/types.KnowledgeStaleIndex.CouldHold method func(language string) bool
 github.com/egladman/magus/types.KnowledgeStaleIndex.Describe method func() string
@@ -2567,6 +2572,7 @@ github.com/egladman/magus/types.KnowledgeSymbol.Refs field []KnowledgeSymbolRef
 github.com/egladman/magus/types.KnowledgeSymbol.Signature field string
 github.com/egladman/magus/types.KnowledgeSymbol.Source field string
 github.com/egladman/magus/types.KnowledgeSymbol.SourceBytes field int
+github.com/egladman/magus/types.KnowledgeSymbol.SourceGenerated field bool
 github.com/egladman/magus/types.KnowledgeSymbol.SourceLines field int
 github.com/egladman/magus/types.KnowledgeSymbol.SymbolKind field string
 github.com/egladman/magus/types.KnowledgeSymbolCall type struct
@@ -2666,6 +2672,7 @@ github.com/egladman/magus/types.LogLevel.Values method func() []string
 github.com/egladman/magus/types.LogTrace const LogLevel = "trace"
 github.com/egladman/magus/types.LogWarn const LogLevel = "warn"
 github.com/egladman/magus/types.LooksLikeBuildInput func(p string) bool
+github.com/egladman/magus/types.LookupJobLease func(ctx context.Context) (string, bool)
 github.com/egladman/magus/types.LoopbackPeerRequired const DiagnosticCode = "MGS9008"
 github.com/egladman/magus/types.MCPBuzzFailed const DiagnosticCode = "MGS3033"
 github.com/egladman/magus/types.MCPClientFailed const DiagnosticCode = "MGS3034"
