@@ -358,6 +358,40 @@ func TestDeclarationRejectsCyclicGoals(t *testing.T) {
 	assert.Contains(t, err.Error(), "dependencies contain a cycle")
 }
 
+func TestDeclarationValidatesSignatureGoals(t *testing.T) {
+	t.Parallel()
+
+	shape := func(id string, symbols ...string) Goal {
+		return Goal{ID: id, Kind: GoalKindSymbol, Expect: ExpectSignature, Symbols: symbols}
+	}
+	for _, tc := range []struct {
+		name  string
+		goals []Goal
+		want  string
+	}{
+		{"one symbol, signature left for the fork to record", []Goal{shape("a", "Api")}, ""},
+		{"one symbol with its signature", []Goal{{ID: "a", Kind: GoalKindSymbol, Expect: ExpectSignature, Symbols: []string{"Api"}, Signature: "func Api()"}}, ""},
+		{"two symbols", []Goal{shape("a", "Api", "Old")}, "expects the signature of 2 symbols"},
+		{"no symbol", []Goal{shape("a", " ")}, "names nothing to examine"},
+		{"a signature on another expectation", []Goal{{ID: "a", Kind: GoalKindSymbol, Expect: ExpectPresent, Symbols: []string{"Api"}, Signature: "func Api()"}},
+			`expects "present" and carries a signature`},
+		{"two signatures for one symbol", []Goal{shape("a", "Api"), shape("b", "Api")}, `goals "a" and "b" both expect a signature of "Api"`},
+		{"signatures for two symbols", []Goal{shape("a", "Api"), shape("b", "Old")}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := Declaration{ID: "shaped", Goals: tc.goals}.Validate()
+			if tc.want == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.want)
+		})
+	}
+	assert.Contains(t, GoalExpects(), ExpectSignature)
+}
+
 // entries was added without moving JobSchemaVersion, so a schema-11 magus that predates it
 // reads such a row, acts on the rest, and writes entries back untouched.
 func TestAnOlderReaderKeepsEntries(t *testing.T) {

@@ -127,6 +127,9 @@ magus run test .
 refactor/pricing: 0 of 1 goal(s) met
   [unmet] check
       carries no output_ref, so there is no run to reopen
+net lines: +0 -0 (+0)
+exports no goal declares: none
+left defined with no use: none
 -- exit.out --
 exited refactor/pricing, recorded exited, with its result filed. Whoever forked it verifies with `magus job wait refactor/pricing`
 -- abandon.out --

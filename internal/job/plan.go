@@ -1,9 +1,11 @@
 package job
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
+	"path"
 	"slices"
 	"strings"
 	"time"
@@ -48,6 +50,9 @@ func ForkMerge(ctx context.Context, store *Store, id string, merge func(*types.J
 		return types.Job{}, err
 	}
 	if merge, err = store.declaredMerge(ctx, rows, id, merge); err != nil {
+		return types.Job{}, err
+	}
+	if merge, err = resolveMerge(ctx, store, rows, id, merge, read); err != nil {
 		return types.Job{}, err
 	}
 	proof, err := refuseMerge(ctx, store, rows, id, merge, limits, read)
@@ -216,7 +221,10 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 		if rec.Checkpoint, err = store.DeclaredCheckpoint(ctx, rows, rec.ID, rec.Checkpoint); err != nil {
 			return nil, err
 		}
-		merge := specMerge(rec, i < 0, checkpoint)
+		merge, err := resolveMerge(ctx, refusing, rows, rec.ID, specMerge(rec, i < 0, checkpoint), read)
+		if err != nil {
+			return nil, err
+		}
 		proof, err := refuseMerge(ctx, refusing, rows, rec.ID, merge, limits, read)
 		if err != nil {
 			return nil, err
@@ -393,7 +401,7 @@ func RefuseAmbiguousSymbols(ctx context.Context, goals []types.Goal, read Symbol
 			if name = strings.TrimSpace(name); name == "" {
 				continue
 			}
-			fact, ok := read(ctx, name)
+			fact, ok := read(ctx, name, "")
 			if !ok || len(fact.SameNameDefinitions) < 2 {
 				continue
 			}
@@ -406,6 +414,210 @@ func RefuseAmbiguousSymbols(ctx context.Context, goals []types.Goal, read Symbol
 	}
 	return fmt.Errorf("job: %s, name one by the symbol id `%s` prints, or the goal grades whichever definition ranks first",
 		strings.Join(refused, ", "), hint.Refs.With("<name>"))
+}
+
+// ResolveSymbolGoals settles what row's symbol goals name before a door stores it, and
+// returns the row with the write path claims it added, sorted.
+//
+// A signature goal that declares no signature takes the one the symbol index holds, which
+// is how a stub the root wrote and indexed becomes the contract. One it cannot freeze is an
+// error, never a skip: no reader, a graph that could not be read, a symbol the index does
+// not define or defines more than once, or one it holds no signature for.
+//
+// A goal that changes, removes or reshapes an EXISTING symbol defined in exactly one file
+// the write paths do not cover claims that symbol's declaration, `<file>#<declaration>`,
+// since its holder has to write it. A goal that only asks a symbol to be present or
+// unreferenced claims nothing, a read-only row claims nothing, and so does a symbol whose
+// declaration line has no form a claim can name (a field, a value). A door still holds each
+// claim to the rules a declared one meets, and drops one no diff driver can place.
+func ResolveSymbolGoals(ctx context.Context, row types.Job, read SymbolReader) (types.Job, []string, error) {
+	row = row.Clone()
+	var refused, claims []string
+	for i, goal := range row.Goals {
+		goal = goal.Resolve()
+		if goal.Kind != types.GoalKindSymbol {
+			continue
+		}
+		for _, name := range goal.Symbols {
+			if name = strings.TrimSpace(name); name == "" {
+				continue
+			}
+			var fact SymbolFact
+			ok := false
+			if read != nil {
+				fact, ok = read(ctx, name, "")
+			}
+			if goal.Expect == types.ExpectSignature && strings.TrimSpace(goal.Signature) == "" {
+				signature, why := frozenSignature(name, read != nil, ok, fact)
+				if why != "" {
+					refused = append(refused, fmt.Sprintf("goal %q %s", goal.ID, why))
+					continue
+				}
+				row.Goals[i].Signature = signature
+			}
+			if claim := derivedClaim(row, goal.Expect, ok, fact); claim != "" && !slices.Contains(claims, claim) {
+				claims = append(claims, claim)
+			}
+		}
+	}
+	if len(refused) > 0 {
+		return types.Job{}, nil, fmt.Errorf("job: %s", strings.Join(refused, "; "))
+	}
+	slices.Sort(claims)
+	row.WritePaths = append(row.WritePaths, claims...)
+	return row, claims, nil
+}
+
+// frozenSignature is the indexed signature a signature goal on name records, or why there
+// is none to record.
+func frozenSignature(name string, hasReader, read bool, fact SymbolFact) (string, string) {
+	switch {
+	case !hasReader:
+		return "", fmt.Sprintf("expects a signature of %q and declares none, and this door reads no symbol graph to record one:"+
+			" declare the signature, or fork with `%s`", name, hint.JobFork.With("--stdin"))
+	case !read:
+		return "", fmt.Sprintf("expects a signature of %q and declares none, and the symbol graph could not be read to record one: `%s` builds it",
+			name, hint.GraphBuild)
+	case !fact.Defined():
+		return "", fmt.Sprintf("expects a signature of %q and declares none, and the symbol index does not define %q:"+
+			" write the stub, run `%s`, and fork again", name, name, hint.GraphBuild)
+	case len(fact.SameNameDefinitions) > 1:
+		return "", fmt.Sprintf("expects a signature of %q, which the graph resolves to %d definitions (%s): name one by the symbol id `%s` prints",
+			name, len(fact.SameNameDefinitions), strings.Join(fact.SameNameDefinitions, ", "), hint.Refs.With(name))
+	case fact.Signature == "":
+		return "", fmt.Sprintf("expects a signature of %q and declares none, and the symbol index holds none for it to record: declare it", name)
+	}
+	return fact.Signature, ""
+}
+
+// derivedClaim is the write path claim a goal expecting expect of an existing symbol adds
+// to row, or "" when it adds none.
+func derivedClaim(row types.Job, expect types.GoalExpect, read bool, fact SymbolFact) string {
+	switch expect {
+	case types.ExpectChanged, types.ExpectAbsent, types.ExpectSignature:
+	default:
+		return ""
+	}
+	if row.ReadOnly || !read || len(fact.DefinedIn) != 1 || len(fact.SameNameDefinitions) > 1 {
+		return ""
+	}
+	file := path.Clean(fact.DefinedIn[0])
+	word := declarationWord(fact.Signature)
+	if word == "" || strings.Contains(file, "#") {
+		return ""
+	}
+	for _, entry := range row.WritePaths {
+		p, decl := types.SplitClaim(entry)
+		switch {
+		case decl == "" && coversPath(p, file):
+			return ""
+		case decl != "" && path.Clean(p) == file && decl == word:
+			return ""
+		}
+	}
+	return file + "#" + word
+}
+
+// declarationWord is the run of a symbol's declaration line that names it alone, read off
+// the signature the index renders: `func Name`, `Recv) Name` for a method, `type Name`,
+// Buzz's `fun name`. "" for any other declaration, whose line a diff driver may not match.
+func declarationWord(signature string) string {
+	sig := strings.Join(strings.Fields(signature), " ")
+	nameOf := func(rest string) string {
+		if i := strings.IndexAny(rest, "([ "); i >= 0 {
+			rest = rest[:i]
+		}
+		return rest
+	}
+	switch {
+	case strings.HasPrefix(sig, "func ("):
+		end := strings.IndexByte(sig, ')')
+		if end < 0 {
+			return ""
+		}
+		fields := strings.Fields(sig[len("func (") : end])
+		name := nameOf(strings.TrimLeft(sig[end+1:], ". "))
+		if len(fields) == 0 || name == "" {
+			return ""
+		}
+		return strings.TrimPrefix(fields[len(fields)-1], "*") + ") " + name
+	case strings.HasPrefix(sig, "func "), strings.HasPrefix(sig, "type "), strings.HasPrefix(sig, "fun "):
+		keyword, rest, _ := strings.Cut(sig, " ")
+		if name := nameOf(rest); name != "" {
+			return keyword + " " + name
+		}
+	}
+	return ""
+}
+
+// resolveMerge wraps merge so the row it writes carries ResolveSymbolGoals' frozen
+// signatures and the derived claims store can place. A signature the stored row already
+// froze for the same goal is kept rather than read again, so a re-applied record does not
+// re-freeze a shape its holder has since changed.
+func resolveMerge(ctx context.Context, store *Store, rows []types.Job, id string, merge func(*types.Job), read SymbolReader) (func(*types.Job), error) {
+	probe := types.Job{ID: id}
+	var prev types.Job
+	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 {
+		prev = rows[i]
+		probe = prev.Clone()
+	}
+	merge(&probe)
+	keepFrozenSignatures(&probe, prev)
+	resolved, derived, err := ResolveSymbolGoals(ctx, probe, read)
+	if err != nil {
+		return nil, err
+	}
+	goals := resolved.Goals
+	paths := append(slices.Clone(probe.WritePaths), placeableClaims(ctx, store, derived)...)
+	return func(u *types.Job) {
+		merge(u)
+		u.Goals, u.WritePaths = goals, paths
+	}, nil
+}
+
+// placeableClaims are the derived claims whose word names exactly one declaration of its
+// file as store's version control places them. The rest are dropped rather than refused: a
+// derived claim is magus's inference, not the job's request, and one no diff driver places,
+// or that names no declaration or several, would hold the holder to lines it never meant.
+// A store with no tree to ask places nothing.
+func placeableClaims(ctx context.Context, store *Store, derived []string) []string {
+	if store == nil || store.root == "" || len(derived) == 0 {
+		return nil
+	}
+	files := make([]string, len(derived))
+	for i, claim := range derived {
+		files[i], _ = types.SplitClaim(claim)
+	}
+	driver, drivers, why := claimDrivers(ctx, store.root, files)
+	if why != "" {
+		return nil
+	}
+	var kept []string
+	for _, claim := range derived {
+		file, word := types.SplitClaim(claim)
+		if drivers[file] == "" {
+			continue
+		}
+		if all, ok := declarationsOf(ctx, driver, store.root, file); ok && len(namedDeclarations(word, all)) == 1 {
+			kept = append(kept, claim)
+		}
+	}
+	return kept
+}
+
+// keepFrozenSignatures fills each signature goal of row that declares none from prev's goal
+// of the same id on the same symbols.
+func keepFrozenSignatures(row *types.Job, prev types.Job) {
+	for i, goal := range row.Goals {
+		if goal.Resolve().Expect != types.ExpectSignature || strings.TrimSpace(goal.Signature) != "" {
+			continue
+		}
+		for _, old := range prev.Goals {
+			if old.ID == goal.ID && old.Resolve().Expect == types.ExpectSignature && slices.Equal(old.Symbols, goal.Symbols) {
+				row.Goals[i].Signature = old.Signature
+			}
+		}
+	}
 }
 
 // RenderGates writes a gate report one gate per line, each unmet one followed by why, and
@@ -433,10 +645,48 @@ func RenderGates(out io.Writer, status types.JobStatus) {
 			fmt.Fprintf(out, "      %s\n", why)
 		}
 	}
+	renderDelta(out, status)
 	if len(status.StaleIndexes) > 0 {
 		fmt.Fprintf(out, "\nstale index: the symbol goals were graded against an index older than the sources in %s,"+
 			" so a symbol verdict may be missing sites.\n  refresh and ask again: %s\n",
 			strings.Join(status.StaleIndexes, ", "), hint.GraphBuild)
+	}
+}
+
+// renderDelta writes what the diff did beside what its goals asked: net lines, exports no
+// goal declares, and symbols it left defined with no use. Each says when it was not
+// measured, since an empty list would otherwise read as nothing found. Reports only: none of
+// them decides a verdict.
+//
+// A status no diff was ever read for, such as an integration grade, carries no reason the
+// footprint is unknown, and renders none of it: there was no diff to measure.
+func renderDelta(out io.Writer, status types.JobStatus) {
+	if !status.FootprintKnown && status.FootprintReason == "" && !status.SymbolDeltaKnown {
+		return
+	}
+	if status.FootprintKnown {
+		fmt.Fprintf(out, "net lines: +%d -%d (%+d)\n", status.LinesAdded, status.LinesDeleted, status.LinesAdded-status.LinesDeleted)
+	} else {
+		fmt.Fprintf(out, "net lines: not measured, %s\n", cmp.Or(status.FootprintReason, "the diff was not read"))
+	}
+	for _, section := range []struct {
+		title string
+		names []string
+	}{
+		{"exports no goal declares", status.UndeclaredExports},
+		{"left defined with no use", status.LeftUnreferenced},
+	} {
+		switch {
+		case !status.SymbolDeltaKnown:
+			fmt.Fprintf(out, "%s: not measured, the symbol graph or the diff could not be read\n", section.title)
+		case len(section.names) == 0:
+			fmt.Fprintf(out, "%s: none\n", section.title)
+		default:
+			fmt.Fprintf(out, "%s: %d\n", section.title, len(section.names))
+			for _, name := range section.names {
+				fmt.Fprintf(out, "  %s\n", name)
+			}
+		}
 	}
 }
 

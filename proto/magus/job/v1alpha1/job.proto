@@ -251,6 +251,8 @@ message CompletionGate {
   repeated string paths = 6;
   repeated string symbols = 7;
   repeated string depends_on = 8;
+  // The declaration a `signature` goal holds its one symbol to, as the symbol index renders it.
+  string signature = 9;
 }
 
 // JobResult is what a holder filed when it exited: the paths it changed, the risks it left

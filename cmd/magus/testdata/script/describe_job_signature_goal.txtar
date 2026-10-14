@@ -1,0 +1,27 @@
+# A signature goal that declares no signature takes the one the symbol index holds when the
+# job is forked, and a fork that cannot record one is refused rather than stored without
+# it. A declared signature needs no index, grades unmet until one holds it, and stamps the
+# row so a magus too old to grade it leaves the row alone.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+exec magus init -local -vcs git
+
+stdin frozen.json
+! exec magus job fork --stdin
+stderr 'goal "shape" expects a signature of "Stub" and declares none, and the symbol index does not define "Stub": write the stub, run `magus graph build`, and fork again'
+
+stdin declared.json
+exec magus job fork --stdin
+exec magus describe job wave/shape
+stdout 'wave/shape: 0 of 1 goal\(s\) met'
+stdout '"Stub" is defined nowhere the graph can see, so it has no signature to hold'
+exec magus ls jobs -o json
+stdout '"signature-goals"'
+stdout '"signature": "func Stub\(n int\) error"'
+
+-- frozen.json --
+{"schema_version": 12, "id": "wave/shape", "criteria": "give Stub its shape", "write_paths": ["code.go"], "goals": [{"id": "shape", "kind": "symbol", "expect": "signature", "symbols": ["Stub"]}]}
+-- declared.json --
+{"schema_version": 12, "id": "wave/shape", "criteria": "give Stub its shape", "write_paths": ["code.go"], "goals": [{"id": "shape", "kind": "symbol", "expect": "signature", "symbols": ["Stub"], "signature": "func Stub(n int) error"}]}
+-- code.go --
+package pkg

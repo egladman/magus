@@ -714,8 +714,8 @@ func TestExitResolvesARefFromTheJobsCheckout(t *testing.T) {
 
 // goalSymbol is one symbol the goalGraph holds.
 type goalSymbol struct {
-	id, label, file string
-	refs            int
+	id, label, file, signature string
+	refs                       int
 }
 
 // goalGraph resolves the way the knowledge graph does: Refs takes the first symbol whose
@@ -742,6 +742,16 @@ func (g goalGraph) Resolve(input string, _ int) []types.KnowledgeMatch {
 	return out
 }
 
+// SignatureMatches compares text: the shape comparison is the knowledge graph's, tested there.
+func (g goalGraph) SignatureMatches(id, declared string) (string, bool, bool) {
+	for _, s := range g {
+		if s.id == id && s.signature != "" {
+			return s.signature, s.signature == declared, true
+		}
+	}
+	return "", false, false
+}
+
 // TestWaitGradesEveryGoal is the audit of every kind and expectation a goal can declare,
 // end to end: a real diff since the checkpoint, a real tree, and a graph that resolves
 // fuzzily. Each pair passes job wait when it holds and fails it when it does not.
@@ -765,7 +775,7 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 
 	// Legacy is gone and LegacyAdapter survives, which a fuzzy lookup of Legacy lands on.
 	graph := goalGraph{
-		{id: "symbol:go a/Api().", label: "Api", file: "api.go"},
+		{id: "symbol:go a/Api().", label: "Api", file: "api.go", signature: "func Api()"},
 		{id: "symbol:go a/Keep().", label: "Keep", file: "keep.go", refs: 2},
 		{id: "symbol:go a/Lonely().", label: "Lonely", file: "keep.go"},
 		{id: "symbol:go a/LegacyAdapter().", label: "LegacyAdapter", file: "keep.go"},
@@ -775,6 +785,9 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 	}
 	symbol := func(expect types.GoalExpect, name string) types.Goal {
 		return types.Goal{ID: "goal", Kind: types.GoalKindSymbol, Expect: expect, Symbols: []string{name}}
+	}
+	signature := func(name, declared string) types.Goal {
+		return types.Goal{ID: "goal", Kind: types.GoalKindSymbol, Expect: types.ExpectSignature, Symbols: []string{name}, Signature: declared}
 	}
 	check := types.Goal{ID: "goal", Check: types.LeaseCheck{Target: "go-test", Project: "."}}
 	run := types.JobAttempt{Found: true, Project: ".", Target: "go-test", Spell: "go", TimestampMs: 9_999_999_999_999}
@@ -813,6 +826,15 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 		{name: "symbol unreferenced holds when nothing references it", goal: symbol(types.ExpectUnreferenced, "Lonely"), holds: true},
 		{name: "symbol unreferenced fails while a reference remains", goal: symbol(types.ExpectUnreferenced, "Keep"),
 			why: `2 place(s) still reference "Keep"`},
+		{name: "symbol signature holds when the indexed declaration matches", goal: signature("Api", "func Api()"), holds: true},
+		{name: "symbol signature fails when the declaration differs", goal: signature("Api", "func Api(n int)"),
+			why: "\"Api\" is declared `func Api()`, and this goal expects `func Api(n int)`"},
+		{name: "symbol signature fails when the index holds none", goal: signature("Keep", "func Keep()"),
+			why: `the symbol index holds no signature for "Keep"`},
+		{name: "symbol signature fails on a symbol defined nowhere", goal: signature("Legacy", "func Legacy()"),
+			why: `"Legacy" is defined nowhere the graph can see`},
+		{name: "symbol signature fails when the graph is unreadable", goal: signature("Api", "func Api()"), blind: true,
+			why: "could not read the symbol graph"},
 		{name: "symbol unreferenced fails once the definition is gone", goal: symbol(types.ExpectUnreferenced, "Legacy"),
 			why: "cannot count what still names it"},
 		{name: "check passed holds on a passing run", goal: check, run: run, holds: true},

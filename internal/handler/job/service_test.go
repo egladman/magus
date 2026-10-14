@@ -209,6 +209,13 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 				Expect: types.ExpectChanged,
 				Paths:  []string{"internal/job/store.go"},
 			},
+			{
+				ID:        "store-shape",
+				Kind:      types.GoalKindSymbol,
+				Expect:    types.ExpectSignature,
+				Symbols:   []string{"Update"},
+				Signature: "func (Store).Update(ctx context.Context, id string) error",
+			},
 		}
 		row.Result = &types.JobResult{
 			ChangedPaths:    []string{"internal/job/store.go"},
@@ -250,7 +257,7 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 	require.Equal(t, "types/job.go", got.Releases[0].Path)
 	require.NotEmpty(t, got.Releases[0].Digest, "a release says which version of the path the next worker inherits")
 
-	require.Len(t, got.Goals, 2)
+	require.Len(t, got.Goals, 3)
 	require.Equal(t, "lint", got.Goals[0].Id)
 	require.Equal(t, "check", got.Goals[0].Kind)
 	require.Equal(t, "passed", got.Goals[0].Expect)
@@ -258,6 +265,10 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 	require.Equal(t, "store-touched", got.Goals[1].Id)
 	require.Equal(t, []string{"internal/job/store.go"}, got.Goals[1].Paths)
 	require.Empty(t, got.Goals[1].Check, "a paths gate carries no check to render")
+	require.Equal(t, "signature", got.Goals[2].Expect)
+	require.Equal(t, []string{"Update"}, got.Goals[2].Symbols)
+	require.Equal(t, "func (Store).Update(ctx context.Context, id string) error", got.Goals[2].Signature)
+	require.Empty(t, got.Goals[1].Signature, "only a signature goal carries one")
 
 	require.NotNil(t, got.Result)
 	require.Equal(t, []string{"internal/job/store.go"}, got.Result.ChangedPaths)

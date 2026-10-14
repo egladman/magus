@@ -280,6 +280,24 @@ func readOnly(row types.Job) error {
 		row.ID, quoteAll(lacks), types.JobSchemaVersion)
 }
 
+// requiredFeatures are the JobSchema features row's content needs a reader to implement,
+// sorted: a `file#Declaration` claim and a `signature` goal are each read wrongly by a magus
+// older than the version that named them, so a row carrying one is read-only to it. Derived
+// from the content on every write, so a row that drops its last claim is writable again.
+// Any requirement the stored row carried that this build does not know never reaches here:
+// readOnly refused that write.
+func requiredFeatures(row types.Job) []string {
+	var out []string
+	if slices.ContainsFunc(slices.Concat(row.WritePaths, row.DenyPaths), types.HasClaim) {
+		out = append(out, types.JobSchema.Requires[11])
+	}
+	if slices.ContainsFunc(row.Goals, func(g types.Goal) bool { return g.Resolve().Expect == types.ExpectSignature }) {
+		out = append(out, types.JobSchema.Requires[12])
+	}
+	slices.Sort(out)
+	return out
+}
+
 func quoteAll(names []string) string {
 	quoted := make([]string, len(names))
 	for i, n := range names {
@@ -615,6 +633,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		// members a newer magus stored, and the stamp never drops below what it read.
 		row.Schema = prev.Schema
 		row.Version = max(prev.Version, types.JobSchemaVersion)
+		row.Requires = requiredFeatures(row)
 		if kind != asNarrowing {
 			row.Releases = s.releases(ctx, prev, row, now, prev.Registered != 0 && actor.Lease != id)
 		}

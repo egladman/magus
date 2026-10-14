@@ -111,7 +111,7 @@ func TestRefuseForkLimitsNamesTheKey(t *testing.T) {
 func TestRefuseAmbiguousSymbolsNamesEveryDefinition(t *testing.T) {
 	t.Parallel()
 
-	read := func(_ context.Context, name string) (SymbolFact, bool) {
+	read := func(_ context.Context, name, _ string) (SymbolFact, bool) {
 		switch name {
 		case "Validate":
 			return SymbolFact{DefinedIn: []string{"types/job.go"}, SameNameDefinitions: []string{"internal/config/validate.go", "types/job.go"}}, true
@@ -140,6 +140,13 @@ func TestRefuseAmbiguousSymbolsNamesEveryDefinition(t *testing.T) {
 type cannedSymbolGraph struct {
 	nodes []types.KnowledgeMatch
 	defs  map[string]string
+	// signatures are the indexed signatures by node id, matched as text.
+	signatures map[string]string
+}
+
+func (g cannedSymbolGraph) SignatureMatches(id, declared string) (string, bool, bool) {
+	indexed, ok := g.signatures[id]
+	return indexed, ok && indexed == declared, ok
 }
 
 func (g cannedSymbolGraph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
@@ -176,11 +183,11 @@ func TestGraphSymbolsListsEveryDefinitionOfABareName(t *testing.T) {
 			"symbol:types/ValidateAll().":          "types/all.go",
 		},
 	}
-	fact, ok := GraphSymbols(g)(t.Context(), "Validate")
+	fact, ok := GraphSymbols(g)(t.Context(), "Validate", "")
 	require.True(t, ok)
 	assert.Equal(t, []string{"internal/config/validate.go", "types/job.go"}, fact.SameNameDefinitions)
 
-	exact, ok := GraphSymbols(g)(t.Context(), "symbol:types/Declaration#Validate().")
+	exact, ok := GraphSymbols(g)(t.Context(), "symbol:types/Declaration#Validate().", "")
 	require.True(t, ok)
 	assert.Empty(t, exact.SameNameDefinitions, "a full symbol id names one definition")
 }
@@ -198,6 +205,190 @@ func TestRenderGatesSaysTheGraphWasStale(t *testing.T) {
 	assert.Contains(t, out.String(), "stale")
 	assert.Contains(t, out.String(), "., console")
 	assert.Contains(t, out.String(), "graph build")
+}
+
+func TestRenderGatesReportsTheDelta(t *testing.T) {
+	t.Parallel()
+
+	render := func(status types.JobStatus) string {
+		var out strings.Builder
+		RenderGates(&out, status)
+		return out.String()
+	}
+	gates := []types.GateStatus{{ID: "check", Verified: true}}
+
+	measured := types.JobStatus{Job: "unit", Gates: gates, FootprintKnown: true, LinesAdded: 4, LinesDeleted: 9,
+		SymbolDeltaKnown: true, UndeclaredExports: []string{"Alpha", "Goal#Extra"}}
+	assert.Equal(t, "unit: 1 of 1 goal(s) met\n  [met] check\n"+
+		"net lines: +4 -9 (-5)\n"+
+		"exports no goal declares: 2\n  Alpha\n  Goal#Extra\n"+
+		"left defined with no use: none\n", render(measured))
+	assert.Equal(t, render(measured), render(measured), "two renders of one status are one text")
+
+	unread := types.JobStatus{Job: "unit", Gates: gates, FootprintReason: "the job was declared without a checkpoint"}
+	assert.Equal(t, "unit: 1 of 1 goal(s) met\n  [met] check\n"+
+		"net lines: not measured, the job was declared without a checkpoint\n"+
+		"exports no goal declares: not measured, the symbol graph or the diff could not be read\n"+
+		"left defined with no use: not measured, the symbol graph or the diff could not be read\n", render(unread))
+
+	assert.Equal(t, "unit: 1 of 1 goal(s) met\n  [met] check\n", render(types.JobStatus{Job: "unit", Gates: gates}),
+		"a grade no diff was read for, such as an integration, measures nothing")
+}
+
+// symbolReader answers from facts by name, and false for a name it holds none for.
+func symbolReader(facts map[string]SymbolFact) SymbolReader {
+	return func(_ context.Context, name, _ string) (SymbolFact, bool) {
+		fact, ok := facts[name]
+		return fact, ok
+	}
+}
+
+func TestResolveSymbolGoalsFreezesSignatures(t *testing.T) {
+	t.Parallel()
+
+	read := symbolReader(map[string]SymbolFact{
+		"Api":   {DefinedIn: []string{"api.go"}, Signature: "func Api(ctx context.Context) error"},
+		"Stub":  {},
+		"Bare":  {DefinedIn: []string{"bare.go"}},
+		"Twice": {DefinedIn: []string{"a.go"}, Signature: "func Twice()", SameNameDefinitions: []string{"a.go", "b.go"}},
+	})
+	goal := func(name, signature string) types.Goal {
+		return types.Goal{ID: "shape", Kind: types.GoalKindSymbol, Expect: types.ExpectSignature, Symbols: []string{name}, Signature: signature}
+	}
+	row := func(g types.Goal) types.Job {
+		return types.Job{ID: "j", ReadOnly: true, Goals: []types.Goal{g}}
+	}
+
+	frozen, claims, err := ResolveSymbolGoals(t.Context(), row(goal("Api", "")), read)
+	require.NoError(t, err)
+	assert.Empty(t, claims)
+	assert.Equal(t, "func Api(ctx context.Context) error", frozen.Goals[0].Signature, "an empty signature records the indexed one")
+
+	declared, _, err := ResolveSymbolGoals(t.Context(), row(goal("Api", "func Api() error")), read)
+	require.NoError(t, err)
+	assert.Equal(t, "func Api() error", declared.Goals[0].Signature, "a declared signature is the contract as written")
+	_, _, err = ResolveSymbolGoals(t.Context(), row(goal("New", "func New()")), nil)
+	require.NoError(t, err, "a declared signature needs no graph, even for a symbol not written yet")
+
+	for _, tc := range []struct {
+		name, symbol string
+		read         SymbolReader
+		want         string
+	}{
+		{"no reader", "Api", nil, "this door reads no symbol graph"},
+		{"an unreadable graph", "Cold", read, "the symbol graph could not be read"},
+		{"a symbol the index does not define", "Stub", read, "write the stub, run `" + hint.GraphBuild.String() + "`, and fork again"},
+		{"a symbol with no indexed signature", "Bare", read, "holds none for it to record"},
+		{"an ambiguous name", "Twice", read, "resolves to 2 definitions"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, _, err := ResolveSymbolGoals(t.Context(), row(goal(tc.symbol, "")), tc.read)
+			require.Error(t, err, "a signature that cannot be frozen is refused, never skipped")
+			assert.Contains(t, err.Error(), `goal "shape"`)
+			assert.Contains(t, err.Error(), tc.want)
+		})
+	}
+}
+
+func TestResolveSymbolGoalsDerivesClaims(t *testing.T) {
+	t.Parallel()
+
+	read := symbolReader(map[string]SymbolFact{
+		"Api":       {DefinedIn: []string{"api.go"}, Signature: "func Api()"},
+		"Resolve":   {DefinedIn: []string{"types/job.go"}, Signature: "func (Goal).Resolve() Goal"},
+		"Update":    {DefinedIn: []string{"store.go"}, Signature: "func (s *Store) Update(id string) error"},
+		"Goal":      {DefinedIn: []string{"types/job.go"}, Signature: "type Goal struct"},
+		"Field":     {DefinedIn: []string{"types/job.go"}, Signature: "struct field Signature string"},
+		"Split":     {DefinedIn: []string{"a.go", "b.go"}, Signature: "func Split()"},
+		"Covered":   {DefinedIn: []string{"internal/job/plan.go"}, Signature: "func Covered()"},
+		"Unindexed": {DefinedIn: []string{"x.go"}},
+	})
+	symbol := func(id string, expect types.GoalExpect, names ...string) types.Goal {
+		return types.Goal{ID: id, Kind: types.GoalKindSymbol, Expect: expect, Symbols: names}
+	}
+	row := types.Job{ID: "j", WritePaths: []string{"internal/job", "api.go#func Other"}, Goals: []types.Goal{
+		symbol("moved", types.ExpectChanged, "Api", "Resolve", "Split", "Covered", "Unindexed", "Field"),
+		symbol("gone", types.ExpectAbsent, "Update"),
+		{ID: "shape", Kind: types.GoalKindSymbol, Expect: types.ExpectSignature, Symbols: []string{"Goal"}, Signature: "type Goal struct"},
+		symbol("kept", types.ExpectPresent, "Api"),
+		symbol("unused", types.ExpectUnreferenced, "Update"),
+		{ID: "check", Check: types.LeaseCheck{Target: "test", Project: "."}},
+	}}
+
+	resolved, claims, err := ResolveSymbolGoals(t.Context(), row, read)
+	require.NoError(t, err)
+	want := []string{"api.go#func Api", "store.go#Store) Update", "types/job.go#Goal) Resolve", "types/job.go#type Goal"}
+	assert.Equal(t, want, claims)
+	assert.Equal(t, append([]string{"internal/job", "api.go#func Other"}, want...), resolved.WritePaths)
+	assert.Equal(t, []string{"internal/job", "api.go#func Other"}, row.WritePaths, "the row handed in is not changed")
+
+	readOnly := row
+	readOnly.ReadOnly = true
+	_, claims, err = ResolveSymbolGoals(t.Context(), readOnly, read)
+	require.NoError(t, err)
+	assert.Empty(t, claims, "a read-only row claims nothing")
+
+	_, claims, err = ResolveSymbolGoals(t.Context(), row, nil)
+	require.NoError(t, err, "only a signature goal needs a graph")
+	assert.Empty(t, claims)
+}
+
+// A door that forks or applies holds a derived claim to the placement a declared one
+// meets, and drops the one no diff driver places. A dry run computes the claims and writes
+// nothing.
+func TestApplyAndForkMergePlaceDerivedClaims(t *testing.T) {
+	t.Parallel()
+
+	root := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": claimGo, "notes.txt": "func Notes()\n"}).Root()
+	read := symbolReader(map[string]SymbolFact{
+		"A":     {DefinedIn: []string{"run.go"}, Signature: "func A(ctx int)"},
+		"Notes": {DefinedIn: []string{"notes.txt"}, Signature: "func Notes()"},
+	})
+	goals := []types.Goal{{ID: "moved", Kind: types.GoalKindSymbol, Symbols: []string{"A", "Notes"}}}
+	record := types.Declaration{ID: "wave/job", WritePaths: []string{"other.go"}, Check: forkCheck(), Goals: goals}
+
+	s := NewStore(tmpLoc(t, root))
+	plan, err := Apply(t.Context(), s, []types.Declaration{record}, config.Jobs{}, read, nil, true)
+	require.NoError(t, err)
+	require.Len(t, plan, 1)
+	assert.Equal(t, []string{"other.go", "run.go#func A"}, plan[0].Next.WritePaths)
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Empty(t, rows, "a dry run writes nothing")
+
+	stored, err := ForkMerge(t.Context(), s, "wave/job", func(u *types.Job) {
+		u.Check, u.State, u.WritePaths, u.Goals = forkCheck(), types.StateDeclared, []string{"other.go"}, goals
+	}, config.Jobs{}, read)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"other.go", "run.go#func A"}, stored.WritePaths)
+	assert.Equal(t, []string{"claim-declarations"}, stored.Requires, "an older magus reads a claim wrongly, so it may not write this row")
+
+	unclaimed, err := ForkMerge(t.Context(), s, "wave/job", func(u *types.Job) {
+		u.WritePaths, u.Goals = []string{"other.go"}, nil
+	}, config.Jobs{}, read)
+	require.NoError(t, err)
+	assert.Nil(t, unclaimed.Requires, "a row that drops its last claim is writable by an older magus again")
+}
+
+// A record applied again with its signature goal still undeclared keeps the signature the
+// first apply froze, so a holder's edit to the symbol never becomes the contract.
+func TestApplyKeepsAFrozenSignature(t *testing.T) {
+	t.Parallel()
+
+	s := tmpStore(t, t.TempDir())
+	record := types.Declaration{ID: "wave/job", WritePaths: []string{"api.go"}, Check: forkCheck(), Goals: []types.Goal{
+		{ID: "shape", Kind: types.GoalKindSymbol, Expect: types.ExpectSignature, Symbols: []string{"Api"}},
+	}}
+	before := symbolReader(map[string]SymbolFact{"Api": {DefinedIn: []string{"api.go"}, Signature: "func Api()"}})
+	after := symbolReader(map[string]SymbolFact{"Api": {DefinedIn: []string{"api.go"}, Signature: "func Api(n int)"}})
+
+	_, err := Apply(t.Context(), s, []types.Declaration{record}, config.Jobs{}, before, nil, false)
+	require.NoError(t, err)
+	plan, err := Apply(t.Context(), s, []types.Declaration{record}, config.Jobs{}, after, nil, false)
+	require.NoError(t, err)
+	assert.Equal(t, "func Api()", plan[0].Next.Goals[0].Signature)
+	assert.Equal(t, []string{"signature-goals"}, plan[0].Next.Requires)
 }
 
 func TestWaitRefusesPassWhileADescendantIsLive(t *testing.T) {
@@ -233,7 +424,7 @@ func TestGradeGatesInheritsAncestorSymbolGates(t *testing.T) {
 		Goals: []types.Goal{{ID: "moved", Kind: types.GoalKindPaths, Expect: types.ExpectPresent, Paths: []string{"api"}}},
 	}
 	loc := declared(t, parent, child)
-	read := func(_ context.Context, name string) (SymbolFact, bool) {
+	read := func(_ context.Context, name, _ string) (SymbolFact, bool) {
 		if name == "OldName" {
 			return SymbolFact{DefinedIn: []string{"api/old.go"}}, true
 		}

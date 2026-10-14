@@ -149,10 +149,14 @@ magus run test .
 refactor/pricing: 0 of 1 goal(s) met
   [unmet] check
       carries no output_ref, so there is no run to reopen
+net lines: +0 -0 (+0)
+exports no goal declares: none
+left defined with no use: none
 ```
 
 The other half's file is listed as somebody else's, and the check is unmet because
-no run has been filed. She edits `total.sh` and runs the check:
+no run has been filed. The last three lines measure her diff so far, which is empty:
+they report, and never decide whether the job passes. She edits `total.sh` and runs the check:
 
 ```sh
 magus run test .
@@ -346,6 +350,9 @@ magus run test .
 currency: 0 of 1 goal(s) met
   [unmet] check
       carries no output_ref, so there is no run to reopen
+net lines: +0 -0 (+0)
+exports no goal declares: none
+left defined with no use: none
 ```
 
 ### Splitting a file by declaration

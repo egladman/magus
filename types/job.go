@@ -135,6 +135,10 @@ type Goal struct {
 	// Symbols are the names a GoalKindSymbol goal examines, as the knowledge graph
 	// resolves them. Zero on every other kind.
 	Symbols []string `json:"symbols,omitempty" yaml:"symbols,omitempty"`
+	// Signature is the declaration an ExpectSignature goal holds its one symbol to, in the
+	// form the symbol index renders it. A fork that declares none records the indexed one,
+	// which is how a stub the root wrote becomes the contract. Zero on every other goal.
+	Signature string `json:"signature,omitempty" yaml:"signature,omitempty"`
 }
 
 // Resolve fills a goal's kind and expectation from what it declared, so every stored goal
@@ -209,11 +213,15 @@ const (
 	// reader to treat the two as one, which is a vocabulary that says it has four members
 	// and behaves as though it has three.
 	ExpectUnreferenced GoalExpect = "unreferenced"
+	// ExpectSignature is "this symbol is declared with this shape": the declaration the
+	// goal's Signature names. Go and Buzz compare the parsed shape, so a renamed parameter
+	// still holds; other languages compare the text.
+	ExpectSignature GoalExpect = "signature"
 )
 
 // GoalExpects is the closed set. See GoalKinds.
 func GoalExpects() []GoalExpect {
-	return []GoalExpect{ExpectPassed, ExpectChanged, ExpectPresent, ExpectAbsent, ExpectUnreferenced}
+	return []GoalExpect{ExpectPassed, ExpectChanged, ExpectPresent, ExpectAbsent, ExpectUnreferenced, ExpectSignature}
 }
 
 // DefaultExpect is what a kind means when a goal names no condition, so the common goal of
@@ -248,7 +256,7 @@ func (g Goal) Subject() []string {
 var goalAccepts = map[GoalKind][]GoalExpect{
 	GoalKindCheck:  {ExpectPassed},
 	GoalKindPaths:  {ExpectChanged, ExpectPresent, ExpectAbsent},
-	GoalKindSymbol: {ExpectChanged, ExpectPresent, ExpectAbsent, ExpectUnreferenced},
+	GoalKindSymbol: {ExpectChanged, ExpectPresent, ExpectAbsent, ExpectUnreferenced, ExpectSignature},
 }
 
 // EffectiveGoals returns the declared goals plus the primary Check as a goal. Keeping the
@@ -457,11 +465,13 @@ func ValidJobID(id string) bool {
 // declared again, and a change of meaning is a new name.
 //
 // It moves only for a change an older reader would act on WRONGLY, and that version names
-// the feature in JobSchema.Requires. 11 is the `<path>#<declaration>` claim grammar in
-// write_paths (see SplitClaim): an older binary matches `run.go#RunCI` against no file and
-// would stop grading the claim. 10 is the field set that ends dead jobs.
+// the feature in JobSchema.Requires, which the store stamps on each row whose content needs
+// it. 12 is the `signature` expectation on a symbol goal: an older binary would grade it as
+// `changed`. 11 is the `<path>#<declaration>` claim grammar in write_paths (see SplitClaim):
+// an older binary matches `run.go#RunCI` against no file and would stop grading the claim.
+// 10 is the field set that ends dead jobs.
 // TestSchemaLedgersEvolveAdditively fails a bump whose diff is only additive.
-const JobSchemaVersion = 11
+const JobSchemaVersion = 12
 
 // JobResultSchemaVersion is the version of the result shape a holder files, the newest the
 // decoder accepts. [JobResultSchema] is its ledger, under JobSchemaVersion's rules.
@@ -565,6 +575,17 @@ type JobStatus struct {
 	// Entries are the job's recorded entries, so a footprint line in an entered path reads
 	// as the entrant's write rather than the holder's.
 	Entries []JobEntry `json:"entries,omitempty" yaml:"entries,omitempty"`
+	// LinesAdded and LinesDeleted sum the Footprint's new and old sides, so they mean
+	// something only when FootprintKnown does.
+	LinesAdded   int `json:"lines_added" yaml:"lines_added"`
+	LinesDeleted int `json:"lines_deleted" yaml:"lines_deleted"`
+	// UndeclaredExports are the exported Go symbols the diff added that no symbol goal of
+	// the job or an ancestor names, and LeftUnreferenced the symbols that lost their last
+	// use in the diff and are still defined. Both are reports, never violations, and mean
+	// something only when SymbolDeltaKnown does.
+	UndeclaredExports []string `json:"undeclared_exports,omitempty" yaml:"undeclared_exports,omitempty"`
+	LeftUnreferenced  []string `json:"left_unreferenced,omitempty" yaml:"left_unreferenced,omitempty"`
+	SymbolDeltaKnown  bool     `json:"symbol_delta_known" yaml:"symbol_delta_known"`
 }
 
 // GateStatus reports verification of one goal.
@@ -982,6 +1003,9 @@ func (r Declaration) Validate() error {
 		}
 		seen[gate.ID] = true
 	}
+	if err := oneSignaturePerSymbol(r.Goals); err != nil {
+		return err
+	}
 	for _, gate := range r.Goals {
 		for _, dep := range gate.DependsOn {
 			if !seen[dep] {
@@ -1027,6 +1051,24 @@ func (r Declaration) Validate() error {
 	return nil
 }
 
+// oneSignaturePerSymbol refuses two signature goals on one symbol: the graph answers one
+// declaration per name, so two shapes for it make a goal nobody could meet.
+func oneSignaturePerSymbol(goals []Goal) error {
+	held := map[string]string{}
+	for _, gate := range goals {
+		if gate.Resolve().Expect != ExpectSignature {
+			continue
+		}
+		for _, name := range trimmedNonEmpty(gate.Symbols) {
+			if other, ok := held[name]; ok {
+				return fmt.Errorf("%w: goals %q and %q both expect a signature of %q, and a symbol has one", errInvalidJob, other, gate.ID, name)
+			}
+			held[name] = gate.ID
+		}
+	}
+	return nil
+}
+
 // Validate reports whether a goal can be matched to an output record without
 // interpreting a shell command.
 func (g Goal) Validate() error {
@@ -1060,6 +1102,13 @@ func (g Goal) Validate() error {
 	}
 	if len(trimmedNonEmpty(g.Subject())) == 0 {
 		return fmt.Errorf("goal %q is a %s goal and names nothing to examine, so nothing could ever satisfy it", g.ID, g.Kind)
+	}
+	switch {
+	case g.Expect != ExpectSignature && strings.TrimSpace(g.Signature) != "":
+		return fmt.Errorf("goal %q expects %q and carries a signature, which only a %q goal reads", g.ID, g.Expect, ExpectSignature)
+	case g.Expect == ExpectSignature && len(trimmedNonEmpty(g.Symbols)) != 1:
+		return fmt.Errorf("goal %q expects the signature of %d symbols, and a signature is one declaration: name one symbol per goal",
+			g.ID, len(trimmedNonEmpty(g.Symbols)))
 	}
 	if g.Kind == GoalKindCheck {
 		if err := g.Check.validScript(); err != nil || g.Check.Script != "" {

@@ -803,7 +803,7 @@ func TestWaitIntegrationRecordsBesideAPassedJob(t *testing.T) {
 
 	s := integrationRow(t, types.StatePass)
 	resolve := runs(map[string][2]string{"out1": {"test", "."}, "out2": {"lint", "docs"}})
-	grade, err := WaitIntegration(t.Context(), s, "w", integrationEvidence(), resolve, "/merged")
+	grade, err := WaitIntegration(t.Context(), s, "w", integrationEvidence(), resolve, "/merged", nil)
 	require.NoError(t, err)
 	assert.True(t, grade.Verified, "%+v", grade.Gates)
 	assert.Equal(t, []string{"check", "lint"}, []string{grade.Gates[0].ID, grade.Gates[1].ID})
@@ -824,7 +824,7 @@ func TestWaitIntegrationRecordsAFailureWithoutMovingTheState(t *testing.T) {
 
 	s := integrationRow(t, types.StateExited)
 	resolve := runs(map[string][2]string{"out1": {"test", "."}, "out2": {"lint", "docs"}}, "out2")
-	grade, err := WaitIntegration(t.Context(), s, "w", integrationEvidence(), resolve, "/merged")
+	grade, err := WaitIntegration(t.Context(), s, "w", integrationEvidence(), resolve, "/merged", nil)
 	require.NoError(t, err)
 	assert.False(t, grade.Verified)
 	assert.True(t, grade.Gates[0].Verified)
@@ -842,9 +842,40 @@ func TestWaitIntegrationRefusesEvidenceForAGoalItDoesNotHold(t *testing.T) {
 	s := integrationRow(t, types.StatePass)
 	rep := integrationEvidence()
 	rep.GateEvidence = append(rep.GateEvidence, types.GateEvidence{GateID: "nope", OutputRef: "out3"})
-	_, err := WaitIntegration(t.Context(), s, "w", rep, runs(nil), "/merged")
+	_, err := WaitIntegration(t.Context(), s, "w", rep, runs(nil), "/merged", nil)
 	require.ErrorContains(t, err, `goal "nope"`)
 	rows, err := s.List()
 	require.NoError(t, err)
 	assert.Nil(t, rows[0].Integration, "a refused grade records nothing")
+}
+
+// Symbol goals a merge can break are graded against the integrator's graph, and `changed`,
+// which is the holder's diff, is not graded there at all.
+func TestWaitIntegrationGradesSymbolGoalsAgainstTheCheckoutsGraph(t *testing.T) {
+	t.Parallel()
+
+	s := tmpStore(t, t.TempDir())
+	_, err := s.Update(t.Context(), "w", func(u *types.Job) {
+		types.Declaration{ID: "w", WritePaths: []string{"a.go"}, Goals: []types.Goal{
+			{ID: "moved", Kind: types.GoalKindSymbol, Symbols: []string{"Api"}},
+			{ID: "shape", Kind: types.GoalKindSymbol, Expect: types.ExpectSignature, Symbols: []string{"Api"}, Signature: "func Api()"},
+			{ID: "gone", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"Legacy"}},
+		}}.Apply(u)
+		u.State = types.StatePass
+	})
+	require.NoError(t, err)
+
+	merged := goalGraph{{id: "symbol:go a/Api().", label: "Api", file: "a.go", signature: "func Api(n int)"}}
+	grade, err := WaitIntegration(t.Context(), s, "w", types.JobResult{Job: "w"}, runs(nil), "/merged", GraphSymbols(merged))
+	require.NoError(t, err)
+	assert.False(t, grade.Verified)
+	require.Len(t, grade.Gates, 2, "the changed goal belongs to the holder's checkout")
+	assert.Equal(t, "shape", grade.Gates[0].ID)
+	assert.Equal(t, []string{"\"Api\" is declared `func Api(n int)`, and this goal expects `func Api()`"}, grade.Gates[0].Violations)
+	assert.Equal(t, types.GateStatus{ID: "gone", Verified: true}, grade.Gates[1])
+
+	blind, err := WaitIntegration(t.Context(), s, "w", types.JobResult{Job: "w"}, runs(nil), "/merged", nil)
+	require.NoError(t, err)
+	assert.False(t, blind.Verified, "a graph nobody read never passes a symbol goal")
+	assert.Contains(t, strings.Join(blind.Gates[1].Violations, "\n"), "could not read the symbol graph")
 }

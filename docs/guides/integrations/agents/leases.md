@@ -643,11 +643,11 @@ A goal names a **kind** (what it examines) and an **expect** (what must be true
 of it). Two fields rather than a kind per pair, so `absent` means the same thing
 of a file and of a symbol:
 
-| kind     | expect                                         | proven by                                                                   |
-| -------- | ---------------------------------------------- | --------------------------------------------------------------------------- |
-| `check`  | `passed`                                       | a recorded, PASSING run of that target, captured after the job was declared |
-| `paths`  | `changed`, `present`, `absent`                 | the diff since the checkpoint, or the tree as it is now                     |
-| `symbol` | `changed`, `present`, `absent`, `unreferenced` | the knowledge graph, at the granularity below a file                        |
+| kind     | expect                                                      | proven by                                                                   |
+| -------- | ----------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `check`  | `passed`                                                    | a recorded, PASSING run of that target, captured after the job was declared |
+| `paths`  | `changed`, `present`, `absent`                              | the diff since the checkpoint, or the tree as it is now                     |
+| `symbol` | `changed`, `present`, `absent`, `unreferenced`, `signature` | the knowledge graph, at the granularity below a file                        |
 
 Each kind has a natural expectation, so the common goal declares only its kind
 and subject: a check is asked whether it passed, files and symbols whether this
@@ -670,6 +670,39 @@ the callers.
 
 A symbol goal takes the name the graph gives the symbol, and only that symbol
 answers for it: a deleted `Legacy` is absent even while `LegacyAdapter` exists.
+
+### Signature goals
+
+`symbol` + `signature` holds one symbol to a declaration, its `signature`, so a
+job handed an interface cannot change its shape and still pass. Go and Buzz
+compare the parsed shape (kind, name, receiver, parameter types, results), so a
+renamed parameter still holds; every other language compares the text with
+whitespace collapsed. A goal names exactly one symbol, and a job holds one
+signature per symbol.
+
+Leave `signature` out and the fork records the one the symbol index holds. That
+is the stub flow: write the declaration with an empty body, run
+`magus graph build`, then fork the job with a `signature` goal beside a
+`changed` goal on the same name. A signature the fork cannot record is refused,
+never skipped: the graph will not open, the index does not define the symbol
+yet, or it holds no signature for it. A later `magus job apply` of the same
+record keeps the signature the first one recorded.
+
+```json
+{"id": "shape", "kind": "symbol", "expect": "signature", "symbols": ["AccountStore#Migrate"]}
+```
+
+A goal that changes, removes or reshapes a symbol already defined in one file
+the write paths do not cover adds a claim on its declaration to `write_paths`
+(`db/accounts.go#AccountStore) Migrate`), and `fork` prints each one it added and
+lists them as `derived_claims` in its JSON. A read-only job claims nothing, and
+neither does a file with no diff driver. A row carrying a `signature` goal is
+stamped `requires: ["signature-goals"]`, so a magus too old to grade one leaves
+the row alone.
+
+`magus job wait --integration` grades the `present`, `absent`, `unreferenced`
+and `signature` symbol goals against the integrating checkout's graph, so a
+shape that drifts in the merge fails there. `changed` stays the holder's.
 
 The single `check` is one of these goals, under the id `check`.
 
@@ -711,6 +744,23 @@ alongside the job's terms, and writes nothing. Because it runs the same grading
 orchestrator may ask while the holder is still working, and asking never blocks
 that holder. The goals that read the tree and the graph answer even for a job
 that has filed no result at all.
+
+Below the goals it reports what the diff did beside them, and `wait` returns
+the same fields. None of them is a violation, and none decides `pass`:
+
+| field                          | what it says                                                                           |
+| ------------------------------ | -------------------------------------------------------------------------------------- |
+| `lines_added`, `lines_deleted` | the lines on each side of the footprint, when `footprint_known`                        |
+| `undeclared_exports`           | exported Go symbols the diff added that no symbol goal of the job or an ancestor names |
+| `left_unreferenced`            | symbols that lost their last use in the diff and are still defined                     |
+| `symbol_delta_known`           | whether the two lists above were read; false reads as "not measured"                   |
+
+```text
+net lines: +12 -40 (-28)
+exports no goal declares: none
+left defined with no use: 1
+  legacyAccountRow (db/accounts.go:88)
+```
 
 Sequence goals with `depends_on` between them when one has to be cleared before
 another is approached. A failed prerequisite propagates, and the declaration

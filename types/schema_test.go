@@ -303,5 +303,5 @@ func TestSchemaUnmet(t *testing.T) {
 	assert.Nil(t, Schema{}.Unmet(nil))
 	assert.Nil(t, Schema{Requires: []string{"a"}}.Unmet([]string{"a", "b"}))
 	assert.Equal(t, []string{"c", "d"}, Schema{Requires: []string{"c", "a", "d"}}.Unmet([]string{"a"}))
-	assert.Equal(t, []string{"claim-declarations", "dead-job-end"}, JobSchema.Features())
+	assert.Equal(t, []string{"claim-declarations", "dead-job-end", "signature-goals"}, JobSchema.Features())
 }

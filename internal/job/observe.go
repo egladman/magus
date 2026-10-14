@@ -18,7 +18,10 @@ import (
 // SymbolReader answers what the knowledge graph knows about a symbol. Supplied by the
 // caller rather than reached for here, because internal/job grades evidence and does not
 // own a graph; the CLI, the MCP tool and the Buzz binding each already hold one.
-type SymbolReader func(ctx context.Context, name string) (SymbolFact, bool)
+//
+// signature is a declared signature to compare with the indexed one, which the fact
+// answers in SignatureMatch; "" reads the symbol only.
+type SymbolReader func(ctx context.Context, name, signature string) (SymbolFact, bool)
 
 // CheckpointObserver answers what a job changed, what is in the tree, and what the graph
 // says about the symbols its gates named.
@@ -48,8 +51,11 @@ func CheckpointObserver(root string, symbols SymbolReader) Observer {
 		if seen.ChangedFrom != "" {
 			seen.ChangedFrom = base.named
 		}
+		if seen.ChangedKnown {
+			seen.ChangedRevision = checkpointRevision(base.revision)
+		}
 		seen.Present, seen.PresentKnown = presentIn(tree, row)
-		seen.Symbols, seen.SymbolsKnown = readSymbols(ctx, row, symbols)
+		seen.readSymbols(ctx, row.EffectiveGoals(), symbols)
 		// Workspace only, as for every rule that acts: a default in one person's global
 		// config must not loosen what a check accepts. An unreadable magus.yaml leaves no
 		// defaults, so a check binds only to the charms it names.
@@ -368,16 +374,19 @@ func presentIn(root string, row types.Job) ([]string, bool) {
 	return out, true
 }
 
-// readSymbols resolves every symbol the row's gates named. One miss from the reader leaves
-// the whole observation unknown: a graph that answered for three names and failed on the
-// fourth cannot be told apart from one that found the fourth absent, and those mean
-// opposite things to a gate.
-func readSymbols(ctx context.Context, row types.Job, read SymbolReader) (map[string]SymbolFact, bool) {
+// readSymbols resolves every symbol goals name into o: a signature goal's against its
+// declared signature, every other one's plainly. One miss from the reader leaves the whole
+// observation unknown: a graph that answered for three names and failed on the fourth cannot
+// be told apart from one that found the fourth absent, and those mean opposite things to a
+// gate.
+func (o *Observed) readSymbols(ctx context.Context, goals []types.Goal, read SymbolReader) {
+	o.Symbols, o.Signatures, o.conflicts, o.SymbolsKnown = nil, nil, nil, false
 	if read == nil {
-		return nil, false
+		return
 	}
-	out := map[string]SymbolFact{}
-	for _, gate := range row.EffectiveGoals() {
+	symbols, signatures := map[string]SymbolFact{}, map[string]SymbolFact{}
+	declared, conflicts := map[string]string{}, map[string]bool{}
+	for _, gate := range goals {
 		if gate.Kind != types.GoalKindSymbol {
 			continue
 		}
@@ -385,14 +394,30 @@ func readSymbols(ctx context.Context, row types.Job, read SymbolReader) (map[str
 			if name = strings.TrimSpace(name); name == "" {
 				continue
 			}
-			fact, ok := read(ctx, name)
-			if !ok {
-				return nil, false
+			signature := ""
+			if gate.Expect == types.ExpectSignature {
+				signature = gate.Signature
+				if prior, ok := declared[name]; ok && prior != signature {
+					conflicts[name] = true
+					continue
+				}
+				declared[name] = signature
 			}
-			out[name] = fact
+			fact, ok := read(ctx, name, signature)
+			if !ok {
+				return
+			}
+			if gate.Expect == types.ExpectSignature {
+				signatures[name] = fact
+			} else {
+				symbols[name] = fact
+			}
 		}
 	}
-	return out, true
+	o.Symbols, o.Signatures, o.SymbolsKnown = symbols, signatures, true
+	if len(conflicts) > 0 {
+		o.conflicts = conflicts
+	}
 }
 
 // SymbolGraph is the slice of the knowledge graph a symbol gate needs.
@@ -405,13 +430,16 @@ type SymbolGraph interface {
 	// Resolve is how a bare name is checked for other symbols carrying it, since Refs
 	// answers for the top-ranked one alone.
 	Resolve(input string, limit int) []types.KnowledgeMatch
+	// SignatureMatches compares a declared signature with the one the graph holds for
+	// symbol node id; ok is false when it holds none.
+	SignatureMatches(id, declared string) (indexed string, match, ok bool)
 }
 
 // GraphSymbols reads symbol facts off a loaded graph. A nil graph reads as UNREADABLE
 // rather than as a graph with nothing in it, which is the distinction a symbol gate turns
 // on: absent and unknown mean opposite things to a verdict.
 func GraphSymbols(g SymbolGraph) SymbolReader {
-	return func(_ context.Context, name string) (SymbolFact, bool) {
+	return func(_ context.Context, name, signature string) (SymbolFact, bool) {
 		if g == nil {
 			return SymbolFact{}, false
 		}
@@ -434,6 +462,10 @@ func GraphSymbols(g SymbolGraph) SymbolReader {
 		fact := SymbolFact{DefinedIn: definedIn, ReferenceCount: out.RefCount}
 		if out.Symbol != name {
 			fact.SameNameDefinitions = sameNameDefinitions(g, name)
+		}
+		if indexed, match, ok := g.SignatureMatches(out.Symbol, signature); ok {
+			fact.Signature = indexed
+			fact.SignatureMatch = signature != "" && match
 		}
 		return fact, true
 	}

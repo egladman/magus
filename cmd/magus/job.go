@@ -1097,9 +1097,18 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return usagef("magus job fork: %s", err)
 	}
 	// The reader loads the graph only when a gate names a symbol.
-	if err := job.RefuseAmbiguousSymbols(ctx, row.Goals, jobSymbolReader(root)); err != nil {
+	symbols := jobSymbolReader(root)
+	if err := job.RefuseAmbiguousSymbols(ctx, row.Goals, symbols); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
+	declaredPaths := probe.WritePaths
+	resolved, derived, err := job.ResolveSymbolGoals(ctx, probe, symbols)
+	if err != nil {
+		return usagef("magus job fork: %s", err)
+	}
+	derived = placedClaims(ctx, store, root, row.ID, derived)
+	probe.Goals, probe.WritePaths = resolved.Goals, append(slices.Clone(declaredPaths), derived...)
+	row.Goals, row.WritePaths = probe.Goals, probe.WritePaths
 	if err := job.RefuseDirectoryWritePaths(store, probe); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
@@ -1151,6 +1160,12 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		fmt.Printf("forked %s, %s, with %d write path(s). Its holder reads the terms with `%s` and takes it with `%s`\n",
 			stored.ID, orDash(string(stored.State)), len(stored.WritePaths),
 			hint.DescribeJob.With(stored.ID), hint.JobExec.With(stored.ID))
+		if len(derived) > 0 {
+			fmt.Printf("its symbol goals claimed %d declaration(s) its write paths did not cover:\n", len(derived))
+			for _, claim := range derived {
+				fmt.Printf("  %s\n", claim)
+			}
+		}
 		notes := jobNotes(ctx, root, []types.Job{stored})[stored.ID]
 		job.RenderRegenerated(os.Stdout, notes.RegeneratedOutside)
 		job.RenderUnrunGates(os.Stdout, notes.UnrunGates)
@@ -1159,8 +1174,18 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return nil
 	default:
 		notes := jobNotes(ctx, root, []types.Job{stored})[stored.ID]
-		return emitFormatted(opts, forkOutput{Job: stored, RegeneratedOutside: notes.RegeneratedOutside, UnrunGates: notes.UnrunGates, ForegroundOverrun: notes.ForegroundOverrun})
+		return emitFormatted(opts, forkReport{
+			forkOutput{Job: stored, RegeneratedOutside: notes.RegeneratedOutside, UnrunGates: notes.UnrunGates, ForegroundOverrun: notes.ForegroundOverrun},
+			derived,
+		})
 	}
+}
+
+// forkReport is forkOutput with the write path claims the fork derived from its symbol
+// goals, which are computed at the fork and never stored apart from write_paths.
+type forkReport struct {
+	forkOutput    `yaml:",inline"`
+	DerivedClaims []string `json:"derived_claims,omitempty" yaml:"derived_claims,omitempty"`
 }
 
 // jobEnter records an entry into job id's path rel, the --stdin record's other shape.
@@ -1682,7 +1707,7 @@ func jobWaitIntegration(ctx context.Context, store *job.Store, root, id string, 
 	if err != nil {
 		return err
 	}
-	grade, err := job.WaitIntegration(ctx, store, id, result, storedAttempts(root), checkout)
+	grade, err := job.WaitIntegration(ctx, store, id, result, storedAttempts(root), checkout, jobSymbolReader(root))
 	if err != nil {
 		return usagef("magus job wait: %s", err)
 	}
@@ -2303,37 +2328,84 @@ func pathEvidence(g *knowledge.Graph, declared string) (job.TermsEvidence, bool)
 // remembered too, so a verification does not retry a graph that is not there once per
 // gate and report the same failure five times.
 func jobSymbolReader(root string) job.SymbolReader {
-	var (
-		once   sync.Once
-		loaded job.SymbolReader
-	)
-	return func(ctx context.Context, name string) (job.SymbolFact, bool) {
-		once.Do(func() {
-			g, err := loadKnowledgeGraphForRefs(ctx, root, false, "")
-			if err != nil {
-				return
-			}
-			loaded = job.GraphSymbols(g)
-		})
-		if loaded == nil {
+	return graphSymbolReader(knowledgeOnce(root))
+}
+
+func graphSymbolReader(load func(context.Context) *knowledge.Graph) job.SymbolReader {
+	return func(ctx context.Context, name, signature string) (job.SymbolFact, bool) {
+		g := load(ctx)
+		if g == nil {
 			return job.SymbolFact{}, false
 		}
-		return loaded(ctx, name)
+		return job.GraphSymbols(g)(ctx, name, signature)
 	}
 }
 
-// jobObserver is the checkpoint observer plus, for a job with a check gate on ci, the
-// newest green ci gate on this checkout's branch and the tier of the change since it.
+// knowledgeOnce loads root's knowledge graph on first use and hands every later caller the
+// same graph, or the same nil when the load failed.
+func knowledgeOnce(root string) func(context.Context) *knowledge.Graph {
+	var (
+		once sync.Once
+		g    *knowledge.Graph
+	)
+	return func(ctx context.Context) *knowledge.Graph {
+		once.Do(func() {
+			if loaded, err := loadKnowledgeGraphForRefs(ctx, root, false, ""); err == nil {
+				g = loaded
+			}
+		})
+		return g
+	}
+}
+
+// jobObserver is the checkpoint observer plus the symbol delta of the job's diff and, for a
+// job with a check gate on ci, the newest green ci gate on this checkout's branch and the
+// tier of the change since it. One graph load serves the symbol goals and the delta.
 func jobObserver(root string) job.Observer {
-	checkpoint := job.CheckpointObserver(root, jobSymbolReader(root))
+	load := knowledgeOnce(root)
+	checkpoint := job.CheckpointObserver(root, graphSymbolReader(load))
 	return func(ctx context.Context, row types.Job) (job.Observed, error) {
 		seen, err := checkpoint(ctx, row)
-		if err != nil || root == "" || !gatesOnCI(row) {
+		if err != nil {
 			return seen, err
+		}
+		if delta, ok := observeSymbolDelta(ctx, root, row, seen, load); ok {
+			seen.AddedExports, seen.LeftUnreferenced, seen.SymbolDeltaKnown = delta.Added, delta.Left, true
+		}
+		if root == "" || !gatesOnCI(row) {
+			return seen, nil
 		}
 		seen.GreenGate = latestGreenGate(ctx, root)
 		return seen, nil
 	}
+}
+
+// observeSymbolDelta reads the delta of the diff seen was graded on, in the checkout that
+// diff was read in. A holder's other checkout gets its own graph, since lines of its files
+// placed against this one's would name the wrong symbols; one that will not load leaves
+// the delta unknown.
+func observeSymbolDelta(ctx context.Context, root string, row types.Job, seen job.Observed, load func(context.Context) *knowledge.Graph) (symbolDelta, bool) {
+	if row.ReadOnly || root == "" || !seen.ChangedKnown || seen.ChangedRevision == "" {
+		return symbolDelta{}, false
+	}
+	if len(seen.Changed) == 0 {
+		return symbolDelta{}, true
+	}
+	tree := root
+	if info, err := os.Stat(row.CheckoutRoot); row.CheckoutRoot != "" && err == nil && info.IsDir() {
+		tree = row.CheckoutRoot
+	}
+	var g *knowledge.Graph
+	if filepath.Clean(tree) == filepath.Clean(root) {
+		g = load(ctx)
+	} else if ws, err := magus.Inspect(ctx, tree, magus.WithLoadedConfig(globalCfg), magus.WithVersion(version)); err == nil {
+		g, _ = loadRefsGraph(ctx, ws, globalCfg, false, "")
+	}
+	res, err := vcs.Resolve(ctx, tree, "", types.VCSOptions{})
+	if err != nil || res.Source == types.VCSSourceDisabled {
+		return symbolDelta{}, false
+	}
+	return readSymbolDelta(ctx, tree, g, res.VCS, seen.ChangedRevision, seen.Changed)
 }
 
 func gatesOnCI(row types.Job) bool {

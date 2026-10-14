@@ -432,6 +432,7 @@ func wireGoals(gates []types.Goal) []*jobv1.CompletionGate {
 			Paths:       g.Paths,
 			Symbols:     g.Symbols,
 			DependsOn:   g.DependsOn,
+			Signature:   g.Signature,
 		}
 		if g.Kind == types.GoalKindCheck && g.Check.Target != "" {
 			wire.Check = g.Check.String()

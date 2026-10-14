@@ -370,7 +370,8 @@ func TestVerifyGatesCarriesTheFootprintAndGradesNothingOnIt(t *testing.T) {
 
 	assert.Equal(t, regions, with.Footprint)
 	assert.True(t, with.FootprintKnown)
-	with.Footprint, with.FootprintKnown = nil, false
+	assert.Equal(t, []int{3, 0}, []int{with.LinesAdded, with.LinesDeleted})
+	with.Footprint, with.FootprintKnown, with.LinesAdded = nil, false, 0
 	assert.Equal(t, without, with, "the footprint is reported and changes no verdict or violation")
 
 	declined := base
@@ -378,6 +379,39 @@ func TestVerifyGatesCarriesTheFootprintAndGradesNothingOnIt(t *testing.T) {
 	status := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, declined)
 	assert.False(t, status.FootprintKnown)
 	assert.Equal(t, "git does not report changed regions (RegionReporter)", status.FootprintReason)
+}
+
+// The symbol delta and the net lines are reports: they land in the status sorted, an
+// export a goal of the job or an ancestor names is declared, and the verdict is the one the
+// same diff reaches without them.
+func TestVerifyGatesReportsTheSymbolDeltaAndGradesNothingOnIt(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "unit", Created: 1, WritePaths: []string{"api"}, Check: &types.LeaseCheck{Target: "go-test", Project: "api"},
+		Goals: []types.Goal{
+			{ID: "new", Kind: types.GoalKindSymbol, Expect: types.ExpectPresent, Symbols: []string{"Declared"}},
+			{ID: "root/field", Kind: types.GoalKindSymbol, Expect: types.ExpectPresent, Symbols: []string{"Goal#Signature"}},
+		}}
+	rep := types.JobResult{Job: "unit", ChangedPaths: []string{"api/x.go"}}
+	base := Observed{Changed: []string{"api/x.go"}, ChangedKnown: true, ChangedFrom: "abc1234", RegionsKnown: true,
+		Regions: []types.RegionChange{
+			{File: types.FileChange{Path: "api/x.go"}, Side: types.RegionNew, Lines: [2]int{4, 9}},
+			{File: types.FileChange{Path: "api/x.go"}, Side: types.RegionOld, Lines: [2]int{2, 3}},
+		}}
+	delta := base
+	delta.AddedExports = []string{"Zeta", "Goal#Signature", "Declared", "Alpha"}
+	delta.LeftUnreferenced = []string{"old (api/y.go:3)", "helper (api/x.go:9)"}
+	delta.SymbolDeltaKnown = true
+
+	without := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, base)
+	with := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, delta)
+
+	assert.Equal(t, []int{6, 2}, []int{with.LinesAdded, with.LinesDeleted})
+	assert.Equal(t, []string{"Alpha", "Zeta"}, with.UndeclaredExports)
+	assert.Equal(t, []string{"helper (api/x.go:9)", "old (api/y.go:3)"}, with.LeftUnreferenced)
+	assert.True(t, with.SymbolDeltaKnown)
+	with.UndeclaredExports, with.LeftUnreferenced, with.SymbolDeltaKnown = nil, nil, false
+	assert.Equal(t, without, with, "the delta changes no verdict or violation")
 }
 
 // overlapFixture is two checkouts of one repository, job a taken in root and job b in
