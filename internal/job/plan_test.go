@@ -789,3 +789,36 @@ func TestApplyCreatesANewJob(t *testing.T) {
 		WriteProof: got[0].Next.WriteProof, // what the fork could prove is the plan's, not this record's
 	}, got[0].Next), got[0].Next)
 }
+
+func TestApplyGradesEveryGoalCheckItAdds(t *testing.T) {
+	t.Parallel()
+
+	s, rec := humanOnlyGrader(t)
+	lint := types.LeaseCheck{Target: "lint", Project: "."}
+	bench := types.LeaseCheck{Target: "bench", Project: "."}
+	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.WritePaths, u.Check = []string{"pkg/b.go"}, &lint }, config.Jobs{}, nil)
+	require.NoError(t, err)
+	graded := len(rec.graded)
+	before := storeBytes(t, s)
+
+	paid := types.Declaration{ID: "w", WritePaths: []string{"pkg/b.go"}, Check: &lint, Goals: []types.Goal{
+		{ID: "paid", Kind: types.GoalKindCheck, Expect: types.ExpectPassed, Check: bench},
+	}}
+	for _, dryRun := range []bool{true, false} {
+		_, err = Apply(t.Context(), s, []types.Declaration{paid}, config.Jobs{}, nil, nil, dryRun)
+		require.ErrorContains(t, err, "w's goal paid's check `magus run bench .` is a target a person runs", "dry run %v", dryRun)
+		assert.Equal(t, before, storeBytes(t, s), "a refused apply writes nothing, dry run %v", dryRun)
+	}
+
+	_, err = ForkMerge(t.Context(), s, "w", func(u *types.Job) {
+		u.Goals = append(u.Goals, types.Goal{ID: "paid", Kind: types.GoalKindCheck, Expect: types.ExpectPassed, Check: bench})
+	}, config.Jobs{}, nil)
+	require.ErrorContains(t, err, "w's goal paid's check", "a merge that adds a goal check is graded too")
+
+	rec.graded = rec.graded[:graded]
+	again := paid
+	again.Goals = []types.Goal{{ID: "again", Kind: types.GoalKindCheck, Expect: types.ExpectPassed, Check: lint}}
+	_, err = Apply(t.Context(), s, []types.Declaration{again}, config.Jobs{}, nil, nil, false)
+	require.NoError(t, err)
+	assert.Len(t, rec.graded, graded, "a goal naming a check the row already holds is not graded again")
+}

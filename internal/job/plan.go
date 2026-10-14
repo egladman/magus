@@ -129,10 +129,7 @@ func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string,
 				return "", err
 			}
 		}
-		if checkChanged {
-			return "", RefuseDeniedCheck(ctx, store, merged)
-		}
-		return "", nil
+		return "", RefuseDeniedCheck(ctx, store, addedChecks(prev, merged, checkChanged))
 	}
 	row := types.Job{ID: id}
 	merge(&row)
@@ -167,6 +164,23 @@ func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string,
 		return "", err
 	}
 	return store.WriteProof(rows, row), nil
+}
+
+// addedChecks is merged cut to the checks an update adds to prev: its check when it
+// changed, and every goal check prev carried under no goal. A check the row already held
+// was graded when it entered, so an unrelated update never re-grades it.
+func addedChecks(prev, merged types.Job, checkChanged bool) types.Job {
+	added := merged
+	if !checkChanged {
+		added.Check = nil
+	}
+	held := prev.EffectiveGoals()
+	added.Goals = slices.DeleteFunc(slices.Clone(merged.Goals), func(goal types.Goal) bool {
+		return goal.Kind != types.GoalKindCheck || slices.ContainsFunc(held, func(g types.Goal) bool {
+			return g.Kind == types.GoalKindCheck && types.SameLeaseCheck(&g.Check, &goal.Check)
+		})
+	})
+	return added
 }
 
 // Applied is one record `magus job apply` wrote, or would write: the row before (zero when
