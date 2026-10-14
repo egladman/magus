@@ -3,7 +3,6 @@ package guard
 import (
 	"context"
 	"fmt"
-	"maps"
 	"os"
 	"path"
 	"slices"
@@ -121,33 +120,19 @@ const phaseHumanOnlyRecord = "human_only_record"
 // current, and opens the workspace otherwise. A workspace that cannot be read reaches
 // none.
 func humanOnlyReach(ctx context.Context, deps Dependencies, root string, runs []targetRun) []humanOnlyPair {
-	if ix, ok := deps.humanOnlyRecord(ctx, root); ok {
-		return reachHumanOnly(recordedHumanOnly{ix}, runs)
+	ix, ok := deps.humanOnlyRecord(ctx, root)
+	if !ok {
+		ws, err := deps.inspect(ctx, root)
+		if err != nil || ws == nil {
+			return nil
+		}
+		ix = types.IndexHumanOnly(ws)
 	}
-	ws, err := deps.inspect(ctx, root)
-	if err != nil || ws == nil {
-		return nil
-	}
-	return reachHumanOnly(inspectedHumanOnly{ws}, runs)
+	return reachHumanOnly(indexedHumanOnly{ix}, runs)
 }
 
-// humanOnlyDeclarations is where humanOnlyReach learns what a workspace declares
-// human_only: the workspace itself, opened, or the record the knowledge store keeps of it.
-// Both answer every question alike, so the verdict cannot depend on which one answered.
-type humanOnlyDeclarations interface {
-	// declared is every human_only target in the workspace, in project path order, then
-	// target name order.
-	declared() []humanOnlyPair
-	// projects is the paths of the projects r runs in, as runProjects settles them.
-	projects(r targetRun) []string
-	// reached is the human_only targets a run of target in project reaches, sorted by
-	// project, then target: the target itself when it is one, else every one its chain
-	// composes before another human_only target.
-	reached(project, target string) []humanOnlyPair
-}
-
-// reachHumanOnly is humanOnlyReach over decls.
-func reachHumanOnly(decls humanOnlyDeclarations, runs []targetRun) []humanOnlyPair {
+// reachHumanOnly is humanOnlyReach over decls, what the workspace declares.
+func reachHumanOnly(decls indexedHumanOnly, runs []targetRun) []humanOnlyPair {
 	var out []humanOnlyPair
 	index := map[string]int{}
 	unreadSeen := false
@@ -182,52 +167,12 @@ func compareHumanOnlyPairs(a, b humanOnlyPair) int {
 	return types.TargetRef{Project: a.project, Target: a.target}.Compare(types.TargetRef{Project: b.project, Target: b.target})
 }
 
-// inspectedHumanOnly answers from the opened workspace.
-type inspectedHumanOnly struct{ ws types.WorkspaceReader }
+// indexedHumanOnly answers what a workspace declares human_only from its index: the record
+// the knowledge store keeps of it, or the one types.IndexHumanOnly builds from it opened.
+// Both are the same index, so the verdict cannot depend on which one answered.
+type indexedHumanOnly struct{ ix types.HumanOnlyIndex }
 
-func (d inspectedHumanOnly) declared() []humanOnlyPair {
-	var out []humanOnlyPair
-	for _, p := range d.ws.All() {
-		for _, name := range slices.Sorted(maps.Keys(p.TargetPolicies)) {
-			if pol := p.TargetPolicies[name]; pol.HumanOnly {
-				out = append(out, humanOnlyPair{project: p.Path, target: name, reason: pol.HumanOnlyReason, skipCache: pol.SkipCache})
-			}
-		}
-	}
-	slices.SortFunc(out, compareHumanOnlyPairs)
-	return out
-}
-
-func (d inspectedHumanOnly) projects(r targetRun) []string {
-	var out []string
-	for _, p := range runProjects(d.ws, r) {
-		out = append(out, p.Path)
-	}
-	return out
-}
-
-func (d inspectedHumanOnly) reached(project, target string) []humanOnlyPair {
-	var out []humanOnlyPair
-	_ = types.WalkChain(d.ws.Get(project), target, d.ws.Get, func(v types.ChainVisit) error {
-		pol := v.Project.TargetPolicies[v.Target]
-		if !pol.HumanOnly {
-			return nil
-		}
-		out = append(out, humanOnlyPair{
-			project: v.Project.Path, target: v.Target, reason: pol.HumanOnlyReason,
-			skipCache: pol.SkipCache, composed: v.Depth > 0,
-		})
-		return types.ErrSkipChain
-	})
-	slices.SortFunc(out, compareHumanOnlyPairs)
-	return out
-}
-
-// recordedHumanOnly answers from the knowledge store's record, whose ReachedBy lists hold
-// the walk inspectedHumanOnly.reached makes.
-type recordedHumanOnly struct{ ix types.HumanOnlyIndex }
-
-func (d recordedHumanOnly) declared() []humanOnlyPair {
+func (d indexedHumanOnly) declared() []humanOnlyPair {
 	out := make([]humanOnlyPair, 0, len(d.ix.Targets))
 	for _, t := range d.ix.Targets {
 		out = append(out, recordedPair(t, false))
@@ -236,7 +181,7 @@ func (d recordedHumanOnly) declared() []humanOnlyPair {
 	return out
 }
 
-func (d recordedHumanOnly) projects(r targetRun) []string {
+func (d indexedHumanOnly) projects(r targetRun) []string {
 	if r.verb != "run" || len(r.projects) == 0 {
 		return d.ix.Projects
 	}
@@ -251,7 +196,7 @@ func (d recordedHumanOnly) projects(r targetRun) []string {
 	return out
 }
 
-func (d recordedHumanOnly) reached(project, target string) []humanOnlyPair {
+func (d indexedHumanOnly) reached(project, target string) []humanOnlyPair {
 	run := types.TargetRef{Project: project, Target: target}
 	var out []humanOnlyPair
 	for _, t := range d.ix.Targets {
@@ -268,24 +213,6 @@ func (d recordedHumanOnly) reached(project, target string) []humanOnlyPair {
 
 func recordedPair(t types.HumanOnlyTarget, composed bool) humanOnlyPair {
 	return humanOnlyPair{project: t.Project, target: t.Target, reason: t.Reason, skipCache: t.SkipCache, composed: composed}
-}
-
-// runProjects is the projects r runs in. A run naming none, `affected`, and a reference
-// that is not a project path all count as every project: the engine settles those from
-// the working directory, the diff or a glob, and missing a project here misses a run.
-func runProjects(ws types.WorkspaceReader, r targetRun) []*types.Project {
-	if r.verb != "run" || len(r.projects) == 0 {
-		return ws.All()
-	}
-	var out []*types.Project
-	for _, ref := range r.projects {
-		p := ws.Get(path.Clean(ref))
-		if p == nil {
-			return ws.All()
-		}
-		out = append(out, p)
-	}
-	return out
 }
 
 // humanOnlyHistory states what the run history says of p and whether a run of it replays,

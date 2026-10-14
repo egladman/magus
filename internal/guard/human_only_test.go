@@ -65,6 +65,15 @@ func benchRecord() types.HumanOnlyIndex {
 	}
 }
 
+// TestBenchRecordIsTheOpenedIndex pins that the record the tests hand the rule is what
+// opening the workspace indexes, so a record hit and an open give one verdict because they
+// read one index.
+func TestBenchRecordIsTheOpenedIndex(t *testing.T) {
+	ws, err := benchWorkspace(t).Inspect(context.Background(), ".")
+	require.NoError(t, err)
+	assert.Equal(t, benchRecord(), types.IndexHumanOnly(ws))
+}
+
 // benchRecorded is benchWorkspace with a current record of it, which the rule reads in
 // place of opening the workspace.
 func benchRecorded(t *testing.T) Dependencies {
