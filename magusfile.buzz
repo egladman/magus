@@ -804,14 +804,15 @@ export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["generate", "./std/..."]);
 }
 
-// Regenerates the magusfile API lock through TestMagusAPILocked.
+// Regenerates the magusfile API lock through TestMagusAPILocked and the std method-name
+// lock through TestStdAPILocked.
 // -count=1 is load-bearing: a cached pass writes no file.
 export fun magusfile_api_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(bindings_generate);
-    ctx.writesFiles("internal/interp/bindings/testdata/magus-api.lock");
-    go["go-test"](ctx.withEnv({"UPDATE_MAGUS_API_LOCK": "1", "GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-count=1", "-run", "TestMagusAPILocked",
-            "./internal/interp/bindings/"]});
+    ctx.writesFiles("internal/interp/bindings/testdata/magus-api.lock", "std/gen/std-api.lock");
+    go["go-test"](ctx.withEnv({"UPDATE_MAGUS_API_LOCK": "1", "UPDATE_STD_API_LOCK": "1", "GOEXPERIMENT": "jsonv2"}),
+        {"args": ["-count=1", "-run", "TestMagusAPILocked|TestStdAPILocked",
+            "./internal/interp/bindings/", "./std/"]});
 }
 
 // Regenerates the host-module snapshot the playground's completion and hover read

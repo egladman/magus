@@ -102,23 +102,20 @@ variable with its full signature, so a changed line is a changed signature for e
 that imports magus. Regenerate it with `magus run go-api-generate .`. The package list lives in
 `publicGoPackages` in `cmd/magus-utils/public_api.go`; add a package there when it becomes public.
 
-**A fifth public interface has no gate: `std/` host-module method names.** A whole-tree
-review in August 2026 established this, and it is worth knowing before you touch a
-descriptor. `Method.Name` in a `std/` module is run through `std.CamelCase` and
-becomes the identifier every magusfile calls, so renaming it breaks them, and
-nothing catches it:
+**A fifth public interface is `std/` host-module method names.** `Method.Name` in a
+`std/` module is run through `std.CamelCase` and becomes the identifier every
+magusfile calls, so renaming it breaks them. `std/gen/std-api.lock` pins every
+member, one `<module>.<member>` line each, and `TestStdAPILocked` fails naming each
+added and each removed one. Regenerate it with `magus run magusfile-api-generate .`
+after an intentional change; the lock is written only by that target. The `magus.*`
+names have their own lock, `internal/interp/bindings/testdata/magus-api.lock`.
 
-- MGS1025's removed-API table covers only the `magus.*` namespace, so it cannot
-  soften a `fs.*` or `os.*` rename, and it is a friendlier error rather than a
-  working alias either way.
-- `internal/interp/bindings/testdata/magus-api.lock` pins only `magus.*` member
-  names. No lock file lists std method names at all.
-
-So a std rename is a silent break that review has to catch by eye. If you make one
-deliberately, it belongs under **Breaking** in the changelog with the old and new
-spellings, and every in-repo caller must move with it: `magusfile.buzz`,
-`spells/`, `docs/**/*.buzz`, `hack/`, testdata scripts, and the `.txtar` fixtures
-under `cmd/magus/testdata/`.
+The lock catches a rename but does not soften it: MGS1025's removed-API table covers
+only `magus.*`, and it is a friendlier error rather than a working alias either way.
+A deliberate rename belongs under **Breaking** in the changelog with the old and new
+spellings, and every in-repo caller must move with it: `magusfile.buzz`, `spells/`,
+`docs/**/*.buzz`, `hack/`, testdata scripts, and the `.txtar` fixtures under
+`cmd/magus/testdata/`.
 
 The same descriptor's `Doc:` string is not documentation either: it is codegen
 input, reaching the generated `.d.ts`, `docs/reference/buzz/*.md`, and editor
