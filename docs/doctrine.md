@@ -210,6 +210,33 @@ test for any new point. This prevents two quiet failures that look
 opposite: the agent that decides because nobody was asked, and the person who
 approves because everybody was.
 
+### Built for the expensive era
+
+Model time is subsidized today, the way early ride-hailing was: prices are
+set to win adoption, not to cover cost. The pattern that follows is known, not
+predicted. Once adoption is won, prices rise and each token buys less;
+enterprise contracts already show it. magus is built for that era, not this
+one.
+
+The mechanism is to move what a model would otherwise have to work out (the
+graph, declared outputs, what a change can break, which conventions hold) into
+deterministic, checked answers. A smaller model can then do work that today
+takes a frontier one. A feature that only works with a frontier model is not
+finished. The measure is the model-tier lens: the economy tier's pass rate
+should rise over time. This prevents a tool that looks capable only while
+someone else pays for the reasoning.
+
+### A copy can be the right answer
+
+Merge duplicates only when they share semantics, policy knobs, and bugs: a bug
+in one is a bug in the other. Otherwise keep them apart, with one line saying
+why. Share small things (a type, a classification) before sharing loops.
+
+Code shared only because it looks alike couples parts that change for
+different reasons. That coupling grows until one change breaks something far
+away. This prevents the abstraction that is cheap to write and costly to
+change, and it is why a deliberate copy carries its reason beside it.
+
 ### Friction that carries meaning
 
 A tool made perfectly smooth stops telling you what it did. Every act collapses

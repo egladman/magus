@@ -93,6 +93,9 @@ saying it, delete it here.
   "kind=docsection id=~decisions/ <terms>"` and the refusal rows in
   [docs/doctrine.md](docs/doctrine.md#a-record-of-refusals). Reopen one only with
   new evidence.
+- Merge duplicates only when they share semantics, knobs and bugs; otherwise keep
+  the copy with one line saying why
+  ([doctrine](docs/doctrine.md#a-copy-can-be-the-right-answer)).
 - `TODO`, `FIXME` and `BUG` comments stay; never add `godox` or a linter that
   reports them.
 - Before fixing behavior that looks wrong, find the test that pins it.
