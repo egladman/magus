@@ -891,7 +891,8 @@ var ruleDocRootContextBudget = denyDoc(types.RuleDoc{ //nolint:unused // read th
 	Catches: "a session's main thread whose context has grown past its level's size",
 	Why: "Every call of a session re-sends its whole context, mostly as cache reads, so its cost grows with the square of its length, and a main thread that does its own reading pays for each result on every call after it. " +
 		"The size is the last usage the main transcript recorded, read after each call. At light it advises once at half the model's window, and says nothing for a model the table does not know; at standard it advises once at a fixed size, lower when the account bills per token than on a subscription quota; at strict it advises lower still and refuses the delegable commands (a recursive search, a whole-file read of source, a full diff, a target run, a web fetch) past a second size. " +
-		"A tokens parameter replaces the level's sizes with one, at the rule's decision. It judges only the unleased main thread, and a thread magus inferred rather than one its host named is only advised.",
+		"A tokens parameter replaces the level's sizes with one, at the rule's decision. It judges only the unleased main thread, and a thread magus inferred rather than one its host named is only advised. " +
+		"A call whose output is a ref or one line is never judged by this rule, so a main thread past its budget can still build ./magus and file its work: the bootstrap build command, `magus run` or `magus affected` with `-s` or `--silent`, `magus run go-build` or `go::go-build`, `magus job fork`, `exit`, `apply` and `wait`, `magus query output --identity`, any magus command asked for `-o name` or `-o template=`, `git commit`, `cherry-pick` and `branch`, `git status -s`, and `git log --oneline` with a count (`-n`, `--max-count` or `-N`). A line that changes directory first is judged by the rest of it.",
 })
 
 var ruleDocRootHeavyCommand = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
@@ -899,7 +900,7 @@ var ruleDocRootHeavyCommand = denyDoc(types.RuleDoc{ //nolint:unused // read thr
 	Catches: "a main thread running delegable commands one after another without spawning",
 	Why: "A recursive search, a whole-file read of source, a full diff, a target run or a web fetch is work a subagent does from a small context, returning only what matters. " +
 		"Each delegable call since the main thread last spawned or continued a subagent counts; at standard it advises once at the eighth, and at strict it advises at the fifth and refuses from the eighth. " +
-		"Spawning, the job verbs, reading a run's output by its ref, the final gate, loading a skill, reading Markdown and editing never count. A calls parameter replaces the level's count.",
+		"Spawning, the final gate, loading a skill, reading Markdown and editing never count, and neither does a command whose output is a ref or one line: the bootstrap build command, `magus run` or `magus affected` with `-s` or `--silent`, `magus run go-build` or `go::go-build`, `magus job fork`, `exit`, `apply` and `wait`, `magus query output --identity`, any magus command asked for `-o name` or `-o template=`, `git commit`, `cherry-pick` and `branch`, `git status -s`, and `git log --oneline` with a count (`-n`, `--max-count` or `-N`). Reading a run's whole output with `magus query output` does count. A calls parameter replaces the level's count.",
 })
 
 var ruleDocRootResultCap = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
