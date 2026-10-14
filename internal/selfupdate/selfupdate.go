@@ -510,7 +510,8 @@ func ExtractBinary(tarGz []byte) (io.Reader, error) {
 	return nil, fmt.Errorf("archive does not contain %q", binaryName)
 }
 
-// FetchLimited fetches url with retry and enforces a byte limit.
+// FetchLimited fetches url with retry and enforces a byte limit. A refused request (4xx
+// other than 408 and 429) and an over-limit body are not retried.
 func FetchLimited(ctx context.Context, url string, maxBytes int64, opts Options) ([]byte, error) {
 	var data []byte
 	err := retry.Do(ctx, func() error {
@@ -524,19 +525,33 @@ func FetchLimited(ctx context.Context, url string, maxBytes int64, opts Options)
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("HTTP %s fetching %s", resp.Status, url)
+			return statusError(resp, url)
 		}
 		b, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
 		if err != nil {
 			return fmt.Errorf("read response: %w", err)
 		}
 		if int64(len(b)) > maxBytes {
-			return fmt.Errorf("response from %s exceeded %d bytes", url, maxBytes)
+			return types.NonRetryable(
+				fmt.Errorf("response from %s exceeded %d bytes", url, maxBytes),
+				types.RetryAfterPerson, "a larger body will not shrink on a second fetch")
 		}
 		data = b
 		return nil
 	}, retry.WithDelay(2*time.Second), retry.WithMaxDelay(30*time.Second))
 	return data, err
+}
+
+// statusError is the error for a non-200 response. A 4xx other than 408 and 429 says the
+// request itself is wrong (a missing release is a 404), so fetching it again cannot help;
+// a 5xx, 408 or 429 may clear and stays retryable.
+func statusError(resp *http.Response, url string) error {
+	err := fmt.Errorf("HTTP %s fetching %s", resp.Status, url)
+	code := resp.StatusCode
+	if code >= 400 && code < 500 && code != http.StatusRequestTimeout && code != http.StatusTooManyRequests {
+		return types.NonRetryable(err, types.RetryAfterPerson, "the server refused the request itself")
+	}
+	return err
 }
 
 // compareParsed is Compare's logic plus the ok bit Compare itself drops: callers
