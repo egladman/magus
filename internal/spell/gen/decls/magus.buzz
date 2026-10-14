@@ -1002,7 +1002,7 @@ export object Job {
     waiterEvidence: JobIntegration? = null,
 }
 
-export object AgentContext {
+export object ContextWindow {
     tokens: int = 0,
     window: int = 0,
     model: str = "",
@@ -1035,8 +1035,8 @@ export object SpawnRequest {
     lease: Job? = null,
     modelTier: JobModelTier? = null,
     thread: str = "",
-    threadKnown: bool = false,
-    context: AgentContext? = null,
+    threadFrom: str = "",
+    window: ContextWindow? = null,
     target: SpawnTarget? = null,
 }
 
@@ -1071,8 +1071,8 @@ export object CommandRequest {
     role: str = "",
     lease: Job? = null,
     thread: str = "",
-    threadKnown: bool = false,
-    context: AgentContext? = null,
+    threadFrom: str = "",
+    window: ContextWindow? = null,
     checkout: CheckoutState? = null,
     dir: str = "",
     workspace: str = "",
@@ -1086,8 +1086,8 @@ export object WriteRequest {
     role: str = "",
     lease: Job? = null,
     thread: str = "",
-    threadKnown: bool = false,
-    context: AgentContext? = null,
+    threadFrom: str = "",
+    window: ContextWindow? = null,
     path: str = "",
     workspace: str = "",
     content: str = "",

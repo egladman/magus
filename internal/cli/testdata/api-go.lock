@@ -29,6 +29,7 @@ github.com/egladman/magus.ComposeGraph func(ws github.com/egladman/magus/types.W
 github.com/egladman/magus.ComposeOption type func(*compose)
 github.com/egladman/magus.DefaultConcurrency func() int
 github.com/egladman/magus.Drift func(policy github.com/egladman/magus/types.DriftPolicy, reason string) TargetOption
+github.com/egladman/magus.EffectiveGuardProfile func(ctx context.Context, rules *GuardRules, root string) github.com/egladman/magus/types.GuardProfile
 github.com/egladman/magus.Event type struct
 github.com/egladman/magus.Event.Command field *Command "json:\"command,omitempty\""
 github.com/egladman/magus.Event.DiagnosticCode field string "json:\"diagnostic_code,omitempty\""
@@ -62,7 +63,6 @@ github.com/egladman/magus.GuardPolicy.ShellRules field int
 github.com/egladman/magus.GuardPolicy.Sources field []github.com/egladman/magus/internal/interp.SourceFile
 github.com/egladman/magus.GuardPolicy.SpawnRule field bool
 github.com/egladman/magus.GuardPolicy.WriteRule field bool
-github.com/egladman/magus.GuardProfile func(ctx context.Context, rules *GuardRules, root string) github.com/egladman/magus/types.GuardProfile
 github.com/egladman/magus.GuardRules type struct
 github.com/egladman/magus.GuardRules.ApprovedBuiltins method(ptr) func(ctx context.Context) (map[string]github.com/egladman/magus/internal/guard/builtin.Setting, error)
 github.com/egladman/magus.GuardRules.ApprovedCommandRule method(ptr) func(ctx context.Context) (github.com/egladman/magus/internal/workspace.CommandRule, error)
@@ -475,11 +475,15 @@ github.com/egladman/magus/types.AgentBilling.Valid method func() bool
 github.com/egladman/magus/types.AgentBilling.Values method func() []string
 github.com/egladman/magus/types.AgentBillingMetered const AgentBilling = "metered"
 github.com/egladman/magus/types.AgentBillingQuota const AgentBilling = "quota"
-github.com/egladman/magus/types.AgentContext type struct
-github.com/egladman/magus/types.AgentContext.Model field string
-github.com/egladman/magus/types.AgentContext.Source field string
-github.com/egladman/magus/types.AgentContext.Tokens field int64
-github.com/egladman/magus/types.AgentContext.Window field int64
+github.com/egladman/magus/types.AgentFacts type struct
+github.com/egladman/magus/types.AgentFacts.Billing field AgentBilling "json:\"billing,omitempty\""
+github.com/egladman/magus/types.AgentFacts.ContextModel field string "json:\"context_model,omitempty\""
+github.com/egladman/magus/types.AgentFacts.ContextTokens field int64 "json:\"context_tokens,omitzero\""
+github.com/egladman/magus/types.AgentFacts.DelegableClass field DelegableClass "json:\"delegable_class,omitempty\""
+github.com/egladman/magus/types.AgentFacts.ResultChars field *int "json:\"result_chars,omitempty\""
+github.com/egladman/magus/types.AgentFacts.Shadow field map[GuardProfile]GuardDecision "json:\"shadow,omitempty\""
+github.com/egladman/magus/types.AgentFacts.Thread field AgentThread "json:\"thread,omitempty\""
+github.com/egladman/magus/types.AgentFacts.ThreadFrom field ThreadSource "json:\"thread_from,omitempty\""
 github.com/egladman/magus/types.AgentRole type string
 github.com/egladman/magus/types.AgentRole.MarshalText method func() ([]byte, error)
 github.com/egladman/magus/types.AgentRole.String method func() string
@@ -490,7 +494,6 @@ github.com/egladman/magus/types.AgentRoleRoot const AgentRole = "root"
 github.com/egladman/magus/types.AgentRoleWorker const AgentRole = "worker"
 github.com/egladman/magus/types.AgentThread type string
 github.com/egladman/magus/types.AgentThread.MarshalText method func() ([]byte, error)
-github.com/egladman/magus/types.AgentThread.String method func() string
 github.com/egladman/magus/types.AgentThread.UnmarshalText method(ptr) func(text []byte) error
 github.com/egladman/magus/types.AgentThread.Valid method func() bool
 github.com/egladman/magus/types.AgentThread.Values method func() []string
@@ -771,7 +774,6 @@ github.com/egladman/magus/types.CommandRequest.Agent field string
 github.com/egladman/magus/types.CommandRequest.Checkout field *CheckoutState
 github.com/egladman/magus/types.CommandRequest.Command field string
 github.com/egladman/magus/types.CommandRequest.Commands field []CommandInvocation
-github.com/egladman/magus/types.CommandRequest.Context field *AgentContext
 github.com/egladman/magus/types.CommandRequest.Description field string
 github.com/egladman/magus/types.CommandRequest.Dir field string
 github.com/egladman/magus/types.CommandRequest.Host field string
@@ -780,7 +782,8 @@ github.com/egladman/magus/types.CommandRequest.Parent field string
 github.com/egladman/magus/types.CommandRequest.Role field AgentRole
 github.com/egladman/magus/types.CommandRequest.Session field string
 github.com/egladman/magus/types.CommandRequest.Thread field AgentThread
-github.com/egladman/magus/types.CommandRequest.ThreadKnown field bool
+github.com/egladman/magus/types.CommandRequest.ThreadFrom field ThreadSource
+github.com/egladman/magus/types.CommandRequest.Window field *ContextWindow
 github.com/egladman/magus/types.CommandRequest.Workspace field string
 github.com/egladman/magus/types.CommentAnchor type struct
 github.com/egladman/magus/types.CommentAnchor.After field []string "json:\"after,omitempty\"  yaml:\"after,omitempty\""
@@ -865,7 +868,14 @@ github.com/egladman/magus/types.ConsoleStatus.Note field string "json:\"note,omi
 github.com/egladman/magus/types.ConsoleStatus.Reachable field bool "json:\"reachable\" yaml:\"reachable\""
 github.com/egladman/magus/types.ConsoleStatus.State field string "json:\"state\" yaml:\"state\""
 github.com/egladman/magus/types.ConsoleStatus.URL field string "json:\"url,omitempty\" yaml:\"url,omitempty\""
+github.com/egladman/magus/types.ContextFromTranscript const ContextSource = "transcript"
 github.com/egladman/magus/types.ContextParamAnnotation const untyped string = "magus\\Context"
+github.com/egladman/magus/types.ContextSource type string
+github.com/egladman/magus/types.ContextWindow type struct
+github.com/egladman/magus/types.ContextWindow.Model field string
+github.com/egladman/magus/types.ContextWindow.Source field ContextSource
+github.com/egladman/magus/types.ContextWindow.Tokens field int64
+github.com/egladman/magus/types.ContextWindow.Window field int64
 github.com/egladman/magus/types.ContextWithGraphObserver func(ctx context.Context, o Observer) context.Context
 github.com/egladman/magus/types.CountLines func(b []byte) int
 github.com/egladman/magus/types.Credential type struct
@@ -928,6 +938,12 @@ github.com/egladman/magus/types.DefinitionChanged const KnowledgeDefinitionStatu
 github.com/egladman/magus/types.DefinitionUnreadable const KnowledgeDefinitionStatus = "unreadable"
 github.com/egladman/magus/types.DefinitionUnverified const KnowledgeDefinitionStatus = "unverified"
 github.com/egladman/magus/types.DefinitionVerified const KnowledgeDefinitionStatus = "verified"
+github.com/egladman/magus/types.DelegableClass type string
+github.com/egladman/magus/types.DelegableDiff const DelegableClass = "diff"
+github.com/egladman/magus/types.DelegableFetch const DelegableClass = "fetch"
+github.com/egladman/magus/types.DelegableRead const DelegableClass = "read"
+github.com/egladman/magus/types.DelegableRun const DelegableClass = "run"
+github.com/egladman/magus/types.DelegableSearch const DelegableClass = "search"
 github.com/egladman/magus/types.DepGraphRepository type interface
 github.com/egladman/magus/types.DepGraphRepository.BlastRadius imethod func() map[string]int
 github.com/egladman/magus/types.DepGraphRepository.NCCD imethod func() float64
@@ -1696,9 +1712,10 @@ github.com/egladman/magus/types.GuardDecision.Valid method func() bool
 github.com/egladman/magus/types.GuardDecision.Values method func() []string
 github.com/egladman/magus/types.GuardDeny const GuardDecision = "deny"
 github.com/egladman/magus/types.GuardProfile type string
-github.com/egladman/magus/types.GuardProfile.Level method func() GuardProfile
+github.com/egladman/magus/types.GuardProfile.Effective method func() GuardProfile
 github.com/egladman/magus/types.GuardProfile.MarshalText method func() ([]byte, error)
 github.com/egladman/magus/types.GuardProfile.Rank method func() int
+github.com/egladman/magus/types.GuardProfile.Stricter method func(o GuardProfile) GuardProfile
 github.com/egladman/magus/types.GuardProfile.String method func() string
 github.com/egladman/magus/types.GuardProfile.UnmarshalText method(ptr) func(text []byte) error
 github.com/egladman/magus/types.GuardProfile.Valid method func() bool
@@ -3445,7 +3462,6 @@ github.com/egladman/magus/types.SpawnRequest type struct
 github.com/egladman/magus/types.SpawnRequest.Agent field string
 github.com/egladman/magus/types.SpawnRequest.AgentType field string
 github.com/egladman/magus/types.SpawnRequest.Background field bool
-github.com/egladman/magus/types.SpawnRequest.Context field *AgentContext
 github.com/egladman/magus/types.SpawnRequest.Description field string
 github.com/egladman/magus/types.SpawnRequest.Host field string
 github.com/egladman/magus/types.SpawnRequest.Isolated field bool
@@ -3460,7 +3476,8 @@ github.com/egladman/magus/types.SpawnRequest.Role field AgentRole
 github.com/egladman/magus/types.SpawnRequest.Session field string
 github.com/egladman/magus/types.SpawnRequest.Target field *SpawnTarget
 github.com/egladman/magus/types.SpawnRequest.Thread field AgentThread
-github.com/egladman/magus/types.SpawnRequest.ThreadKnown field bool
+github.com/egladman/magus/types.SpawnRequest.ThreadFrom field ThreadSource
+github.com/egladman/magus/types.SpawnRequest.Window field *ContextWindow
 github.com/egladman/magus/types.SpawnTarget type struct
 github.com/egladman/magus/types.SpawnTarget.Agent field string
 github.com/egladman/magus/types.SpawnTarget.ContextTokens field *int64
@@ -3718,7 +3735,6 @@ github.com/egladman/magus/types.StreamTargetOutput const StreamEventType = "targ
 github.com/egladman/magus/types.StreamTargetResult const StreamEventType = "target.result"
 github.com/egladman/magus/types.StreamingUnsupported const DiagnosticCode = "MGS9028"
 github.com/egladman/magus/types.StricterGuardVerdict func(a GuardVerdict, b GuardVerdict) GuardVerdict
-github.com/egladman/magus/types.StricterProfile func(profiles ...GuardProfile) GuardProfile
 github.com/egladman/magus/types.SuggestionAccepted const SuggestionStatus = "accepted"
 github.com/egladman/magus/types.SuggestionDeclined const SuggestionStatus = "declined"
 github.com/egladman/magus/types.SuggestionPending const SuggestionStatus = ""
@@ -3903,6 +3919,13 @@ github.com/egladman/magus/types.TermStyle.String method func() string
 github.com/egladman/magus/types.TermStyle.Valid method func() bool
 github.com/egladman/magus/types.TermStyle.Values method func() []string
 github.com/egladman/magus/types.TermYellow const TermStyle = "33"
+github.com/egladman/magus/types.ThreadInferred const ThreadSource = "inferred"
+github.com/egladman/magus/types.ThreadReported const ThreadSource = "reported"
+github.com/egladman/magus/types.ThreadSource type string
+github.com/egladman/magus/types.ThreadSource.MarshalText method func() ([]byte, error)
+github.com/egladman/magus/types.ThreadSource.UnmarshalText method(ptr) func(text []byte) error
+github.com/egladman/magus/types.ThreadSource.Valid method func() bool
+github.com/egladman/magus/types.ThreadSource.Values method func() []string
 github.com/egladman/magus/types.TimeDateOnly const TimeLayout = "2006-01-02"
 github.com/egladman/magus/types.TimeDateTime const TimeLayout = "2006-01-02 15:04:05"
 github.com/egladman/magus/types.TimeKitchen const TimeLayout = "3:04PM"
@@ -4243,7 +4266,6 @@ github.com/egladman/magus/types.WriteProofOverlapping const JobWriteProof = "ove
 github.com/egladman/magus/types.WriteRequest type struct
 github.com/egladman/magus/types.WriteRequest.Agent field string
 github.com/egladman/magus/types.WriteRequest.Content field string
-github.com/egladman/magus/types.WriteRequest.Context field *AgentContext
 github.com/egladman/magus/types.WriteRequest.Host field string
 github.com/egladman/magus/types.WriteRequest.Lease field *Job
 github.com/egladman/magus/types.WriteRequest.NewText field string
@@ -4253,7 +4275,8 @@ github.com/egladman/magus/types.WriteRequest.Path field string
 github.com/egladman/magus/types.WriteRequest.Role field AgentRole
 github.com/egladman/magus/types.WriteRequest.Session field string
 github.com/egladman/magus/types.WriteRequest.Thread field AgentThread
-github.com/egladman/magus/types.WriteRequest.ThreadKnown field bool
+github.com/egladman/magus/types.WriteRequest.ThreadFrom field ThreadSource
+github.com/egladman/magus/types.WriteRequest.Window field *ContextWindow
 github.com/egladman/magus/types.WriteRequest.Workspace field string
 github.com/egladman/magus/types.WriteWithoutRWCharm const DiagnosticCode = "MGS1035"
 github.com/egladman/magus/types.YAMLPositions type struct

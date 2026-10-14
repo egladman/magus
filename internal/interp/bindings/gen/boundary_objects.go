@@ -3365,12 +3365,12 @@ func ObjectJobStatus(v types.JobStatus) vm.Value {
 	return out
 }
 
-func ObjectAgentContext(v types.AgentContext) vm.Value {
+func ObjectContextWindow(v types.ContextWindow) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("tokens", vm.IntValue(int64(v.Tokens)))
 	out.MapSet("window", vm.IntValue(int64(v.Window)))
 	out.MapSet("model", vm.StrValue(v.Model))
-	out.MapSet("source", vm.StrValue(v.Source))
+	out.MapSet("source", vm.StrValue(string(v.Source)))
 	return out
 }
 
@@ -3423,12 +3423,12 @@ func ObjectSpawnRequest(v types.SpawnRequest, enums ffi.EnumCases) vm.Value {
 	}
 	out.MapSet("modelTier", optModelTier)
 	out.MapSet("thread", vm.StrValue(string(v.Thread)))
-	out.MapSet("threadKnown", vm.BoolValue(v.ThreadKnown))
-	optContext := vm.Null
-	if v.Context != nil {
-		optContext = ObjectAgentContext((*v.Context))
+	out.MapSet("threadFrom", vm.StrValue(string(v.ThreadFrom)))
+	optWindow := vm.Null
+	if v.Window != nil {
+		optWindow = ObjectContextWindow((*v.Window))
 	}
-	out.MapSet("context", optContext)
+	out.MapSet("window", optWindow)
 	optTarget := vm.Null
 	if v.Target != nil {
 		optTarget = ObjectSpawnTarget((*v.Target))
@@ -3499,12 +3499,12 @@ func ObjectCommandRequest(v types.CommandRequest, enums ffi.EnumCases) vm.Value 
 	}
 	out.MapSet("lease", optLease)
 	out.MapSet("thread", vm.StrValue(string(v.Thread)))
-	out.MapSet("threadKnown", vm.BoolValue(v.ThreadKnown))
-	optContext := vm.Null
-	if v.Context != nil {
-		optContext = ObjectAgentContext((*v.Context))
+	out.MapSet("threadFrom", vm.StrValue(string(v.ThreadFrom)))
+	optWindow := vm.Null
+	if v.Window != nil {
+		optWindow = ObjectContextWindow((*v.Window))
 	}
-	out.MapSet("context", optContext)
+	out.MapSet("window", optWindow)
 	optCheckout := vm.Null
 	if v.Checkout != nil {
 		optCheckout = ObjectCheckoutState((*v.Checkout))
@@ -3528,12 +3528,12 @@ func ObjectWriteRequest(v types.WriteRequest, enums ffi.EnumCases) vm.Value {
 	}
 	out.MapSet("lease", optLease)
 	out.MapSet("thread", vm.StrValue(string(v.Thread)))
-	out.MapSet("threadKnown", vm.BoolValue(v.ThreadKnown))
-	optContext := vm.Null
-	if v.Context != nil {
-		optContext = ObjectAgentContext((*v.Context))
+	out.MapSet("threadFrom", vm.StrValue(string(v.ThreadFrom)))
+	optWindow := vm.Null
+	if v.Window != nil {
+		optWindow = ObjectContextWindow((*v.Window))
 	}
-	out.MapSet("context", optContext)
+	out.MapSet("window", optWindow)
 	out.MapSet("path", vm.StrValue(v.Path))
 	out.MapSet("workspace", vm.StrValue(v.Workspace))
 	out.MapSet("content", vm.StrValue(v.Content))

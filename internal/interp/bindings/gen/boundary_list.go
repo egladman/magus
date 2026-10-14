@@ -14,7 +14,6 @@ import (
 var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Affected", Zero: types.AffectedResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectAffectedResult(v.(types.AffectedResult)) }},
 	{Name: "Affinity", Zero: types.AffinityOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectAffinityOutput(v.(types.AffinityOutput)) }},
-	{Name: "AgentContext", Zero: types.AgentContext{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectAgentContext(v.(types.AgentContext)) }},
 	{Name: "ArchiveEntry", Zero: types.ArchiveEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectArchiveEntry(v.(types.ArchiveEntry)) }},
 	{Name: "Artifact", Zero: types.TargetArtifact{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTargetArtifact(v.(types.TargetArtifact)) }},
 	{Name: "ArtifactVersion", Zero: types.ArtifactVersion{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectArtifactVersion(v.(types.ArtifactVersion)) }},
@@ -37,6 +36,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Commit", Zero: types.CommitRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCommitRecord(v.(types.CommitRecord)) }},
 	{Name: "CommitAuthor", Zero: types.CommitAuthor{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCommitAuthor(v.(types.CommitAuthor)) }},
 	{Name: "CompressResult", Zero: types.CompressResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCompressResult(v.(types.CompressResult)) }},
+	{Name: "ContextWindow", Zero: types.ContextWindow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectContextWindow(v.(types.ContextWindow)) }},
 	{Name: "Credential", Zero: types.Credential{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCredential(v.(types.Credential)) }},
 	{Name: "CrossTargetRef", Zero: types.CrossTargetRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCrossTargetRef(v.(types.CrossTargetRef)) }},
 	{Name: "Diagnostic", Zero: types.Diagnostic{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiagnostic(v.(types.Diagnostic)) }},

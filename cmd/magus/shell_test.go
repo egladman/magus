@@ -400,7 +400,7 @@ func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
 
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"schema_version":1,"tool":"shell.command","command":"git stash","thread":"unknown"}`, string(body))
+	assert.JSONEq(t, `{"schema_version":1,"tool":"shell.command","command":"git stash","thread":"unknown","thread_from":"inferred"}`, string(body))
 	body, err = trail.ReadBlob(dir, got.ResponseRef)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), `"schema_version":1`)
@@ -425,7 +425,7 @@ func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
 	assert.Equal(t, hookCommandEvent(ctx, got, types.Origin{EntryPoint: types.EntryPointHook}, "file.write", "guard: advise"), got)
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"schema_version":1,"path":"AGENTS.md","tool":"file.write","thread":"unknown"}`, string(body))
+	assert.JSONEq(t, `{"schema_version":1,"path":"AGENTS.md","tool":"file.write","thread":"unknown","thread_from":"inferred"}`, string(body))
 
 	emptyDir := t.TempDir()
 	emptyCtx := guard.WithLocation(context.Background(), emptyDir, "/repo/magus", "")
@@ -480,7 +480,7 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 	body, err := trail.ReadBlob(dir, requestRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"schema_version":1,"host":"claude-code","session":"abc123","event":"PreToolUse","tool":"shell.command","command":"ls",`+
-		`"thread":"main","shadow":{"off":"allow","light":"allow","standard":"allow","strict":"allow"}}`, string(body))
+		`"thread":"main","thread_from":"inferred","shadow":{"off":"allow","light":"allow","standard":"allow","strict":"allow"}}`, string(body))
 	body, err = trail.ReadBlob(dir, responseRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"schema_version":1,"decision":"pass"}`, string(body))
@@ -508,7 +508,7 @@ func TestHookCmd_AttributionIsOptional(t *testing.T) {
 	// Omitted rather than recorded empty: the blob says nothing was known, not that the host is "".
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"schema_version":1,"tool":"shell.command","command":"ls","thread":"unknown"}`, string(body))
+	assert.JSONEq(t, `{"schema_version":1,"tool":"shell.command","command":"ls","thread":"unknown","thread_from":"inferred"}`, string(body))
 }
 
 // TestHookCmd_ObserveRecordsWithoutJudging pins what --observe is for. AGENTS.md is the exact
@@ -538,7 +538,7 @@ func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
 
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"schema_version":1,"tool":"file.read","path":"AGENTS.md","thread":"unknown"}`, string(body))
+	assert.JSONEq(t, `{"schema_version":1,"tool":"file.read","path":"AGENTS.md","thread":"unknown","thread_from":"inferred"}`, string(body))
 	body, err = trail.ReadBlob(dir, got.ResponseRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"schema_version":1,"decision":""}`, string(body))
@@ -585,7 +585,7 @@ func TestHookCmd_RecordsTranscriptPath(t *testing.T) {
 
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"schema_version":1,"session":"s1","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"shell.command","command":"ls","thread":"unknown"}`, string(body))
+	assert.JSONEq(t, `{"schema_version":1,"session":"s1","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"shell.command","command":"ls","thread":"unknown","thread_from":"inferred"}`, string(body))
 }
 
 // TestHookCmd_TranscriptFlagRecordsThePointer covers the FLAG path, which is the one the
@@ -614,7 +614,7 @@ func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
 
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"schema_version":1,"host":"claude-code","session":"s9","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"file.read","path":"internal/trail/trail.go","thread":"main"}`, string(body))
+	assert.JSONEq(t, `{"schema_version":1,"host":"claude-code","session":"s9","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"file.read","path":"internal/trail/trail.go","thread":"main","thread_from":"inferred"}`, string(body))
 }
 
 // TestHookCmd_ObserveWithNoInputRecordsNothing: a wrapper whose host event carried no path
@@ -685,7 +685,7 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"schema_version":1,"host":"claude-code","session":"abc123","event":"PreToolUse",`+
 		`"tool":"Task","child":"Explore","lease":"notes-store-6b","declared_model":"opus",`+
-		`"context":"lease: notes-store-6b\nDo not run git stash anywhere.","thread":"main"}`, string(body))
+		`"context":"lease: notes-store-6b\nDo not run git stash anywhere.","thread":"main","thread_from":"inferred"}`, string(body))
 }
 
 // TestHookCmd_SpawnWithoutMarkerOrLabel holds three parts of the cooperative contract: an

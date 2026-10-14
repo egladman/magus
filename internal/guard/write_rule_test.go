@@ -79,7 +79,7 @@ func TestWriteRuleSeesTheWrittenText(t *testing.T) {
 			require.Len(t, probe.asked, 1)
 			want := tc.want
 			want.Host, want.Session, want.Path, want.Workspace, want.Role = "claude-code", "s1", path, root, types.AgentRoleRoot
-			want.Thread = types.AgentThreadMain
+			want.Thread, want.ThreadFrom = types.AgentThreadMain, types.ThreadInferred
 			got := probe.asked[0]
 			got.Workspace = canonicalDir(got.Workspace)
 			want.Workspace = canonicalDir(want.Workspace)
