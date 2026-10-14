@@ -213,7 +213,7 @@ const (
 )
 
 // writeGrade is what the job store has to say about one write. Separate from
-// Verdict because the empty Decision means "no opinion", which the wire's "pass"
+// GuardJudgment because the empty Decision means "no opinion", which the wire's "pass"
 // does not: a rule that stayed silent and a rule that cleared the write are different
 // facts, and only the first may be overridden by a later rule.
 type writeGrade struct {

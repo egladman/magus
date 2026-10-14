@@ -48,7 +48,7 @@ func TestEveryRuleIsCatalogued(t *testing.T) {
 
 // TestEveryRuleSiteNamesACataloguedRule closes the roads around the constants: a verdict
 // filed under a name spelled at the site, under a constant of another type, or under an
-// advisory kind the catalog lacks. A site is a Verdict's Rule, a ShellVerdict's Kind, a
+// advisory kind the catalog lacks. A site is a GuardJudgment's Rule, a ShellVerdict's Kind, a
 // field of type denyRuleName, a parameter of that type or of hint.MarkerKind, and a
 // conversion to one. Each must name a
 // catalogued rule, a workspace rule or nothing; a value computed at run time arrives
@@ -313,9 +313,9 @@ func ruleSourceOf(t *testing.T) ruleSource {
 		denies: map[string]string{}, kinds: map[string]string{}, values: map[string]string{},
 		workspace: map[string]bool{}, consts: map[string]bool{},
 	}
-	// Where a rule is set: Verdict.Rule and ShellVerdict.Kind by name, every struct field
+	// Where a rule is set: GuardJudgment.Rule and ShellVerdict.Kind by name, every struct field
 	// of type denyRuleName, and every package function's denyRuleName parameters.
-	fields := map[string]map[string]bool{"Verdict": {"Rule": true}, "ShellVerdict": {"Kind": true}}
+	fields := map[string]map[string]bool{"GuardJudgment": {"Rule": true}, "ShellVerdict": {"Kind": true}}
 	params := map[string][]int{}
 	for _, f := range parsed {
 		for _, decl := range f.Decls {
@@ -372,8 +372,16 @@ func ruleSourceOf(t *testing.T) ruleSource {
 		ast.Inspect(f, func(n ast.Node) bool {
 			switch n := n.(type) {
 			case *ast.CompositeLit:
-				typ, ok := n.Type.(*ast.Ident)
-				if !ok {
+				typName := ""
+				switch typ := n.Type.(type) {
+				case *ast.Ident:
+					typName = typ.Name
+				case *ast.SelectorExpr:
+					if pkg, ok := typ.X.(*ast.Ident); ok && pkg.Name == "types" && typ.Sel.Name == "GuardJudgment" {
+						typName = typ.Sel.Name
+					}
+				}
+				if typName == "" {
 					return true
 				}
 				for _, elt := range n.Elts {
@@ -381,7 +389,7 @@ func ruleSourceOf(t *testing.T) ruleSource {
 					if !ok {
 						continue
 					}
-					if key, ok := kv.Key.(*ast.Ident); ok && fields[typ.Name][key.Name] {
+					if key, ok := kv.Key.(*ast.Ident); ok && fields[typName][key.Name] {
 						src.sites = append(src.sites, siteOf(fset, kv.Value))
 					}
 				}

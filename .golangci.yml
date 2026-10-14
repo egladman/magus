@@ -269,12 +269,12 @@ linters:
             - {func: "(*github.com/egladman/magus/libs/diagnostics.Domain).Format", arg: 1}
             - {func: github.com/egladman/magus/internal/hint.breadcrumb, arg: 2}
           fields:
-            - {type: github.com/egladman/magus/internal/hint.Next, field: Why}
+            - {type: github.com/egladman/magus/types.NextStep, field: Why}
             - {type: github.com/egladman/magus/internal/guard.ShellVerdict, field: Deny}
             - {type: github.com/egladman/magus/internal/guard.ShellVerdict, field: Lead}
             - {type: github.com/egladman/magus/types.RuleDoc, field: Catches}
             - {type: github.com/egladman/magus/internal/guard.denial, field: Say}
-            - {type: github.com/egladman/magus/internal/guard.Verdict, field: Reason}
+            - {type: github.com/egladman/magus/types.GuardJudgment, field: Reason}
             - {type: github.com/egladman/magus/internal/hint.Suggestion, field: Why}
             - {type: github.com/egladman/magus/internal/hint.Suggestion, field: Hedge}
           prefixes: ["magus workspace:"]
