@@ -312,7 +312,7 @@ func TestAttachConformanceFindsANewNameWithoutABaseline(t *testing.T) {
 	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
 	byPath := map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}
 
-	attachConformance(byPath, head, conformanceInput{conform: shippedConform(),patch: trailPatch})
+	attachConformance(byPath, head, conformanceInput{conform: shippedConform(), patch: trailPatch})
 
 	require.Len(t, out.Files[0].Symbols, 1, "Trail's definition line is unchanged, so only EntryPointFrom is a subject")
 	got := out.Files[0].Symbols[0]
@@ -352,7 +352,7 @@ func TestAttachConformanceSkipsAMovedSymbol(t *testing.T) {
 -func EntryPointFrom(ctx context.Context) *T { return nil }
 `
 
-	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, conformanceInput{conform: shippedConform(),patch: moved})
+	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, conformanceInput{conform: shippedConform(), patch: moved})
 
 	assert.Empty(t, out.Files[0].Symbols)
 }
@@ -362,10 +362,10 @@ func TestAttachConformanceFollowsTheBaselineClassification(t *testing.T) {
 	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
 	byPath := map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}
 
-	attachConformance(byPath, head, conformanceInput{conform: shippedConform(),changes: map[string]string{trailID("EntryPointFrom"): types.DiffChangeBody}})
+	attachConformance(byPath, head, conformanceInput{conform: shippedConform(), changes: map[string]string{trailID("EntryPointFrom"): types.DiffChangeBody}})
 	assert.Empty(t, out.Files[0].Symbols, "a body edit is not a naming decision")
 
-	attachConformance(byPath, head, conformanceInput{conform: shippedConform(),changes: map[string]string{trailID("EntryPointFrom"): types.DiffChangeAdded}})
+	attachConformance(byPath, head, conformanceInput{conform: shippedConform(), changes: map[string]string{trailID("EntryPointFrom"): types.DiffChangeAdded}})
 	require.Len(t, out.Files[0].Symbols, 1)
 	assert.Equal(t, types.DiffChangeAdded, out.Files[0].Symbols[0].Change)
 	assert.NotEmpty(t, out.Files[0].Symbols[0].Checks)
@@ -375,7 +375,7 @@ func TestAttachConformanceSkipsGeneratedFiles(t *testing.T) {
 	head := conformanceHead(map[string]int{"EntryPointFrom": 6})
 	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: ".", Role: types.DiffRoleOutput}}}
 
-	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, conformanceInput{conform: shippedConform(),patch: trailPatch})
+	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, conformanceInput{conform: shippedConform(), patch: trailPatch})
 
 	assert.Empty(t, out.Files[0].Symbols, "a regenerated file's names are the generator's decision")
 }

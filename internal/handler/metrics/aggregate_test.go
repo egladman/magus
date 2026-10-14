@@ -88,7 +88,6 @@ func intHist(name string, bounds []float64, counts []uint64, sum int64) metricda
 	}
 }
 
-
 func total(counts []uint64) uint64 {
 	var n uint64
 	for _, c := range counts {

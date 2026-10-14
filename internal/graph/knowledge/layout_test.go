@@ -207,7 +207,7 @@ func TestLayoutIsDeterministicAndCapped(t *testing.T) {
 	for _, cs := range first {
 		total += len(cs)
 	}
-	assert.Equal(t, testGates().MaxFindings, total,"four new directories break three checks each")
+	assert.Equal(t, testGates().MaxFindings, total, "four new directories break three checks each")
 	assert.Equal(t, []string{"internal/new0", "internal/new1"}, slices.Sorted(maps.Keys(first)), "directory order, then check order")
 	for range 5 {
 		assert.Equal(t, first, g.Layout(LayoutChange{Gates: testGates(), Added: addedSet(added...)}))

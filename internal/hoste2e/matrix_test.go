@@ -72,7 +72,9 @@ type scenario struct {
 // scenarios assert what Claude Code gets today; parity is the bar for every host.
 var scenarios = []scenario{
 	{name: "shell-deny", conv: convTools, check: func(t *testing.T, h *hostDriver, s *session) {
-		if !hasRecord(t, s, func(r record) bool { return strings.Contains(r.Request.Command, "e2e-deny-probe") && r.Response.Decision == "deny" }) {
+		if !hasRecord(t, s, func(r record) bool {
+			return strings.Contains(r.Request.Command, "e2e-deny-probe") && r.Response.Decision == "deny"
+		}) {
 			t.Error("no deny recorded for the probe command")
 		}
 		if !s.replied(s.w.code("DENY")) {
@@ -119,12 +121,16 @@ var scenarios = []scenario{
 		}
 	}},
 	{name: "write-output-judged", conv: convTools, check: func(t *testing.T, h *hostDriver, s *session) {
-		if !hasRecord(t, s, func(r record) bool { return strings.HasSuffix(r.Request.Path, "gen/out.txt") && r.Response.Decision == "advise" }) {
+		if !hasRecord(t, s, func(r record) bool {
+			return strings.HasSuffix(r.Request.Path, "gen/out.txt") && r.Response.Decision == "advise"
+		}) {
 			t.Error("the write to the declared output gen/out.txt was not judged (want an advise)")
 		}
 	}},
 	{name: "write-deny", conv: convTools, check: func(t *testing.T, h *hostDriver, s *session) {
-		if !hasRecord(t, s, func(r record) bool { return strings.HasSuffix(r.Request.Path, "blocked.txt") && r.Response.Decision == "deny" }) {
+		if !hasRecord(t, s, func(r record) bool {
+			return strings.HasSuffix(r.Request.Path, "blocked.txt") && r.Response.Decision == "deny"
+		}) {
 			t.Error("no deny recorded for the write to blocked.txt")
 		}
 		if fileExists(filepath.Join(s.w.dir, "blocked.txt")) {

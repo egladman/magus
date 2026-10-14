@@ -276,7 +276,9 @@ func TestValidate_Conform(t *testing.T) {
 			want: FieldFailure{Field: "knowledge.conform.checks.file-lines.tests", Tag: "conform_population", Param: strings.Join(types.ConformPopSource.Values(), " "), Value: "tests"},
 		},
 		"zero percentile": {
-			edit: func(c *ConformConfig) { c.Checks[types.ConformFileLines][types.ConformPopSource] = ConformLimitConfig{Anchor: 2200} },
+			edit: func(c *ConformConfig) {
+				c.Checks[types.ConformFileLines][types.ConformPopSource] = ConformLimitConfig{Anchor: 2200}
+			},
 			want: FieldFailure{Field: "knowledge.conform.checks.file-lines.source.percentile", Tag: "gt", Param: "0", Value: "0"},
 		},
 		"percentile past 100": {

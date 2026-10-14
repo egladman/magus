@@ -202,7 +202,6 @@ func TestWithSpell(t *testing.T) {
 	assert.Equal(t, "go", p.Bindings[0].Name)
 }
 
-
 // These tests live in package magus, beside no provider.go, because what they cover
 // is the LOAD ORDER in magus.go: that providers run after magusfile evaluation and
 // before WorkspaceRegistry.Apply, and that a provided project is indistinguishable
