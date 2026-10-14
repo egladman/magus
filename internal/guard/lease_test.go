@@ -1994,3 +1994,69 @@ func TestDenyWriteOutsideLeaseStaysQuiet(t *testing.T) {
 		assert.Empty(t, denyWriteOutsideLease(nowhere, Dependencies{}, "lease-b", "echo x > internal/ledger/store.go"))
 	})
 }
+
+// A remove or move takes a directory whole, so a directory operand is graded by what it
+// holds: wholly inside the lease's write paths it passes, and holding anything outside
+// them, or inside its deny paths, it is refused naming the write paths. That holds for
+// rm and mv as for the version-control verbs.
+func TestDenyWriteOutsideLeaseGradesWhatADirectoryHolds(t *testing.T) {
+	ctx, root := fleetFixture(t, writePathFleet()...)
+	for _, file := range []string{"cmd/magus/a.go", "cmd/magus/sub/b.go", "cmd/magus/gen/g.go", "cmd/other/c.go", "pkg/only/d.go"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.Dir(file)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, file), nil, 0o644))
+	}
+
+	for _, command := range []string{
+		"rm -r cmd/magus/sub",
+		"git rm -r cmd/magus/sub",
+		"hg remove cmd/magus/sub",
+		"mv cmd/magus/a.go cmd/magus/sub",
+		"git mv cmd/magus/sub cmd/magus/moved",
+		"rm -r cmd/magus/missing",
+	} {
+		assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "lease-b", command), "%q is wholly inside", command)
+	}
+	for command, want := range map[string]string{
+		"rm -r cmd/other":                 "cmd/other is outside",
+		"rm notes.txt":                    "notes.txt is outside",
+		"git rm -r cmd":                   "cmd holds cmd/magus/gen, which is outside",
+		"sh -c 'rm -rf cmd'":              "cmd holds cmd/magus/gen, which is outside",
+		"mv cmd/magus/a.go cmd/other":     "cmd/other is outside",
+		"mv -t cmd/other cmd/magus/a.go":  "cmd/other is outside",
+		"git rm -r cmd/magus":             "cmd/magus holds cmd/magus/gen, which is outside",
+		"sl rename cmd/magus/sub pkg/new": "pkg/new is outside",
+		"rm -rf .":                        ". holds ",
+	} {
+		reason := denyWriteOutsideLease(ctx, Dependencies{}, "lease-b", command)
+		assert.Contains(t, reason, want, "%q", command)
+		assert.Contains(t, reason, "(cmd/magus)", "%q names the write paths", command)
+	}
+
+	t.Run("a directory leading only to the lease's paths passes", func(t *testing.T) {
+		ctx, root := fleetFixture(t, types.Job{ID: "pkg", WritePaths: []string{"pkg/only/**"}, State: types.StateRunning, Registered: 1})
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg", "only"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "pkg", "only", "d.go"), nil, 0o644))
+		assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "pkg", "rm -r pkg"))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "pkg", "e.go"), nil, 0o644))
+		assert.Contains(t, denyWriteOutsideLease(ctx, Dependencies{}, "pkg", "rm -r pkg"), "holds pkg/e.go,")
+	})
+	t.Run("no lease is never graded", func(t *testing.T) {
+		assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "", "rm -rf cmd"))
+	})
+}
+
+// A relative operand names a path under the directory the call runs in.
+func TestDenyWriteOutsideLeaseResolvesFromTheCallDir(t *testing.T) {
+	ctx, root := fleetFixture(t, writePathFleet()...)
+	for _, dir := range []string{"cmd/magus/sub", "cmd/other", "internal/ledger"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, dir), 0o755))
+	}
+	from := func(dir string) Dependencies { return Dependencies{callDir: filepath.Join(root, dir)} }
+
+	assert.Contains(t, denyWriteOutsideLease(ctx, from("internal/ledger"), "lease-b", "git rm store.go"), "lease-a",
+		"store.go here is internal/ledger/store.go")
+	assert.Contains(t, denyWriteOutsideLease(ctx, from("internal/ledger"), "lease-b", "rm store.go"), "lease-a")
+	assert.Empty(t, denyWriteOutsideLease(ctx, from("cmd/magus"), "lease-b", "git rm a.go"))
+	assert.Empty(t, denyWriteOutsideLease(ctx, from("cmd/magus"), "lease-b", "rm -r sub"))
+	assert.Contains(t, denyWriteOutsideLease(ctx, from("cmd/magus"), "lease-b", "rm -r ../other"), "cmd/other is outside")
+}

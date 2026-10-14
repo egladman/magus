@@ -2482,13 +2482,23 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	}
 	dialect := effectiveDialect(deps.ShellDialect)
 	redirects := redirectTargets(command, 0, dialect)
+	// A relative word names a path under the directory the call runs in, which for a
+	// command run from a subdirectory is not the checkout's root.
+	checkout := leaseCheckout(ctx, location, actingLease)
+	base := cmp.Or(deps.callDir, checkout)
+	resolve := func(word string) string {
+		if filepath.IsAbs(word) {
+			return word
+		}
+		return filepath.Join(base, word)
+	}
 	for _, candidate := range writeTargetCandidates(command, 0, dialect) {
 		// A flag (`-p`, `-c`) or stdin's `-` names no file; a file spelled that way is
 		// written `./-p`, which still resolves.
 		if strings.HasPrefix(candidate, "-") {
 			continue
 		}
-		rel, inside := workspaceRelative(location.workspace, candidate)
+		rel, inside := workspaceRelative(checkout, resolve(candidate))
 		if !inside {
 			continue
 		}
@@ -2498,14 +2508,101 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 		}
 		// A catch-all covers every word, `print(1)` included, so under one only a
 		// redirect target or a word shaped like a file stands in for a path.
-		if byCatchAll && !slices.Contains(redirects, candidate) && !pathShaped(location.workspace, rel) {
+		if byCatchAll && !slices.Contains(redirects, candidate) && !pathShaped(checkout, rel) {
 			continue
 		}
-		if g := gradeLeasedWrite(ctx, deps, actingLease, candidate); g.Decision == decisionDeny {
+		if g := gradeLeasedWrite(ctx, deps, actingLease, resolve(candidate)); g.Decision == decisionDeny {
 			return g.Reason
 		}
 	}
+	me, enrolled := liveLease(live, actingLease)
+	if !enrolled || len(me.WritePaths) == 0 {
+		return ""
+	}
+	for _, operand := range removedOrMovedOperands(command, 0, dialect) {
+		rel, inside := workspaceRelative(checkout, resolve(operand))
+		if !inside {
+			continue
+		}
+		if outside := reachOutside(checkout, me, rel); outside != "" {
+			what := outside + " is"
+			if outside != rel {
+				what = rel + " holds " + outside + ", which is"
+			}
+			return denial{
+				Say: fmt.Sprintf("magus workspace: %s outside the paths lease %s was given (%s); "+leaseActorClause("widen these write paths"),
+					what, me.ID, strings.Join(me.WritePaths, ", ")),
+				Why: fmt.Sprintf("A remove or move writes each path it names, and a directory with everything in it, so every one of them must be inside the write paths lease %s (%s) declared and outside its deny paths. "+
+					"`%s` shows what the job holds.\n"+leaseActorWhy,
+					me.ID, criteriaLine(me), hint.DescribeJob.With(me.ID)),
+			}.full()
+		}
+	}
 	return ""
+}
+
+// reachOutside is the first path at or in rel that me may not write: one outside its write
+// paths, or inside its deny paths. "" when every path there is me's. Of a directory only
+// the subdirectories that lead to a write path are walked, and a pattern that cannot be
+// read ends the walk silently, as every uncertainty here does.
+func reachOutside(checkout string, me types.Job, rel string) string {
+	root := filepath.Join(checkout, filepath.FromSlash(rel))
+	// Lstat: a remove of a link to a directory removes the link.
+	if info, err := os.Lstat(root); err != nil || !info.IsDir() {
+		_, denied, errDeny := declarationCovering(me.DenyPaths, rel)
+		_, mine, errMine := declarationCovering(me.WritePaths, rel)
+		if errDeny != nil || errMine != nil || mine && !denied {
+			return ""
+		}
+		return rel
+	}
+	outside := ""
+	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		under, err := filepath.Rel(root, p)
+		if err != nil {
+			return filepath.SkipAll
+		}
+		r := path.Join(rel, filepath.ToSlash(under))
+		_, denied, errDeny := declarationCovering(me.DenyPaths, r)
+		_, mine, errMine := declarationCovering(me.WritePaths, r)
+		switch {
+		case errDeny != nil || errMine != nil:
+			return filepath.SkipAll
+		case denied:
+		case mine && d.IsDir() && !leadsTo(me.DenyPaths, r):
+			return filepath.SkipDir
+		case mine:
+			return nil
+		case d.IsDir() && leadsTo(me.WritePaths, r):
+			return nil
+		}
+		outside = r
+		return filepath.SkipAll
+	})
+	return outside
+}
+
+// leadsTo reports whether the directory dir holds a path one of decls could name: it is an
+// ancestor of a declaration's literal part, or a declaration starts with a pattern.
+func leadsTo(decls []string, dir string) bool {
+	for _, raw := range decls {
+		file, _ := types.SplitClaim(raw)
+		var literal []string
+		for _, seg := range strings.Split(path.Clean(file), "/") {
+			if strings.ContainsAny(seg, "*?[{") {
+				break
+			}
+			literal = append(literal, seg)
+		}
+		prefix := strings.Join(literal, "/")
+		if prefix == "" || dir == "." || strings.HasPrefix(prefix+"/", dir+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // declaredPath reports whether any live lease named rel in a boundary, as a path it owns

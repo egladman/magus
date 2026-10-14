@@ -331,6 +331,66 @@ var genericWriteVerbs = map[string]bool{
 	"find": true, "sort": true, "sed": true,
 }
 
+// removedOrMovedOperands names the path operands of the line's removes and moves (rm, rmdir,
+// mv, and git, hg and sl remove and move), nested scripts included. Each takes a directory
+// whole, so a boundary has to ask what one holds, not only what it is named.
+func removedOrMovedOperands(command string, depth int, d Dialect) []string {
+	if depth > writeScanDepth {
+		return nil
+	}
+	f, err := parseFile(command, d)
+	if err != nil {
+		return nil
+	}
+	var out, nested []string
+	syntax.Walk(f, func(n syntax.Node) bool {
+		stmt, ok := n.(*syntax.Stmt)
+		if !ok {
+			return true
+		}
+		if call, ok := stmt.Cmd.(*syntax.CallExpr); ok {
+			if script, ok := shellPayload(literalWords(call.Args)); ok {
+				nested = append(nested, script)
+			}
+		}
+		for _, c := range stmtCommands(stmt, d) {
+			name := path.Base(c.Name)
+			if paths, ok := vcsPathOperands(name, c.Args); ok {
+				out = append(out, paths...)
+				continue
+			}
+			switch name {
+			case "rm", "rmdir":
+				out = append(out, operands(c.Args, "")...)
+			case "mv":
+				out = append(out, mvOperands(c.Args)...)
+			}
+		}
+		return true
+	})
+	for _, script := range nested {
+		out = append(out, removedOrMovedOperands(script, depth+1, d)...)
+	}
+	return out
+}
+
+// mvOperands are mv's sources and destination, the one `-t` or `--target-directory` names
+// included. `-S` takes a backup suffix.
+func mvOperands(args []string) []string {
+	out := operands(args, "tS")
+	for i, a := range args {
+		switch {
+		case a == "--":
+			return out
+		case a == "-t" && i+1 < len(args):
+			out = append(out, args[i+1])
+		case strings.HasPrefix(a, "--target-directory="):
+			out = append(out, strings.TrimPrefix(a, "--target-directory="))
+		}
+	}
+	return out
+}
+
 // writeTargetCandidates names every word the line's writes could be aimed at, in the order
 // the walk reaches them: each writing redirect's target, and the operands of every command
 // that is not a known reader.
