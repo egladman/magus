@@ -3,6 +3,7 @@ package job
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/types"
@@ -36,17 +37,55 @@ func CompilingCheck() types.LeaseCheck {
 	return types.LeaseCheck{Target: "go::go-vet", Project: "."}
 }
 
-// RefuseDeniedCheck refuses a job whose declared check the guard would deny its holder. The
-// holder runs the check under the lease, so a denied one leaves the job unable to verify
-// itself and ends it unverified. A Store with no grader, and a job with no check, refuse
+// humanOnlyRule is the guard rule that refuses a run of a target the workspace declares a
+// person runs.
+const humanOnlyRule = "human-only"
+
+// RefuseDeniedCheck refuses a job whose declared check, or the check of any of its goals
+// of kind check, the guard would deny its holder. The holder runs every check under the
+// lease, so a denied one leaves the job unable to verify itself and ends it unverified.
+// Each check is graded as the row with that check, the first deny refuses, and a check
+// two goals share is graded once. A Store with no grader, and a job with no check, refuse
 // nothing.
 func RefuseDeniedCheck(ctx context.Context, store *Store, row types.Job) error {
-	if store == nil || store.grader == nil || row.Check == nil {
+	if store == nil || store.grader == nil {
 		return nil
 	}
-	verdict := store.grader(ctx, store.root, row)
-	if !verdict.Denied {
-		return nil
+	var graded []types.LeaseCheck
+	for _, goal := range row.EffectiveGoals() {
+		if goal.Kind != types.GoalKindCheck || goal.Check.Target == "" && goal.Check.Script == "" {
+			continue
+		}
+		if slices.ContainsFunc(graded, func(c types.LeaseCheck) bool { return types.SameLeaseCheck(&c, &goal.Check) }) {
+			continue
+		}
+		graded = append(graded, goal.Check)
+		pending := row
+		pending.Check = &goal.Check
+		verdict := store.grader(ctx, store.root, pending)
+		if !verdict.Denied {
+			continue
+		}
+		which := "check"
+		if goal.ID != types.PrimaryGoalID {
+			which = "goal " + goal.ID + "'s check"
+		}
+		return deniedCheckError(row.ID, which, goal.Check, verdict)
+	}
+	return nil
+}
+
+// deniedCheckError words the refusal of row id's check, which names it in the row. A
+// target a person runs is no check a worker could ever run, so that refusal names the
+// rule's reason and asks for another check; any other deny recommends the compiling check,
+// which the guard lets a worker it keeps from building run.
+func deniedCheckError(id, which string, check types.LeaseCheck, verdict CheckVerdict) error {
+	reason := strings.Join(strings.Fields(verdict.Reason), " ")
+	if verdict.Rule == humanOnlyRule {
+		return fmt.Errorf("job: %s's %s `%s` is a target a person runs (%s): %s,"+
+			" and a worker is refused it whoever asks, so it can never verify the job;"+
+			" declare a check its worker may run in its place, with `magus job fork %s --check '<target> <project>'`",
+			id, which, check.String(), humanOnlyRule, reason, id)
 	}
 	rule := ""
 	if verdict.Rule != "" {
@@ -54,10 +93,9 @@ func RefuseDeniedCheck(ctx context.Context, store *Store, row types.Job) error {
 	}
 	compiling := CompilingCheck()
 	recommended := compiling.Target + " " + compiling.Project
-	return fmt.Errorf("job: %s's check `%s` would be denied to its worker by the guard%s: %s,"+
+	return fmt.Errorf("job: %s's %s `%s` would be denied to its worker by the guard%s: %s,"+
 		" and the holder runs the check under its lease, so a denied one can never verify the job,"+
 		" declare a target that compiles without building the binary, such as `%s`,"+
 		" with `magus job fork %s --check '%s'`",
-		row.ID, row.Check.String(), rule, strings.Join(strings.Fields(verdict.Reason), " "),
-		recommended, row.ID, recommended)
+		id, which, check.String(), rule, reason, recommended, id, recommended)
 }
