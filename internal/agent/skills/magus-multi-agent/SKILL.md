@@ -26,10 +26,6 @@ You do not need to be asked to split work{{if .Full}}. "Split this across agents
 several disjoint write sets you can name is another{{else}}: several disjoint write sets
 you can name are reason enough{{end}}.
 
-Hand every spawn a job row forked first, read-only scouts included. A child bound to
-no row is graded as you are, and no lease bounds you. "Fork the job, then spawn the
-worker" below has the commands.
-
 Fan-out is not inherently expensive{{if .Full}}. What costs is unbounded fan-out:
 workers that hand work on without a shrinking scope, jobs with no acceptance criteria
 so nobody can say when to stop, and a principal model assigned to mechanical edits.
@@ -71,8 +67,7 @@ Apply these four in the order they bite:
 Prove it before you plan it. A claim a plan or brief rests on cites the output ref of
 a run that settled it. A guess nobody ran stays out of the plan.
 
-{{if .Full}}Graph engineering is a natural evolution of loop engineering: the graph improves
-the loop's partition and collision decisions, and does not replace the loop. Run it:
+{{if .Full}}The graph improves the loop's partition and collision decisions; run the loop:
 
 1. State the top-level goal, constraints, and observable acceptance criteria.
 2. Map the affected graph and propose collision-resistant edit jobs.
@@ -120,26 +115,16 @@ Then make the declaration gradeable, so the names are a contract, not a suggesti
   cannot tell the defining file or an import from real use{{end}}.
 - `symbol` + `unreferenced` for each helper the shared API replaces.
 
-Signature goals are the default for a job that adds or changes an exported API.
-`symbol` + `signature` holds the name to a declaration, so the interface is a
-contract and not only a name. The recipe:
+A job that adds or changes an exported API gets a `symbol` + `signature` goal by
+default: the root commits the stub, runs `{{cmd "graph build"}}`, and forks the
+`signature` goal empty, so the fork records the indexed stub as the contract, beside
+a `changed` goal on the same name.
 
-1. The root commits the stub: the declaration, with no body worth keeping.
-2. Run `{{cmd "graph build"}}`, so the index holds the stub.
-3. Fork the job with a `signature` goal and a `changed` goal on the same name. Leave
-   `signature` empty and the fork records the indexed one, which is how the stub
-   becomes the contract.
-
-Name what a job may break in its `breaks` list: the flags, JSON keys, exported
-symbols or stored formats you approved it breaking. An empty list means it breaks
-nothing on its own authority, and a worker that finds a break outside the list
-stops and reports it.
-
-Findings from the magus are work to finish, not noise. The unreferenced symbols
-`{{cmd "job fork"}}` lists in the job's write paths (`deletion_candidates` in
-`-o json`) and the symbols `{{cmd "job wait"}}` reports left unreferenced are each
-finished or deleted. The graph cannot see reflection, interface dispatch or a
-consumer outside the workspace, so confirm before deleting.
+A job's `breaks` list names the flags, JSON keys, exported symbols or stored formats
+you approved it breaking; a worker that finds a break outside it stops and reports.
+Each unreferenced symbol `{{cmd "job fork"}}` lists in the write paths
+(`deletion_candidates`) or `{{cmd "job wait"}}` reports is finished or deleted. Confirm
+first: the graph cannot see reflection, interface dispatch or outside consumers.
 
 Check each declared name with `{{cmd "refs"}}` before forking. A bare name that resolves
 to more than one definition is graded against one of them, silently.
@@ -276,11 +261,9 @@ private ownership map.
   write paths.
 - A cap the user sets applies to the whole tree, not once per parent.
 
-Keep one integration owner at the root, however deep the job tree.
-{{if .Full}}A child may coordinate its descendants, but it may not accept changes
-outside its own job, relax top-level acceptance criteria, or hide additional
-fan-out from the root. Nest wherever a child has a genuinely separable area and
-enough context to partition it better than its parent.{{else}}A child coordinates its descendants but may not relax the root's criteria.{{end}}
+Keep one integration owner at the root, however deep the job tree. A child
+coordinates its descendants but may not accept changes outside its own job or relax
+the root's criteria.
 
 ## Seed the partition with magus
 
@@ -440,10 +423,8 @@ magus job exit <job> --stdin <<'EOF'
 EOF
 ```
 
-A typed result makes verification mechanical{{if .Full}}; the same four facts in prose can only be
-graded by reading, and a worker that ran a filtered subset writes the same
-paragraph as one that did not{{end}}. Keep unresolved risks mandatory, so a mis-scoped
-worker can say so instead of widening silently.
+A typed result makes verification mechanical. Keep unresolved risks mandatory, so a
+mis-scoped worker can say so instead of widening silently.
 
 A worker writes only its own row and the children it forks. Every other store write
 is the orchestrator's; a refused worker reports it as an unresolved risk and stops.
@@ -514,9 +495,3 @@ As jobs finish:
    editors, a rebuild estimate, advisors and anchored notes. It is context, never a
    verdict. An empty section means nobody could measure it, not that nothing was found.{{end}}
 7. Run `{{cmd "affected"}} ci` and evaluate the top-level acceptance criteria.
-
-{{if .Full}}Parallelism is an optimization, not the objective. Fewer
-well-isolated jobs are usually cheaper than wide fan-out followed by conflict
-repair, and the graph is evidence for that judgment rather than permission to
-spawn every possible worker.{{else}}Prefer fewer proven-independent jobs over
-wide fan-out and conflict repair.{{end}}
