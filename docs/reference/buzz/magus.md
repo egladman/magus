@@ -105,7 +105,7 @@ Every VCS-history lens as one typed report: {hotspots, affinity, ownership, tren
 
 Search the knowledge graph: {definition, schemaVersion, query, budget, matchCount, offset, matches, nodes, links, answer}. Annotate the result `> QueryResult`. query is free text plus field matchers (kind=spell, project=pkg/foo, relation=uses, kind!=op, id=~build$). A query that seeds code symbols (kind=symbol) reads the symbol shards too; every other query reads the domain graph. opts.budget caps the neighborhood (default 50); opts.limit and opts.offset window the matches while matchCount stays the total. Read answer.verdict before trusting zero matches: `unknown` means part of the workspace had no symbol index. An unknown option raises. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\query(query, [opts]) -> QueryResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L105)
+**Signature:** `magus\query(query, [opts]) -> QueryResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L98)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -118,7 +118,7 @@ Search the knowledge graph: {definition, schemaVersion, query, budget, matchCoun
 
 One knowledge-graph node's context card: {definition, schemaVersion, node, blastRadius, out, in, docsURL, resolution}. Annotate the result `> ExplainResult`. node is a node ID (target:pkg/foo:build), a workspace path (internal/httpx), or a name that resolves to one. A path resolves to its dir or file node exactly before any ranked match; resolution says which happened (id, path or fuzzy), and a caller anchoring by path refuses fuzzy. A path between two nodes is magus\path. Raises when node resolves to nothing, naming magus\refs when the name could be a code symbol this graph does not load. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\explain(node) -> ExplainResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L136)
+**Signature:** `magus\explain(node) -> ExplainResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L124)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -130,7 +130,7 @@ One knowledge-graph node's context card: {definition, schemaVersion, node, blast
 
 The shortest chain of edges between two knowledge-graph nodes: {definition, schemaVersion, from, to, found, steps}. Annotate the result `> PathResult`. Edges are walked in both directions. opts.relations limits the hops to those relations, so found false under it means no path of those relations. A resolved pair with no connection returns found false; an endpoint that resolves to nothing, an unknown option, and an unknown relation raise. The endpoints are `node` and `to` rather than from and to because `from` is a reserved Buzz word. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\path(node, to, [opts]) -> PathResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L173)
+**Signature:** `magus\path(node, to, [opts]) -> PathResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L162)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -144,7 +144,7 @@ The shortest chain of edges between two knowledge-graph nodes: {definition, sche
 
 Where a code symbol is defined and every file that references it: {definition, schemaVersion, symbol, label, fileCount, refCount, defs, refs, answer}. Annotate the result `> RefsResult`. symbol is a symbol node ID or a name that resolves to one, drawn from the workspace's declared SCIP indexes. A symbol nothing defines is an answer, not a raise: answer.verdict says whether that is a verified absence or a blind spot. opts.limit and opts.offset window refs while fileCount and refCount stay the totals. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\refs(symbol, [opts]) -> RefsResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L204)
+**Signature:** `magus\refs(symbol, [opts]) -> RefsResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L193)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -157,7 +157,7 @@ Where a code symbol is defined and every file that references it: {definition, s
 
 The knowledge graph's shape: {definition, nodeCount, edgeCount, gods, orphans, coverage, isolatedCount, componentCount, largestComponentSize}. Annotate the result `> KnowledgeStats`. gods are the most connected nodes, where structural risk concentrates; orphans are docs that document nothing and spells no target uses. kind scopes every section to one node kind (spell, target, doc, ...); omit it for the whole graph. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\stats([kind]) -> KnowledgeStats` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L244)
+**Signature:** `magus\stats([kind]) -> KnowledgeStats` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L233)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -169,7 +169,7 @@ The knowledge graph's shape: {definition, nodeCount, edgeCount, gods, orphans, c
 
 The workspace's package import graph: {indexed, packages}, packages mapping each package directory ("." for the root) to the sorted package directories it imports, read off the workspace's declared SCIP indexes. Annotate the result `> ImportGraph`. Test files, packages outside the workspace, and self-imports are left out. indexed is false when no symbol index was ingested, and packages is then empty because nobody looked, not because nothing imports anything: a caller checking drift refuses on it rather than reporting none. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\importGraph() -> ImportGraph` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L258)
+**Signature:** `magus\importGraph() -> ImportGraph` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L247)
 
 **Returns:** map[string]any
 
@@ -185,7 +185,7 @@ A digest of the symbol index the graph members load: {digest, indexed, projects,
 
 The precedents the workspace's merged symbol indexes establish, the rows `Graph.Precedents` mines: {precedents, indexes}, keyed as JSON is, with no Buzz object mirroring it. Each precedent is {family, scope, key, follow, cohort, share, established, cited, departures}: follow of cohort cases share one shape, established when the cohort and share clear the conformance gate, and departures are the cases that do not. indexes is each declared symbol index as `magus status` judges it ({project, op, language, freshness, detail}), judged just before the graph is read: an index not `up-to-date` gave the rows nothing or something old, so a gate on the rows checks indexes first and fails rather than reading silence as agreement. Declared outputs are never counted. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\precedents() -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L354)
+**Signature:** `magus\precedents() -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L343)
 
 **Returns:** map[string]any
 
@@ -193,7 +193,7 @@ The precedents the workspace's merged symbol indexes establish, the rows `Graph.
 
 Every non-test, non-generated symbol's declaration and doc comment in the workspace's merged symbol indexes, whatever language indexed them, as data: {symbols, indexes}, keyed as JSON is, with no Buzz object mirroring it. Each symbol is {node, source, language, name, kind, owner, doc}: source is the declaration's path and line, since an index records no position inside a doc; kind is function, method, type, interface, struct or value, or empty when the naming index read no shape; owner is the enclosing type of a member; doc is the whole comment with its lines kept. Nothing here judges the text: a magusfile rule reads it and decides. indexes is each declared symbol index as `magus status` judges it, judged just before the graph is read, as magus\precedents reports it: an index not `up-to-date` gave the symbols nothing or something old, so a gate on them checks indexes first. Test files and declared outputs are never listed. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\symbols() -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L368)
+**Signature:** `magus\symbols() -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L357)
 
 **Returns:** map[string]any
 
@@ -201,7 +201,7 @@ Every non-test, non-generated symbol's declaration and doc comment in the worksp
 
 One workspace directory as the knowledge graph holds it: {path, id, layer, language, imports, importedBy, importsIndexed, calls, calledBy, children, files}. Annotate the result `> Dir`. path is workspace-relative (internal/httpx). imports and importedBy are the package directories it imports and that import it; importsIndexed false means no symbol index read this directory, so empty lists there say nothing. calls and calledBy are DirCall records, one per `magus:calls` marker, with the transport it declares. layer is what magus\project's "layers" declares for it. Raises MGS7005 when the graph holds no dir node for path, naming the nearest one when a typo is likely, so a figure never draws a box for a directory that is not there. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\dir(path) -> Dir` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L384)
+**Signature:** `magus\dir(path) -> Dir` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L373)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -213,7 +213,7 @@ One workspace directory as the knowledge graph holds it: {path, id, layer, langu
 
 Every directory whose workspace path matches glob, as Dir records sorted by path. Annotate the result `> [Dir]`. glob is a doublestar pattern (internal/**). opts is a DirsOptions: layer keeps one declared layer, and a layer nothing declares raises MGS7006 rather than matching nothing; language keeps one package language; depth bounds how many segments below the glob's literal prefix a match may sit (0 is unbounded). An unknown option raises. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\dirs(glob, [opts]) -> [Dir]` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L406)
+**Signature:** `magus\dirs(glob, [opts]) -> [Dir]` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L395)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -226,7 +226,7 @@ Every directory whose workspace path matches glob, as Dir records sorted by path
 
 One layer magus\project's "layers" key declares: {name, declared, dirs}. Annotate the result `> Layer`. declared are the directories and globs declared for it; dirs are the Dir records it covers. Raises MGS7006 on a name no declaration uses, listing the declared ones. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\layer(name) -> Layer` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L442)
+**Signature:** `magus\layer(name) -> Layer` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L431)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -238,7 +238,7 @@ One layer magus\project's "layers" key declares: {name, declared, dirs}. Annotat
 
 The knowledge subgraph around one focus node: {definition, schemaVersion, focus, resolution, options, nodes, links, folds, answer}. Annotate the result `> NeighborhoodResult`. focus is a node ID, a workspace path, or a name; resolution says how it was reached. opts is a NeighborhoodOptions: depth is the most hops (0 means 1); relations are the only relations walked; direction is out, in, or empty for both; collapse folds every source node under each workspace path prefix into that prefix's dir node, longest prefix winning, and folds lists what each absorbed. Read answer.verdict before trusting a thin result: an imports walk with no symbol index is unknown, not absent. An unknown option, relation or direction raises, as does a focus that resolves to nothing. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\neighborhood(focus, [opts]) -> NeighborhoodResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L464)
+**Signature:** `magus\neighborhood(focus, [opts]) -> NeighborhoodResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L453)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -251,7 +251,7 @@ The knowledge subgraph around one focus node: {definition, schemaVersion, focus,
 
 One target run's captured output by its ref: {ref, project, target, failed, durationMs, output}. Annotate the result `> OutputRecord`. ref is an output ref (out1a2b3c) or a unique prefix of one. Raises on a value that is not a ref, a prefix that matches several, and a ref this checkout's output store does not hold: output lives in the checkout that ran the target. Read in-process from the workspace on the context, or inside a guard rule from the checkout the guard judges; raises MGS1022 outside both.
 
-**Signature:** `magus\output(ref) -> OutputRecord` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L630)
+**Signature:** `magus\output(ref) -> OutputRecord` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L619)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |

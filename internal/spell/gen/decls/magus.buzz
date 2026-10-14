@@ -1196,7 +1196,7 @@ export object JobStatus {
     job: str = "",
     verified: bool = false,
     violations: [str] = [],
-    risks: [str] = [],
+    unresolvedRisks: [str] = [],
     command: str = "",
     gates: [GateStatus] = [],
     staleIndexes: [str] = [],

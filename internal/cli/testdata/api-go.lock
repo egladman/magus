@@ -171,10 +171,8 @@ github.com/egladman/magus.Magus.ImportCache method(ptr) func(ctx context.Context
 github.com/egladman/magus.Magus.InvocationByID method(ptr) func(inv string) (Invocation, error)
 github.com/egladman/magus.Magus.InvocationEventsByID method(ptr) func(inv string) (Invocation, []Event, error)
 github.com/egladman/magus.Magus.JobLimits method(ptr) func() github.com/egladman/magus/internal/config.Jobs
-github.com/egladman/magus.Magus.KnowledgeGraph method(ptr) func(ctx context.Context, refresh bool) (*github.com/egladman/magus/internal/graph/knowledge.Graph, error)
+github.com/egladman/magus.Magus.KnowledgeGraph method(ptr) func(ctx context.Context, req github.com/egladman/magus/types.GraphRequest) (*github.com/egladman/magus/internal/graph/knowledge.Graph, error)
 github.com/egladman/magus.Magus.KnowledgeGraphHealthy method(ptr) func() (watching bool, valid bool)
-github.com/egladman/magus.Magus.KnowledgeGraphWithSymbols method(ptr) func(ctx context.Context) (*github.com/egladman/magus/internal/graph/knowledge.Graph, error)
-github.com/egladman/magus.Magus.KnowledgeGraphWithSymbolsForRef method(ptr) func(ctx context.Context, ref string) (*github.com/egladman/magus/internal/graph/knowledge.Graph, error)
 github.com/egladman/magus.Magus.LastRecordedRun method(ptr) func(ctx context.Context, projectPath string, target string) (github.com/egladman/magus/internal/cache.RecordedRun, error)
 github.com/egladman/magus.Magus.LifecycleProvider method(ptr) func() string
 github.com/egladman/magus.Magus.Lifecycles method(ptr) func(ctx context.Context, installed ...github.com/egladman/magus/types.ToolRow) (github.com/egladman/magus/types.LifecycleStatus, []github.com/egladman/magus/spells.Lifecycle, error)
@@ -500,6 +498,7 @@ github.com/egladman/magus/types.AgentThreadMain const AgentThread = "main"
 github.com/egladman/magus/types.AgentThreadSub const AgentThread = "sub"
 github.com/egladman/magus/types.AgentThreadUnknown const AgentThread = "unknown"
 github.com/egladman/magus/types.AllDiagnosticCodes func() []DiagnosticCode
+github.com/egladman/magus/types.AllSymbols var SymbolScope
 github.com/egladman/magus/types.AllowlistUnresolved const DiagnosticCode = "MGS2004"
 github.com/egladman/magus/types.AncestryReporter type interface
 github.com/egladman/magus/types.AncestryReporter.IsAncestor imethod func(ctx context.Context, dir string, ancestor string, descendant string) (bool, error)
@@ -1160,13 +1159,12 @@ github.com/egladman/magus/types.DiffStepHunk.Label field string "json:\"label,om
 github.com/egladman/magus/types.DiffStepHunk.Ref field DiffHunkRef "json:\"ref\" yaml:\"ref\""
 github.com/egladman/magus/types.DiffStepHunk.Why field DiffWhy "json:\"why\" yaml:\"why\""
 github.com/egladman/magus/types.DiffSuggestion type struct
-github.com/egladman/magus/types.DiffSuggestion.Accepted field bool "json:\"accepted\" yaml:\"accepted\""
 github.com/egladman/magus/types.DiffSuggestion.AgentName field string "json:\"agent_name,omitempty\" yaml:\"agent_name,omitempty\""
-github.com/egladman/magus/types.DiffSuggestion.Declined field bool "json:\"declined\" yaml:\"declined\""
 github.com/egladman/magus/types.DiffSuggestion.Hunk field int "json:\"hunk\" yaml:\"hunk\""
 github.com/egladman/magus/types.DiffSuggestion.ID field string "json:\"id\" yaml:\"id\""
 github.com/egladman/magus/types.DiffSuggestion.Path field string "json:\"path\" yaml:\"path\""
 github.com/egladman/magus/types.DiffSuggestion.Reason field string "json:\"reason\" yaml:\"reason\""
+github.com/egladman/magus/types.DiffSuggestion.Status field SuggestionStatus "json:\"status,omitempty\" yaml:\"status,omitempty\""
 github.com/egladman/magus/types.DiffSymbol type struct
 github.com/egladman/magus/types.DiffSymbol.BaseSignature field string "json:\"base_signature,omitempty\" yaml:\"base_signature,omitempty\""
 github.com/egladman/magus/types.DiffSymbol.Change field string "json:\"change,omitempty\" yaml:\"change,omitempty\""
@@ -1678,6 +1676,9 @@ github.com/egladman/magus/types.GraphOutput.Direction field string "json:\"direc
 github.com/egladman/magus/types.GraphOutput.Nodes field []Node "json:\"nodes\" yaml:\"nodes\""
 github.com/egladman/magus/types.GraphOutput.Roots field []string "json:\"roots,omitempty\" yaml:\"roots,omitempty\""
 github.com/egladman/magus/types.GraphOutput.SpellName field string "json:\"spell_name,omitempty\" yaml:\"spell_name,omitempty\""
+github.com/egladman/magus/types.GraphRequest type struct
+github.com/egladman/magus/types.GraphRequest.Refresh field bool
+github.com/egladman/magus/types.GraphRequest.Symbols field SymbolScope
 github.com/egladman/magus/types.GraphView type struct
 github.com/egladman/magus/types.GraphView.BlastRadius field map[string]int
 github.com/egladman/magus/types.GraphView.DependsOn field map[string][]string
@@ -2102,6 +2103,7 @@ github.com/egladman/magus/types.JobState.Terminal method func() bool
 github.com/egladman/magus/types.JobStateVocabulary func() string
 github.com/egladman/magus/types.JobStates func() []JobState
 github.com/egladman/magus/types.JobStatus type struct
+github.com/egladman/magus/types.JobStatus.Clean method func() bool
 github.com/egladman/magus/types.JobStatus.Command field string "json:\"command,omitempty\" yaml:\"command,omitempty\""
 github.com/egladman/magus/types.JobStatus.Entries field []JobEntry "json:\"entries,omitempty\" yaml:\"entries,omitempty\""
 github.com/egladman/magus/types.JobStatus.Footprint field []RegionChange "json:\"footprint,omitempty\" yaml:\"footprint,omitempty\""
@@ -2113,10 +2115,10 @@ github.com/egladman/magus/types.JobStatus.Job field string "json:\"job\" yaml:\"
 github.com/egladman/magus/types.JobStatus.LeftUnreferenced field []string "json:\"left_unreferenced,omitempty\" yaml:\"left_unreferenced,omitempty\""
 github.com/egladman/magus/types.JobStatus.LinesAdded field int "json:\"lines_added\" yaml:\"lines_added\""
 github.com/egladman/magus/types.JobStatus.LinesDeleted field int "json:\"lines_deleted\" yaml:\"lines_deleted\""
-github.com/egladman/magus/types.JobStatus.Risks field []string "json:\"unresolved_risks,omitempty\" yaml:\"unresolved_risks,omitempty\""
 github.com/egladman/magus/types.JobStatus.StaleIndexes field []string "json:\"stale_indexes,omitempty\" yaml:\"stale_indexes,omitempty\""
 github.com/egladman/magus/types.JobStatus.SymbolDeltaKnown field bool "json:\"symbol_delta_known\" yaml:\"symbol_delta_known\""
 github.com/egladman/magus/types.JobStatus.UndeclaredExports field []string "json:\"undeclared_exports,omitempty\" yaml:\"undeclared_exports,omitempty\""
+github.com/egladman/magus/types.JobStatus.UnresolvedRisks field []string "json:\"unresolved_risks,omitempty\" yaml:\"unresolved_risks,omitempty\""
 github.com/egladman/magus/types.JobStatus.Verified field bool "json:\"verified\" yaml:\"verified\""
 github.com/egladman/magus/types.JobStatus.Violations field []string "json:\"violations,omitempty\" yaml:\"violations,omitempty\""
 github.com/egladman/magus/types.JobUnattributedWrite type struct
@@ -2649,6 +2651,7 @@ github.com/egladman/magus/types.MemorySizing.Measured method func() bool
 github.com/egladman/magus/types.MemorySizing.Samples field int "json:\"samples,omitzero\" yaml:\"samples,omitempty\""
 github.com/egladman/magus/types.MemorySizing.String method func() string
 github.com/egladman/magus/types.MergeBothAdded const MergeKind = 2
+github.com/egladman/magus/types.MergeByClaim const MergeKind = 3
 github.com/egladman/magus/types.MergeContained const MergeKind = 1
 github.com/egladman/magus/types.MergeDriverGlobs type struct
 github.com/egladman/magus/types.MergeDriverGlobs.AutoResolve field []string
@@ -2660,6 +2663,7 @@ github.com/egladman/magus/types.MergeDriverInstaller.EnsureMergeDriver imethod f
 github.com/egladman/magus/types.MergeDriverInstaller.InstallMergeDriver imethod func(ctx context.Context, root string, globs MergeDriverGlobs) error
 github.com/egladman/magus/types.MergeDriverInstaller.MergeDriverCommand imethod func(ctx context.Context, root string) (string, error)
 github.com/egladman/magus/types.MergeDriverInstaller.RunMergeDriver imethod func(ctx context.Context, root string, paths []string) error
+github.com/egladman/magus/types.MergeImportSet const MergeKind = 4
 github.com/egladman/magus/types.MergeKind type int
 github.com/egladman/magus/types.MergeKind.String method func() string
 github.com/egladman/magus/types.MergeRegion type struct
@@ -2805,6 +2809,7 @@ github.com/egladman/magus/types.NewProjectRef func(path string, dir string) Proj
 github.com/egladman/magus/types.NewestReleaseStage func(tags []VCSTag) ReleaseStage
 github.com/egladman/magus/types.NoAuthToken const DiagnosticCode = "MGS9004"
 github.com/egladman/magus/types.NoCITarget const DiagnosticCode = "MGS1001"
+github.com/egladman/magus/types.NoSymbols var SymbolScope
 github.com/egladman/magus/types.NoWorkspaceRoot const DiagnosticCode = "MGS3008"
 github.com/egladman/magus/types.Node type struct
 github.com/egladman/magus/types.Node.Authors field int "json:\"authors,omitempty\" yaml:\"authors,omitempty\""
@@ -3714,6 +3719,10 @@ github.com/egladman/magus/types.StreamTargetResult const StreamEventType = "targ
 github.com/egladman/magus/types.StreamingUnsupported const DiagnosticCode = "MGS9028"
 github.com/egladman/magus/types.StricterGuardVerdict func(a GuardVerdict, b GuardVerdict) GuardVerdict
 github.com/egladman/magus/types.StricterProfile func(profiles ...GuardProfile) GuardProfile
+github.com/egladman/magus/types.SuggestionAccepted const SuggestionStatus = "accepted"
+github.com/egladman/magus/types.SuggestionDeclined const SuggestionStatus = "declined"
+github.com/egladman/magus/types.SuggestionPending const SuggestionStatus = ""
+github.com/egladman/magus/types.SuggestionStatus type string
 github.com/egladman/magus/types.SymbolDecl type struct
 github.com/egladman/magus/types.SymbolDecl.Doc field string "json:\"doc\""
 github.com/egladman/magus/types.SymbolDecl.Kind field string "json:\"kind\""
@@ -3761,6 +3770,10 @@ github.com/egladman/magus/types.SymbolOccurrenceVerified const SymbolOccurrenceS
 github.com/egladman/magus/types.SymbolReport type struct
 github.com/egladman/magus/types.SymbolReport.Indexes field []SymbolIndexStatus "json:\"indexes\""
 github.com/egladman/magus/types.SymbolReport.Symbols field []SymbolDecl "json:\"symbols\""
+github.com/egladman/magus/types.SymbolScope type struct
+github.com/egladman/magus/types.SymbolScope.Loaded method func() bool
+github.com/egladman/magus/types.SymbolScope.Ref method func() string
+github.com/egladman/magus/types.SymbolsFor func(ref string) SymbolScope
 github.com/egladman/magus/types.Target type struct
 github.com/egladman/magus/types.Target.Advisory field bool "json:\"advisory,omitempty\" buzz:\"advisory\""
 github.com/egladman/magus/types.Target.AdvisoryReason field string "json:\"advisory_reason,omitempty\" buzz:\"advisory_reason\""

@@ -3316,11 +3316,11 @@ func ObjectJobStatus(v types.JobStatus) vm.Value {
 		itemsViolations[indexViolations] = vm.StrValue(v.Violations[indexViolations])
 	}
 	out.MapSet("violations", vm.ListValue(itemsViolations))
-	itemsRisks := make([]vm.Value, len(v.Risks))
-	for indexRisks := range v.Risks {
-		itemsRisks[indexRisks] = vm.StrValue(v.Risks[indexRisks])
+	itemsUnresolvedRisks := make([]vm.Value, len(v.UnresolvedRisks))
+	for indexUnresolvedRisks := range v.UnresolvedRisks {
+		itemsUnresolvedRisks[indexUnresolvedRisks] = vm.StrValue(v.UnresolvedRisks[indexUnresolvedRisks])
 	}
-	out.MapSet("risks", vm.ListValue(itemsRisks))
+	out.MapSet("unresolvedRisks", vm.ListValue(itemsUnresolvedRisks))
 	out.MapSet("command", vm.StrValue(v.Command))
 	itemsGates := make([]vm.Value, len(v.Gates))
 	for indexGates := range v.Gates {
