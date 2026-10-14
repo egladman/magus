@@ -61,14 +61,6 @@ export enum<str> SymbolIndexFreshness {
     unvouched = "unvouched",
 }
 
-export enum<str> JobKind {
-    check = "check",
-    symbol = "symbol",
-    paths = "paths",
-    script = "script",
-    prose = "prose",
-}
-
 export enum<str> SkillVariant {
     short = "short",
     full = "full",
@@ -78,6 +70,14 @@ export enum<str> ModelTierSource {
     row = "row",
     matrix = "matrix",
     default = "default",
+}
+
+export enum<str> JobKind {
+    check = "check",
+    symbol = "symbol",
+    paths = "paths",
+    script = "script",
+    prose = "prose",
 }
 
 export object Affected {
@@ -797,6 +797,16 @@ export object GuardBinary {
     stamp: str = "",
 }
 
+export object JobModelTier {
+    name: str = "",
+    rank: int = 0,
+    skills: SkillVariant = SkillVariant.short,
+    source: ModelTierSource = ModelTierSource.row,
+    reason: str = "",
+    site: str = "",
+    model: str = "",
+}
+
 export object LeaseCheck {
     target: str = "",
     script: str = "",
@@ -937,6 +947,7 @@ export object Job {
     dependsOn: [str] = [],
     breaks: [str] = [],
     model: str = "",
+    modelTier: JobModelTier? = null,
     check: LeaseCheck? = null,
     validation: str = "",
     goals: [Goal] = [],
@@ -1212,16 +1223,6 @@ export object ModelTierRequest {
 export object ModelTierBounds {
     maxLive: int = 0,
     maxContext: int = 0,
-}
-
-export object JobModelTier {
-    name: str = "",
-    rank: int = 0,
-    skills: SkillVariant = SkillVariant.short,
-    source: ModelTierSource = ModelTierSource.row,
-    reason: str = "",
-    site: str = "",
-    model: str = "",
 }
 
 export object CharmDeclaration {

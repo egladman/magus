@@ -2997,7 +2997,7 @@ func ObjectModelTierRequest(v types.ModelTierRequest, enums ffi.EnumCases) vm.Va
 	return out
 }
 
-func ObjectJob(v types.Job) vm.Value {
+func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("schemaVersion", vm.IntValue(int64(v.Schema.Version)))
 	itemsRequires := make([]vm.Value, len(v.Schema.Requires))
@@ -3035,6 +3035,11 @@ func ObjectJob(v types.Job) vm.Value {
 	}
 	out.MapSet("breaks", vm.ListValue(itemsBreaks))
 	out.MapSet("model", vm.StrValue(v.Model))
+	optModelTier := vm.Null
+	if v.ModelTier != nil {
+		optModelTier = ObjectJobModelTier((*v.ModelTier), enums)
+	}
+	out.MapSet("modelTier", optModelTier)
 	optCheck := vm.Null
 	if v.Check != nil {
 		optCheck = ObjectLeaseCheck((*v.Check))
@@ -3227,11 +3232,11 @@ func ObjectInflightFetch(v types.InflightFetch) vm.Value {
 	return out
 }
 
-func ObjectJobList(v types.JobList) vm.Value {
+func ObjectJobList(v types.JobList, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	itemsJobs := make([]vm.Value, len(v.Jobs))
 	for indexJobs := range v.Jobs {
-		itemsJobs[indexJobs] = ObjectJob(v.Jobs[indexJobs])
+		itemsJobs[indexJobs] = ObjectJob(v.Jobs[indexJobs], enums)
 	}
 	out.MapSet("jobs", vm.ListValue(itemsJobs))
 	itemsOverlaps := make([]vm.Value, len(v.Overlaps))
@@ -3372,7 +3377,7 @@ func ObjectSpawnTarget(v types.SpawnTarget) vm.Value {
 	return out
 }
 
-func ObjectSpawnRequest(v types.SpawnRequest) vm.Value {
+func ObjectSpawnRequest(v types.SpawnRequest, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("kind", vm.StrValue(string(v.Kind)))
 	out.MapSet("host", vm.StrValue(v.Host))
@@ -3389,7 +3394,7 @@ func ObjectSpawnRequest(v types.SpawnRequest) vm.Value {
 	out.MapSet("role", vm.StrValue(string(v.Role)))
 	optLease := vm.Null
 	if v.Lease != nil {
-		optLease = ObjectJob((*v.Lease))
+		optLease = ObjectJob((*v.Lease), enums)
 	}
 	out.MapSet("lease", optLease)
 	out.MapSet("thread", vm.StrValue(string(v.Thread)))
@@ -3449,7 +3454,7 @@ func ObjectCheckoutState(v types.CheckoutState) vm.Value {
 	return out
 }
 
-func ObjectCommandRequest(v types.CommandRequest) vm.Value {
+func ObjectCommandRequest(v types.CommandRequest, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("host", vm.StrValue(v.Host))
 	out.MapSet("session", vm.StrValue(v.Session))
@@ -3465,7 +3470,7 @@ func ObjectCommandRequest(v types.CommandRequest) vm.Value {
 	out.MapSet("role", vm.StrValue(string(v.Role)))
 	optLease := vm.Null
 	if v.Lease != nil {
-		optLease = ObjectJob((*v.Lease))
+		optLease = ObjectJob((*v.Lease), enums)
 	}
 	out.MapSet("lease", optLease)
 	out.MapSet("thread", vm.StrValue(string(v.Thread)))
@@ -3485,7 +3490,7 @@ func ObjectCommandRequest(v types.CommandRequest) vm.Value {
 	return out
 }
 
-func ObjectWriteRequest(v types.WriteRequest) vm.Value {
+func ObjectWriteRequest(v types.WriteRequest, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("host", vm.StrValue(v.Host))
 	out.MapSet("session", vm.StrValue(v.Session))
@@ -3494,7 +3499,7 @@ func ObjectWriteRequest(v types.WriteRequest) vm.Value {
 	out.MapSet("role", vm.StrValue(string(v.Role)))
 	optLease := vm.Null
 	if v.Lease != nil {
-		optLease = ObjectJob((*v.Lease))
+		optLease = ObjectJob((*v.Lease), enums)
 	}
 	out.MapSet("lease", optLease)
 	out.MapSet("thread", vm.StrValue(string(v.Thread)))

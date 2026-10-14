@@ -29,7 +29,9 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "CoChange", Zero: types.CoChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCoChange(v.(types.CoChange)) }},
 	{Name: "Command", Zero: spells.Command{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCommand(v.(spells.Command), enums) }},
 	{Name: "CommandInvocation", Zero: types.CommandInvocation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCommandInvocation(v.(types.CommandInvocation)) }},
-	{Name: "CommandRequest", Zero: types.CommandRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCommandRequest(v.(types.CommandRequest)) }},
+	{Name: "CommandRequest", Zero: types.CommandRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectCommandRequest(v.(types.CommandRequest), enums)
+	}},
 	{Name: "CommentBlock", Zero: spells.CommentBlock{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCommentBlock(v.(spells.CommentBlock)) }},
 	{Name: "CommentSyntax", Zero: spells.CommentSyntax{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCommentSyntax(v.(spells.CommentSyntax)) }},
 	{Name: "Commit", Zero: types.CommitRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCommitRecord(v.(types.CommitRecord)) }},
@@ -118,13 +120,13 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "InflightNeighbour", Zero: types.InflightNeighbour{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectInflightNeighbour(v.(types.InflightNeighbour)) }},
 	{Name: "InputRef", Zero: types.InputRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectInputRef(v.(types.InputRef)) }},
 	{Name: "InsightReport", Zero: types.InsightReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectInsightReport(v.(types.InsightReport), enums) }},
-	{Name: "Job", Zero: types.Job{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJob(v.(types.Job)) }},
+	{Name: "Job", Zero: types.Job{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJob(v.(types.Job), enums) }},
 	{Name: "JobAttempt", Zero: types.JobAttempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobAttempt(v.(types.JobAttempt)) }},
 	{Name: "JobBlock", Zero: types.JobBlock{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobBlock(v.(types.JobBlock)) }},
 	{Name: "JobEntry", Zero: types.JobEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobEntry(v.(types.JobEntry)) }},
 	{Name: "JobGateAttempt", Zero: types.JobGateAttempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobGateAttempt(v.(types.JobGateAttempt)) }},
 	{Name: "JobIntegration", Zero: types.JobIntegration{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobIntegration(v.(types.JobIntegration)) }},
-	{Name: "JobList", Zero: types.JobList{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobList(v.(types.JobList)) }},
+	{Name: "JobList", Zero: types.JobList{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobList(v.(types.JobList), enums) }},
 	{Name: "JobModelTier", Zero: types.JobModelTier{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobModelTier(v.(types.JobModelTier), enums) }},
 	{Name: "JobOverlap", Zero: types.JobOverlap{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobOverlap(v.(types.JobOverlap)) }},
 	{Name: "JobOverlapFootprint", Zero: types.JobOverlapFootprint{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
@@ -216,7 +218,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ServiceView", Zero: spells.ServiceView{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectServiceView(v.(spells.ServiceView)) }},
 	{Name: "ShellCommand", Zero: types.ShellCommand{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectShellCommand(v.(types.ShellCommand)) }},
 	{Name: "Skill", Zero: types.Skill{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSkill(v.(types.Skill)) }},
-	{Name: "SpawnRequest", Zero: types.SpawnRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpawnRequest(v.(types.SpawnRequest)) }},
+	{Name: "SpawnRequest", Zero: types.SpawnRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpawnRequest(v.(types.SpawnRequest), enums) }},
 	{Name: "SpawnTarget", Zero: types.SpawnTarget{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpawnTarget(v.(types.SpawnTarget)) }},
 	{Name: "Spell", Zero: types.Spell{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpell(v.(types.Spell)) }},
 	{Name: "SpellToolchain", Zero: types.SpellToolchain{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpellToolchain(v.(types.SpellToolchain)) }},
@@ -258,6 +260,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Volatility", Zero: types.VolatilityReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVolatilityReport(v.(types.VolatilityReport)) }},
 	{Name: "VolatilityTarget", Zero: types.VolatilityTarget{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVolatilityTarget(v.(types.VolatilityTarget)) }},
 	{Name: "WorkspaceEntry", Zero: types.WorkspaceEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectWorkspaceEntry(v.(types.WorkspaceEntry)) }},
-	{Name: "WriteRequest", Zero: types.WriteRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectWriteRequest(v.(types.WriteRequest)) }},
+	{Name: "WriteRequest", Zero: types.WriteRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectWriteRequest(v.(types.WriteRequest), enums) }},
 	{Name: "YamlPositions", Zero: types.YAMLPositions{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectYAMLPositions(v.(types.YAMLPositions)) }},
 }

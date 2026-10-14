@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -33,6 +34,6 @@ func registerSpawnRule(ctx context.Context, sess *buzz.Session, obs buzz.DirectO
 // buzzSpawnRule adapts the registered Buzz function to the guard's rule type.
 func buzzSpawnRule(sess *buzz.Session, rule vm.Value) workspace.SpawnRule {
 	return func(ctx context.Context, req types.SpawnRequest, facts hint.Gate) (types.GuardVerdict, error) {
-		return callFunctionRule(ctx, sess, rule, "spawn", bindinggen.ObjectSpawnRequest(req), facts)
+		return callFunctionRule(ctx, sess, rule, "spawn", bindinggen.ObjectSpawnRequest(req, ffi.SessionEnums(ctx, sess, "magus")), facts)
 	}
 }

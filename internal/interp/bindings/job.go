@@ -36,7 +36,7 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return bindinggen.ObjectJobList(report), nil
+		return bindinggen.ObjectJobList(report, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	job.MapSet("put", directVal(obs, "magus.job.put", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		id := ffi.Str(args, 0)
@@ -45,7 +45,7 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return bindinggen.ObjectJob(row), nil
+		return bindinggen.ObjectJob(row, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	// register answers with a two-key map rather than the row alone, which is the shape
 	// list and put use. The advice sentence is DERIVED from the row and not a field on it
@@ -57,7 +57,7 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 			return vm.Null, ffi.Error(err)
 		}
 		out := vm.NewMap()
-		out.MapSet("job", bindinggen.ObjectJob(row))
+		out.MapSet("job", bindinggen.ObjectJob(row, ffi.SessionEnums(ctx, sess, "magus")))
 		out.MapSet("advice", ffi.StrVal(advice))
 		return out, nil
 	}))
@@ -74,7 +74,7 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return bindinggen.ObjectJob(row), nil
+		return bindinggen.ObjectJob(row, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	job.MapSet("wait", directVal(obs, "magus.job.wait", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		var result map[string]any
