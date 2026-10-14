@@ -91,6 +91,10 @@ type SpawnRequest struct {
 	// Lease is the job row a worker acts under, nil for root. A bound id the job store
 	// does not carry comes back with only its ID set.
 	Lease *Job
+	// ModelTier is the model tier recorded on the live row a spawn's `<parent>/<role> <job>`
+	// title names. Nil on a continue, when the title names no live row, or when the row was
+	// written with no model tiers declared.
+	ModelTier *JobModelTier
 	// Thread, ThreadKnown and Context are the CALLER's, as on CommandRequest.
 	Thread      AgentThread
 	ThreadKnown bool

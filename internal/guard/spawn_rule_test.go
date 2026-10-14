@@ -507,6 +507,21 @@ func TestSpawnRuleSeesTheHostsSubagentID(t *testing.T) {
 	assert.Empty(t, probe.asked[1].Agent, "the main agent carries no subagent id")
 }
 
+// A spawn titled for a live row carries the model tier the row was forked at; a title that
+// names no row carries none.
+func TestSpawnRuleSeesTheRowsModelTier(t *testing.T) {
+	ctx := tierFixture(t, testModelTiers(t, "claude-code"), types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+	probe := &spawnRuleProbe{}
+	deps := Dependencies{SpawnRule: probe.rule()}
+
+	judgeSpawn(ctx, t, deps, "haiku")
+	Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
+	require.Len(t, probe.asked, 2)
+	assert.Equal(t, &types.JobModelTier{Name: "economy", Rank: 0, Skills: types.SkillVariantFull, Source: types.ModelTierSourceMatrix,
+		Reason: "two files", Site: "hack/tiers.buzz:12"}, probe.asked[0].ModelTier)
+	assert.Nil(t, probe.asked[1].ModelTier)
+}
+
 // trailEvents returns matching events oldest-first: ReadRecent reports newest-first, and a
 // lineage assertion reads left-to-right as it happened.
 func trailEvents(t *testing.T, base string, kind trail.Kind) []trail.Event {

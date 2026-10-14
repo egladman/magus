@@ -3411,6 +3411,11 @@ func ObjectSpawnRequest(v types.SpawnRequest, enums ffi.EnumCases) vm.Value {
 		optLease = ObjectJob((*v.Lease), enums)
 	}
 	out.MapSet("lease", optLease)
+	optModelTier := vm.Null
+	if v.ModelTier != nil {
+		optModelTier = ObjectJobModelTier((*v.ModelTier), enums)
+	}
+	out.MapSet("modelTier", optModelTier)
 	out.MapSet("thread", vm.StrValue(string(v.Thread)))
 	out.MapSet("threadKnown", vm.BoolValue(v.ThreadKnown))
 	optContext := vm.Null

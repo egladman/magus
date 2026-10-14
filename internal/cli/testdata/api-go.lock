@@ -3432,6 +3432,7 @@ github.com/egladman/magus/types.SpawnRequest.Isolated field bool
 github.com/egladman/magus/types.SpawnRequest.Kind field SpawnKind
 github.com/egladman/magus/types.SpawnRequest.Lease field *Job
 github.com/egladman/magus/types.SpawnRequest.Model field string
+github.com/egladman/magus/types.SpawnRequest.ModelTier field *JobModelTier
 github.com/egladman/magus/types.SpawnRequest.Name field string
 github.com/egladman/magus/types.SpawnRequest.Parent field string
 github.com/egladman/magus/types.SpawnRequest.Prompt field string

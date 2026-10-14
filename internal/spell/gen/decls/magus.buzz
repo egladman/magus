@@ -1031,6 +1031,7 @@ export object SpawnRequest {
     parent: str = "",
     role: str = "",
     lease: Job? = null,
+    modelTier: JobModelTier? = null,
     thread: str = "",
     threadKnown: bool = false,
     context: AgentContext? = null,

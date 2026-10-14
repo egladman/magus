@@ -253,6 +253,8 @@ func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at 
 	if env.IsContinue {
 		req.Kind = types.SpawnKindContinue
 		req.Target = continueTarget(ctx, at, facts, env.Target, time.Now())
+	} else if row, ok := spawnTitleJob(ctx, at, env.Spawn.Description); ok {
+		req.ModelTier = row.ModelTier
 	}
 	// The same resolution every lease-scoped rule uses, so the rule and the guard cannot
 	// disagree about who is acting.
