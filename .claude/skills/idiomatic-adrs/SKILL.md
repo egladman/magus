@@ -1,6 +1,6 @@
 ---
 name: idiomatic-adrs
-description: "Write and consult architecture decision records (ADRs) that keep what was built, what was deliberately not built, and why. Use when a design decision lands and needs a durable record, when a plan or research note turns into a decision, before proposing or reversing a design that an existing record or refusal row may already settle, and when an ADR's status or State rows no longer match the code. Every record is checked against docs/doctrine.md. Fire even if the request says plan, design doc or write this up. This repository's template and lint win over this skill's defaults. Repo-only; never shipped."
+description: "Write and consult architecture decision records (ADRs): what was built, what was not, and why. Use when a design decision lands or a plan becomes one. Use before reopening a settled design. Use when an ADR's State rows drift from the code. Fire on plan, design doc or write this up. Repo-only; its template and lint win."
 metadata:
   source: workspace
 ---
@@ -15,7 +15,7 @@ whether a later reader can trust it.
 
 ## Consult before you propose
 
-Settled decisions are only read when someone looks. Before proposing a flag, rule, check
+Settled decisions are only read when someone looks. Before proposing a flag, lint, check
 or feature, or reopening a removed one:
 
 1. Search the records: `magus query "kind=docsection id=~decisions/ <terms>"`.
@@ -25,9 +25,9 @@ or feature, or reopening a removed one:
 
 ## Decide whether to write one
 
-- Write one when a decision lands that someone will be tempted to reverse, when a plan or
-  research thread reaches a decision, or when a pull request description would otherwise
-  carry the rationale.
+- Write one when a decision lands that someone may be tempted to reverse.
+- Write one when a plan or research thread reaches a decision.
+- Write one when a pull request description would otherwise carry the rationale.
 - Do not write one for research with no decision, or a choice that lives and dies in one
   pull request.
 - A measured decision not to build, with no built consequence, is one row in
@@ -37,26 +37,26 @@ or feature, or reopening a removed one:
 
 - **Context** states the forces with measurements from this tree, not adjectives.
 - **Decision** says what was built and in what state, one State per item.
-- **Every rejection carries four things**: the option, why it lost, the evidence, and what
+- Every rejection carries four things: the option, why it lost, the evidence, and what
   would reopen it. A pointer to a table is not an Alternatives section.
 - **Quote the evidence.** A number needs its sample and its date. "Slow" is not evidence.
 - **Name the unknowns** under Open questions instead of deciding them quietly.
 
 ## Check the decision against doctrine
 
-Every record holds its decision up against the principles in
-[docs/doctrine.md](../../../docs/doctrine.md) before it is accepted. This step is
-required. Read the principles, then add a `### Doctrine checked` H3 under Decision that
-links each principle the decision relies on or departs from, with one sentence on how.
+Hold every record's decision against the principles in
+[docs/doctrine.md](../../../docs/doctrine.md) before accepting it. This step is
+required. Read the principles, then add a `### Doctrine checked` H3 under Decision.
+Link each principle the decision relies on or departs from, with one sentence on how.
 
 - A departure names the principle, what bends and why, and who decided. A decision that
   contradicts a principle without saying so is the defect this step exists to catch.
 - A record that touches an agent integration cites
-  [The outer harness stays outside](../../../docs/doctrine.md): magus judges and informs,
-  never transforms what the host's inner loop sends, with no proxy or context rewriting, and
-  agent-loaded text is static and version-controlled. That principle is on an unmerged
-  branch (`feat/proofread-library-improvements-87c508`, commit 94344b71c). Cite it as
-  pending until it lands in doctrine.md, then link its heading.
+  [The outer harness stays outside](../../../docs/doctrine.md). Magus judges and informs.
+  It never transforms what the host's inner loop sends, and agent-loaded text stays static
+  and version-controlled. That principle is on an unmerged branch
+  (`feat/proofread-library-improvements-87c508`, commit 94344b71c): cite it as pending until
+  it lands in doctrine.md, then link its heading.
 - Principles the decision does not touch need no mention.
 
 ## Keep it true

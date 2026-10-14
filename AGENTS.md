@@ -104,7 +104,7 @@ saying it, delete it here.
 - The docs site is classless Pico: semantic HTML, few custom classes, no inline
   styles.
 - A convention that matters gets an enforcement point;
-  [Where a rule lives](CONTRIBUTING.md#where-a-rule-lives) says which. A
+  [CONTRIBUTING.md](CONTRIBUTING.md#where-a-rule-lives) says which. A
   convention kept only in prose holds about half the time.
 
 ## Gotchas

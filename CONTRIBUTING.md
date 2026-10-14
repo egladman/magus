@@ -314,7 +314,7 @@ order and stop at the first yes.
    to it.
 2. Does it need judgment? Then it is a sentence for a reader. Pick the reader by
    how often they must see it.
-3. Is it a decision someone will be tempted to reverse? Then it is a record.
+3. Is it a decision someone may be tempted to reverse? Then it is a record.
 
 ### Mechanical rules
 

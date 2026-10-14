@@ -739,7 +739,7 @@ Leave `signature` out and the fork records the one the symbol index holds. That
 is the stub flow: write the declaration with an empty body, run
 `magus graph build`, then fork the job with a `signature` goal beside a
 `changed` goal on the same name. A signature the fork cannot record is refused,
-never skipped: the graph will not open, the index does not define the symbol
+never skipped: the graph does not open, the index does not define the symbol
 yet, or it holds no signature for it. A later `magus job apply` of the same
 record keeps the signature the first one recorded.
 
