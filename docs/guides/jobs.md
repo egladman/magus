@@ -463,5 +463,7 @@ running magus in a pipeline.
 
 - [Splitting other work](jobs/other-work.md): a dependency upgrade, a translation
   and a release checklist, each split into jobs.
+- [Model tiers](jobs/model-tiers.md): declare the tiers your jobs run at, map each
+  to a harness's model, and optionally pick one with a function at fork.
 - `magus job <verb> -h` ends with an example for that verb, and
   [`magus job`](../reference/manpage/magus-job.md) has every flag.

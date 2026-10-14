@@ -1,0 +1,30 @@
+import "magus";
+import "magus/modeltiers" as modeltiers;
+
+object Choice { tier: modeltiers\ModelTier, skills: magus\SkillVariant, reason: str }
+
+// Economy stops taking a kind of job once ten of them are recorded and fewer than half passed.
+fun economyHolds(req: ModelTierRequest) > bool {
+    foreach (r in req.history) {
+        if (r.rank == 0 and r.kind == req.kind and r.jobs >= 10 and r.passLower < 0.5) { return false; }
+    }
+    return true;
+}
+
+fun choose(req: ModelTierRequest) > Choice? {
+    if (req.readOnly or req.check == null) { return null; }
+    if (req.writeFiles <= 3 and req.writeProjects.len() == 1 and economyHolds(req)) {
+        return Choice{
+            tier = modeltiers\ModelTier.economy,
+            skills = magus\SkillVariant.full,
+            reason = "{req.kind.value} job, {req.writeFiles} files",
+        };
+    }
+    return Choice{
+        tier = modeltiers\ModelTier.standard,
+        skills = magus\SkillVariant.short,
+        reason = "wide write set, or economy failing {req.kind.value}",
+    };
+}
+
+magus\job.modelTier(choose);
