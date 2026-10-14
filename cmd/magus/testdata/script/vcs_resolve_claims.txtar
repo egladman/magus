@@ -114,6 +114,8 @@ exec magus run test .
 *.ts diff=typescript
 *.tsx diff=typescript
 *.buzz diff=buzz
+*.yaml diff=yaml
+*.yml diff=yaml
 # END magus-generated
 -- ws/magusfile.buzz --
 import "magus";

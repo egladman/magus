@@ -87,6 +87,8 @@ pick.out
 *.ts diff=typescript
 *.tsx diff=typescript
 *.buzz diff=buzz
+*.yaml diff=yaml
+*.yml diff=yaml
 /OUT.txt merge=magus linguist-generated
 # END magus-generated
 -- magusfile.buzz --
