@@ -128,7 +128,8 @@ func TestJudgeRefusesASpawnWhoseBriefTeachesADeniedCommand(t *testing.T) {
 
 // TestBriefOffCheckIsRefused: the 2026-09-29 briefs told figure workers they "may also run"
 // lint, and two ran it at once. A brief naming a live row is held to that row's check before
-// any worker exists.
+// any worker exists. Only a run the brief teaches, in a code span or a shell block, is held
+// to it: on 2026-10-14 a brief that only described a refused run in running text was refused.
 func TestBriefOffCheckIsRefused(t *testing.T) {
 	row := figuresLease()
 	produces := func() func(target, project string) bool {
@@ -136,18 +137,16 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 			return targetName(target) == "figures-generate" && project == "docs"
 		}
 	}
-	defines := func(target string) bool {
-		return slices.Contains([]string{"lint", "lint-files", "diagrams-generate", "figures-generate"}, targetName(target))
-	}
 	for _, tt := range []struct {
 		name, brief, target string // target is what the refusal names; "" for none
 	}{
 		{"may also run", "You may also run `./magus run lint docs` beside the check.", "lint"},
-		{"may also run, in prose", "You may also run ./magus run lint docs, lint-files . and observe.", "lint"},
 		{"a shell block", "Validate:\n```bash\n./magus run diagrams_generate docs\n./magus run lint docs\n```", "lint"},
 		{"the gate", "Finish with `./magus affected ci`.", "ci"},
-		{"run the X target", "Then run the lint target and report.", "lint"},
 
+		{"may also run, in prose", "You may also run ./magus run lint docs, lint-files . and observe.", ""},
+		{"run the X target", "Then run the lint target and report.", ""},
+		{"a run described in prose", "The guard refused magus run go-build . for the last worker; report it.", ""},
 		{"never run", "Never run `./magus run lint docs`; the orchestrator does.", ""},
 		{"do not run, in prose", "Do not run lint docs: validations serialize.", ""},
 		{"the row's own check", "Run `./magus run diagrams_generate docs` once at the end.", ""},
@@ -157,9 +156,13 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 		{"a placeholder", "Run `./magus run <target> <project>` for the row's check.", ""},
 		{"a read", "Read `./magus describe job figures/flow` first.", ""},
 	} {
-		off, found := briefOffCheck(briefRuns(tt.brief), row, produces, defines)
+		runs := briefRuns(tt.brief)
+		off, found := briefOffCheck(runs, row, produces)
 		if tt.target == "" {
 			assert.False(t, found, "%s: refused over %q", tt.name, off.line)
+			if slices.ContainsFunc(runs, func(r briefRun) bool { return r.prose }) {
+				assert.NotEmpty(t, briefPassNotes(runs, row, produces), "%s: a pass says why the run was not graded", tt.name)
+			}
 			continue
 		}
 		require.True(t, found, tt.name)
