@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 26132
-skill_short_bytes: 19909
+skill_full_bytes: 27292
+skill_short_bytes: 21069
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `123` |
 | `knowledge-schema-version` | `17` |
-| `skill-content` | `2f8afc0b09ad` |
+| `skill-content` | `78bd99259b15` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -139,6 +139,27 @@ Then make the declaration gradeable, so the names are a contract, not a suggesti
 - `symbol` + `absent` for the name a second copy would predictably take beside a
   symbol the work must reuse. No gate grades reuse itself.
 - `symbol` + `unreferenced` for each helper the shared API replaces.
+
+Signature goals are the default for a job that adds or changes an exported API.
+`symbol` + `signature` holds the name to a declaration, so the interface is a
+contract and not only a name. The recipe:
+
+1. The root commits the stub: the declaration, with no body worth keeping.
+2. Run `magus graph build`, so the index holds the stub.
+3. Fork the job with a `signature` goal and a `changed` goal on the same name. Leave
+   `signature` empty and the fork records the indexed one, which is how the stub
+   becomes the contract.
+
+Name what a job may break in its `breaks` list: the flags, JSON keys, exported
+symbols or stored formats you approved it breaking. An empty list means it breaks
+nothing on its own authority, and a worker that finds a break outside the list
+stops and reports it.
+
+Findings from the magus are work to finish, not noise. The unreferenced symbols
+`magus job fork` lists in the job's write paths (`deletion_candidates` in
+`-o json`) and the symbols `magus job wait` reports left unreferenced are each
+finished or deleted. The graph cannot see reflection, interface dispatch or a
+consumer outside the workspace, so confirm before deleting.
 
 Check each declared name with `magus refs` before forking. A bare name that resolves
 to more than one definition is graded against one of them, silently.
@@ -601,6 +622,27 @@ Then make the declaration gradeable, so the names are a contract, not a suggesti
   holds for a symbol that existed before the job began, and a reference count
   cannot tell the defining file or an import from real use.
 - `symbol` + `unreferenced` for each helper the shared API replaces.
+
+Signature goals are the default for a job that adds or changes an exported API.
+`symbol` + `signature` holds the name to a declaration, so the interface is a
+contract and not only a name. The recipe:
+
+1. The root commits the stub: the declaration, with no body worth keeping.
+2. Run `magus graph build`, so the index holds the stub.
+3. Fork the job with a `signature` goal and a `changed` goal on the same name. Leave
+   `signature` empty and the fork records the indexed one, which is how the stub
+   becomes the contract.
+
+Name what a job may break in its `breaks` list: the flags, JSON keys, exported
+symbols or stored formats you approved it breaking. An empty list means it breaks
+nothing on its own authority, and a worker that finds a break outside the list
+stops and reports it.
+
+Findings from the magus are work to finish, not noise. The unreferenced symbols
+`magus job fork` lists in the job's write paths (`deletion_candidates` in
+`-o json`) and the symbols `magus job wait` reports left unreferenced are each
+finished or deleted. The graph cannot see reflection, interface dispatch or a
+consumer outside the workspace, so confirm before deleting.
 
 Check each declared name with `magus refs` before forking. A bare name that resolves
 to more than one definition is graded against one of them, silently.

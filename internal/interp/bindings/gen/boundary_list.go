@@ -165,6 +165,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "RefSite", Zero: types.KnowledgeRefSite{}, Encode: func(v any) vm.Value { return ObjectKnowledgeRefSite(v.(types.KnowledgeRefSite)) }},
 	{Name: "RefsResult", Zero: types.KnowledgeRefsOutput{}, Encode: func(v any) vm.Value { return ObjectKnowledgeRefsOutput(v.(types.KnowledgeRefsOutput)) }},
 	{Name: "RegionChange", Zero: types.RegionChange{}, Encode: func(v any) vm.Value { return ObjectRegionChange(v.(types.RegionChange)) }},
+	{Name: "ReleaseStage", Zero: types.ReleaseStage{}, Encode: func(v any) vm.Value { return ObjectReleaseStage(v.(types.ReleaseStage)) }},
 	{Name: "Rule", Zero: types.RuleDoc{}, Encode: func(v any) vm.Value { return ObjectRuleDoc(v.(types.RuleDoc)) }},
 	{Name: "Run", Zero: types.StatusRun{}, Encode: func(v any) vm.Value { return ObjectStatusRun(v.(types.StatusRun)) }},
 	{Name: "Sandbox", Zero: spells.Sandbox{}, Encode: func(v any) vm.Value { return ObjectSandbox(v.(spells.Sandbox)) }},

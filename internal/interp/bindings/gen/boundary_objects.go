@@ -1162,6 +1162,13 @@ func ObjectDiffFile(v types.DiffFile) vm.Value {
 	return out
 }
 
+func ObjectReleaseStage(v types.ReleaseStage) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("tag", vm.StrValue(v.Tag))
+	out.MapSet("major", vm.IntValue(int64(v.Major)))
+	return out
+}
+
 func ObjectDiffAPI(v types.DiffAPI) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("base", vm.StrValue(v.Base))
@@ -1171,6 +1178,7 @@ func ObjectDiffAPI(v types.DiffAPI) vm.Value {
 	out.MapSet("removed", vm.IntValue(int64(v.Removed)))
 	out.MapSet("signature", vm.IntValue(int64(v.Signature)))
 	out.MapSet("body", vm.IntValue(int64(v.Body)))
+	out.MapSet("stage", ObjectReleaseStage(v.Stage))
 	return out
 }
 
@@ -3021,6 +3029,11 @@ func ObjectJob(v types.Job) vm.Value {
 		itemsDependsOn[indexDependsOn] = vm.StrValue(v.DependsOn[indexDependsOn])
 	}
 	out.MapSet("dependsOn", vm.ListValue(itemsDependsOn))
+	itemsBreaks := make([]vm.Value, len(v.Breaks))
+	for indexBreaks := range v.Breaks {
+		itemsBreaks[indexBreaks] = vm.StrValue(v.Breaks[indexBreaks])
+	}
+	out.MapSet("breaks", vm.ListValue(itemsBreaks))
 	out.MapSet("model", vm.StrValue(v.Model))
 	optCheck := vm.Null
 	if v.Check != nil {

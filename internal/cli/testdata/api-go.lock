@@ -894,6 +894,7 @@ github.com/egladman/magus/types.DeadOutputGlob const DiagnosticCode = "MGS1018"
 github.com/egladman/magus/types.Declaration type struct
 github.com/egladman/magus/types.Declaration.Apply method func(u *Job)
 github.com/egladman/magus/types.Declaration.ApplySpec method func(u *Job)
+github.com/egladman/magus/types.Declaration.Breaks field []string "json:\"breaks,omitempty\""
 github.com/egladman/magus/types.Declaration.Check field *LeaseCheck "json:\"check,omitempty\""
 github.com/egladman/magus/types.Declaration.Checkpoint field string "json:\"checkpoint,omitempty\""
 github.com/egladman/magus/types.Declaration.Criteria field string "json:\"criteria,omitempty\""
@@ -996,6 +997,7 @@ github.com/egladman/magus/types.DiffAPI.Floor field string "json:\"floor\" yaml:
 github.com/egladman/magus/types.DiffAPI.Likely field string "json:\"likely\" yaml:\"likely\""
 github.com/egladman/magus/types.DiffAPI.Removed field int "json:\"removed\"   yaml:\"removed\""
 github.com/egladman/magus/types.DiffAPI.Signature field int "json:\"signature\" yaml:\"signature\""
+github.com/egladman/magus/types.DiffAPI.Stage field ReleaseStage "json:\"stage\" yaml:\"stage\""
 github.com/egladman/magus/types.DiffAuthor type string
 github.com/egladman/magus/types.DiffAuthor.UnmarshalText method(ptr) func(b []byte) error
 github.com/egladman/magus/types.DiffAuthorAgent const DiffAuthor = "agent"
@@ -1901,6 +1903,7 @@ github.com/egladman/magus/types.IsReservedCharm func(name string) bool
 github.com/egladman/magus/types.Job type struct
 github.com/egladman/magus/types.Job.Attempt field *JobAttempt "json:\"attempt,omitempty\" yaml:\"attempt,omitempty\""
 github.com/egladman/magus/types.Job.BaseVerdict field JobBaseVerdict "json:\"base_verdict,omitempty\" yaml:\"base_verdict,omitempty\""
+github.com/egladman/magus/types.Job.Breaks field []string "json:\"breaks,omitempty\" yaml:\"breaks,omitempty\""
 github.com/egladman/magus/types.Job.Check field *LeaseCheck "json:\"check,omitempty\" yaml:\"check,omitempty\""
 github.com/egladman/magus/types.Job.CheckoutRoot field string "json:\"checkout_root,omitempty\" yaml:\"checkout_root,omitempty\""
 github.com/egladman/magus/types.Job.Checkpoint field string "json:\"checkpoint,omitempty\" yaml:\"checkpoint,omitempty\""
@@ -2768,6 +2771,7 @@ github.com/egladman/magus/types.NewGraphConfig func(initial Observer) *GraphConf
 github.com/egladman/magus/types.NewJobList func(jobs []Job) JobList
 github.com/egladman/magus/types.NewModelTierSet func(decl ModelTierDeclaration) (*ModelTierSet, error)
 github.com/egladman/magus/types.NewProjectRef func(path string, dir string) ProjectRef
+github.com/egladman/magus/types.NewestReleaseStage func(tags []VCSTag) ReleaseStage
 github.com/egladman/magus/types.NoAuthToken const DiagnosticCode = "MGS9004"
 github.com/egladman/magus/types.NoCITarget const DiagnosticCode = "MGS1001"
 github.com/egladman/magus/types.NoWorkspaceRoot const DiagnosticCode = "MGS3008"
@@ -3161,6 +3165,10 @@ github.com/egladman/magus/types.RelationProduces const RelationID = "produces"
 github.com/egladman/magus/types.RelationRationaleFor const RelationID = "rationale_for"
 github.com/egladman/magus/types.RelationReferences const RelationID = "references"
 github.com/egladman/magus/types.RelationUses const RelationID = "uses"
+github.com/egladman/magus/types.ReleaseStage type struct
+github.com/egladman/magus/types.ReleaseStage.Known method func() bool
+github.com/egladman/magus/types.ReleaseStage.Major field int "json:\"major\" yaml:\"major\""
+github.com/egladman/magus/types.ReleaseStage.Tag field string "json:\"tag,omitempty\" yaml:\"tag,omitempty\""
 github.com/egladman/magus/types.RemoteConfigReporter type interface
 github.com/egladman/magus/types.RemoteConfigReporter.ConfiguredRemote imethod func(dir string) (string, error)
 github.com/egladman/magus/types.RemoteReporter type interface

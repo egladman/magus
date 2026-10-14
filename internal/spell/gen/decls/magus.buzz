@@ -216,6 +216,11 @@ export object ImpactProject {
     targets: [str] = [],
 }
 
+export object ReleaseStage {
+    tag: str = "",
+    major: int = 0,
+}
+
 export object DiffAPI {
     base: str = "",
     floor: str = "",
@@ -224,6 +229,7 @@ export object DiffAPI {
     removed: int = 0,
     signature: int = 0,
     body: int = 0,
+    stage: ReleaseStage = ReleaseStage{},
 }
 
 export object DiffHunkRef {
@@ -929,6 +935,7 @@ export object Job {
     denyPaths: [str] = [],
     readPaths: [str] = [],
     dependsOn: [str] = [],
+    breaks: [str] = [],
     model: str = "",
     check: LeaseCheck? = null,
     validation: str = "",

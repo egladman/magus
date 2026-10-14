@@ -285,8 +285,11 @@ type Job struct {
 	// the holder's, unset unless `magus job wait --evidence` took some. gate_attempts keep the
 	// holder's own attempts untouched; this is the second fact beside them.
 	WaiterEvidence *JobIntegration `protobuf:"bytes,39,opt,name=waiter_evidence,json=waiterEvidence,proto3" json:"waiter_evidence,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// breaks are the flags, JSON keys, exported symbols or stored formats the root approved this
+	// job breaking; empty means it breaks nothing on its own authority.
+	Breaks        []string `protobuf:"bytes,40,rep,name=breaks,proto3" json:"breaks,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Job) Reset() {
@@ -588,6 +591,13 @@ func (x *Job) GetRequires() []string {
 func (x *Job) GetWaiterEvidence() *JobIntegration {
 	if x != nil {
 		return x.WaiterEvidence
+	}
+	return nil
+}
+
+func (x *Job) GetBreaks() []string {
+	if x != nil {
+		return x.Breaks
 	}
 	return nil
 }
@@ -2101,7 +2111,7 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\rinvocation_id\x18\x02 \x01(\tR\finvocationId\x12\x1f\n" +
 	"\vconsole_url\x18\x03 \x01(\tR\n" +
 	"consoleUrl\x12)\n" +
-	"\x03job\x18\x04 \x01(\v2\x17.magus.job.v1alpha1.JobR\x03job\"\xab\f\n" +
+	"\x03job\x18\x04 \x01(\v2\x17.magus.job.v1alpha1.JobR\x03job\"\xc3\f\n" +
 	"\x03Job\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x18\n" +
@@ -2152,7 +2162,8 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\vintegration\x18$ \x01(\v2\".magus.job.v1alpha1.JobIntegrationR\vintegration\x12%\n" +
 	"\x0eschema_version\x18& \x01(\x05R\rschemaVersion\x12\x1a\n" +
 	"\brequires\x18% \x03(\tR\brequires\x12K\n" +
-	"\x0fwaiter_evidence\x18' \x01(\v2\".magus.job.v1alpha1.JobIntegrationR\x0ewaiterEvidence\"\xdb\x01\n" +
+	"\x0fwaiter_evidence\x18' \x01(\v2\".magus.job.v1alpha1.JobIntegrationR\x0ewaiterEvidence\x12\x16\n" +
+	"\x06breaks\x18( \x03(\tR\x06breaks\"\xdb\x01\n" +
 	"\tJobOrigin\x12\x12\n" +
 	"\x04user\x18\x01 \x01(\tR\x04user\x12\x10\n" +
 	"\x03uid\x18\x02 \x01(\tR\x03uid\x12\x1f\n" +

@@ -67,6 +67,13 @@
       },
       "description": "DependsOn names the lease ids that must land before this one."
     },
+    "breaks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Breaks are the flags, JSON keys, exported symbols or stored formats the root approved this job breaking; empty means it breaks nothing on its own authority. See [Job.Breaks]."
+    },
     "model": {
       "type": "string",
       "description": "Model is the model or effort tier the work was matched to, a free string because hosts name their models differently."
