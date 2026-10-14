@@ -107,6 +107,24 @@ func DeferredSettle(ctx context.Context, root string) (HookOperation, bool, erro
 	return op, true, nil
 }
 
+// DeferSettle records op's settle as deferred, the way the hooks' shell does under
+// magus.settle=defer: the revision op started from, kept when an earlier deferral
+// already recorded one.
+func DeferSettle(op HookOperation) error {
+	path := filepath.Join(op.gitDir, deferredSettleFile)
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	}
+	base := op.base
+	if base == "HEAD" || base == "HEAD~1" || base == "ORIG_HEAD" {
+		return fmt.Errorf("vcs: defer the %s settle: it started from %s, which names no fixed revision", op.Kind, base)
+	}
+	if err := os.WriteFile(path, []byte(base+"\n"), 0o644); err != nil {
+		return fmt.Errorf("vcs: write %s: %w", deferredSettleFile, err)
+	}
+	return nil
+}
+
 // ClearDeferredSettle forgets what DeferredSettle read, once it is settled; nothing
 // deferred is not an error.
 func ClearDeferredSettle(ctx context.Context, root string) error {
