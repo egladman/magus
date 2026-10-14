@@ -1468,7 +1468,9 @@ const wantDiffDriverLines = "*.go diff=golang\n" +
 	"*.md diff=markdown\n" +
 	"*.ts diff=typescript\n" +
 	"*.tsx diff=typescript\n" +
-	"*.buzz diff=buzz\n"
+	"*.buzz diff=buzz\n" +
+	"*.yaml diff=yaml\n" +
+	"*.yml diff=yaml\n"
 
 // A generated .go file matches both its output glob and `*.go`. git resolves each attribute
 // by the last line that sets it, and the two lines set different ones, so the file keeps the
@@ -1587,6 +1589,7 @@ export type Pair<T> = {
 
 Run it.
 `,
+		"e.yaml": "jobs:\n  stale_after: 2h\n",
 	}
 	repo := testkit.NewRepo(t, files).Root()
 	require.NoError(t, gitVCS{}.InstallMergeDriver(t.Context(), repo, types.MergeDriverGlobs{}))
@@ -1612,6 +1615,7 @@ Run it.
 		{"b.tsx", "  return <div>hi</div>;", "export default function App() {"},
 		{"c.go", "\treturn 1", "func Alpha() int {"},
 		{"d.md", "Run it.", "## Usage"},
+		{"e.yaml", "  stale_after: 2h", "jobs"},
 	} {
 		t.Run(tc.file+" "+strings.TrimSpace(tc.line), func(t *testing.T) {
 			original := files[tc.file]
@@ -1667,6 +1671,8 @@ func TestCheckMergeDriverReportsMissingDiffDrivers(t *testing.T) {
 		".gitattributes: *.ts diff=typescript",
 		".gitattributes: *.tsx diff=typescript",
 		".gitattributes: *.buzz diff=buzz",
+		".gitattributes: *.yaml diff=yaml",
+		".gitattributes: *.yml diff=yaml",
 		"git config diff.typescript.xfuncname",
 		"git config diff.buzz.xfuncname",
 	}, missing)

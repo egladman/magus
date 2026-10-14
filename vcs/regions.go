@@ -421,7 +421,8 @@ const regionMarker = "\x01magus-region\x01"
 // .gitattributes outranks core.attributesFile, and a `*` rule there would replace the driver.
 //
 // git matches funcname patterns line by line, so a declaration it finds on a line inside a
-// Go string or comment is dropped afterwards (types.DiffDriver.DropOpaque).
+// Go string or comment is dropped afterwards, and config keys are named by their path, as
+// types.DiffDriver.Declarations names them (types.DiffDriver.Conform).
 func gitPlaceLines(ctx context.Context, tmp, driver string, funcnames []string, body []byte) ([]string, error) {
 	lines := strings.SplitAfter(string(body), "\n")
 	if lines[len(lines)-1] == "" {
@@ -469,11 +470,8 @@ func gitPlaceLines(ctx context.Context, tmp, driver string, funcnames []string, 
 	}
 	for _, d := range types.DiffDrivers {
 		if d.Name == driver {
-			d.DropOpaque(lines, decls)
+			d.Conform(lines, decls)
 		}
-	}
-	if driver == "buzz" {
-		placeProjectKeys(lines, decls)
 	}
 	handLeadersDown(decls, lines, declarationLeaders[driver])
 	return decls, nil

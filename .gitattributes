@@ -6,6 +6,8 @@
 *.ts diff=typescript
 *.tsx diff=typescript
 *.buzz diff=buzz
+*.yaml diff=yaml
+*.yml diff=yaml
 **/gen/mocks/*.go merge=magus linguist-generated
 **/mocks_test.go merge=magus linguist-generated
 .agents/skills/magus-architecture-review*/** merge=magus linguist-generated

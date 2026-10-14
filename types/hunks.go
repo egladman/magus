@@ -37,7 +37,12 @@ var DiffDrivers = []DiffDriver{
 	{Name: "markdown", Globs: []string{"*.md"}, Builtin: true, Funcname: "^ {0,3}#{1,6}[ \t].*"},
 	{Name: "typescript", Globs: []string{"*.ts", "*.tsx"}, Funcname: typescriptFuncname},
 	{Name: "buzz", Globs: []string{"*.buzz"}, Funcname: buzzFuncname},
+	{Name: "yaml", Globs: []string{"*.yaml", "*.yml"}, Funcname: yamlFuncname},
 }
+
+// yamlFuncname names a top-level YAML key by the key alone (`jobs`); a line under it is
+// named `<key>.<sub>` afterwards, by [DiffDriver.Conform] and Declarations.
+const yamlFuncname = `^"?([A-Za-z_][A-Za-z0-9_.-]*)"?[[:blank:]]*:([[:blank:]]|$)`
 
 // golangFuncname is git's built-in golang pattern (a func, and a type ... struct or
 // interface, at any indentation) plus a top-level var, const or type declaration, single or
@@ -139,7 +144,8 @@ func (d DiffDriver) funcname(line string) string {
 // Declarations returns the declaration enclosing each line of lines, indexed by line-1: the
 // nearest line at or above it d's funcname patterns name, "" above the first one. A line
 // that begins inside a string or comment of the driver's language (see OpaqueLines) names
-// nothing. A driver with no patterns places nothing.
+// nothing. Lines inside a magusfile's project call, and under a YAML key, are named by their
+// key path (see placeKeys). A driver with no patterns places nothing.
 func (d DiffDriver) Declarations(lines []string) []string {
 	out := make([]string, len(lines))
 	if d.Funcname == "" {
@@ -153,6 +159,7 @@ func (d DiffDriver) Declarations(lines []string) []string {
 		}
 		out[i] = current
 	}
+	d.placeKeys(lines, out)
 	return out
 }
 
@@ -188,11 +195,19 @@ func (d DiffDriver) OpaqueLines(lines []string) []bool {
 	return opaque
 }
 
-// DropOpaque replaces each declaration in decls that begins on a line OpaqueLines reports
-// with the declaration enclosing it, so a placement made without lexing (git's own funcname
-// matching) reads as Declarations does. decls is indexed by line-1 like lines, and a
-// declaration begins where its text differs from the line above's.
-func (d DiffDriver) DropOpaque(lines, decls []string) {
+// Conform rewrites decls, a placement git's own funcname matching made of lines, so it
+// reads as Declarations does: a declaration that begins on a line OpaqueLines reports gives
+// way to the one enclosing it, and the keys of a magusfile's project call or a YAML file
+// are named by their path (see placeKeys). decls is indexed by line-1 like lines.
+func (d DiffDriver) Conform(lines, decls []string) {
+	d.dropOpaque(lines, decls)
+	d.placeKeys(lines, decls)
+}
+
+// dropOpaque replaces each declaration in decls that begins on a line OpaqueLines reports
+// with the declaration enclosing it. A declaration begins where its text differs from the
+// line above's.
+func (d DiffDriver) dropOpaque(lines, decls []string) {
 	opaque := d.OpaqueLines(lines)
 	enclosing, dropping, above := "", false, ""
 	for i, decl := range decls {
@@ -206,6 +221,150 @@ func (d DiffDriver) DropOpaque(lines, decls []string) {
 		if dropping {
 			decls[i] = enclosing
 		}
+	}
+}
+
+// placeKeys names lines a funcname pattern leaves to the declaration above them by the key
+// path they sit under, so a claim can hold one key of a shared config file: a magusfile's
+// project call for buzz (placeProjectKeys) and a second-level key for yaml (placeYAMLKeys).
+// Any other driver's placement is left as it is.
+func (d DiffDriver) placeKeys(lines, decls []string) {
+	switch d.Name {
+	case "buzz":
+		placeProjectKeys(lines, decls)
+	case "yaml":
+		placeYAMLKeys(lines, decls)
+	}
+}
+
+// projectCallOpen matches the top-level call that declares a magusfile's project, under
+// whatever name the magus module was imported as.
+var projectCallOpen = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*\\project\(\{`)
+
+// quotedKey matches a quoted map key at the start of a trimmed line, capturing the key.
+var quotedKey = regexp.MustCompile(`^"((?:[^"\\]|\\.)*)"[ \t]*:`)
+
+// placeProjectKeys names the lines of a magusfile's top-level project call, which buzz's
+// funcname pattern leaves to the declaration above it: `project` for the call's own lines,
+// `project.<key>` for a top-level key, and `project.<key>.<entry>` for an entry of a key
+// whose value is a map. A claim can then hold one target's settings
+// (`magusfile.buzz#project.targets.test`) where the call is otherwise one declaration of the
+// whole file. Lines after the call that were given the declaration above it belong to the
+// call too, up to the next declaration; every other line keeps its name.
+func placeProjectKeys(lines, decls []string) {
+	start := slices.IndexFunc(lines, projectCallOpen.MatchString)
+	if start < 0 {
+		return
+	}
+	above := decls[start]
+	decls[start] = "project"
+	// base is the depth of the lines directly inside the call's map: `"targets": {`.
+	base := bracketDepth(lines[start], 0)
+	if base <= 0 {
+		return
+	}
+	depth := base
+	var key, entry string
+	keyIsMap := false
+	for i := start + 1; i < len(lines); i++ {
+		trimmed := strings.TrimLeft(lines[i], " \t")
+		at := depth
+		switch {
+		case at == base && strings.HasPrefix(trimmed, "}"):
+			key, entry = "", ""
+		case at == base:
+			if m := quotedKey.FindStringSubmatch(trimmed); m != nil {
+				key, entry = m[1], ""
+				keyIsMap = strings.HasPrefix(strings.TrimLeft(trimmed[len(m[0]):], " \t"), "{")
+			}
+		case at == base+1 && key != "" && (strings.HasPrefix(trimmed, "}") || strings.HasPrefix(trimmed, "]")):
+			entry = ""
+		case at == base+1 && key != "" && keyIsMap:
+			if m := quotedKey.FindStringSubmatch(trimmed); m != nil {
+				entry = m[1]
+			}
+		}
+		decls[i] = keyPath("project", key, entry)
+		depth = bracketDepth(lines[i], depth)
+		if depth <= 0 {
+			for j := i + 1; j < len(decls) && decls[j] == above; j++ {
+				decls[j] = "project"
+			}
+			return
+		}
+	}
+}
+
+// keyPath joins the non-empty parts of a key path with dots.
+func keyPath(parts ...string) string {
+	return strings.Join(slices.DeleteFunc(parts, func(p string) bool { return p == "" }), ".")
+}
+
+// bracketDepth is depth after line, counting (, [ and { as opening and their pairs as
+// closing, outside strings and line comments. A string does not span lines here; one that
+// does is rare enough in a project table that miscounting it costs only its own lines.
+func bracketDepth(line string, depth int) int {
+	var quote byte
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		switch {
+		case quote != 0:
+			if c == '\\' {
+				i++
+			} else if c == quote {
+				quote = 0
+			}
+		case c == '"' || c == '\'' || c == '`':
+			quote = c
+		case c == '/' && i+1 < len(line) && line[i+1] == '/':
+			return depth
+		case c == '(' || c == '[' || c == '{':
+			depth++
+		case c == ')' || c == ']' || c == '}':
+			depth--
+		}
+	}
+	return depth
+}
+
+// yamlKey matches a mapping key at the start of a trimmed YAML line, capturing the key.
+var yamlKey = regexp.MustCompile(`^"?([A-Za-z_][A-Za-z0-9_.-]*)"?[ \t]*:([ \t]|$)`)
+
+// placeYAMLKeys names each line under a top-level YAML key, which yamlFuncname names
+// (`jobs`), by the second-level key it sits under: `jobs.stale_after`. The second level is
+// the indentation of the first indented line under the key; a deeper line, a list item, a
+// comment and a blank line keep the key above them. A top-level key whose value is a block
+// scalar (`key: |`) has no second level.
+func placeYAMLKeys(lines, decls []string) {
+	var top, sub string
+	subIndent, block := -1, false
+	for i, l := range lines {
+		content := strings.TrimRight(l, "\r\n")
+		trimmed := strings.TrimLeft(content, " ")
+		indent := len(content) - len(trimmed)
+		if indent == 0 && trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+			top, sub, subIndent, block = "", "", -1, false
+			if m := yamlKey.FindStringSubmatch(trimmed); m != nil && decls[i] != "" {
+				top = decls[i]
+				value := strings.TrimSpace(trimmed[len(m[0]):])
+				block = strings.HasPrefix(value, "|") || strings.HasPrefix(value, ">")
+			}
+			continue
+		}
+		if top == "" || block {
+			continue
+		}
+		if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+			if subIndent < 0 {
+				subIndent = indent
+			}
+			if indent == subIndent {
+				if m := yamlKey.FindStringSubmatch(trimmed); m != nil {
+					sub = m[1]
+				}
+			}
+		}
+		decls[i] = keyPath(top, sub)
 	}
 }
 

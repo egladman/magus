@@ -447,7 +447,8 @@ func TestRegionsOfTestsTaggedFilesAndEmbeddedBuzz(t *testing.T) {
 
 // The pure placement (types.DiffDriver.Declarations) names every line as git's funcname
 // matching does, for every driver magus routes files to, so a region a merge reports is
-// the region git's hunk headers, a footprint and a job claim name.
+// the region git's hunk headers, a footprint and a job claim name. The buzz fixture holds a
+// project call and the yaml one nested keys, so key paths are placed alike too.
 func TestPurePlacementMatchesGit(t *testing.T) {
 	fixtures := map[string]string{
 		"golang":     "package a\n\nimport \"fmt\"\n\ntype T struct {\n\tA int\n}\n\nfunc (t T) M() {\n\tfmt.Println(1)\n}\n\nfunc F(x int) int {\n\treturn x\n}\n",
@@ -455,7 +456,8 @@ func TestPurePlacementMatchesGit(t *testing.T) {
 		"rust":       "use std::fmt;\n\npub struct S {\n    a: i32,\n}\n\nimpl S {\n    pub fn new() -> Self {\n        S { a: 1 }\n    }\n}\n",
 		"markdown":   "Intro line\n\n# Title\n\ntext\n\n## Section two\n\n   ### Indented heading\n\n    #### code block, not a heading\n",
 		"typescript": "import x from 'y'\n\nexport function f(a: number): number {\n  if (a) {\n    return a\n  }\n  return 0\n}\n\nclass C {\n  m(a: string): void {\n  }\n}\n",
-		"buzz":       "import \"std\";\n\nexport fun main(args: [str]) > void {\n    std\\print(\"x\");\n}\n\nobject O {\n    fun m() > void {}\n}\n\ntest \"it works\" {\n}\n",
+		"buzz":       "import \"std\";\n\nmagus\\project({\n    \"name\": \"x\",\n    \"targets\": {\n        \"test\": {\"timeout\": \"5m\"},\n    },\n});\n\nexport fun main(args: [str]) > void {\n    std\\print(\"x\");\n}\n\nobject O {\n    fun m() > void {}\n}\n\ntest \"it works\" {\n}\n",
+		"yaml":       "# config\nversion: 1\njobs:\n  stale_after: 2h\n  nested:\n    deep: 1\nlist:\n  - a\nblock: |\n  text: here\n",
 	}
 	var funcnames []string
 	for _, f := range gitFuncnames {

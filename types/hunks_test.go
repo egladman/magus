@@ -9,7 +9,7 @@ import (
 )
 
 func TestDiffDriverFor(t *testing.T) {
-	for path, want := range map[string]string{"a/b.go": "golang", "x.tsx": "typescript", "docs/CHANGELOG.md": "markdown", "f.buzz": "buzz"} {
+	for path, want := range map[string]string{"a/b.go": "golang", "x.tsx": "typescript", "docs/CHANGELOG.md": "markdown", "f.buzz": "buzz", "magus.yaml": "yaml", "ci.yml": "yaml"} {
 		d, ok := MatchDiffDriver(path)
 		require.True(t, ok, path)
 		assert.Equal(t, want, d.Name, path)
@@ -31,6 +31,27 @@ func TestDeclarations(t *testing.T) {
 		"a rejecting pattern names nothing, so the declaration above stands")
 
 	assert.Equal(t, []string{"", ""}, DiffDriver{}.Declarations([]string{"func A() {\n", "}\n"}))
+}
+
+// A magusfile's project call and a YAML file are named by key path, so a claim holds one
+// key of them; merge risk reads these names, and vcs's git placement reads the same code.
+func TestDeclarationsNameKeyPaths(t *testing.T) {
+	buzz, _ := MatchDiffDriver("magusfile.buzz")
+	magusfile := SplitLines([]byte("import \"magus\";\n\nmagus\\project({\n    \"name\": \"x\",\n    \"sources\": [\n        \"a.txt\",\n    ],\n" +
+		"    \"targets\": {\n        \"test\": {\n            \"slots\": 4,\n        },\n        \"go-test\": {\"slots\": 4},\n    },\n});\n\n" +
+		"export fun build() > void {\n}\n"))
+	assert.Equal(t, []string{
+		"", "", "project", "project.name", "project.sources", "project.sources", "project.sources",
+		"project.targets", "project.targets.test", "project.targets.test", "project.targets.test", "project.targets.go-test", "project.targets", "project",
+		"project", "export fun build() > void {", "export fun build() > void {",
+	}, buzz.Declarations(magusfile))
+
+	yaml, ok := MatchDiffDriver("magus.yml")
+	require.True(t, ok)
+	config := SplitLines([]byte("# config\nversion: 1\njobs:\n  stale_after: 2h\n  nested:\n    deep: 1\nlist:\n  - a\nblock: |\n  text: here\n"))
+	assert.Equal(t, []string{
+		"", "version", "jobs", "jobs.stale_after", "jobs.nested", "jobs.nested", "list", "list", "block", "block",
+	}, yaml.Declarations(config))
 }
 
 // Buzz or Go held in a raw string, or in a block comment, is text: its column-0 `var` and
