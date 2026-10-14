@@ -224,7 +224,7 @@ func checkMatrixAnswer(set *types.ModelTierSet, id string, answer types.JobModel
 	if answer.Rank != tier.Rank() {
 		return types.JobModelTier{}, fmt.Errorf("job: the model tier matrix chose %s for %s at rank %d, and the declaration ranks it %d", answer.Name, id, answer.Rank, tier.Rank())
 	}
-	if !answer.Skills.Valid() {
+	if answer.Skills == "" || !answer.Skills.Valid() {
 		return types.JobModelTier{}, fmt.Errorf("job: the model tier matrix chose skills %q for %s, and the variants are %s", answer.Skills, id, strings.Join(answer.Skills.Values(), ", "))
 	}
 	if answer.Reason == "" {
