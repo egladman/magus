@@ -83,7 +83,7 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessPromptsContract, err)
 		}
 	}
-	agents, err := agent.ShippedAgentParams()
+	agents, err := agent.ShippedAgentParams(cheapestTierModel(ctx, id))
 	if err != nil {
 		return agent.HarnessDescriptor{}, "", false, err
 	}
@@ -130,6 +130,30 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 		d.Models = models
 	}
 	return d, "spell:" + id, true, nil
+}
+
+// cheapestTierModel is the model alias the workspace's model tiers give harness id for the
+// cheapest tier, which the agents magus ships run on. Empty when ctx carries no workspace,
+// the workspace declares no tiers, or the declaration maps no model for this harness: the
+// spell then renders no model line and the host's default applies.
+func cheapestTierModel(ctx context.Context, id string) string {
+	ws, ok := types.WorkspaceFromContext(ctx).(interface{ ModelTiers() *types.ModelTierSet })
+	if !ok {
+		return ""
+	}
+	set := ws.ModelTiers()
+	if set == nil {
+		return ""
+	}
+	cheapest, ok := set.At(0)
+	if !ok {
+		return ""
+	}
+	alias, err := set.Alias(types.HarnessKey{ID: id}, cheapest)
+	if err != nil {
+		return ""
+	}
+	return alias
 }
 
 // harnessModelRow is one row of a harness_models return, in the snake_case the spell

@@ -52,7 +52,7 @@ func TestHarnessSpellsRenderTheShippedAgent(t *testing.T) {
 		{"claude-code", agent.HarnessAgentFile{
 			Path: ".claude/agents/magus-scout.md",
 			Content: "---\nname: \"magus-scout\"\ndescription: " + quoted + "\n" +
-				"tools: Read, Grep, Glob, Bash\nmodel: haiku\n---\n\n" + instructions,
+				"tools: Read, Grep, Glob, Bash\n---\n\n" + instructions,
 		}},
 		{"codex", agent.HarnessAgentFile{
 			Path: ".codex/agents/magus-scout.toml",
@@ -75,6 +75,82 @@ func TestHarnessSpellsRenderTheShippedAgent(t *testing.T) {
 		t.Run(tc.id, func(t *testing.T) {
 			d := loadShippedHarness(t, tc.id)
 			assert.Equal(t, []agent.HarnessAgentFile{tc.want}, d.Agents)
+		})
+	}
+}
+
+// tieredWorkspace is a workspace that also answers the model tiers the render step asks for.
+type tieredWorkspace struct {
+	types.WorkspaceRepository
+	set *types.ModelTierSet
+}
+
+func (w tieredWorkspace) ModelTiers() *types.ModelTierSet { return w.set }
+
+func tiersMapping(t *testing.T, hosts map[types.HarnessKey][]string) *types.ModelTierSet {
+	t.Helper()
+	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"small", "large"}, Default: 1,
+		Bounds: []types.ModelTierBounds{{}, {}},
+		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort},
+		Hosts:  hosts,
+	})
+	require.NoError(t, err)
+	return set
+}
+
+func tieredContext(t *testing.T, set *types.ModelTierSet) context.Context {
+	t.Helper()
+	ws := mocks.NewMockWorkspaceRepository(t)
+	ws.EXPECT().All().Return(nil).Maybe()
+	return types.WithWorkspace(context.Background(), tieredWorkspace{WorkspaceRepository: ws, set: set})
+}
+
+// TestHarnessSpellsOfferTheCheapestTierModel pins what the render step hands harness_agents:
+// the alias the workspace's tiers map for THIS harness at rank 0, and no model key when no
+// alias resolves, so a spell never invents a model.
+func TestHarnessSpellsOfferTheCheapestTierModel(t *testing.T) {
+	tests := []struct {
+		name string
+		ctx  func(t *testing.T, id string) context.Context
+		want any
+	}{
+		{"the harness's alias for the cheapest tier", func(t *testing.T, id string) context.Context {
+			return tieredContext(t, tiersMapping(t, map[types.HarnessKey][]string{{ID: id}: {"tiny", "big"}, {ID: "other"}: {"mini", "max"}}))
+		}, "tiny"},
+		{"no workspace", func(*testing.T, string) context.Context { return context.Background() }, nil},
+		{"tiers turned off", func(t *testing.T, _ string) context.Context { return tieredContext(t, nil) }, nil},
+		{"a declaration that maps another harness", func(t *testing.T, _ string) context.Context {
+			return tieredContext(t, tiersMapping(t, map[types.HarnessKey][]string{{ID: "other"}: {"mini", "max"}}))
+		}, nil},
+		{"a declaration that maps no harness", func(t *testing.T, _ string) context.Context {
+			return tieredContext(t, tiersMapping(t, nil))
+		}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var offered []any
+			id := register.Spell(t, "modelled-test", spells.WithInvoker(
+				func(_ context.Context, req spells.InvokeRequest) (any, error) {
+					switch req.Target {
+					case spells.HarnessConfigContract:
+						return map[string]any{"path": ""}, nil
+					case spells.HarnessAgentsContract:
+						offered, _ = req.Params["agents"].([]any)
+					}
+					return nil, nil
+				}))
+			_, _, ok, err := loadHarnessFromSpell(tt.ctx(t, id), id)
+			require.NoError(t, err)
+			require.True(t, ok)
+			require.Len(t, offered, 1)
+			params := offered[0].(map[string]any)
+			assert.NotContains(t, params, "class")
+			if tt.want == nil {
+				assert.NotContains(t, params, "model")
+				return
+			}
+			assert.Equal(t, tt.want, params["model"])
 		})
 	}
 }
