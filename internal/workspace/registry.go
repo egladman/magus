@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"slices"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -60,6 +62,16 @@ type WorkspaceRegistry struct {
 	// magus\harness.provider), in wiring order. Many hosts, like workspace.provider;
 	// unlike cache.remote's one.
 	harnesses []string
+	// modelTiers is the declaration a magusfile made via magus\job.modelTiers, nil when it
+	// turned tiers off. modelTiersDeclared tells that apart from no call at all, which
+	// leaves the shipped default to defaultModelTiers.
+	modelTiers         *types.ModelTierSet
+	modelTiersDeclared bool
+	// defaultModelTiers builds the shipped declaration, run at most once and only when
+	// something asks for the tiers of a workspace whose magusfile declared none.
+	defaultModelTiers func() (*types.ModelTierSet, error)
+	// modelTierMatrix is the function a magusfile registered via magus\job.modelTier, or nil.
+	modelTierMatrix ModelTierMatrix
 }
 
 // ShellRule is one additive shell rule declared by magus\guard.shell. Fields match
@@ -87,6 +99,14 @@ type CommandRule func(ctx context.Context, req types.CommandRequest, facts hint.
 // WriteRule judges one agent file write for magus\guard.write, with the same facts and
 // error contract as SpawnRule.
 type WriteRule func(ctx context.Context, req types.WriteRequest, facts hint.Gate) (types.GuardVerdict, error)
+
+// ModelTierMatrix chooses the model tier of one job from its typed request, for
+// magus\job.modelTier. A nil answer leaves the declared default to decide. The job store
+// is read-only while it runs, and it runs once, when the job is forked.
+//
+// An error means the matrix itself failed (it raised, or returned a choice the
+// declaration cannot use), never that it declined: declining is a nil answer.
+type ModelTierMatrix func(ctx context.Context, req types.ModelTierRequest) (*types.JobModelTier, error)
 
 // NewWorkspaceRegistry returns an empty WorkspaceRegistry.
 func NewWorkspaceRegistry() *WorkspaceRegistry {
@@ -397,4 +417,64 @@ func (r *WorkspaceRegistry) Apply(w types.WorkspaceRepository) error {
 		return errors.Join(errs...)
 	}
 	return nil
+}
+
+// SetModelTiers records the declaration of magus\job.modelTiers, replacing one an earlier
+// evaluation of the same magusfile recorded; nil records that the magusfile turned model
+// tiers off, so the shipped default does not apply. Refusing a second call is the binding's
+// job, on the terms of SetSpawnRule. Safe to call concurrently.
+func (r *WorkspaceRegistry) SetModelTiers(set *types.ModelTierSet) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.modelTiers = set
+	r.modelTiersDeclared = true
+}
+
+// SetDefaultModelTiers records how to build the declaration a workspace gets when its
+// magusfile makes none, so a workspace nothing asks about never builds it.
+func (r *WorkspaceRegistry) SetDefaultModelTiers(build func() (*types.ModelTierSet, error)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.defaultModelTiers = build
+}
+
+// ModelTiers returns the workspace's model tiers: the magusfile's declaration, nil when it
+// turned them off, else the shipped default. It is nil too when the default cannot be
+// built, which is logged at error level.
+func (r *WorkspaceRegistry) ModelTiers() *types.ModelTierSet {
+	r.mu.Lock()
+	if r.modelTiersDeclared || r.defaultModelTiers == nil {
+		defer r.mu.Unlock()
+		return r.modelTiers
+	}
+	build := r.defaultModelTiers
+	r.mu.Unlock()
+
+	// Built outside the lock: the build loads a Buzz module, which must not wait on this
+	// registry. Two callers racing build the same set and the later one wins.
+	set, err := build()
+	if err != nil {
+		slog.With(attr.Component("magus")).Error("the default model tier declaration does not load", attr.Error(err))
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.modelTiersDeclared {
+		r.modelTiers, r.modelTiersDeclared = set, true
+	}
+	return r.modelTiers
+}
+
+// SetModelTierMatrix records the magus\job.modelTier function, on the terms of SetSpawnRule.
+func (r *WorkspaceRegistry) SetModelTierMatrix(m ModelTierMatrix) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.modelTierMatrix = m
+}
+
+// ModelTierMatrix returns the magus\job.modelTier function, or nil when none was registered.
+func (r *WorkspaceRegistry) ModelTierMatrix() ModelTierMatrix {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.modelTierMatrix
 }

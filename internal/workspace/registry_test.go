@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
@@ -226,4 +227,77 @@ func TestRemoteBackend_RoundTrip(t *testing.T) {
 	// Last writer wins.
 	r.SetRemoteBackend("gcs-cache")
 	assert.Equal(t, "gcs-cache", r.RemoteBackend())
+}
+
+func testModelTierSet(t *testing.T, enum string) *types.ModelTierSet {
+	t.Helper()
+	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+		Enum:    enum,
+		Site:    "magusfile.buzz:1",
+		Cases:   []string{"low", "high"},
+		Default: 0,
+		Bounds:  make([]types.ModelTierBounds, 2),
+		Skills:  []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort},
+	})
+	require.NoError(t, err)
+	return set
+}
+
+// The default builds on first ask and once; a declaration, or turning tiers off, wins over it.
+func TestWorkspaceRegistry_ModelTiers(t *testing.T) {
+	t.Run("no declaration and no default is nil", func(t *testing.T) {
+		assert.Nil(t, NewWorkspaceRegistry().ModelTiers())
+	})
+
+	t.Run("the default builds once, on the first ask", func(t *testing.T) {
+		r := NewWorkspaceRegistry()
+		builds := 0
+		shipped := testModelTierSet(t, "Shipped")
+		r.SetDefaultModelTiers(func() (*types.ModelTierSet, error) { builds++; return shipped, nil })
+		assert.Zero(t, builds, "registering the default builds nothing")
+		assert.Same(t, shipped, r.ModelTiers())
+		assert.Same(t, shipped, r.ModelTiers())
+		assert.Equal(t, 1, builds)
+	})
+
+	t.Run("a declaration replaces the default and a re-run replaces the declaration", func(t *testing.T) {
+		r := NewWorkspaceRegistry()
+		r.SetDefaultModelTiers(func() (*types.ModelTierSet, error) { return testModelTierSet(t, "Shipped"), nil })
+		first, second := testModelTierSet(t, "First"), testModelTierSet(t, "Second")
+		r.SetModelTiers(first)
+		assert.Same(t, first, r.ModelTiers())
+		r.SetModelTiers(second)
+		assert.Same(t, second, r.ModelTiers())
+	})
+
+	t.Run("a declaration of nil turns tiers off", func(t *testing.T) {
+		r := NewWorkspaceRegistry()
+		r.SetDefaultModelTiers(func() (*types.ModelTierSet, error) {
+			return nil, errors.New("the default must not build when tiers are off")
+		})
+		r.SetModelTiers(nil)
+		assert.Nil(t, r.ModelTiers())
+	})
+
+	t.Run("a default that fails to build answers nil", func(t *testing.T) {
+		r := NewWorkspaceRegistry()
+		r.SetDefaultModelTiers(func() (*types.ModelTierSet, error) { return nil, errors.New("broken") })
+		assert.Nil(t, r.ModelTiers())
+	})
+}
+
+func TestWorkspaceRegistry_ModelTierMatrixReplaces(t *testing.T) {
+	r := NewWorkspaceRegistry()
+	assert.Nil(t, r.ModelTierMatrix())
+
+	matrix := func(reason string) ModelTierMatrix {
+		return func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error) {
+			return &types.JobModelTier{Reason: reason}, nil
+		}
+	}
+	r.SetModelTierMatrix(matrix("first"))
+	r.SetModelTierMatrix(matrix("second"))
+	got, err := r.ModelTierMatrix()(context.Background(), types.ModelTierRequest{})
+	require.NoError(t, err)
+	assert.Equal(t, &types.JobModelTier{Reason: "second"}, got)
 }
