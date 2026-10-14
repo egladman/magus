@@ -82,3 +82,17 @@ func TestMergeRejectsAListElementOfTheWrongType(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "depends_on")
 }
+
+func TestMergeReadsMaxAttemptsAsAWholeCount(t *testing.T) {
+	t.Parallel()
+
+	for _, v := range []any{3, int64(3), float64(3), " 3 "} {
+		assert.Equal(t, 3, applyMerge(t, map[string]any{"max_attempts": v}, types.Job{}).MaxAttempts, "%#v", v)
+	}
+	assert.Zero(t, applyMerge(t, map[string]any{"max_attempts": 0}, types.Job{MaxAttempts: 2}).MaxAttempts,
+		"zero clears the cap")
+	for _, v := range []any{2.5, -1, "three", true} {
+		_, err := ParseMerge(map[string]any{"max_attempts": v})
+		require.ErrorContains(t, err, "max_attempts", "%#v", v)
+	}
+}

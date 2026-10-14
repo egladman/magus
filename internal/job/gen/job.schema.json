@@ -11,7 +11,7 @@
     "schema_version": {
       "type": "integer",
       "minimum": 1,
-      "maximum": 12,
+      "maximum": 13,
       "description": "Version is the newest schema any writer of this record used. A rewrite stamps the larger of the stored version and its own, so an older magus never relabels content a newer one wrote."
     },
     "requires": {
@@ -232,6 +232,10 @@
     "timeout": {
       "type": "string",
       "description": "Timeout bounds the lease, as a Go duration. The store stamps Job.Deadline from it when it writes the row, so a declaration carries a length and never an instant. Empty is no bound; there is no default here (a workspace may set jobs.default_timeout)."
+    },
+    "max_attempts": {
+      "type": "integer",
+      "description": "MaxAttempts caps how many times the job may be forked, its first fork included; zero is no cap. See [Job.MaxAttempts]."
     },
     "enter": {
       "type": "string",

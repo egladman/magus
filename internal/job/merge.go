@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	json "github.com/egladman/magus/internal/json"
@@ -149,6 +150,11 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 			set = append(set, func(u *types.Job) { u.ReadOnly = b })
 		}
 	}
+	if n, ok, e := mergeCount(params, "max_attempts"); e != nil {
+		err = errors.Join(err, e)
+	} else if ok {
+		set = append(set, func(u *types.Job) { u.MaxAttempts = n })
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +170,7 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 var mergeFields = []string{
 	"parent", "criteria", "checkpoint", "write_paths", "deny_paths", "read_paths",
 	"depends_on", "breaks", "model", "check", "validation", "goals", "state", "read_only", "timeout",
-	"enter",
+	"max_attempts", "enter",
 }
 
 // unknownParams rejects a key outside that set. A dropped key reads to its sender exactly
@@ -199,6 +205,41 @@ func mergeString(params map[string]any, key string) (string, bool, error) {
 		return "", false, fmt.Errorf("job: %s must be a string", key)
 	}
 	return s, true, nil
+}
+
+// mergeCount reads a whole number of at least 0: a JSON number decodes as float64 and a Buzz
+// int as int64, and a client the MCP descriptor holds to strings sends it as decimal text.
+// A fraction or a negative is refused, never truncated or clamped.
+func mergeCount(params map[string]any, key string) (int, bool, error) {
+	v, present := params[key]
+	if !present {
+		return 0, false, nil
+	}
+	bad := fmt.Errorf("job: %s must be a whole number of at least 0", key)
+	var n int
+	switch t := v.(type) {
+	case int:
+		n = t
+	case int64:
+		n = int(t)
+	case float64:
+		if t != float64(int(t)) {
+			return 0, false, bad
+		}
+		n = int(t)
+	case string:
+		parsed, err := strconv.Atoi(strings.TrimSpace(t))
+		if err != nil {
+			return 0, false, bad
+		}
+		n = parsed
+	default:
+		return 0, false, bad
+	}
+	if n < 0 {
+		return 0, false, bad
+	}
+	return n, true, nil
 }
 
 // mergeList accepts the natural JSON/Buzz array shape as well as the space-separated

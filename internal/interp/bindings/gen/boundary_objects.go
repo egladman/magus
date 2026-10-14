@@ -2881,6 +2881,7 @@ func ObjectJobResult(v types.JobResult) vm.Value {
 		itemsUnresolvedRisks[indexUnresolvedRisks] = vm.StrValue(v.UnresolvedRisks[indexUnresolvedRisks])
 	}
 	out.MapSet("unresolvedRisks", vm.ListValue(itemsUnresolvedRisks))
+	out.MapSet("observedGeneration", vm.IntValue(int64(v.ObservedGeneration)))
 	return out
 }
 
@@ -2903,6 +2904,7 @@ func ObjectJobAttempt(v types.JobAttempt) vm.Value {
 		itemsExtraArgs[indexExtraArgs] = vm.StrValue(v.ExtraArgs[indexExtraArgs])
 	}
 	out.MapSet("extraArgs", vm.ListValue(itemsExtraArgs))
+	out.MapSet("observedGeneration", vm.IntValue(int64(v.ObservedGeneration)))
 	return out
 }
 
@@ -2936,6 +2938,7 @@ func ObjectJobIntegration(v types.JobIntegration) vm.Value {
 		itemsGates[indexGates] = ObjectGateStatus(v.Gates[indexGates])
 	}
 	out.MapSet("gates", vm.ListValue(itemsGates))
+	out.MapSet("observedGeneration", vm.IntValue(int64(v.ObservedGeneration)))
 	return out
 }
 
@@ -3020,6 +3023,84 @@ func ObjectModelTierRequest(v types.ModelTierRequest, enums ffi.EnumCases) vm.Va
 	return out
 }
 
+func ObjectJobDenial(v types.JobDenial) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("rule", vm.StrValue(v.Rule))
+	out.MapSet("reason", vm.StrValue(v.Reason))
+	out.MapSet("action", vm.StrValue(v.Action))
+	out.MapSet("verdictRef", vm.StrValue(v.VerdictRef))
+	out.MapSet("ts", vm.IntValue(int64(v.Ts)))
+	return out
+}
+
+func ObjectRetryVerdict(v types.RetryVerdict) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("retryable", vm.BoolValue(v.Retryable))
+	out.MapSet("change", vm.StrValue(string(v.Change)))
+	out.MapSet("reason", vm.StrValue(v.Reason))
+	out.MapSet("code", vm.StrValue(string(v.Code)))
+	return out
+}
+
+func ObjectPriorAttempt(v types.PriorAttempt) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("n", vm.IntValue(int64(v.N)))
+	out.MapSet("state", vm.StrValue(string(v.State)))
+	out.MapSet("observedGeneration", vm.IntValue(int64(v.ObservedGeneration)))
+	out.MapSet("endReason", vm.StrValue(v.EndReason))
+	out.MapSet("modelTier", vm.StrValue(v.ModelTier))
+	out.MapSet("checkpoint", vm.StrValue(v.Checkpoint))
+	out.MapSet("reportedBase", vm.StrValue(v.ReportedBase))
+	out.MapSet("ended", vm.IntValue(int64(v.Ended)))
+	out.MapSet("reworkRounds", vm.IntValue(int64(v.ReworkRounds)))
+	out.MapSet("widenings", vm.IntValue(int64(v.Widenings)))
+	itemsUnmet := make([]vm.Value, len(v.Unmet))
+	for indexUnmet := range v.Unmet {
+		itemsUnmet[indexUnmet] = ObjectGateStatus(v.Unmet[indexUnmet])
+	}
+	out.MapSet("unmet", vm.ListValue(itemsUnmet))
+	itemsViolations := make([]vm.Value, len(v.Violations))
+	for indexViolations := range v.Violations {
+		itemsViolations[indexViolations] = vm.StrValue(v.Violations[indexViolations])
+	}
+	out.MapSet("violations", vm.ListValue(itemsViolations))
+	itemsUnresolvedRisks := make([]vm.Value, len(v.UnresolvedRisks))
+	for indexUnresolvedRisks := range v.UnresolvedRisks {
+		itemsUnresolvedRisks[indexUnresolvedRisks] = vm.StrValue(v.UnresolvedRisks[indexUnresolvedRisks])
+	}
+	out.MapSet("unresolvedRisks", vm.ListValue(itemsUnresolvedRisks))
+	itemsFailingRefs := make([]vm.Value, len(v.FailingRefs))
+	for indexFailingRefs := range v.FailingRefs {
+		itemsFailingRefs[indexFailingRefs] = vm.StrValue(v.FailingRefs[indexFailingRefs])
+	}
+	out.MapSet("failingRefs", vm.ListValue(itemsFailingRefs))
+	itemsDenials := make([]vm.Value, len(v.Denials))
+	for indexDenials := range v.Denials {
+		itemsDenials[indexDenials] = ObjectJobDenial(v.Denials[indexDenials])
+	}
+	out.MapSet("denials", vm.ListValue(itemsDenials))
+	out.MapSet("denialsKnown", vm.BoolValue(v.DenialsKnown))
+	out.MapSet("retry", ObjectRetryVerdict(v.Retry))
+	return out
+}
+
+func ObjectJobRejection(v types.JobRejection) vm.Value {
+	out := vm.NewMap()
+	itemsUnmet := make([]vm.Value, len(v.Unmet))
+	for indexUnmet := range v.Unmet {
+		itemsUnmet[indexUnmet] = ObjectGateStatus(v.Unmet[indexUnmet])
+	}
+	out.MapSet("unmet", vm.ListValue(itemsUnmet))
+	itemsViolations := make([]vm.Value, len(v.Violations))
+	for indexViolations := range v.Violations {
+		itemsViolations[indexViolations] = vm.StrValue(v.Violations[indexViolations])
+	}
+	out.MapSet("violations", vm.ListValue(itemsViolations))
+	out.MapSet("at", vm.IntValue(int64(v.At)))
+	out.MapSet("observedGeneration", vm.IntValue(int64(v.ObservedGeneration)))
+	return out
+}
+
 func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("schemaVersion", vm.IntValue(int64(v.Schema.Version)))
@@ -3065,6 +3146,19 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	out.MapSet("modelTier", optModelTier)
 	out.MapSet("reworkRounds", vm.IntValue(int64(v.ReworkRounds)))
 	out.MapSet("widenings", vm.IntValue(int64(v.Widenings)))
+	out.MapSet("generation", vm.IntValue(int64(v.Generation)))
+	out.MapSet("maxAttempts", vm.IntValue(int64(v.MaxAttempts)))
+	out.MapSet("attempts", vm.IntValue(int64(v.Attempts)))
+	itemsPrior := make([]vm.Value, len(v.Prior))
+	for indexPrior := range v.Prior {
+		itemsPrior[indexPrior] = ObjectPriorAttempt(v.Prior[indexPrior])
+	}
+	out.MapSet("prior", vm.ListValue(itemsPrior))
+	optRejection := vm.Null
+	if v.Rejection != nil {
+		optRejection = ObjectJobRejection((*v.Rejection))
+	}
+	out.MapSet("rejection", optRejection)
 	optCheck := vm.Null
 	if v.Check != nil {
 		optCheck = ObjectLeaseCheck((*v.Check))
@@ -3367,6 +3461,7 @@ func ObjectJobStatus(v types.JobStatus) vm.Value {
 	}
 	out.MapSet("leftUnreferenced", vm.ListValue(itemsLeftUnreferenced))
 	out.MapSet("symbolDeltaKnown", vm.BoolValue(v.SymbolDeltaKnown))
+	out.MapSet("observedGeneration", vm.IntValue(int64(v.ObservedGeneration)))
 	return out
 }
 

@@ -538,7 +538,7 @@ type JobResult struct {
 	UnresolvedRisks []string            `json:"unresolved_risks" yaml:"unresolved_risks"`
 	// ObservedGeneration is the job's Generation when the result was filed, stamped by the
 	// store rather than taken from the holder.
-	ObservedGeneration int `json:"observed_generation,omitempty" yaml:"observed_generation,omitempty"`
+	ObservedGeneration int `json:"observed_generation,omitzero" yaml:"observed_generation,omitempty"`
 }
 
 // GateEvidence links a goal to captured Magus output.
@@ -592,7 +592,7 @@ type JobStatus struct {
 	LeftUnreferenced  []string `json:"left_unreferenced,omitempty" yaml:"left_unreferenced,omitempty"`
 	SymbolDeltaKnown  bool     `json:"symbol_delta_known" yaml:"symbol_delta_known"`
 	// ObservedGeneration is the job's Generation when it was graded.
-	ObservedGeneration int `json:"observed_generation,omitempty" yaml:"observed_generation,omitempty"`
+	ObservedGeneration int `json:"observed_generation,omitzero" yaml:"observed_generation,omitempty"`
 }
 
 // Clean reports whether the holder's result left no risk unresolved.
@@ -632,7 +632,7 @@ type JobAttempt struct {
 	// record predates the field, so only a non-nil value is compared with a check's args.
 	ExtraArgs []string `json:"extra_args,omitempty" yaml:"extra_args,omitempty"`
 	// ObservedGeneration is the job's Generation when the store recorded the run against it.
-	ObservedGeneration int `json:"observed_generation,omitempty" yaml:"observed_generation,omitempty"`
+	ObservedGeneration int `json:"observed_generation,omitzero" yaml:"observed_generation,omitempty"`
 }
 
 // JobGateAttempt is the stored output record for one goal.
@@ -895,7 +895,7 @@ type JobIntegration struct {
 	Verified bool         `json:"verified" yaml:"verified"`
 	Gates    []GateStatus `json:"gates,omitempty" yaml:"gates,omitempty"`
 	// ObservedGeneration is the row's Generation when the grade was taken.
-	ObservedGeneration int `json:"observed_generation,omitempty" yaml:"observed_generation,omitempty"`
+	ObservedGeneration int `json:"observed_generation,omitzero" yaml:"observed_generation,omitempty"`
 }
 
 // JobRejection is a `magus job wait` that refused the live attempt, At unix seconds.
@@ -903,7 +903,7 @@ type JobRejection struct {
 	Unmet              []GateStatus `json:"unmet,omitempty"               yaml:"unmet,omitempty"`
 	Violations         []string     `json:"violations,omitempty"          yaml:"violations,omitempty"`
 	At                 int64        `json:"at"                            yaml:"at"`
-	ObservedGeneration int          `json:"observed_generation,omitempty" yaml:"observed_generation,omitempty"`
+	ObservedGeneration int          `json:"observed_generation,omitzero"  yaml:"observed_generation,omitempty"`
 }
 
 // JobDenial is one guard denial of a job's holder, Ts unix seconds. VerdictRef reopens the
@@ -923,7 +923,7 @@ type JobDenial struct {
 type PriorAttempt struct {
 	N                  int          `json:"n"                             yaml:"n"`
 	State              JobState     `json:"state"                         yaml:"state"`
-	ObservedGeneration int          `json:"observed_generation,omitempty" yaml:"observed_generation,omitempty"`
+	ObservedGeneration int          `json:"observed_generation,omitzero"  yaml:"observed_generation,omitempty"`
 	EndReason          string       `json:"end_reason,omitempty"          yaml:"end_reason,omitempty"`
 	ModelTier          string       `json:"model_tier,omitempty"          yaml:"model_tier,omitempty"`
 	Checkpoint         string       `json:"checkpoint,omitempty"          yaml:"checkpoint,omitempty"`

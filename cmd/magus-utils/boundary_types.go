@@ -264,6 +264,11 @@ var boundaryTypes = []boundaryType{
 	{Name: "HarnessKey", Type: reflect.TypeFor[types.HarnessKey]()},
 	{Name: "JobModelTier", Type: reflect.TypeFor[types.JobModelTier](), RuntimeObject: true},
 	{Name: "ModelTierRequest", Type: reflect.TypeFor[types.ModelTierRequest](), RuntimeObject: true},
+	// Leaf first: Job.prior is [PriorAttempt], whose denials and retry are these two.
+	{Name: "JobDenial", Type: reflect.TypeFor[types.JobDenial](), RuntimeObject: true},
+	{Name: "RetryVerdict", Type: reflect.TypeFor[types.RetryVerdict](), RuntimeObject: true},
+	{Name: "PriorAttempt", Type: reflect.TypeFor[types.PriorAttempt](), RuntimeObject: true},
+	{Name: "JobRejection", Type: reflect.TypeFor[types.JobRejection](), RuntimeObject: true},
 	{Name: "Job", Type: reflect.TypeFor[types.Job](), RuntimeObject: true},
 	// Declaration is Job's INPUT twin: a magusfile can construct one, but nothing hands one
 	// back out, so it carries no RuntimeObject encoder.
