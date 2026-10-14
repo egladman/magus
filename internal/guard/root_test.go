@@ -290,7 +290,8 @@ func TestSpawnNamesModelComparesModelTierRanks(t *testing.T) {
 
 	v = judgeSpawn(ctx, t, deps, "claude-haiku-5-5")
 	assert.Equal(t, decisionDeny, v.Decision, "an id no alias names has no tier")
-	assert.Contains(t, v.Reason, "claude-haiku-5-5, which harness claude-code maps to no model tier")
+	assert.Contains(t, storedVerdict(t, at.cacheDir, v.Reason), "claude-haiku-5-5, which harness claude-code maps to no model tier",
+		"a repeat cites the rule's summary inline and stores the full reason")
 }
 
 // A declaration that maps no model for the spawning host is refused at strict, naming the
