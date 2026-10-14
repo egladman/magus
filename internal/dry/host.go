@@ -373,6 +373,18 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		unreferenced.MapSet("symbols", vm.ListValue(nil))
 		unreferenced.MapSet("answer", answer)
 
+		duplication := vm.NewMap()
+		duplication.MapSet("definition", vm.StrValue(""))
+		duplication.MapSet("groups", vm.ListValue(nil))
+		duplication.MapSet("answer", answer)
+
+		conform := vm.NewMap()
+		conform.MapSet("definition", vm.StrValue(""))
+		conform.MapSet("rows", vm.ListValue(nil))
+		conform.MapSet("stale", vm.ListValue(nil))
+		conform.MapSet("excluded", vm.IntValue(0))
+		conform.MapSet("answer", answer)
+
 		modelTiers := vm.NewMap()
 		modelTiers.MapSet("definition", vm.StrValue(""))
 		modelTiers.MapSet("rows", vm.ListValue(nil))
@@ -384,6 +396,8 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("trend", insightLens("projects"))
 		res.MapSet("volatility", volatility)
 		res.MapSet("unreferenced", unreferenced)
+		res.MapSet("duplication", duplication)
+		res.MapSet("conform", conform)
 		res.MapSet("modelTiers", modelTiers)
 		res.MapSet("graphStats", stats)
 		return res, nil
@@ -494,6 +508,11 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// Empty for the reason precedents is.
 	m.MapSet("symbols", shaped("magus.symbols", map[string]vm.Value{
 		"symbols": empty, "indexes": empty,
+	}))
+	// Empty for the reason precedents is.
+	m.MapSet("conform", shaped("magus.conform", map[string]vm.Value{
+		"definition": vm.StrValue(""), "rows": empty, "stale": empty, "excluded": vm.IntValue(0),
+		"answer": vm.NewMap(), "indexes": empty,
 	}))
 	// The typed records come from the generated encoders, so a dry run exposes exactly the
 	// fields a figure reads. Nothing is raised: the preview has no graph to hold a path or
