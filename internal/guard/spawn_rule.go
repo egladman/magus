@@ -186,6 +186,9 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		ruleFailures: failures,
 	})
 	if verdict.Decision != decisionDeny {
+		if env.IsContinue {
+			recordRework(ctx, at, facts, env.Target)
+		}
 		markAgentSeen(facts, env)
 		noteMainSpawn(at, who, actingLease)
 		if env.IsSpawn {
