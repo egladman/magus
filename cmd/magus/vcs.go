@@ -381,7 +381,7 @@ func autoResolveConflicts(ctx context.Context, m *magus.Magus, drv types.VCSDriv
 // failed. A path no job claims is passed over in silence, since claims say nothing about it.
 func settleByClaims(ctx context.Context, m *magus.Magus, drv types.VCSDriver, ours, against string, conflicts []types.Conflict) ([]types.Conflict, error) {
 	root := m.Root()
-	store, err := openJobs(root)
+	store, err := openJobs(ctx, root, jobOpen{})
 	var rows []types.Job
 	if err == nil {
 		rows, err = store.List()

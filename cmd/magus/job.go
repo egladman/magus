@@ -172,40 +172,26 @@ func probeConsoleServer() (serving bool, serverVersion string) {
 // milliseconds; anything slower is one that cannot serve a console page either.
 const consoleProbeTimeout = 2 * time.Second
 
-func openJobs(root string) (*job.Store, error) {
-	return openJobsDry(root, false)
+// jobOpen is how a command opens the job store.
+type jobOpen struct {
+	// DryRun makes the store's reads write nothing: no sweep and no cached footprint.
+	DryRun bool
+	// ModelTiers wires the workspace's model tiers, matrix and owners, for a write that
+	// creates a row or changes its model, so the store assigns the row's tier.
+	ModelTiers bool
 }
 
-// openJobsDry is openJobs whose reads write nothing under dryRun: no sweep and no cached
-// footprint.
-func openJobsDry(root string, dryRun bool) (*job.Store, error) {
-	loc, err := jobLocation(root)
-	if err != nil {
-		return nil, err
-	}
-	loc.DryRun = dryRun
-	return job.NewStore(loc), nil
-}
-
-func jobLocation(root string) (job.Location, error) {
+// openJobs opens the job store of the workspace at root. With o.ModelTiers a workspace
+// that will not load is an error, since a tier declaration that failed to load must not
+// read as one that declared nothing; a root of "" is no workspace at all, and assigns
+// nothing.
+func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 	if err != nil {
-		return job.Location{}, err
-	}
-	return job.Location{CacheDir: cacheDir, Root: root, Outputs: outputsIn, Grader: newCheckGrader()}, nil
-}
-
-// openForkJobs opens the store a write that creates a row or changes its model goes
-// through: openJobs, with the workspace's model tiers and matrix wired so the store
-// assigns the row's tier. A workspace that will not load is an error, since a tier
-// declaration that failed to load must not read as one that declared nothing; a root
-// of "" is no workspace at all, and assigns nothing.
-func openForkJobs(ctx context.Context, root string) (*job.Store, error) {
-	loc, err := jobLocation(root)
-	if err != nil {
 		return nil, err
 	}
-	if root != "" {
+	loc := job.Location{CacheDir: cacheDir, Root: root, Outputs: outputsIn, Grader: newCheckGrader(), DryRun: o.DryRun}
+	if o.ModelTiers && root != "" {
 		m, err := loadMagus(ctx, root)
 		if err != nil {
 			return nil, err
@@ -385,13 +371,13 @@ func lsJobs(root string, args []string) error {
 	if len(rest) > 0 {
 		return usagef("magus ls jobs: takes no arguments (got %q)", rest[0])
 	}
-	store, err := openJobs(root)
+	ctx := context.Background()
+	store, err := openJobs(ctx, root, jobOpen{})
 	if err != nil {
 		return err
 	}
 	// The store's report, not the bare rows: magus\job.list and JobService's ListJobs
 	// build the same one, so the three doors cannot disagree about a row.
-	ctx := context.Background()
 	list, err := store.Report(ctx, time.Now().Unix(), globalCfg.Jobs.StaleAfter)
 	if err != nil {
 		return err
@@ -829,7 +815,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return usagef("magus describe job: requires exactly one job")
 	}
 	root = resolveRootOrEmpty(root)
-	store, err := openJobsDry(root, globalCfg.DryRun)
+	store, err := openJobs(ctx, root, jobOpen{DryRun: globalCfg.DryRun})
 	if err != nil {
 		return err
 	}
@@ -1121,13 +1107,13 @@ func jobFork(ctx context.Context, root string, args []string) error {
 
 	root = resolveRootOrEmpty(root)
 	if row.Enter != "" {
-		store, err := openJobs(root)
+		store, err := openJobs(ctx, root, jobOpen{})
 		if err != nil {
 			return err
 		}
 		return jobEnter(ctx, store, row.ID, row.Enter)
 	}
-	store, err := openForkJobs(ctx, root)
+	store, err := openJobs(ctx, root, jobOpen{ModelTiers: true})
 	if err != nil {
 		return err
 	}
@@ -1400,7 +1386,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	if root == "" {
 		return errors.New("magus job exec: no workspace here: run from inside one or pass --root <path>")
 	}
-	store, err := openJobs(root)
+	store, err := openJobs(ctx, root, jobOpen{})
 	if err != nil {
 		return err
 	}
@@ -1590,7 +1576,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 		return usagef("magus job exit: --stdin files one result onto one job, and %d are named", len(pos))
 	}
 	root = resolveRootOrEmpty(root)
-	store, err := openJobs(root)
+	store, err := openJobs(ctx, root, jobOpen{})
 	if err != nil {
 		return err
 	}
@@ -1729,7 +1715,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	}
 	root = resolveRootOrEmpty(root)
 
-	store, err := openJobsDry(root, globalCfg.DryRun)
+	store, err := openJobs(ctx, root, jobOpen{DryRun: globalCfg.DryRun})
 	if err != nil {
 		return err
 	}
@@ -1861,7 +1847,7 @@ func jobWatch(ctx context.Context, root string, args []string) error {
 	}
 	id := pos[0]
 	root = resolveRootOrEmpty(root)
-	store, err := openJobs(root)
+	store, err := openJobs(ctx, root, jobOpen{})
 	if err != nil {
 		return err
 	}
@@ -2659,7 +2645,7 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 	if len(pos) != 1 {
 		return usagef("magus job rm: requires exactly one job")
 	}
-	store, err := openJobs(resolveRootOrEmpty(root))
+	store, err := openJobs(ctx, resolveRootOrEmpty(root), jobOpen{})
 	if err != nil {
 		return err
 	}
@@ -2740,11 +2726,8 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		return usagef("magus job apply: %s (`%s` prints the schema each record must satisfy)", err, hint.JobFork.With("--schema"))
 	}
 	root = resolveRootOrEmpty(root)
-	opener := openForkJobs
-	if globalCfg.DryRun {
-		opener = func(_ context.Context, root string) (*job.Store, error) { return openJobsDry(root, true) }
-	}
-	store, err := opener(ctx, root)
+	// A dry run assigns no tier, so it runs no matrix.
+	store, err := openJobs(ctx, root, jobOpen{DryRun: globalCfg.DryRun, ModelTiers: !globalCfg.DryRun})
 	if err != nil {
 		return err
 	}
@@ -2937,7 +2920,7 @@ func jobPrune(ctx context.Context, root string, args []string) error {
 	if len(pos) > 0 {
 		return usagef("magus job prune: takes no arguments (got %q)", pos[0])
 	}
-	store, err := openJobs(resolveRootOrEmpty(root))
+	store, err := openJobs(ctx, resolveRootOrEmpty(root), jobOpen{})
 	if err != nil {
 		return err
 	}

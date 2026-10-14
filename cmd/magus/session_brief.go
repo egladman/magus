@@ -358,7 +358,7 @@ func unpushedCommits(ctx context.Context, res types.VCSResolution, root string) 
 // leases are live. It names those taken in this checkout and the caller's own binding,
 // editing jobs first, up to briefMaxLeases, and counts the rest.
 func briefLeases(ctx context.Context, root string) (leases []briefLease, others int) {
-	store, err := openJobs(root)
+	store, err := openJobs(ctx, root, jobOpen{})
 	if err != nil {
 		return nil, 0
 	}

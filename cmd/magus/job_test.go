@@ -541,6 +541,19 @@ func TestJobForkRefusesARowScopedByNothing(t *testing.T) {
 	assert.Equal(t, map[string]bool{"reader": true, "writer": false}, got, "a refused fork writes no row")
 }
 
+// Only a store opened for model tiers loads the workspace, so a magusfile mid-edit fails
+// that open alone.
+func TestOpenJobsLoadsTheWorkspaceOnlyForModelTiers(t *testing.T) {
+	resetWorkspaceMemo(t)
+	root, _ := execFixture(t)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\nmagus\\project({\n"), 0o644))
+
+	_, err := openJobs(t.Context(), root, jobOpen{DryRun: true})
+	require.NoError(t, err)
+	_, err = openJobs(t.Context(), root, jobOpen{ModelTiers: true})
+	require.Error(t, err, "a tier declaration that failed to load is not one that declared nothing")
+}
+
 // A fork resolves the checkpoint it is handed: a full-length revision the repository
 // never held is refused and writes no row, and a real abbreviated one is stored in full.
 func TestJobForkResolvesItsCheckpoint(t *testing.T) {
@@ -646,7 +659,7 @@ func TestJobExitResolvesARefInTheJobsCheckout(t *testing.T) {
 	row := leaseRow("w", "")
 	row.CheckoutRoot, row.Registered = worker, 1
 	root, _ := execFixture(t, row)
-	store, err := openJobs(root)
+	store, err := openJobs(t.Context(), root, jobOpen{})
 	require.NoError(t, err)
 	here := func(context.Context, string) (types.JobAttempt, error) { return types.JobAttempt{}, nil }
 	result := types.JobResult{Job: row.ID, Validation: types.JobResultValidation{OutputRef: recorded.Ref}}
@@ -688,7 +701,7 @@ func TestJobWaitEvidenceResolvesOnlyInTheWaitersCheckout(t *testing.T) {
 		Attempt: &types.JobAttempt{Found: true, Ref: "failed", Project: ".", Target: "go-test", Failed: true, TimestampMs: 2_000},
 	}
 	seedJobStore(t, waiter.Root(), row)
-	store, err := openJobs(waiter.Root())
+	store, err := openJobs(t.Context(), waiter.Root(), jobOpen{})
 	require.NoError(t, err)
 	observe := func(context.Context, types.Job) (job.Observed, error) {
 		return job.Observed{Changed: []string{"a.go"}, ChangedKnown: true}, nil
