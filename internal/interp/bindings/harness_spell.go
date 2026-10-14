@@ -117,7 +117,53 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessLimitsContract, err)
 		}
 	}
+	modelsResp, err := drv.Invoke(ctx, spells.InvokeRequest{Target: spells.HarnessModelsContract})
+	if err != nil {
+		if !isMissingHarnessOp(err) {
+			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessModelsContract, err)
+		}
+	} else if modelsResp.Data != nil {
+		models, err := decodeHarnessModels(modelsResp.Data)
+		if err != nil {
+			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessModelsContract, err)
+		}
+		d.Models = models
+	}
 	return d, "spell:" + id, true, nil
+}
+
+// harnessModelRow is one row of a harness_models return, in the snake_case the spell
+// writes; types.ModelFacts carries no wire tags.
+type harnessModelRow struct {
+	ID           string  `json:"id"`
+	Window       int64   `json:"window"`
+	Input        float64 `json:"input"`
+	CacheWrite5m float64 `json:"cache_write_5m"`
+	CacheWrite1h float64 `json:"cache_write_1h"`
+	CacheRead    float64 `json:"cache_read"`
+	Output       float64 `json:"output"`
+	PriceStep    int64   `json:"price_step"`
+	StepFactor   float64 `json:"step_factor"`
+}
+
+// decodeHarnessModels reads a harness_models return into model rows. A row without an id
+// is an error: it could match nothing and would hide a misspelled key.
+func decodeHarnessModels(data any) ([]types.ModelFacts, error) {
+	var rows []harnessModelRow
+	if err := decodeHarnessJSON(data, &rows); err != nil {
+		return nil, err
+	}
+	out := make([]types.ModelFacts, len(rows))
+	for i, r := range rows {
+		if strings.TrimSpace(r.ID) == "" {
+			return nil, fmt.Errorf("row %d has no id", i+1)
+		}
+		out[i] = types.ModelFacts{
+			ID: r.ID, Window: r.Window, Input: r.Input, CacheWrite5m: r.CacheWrite5m, CacheWrite1h: r.CacheWrite1h,
+			CacheRead: r.CacheRead, Output: r.Output, PriceStep: r.PriceStep, StepFactor: r.StepFactor,
+		}
+	}
+	return out, nil
 }
 
 // humanOnlyReasons maps each target the workspace on ctx declares human_only to its

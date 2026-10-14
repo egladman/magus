@@ -60,4 +60,11 @@ const (
 	// and how long it waits on one hook before it stops waiting for the verdict. Optional,
 	// and so is each key; a host that never backgrounds a command omits the first two.
 	HarnessLimitsContract = "harness_limits"
+
+	// HarnessModelsContract returns the models this host runs as rows: [{id, window,
+	// input, output, cache_read, cache_write_5m, cache_write_1h, price_step,
+	// step_factor}]. Prices are USD per million tokens; a price left out is unknown, never
+	// free. Optional: a host that publishes no facts omits it. A person's agents.models
+	// overrides these row by row.
+	HarnessModelsContract = "harness_models"
 )

@@ -119,6 +119,41 @@ export fun harness_limits(target: Target, cb: fun(any)) > {str: any} {
     return claude_limits();
 }
 
+// Read from platform.claude.com/docs/en/about-claude/pricing and written by hand: the Models
+// API needs an API key a subscription user does not have, and a hook has no time for a
+// network call. A model released after this spell's version matches no row, and the guard's
+// cost advice for it falls back to token counts; agents.models in magus.yaml fills the gap.
+// Prices are USD per million tokens; a price_step of 0 means the model has no step.
+fun claude_model(id: str, window: int, input: double, cacheWrite5m: double, cacheWrite1h: double, cacheRead: double, output: double, priceStep: int, stepFactor: double) > {str: any} {
+    return {
+        "id": id,
+        "window": window,
+        "input": input,
+        "cache_write_5m": cacheWrite5m,
+        "cache_write_1h": cacheWrite1h,
+        "cache_read": cacheRead,
+        "output": output,
+        "price_step": priceStep,
+        "step_factor": stepFactor,
+    };
+}
+
+fun claude_models() > [any] {
+    return [
+        claude_model("claude-fable-5-1", window: 1000000, input: 10.0, cacheWrite5m: 12.5, cacheWrite1h: 20.0, cacheRead: 0.25, output: 50.0, priceStep: 0, stepFactor: 0.0),
+        claude_model("claude-opus-5-5", window: 1000000, input: 4.0, cacheWrite5m: 5.0, cacheWrite1h: 8.0, cacheRead: 0.2, output: 20.0, priceStep: 0, stepFactor: 0.0),
+        claude_model("claude-sonnet-5-5", window: 1000000, input: 2.0, cacheWrite5m: 2.5, cacheWrite1h: 4.0, cacheRead: 0.1, output: 10.0, priceStep: 0, stepFactor: 0.0),
+        // The one current model priced by prompt length: every category is 5x above 100000
+        // prompt tokens, cache reads and writes included.
+        claude_model("claude-haiku-5-5", window: 1000000, input: 0.1, cacheWrite5m: 0.125, cacheWrite1h: 0.2, cacheRead: 0.01, output: 0.5, priceStep: 100000, stepFactor: 5.0),
+        claude_model("claude-haiku-4-5", window: 200000, input: 1.0, cacheWrite5m: 1.25, cacheWrite1h: 2.0, cacheRead: 0.1, output: 5.0, priceStep: 0, stepFactor: 0.0),
+    ];
+}
+
+export fun harness_models(target: Target, cb: fun(any)) > [any] {
+    return claude_models();
+}
+
 fun claude_path_command() > str {
     return claude_glue_command("path", flags: [REPORTS_SKILLS]);
 }
@@ -391,6 +426,24 @@ test "claude_agents renders one file per agent, in order" {
     final files = claude_agents([claude_scout_fixture(true, class: "economy"), claude_scout_fixture(false, class: "standard")]);
     assert\equal(files.len(), 2, "one file per agent");
     assert\equal("{files[1]["path"]}", ".claude/agents/magus-scout.md", "path");
+}
+
+test "harness_models ships the five Claude rows, and only haiku-5-5 steps its price" {
+    final noTarget = null;
+    final cb = fun(_: any) > void {};
+    final rows = harness_models(noTarget, cb);
+    assert\equal(rows.len(), 5, "one row per model");
+    final ids = mut [<str>];
+    final steps = mut [<str>];
+    foreach (row in rows) {
+        final fields = row as {str: any};
+        ids.append("{fields["id"]}");
+        if ("{fields["price_step"]}" != "0") {
+            steps.append("{fields["id"]}");
+        }
+    }
+    assert\equal(ids.join(","), "claude-fable-5-1,claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5,claude-haiku-4-5", "ids in table order");
+    assert\equal(steps.join(","), "claude-haiku-5-5", "the one model priced by prompt length");
 }
 
 test "mgs_getName is the harness id describe and verify look up" {
