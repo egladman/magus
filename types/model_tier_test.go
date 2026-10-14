@@ -218,3 +218,39 @@ func TestEnumModelTierVocabulariesCloseTheirSets(t *testing.T) {
 	assert.True(t, SkillVariantShort.Short())
 	assert.Equal(t, "short", SkillVariantShort.String(), "the skill-variant stamp prints this")
 }
+
+func TestModelTierSetNamesItsSiteAndHosts(t *testing.T) {
+	t.Parallel()
+
+	decl := threeTiers()
+	decl.Hosts = map[HarnessKey][]string{
+		{ID: "zed"}:     {"a", "b", "c"},
+		{ID: "claude"}:  {"d", "e", "f"},
+		{ID: "bravado"}: {"g", "h", "i"},
+	}
+	set := mustTiers(t, decl)
+
+	assert.Equal(t, "magusfile.buzz:3", set.Site())
+	assert.Equal(t, []HarnessKey{{ID: "bravado"}, {ID: "claude"}, {ID: "zed"}}, set.Hosts())
+	assert.Empty(t, mustTiers(t, func() ModelTierDeclaration { d := threeTiers(); d.Hosts = nil; return d }()).Hosts())
+}
+
+func TestJobModelTierStringIsTheLineForkPrints(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		tier JobModelTier
+		want string
+	}{
+		{"reason and site", JobModelTier{Name: "economy", Source: ModelTierSourceMatrix, Reason: "small", Site: "magusfile.buzz:20"}, `economy (rank 0), matrix: "small" at magusfile.buzz:20`},
+		{"reason alone", JobModelTier{Name: "standard", Rank: 1, Source: ModelTierSourceDefault, Reason: "the declared default"}, `standard (rank 1), default: "the declared default"`},
+		{"neither", JobModelTier{Name: "principal", Rank: 2, Source: ModelTierSourceRow}, "principal (rank 2), row"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, tt.tier.String())
+		})
+	}
+}

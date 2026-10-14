@@ -247,6 +247,14 @@ func (s *ModelTierSet) Resolve(host HarnessKey, alias string) (ModelTier, bool) 
 	return ModelTier{set: s, rank: i}, true
 }
 
+// Site is the file:line, or module name, of the declaration.
+func (s *ModelTierSet) Site() string { return s.site }
+
+// Hosts lists the harnesses the declaration maps to models, ordered by id.
+func (s *ModelTierSet) Hosts() []HarnessKey {
+	return slices.SortedFunc(maps.Keys(s.hosts), func(a, b HarnessKey) int { return strings.Compare(a.ID, b.ID) })
+}
+
 func (s *ModelTierSet) hostIDs() string {
 	if len(s.hosts) == 0 {
 		return "none"
@@ -364,4 +372,17 @@ type JobModelTier struct {
 	Reason string          `json:"reason,omitempty" yaml:"reason,omitempty"`
 	Site   string          `json:"site,omitempty"   yaml:"site,omitempty"`
 	Model  string          `json:"model,omitempty"  yaml:"model,omitempty"`
+}
+
+// String renders the assignment as `fork` and `describe job` print it: the name and rank,
+// the source that chose it and, where the source gave them, its reason and site.
+func (t JobModelTier) String() string {
+	line := fmt.Sprintf("%s (rank %d), %s", t.Name, t.Rank, t.Source)
+	if t.Reason != "" {
+		line += fmt.Sprintf(": %q", t.Reason)
+	}
+	if t.Site != "" {
+		line += " at " + t.Site
+	}
+	return line
 }

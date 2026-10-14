@@ -134,7 +134,7 @@ var storeStamped = []string{
 	"holder", "releases", "unattributed", "entries", "write_proof", "reported_base",
 	"base_verdict", "registered_by", "registered", "checkout_root", "end_reason", "created",
 	"updated", "deadline", "result", "attempt", "gate_attempts", "last_run", "integration",
-	"waiter_evidence",
+	"waiter_evidence", "model_tier",
 }
 
 // dropStoreStamped is raw without the members in storeStamped; without `state`, the

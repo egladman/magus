@@ -204,7 +204,7 @@ func TestDecodeDeclarationsIgnoresWhatTheStoreStamped(t *testing.T) {
 	stored := fmt.Sprintf(`{"schema_version":%d,"id":"a","write_paths":["internal/job"],"state":"declared",`+
 		`"created":1,"updated":2,"deadline":3,"registered":4,"registered_by":{"session":"s"},`+
 		`"write_proof":{},"reported_base":"abc","base_verdict":"match","checkout_root":"/w",`+
-		`"holder":{},"releases":[],"result":null}`, types.JobSchemaVersion)
+		`"holder":{},"releases":[],"result":null,"model_tier":{"name":"economy","rank":0,"skills":"full","source":"default"}}`, types.JobSchemaVersion)
 	rows, err := DecodeDeclarations(strings.NewReader(stored))
 	require.NoError(t, err)
 	require.Len(t, rows, 1)

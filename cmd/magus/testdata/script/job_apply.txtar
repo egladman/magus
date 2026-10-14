@@ -38,6 +38,7 @@ stdout 'src/pkg/other\.go'
 exec magus describe job wave/a -o 'template={{toJson .job}}'
 stdout '"created"'
 stdout '"write_proof"'
+stdout '"model_tier"'
 cp stdout $WORK/roundtrip.json
 exec magus job apply -f $WORK/roundtrip.json
 stdout '(unchanged|updated) wave/a'
