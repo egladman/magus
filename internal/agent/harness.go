@@ -164,11 +164,22 @@ type HarnessVerification struct {
 	// empty when it keeps none.
 	SettingStatus HarnessStatus `json:"setting_status,omitempty"`
 	SettingReason string        `json:"setting_reason,omitempty"`
-	// PluginStatus is whether each Claude Code plugin the workspace enables through the
-	// descriptor's settings is installed for this person, empty when the descriptor enables
+	// Plugin is whether each Claude Code plugin the workspace enables through the
+	// descriptor's settings is installed for this person, zero when the descriptor enables
 	// none or the workspace has not turned it on. Uncovered names the install command.
-	PluginStatus HarnessStatus `json:"plugin_status,omitempty"`
-	PluginReason string        `json:"plugin_reason,omitempty"`
+	Plugin HarnessCheck `json:"plugin,omitzero"`
+}
+
+// HarnessCheck is one verdict beside the harness config's own. A zero Status means the
+// descriptor keeps nothing of that kind, so there is nothing to fail.
+type HarnessCheck struct {
+	Status HarnessStatus `json:"status"`
+	Reason string        `json:"reason,omitempty"`
+}
+
+// Failing reports a check that ran and did not verify.
+func (c HarnessCheck) Failing() bool {
+	return c.Status != "" && c.Status != HarnessVerified
 }
 
 // HarnessSpellLoader resolves a harness descriptor from a magusfile-selected
@@ -597,14 +608,13 @@ func verifyHarnessPlugins(root string, d HarnessDescriptor, result *HarnessVerif
 		installed, err := claudePluginInstalled(id)
 		switch {
 		case err != nil:
-			result.PluginStatus, result.PluginReason = HarnessUnprobed, err.Error()
+			result.Plugin = HarnessCheck{Status: HarnessUnprobed, Reason: err.Error()}
 			return
 		case !installed:
-			result.PluginStatus = HarnessUncovered
-			result.PluginReason = pluginMissingReason(d, s, id)
+			result.Plugin = HarnessCheck{Status: HarnessUncovered, Reason: pluginMissingReason(d, s, id)}
 			return
 		}
-		result.PluginStatus = HarnessVerified
+		result.Plugin = HarnessCheck{Status: HarnessVerified}
 	}
 }
 

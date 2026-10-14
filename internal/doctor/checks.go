@@ -2359,8 +2359,8 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 			problems = append(problems, fmt.Sprintf("%s: %v", id, err))
 			continue
 		}
-		if verification.PluginStatus != "" && verification.PluginStatus != agent.HarnessVerified {
-			problems = append(problems, fmt.Sprintf("%s harness plugin is %s: %s", id, verification.PluginStatus, verification.PluginReason))
+		if verification.Plugin.Failing() {
+			problems = append(problems, fmt.Sprintf("%s harness plugin is %s: %s", id, verification.Plugin.Status, verification.Plugin.Reason))
 		}
 		if verification.Status == agent.HarnessSkillsOnly {
 			// Wires no guard at all by design; nothing here is a problem to report,

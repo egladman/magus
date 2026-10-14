@@ -955,10 +955,10 @@ func TestVerifyHarnessReportsAnEnabledPluginNobodyInstalled(t *testing.T) {
 	result, err := VerifyHarness(untimedProbes(), root, "moder")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.SettingStatus, "the settings are in place; the install is the gap")
-	assert.Equal(t, HarnessUncovered, result.PluginStatus)
-	assert.Contains(t, result.PluginReason, "/plugin install magus --marketplace egladman/magus")
-	assert.Contains(t, result.PluginReason, "magus@magus")
-	assert.Contains(t, result.PluginReason, "not registered")
+	assert.Equal(t, HarnessUncovered, result.Plugin.Status)
+	assert.Contains(t, result.Plugin.Reason, "/plugin install magus --marketplace egladman/magus")
+	assert.Contains(t, result.Plugin.Reason, "magus@magus")
+	assert.Contains(t, result.Plugin.Reason, "not registered")
 }
 
 // TestVerifyHarnessReadsAnInstalledPluginAsCurrent covers both shapes of the install record:
@@ -976,8 +976,8 @@ func TestVerifyHarnessReadsAnInstalledPluginAsCurrent(t *testing.T) {
 
 			result, err := VerifyHarness(untimedProbes(), root, "moder")
 			require.NoError(t, err)
-			assert.Equal(t, HarnessVerified, result.PluginStatus)
-			assert.Empty(t, result.PluginReason)
+			assert.Equal(t, HarnessVerified, result.Plugin.Status)
+			assert.Empty(t, result.Plugin.Reason)
 		})
 	}
 }
@@ -1002,8 +1002,8 @@ func TestVerifyHarnessIgnoresAPluginTheWorkspaceDoesNotEnable(t *testing.T) {
 
 			result, err := VerifyHarness(untimedProbes(), root, "moder")
 			require.NoError(t, err)
-			assert.Empty(t, result.PluginStatus)
-			assert.Empty(t, result.PluginReason)
+			assert.Empty(t, result.Plugin.Status)
+			assert.Empty(t, result.Plugin.Reason)
 		})
 	}
 }
@@ -1030,9 +1030,9 @@ func TestVerifyHarnessPluginInstallLineFollowsTheDescriptor(t *testing.T) {
 
 	result, err := VerifyHarness(untimedProbes(), root, "other-mod")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessUncovered, result.PluginStatus)
-	assert.Contains(t, result.PluginReason, "/plugin install lint --marketplace acme/tools")
-	assert.NotContains(t, result.PluginReason, "not registered")
+	assert.Equal(t, HarnessUncovered, result.Plugin.Status)
+	assert.Contains(t, result.Plugin.Reason, "/plugin install lint --marketplace acme/tools")
+	assert.NotContains(t, result.Plugin.Reason, "not registered")
 }
 
 // TestVerifyHarnessPluginStoreThatCannotBeReadIsUnprobed pins that a corrupt store is not
@@ -1045,8 +1045,8 @@ func TestVerifyHarnessPluginStoreThatCannotBeReadIsUnprobed(t *testing.T) {
 
 	result, err := VerifyHarness(untimedProbes(), root, "moder")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessUnprobed, result.PluginStatus)
-	assert.Contains(t, result.PluginReason, "installed_plugins.json")
+	assert.Equal(t, HarnessUnprobed, result.Plugin.Status)
+	assert.Contains(t, result.Plugin.Reason, "installed_plugins.json")
 }
 
 // TestHarnessDescriptorRejectsAMalformedSetting pins that a setting names a key and a value
