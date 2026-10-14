@@ -591,6 +591,10 @@ func ObjectModelTierRecord(v types.ModelTierRecord, enums ffi.EnumCases) vm.Valu
 	out.MapSet("wideningsPerJob", vm.FloatValue(float64(v.WideningsPerJob)))
 	out.MapSet("meanCostUSD", vm.FloatValue(float64(v.MeanCostUSD)))
 	out.MapSet("medianTokens", vm.IntValue(int64(v.MedianTokens)))
+	out.MapSet("firstAttempts", vm.IntValue(int64(v.FirstAttempts)))
+	out.MapSet("firstPass", vm.IntValue(int64(v.FirstPass)))
+	out.MapSet("firstPassLower", vm.FloatValue(float64(v.FirstPassLower)))
+	out.MapSet("notRetryable", vm.IntValue(int64(v.NotRetryable)))
 	return out
 }
 
@@ -3531,6 +3535,7 @@ func ObjectJobStatus(v types.JobStatus) vm.Value {
 	out.MapSet("leftUnreferenced", vm.ListValue(itemsLeftUnreferenced))
 	out.MapSet("symbolDeltaKnown", vm.BoolValue(v.SymbolDeltaKnown))
 	out.MapSet("observedGeneration", vm.IntValue(int64(v.ObservedGeneration)))
+	out.MapSet("priorGeneration", vm.IntValue(int64(v.PriorGeneration)))
 	return out
 }
 

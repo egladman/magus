@@ -665,6 +665,10 @@ export object ModelTierRecord {
     wideningsPerJob: double = 0.0,
     meanCostUSD: double = 0.0,
     medianTokens: int = 0,
+    firstAttempts: int = 0,
+    firstPass: int = 0,
+    firstPassLower: double = 0.0,
+    notRetryable: int = 0,
 }
 
 export object ModelTierOutput {
@@ -1307,6 +1311,7 @@ export object JobStatus {
     leftUnreferenced: [str] = [],
     symbolDeltaKnown: bool = false,
     observedGeneration: int = 0,
+    priorGeneration: int = 0,
 }
 
 export object ModelTierRequest {

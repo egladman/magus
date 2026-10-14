@@ -59,7 +59,7 @@ Used by: [GetInsight (response)](insight.md#getinsight).
 
 ConformItem is one file, symbol, package or clone group past its row's value and not known. source is its path:line.
 
-Source: [insight.proto:280](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L280).
+Source: [insight.proto:287](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L287).
 
 | Field     | Type   | # | Description |
 | --------- | ------ | - | ----------- |
@@ -73,7 +73,7 @@ Used by: [GetInsight (response)](insight.md#getinsight).
 
 ConformKey names one threshold: metric (file-lines, func-lines, type-methods, file-symbols, dep-fanout, clone-tokens or export-scope), population (source, main or test) and, for dep-fanout, the layer or package directory it covers.
 
-Source: [insight.proto:251](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L251).
+Source: [insight.proto:258](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L258).
 
 | Field        | Type   | # | Description |
 | ------------ | ------ | - | ----------- |
@@ -87,7 +87,7 @@ Used by: [GetInsight (response)](insight.md#getinsight).
 
 ConformKnown is a list of items already past a metric's value and accepted for a reason. In ConformOutput.stale it names the entries that no longer violate and should be deleted.
 
-Source: [insight.proto:288](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L288).
+Source: [insight.proto:295](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L295).
 
 | Field    | Type            | # | Description |
 | -------- | --------------- | - | ----------- |
@@ -101,7 +101,7 @@ Used by: [GetInsight (response)](insight.md#getinsight).
 
 ConformOutput is the code-shape lens: one row per metric and population, judged against the value a check enforces. It reads the symbol graph, not git. It reports and proposes; a person commits a proposed value to the ratchet record, and nothing here sets one. answer is unknown, never a pass, when a symbol index is missing. excluded counts the files the configured exclusions hid, so a widened exclusion stays visible.
 
-Source: [insight.proto:240](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L240).
+Source: [insight.proto:247](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L247).
 
 | Field        | Type                                           | # | Description |
 | ------------ | ---------------------------------------------- | - | ----------- |
@@ -117,7 +117,7 @@ Used by: [GetInsight (response)](insight.md#getinsight).
 
 ConformRow is one key's distribution and verdict. live is the configured percentile today; value and source (ratchet or anchor) are what a check enforces, and anchor is the shipped bound no committed value may exceed. propose is zero, or a tighter value to commit; it is never looser than value. known counts the accepted items past value, and violations are the rest.
 
-Source: [insight.proto:262](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L262).
+Source: [insight.proto:269](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L269).
 
 | Field        | Type                                 | #  | Description |
 | ------------ | ------------------------------------ | -- | ----------- |
@@ -216,22 +216,26 @@ ModelTierRecord is the recorded outcome of the jobs that ran at one tier and job
 
 Source: [insight.proto:218](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L218).
 
-| Field               | Type   | #  | Description                           |
-| ------------------- | ------ | -- | ------------------------------------- |
-| `rank`              | int32  | 1  |                                       |
-| `model_tier`        | string | 2  |                                       |
-| `kind`              | string | 3  | check, symbol, paths, script or prose |
-| `jobs`              | int32  | 4  |                                       |
-| `pass`              | int32  | 5  |                                       |
-| `fail`              | int32  | 6  |                                       |
-| `no_return`         | int32  | 7  |                                       |
-| `pass_lower`        | double | 8  |                                       |
-| `checks_per_job`    | double | 9  |                                       |
-| `forks_per_id`      | double | 10 |                                       |
-| `rework_per_job`    | double | 11 |                                       |
-| `widenings_per_job` | double | 12 |                                       |
-| `mean_cost_usd`     | double | 13 |                                       |
-| `median_tokens`     | int64  | 14 |                                       |
+| Field               | Type   | #  | Description                                                                                                                                                                                                                                                                 |
+| ------------------- | ------ | -- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rank`              | int32  | 1  |                                                                                                                                                                                                                                                                             |
+| `model_tier`        | string | 2  |                                                                                                                                                                                                                                                                             |
+| `kind`              | string | 3  | check, symbol, paths, script or prose                                                                                                                                                                                                                                       |
+| `jobs`              | int32  | 4  |                                                                                                                                                                                                                                                                             |
+| `pass`              | int32  | 5  |                                                                                                                                                                                                                                                                             |
+| `fail`              | int32  | 6  |                                                                                                                                                                                                                                                                             |
+| `no_return`         | int32  | 7  |                                                                                                                                                                                                                                                                             |
+| `pass_lower`        | double | 8  |                                                                                                                                                                                                                                                                             |
+| `checks_per_job`    | double | 9  |                                                                                                                                                                                                                                                                             |
+| `forks_per_id`      | double | 10 |                                                                                                                                                                                                                                                                             |
+| `rework_per_job`    | double | 11 |                                                                                                                                                                                                                                                                             |
+| `widenings_per_job` | double | 12 |                                                                                                                                                                                                                                                                             |
+| `mean_cost_usd`     | double | 13 |                                                                                                                                                                                                                                                                             |
+| `median_tokens`     | int64  | 14 |                                                                                                                                                                                                                                                                             |
+| `first_attempts`    | int32  | 15 | first\_attempts counts the endings of a job's first attempt and first\_pass those that passed; first\_pass\_lower is their Wilson lower bound, as pass\_lower is for every ending. not\_retryable counts the endings classified as needing a change before another attempt. |
+| `first_pass`        | int32  | 16 |                                                                                                                                                                                                                                                                             |
+| `first_pass_lower`  | double | 17 |                                                                                                                                                                                                                                                                             |
+| `not_retryable`     | int32  | 18 |                                                                                                                                                                                                                                                                             |
 
 Used by: [GetInsight (response)](insight.md#getinsight).
 

@@ -1212,8 +1212,15 @@ type ModelTierRecord struct {
 	WideningsPerJob float64                `protobuf:"fixed64,12,opt,name=widenings_per_job,json=wideningsPerJob,proto3" json:"widenings_per_job,omitempty"`
 	MeanCostUsd     float64                `protobuf:"fixed64,13,opt,name=mean_cost_usd,json=meanCostUsd,proto3" json:"mean_cost_usd,omitempty"`
 	MedianTokens    int64                  `protobuf:"varint,14,opt,name=median_tokens,json=medianTokens,proto3" json:"median_tokens,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// first_attempts counts the endings of a job's first attempt and first_pass those that
+	// passed; first_pass_lower is their Wilson lower bound, as pass_lower is for every ending.
+	// not_retryable counts the endings classified as needing a change before another attempt.
+	FirstAttempts  int32   `protobuf:"varint,15,opt,name=first_attempts,json=firstAttempts,proto3" json:"first_attempts,omitempty"`
+	FirstPass      int32   `protobuf:"varint,16,opt,name=first_pass,json=firstPass,proto3" json:"first_pass,omitempty"`
+	FirstPassLower float64 `protobuf:"fixed64,17,opt,name=first_pass_lower,json=firstPassLower,proto3" json:"first_pass_lower,omitempty"`
+	NotRetryable   int32   `protobuf:"varint,18,opt,name=not_retryable,json=notRetryable,proto3" json:"not_retryable,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ModelTierRecord) Reset() {
@@ -1340,6 +1347,34 @@ func (x *ModelTierRecord) GetMeanCostUsd() float64 {
 func (x *ModelTierRecord) GetMedianTokens() int64 {
 	if x != nil {
 		return x.MedianTokens
+	}
+	return 0
+}
+
+func (x *ModelTierRecord) GetFirstAttempts() int32 {
+	if x != nil {
+		return x.FirstAttempts
+	}
+	return 0
+}
+
+func (x *ModelTierRecord) GetFirstPass() int32 {
+	if x != nil {
+		return x.FirstPass
+	}
+	return 0
+}
+
+func (x *ModelTierRecord) GetFirstPassLower() float64 {
+	if x != nil {
+		return x.FirstPassLower
+	}
+	return 0
+}
+
+func (x *ModelTierRecord) GetNotRetryable() int32 {
+	if x != nil {
+		return x.NotRetryable
 	}
 	return 0
 }
@@ -1868,7 +1903,7 @@ const file_magus_insight_v1alpha1_insight_proto_rawDesc = "" +
 	"\n" +
 	"definition\x18\x01 \x01(\tR\n" +
 	"definition\x12;\n" +
-	"\x04rows\x18\x02 \x03(\v2'.magus.insight.v1alpha1.ModelTierRecordR\x04rows\"\xb3\x03\n" +
+	"\x04rows\x18\x02 \x03(\v2'.magus.insight.v1alpha1.ModelTierRecordR\x04rows\"\xc8\x04\n" +
 	"\x0fModelTierRecord\x12\x12\n" +
 	"\x04rank\x18\x01 \x01(\x05R\x04rank\x12\x1d\n" +
 	"\n" +
@@ -1887,7 +1922,12 @@ const file_magus_insight_v1alpha1_insight_proto_rawDesc = "" +
 	"\x0erework_per_job\x18\v \x01(\x01R\freworkPerJob\x12*\n" +
 	"\x11widenings_per_job\x18\f \x01(\x01R\x0fwideningsPerJob\x12\"\n" +
 	"\rmean_cost_usd\x18\r \x01(\x01R\vmeanCostUsd\x12#\n" +
-	"\rmedian_tokens\x18\x0e \x01(\x03R\fmedianTokens\"\xf5\x01\n" +
+	"\rmedian_tokens\x18\x0e \x01(\x03R\fmedianTokens\x12%\n" +
+	"\x0efirst_attempts\x18\x0f \x01(\x05R\rfirstAttempts\x12\x1d\n" +
+	"\n" +
+	"first_pass\x18\x10 \x01(\x05R\tfirstPass\x12(\n" +
+	"\x10first_pass_lower\x18\x11 \x01(\x01R\x0efirstPassLower\x12#\n" +
+	"\rnot_retryable\x18\x12 \x01(\x05R\fnotRetryable\"\xf5\x01\n" +
 	"\rConformOutput\x12\x1e\n" +
 	"\n" +
 	"definition\x18\x01 \x01(\tR\n" +

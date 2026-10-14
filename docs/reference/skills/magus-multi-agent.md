@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 26667
-skill_short_bytes: 20966
+skill_full_bytes: 26956
+skill_short_bytes: 21259
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `126` |
+| `agent-skill-version` | `127` |
 | `knowledge-schema-version` | `19` |
-| `skill-content` | `c2f17a551361` |
+| `skill-content` | `d107f00822ff` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -202,8 +202,10 @@ definitive end without capping depth:
 - **Every job carries acceptance criteria down.** A child inherits its parent's
   criteria plus its own. A job nobody can evaluate cannot end; that, not the nesting,
   makes depth dangerous.
-- **A job that fails its criteria twice is not re-issued.** The root re-scopes it,
-  or serializes it behind whatever keeps breaking it.
+- **A retry is `magus job fork <same id>`, never a new id.** The next holder reads the previous
+  attempt in `magus describe job`, never a transcript. One marked not retryable names what changes
+  first (`magus job apply` to widen, a config edit, or you): make it, or do the job locally; never
+  re-fork it unchanged. A goal unmet twice marks it so: the root re-scopes the job, or serializes it behind whatever keeps breaking it.
 - **Whatever the parent does not hand out, the parent still owns.** A strict subset
   leaks by construction. Split "no caller of X remains" into per-project jobs, and
   the callers in no project belong to nobody. Every job passes and the goal is
@@ -682,10 +684,10 @@ definitive end without capping depth:
 - **Every job carries acceptance criteria down.** A child inherits its parent's
   criteria plus its own. A job nobody can evaluate cannot end; that, not the nesting,
   makes depth dangerous.
-- **A job that fails its criteria twice is not re-issued.** The root re-scopes it,
-  or serializes it behind whatever keeps breaking it. Two jobs with an undeclared
-  dependency each break the other's criteria, and re-issuing the failing one satisfies
-  every instruction above while alternating forever; the budget is what ends it.
+- **A retry is `magus job fork <same id>`, never a new id.** The next holder reads the previous
+  attempt in `magus describe job`, never a transcript. One marked not retryable names what changes
+  first (`magus job apply` to widen, a config edit, or you): make it, or do the job locally; never
+  re-fork it unchanged. A goal unmet twice marks it so: the root re-scopes the job, or serializes it behind whatever keeps breaking it. Two jobs with an undeclared dependency each break the other's criteria, and re-forking the failing one satisfies every instruction above while alternating forever; the budget is what ends it.
 - **Whatever the parent does not hand out, the parent still owns.** A strict subset
   leaks by construction. Split "no caller of X remains" into per-project jobs, and
   the callers in no project belong to nobody. Every job passes and the goal is
