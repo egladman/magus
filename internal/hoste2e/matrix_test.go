@@ -12,12 +12,31 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/trail"
 )
+
+// conversationName picks one of the scripted sessions below.
+type conversationName string
+
+const (
+	convTools conversationName = "tools"
+	convSpawn conversationName = "spawn"
+	convBrief conversationName = "brief"
+)
+
+// prompts is what the conversation sends a host. A Claude Code session reaches the
+// brief only through a compaction, so convBrief swaps in that host's longer script.
+func (c conversationName) prompts(hostID string) []string {
+	if turns, ok := briefTurns[hostID]; ok && c == convBrief {
+		return turns
+	}
+	return conversations[c]
+}
 
 // The prompts are scripts, not tasks: each step names the tool to use so the hook it
 // should fire is not left to the model's choice.
-var conversations = map[string][]string{
-	"tools": {`This is an automated test of tool hooks. Use your tools for each numbered step, in order. If a step is refused, or a hook adds a note, do not retry it; go on to the next step.
+var conversations = map[conversationName][]string{
+	convTools: {`This is an automated test of tool hooks. Use your tools for each numbered step, in order. If a step is refused, or a hook adds a note, do not retry it; go on to the next step.
 1. Run the shell command: echo e2e-deny-probe
 2. Run the shell command: echo e2e-advise-probe
 3. Read the file probe.txt with your file-read tool; use the shell only if you have no such tool.
@@ -25,7 +44,7 @@ var conversations = map[string][]string{
 5. Create the file blocked.txt containing the line "blocked", with your file-editing tool (write, edit or patch), not the shell.
 6. Call the status tool of the magus MCP server once.
 Finally reply with one line listing every code word (shaped like E2E-WORD-XXXXXXXX) that any refusal, error or hook note showed you. Context: we are checking this workspace's module boundary.`},
-	"spawn": {`This is an automated test of subagent hooks.
+	convSpawn: {`This is an automated test of subagent hooks.
 1. Load the skill named magus-multi-agent with your skill tool. With no skill tool, read its SKILL.md under .claude/skills, .agents/skills, .cursor/skills or .opencode/skills.
 2. Start exactly one subagent with your subagent tool. Its description (title) is: e2e/probe ` + jobID + `
 Its prompt is exactly these two lines:
@@ -33,7 +52,7 @@ lease: ` + jobID + `
 Reply with the single word OK and use no tools.
 3. Wait for the subagent to finish. If the spawn is refused, do not retry it.
 Finally reply with one line listing every code word (shaped like E2E-WORD-XXXXXXXX) that any refusal, error or hook note showed you.`},
-	"brief": {briefQuestion},
+	convBrief: {briefQuestion},
 }
 
 const briefQuestion = `Use no tools. Your context may hold a magus brief that lists the leases live in this checkout. Reply with the code word shaped like E2E-BRIEF-XXXXXXXX from that list, or NONE if you have no such brief.`
@@ -46,32 +65,32 @@ var briefTurns = map[string][]string{
 
 type scenario struct {
 	name  string
-	conv  string
+	conv  conversationName
 	check func(t *testing.T, h *hostDriver, s *session)
 }
 
 // scenarios assert what Claude Code gets today; parity is the bar for every host.
 var scenarios = []scenario{
-	{"shell-deny", "tools", func(t *testing.T, h *hostDriver, s *session) {
-		if !hasRecord(t, s, func(r record) bool { return strings.Contains(r.command(), "e2e-deny-probe") && r.decision() == "deny" }) {
+	{name: "shell-deny", conv: convTools, check: func(t *testing.T, h *hostDriver, s *session) {
+		if !hasRecord(t, s, func(r record) bool { return strings.Contains(r.Request.Command, "e2e-deny-probe") && r.Response.Decision == "deny" }) {
 			t.Error("no deny recorded for the probe command")
 		}
 		if !s.replied(s.w.code("DENY")) {
 			t.Errorf("the deny reason never reached the model: reply lacks %s", s.w.code("DENY"))
 		}
 	}},
-	{"judged-once-per-call", "tools", func(t *testing.T, h *hostDriver, s *session) {
+	{name: "judged-once-per-call", conv: convTools, check: func(t *testing.T, h *hostDriver, s *session) {
 		// Two hooks wired to one call judge it within one hook round trip of each other;
 		// a model issuing the same call again waits on a model turn first.
 		const window = 1500
 		last := map[string]int64{}
 		var twice []string
 		for _, r := range s.w.records(t) {
-			if r.decision() == "" {
+			if r.Response.Decision == "" {
 				continue
 			}
 			if at, ok := last[r.subject()]; ok && r.Ts-at < window {
-				twice = append(twice, r.tool()+" "+clip(r.command()+filepath.Base(r.path())))
+				twice = append(twice, r.Request.Tool+" "+clip(r.Request.Command+filepath.Base(r.Request.Path)))
 			}
 			last[r.subject()] = r.Ts
 		}
@@ -80,9 +99,9 @@ var scenarios = []scenario{
 			t.Errorf("one call judged twice, within %dms: %v", window, twice)
 		}
 	}},
-	{"shell-advise", "tools", func(t *testing.T, h *hostDriver, s *session) {
+	{name: "shell-advise", conv: convTools, check: func(t *testing.T, h *hostDriver, s *session) {
 		if !hasRecord(t, s, func(r record) bool {
-			return strings.Contains(r.command(), "e2e-advise-probe") && r.decision() == "advise"
+			return strings.Contains(r.Request.Command, "e2e-advise-probe") && r.Response.Decision == "advise"
 		}) {
 			t.Error("no advise recorded for the probe command")
 		}
@@ -90,22 +109,22 @@ var scenarios = []scenario{
 			t.Errorf("the advice never reached the model: reply lacks %s", s.w.code("ADVISE"))
 		}
 	}},
-	{"read-judged", "tools", func(t *testing.T, h *hostDriver, s *session) {
+	{name: "read-judged", conv: convTools, check: func(t *testing.T, h *hostDriver, s *session) {
 		// The guard restates a read tool's call as `cat <path>`, so a read and a shell cat
 		// record alike.
 		if !hasRecord(t, s, func(r record) bool {
-			return strings.Contains(r.path()+r.command(), "probe.txt") && r.decision() != ""
+			return strings.Contains(r.Request.Path+r.Request.Command, "probe.txt") && r.Response.Decision != ""
 		}) {
 			t.Error("no judged read of probe.txt")
 		}
 	}},
-	{"write-output-judged", "tools", func(t *testing.T, h *hostDriver, s *session) {
-		if !hasRecord(t, s, func(r record) bool { return strings.HasSuffix(r.path(), "gen/out.txt") && r.decision() == "advise" }) {
+	{name: "write-output-judged", conv: convTools, check: func(t *testing.T, h *hostDriver, s *session) {
+		if !hasRecord(t, s, func(r record) bool { return strings.HasSuffix(r.Request.Path, "gen/out.txt") && r.Response.Decision == "advise" }) {
 			t.Error("the write to the declared output gen/out.txt was not judged (want an advise)")
 		}
 	}},
-	{"write-deny", "tools", func(t *testing.T, h *hostDriver, s *session) {
-		if !hasRecord(t, s, func(r record) bool { return strings.HasSuffix(r.path(), "blocked.txt") && r.decision() == "deny" }) {
+	{name: "write-deny", conv: convTools, check: func(t *testing.T, h *hostDriver, s *session) {
+		if !hasRecord(t, s, func(r record) bool { return strings.HasSuffix(r.Request.Path, "blocked.txt") && r.Response.Decision == "deny" }) {
 			t.Error("no deny recorded for the write to blocked.txt")
 		}
 		if fileExists(filepath.Join(s.w.dir, "blocked.txt")) {
@@ -115,20 +134,20 @@ var scenarios = []scenario{
 			t.Errorf("the write deny reason never reached the model: reply lacks %s", s.w.code("WRITE"))
 		}
 	}},
-	{"mcp-judged", "tools", func(t *testing.T, h *hostDriver, s *session) {
+	{name: "mcp-judged", conv: convTools, check: func(t *testing.T, h *hostDriver, s *session) {
 		if !hasRecord(t, s, func(r record) bool {
-			call := strings.ToLower(r.tool() + " " + r.command())
-			return strings.Contains(call, "mcp") && strings.Contains(call, "status") && r.decision() != ""
+			call := strings.ToLower(r.Request.Tool + " " + r.Request.Command)
+			return strings.Contains(call, "mcp") && strings.Contains(call, "status") && r.Response.Decision != ""
 		}) {
 			t.Error("no judged call of the magus MCP status tool")
 		}
 	}},
-	{"prompt-recorded", "tools", func(t *testing.T, h *hostDriver, s *session) {
+	{name: "prompt-recorded", conv: convTools, check: func(t *testing.T, h *hostDriver, s *session) {
 		if len(s.w.markers(t, "topic-architecture")) == 0 {
 			t.Error("the prompt was not recorded: no architecture topic marked for the session")
 		}
 	}},
-	{"reply-check", "tools", func(t *testing.T, h *hostDriver, s *session) {
+	{name: "reply-check", conv: convTools, check: func(t *testing.T, h *hostDriver, s *session) {
 		replies := s.w.proofreadReplies(t)
 		if len(replies) == 0 {
 			t.Fatal("proofread-reply.buzz never ran proofread at turn end")
@@ -137,7 +156,7 @@ var scenarios = []scenario{
 			t.Error("proofread received an empty reply")
 		}
 	}},
-	{"checkpoint", "tools", func(t *testing.T, h *hostDriver, s *session) {
+	{name: "checkpoint", conv: convTools, check: func(t *testing.T, h *hostDriver, s *session) {
 		// OpenCode records it from session.idle, which can land after `opencode run`
 		// has returned, so the listing gets a short grace period.
 		deadline := time.Now().Add(15 * time.Second)
@@ -154,25 +173,25 @@ var scenarios = []scenario{
 		}
 		t.Errorf("magus session lists no %s checkpoint for %s", h.id, s.w.dir)
 	}},
-	{"skill-load-recorded", "spawn", func(t *testing.T, h *hostDriver, s *session) {
+	{name: "skill-load-recorded", conv: convSpawn, check: func(t *testing.T, h *hostDriver, s *session) {
 		if len(s.w.markers(t, "skill-magus-multi-agent")) == 0 {
 			t.Error("the magus-multi-agent skill load was not recorded")
 		}
 	}},
-	{"spawn-judged", "spawn", func(t *testing.T, h *hostDriver, s *session) {
-		if !hasRecord(t, s, func(r record) bool { return r.Kind == "agent_spawn" && r.Lease == jobID && r.DecidedBy != "" }) {
+	{name: "spawn-judged", conv: convSpawn, check: func(t *testing.T, h *hostDriver, s *session) {
+		if !hasRecord(t, s, func(r record) bool { return r.Kind == trail.KindAgentSpawn && r.Lease == jobID && r.DecidedBy != "" }) {
 			t.Errorf("no judged agent_spawn record carrying lease %s", jobID)
 		}
 		if !s.replied(s.w.code("SPAWN")) {
 			t.Logf("the spawn rule's advice did not reach the model: reply lacks %s", s.w.code("SPAWN"))
 		}
 	}},
-	{"spawn-child-recorded", "spawn", func(t *testing.T, h *hostDriver, s *session) {
+	{name: "spawn-child-recorded", conv: convSpawn, check: func(t *testing.T, h *hostDriver, s *session) {
 		if len(s.w.spawnedAgents(t)) == 0 {
 			t.Error("no spawned child id recorded")
 		}
 	}},
-	{"subagent-context-filed", "spawn", func(t *testing.T, h *hostDriver, s *session) {
+	{name: "subagent-context-filed", conv: convSpawn, check: func(t *testing.T, h *hostDriver, s *session) {
 		for _, a := range s.w.spawnedAgents(t) {
 			if a.ContextTokens != nil && *a.ContextTokens > 0 {
 				return
@@ -180,7 +199,7 @@ var scenarios = []scenario{
 		}
 		t.Error("no subagent context size filed")
 	}},
-	{"brief-delivered", "brief", func(t *testing.T, h *hostDriver, s *session) {
+	{name: "brief-delivered", conv: convBrief, check: func(t *testing.T, h *hostDriver, s *session) {
 		if !s.replied(s.w.code("BRIEF")) {
 			t.Errorf("the brief never reached the model: reply lacks %s", s.w.code("BRIEF"))
 		}
@@ -196,12 +215,21 @@ func hasRecord(t *testing.T, s *session, match func(record) bool) bool {
 	return false
 }
 
+// outcome is how one scenario ended.
+type outcome string
+
+const (
+	outcomePass outcome = "pass"
+	outcomeSkip outcome = "skip"
+	outcomeFail outcome = "fail"
+)
+
 // result is one host x scenario row of the report.
 type result struct {
-	Host     string `json:"host"`
-	Scenario string `json:"scenario"`
-	Status   string `json:"status"`
-	Detail   string `json:"detail,omitempty"`
+	Host     string  `json:"host"`
+	Scenario string  `json:"scenario"`
+	Status   outcome `json:"status"`
+	Detail   string  `json:"detail,omitempty"`
 }
 
 type hostReport struct {
@@ -240,8 +268,8 @@ func TestHosts(t *testing.T) {
 				}
 				t.Logf("%s: %s (%s), %s; model %s", h.id, h.path, h.version, h.note, h.model)
 				owner := t
-				sessions := map[string]*session{}
-				failed := map[string]bool{}
+				sessions := map[conversationName]*session{}
+				failed := map[conversationName]bool{}
 				for _, sc := range scenarios {
 					t.Run(sc.name, func(t *testing.T) {
 						detail := ""
@@ -264,11 +292,7 @@ func TestHosts(t *testing.T) {
 						s, ok := sessions[sc.conv]
 						if !ok {
 							failed[sc.conv] = true
-							prompts := conversations[sc.conv]
-							if turns, ok := briefTurns[h.id]; ok && sc.conv == "brief" {
-								prompts = turns
-							}
-							s = h.play(t, owner, prompts)
+							s = h.play(t, owner, sc.conv.prompts(h.id))
 							sessions[sc.conv], failed[sc.conv] = s, false
 						}
 						if h.unauthenticated != "" {
@@ -284,14 +308,14 @@ func TestHosts(t *testing.T) {
 	writeReport(t, hosts, results)
 }
 
-func status(t *testing.T) string {
+func status(t *testing.T) outcome {
 	switch {
 	case t.Skipped():
-		return "skip"
+		return outcomeSkip
 	case t.Failed():
-		return "fail"
+		return outcomeFail
 	}
-	return "pass"
+	return outcomePass
 }
 
 func writeReport(t *testing.T, hosts []hostReport, results []result) {

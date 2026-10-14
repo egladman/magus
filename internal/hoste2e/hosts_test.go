@@ -14,19 +14,12 @@ import (
 	"time"
 )
 
-// hostDriver knows how to find, isolate, wire and drive one agent host headless.
-type hostDriver struct {
+// hostSpec is what the suite knows about a host before it looks for one: how to
+// isolate, wire and drive it.
+type hostSpec struct {
 	id     string // the harness spell and the --agent-name its wiring passes
-	spell  string
 	binary string
 	model  string
-
-	path    string
-	version string
-	note    string
-	// unauthenticated is the host's own words when it refused a turn for want of a
-	// login; every later scenario skips, since the suite never logs a host in.
-	unauthenticated string
 	// login names the logins the host reads, for the skip a refused turn reports.
 	login string
 
@@ -35,9 +28,25 @@ type hostDriver struct {
 	// wire adds what magus leaves to the user, the MCP registration, after the merge.
 	wire func(t *testing.T, w *workspace)
 	// turn sends one prompt into conv and returns the reply text the host printed.
-	turn func(t *testing.T, w *workspace, h *hostDriver, conv *conversation, prompt string) (string, hostRun)
+	turn func(t *testing.T, w *workspace, conv *conversation, prompt string) (string, hostRun)
 	// skips names the scenarios this suite cannot drive on this host, with the reason.
 	skips map[string]string
+}
+
+// hostInstall is what the run finds out about a host on this machine.
+type hostInstall struct {
+	path    string
+	version string
+	note    string
+	// unauthenticated is the host's own words when it refused a turn for want of a
+	// login; every later scenario skips, since the suite never logs a host in.
+	unauthenticated string
+}
+
+// hostDriver finds, isolates, wires and drives one agent host headless.
+type hostDriver struct {
+	hostSpec
+	hostInstall
 }
 
 // conversation is one host session; a host that resumes keys the later turns on id.
@@ -65,27 +74,33 @@ func drivers() []*hostDriver {
 	return []*hostDriver{claudeDriver(), codexDriver(), cursorDriver(), opencodeDriver()}
 }
 
+// candidate is a place a host binary might be, and the name the note gives for it.
+type candidate struct {
+	path   string
+	source string
+}
+
 // locate resolves the binary: MAGUS_E2E_<HOST>_BIN first, then candidates in order,
 // keeping the first that answers --version. It never installs or upgrades anything.
-func (h *hostDriver) locate(envName string, candidates ...[2]string) {
+func (h *hostDriver) locate(envName string, candidates ...candidate) {
 	if p := os.Getenv("MAGUS_E2E_" + envName + "_BIN"); p != "" {
-		candidates = append([][2]string{{p, "MAGUS_E2E_" + envName + "_BIN"}}, candidates...)
+		candidates = append([]candidate{{path: p, source: "MAGUS_E2E_" + envName + "_BIN"}}, candidates...)
 	}
 	if p, err := exec.LookPath(h.binary); err == nil {
-		candidates = append(candidates, [2]string{p, "PATH"})
+		candidates = append(candidates, candidate{path: p, source: "PATH"})
 	}
 	var tried []string
 	for _, c := range candidates {
-		if c[0] == "" {
+		if c.path == "" {
 			continue
 		}
-		v, err := versionOf(c[0])
+		v, err := versionOf(c.path)
 		if err != nil {
-			tried = append(tried, fmt.Sprintf("%s (%s): %v", c[0], c[1], err))
+			tried = append(tried, fmt.Sprintf("%s (%s): %v", c.path, c.source, err))
 			continue
 		}
-		h.path, h.version = c[0], v
-		h.note = "from " + c[1]
+		h.path, h.version = c.path, v
+		h.note = "from " + c.source
 		if len(tried) > 0 {
 			h.note += "; passed over " + strings.Join(tried, "; ")
 		}
@@ -138,7 +153,7 @@ func (h *hostDriver) play(t, owner *testing.T, prompts []string) *session {
 	s := &session{w: w}
 	conv := newConversation()
 	for _, p := range prompts {
-		reply, run := h.turn(t, w, h, conv, p)
+		reply, run := h.turn(t, w, conv, p)
 		conv.turns++
 		s.replies = append(s.replies, reply)
 		s.runs = append(s.runs, run)

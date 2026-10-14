@@ -5,6 +5,7 @@ package hoste2e
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -28,11 +29,11 @@ import (
 // Every host gets XDG_STATE_HOME at a temp dir, which holds magus's session store.
 
 func claudeDriver() *hostDriver {
-	h := &hostDriver{id: "claude-code", spell: "claude-code", binary: "claude", model: envModel("CLAUDE", "haiku"),
-		login: "a keychain login from `claude /login`, or CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`"}
+	h := &hostDriver{hostSpec: hostSpec{id: "claude-code", binary: "claude", model: envModel("CLAUDE", "haiku"),
+		login: "a keychain login from `claude /login`, or CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`"}}
 	// The desktop engine is newer than the CLI cask; it is preferred when the suite runs
 	// inside a desktop session that exports it.
-	h.locate("CLAUDE", [2]string{os.Getenv("CLAUDE_CODE_EXECPATH"), "CLAUDE_CODE_EXECPATH"})
+	h.locate("CLAUDE", candidate{path: os.Getenv("CLAUDE_CODE_EXECPATH"), source: "CLAUDE_CODE_EXECPATH"})
 	h.env = func(*testing.T, *workspace) []string { return nil }
 	h.wire = func(t *testing.T, w *workspace) {
 		w.wireReplyCheck(t, ".claude/settings.json", "Stop", map[string]any{"hooks": []any{map[string]any{
@@ -42,7 +43,7 @@ func claudeDriver() *hostDriver {
 		// The command `magus describe harness claude-code` prints for MCP.
 		w.run(t, h.path, "mcp", "add", "--scope", "project", "magus", "--", "./magus", "mcp")
 	}
-	h.turn = func(t *testing.T, w *workspace, h *hostDriver, conv *conversation, prompt string) (string, hostRun) {
+	h.turn = func(t *testing.T, w *workspace, conv *conversation, prompt string) (string, hostRun) {
 		args := []string{"-p", prompt, "--output-format", "json", "--model", h.model,
 			"--setting-sources", "project", "--mcp-config", filepath.Join(w.dir, ".mcp.json"), "--strict-mcp-config",
 			"--dangerously-skip-permissions"}
@@ -65,7 +66,7 @@ func claudeDriver() *hostDriver {
 }
 
 func codexDriver() *hostDriver {
-	h := &hostDriver{id: "codex", spell: "codex", binary: "codex", model: envModel("CODEX", "gpt-6-luna")}
+	h := &hostDriver{hostSpec: hostSpec{id: "codex", binary: "codex", model: envModel("CODEX", "gpt-6-luna")}}
 	h.locate("CODEX")
 	home := func(w *workspace) string { return filepath.Join(w.root, "codex-home") }
 	h.env = func(_ *testing.T, w *workspace) []string { return []string{"CODEX_HOME=" + home(w)} }
@@ -82,10 +83,10 @@ func codexDriver() *hostDriver {
 		mustSymlink(t, auth, filepath.Join(dir, "auth.json"))
 		config := "model = " + tomlString(h.model) + "\nmodel_reasoning_effort = \"low\"\n\n" +
 			"[projects." + tomlString(w.dir) + "]\ntrust_level = \"trusted\"\n\n" +
-			codexMCPTables(t, w.harnessPlan(t, h.spell).MCPHint)
+			codexMCPTables(t, w.harnessPlan(t, h.id).MCPHint)
 		writeFile(t, filepath.Join(dir, "config.toml"), config)
 	}
-	h.turn = func(t *testing.T, w *workspace, h *hostDriver, conv *conversation, prompt string) (string, hostRun) {
+	h.turn = func(t *testing.T, w *workspace, conv *conversation, prompt string) (string, hostRun) {
 		last := filepath.Join(w.logs, labelFor(conv)+".last-message")
 		run := w.runHost(t, labelFor(conv), h.path, []string{"exec", "--json",
 			"--dangerously-bypass-approvals-and-sandbox", "--dangerously-bypass-hook-trust",
@@ -121,7 +122,7 @@ func tomlString(s string) string {
 }
 
 func cursorDriver() *hostDriver {
-	h := &hostDriver{id: "cursor", spell: "cursor", binary: "cursor-agent", model: envModel("CURSOR", "auto")}
+	h := &hostDriver{hostSpec: hostSpec{id: "cursor", binary: "cursor-agent", model: envModel("CURSOR", "auto")}}
 	h.locate("CURSOR")
 	h.env = func(*testing.T, *workspace) []string { return nil }
 	h.wire = func(t *testing.T, w *workspace) {
@@ -133,7 +134,7 @@ func cursorDriver() *hostDriver {
 			"mcpServers": map[string]any{"magus": map[string]any{"command": "./magus", "args": []string{"mcp"}}},
 		})
 	}
-	h.turn = func(t *testing.T, w *workspace, h *hostDriver, conv *conversation, prompt string) (string, hostRun) {
+	h.turn = func(t *testing.T, w *workspace, conv *conversation, prompt string) (string, hostRun) {
 		args := []string{"-p", "--output-format", "json", "--force", "--trust", "--approve-mcps",
 			"--workspace", w.dir, "--model", h.model, prompt}
 		run := w.runHost(t, labelFor(conv), h.path, args)
@@ -157,7 +158,7 @@ func cursorDriver() *hostDriver {
 }
 
 func opencodeDriver() *hostDriver {
-	h := &hostDriver{id: "opencode", spell: "opencode", binary: "opencode", model: envModel("OPENCODE", "opencode/big-pickle")}
+	h := &hostDriver{hostSpec: hostSpec{id: "opencode", binary: "opencode", model: envModel("OPENCODE", "opencode/big-pickle")}}
 	h.locate("OPENCODE")
 	h.env = func(_ *testing.T, w *workspace) []string {
 		return []string{
@@ -182,7 +183,7 @@ func opencodeDriver() *hostDriver {
 		config["mcp"] = map[string]any{"magus": map[string]any{"type": "local", "command": []string{"./magus", "mcp"}}}
 		writeJSON(t, path, config)
 	}
-	h.turn = func(t *testing.T, w *workspace, h *hostDriver, conv *conversation, prompt string) (string, hostRun) {
+	h.turn = func(t *testing.T, w *workspace, conv *conversation, prompt string) (string, hostRun) {
 		run := w.runHost(t, labelFor(conv), h.path, []string{"run", "--format", "json", "--dir", w.dir, "--auto", "-m", h.model, prompt})
 		return opencodeText(run.stdout), run
 	}
@@ -212,7 +213,7 @@ func opencodeText(stdout string) string {
 	return strings.Join(parts, "\n")
 }
 
-func labelFor(conv *conversation) string { return "turn" + string(rune('1'+conv.turns)) }
+func labelFor(conv *conversation) string { return "turn" + strconv.Itoa(conv.turns+1) }
 
 func writeJSON(t *testing.T, path string, v any) {
 	t.Helper()

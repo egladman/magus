@@ -12,28 +12,31 @@ import (
 	"github.com/egladman/magus/internal/trail"
 )
 
+// hookRequest is what the host sent, restated by magus. Tool is magus's normalized name
+// for the call (shell.command, file.write), not the host's tool name.
+type hookRequest struct {
+	Tool    string `json:"tool"`
+	Command string `json:"command"`
+	Path    string `json:"path"`
+}
+
+// hookResponse is what the guard answered.
+type hookResponse struct {
+	Decision string `json:"decision"`
+}
+
 // record is one hook observation from the workspace's activity trail with both of its
-// blobs decoded: what the host sent and what the guard answered.
+// blobs decoded.
 type record struct {
 	trail.Event
-	Request  map[string]any
-	Response map[string]any
+	Request  hookRequest
+	Response hookResponse
 }
-
-func (r record) field(side map[string]any, key string) string {
-	s, _ := side[key].(string)
-	return s
-}
-
-// tool is magus's normalized name for the call (shell.command, file.write), not the
-// host's tool name.
-func (r record) tool() string     { return r.field(r.Request, "tool") }
-func (r record) command() string  { return r.field(r.Request, "command") }
-func (r record) path() string     { return r.field(r.Request, "path") }
-func (r record) decision() string { return r.field(r.Response, "decision") }
 
 // subject is what the call acted on, the key two judgments of one call share.
-func (r record) subject() string { return r.tool() + "\x00" + r.command() + "\x00" + r.path() }
+func (r record) subject() string {
+	return r.Request.Tool + "\x00" + r.Request.Command + "\x00" + r.Request.Path
+}
 
 // records reads every agent_command and agent_spawn event the host's own hooks wrote
 // after setup, oldest first. Setup's own records (the rule probe, and the synthetic
@@ -50,34 +53,35 @@ func (w *workspace) records(t *testing.T) []record {
 		if e.Host != w.host || e.Ts < w.ready || (e.Kind != trail.KindAgentCommand && e.Kind != trail.KindAgentSpawn) {
 			continue
 		}
-		r := record{Event: e, Request: w.blob(t, e.RequestRef), Response: w.blob(t, e.ResponseRef)}
-		out = append(out, r)
+		out = append(out, record{Event: e, Request: readBlob[hookRequest](t, w, e.RequestRef), Response: readBlob[hookResponse](t, w, e.ResponseRef)})
 	}
 	return out
 }
 
-func (w *workspace) blob(t *testing.T, ref string) map[string]any {
+// readBlob decodes a trail blob into T; a missing or unreadable blob is T's zero value,
+// logged, since a record without one still carries its kind and lease.
+func readBlob[T any](t *testing.T, w *workspace, ref string) T {
 	t.Helper()
+	var v T
 	if ref == "" {
-		return map[string]any{}
+		return v
 	}
 	body, err := trail.ReadBlob(w.cacheDir(), ref)
 	if err != nil {
 		t.Logf("trail blob %s: %v", ref, err)
-		return map[string]any{}
+		return v
 	}
-	m := map[string]any{}
-	if err := json.Unmarshal(body, &m); err != nil {
+	if err := json.Unmarshal(body, &v); err != nil {
 		t.Logf("trail blob %s: %v", ref, err)
 	}
-	return m
+	return v
 }
 
 func (w *workspace) dumpRecords(t *testing.T) {
 	t.Helper()
 	for _, r := range w.records(t) {
 		t.Logf("  %d %s %s tool=%q cmd=%q path=%q decision=%q lease=%q decided_by=%q",
-			r.Ts, r.Kind, r.Session, r.tool(), clip(r.command()), filepath.Base(r.path()), r.decision(), r.Lease, r.DecidedBy)
+			r.Ts, r.Kind, r.Session, r.Request.Tool, clip(r.Request.Command), filepath.Base(r.Request.Path), r.Response.Decision, r.Lease, r.DecidedBy)
 	}
 }
 

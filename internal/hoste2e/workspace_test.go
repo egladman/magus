@@ -148,16 +148,16 @@ func newWorkspace(t, owner *testing.T, host *hostDriver) *workspace {
 	)
 	w.env = append(w.env, host.env(t, w)...)
 
-	w.writeFixture(t, host.spell)
+	w.writeFixture(t, host.id)
 	w.git(t, "init", "-q", "-b", "main")
 	w.git(t, "add", "-A")
 	w.git(t, "-c", "user.name=e2e", "-c", "user.email=e2e@example.invalid", "-c", "commit.gpgsign=false",
 		"commit", "-q", "-m", "fixture")
 
 	w.magus(t, "ls")
-	w.mergeHarness(t, host.spell)
-	w.magus(t, "agent", "harness", "verify", "--id", host.spell)
-	w.magus(t, "agent", "harness", "install", "--id", host.spell)
+	w.mergeHarness(t, host.id)
+	w.magus(t, "agent", "harness", "verify", "--id", host.id)
+	w.magus(t, "agent", "harness", "install", "--id", host.id)
 	w.magus(t, "job", "fork", jobID, "--write-paths", "probe.txt", "--check", "generate .",
 		"--criteria", w.code("BRIEF")+" is this lease's code word; a host end-to-end probe")
 	w.probeRules(t)
@@ -322,13 +322,13 @@ type hostRun struct {
 
 // runHost starts a host binary in its own process group so a timeout takes its MCP
 // servers and hook children down with it, and keeps both streams under logs/.
-func (w *workspace) runHost(t *testing.T, label, bin string, args []string, extraEnv ...string) hostRun {
+func (w *workspace) runHost(t *testing.T, label, bin string, args []string) hostRun {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), hostTimeout())
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = w.dir
-	cmd.Env = append(append([]string{}, w.env...), extraEnv...)
+	cmd.Env = w.env
 	cmd.Stdin = nil
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
