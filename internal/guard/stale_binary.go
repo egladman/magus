@@ -36,7 +36,7 @@ const (
 // unloadReason is what unloadCause found. Spell is the spell the tree carries and the
 // binary does not ship, "" for none; a checkout with no ./magus can have one too.
 type unloadReason struct {
-	Kind  unloadKind
+	Cause unloadKind
 	Spell string
 }
 
@@ -63,14 +63,14 @@ func unloadCause(loadFailure error, root string) unloadReason {
 		return unloadReason{}
 	}
 	if ward.IsStaleBinary(loadFailure) {
-		return unloadReason{Kind: unloadStale}
+		return unloadReason{Cause:unloadStale}
 	}
 	spell := skewedSpell(loadFailure, root)
 	switch {
 	case !hasMagusBinary(root):
-		return unloadReason{Kind: unloadNoBinary, Spell: spell}
+		return unloadReason{Cause:unloadNoBinary, Spell: spell}
 	case spell != "":
-		return unloadReason{Kind: unloadSkewedSpell, Spell: spell}
+		return unloadReason{Cause:unloadSkewedSpell, Spell: spell}
 	}
 	return unloadReason{}
 }
@@ -399,10 +399,10 @@ func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, 
 	fix := binaryRemedy(own, hasBinary, call.lease)
 	problem := "the magus judging this is older than this workspace and cannot load its guard policy"
 	switch {
-	case reason.Kind == unloadSkewedSpell:
+	case reason.Cause == unloadSkewedSpell:
 		problem = "./magus was built from another commit than this tree: it ships no spell " + strconv.Quote(reason.Spell) +
 			", which the tree carries, so it cannot load its guard policy"
-	case reason.Kind == unloadNoBinary, own && !hasBinary:
+	case reason.Cause == unloadNoBinary, own && !hasBinary:
 		problem = "this checkout has no ./magus to load its guard policy"
 	case own && hasBinary:
 		problem = "./magus is older than this workspace and cannot load its guard policy"

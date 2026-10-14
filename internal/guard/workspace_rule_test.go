@@ -118,7 +118,7 @@ func TestLoadFailureDenyNamesTheRebuildInMagusOwnCheckout(t *testing.T) {
 		"If the rebuild cannot load the tree either, bootstrap over it, alone on its line: "+
 		"`GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`. If the error names a magusfile line instead, fix that line.\n"+
 		"see: "+ruleDocsBase+"stale-binary/", stored)
-	d := staleBinaryDenial(judgedCall{seam: seamCommand, what: "`git push`"}, unloadReason{Kind: unloadStale}, failureLines(staleFailures), true, root)
+	d := staleBinaryDenial(judgedCall{seam: seamCommand, what: "`git push`"}, unloadReason{Cause:unloadStale}, failureLines(staleFailures), true, root)
 	assert.Equal(t, d.full()+"\nsee: "+ruleDocsBase+"stale-binary/", stored)
 }
 
@@ -420,7 +420,7 @@ func TestLoadFailureDeniesASpawn(t *testing.T) {
 	v := Judge(ctx, unloadedDeps(), Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, staleElsewhereSay)
 	d := staleBinaryDenial(judgedCall{seam: seamSpawn, verb: "a subagent spawn", what: "a subagent spawn", changes: true},
-		unloadReason{Kind: unloadStale}, failureLines(staleFailures), false, hookLocation(ctx, Dependencies{}).workspace)
+		unloadReason{Cause:unloadStale}, failureLines(staleFailures), false, hookLocation(ctx, Dependencies{}).workspace)
 	assert.Equal(t, d.full()+"\nsee: "+ruleDocsBase+"stale-binary/", stored)
 	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
 	require.Len(t, spawns, 1)

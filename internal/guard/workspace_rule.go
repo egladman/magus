@@ -293,7 +293,7 @@ func denyUnloaded(asked *rulesAnswer, call judgedCall, at location) bool {
 	reason := unloadCause(asked.loadFailure, at.workspace)
 	var d denial
 	switch {
-	case call.changes && reason.Kind != unloadNone && (recorded || declaresGuardRule(at.workspace)):
+	case call.changes && reason.Cause != unloadNone && (recorded || declaresGuardRule(at.workspace)):
 		d, asked.rule = staleBinaryDenial(call, reason, failureLines(asked.failures), own, at.workspace), denyRuleStaleBinary
 	case call.verb != "" && recorded:
 		d, asked.rule = unloadedDenial(call, asked.failures, own, hasMagusBinary(at.workspace)), denyRulePolicyUnloaded
@@ -517,13 +517,13 @@ func judgingBinaryNote(deps Dependencies, at location, loadFailure error, lease 
 			j.same = errA == nil && errB == nil && os.SameFile(a, b)
 		}
 		j.unload = unloadCause(loadFailure, j.root)
-		if j.unload.Kind == unloadNoBinary {
-			j.unload.Kind = unloadNone
+		if j.unload.Cause == unloadNoBinary {
+			j.unload.Cause = unloadNone
 			if j.unload.Spell != "" {
-				j.unload.Kind = unloadSkewedSpell
+				j.unload.Cause = unloadSkewedSpell
 			}
 		}
-		switch j.unload.Kind {
+		switch j.unload.Cause {
 		case unloadStale:
 			j.fix = binaryRemedy(ownSourceRoot(j.root), j.hasBinary, lease).say
 		case unloadSkewedSpell:
@@ -550,9 +550,9 @@ func (j judgingBinary) String() string {
 		who += ", which is not this checkout's ./magus."
 	}
 	switch {
-	case j.unload.Kind == unloadSkewedSpell:
+	case j.unload.Cause == unloadSkewedSpell:
 		return who + " It ships no spell " + strconv.Quote(j.unload.Spell) + ", which the tree carries, so it was built from another commit. Fix: " + j.fix + "."
-	case j.unload.Kind != unloadStale:
+	case j.unload.Cause != unloadStale:
 		return who
 	case j.hasBinary && !j.same:
 		return who + " It is older than the tree: the hook uses ./magus when the call runs inside this checkout and ./magus is executable. Otherwise " + j.fix + "."

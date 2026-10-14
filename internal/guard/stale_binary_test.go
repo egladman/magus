@@ -387,9 +387,9 @@ func TestUnloadCause(t *testing.T) {
 	stale := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "older")
 	typo := errors.New("magusfile.buzz:3:1: expected expression")
 
-	assert.Equal(t, unloadReason{Kind: unloadStale}, unloadCause(stale, withBinary))
-	assert.Equal(t, unloadReason{Kind: unloadStale}, unloadCause(errMissingMember, withBinary), "the uncoded missing member reads as stale")
-	assert.Equal(t, unloadReason{Kind: unloadNoBinary}, unloadCause(typo, bare), "any failure in a checkout with no ./magus")
+	assert.Equal(t, unloadReason{Cause:unloadStale}, unloadCause(stale, withBinary))
+	assert.Equal(t, unloadReason{Cause:unloadStale}, unloadCause(errMissingMember, withBinary), "the uncoded missing member reads as stale")
+	assert.Equal(t, unloadReason{Cause:unloadNoBinary}, unloadCause(typo, bare), "any failure in a checkout with no ./magus")
 	assert.Equal(t, unloadReason{}, unloadCause(typo, withBinary), "a typo is the author's to fix")
 	assert.Equal(t, unloadReason{}, unloadCause(nil, bare))
 	assert.Equal(t, unloadReason{}, unloadCause(stale, ""))
