@@ -144,12 +144,13 @@ other templates.
 //
 // An ASK puts the call in front of the person, and a plugin cannot prompt: throwing is
 // the only answer tool.execute.before has. So the prompt is OpenCode's own. The opencode
-// harness writes each backend's push verb (`git push`, `hg push`, `sl push`, `jj git push`) and
-// that verb with ` *` as "ask" under permission.bash in opencode.json, which makes OpenCode
-// ask before any push, and this plugin's permission.ask hook answers that
-// request from the verdict: allow for a push a gate covers, ask for an ungated one, deny
-// for a leased worker's. Where that prompt cannot happen (the config does not ask, or the
-// call is not a plain push the pattern matches) an ask throws, naming the person's own
+// harness writes each backend's push verb (`git push`, `hg push`, `sl push`, `jj git push`),
+// and `magus run <target>` and `magus affected <target>` for each human_only target, each
+// alone and with ` *` as "ask" under permission.bash in opencode.json, which makes OpenCode
+// ask before any of them, and this plugin's permission.ask hook answers that
+// request from the verdict: allow for a call the guard passes, ask for one it asks about,
+// deny for a leased worker's. Where that prompt cannot happen (the config does not ask, or
+// the call is not a plain one the pattern matches) an ask throws, naming the person's own
 // terminal. A decision this file does not know throws too, and never allows.
 // magus-guard-template: 26
 // magus-guard-coverage: schema=2 host=opencode input=command deny=model advise=model pass=none ask=human
@@ -221,24 +222,37 @@ function toVerdict(envelope: Envelope): Verdict {
 const PUSH_VERBS = ["git push", "hg push", "sl push", "jj git push"] as const;
 
 /**
- * The push verb a command is one bare push through, or null. Only a bare push is known to
- * match its permission pattern. A compound line or `git -C dir push` may reach no pattern,
- * and OpenCode would run it without asking anyone.
+ * The permission key a command reaches by its plain prefix, or null: a bare push reaches
+ * its backend's push verb, and a bare `magus run <target>` or `magus affected <target>`
+ * reaches the key the harness writes for a human_only target. A compound line,
+ * `git -C dir push` or a flag before the target may reach no pattern, and OpenCode would
+ * run it without asking anyone.
  */
-function plainPushVerb(command: string): string | null {
+function promptKey(command: string): string | null {
   if (/[;&|`$()<>\\\n]/.test(command)) return null;
-  return PUSH_VERBS.find((verb) => command === verb || command.startsWith(`${verb} `)) ?? null;
+  const push = PUSH_VERBS.find((verb) => command === verb || command.startsWith(`${verb} `));
+  if (push !== undefined) return push;
+  const [bin, verb, target] = command.split(" ").filter((word) => word !== "");
+  if (
+    (bin === "magus" || bin === "./magus") &&
+    (verb === "run" || verb === "affected") &&
+    target !== undefined &&
+    !target.startsWith("-")
+  ) {
+    return `${bin} ${verb} ${target}`;
+  }
+  return null;
 }
 
-/** Whether OpenCode's loaded config makes it ask before a push through verb. */
-function asksBeforePush(config: unknown, verb: string): boolean {
+/** Whether OpenCode's loaded config makes it ask before a command reaching key. */
+function asksBefore(config: unknown, key: string): boolean {
   if (typeof config !== "object" || config === null) return false;
   const permission = (config as Record<string, unknown>).permission;
   if (typeof permission !== "object" || permission === null) return false;
   const bash = (permission as Record<string, unknown>).bash;
   if (typeof bash !== "object" || bash === null) return false;
   const patterns = bash as Record<string, unknown>;
-  return patterns[verb] === "ask" && patterns[`${verb} *`] === "ask";
+  return patterns[key] === "ask" && patterns[`${key} *`] === "ask";
 }
 
 /** First non-empty string among `keys` in a tool's untyped args, else "". */
@@ -553,7 +567,7 @@ export const MagusGuard: Plugin = async (ctx) => {
         if (promptable) return "";
         throw new Error(
           `[magus guard] ${verdict.reason}\n\nThis call needs the approval of the person you work for, ` +
-            "and OpenCode will not ask them: only a plain git push, hg push, sl push or jj git push reaches the prompt " +
+            "and OpenCode will not ask them: only a plain git push, hg push, sl push or jj git push, or a plain magus run of a human-only target, reaches the prompt " +
             'its own "permission.bash" entries configure, which magus describe harness opencode prints. ' +
             "Ask them to run it from their own terminal.",
         );
@@ -639,8 +653,8 @@ export const MagusGuard: Plugin = async (ctx) => {
       if (input.tool === "bash") {
         const command = argString(output.args, ["command"]);
         if (command === "") return;
-        const verb = plainPushVerb(command);
-        const promptable = verb !== null && asksBeforePush(loadedConfig, verb);
+        const key = promptKey(command);
+        const promptable = key !== null && asksBefore(loadedConfig, key);
         remember(input.callID, apply(await judge(inThread(shellArgs, who), command), promptable));
         return;
       }
@@ -707,15 +721,16 @@ export const MagusGuard: Plugin = async (ctx) => {
       if (set === undefined) output.env.MAGUS_LOG_SILENT = "true";
     },
 
-    // OpenCode raises this before its own prompt. Only a push, the prompt magus configured,
-    // is answered: any other request is the person's own rule, and a pass from the guard is
-    // not their consent to it. With no verdict at all the prompt stays, so a broken guard
-    // costs a question rather than an unasked push.
+    // OpenCode raises this before its own prompt. Only a prompt magus configured, a push or
+    // a human-only target's run, is answered: any other request is the person's own rule,
+    // and a pass from the guard is not their consent to it. With no verdict at all the
+    // prompt stays, so a broken guard costs a question rather than an unasked call.
     "permission.ask": async (input, output) => {
       if (input.type !== "bash") return;
       const command =
         typeof input.metadata.command === "string" ? input.metadata.command : input.title;
-      if (plainPushVerb(command) === null) return;
+      const key = promptKey(command);
+      if (key === null || !asksBefore(loadedConfig, key)) return;
       const verdict = await judge(inThread(shellArgs, await whoIs(input.sessionID)), command);
       switch (verdict?.decision) {
         case "pass":
@@ -831,6 +846,13 @@ workers do not publish. Without the permission for that backend, or for a push w
 as anything but a plain `git push`, `hg push`, `sl push` or `jj git push` command, the plugin refuses the push and names your own
 terminal. `magus agent harness verify --id opencode` fails while the permission is
 missing. A decision the plugin does not know is refused, never allowed.
+
+A target the workspace declares `human_only` is asked about the same way. The
+harness prints `magus run <target>`, `./magus run <target>`, `magus affected <target>`
+and `./magus affected <target>` for each one, bare and as `<prefix> *`, and the plugin
+answers OpenCode's prompt from the verdict: ask for a session no job lease binds, deny
+for a leased worker. A run spelled any other way, such as with a flag before the
+target, is refused, naming your own terminal.
 
 ## Notifications
 

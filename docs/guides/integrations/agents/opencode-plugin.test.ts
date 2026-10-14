@@ -386,6 +386,7 @@ test("permission.ask answers a push prompt from the verdict", async () => {
   for (const [verdict, want] of cases) {
     const calls = stubBun(() => verdict);
     const h = await hooks();
+    await h.config(pushPrompt);
     const output: { status: Status } = { status: "ask" };
     await h["permission.ask"](
       {
@@ -439,6 +440,7 @@ test("permission.ask approves each backend's covered push, and nothing else", as
   for (const command of ["hg push", "sl push --to main", "jj git push -b main"]) {
     const calls = stubBun(() => pass);
     const h = await hooks();
+    await h.config(everyPushPrompt);
     const output: { status: Status } = { status: "ask" };
     await h["permission.ask"]({ type: "bash", title: command, metadata: { command } }, output);
     assert.equal(output.status, "allow", command);
@@ -447,6 +449,7 @@ test("permission.ask approves each backend's covered push, and nothing else", as
   for (const command of ["hg pull", "jj git fetch", "sl push && rm -rf x"]) {
     const calls = stubBun(() => pass);
     const h = await hooks();
+    await h.config(everyPushPrompt);
     const output: { status: Status } = { status: "ask" };
     await h["permission.ask"]({ type: "bash", title: command, metadata: { command } }, output);
     assert.equal(output.status, "ask", command);
@@ -470,6 +473,7 @@ test("permission.ask leaves every other prompt to the person", async () => {
 test("permission.ask with no runnable magus keeps the prompt", async () => {
   stubBun(null);
   const h = await hooks();
+  await h.config(pushPrompt);
   const output: { status: Status } = { status: "ask" };
   await withWarnings(async () => {
     await h["permission.ask"](
@@ -478,6 +482,64 @@ test("permission.ask with no runnable magus keeps the prompt", async () => {
     );
   });
   assert.equal(output.status, "ask");
+});
+
+const humanOnlyPrompt = {
+  permission: {
+    bash: {
+      "magus run agent-bench-run": "ask",
+      "magus run agent-bench-run *": "ask",
+      "./magus run agent-bench-run": "ask",
+      "./magus run agent-bench-run *": "ask",
+    },
+  },
+};
+
+const humanOnlyAsk: Canned = {
+  schema_version: 1,
+  decision: "ask",
+  reason: "`magus run agent-bench-run .` is run by a person: launches paid sessions",
+};
+
+test("an ask on a human-only run reaches OpenCode's prompt when the config asks for it", async () => {
+  for (const command of ["magus run agent-bench-run .", "./magus run agent-bench-run"]) {
+    stubBun(() => humanOnlyAsk);
+    const h = await hooks();
+    await h.config(humanOnlyPrompt);
+    await h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command } });
+  }
+});
+
+test("an ask on a run no human-only prompt matches refuses", async () => {
+  for (const command of ["magus run --no-cache agent-bench-run .", "magus affected agent-bench-run"]) {
+    stubBun(() => humanOnlyAsk);
+    const h = await hooks();
+    await h.config(humanOnlyPrompt);
+    await assert.rejects(
+      h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command } }),
+      /own terminal/,
+      command,
+    );
+  }
+});
+
+test("permission.ask answers a human-only run's prompt, and no run magus did not configure", async () => {
+  const calls = stubBun(() => humanOnlyAsk);
+  const h = await hooks();
+  await h.config(humanOnlyPrompt);
+  const asked: { status: Status } = { status: "allow" };
+  const command = "magus run agent-bench-run .";
+  await h["permission.ask"]({ type: "bash", title: command, metadata: { command } }, asked);
+  assert.equal(asked.status, "ask");
+  assert.equal(calls[0].stdin, command);
+
+  const other: { status: Status } = { status: "ask" };
+  await h["permission.ask"](
+    { type: "bash", title: "magus run lint .", metadata: { command: "magus run lint ." } },
+    other,
+  );
+  assert.equal(other.status, "ask");
+  assert.equal(calls.length, 1, "a run whose prompt magus did not configure is not judged");
 });
 
 /** Parses the Claude Code envelope the plugin piped for one call. */

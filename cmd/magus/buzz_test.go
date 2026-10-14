@@ -757,6 +757,8 @@ var glueArrangements = []glueArrangement{
 	{label: "codex in a mode that never prompts", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"bypassPermissions","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
 	{label: "codex approval request for a push", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PermissionRequest","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push origin HEAD"}}`},
 	{label: "codex approval request for anything else", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PermissionRequest","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"rm -rf build"}}`},
+	{label: "codex with a human-only run's prompt rule", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"magus run agent-bench-run .","file_path":"README.md"}}`},
+	{label: "codex approval request for a human-only run", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PermissionRequest","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"magus run agent-bench-run ."}}`},
 	// The payload never overrides the name: an event carrying Codex's turn_id, under a
 	// wiring that names claude-code, gets Claude Code's ask.
 	{label: "claude-code named, Codex-shaped event", host: "claude-code", wantsAsk: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","turn_id":"t","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
@@ -806,7 +808,8 @@ func runGlue(t *testing.T, name string, a glueArrangement) (string, bool) {
 	if a.rules {
 		rules := filepath.Join(dir, ".codex", "rules", "magus.rules")
 		require.NoError(t, os.MkdirAll(filepath.Dir(rules), 0o755))
-		require.NoError(t, os.WriteFile(rules, []byte("prefix_rule(pattern = [\"git\", \"push\"], decision = \"prompt\")\n"), 0o644))
+		require.NoError(t, os.WriteFile(rules, []byte("prefix_rule(pattern = [\"git\", \"push\"], decision = \"prompt\")\n"+
+			"prefix_rule(pattern = [\"magus\", \"run\", \"agent-bench-run\"], decision = \"prompt\")\n"), 0o644))
 	}
 	stub := a.stub
 	if stub == "" {
@@ -927,6 +930,39 @@ func TestGlueRepliesValidateAgainstTheirHostSchema(t *testing.T) {
 			})
 		}
 	}
+}
+
+// TestGlueLeavesAHumanOnlyRunToCodexsPrompt pins that a plain run of a target the rules file
+// prompts for reaches the person through Codex's own prompt, as a push does: PreToolUse
+// carries the ask as context rather than refusing it, and the approval request leaves the
+// prompt standing. A run no rule matches is refused, naming the person's terminal.
+func TestGlueLeavesAHumanOnlyRunToCodexsPrompt(t *testing.T) {
+	render := func(t *testing.T, command, event, decision string) string {
+		t.Helper()
+		body, _ := runGlue(t, "magus-command.buzz", glueArrangement{host: "codex", codex: true, rules: true,
+			event: `{"hook_event_name":"` + event + `","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"` + command + `"}}`})
+		tmpl, err := template.New("glue").Funcs(templateFuncs()).Parse(body)
+		require.NoError(t, err)
+		var out strings.Builder
+		require.NoError(t, tmpl.Execute(&out, map[string]string{"decision": decision, "reason": "a person runs this"}))
+		return out.String()
+	}
+	t.Run("prompted run", func(t *testing.T) {
+		got := render(t, "magus run agent-bench-run .", "PreToolUse", "ask")
+		assert.NotContains(t, got, `"permissionDecision":"deny"`)
+		assert.Contains(t, got, "a person runs this")
+	})
+	t.Run("approval request for a prompted run", func(t *testing.T) {
+		assert.Equal(t, `{"hookSpecificOutput":{"hookEventName":"PermissionRequest"}}`, render(t, "magus run agent-bench-run .", "PermissionRequest", "ask"))
+		assert.Contains(t, render(t, "magus run agent-bench-run .", "PermissionRequest", "pass"), `"behavior":"allow"`)
+	})
+	t.Run("run no rule prompts for", func(t *testing.T) {
+		got := render(t, "magus run lint .", "PreToolUse", "ask")
+		assert.Contains(t, got, `"permissionDecision":"deny"`)
+		assert.Contains(t, got, "own terminal")
+		assert.NotContains(t, render(t, "magus run lint .", "PermissionRequest", "pass"), "allow",
+			"a pass is not consent to a prompt magus did not configure")
+	})
 }
 
 // TestGlueHandsBackTheRewrittenCommand pins the stdin rewrite per host. Claude Code's
