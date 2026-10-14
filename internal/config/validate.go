@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/proc/endpoint"
@@ -190,8 +191,12 @@ func conformFailures(c ConformConfig) []FieldFailure {
 		out = append(out, FieldFailure{Field: root + ".ratchet", Tag: "conform_ratchet_path", Value: c.Ratchet})
 	}
 	for i, pattern := range c.Exclude {
-		if pattern == "" {
-			out = append(out, FieldFailure{Field: fmt.Sprintf("%s.exclude[%d]", root, i), Tag: "required"})
+		field := fmt.Sprintf("%s.exclude[%d]", root, i)
+		switch {
+		case pattern == "":
+			out = append(out, FieldFailure{Field: field, Tag: "required"})
+		case !doublestar.ValidatePattern(pattern):
+			out = append(out, FieldFailure{Field: field, Tag: "conform_exclude_glob", Value: pattern})
 		}
 	}
 	for _, metric := range slices.Sorted(maps.Keys(c.Checks)) {
@@ -287,6 +292,8 @@ func humanReason(f FieldFailure) string {
 		return fmt.Sprintf("must be < %s (got %s)", f.Param, f.Value)
 	case "conform_ratchet_path":
 		return fmt.Sprintf("must be a file inside the workspace, relative to magus.yaml (got %q)", f.Value)
+	case "conform_exclude_glob":
+		return fmt.Sprintf("is not a valid glob, so it would exclude nothing (got %q)", f.Value)
 	case "conform_metric":
 		return fmt.Sprintf("is not a metric magus measures; want one of: %s (got %q)", strings.Join(strings.Fields(f.Param), ", "), f.Value)
 	case "conform_population":

@@ -824,9 +824,8 @@ func (c ConformConfig) Options() types.ConformOptions {
 // figures, except clone-tokens: its anchor is the smallest body worth one shared home,
 // just above the typical function (p50 58). The percentile is where a proposal
 // measures: p99 for test files and function lengths, since a long table test is
-// deliberate, p50 for clones, p95 elsewhere. The libs/gopherbuzz tree follows upstream
-// Buzz, so it is kept out. The cmd/magus scope is the import fan-out of the one binary
-// that wires every package together.
+// deliberate, p50 for clones, p95 elsewhere. They name no path: an exclusion or a scope
+// is one workspace's layout, so it lives in that workspace's magus.yaml.
 func conformDefaults() ConformConfig {
 	limit := func(percentile float64, anchor int) ConformLimitConfig {
 		return ConformLimitConfig{Percentile: percentile, Anchor: anchor}
@@ -836,12 +835,9 @@ func conformDefaults() ConformConfig {
 		main = types.ConformPopMain
 		test = types.ConformPopTest
 	)
-	fanout := limit(95, 62)
-	fanout.Scopes = map[string]int{"cmd/magus": 89}
 	return ConformConfig{
 		MinSample: 30,
 		Step:      0.05,
-		Exclude:   []string{"libs/gopherbuzz/**"},
 		Gates:     ConformGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
 		Checks: map[types.ConformMetric]map[types.ConformPopulation]ConformLimitConfig{
 			types.ConformFileLines:   {src: limit(95, 2200), main: limit(95, 3000), test: limit(99, 1900)},
@@ -849,7 +845,7 @@ func conformDefaults() ConformConfig {
 			types.ConformTypeMethods: {src: limit(95, 49), main: limit(95, 22), test: limit(95, 32)},
 			types.ConformFileSymbols: {src: limit(95, 82)},
 			types.ConformCloneTokens: {src: limit(50, 80), main: limit(50, 80)},
-			types.ConformDepFanout:   {src: fanout},
+			types.ConformDepFanout:   {src: limit(95, 62)},
 		},
 	}
 }

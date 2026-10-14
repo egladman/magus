@@ -108,7 +108,7 @@ func TestConformDefaults(t *testing.T) {
 	assert.Equal(t, 30, c.MinSample)
 	assert.InDelta(t, 0.05, c.Step, 0)
 	assert.Empty(t, c.Ratchet, "the ratchet is opt-in: a workspace names its own record")
-	assert.Equal(t, []string{"libs/gopherbuzz/**"}, c.Exclude)
+	assert.Empty(t, c.Exclude, "an exclusion names one workspace's layout, so it ships in none")
 
 	assert.Equal(t, map[types.ConformPopulation]ConformLimitConfig{
 		types.ConformPopSource: {Percentile: 95, Anchor: 2200},
@@ -123,16 +123,15 @@ func TestConformDefaults(t *testing.T) {
 	assert.Equal(t, 32, c.Checks[types.ConformTypeMethods][types.ConformPopTest].Anchor)
 	assert.Equal(t, 82, c.Checks[types.ConformFileSymbols][types.ConformPopSource].Anchor)
 	assert.Equal(t, ConformLimitConfig{Percentile: 50, Anchor: 80}, c.Checks[types.ConformCloneTokens][types.ConformPopSource])
-	assert.Equal(t, ConformLimitConfig{Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 89}}, c.Checks[types.ConformDepFanout][types.ConformPopSource])
+	assert.Equal(t, ConformLimitConfig{Percentile: 95, Anchor: 62}, c.Checks[types.ConformDepFanout][types.ConformPopSource],
+		"a scope names one workspace's directory, so it ships in none")
 }
 
 func TestConformDefaultsAreNotShared(t *testing.T) {
 	t.Parallel()
 	a, b := Defaults(), Defaults()
 	a.Knowledge.Conform.Checks[types.ConformFileLines][types.ConformPopSource] = ConformLimitConfig{Percentile: 1, Anchor: 1}
-	a.Knowledge.Conform.Exclude[0] = "changed"
 	assert.Equal(t, 2200, b.Knowledge.Conform.Checks[types.ConformFileLines][types.ConformPopSource].Anchor)
-	assert.Equal(t, "libs/gopherbuzz/**", b.Knowledge.Conform.Exclude[0])
 }
 
 func TestConformOptions(t *testing.T) {
@@ -170,14 +169,16 @@ func TestConformOptions(t *testing.T) {
 	assert.Equal(t, "vendor/**", c.Exclude[0], "the options own their exclusions")
 }
 
-// The cmd/magus pin lives above the population's anchor as its own scoped value, so the
-// anchor every other package answers to stays tight.
+// A scope pin lives above the population's anchor as its own scoped value, so the anchor
+// every other package answers to stays tight.
 func TestConformScopedLimitKeepsTheAnchorTight(t *testing.T) {
 	t.Parallel()
 	scoped := types.ConformKey{Metric: types.ConformDepFanout, Population: types.ConformPopSource, Scope: "cmd/magus"}
 	other := types.ConformKey{Metric: types.ConformDepFanout, Population: types.ConformPopSource, Scope: "internal/server"}
 
-	o := Defaults().Knowledge.Conform.Options()
+	c := Defaults().Knowledge.Conform
+	c.Checks[types.ConformDepFanout][types.ConformPopSource] = ConformLimitConfig{Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 89}}
+	o := c.Options()
 	o.RatchetPath = "hack/policy/conform.json"
 	o.Ratchet = types.ConformRatchet{Schema: 1, Thresholds: []types.ConformThreshold{
 		{ConformKey: scoped, Value: 89, N: 1, Why: "pin", Line: 4},

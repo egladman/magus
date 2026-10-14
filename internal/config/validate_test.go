@@ -259,6 +259,10 @@ func TestValidate_Conform(t *testing.T) {
 			edit: func(c *ConformConfig) { c.Exclude = []string{""} },
 			want: FieldFailure{Field: "knowledge.conform.exclude[0]", Tag: "required"},
 		},
+		"malformed exclude glob": {
+			edit: func(c *ConformConfig) { c.Exclude = []string{"vendor/**", "third/[a-"} },
+			want: FieldFailure{Field: "knowledge.conform.exclude[1]", Tag: "conform_exclude_glob", Value: "third/[a-"},
+		},
 		"unknown metric": {
 			edit: func(c *ConformConfig) {
 				c.Checks["file-line"] = map[types.ConformPopulation]ConformLimitConfig{types.ConformPopSource: {Percentile: 95, Anchor: 1}}
