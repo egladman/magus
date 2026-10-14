@@ -2361,9 +2361,8 @@ them and magus describe job prints one job's terms.`,
 		{
 			Name:        "exec",
 			Short:       "Take the lease on a job here, and record the base this checkout landed on",
-			Description: "Record the base this tree is on and the checkout the job was taken in. The guard hook binds the caller to the job when it lets this through, keyed on the session and subagent its host names; a host that names neither binds this checkout.",
+			Description: "Record the base this tree is on, read from its version control as `magus vcs checkpoint -o name` prints it, and the checkout the job was taken in. The guard hook binds the caller to the job when it lets this through, keyed on the session and subagent its host names; a host that names neither binds this checkout.",
 			Flags: []Flag{
-				{Name: "base", Kind: FlagString, Doc: "The base this checkout landed on, as `magus vcs checkpoint -o name` prints it (default: read from this checkout)"},
 				{Name: "timeout", Kind: FlagDuration, Doc: "Run the command after -- and stop its whole process group once this long has passed (e.g. 20m); exits 124 at the deadline"},
 				{Name: "slots", Kind: FlagInt, Default: 1, Doc: "With --timeout: the machine budget slots the command takes while it runs"},
 			},
