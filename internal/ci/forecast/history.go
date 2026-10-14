@@ -8,8 +8,8 @@
 //	History:      version(int), updated_at(time), constants(Constants),
 //	              projects(map[string]map[string]Stats), setup([]int64),
 //	              alpha([]int64), workspace_fallback_ms(int64),
-//	              runs([]Run)
-//	Constants:    setup_p50_ms(int64), alpha_ms(int64)
+//	              runs([]Run), jobs([]types.JobOutcome)
+//	Constants:   setup_p50_ms(int64), alpha_ms(int64)
 //	Stats:        p75_ms(int64), samples(int), last_updated(time), recent([]int64),
 //	              buckets(map[string]BucketStats), hit_count(int), miss_count(int),
 //	              hit_rate(float64), pass_count(int), fail_count(int),
@@ -19,6 +19,12 @@
 //	              charms([]string: charm names), args_hash(string: 32 bits of a hash)
 //	Run:          commit(string: a commit id), ref(string), target(string),
 //	              status(string: "passed"|"failed"), at(time)
+//
+//	JobOutcome:   job(string: a job id the workspace chose), model_tier(string: a case
+//	              of the workspace's tier enum), kind, skills, source(enums), model(string:
+//	              a model alias), reason(string: the sentence that chose the tier),
+//	              write_files, checks_run, rework_rounds, widenings(int), state(enum),
+//	              context_tokens(int64), cost_usd(float64), duration_ms, ended(int64)
 //
 // DO NOT add: source code, file contents, env vars, secrets, tokens, PR numbers,
 // author identity, error messages, or stdout/stderr captures. Any new field must
@@ -44,6 +50,7 @@
 package forecast
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -65,7 +72,8 @@ import (
 // v4 adds PassCount/FailCount/VolatileCount/RecentOutcomes; all prior versions load cleanly.
 // v5 adds Runs, the per-branch log of end-to-end run outcomes.
 // v6 adds Outcome.Charms and Outcome.ArgsHash, the shape of the run an outcome records.
-const HistoryVersion = 6
+// v7 adds Jobs, the log of terminal job outcomes the model-tier lens reads.
+const HistoryVersion = 7
 
 // SampleWindow is the rolling window for duration percentiles (100 runs ≈ 5 CI days).
 const SampleWindow = 100
@@ -108,6 +116,9 @@ type History struct {
 	// Runs is the rolling log of end-to-end runs, oldest first. See [Run]; query it
 	// with [History.PassedCommit].
 	Runs []Run `json:"runs,omitempty"`
+	// Jobs is the rolling log of terminal job outcomes, oldest first, kept after the job
+	// rows expire. See [History.RecordJob].
+	Jobs []types.JobOutcome `json:"jobs,omitempty"`
 }
 
 // Run is one recorded end-to-end run of a target on a branch: what it ran at, how it
@@ -153,6 +164,11 @@ const (
 // and because the useful reads here (the last passing commit, the current red streak)
 // are all near the head of the log.
 const RunWindow = 100
+
+// JobWindow is the rolling window of job outcomes kept. Larger than RunWindow because a
+// lens scores each (model tier, job kind) pair separately, and a pair needs enough
+// outcomes of its own to say anything.
+const JobWindow = 500
 
 // Constants are the fitted scheduling-cost parameters: per-shard fixed cost and per-added-shard penalty.
 type Constants struct {
@@ -654,6 +670,23 @@ func (h *History) Merge(other *History) {
 			h.Runs = h.Runs[len(h.Runs)-RunWindow:]
 		}
 	}
+	if len(other.Jobs) > 0 {
+		seen := make(map[types.JobOutcome]struct{}, len(h.Jobs))
+		for _, o := range h.Jobs {
+			seen[o] = struct{}{}
+		}
+		for _, o := range other.Jobs {
+			if _, dup := seen[o]; dup {
+				continue
+			}
+			seen[o] = struct{}{}
+			h.Jobs = append(h.Jobs, o)
+		}
+		slices.SortStableFunc(h.Jobs, func(a, b types.JobOutcome) int { return cmp.Compare(a.Ended, b.Ended) })
+		if len(h.Jobs) > JobWindow {
+			h.Jobs = h.Jobs[len(h.Jobs)-JobWindow:]
+		}
+	}
 	if h.Version == 0 {
 		h.Version = other.Version
 	}
@@ -692,6 +725,14 @@ func (h *History) RecordRun(run Run, now time.Time) {
 	h.Runs = append(h.Runs, run)
 	if len(h.Runs) > RunWindow {
 		h.Runs = h.Runs[len(h.Runs)-RunWindow:]
+	}
+}
+
+// RecordJob appends one terminal job outcome to the log, trimming to [JobWindow].
+func (h *History) RecordJob(o types.JobOutcome) {
+	h.Jobs = append(h.Jobs, o)
+	if len(h.Jobs) > JobWindow {
+		h.Jobs = h.Jobs[len(h.Jobs)-JobWindow:]
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,6 +35,15 @@ func TestHistorySchemaLockIsStructural(t *testing.T) {
 		reflect.TypeOf(History{}): {
 			"version": true, "updated_at": true, "constants": true, "projects": true,
 			"setup": true, "alpha": true, "workspace_fallback_ms": true, "runs": true,
+			"jobs": true,
+		},
+		reflect.TypeOf(types.JobOutcome{}): {
+			// Ids, enum cases and the sentence that chose a tier: names the workspace
+			// declared and numbers about a job, never its prose, paths or output.
+			"job": true, "model_tier": true, "kind": true, "skills": true, "model": true,
+			"source": true, "reason": true, "write_files": true, "state": true,
+			"checks_run": true, "context_tokens": true, "cost_usd": true,
+			"duration_ms": true, "ended": true, "rework_rounds": true, "widenings": true,
 		},
 		reflect.TypeOf(Constants{}): {"setup_p50_ms": true, "alpha_ms": true},
 		reflect.TypeOf(Run{}): {
@@ -107,6 +117,7 @@ func TestHistorySchemaLock(t *testing.T) {
 		Alpha:               []int64{4_800, 5_200},
 		WorkspaceFallbackMs: 9_000,
 		Runs:                []Run{{Commit: "39e02449", Ref: "main", Target: "ci", Status: RunPassed, At: time.Now()}},
+		Jobs:                []types.JobOutcome{{Job: "docs", ModelTier: "economy", Kind: types.JobKindCheck, State: types.StatePass, Ended: 1}},
 	}
 
 	b, err := json.Marshal(h)
@@ -127,6 +138,7 @@ func TestHistorySchemaLock(t *testing.T) {
 		"alpha":                 true, // []int64 of fitted α observations
 		"workspace_fallback_ms": true, // int64 workspace-wide p75
 		"runs":                  true, // []Run: commit ids and ref names, the ONE exception; see the cache-safety notice in history.go
+		"jobs":                  true, // []types.JobOutcome: job ids and tier case names the workspace chose, enums and counters; locked field by field above
 	}
 	for k := range top {
 		assert.Truef(t, allowed[k], "unexpected History JSON key %q — add to allowed map with a safety justification, or remove the field", k)
@@ -949,6 +961,40 @@ func TestRunLog(t *testing.T) {
 	if n := len(a.Runs); n != 2 {
 		t.Fatalf("re-merge duplicated: %d runs; want 2", n)
 	}
+}
+
+// TestJobOutcomesAreCappedAndMergeAsAUnion pins the job log the Runs log's way: the newest
+// JobWindow outcomes survive, merging two histories keeps every outcome once, oldest first,
+// and the log survives a write and a read.
+func TestJobOutcomesAreCappedAndMergeAsAUnion(t *testing.T) {
+	t.Parallel()
+
+	var w History
+	for i := range JobWindow + 25 {
+		w.RecordJob(types.JobOutcome{Job: "j", Ended: int64(i)})
+	}
+	require.Len(t, w.Jobs, JobWindow)
+	assert.Equal(t, int64(25), w.Jobs[0].Ended, "the oldest are the ones dropped")
+
+	var a, b History
+	a.RecordJob(types.JobOutcome{Job: "x", Ended: 2, State: types.StatePass})
+	b.RecordJob(types.JobOutcome{Job: "y", Ended: 1, State: types.StateFail})
+	b.RecordJob(types.JobOutcome{Job: "x", Ended: 2, State: types.StatePass})
+	a.Merge(&b)
+	want := []types.JobOutcome{
+		{Job: "y", Ended: 1, State: types.StateFail},
+		{Job: "x", Ended: 2, State: types.StatePass},
+	}
+	assert.Equal(t, want, a.Jobs, "a shared outcome is kept once, in time order")
+
+	path := filepath.Join(t.TempDir(), "history.json")
+	require.NoError(t, UpdateHistory(t.Context(), path, func(h *History) error {
+		h.RecordJob(want[0])
+		return nil
+	}))
+	var got History
+	require.NoError(t, got.Load(t.Context(), path))
+	assert.Equal(t, want[:1], got.Jobs)
 }
 
 // TestFoldTargetHistoriesCombinesEverySpellServingATarget pins the fold both remaining
