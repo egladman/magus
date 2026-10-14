@@ -399,13 +399,14 @@ func settleByClaims(ctx context.Context, m *magus.Magus, drv types.VCSDriver, ou
 			continue
 		}
 		merged, how, err := s.settle(ctx, c.Path, writers)
-		if err != nil {
-			return nil, fmt.Errorf("vcs resolve: %s: %w", c.Path, err)
-		}
-		if merged == nil {
-			fmt.Printf("vcs resolve: %s not settled by job claims: %s\n", c.Path, how)
+		var why unsettledError
+		if errors.As(err, &why) {
+			fmt.Printf("vcs resolve: %s not settled by job claims: %s\n", c.Path, why)
 			left = append(left, c)
 			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("vcs resolve: %s: %w", c.Path, err)
 		}
 		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(c.Path)), merged, 0o644); err != nil {
 			return nil, fmt.Errorf("vcs resolve: %w", err)
@@ -448,37 +449,56 @@ type claimSettle struct {
 
 	looked  bool
 	base    string
-	baseWhy string
 	baseErr error
 }
 
-// settle is the merge of p, or nil and the first condition that failed. how names the
-// claims either way.
+// unsettledError is the first condition that kept a path from settling by job claims,
+// as opposed to a failure to evaluate them.
+type unsettledError string
+
+func (e unsettledError) Error() string { return string(e) }
+
+func unsettledf(format string, args ...any) error {
+	return unsettledError(fmt.Sprintf(format, args...))
+}
+
+// mergeSide is one of the two revisions a merge joins; it indexes the per-side arrays of
+// settle.
+type mergeSide uint8
+
+const (
+	oursSide mergeSide = iota
+	theirsSide
+)
+
+// settle is the merge of p, or an unsettledError naming the first condition that failed.
+// how names the claims that settled it.
 func (s *claimSettle) settle(ctx context.Context, p string, writers []types.Job) (merged []byte, how string, err error) {
 	if _, _, ok := risk.MatchScopes(risk.MergeScopes(s.m.All()), p); !ok {
-		return nil, "no project's merge_low_risk covers it", nil
+		return nil, "", unsettledf("no project's merge_low_risk covers it")
 	}
 	if _, ok := types.MatchDiffDriver(p); !ok {
-		return nil, "no diff driver places its declarations", nil
+		return nil, "", unsettledf("no diff driver places its declarations")
 	}
-	base, why, err := s.mergeBase(ctx)
-	if why != "" || err != nil {
-		return nil, why, err
+	base, err := s.mergeBase(ctx)
+	if err != nil {
+		return nil, "", err
 	}
 	var jobs [2][]types.Job
 	for _, row := range writers {
-		if side := s.sideOf(ctx, row, base); side >= 0 {
+		if side, ok := s.sideOf(ctx, row, base); ok {
 			jobs[side] = append(jobs[side], row)
 		}
 	}
+	names := [2]string{oursSide: "ours", theirsSide: s.theirs}
 	var claims, cited [2][]string
 	for side, rows := range jobs {
 		if len(rows) == 0 {
-			return nil, fmt.Sprintf("no job whose work %s carries writes it", s.sideName(side)), nil
+			return nil, "", unsettledf("no job whose work %s carries writes it", names[side])
 		}
 		for _, row := range rows {
 			if row.State != types.StatePass {
-				return nil, fmt.Sprintf("job %s is %s, not recorded pass by `magus job wait`", row.ID, cmp.Or(row.State, types.StateDeclared)), nil
+				return nil, "", unsettledf("job %s is %s, not recorded pass by `magus job wait`", row.ID, cmp.Or(row.State, types.StateDeclared))
 			}
 			for _, e := range row.WritePaths {
 				if !types.PathsIntersect(e, p) {
@@ -486,7 +506,7 @@ func (s *claimSettle) settle(ctx context.Context, p string, writers []types.Job)
 				}
 				_, decl := types.SplitClaim(e)
 				if decl == "" {
-					return nil, fmt.Sprintf("job %s writes it whole (%s), not by declaration", row.ID, e), nil
+					return nil, "", unsettledf("job %s writes it whole (%s), not by declaration", row.ID, e)
 				}
 				claims[side] = append(claims[side], decl)
 				cited[side] = append(cited[side], e+" (job "+row.ID+")")
@@ -494,51 +514,46 @@ func (s *claimSettle) settle(ctx context.Context, p string, writers []types.Job)
 		}
 	}
 	if a, b, ok := risk.OverlappingClaims(claims[0], claims[1]); ok {
-		return nil, fmt.Sprintf("the claims overlap: %s#%s on %s, %s#%s on %s", p, a, s.sideName(0), p, b, s.sideName(1)), nil
+		return nil, "", unsettledf("the claims overlap: %s#%s on %s, %s#%s on %s", p, a, names[oursSide], p, b, names[theirsSide])
 	}
 	var content [3][]byte
 	for i, rev := range []string{base, s.ours, s.theirs} {
 		text, err := s.drv.ReadFileAt(ctx, s.m.Root(), rev, p)
 		if err != nil {
-			return nil, fmt.Sprintf("it cannot be read at %s: %v", rev, err), nil
+			return nil, "", unsettledf("it cannot be read at %s: %v", rev, err)
 		}
 		content[i] = []byte(text)
 	}
-	res, err := risk.MergeByClaims(p, content[0], content[1], content[2], claims[0], claims[1])
+	res, err := risk.MergeByClaims(p, content[0],
+		risk.ClaimSide{Content: content[1], Claims: claims[oursSide]},
+		risk.ClaimSide{Content: content[2], Claims: claims[theirsSide]})
 	if err != nil {
-		return nil, err.Error(), nil
+		return nil, "", unsettledError(err.Error())
 	}
 	return res.Content, strings.Join(cited[0], ", ") + " against " + strings.Join(cited[1], ", ") + "; every job passed", nil
 }
 
-func (s *claimSettle) sideName(side int) string {
-	if side == 0 {
-		return "ours"
-	}
-	return s.theirs
-}
-
-func (s *claimSettle) mergeBase(ctx context.Context) (base, why string, err error) {
+// mergeBase is the one merge base of the two sides, an unsettledError when there is not one.
+func (s *claimSettle) mergeBase(ctx context.Context) (string, error) {
 	if !s.looked {
 		s.looked = true
 		var ok bool
 		s.base, ok, s.baseErr = s.drv.MergeBase(ctx, s.m.Root(), s.ours, s.theirs)
 		switch {
 		case errors.Is(s.baseErr, types.ErrVCSUnsupported):
-			s.baseErr = nil
-			s.baseWhy = s.drv.Name() + " reports no merge base, and each side's edits are measured from one"
+			s.baseErr = unsettledf("%s reports no merge base, and each side's edits are measured from one", s.drv.Name())
 		case s.baseErr == nil && !ok:
-			s.baseWhy = "the sides share no one merge base"
+			s.baseErr = unsettledf("the sides share no one merge base")
 		}
 	}
-	return s.base, s.baseWhy, s.baseErr
+	return s.base, s.baseErr
 }
 
-// sideOf is the side whose history carries row's work, 0 for ours and 1 for theirs, or -1
-// for neither: the work is already in the merge base, or no revision here names it. The
-// work is the revision row's checkout has checked out, else a revision named row.ID: the
-// branch-per-job convention hack/dev/merge-job-branches.buzz also reads.
-func (s *claimSettle) sideOf(ctx context.Context, row types.Job, base string) int {
+// sideOf is the side whose history carries row's work, or false for neither: the work is
+// already in the merge base, or no revision here names it. The work is the revision row's
+// checkout has checked out, else a revision named row.ID: the branch-per-job convention
+// hack/dev/merge-job-branches.buzz also reads.
+func (s *claimSettle) sideOf(ctx context.Context, row types.Job, base string) (mergeSide, bool) {
 	tip := row.ID
 	if info, err := os.Stat(row.CheckoutRoot); err == nil && info.IsDir() {
 		if ref, err := s.drv.Ref(ctx, row.CheckoutRoot); err == nil && ref != "" {
@@ -547,14 +562,14 @@ func (s *claimSettle) sideOf(ctx context.Context, row types.Job, base string) in
 	}
 	root := s.m.Root()
 	if in, err := s.drv.IsAncestor(ctx, root, tip, base); err != nil || in {
-		return -1
+		return 0, false
 	}
 	for side, rev := range []string{s.ours, s.theirs} {
 		if in, err := s.drv.IsAncestor(ctx, root, tip, rev); err == nil && in {
-			return side
+			return mergeSide(side), true
 		}
 	}
-	return -1
+	return 0, false
 }
 
 // startMergeAgainst begins the merge that --against settles, and returns the function that

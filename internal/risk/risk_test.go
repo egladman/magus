@@ -424,6 +424,10 @@ func TestCommentOnlyDeclaredDirectives(t *testing.T) {
 	assert.False(t, CommentOnlyDeclared("// @ts-ignore\nf();\n", "f();\n", ts), "removing a ts directive is a code edit")
 }
 
+func claimedRegion(declaration string, kind types.MergeKind) types.MergeRegion {
+	return types.MergeRegion{Locations: []types.Location{{Path: "a.go", Declaration: declaration}}, Kind: kind}
+}
+
 const claimsBase = "package a\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc A() int { return 1 }\nfunc B() int { return 2 }\n"
 
 // TestMergeByClaims pins what two jobs' disjoint claims settle that a line merge does
@@ -435,7 +439,7 @@ func TestMergeByClaims(t *testing.T) {
 		claimsOurs    []string
 		claimsTheirs  []string
 		want, wantErr string
-		regions       []string
+		regions       []types.MergeRegion
 	}{
 		{
 			name:         "adjacent edits in two claimed declarations",
@@ -444,7 +448,10 @@ func TestMergeByClaims(t *testing.T) {
 			claimsOurs:   []string{"A"},
 			claimsTheirs: []string{"B"},
 			want:         strings.Replace(strings.Replace(claimsBase, "return 1", "return 10", 1), "return 2", "return 20", 1),
-			regions:      []string{"a.go#func A() int { return 1 }: ours", "a.go#func B() int { return 2 }: theirs"},
+			regions: []types.MergeRegion{
+				claimedRegion("func A() int { return 1 }", types.MergeByClaim),
+				claimedRegion("func B() int { return 2 }", types.MergeByClaim),
+			},
 		},
 		{
 			name:         "an edit outside its side's claims",
@@ -467,7 +474,7 @@ func TestMergeByClaims(t *testing.T) {
 			ours:    strings.Replace(claimsBase, `"fmt"`, `"errors"`, 1),
 			theirs:  strings.Replace(claimsBase, `"fmt"`, `"io"`, 1),
 			want:    strings.Replace(claimsBase, "\t\"fmt\"\n", "\t\"errors\"\n\t\"io\"\n", 1),
-			regions: []string{"a.go#(preamble): imports merged as a set"},
+			regions: []types.MergeRegion{claimedRegion(types.Preamble, types.MergeImportSet)},
 		},
 		{
 			name:   "adjacent import edits, unclaimed",
@@ -488,13 +495,18 @@ func TestMergeByClaims(t *testing.T) {
 			_, settled := types.MergeThreeWay("a.go", []byte(claimsBase), []byte(tc.ours), []byte(tc.theirs))
 			require.False(t, settled, "a case a line merge settles proves nothing about claims")
 
-			got, err := MergeByClaims("a.go", []byte(claimsBase), []byte(tc.ours), []byte(tc.theirs), tc.claimsOurs, tc.claimsTheirs)
+			got, err := MergeByClaims("a.go", []byte(claimsBase),
+				ClaimSide{[]byte(tc.ours), tc.claimsOurs}, ClaimSide{[]byte(tc.theirs), tc.claimsTheirs})
 			if tc.wantErr != "" {
 				require.EqualError(t, err, tc.wantErr)
 				return
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, string(got.Content))
+			if tc.regions == nil {
+				assert.Empty(t, got.Regions, "an edit no other edit touches is not a contested region")
+				return
+			}
 			assert.Equal(t, tc.regions, got.Regions)
 		})
 	}
@@ -508,17 +520,17 @@ func TestMergeByClaimsBothAdded(t *testing.T) {
 	line, ok := types.MergeThreeWay("a.go", []byte(claimsBase), []byte(ours), []byte(theirs))
 	require.True(t, ok)
 
-	got, err := MergeByClaims("a.go", []byte(claimsBase), []byte(ours), []byte(theirs), []string{"X"}, []string{"Y"})
+	got, err := MergeByClaims("a.go", []byte(claimsBase), ClaimSide{[]byte(ours), []string{"X"}}, ClaimSide{[]byte(theirs), []string{"Y"}})
 	require.NoError(t, err)
 	assert.Equal(t, string(line.Content), string(got.Content))
-	assert.Equal(t, []string{"a.go#func X() int { return 8 }: both added"}, got.Regions)
+	assert.Equal(t, []types.MergeRegion{claimedRegion("func X() int { return 8 }", types.MergeBothAdded)}, got.Regions)
 
-	_, err = MergeByClaims("a.go", []byte(claimsBase), []byte(ours), []byte(theirs), []string{"X"}, []string{"Z"})
+	_, err = MergeByClaims("a.go", []byte(claimsBase), ClaimSide{[]byte(ours), []string{"X"}}, ClaimSide{[]byte(theirs), []string{"Z"}})
 	require.EqualError(t, err, "a.go#func Y() int { return 9 }: theirs changed it, and none of that side's claims names it")
 }
 
 func TestMergeByClaimsNeedsADiffDriver(t *testing.T) {
-	_, err := MergeByClaims("notes.txt", []byte("a\n"), []byte("b\n"), []byte("c\n"), []string{"x"}, []string{"y"})
+	_, err := MergeByClaims("notes.txt", []byte("a\n"), ClaimSide{[]byte("b\n"), []string{"x"}}, ClaimSide{[]byte("c\n"), []string{"y"}})
 	require.EqualError(t, err, "notes.txt: no diff driver places its declarations")
 }
 

@@ -139,6 +139,8 @@ func TestMergeResolutionLabel(t *testing.T) {
 	assert.Equal(t, "one side each", MergeResolution{}.Label())
 	assert.Equal(t, "notes.txt: kind 2; notes.txt: kind 1",
 		MergeResolution{Regions: []MergeRegion{{Locations: notesFile, Kind: MergeBothAdded}, {Locations: notesFile, Kind: MergeContained}}}.Label())
+	assert.Equal(t, "notes.txt: kind 3; notes.txt: kind 4",
+		MergeResolution{Regions: []MergeRegion{{Locations: notesFile, Kind: MergeByClaim}, {Locations: notesFile, Kind: MergeImportSet}}}.Label())
 	assert.Equal(t, "not settled", MergeKind(0).String())
 	assert.Equal(t, "MergeKind(7)", MergeKind(7).String())
 }
