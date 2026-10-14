@@ -458,15 +458,7 @@ envelope and pipe it to `magus session notify`, exactly as the other hosts do; s
   through `/hooks`, so a config committed to a repository guards nobody who has
   not accepted it. That is the one way this host differs from the others in kind
   rather than degree.
-- **The guard never rewrites a command's stdin.** On Claude Code the guard hands the
-  command back with stdin closed, so a stray stdin reader cannot hang the call. Codex
-  closes a command's stdin itself, so a rewrite buys nothing here, and the prefix it
-  would add (`exec </dev/null; ...`) moves the command out of reach of your own
-  `prefix_rule`: a probe ran `exec </dev/null; echo x` under a rule forbidding
-  `echo x`, and it ran. Codex also applies `updatedInput` only beside
-  `permissionDecision: "allow"` and marks the hook failed on any other shape, so a
-  rewrite would turn every guard pass into an approval that skips Codex's own prompt.
-  The glue never sends one.
+- **The guard never rewrites a command.** Codex closes a command's stdin itself, and so do Claude Code and Cursor, so no host needs a `exec </dev/null;` prefix. A prefix would also move the command out of reach of your own `prefix_rule`: a probe ran `exec </dev/null; echo x` under a rule forbidding `echo x`, and it ran. Codex also applies `updatedInput` only beside `permissionDecision: "allow"` and marks the hook failed on any other shape, so a rewrite would turn every guard pass into an approval that skips Codex's own prompt. The glue never sends one.
 - Codex has no `Read` tool; a file is read through a shell command, which the command
   rules already judge. No `Read` matcher is wired, and magus keeps no read record for
   this host. File writes are `apply_patch`, which the `Edit|Write` matcher catches by

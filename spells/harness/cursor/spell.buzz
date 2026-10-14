@@ -64,11 +64,10 @@ fun cursor_event_names() > [str] {
 }
 
 fun cursor_pretool_matcher() > str {
-    // Shell is gated here because preToolUse can rewrite the command and
-    // beforeShellExecution cannot. Grep, Glob and Read are restated as shell and gated
-    // here: a deny has to land before the tool runs, and an advise after a log read or a
-    // terminals read is the call that already undermined magus. Task is the subagent
-    // spawn, gated as a spawn.
+    // Shell is gated here so a deny lands before the command runs, once per call.
+    // Grep, Glob and Read are restated as shell and gated here for the same reason: an
+    // advise after a log read or a terminals read is the call that already undermined
+    // magus. Task is the subagent spawn, gated as a spawn.
     return "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|Task";
 }
 
@@ -355,7 +354,7 @@ test "harness_entries covers every Cursor event magus uses" {
 
 test "preToolUse matcher gates the shell, edits and the tools restated as shell" {
     final matcher = cursor_pretool_matcher();
-    assert\isTrue(matcher.indexOf("Shell") != null, "Shell, the one gate whose reply can rewrite the command");
+    assert\isTrue(matcher.indexOf("Shell") != null, "Shell, gated here so a deny lands before the command runs");
     assert\isTrue(matcher.indexOf("Write") != null, "Write");
     assert\isTrue(matcher.indexOf("StrReplace") != null, "StrReplace");
     assert\isTrue(matcher.indexOf("Delete") != null, "Delete");

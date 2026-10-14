@@ -105,8 +105,6 @@ export final BUILTINS: {str: any} = {
 //   precedent-search (advise): over 1,499 sessions, 42% of new files were preceded by a
 //     hunt for one name, 71% in subagent sessions, where only 12.9% reached for a magus
 //     verb at all.
-//   stdin-closed (advise): 2026-09-29, a grep whose file operands expanded to nothing read
-//     stdin for 3.5 hours.
 //   worker-check-only (deny): 2026-09-29, briefs told six workers they "may also run"
 //     `magus run lint docs`, and two ran it at the same moment from two worktrees.
 //
