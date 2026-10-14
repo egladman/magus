@@ -24,6 +24,6 @@ func SignalGroup(pgid int, _ bool) error {
 	return nil
 }
 
-// GroupAlive cannot tell a live process from a gone one here without opening it, so it
+// groupAlive cannot tell a live process from a gone one here without opening it, so it
 // reports none left once a kill was sent.
-func GroupAlive(int) bool { return false }
+func groupAlive(int) bool { return false }

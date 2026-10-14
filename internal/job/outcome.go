@@ -17,13 +17,13 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// NewJobOutcome is row's terminal record, kept in the history file after the row expires.
+// newJobOutcome is row's terminal record, kept in the history file after the row expires.
 // ended is Unix milliseconds.
 //
 // The row carries no token count or cost, so those stay zero until a host reports them
 // onto it. ChecksRun counts the runs the row kept evidence of: its own check's and one per
 // goal.
-func NewJobOutcome(row types.Job, ended int64) types.JobOutcome {
+func newJobOutcome(row types.Job, ended int64) types.JobOutcome {
 	out := types.JobOutcome{
 		Job:          row.ID,
 		Kind:         modelTierKind(row),
@@ -193,7 +193,7 @@ func (e endings) record(ctx context.Context, ended int64) error {
 	}
 	if err := forecast.UpdateHistory(ctx, e.path, func(h *forecast.History) error {
 		for _, row := range e.rows {
-			h.RecordJob(NewJobOutcome(row, ended))
+			h.RecordJob(newJobOutcome(row, ended))
 		}
 		return nil
 	}); err != nil {

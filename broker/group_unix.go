@@ -29,7 +29,7 @@ func SignalGroup(pgid int, kill bool) error {
 	return syscall.Kill(-pgid, sig)
 }
 
-// GroupAlive reports whether any process is left in group pgid.
-func GroupAlive(pgid int) bool {
+// groupAlive reports whether any process is left in group pgid.
+func groupAlive(pgid int) bool {
 	return pgid > 1 && syscall.Kill(-pgid, 0) == nil
 }

@@ -11,12 +11,12 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// NewModelTierRequest is what a matrix function reads to choose row's tier: the row's
+// newModelTierRequest is what a matrix function reads to choose row's tier: the row's
 // declared record, its parent's assigned rank, and the recorded outcomes in history.
 //
 // rows is the plan the row joins, which is where the parent's rank is read. WriteProjects
 // stays empty: a project is a graph fact, which [Store] fills from Location.Owners.
-func NewModelTierRequest(row types.Job, rows []types.Job, set *types.ModelTierSet, history []types.ModelTierRecord) types.ModelTierRequest {
+func newModelTierRequest(row types.Job, rows []types.Job, set *types.ModelTierSet, history []types.ModelTierRecord) types.ModelTierRequest {
 	req := types.ModelTierRequest{
 		ID:            row.ID,
 		Parent:        row.Parent,
@@ -114,7 +114,7 @@ func declaredModelTier(set *types.ModelTierSet, model string) (tier types.ModelT
 	return tier, host, ok, nil
 }
 
-// AssignModelTier decides row's model tier and says why. It runs once, when the row is
+// resolveModelTier decides row's model tier and says why. It runs once, when the row is
 // created or its Model changes, and nothing re-runs it: a tier moves only when someone
 // edits the row, the matrix or the declaration.
 //
@@ -130,7 +130,7 @@ func declaredModelTier(set *types.ModelTierSet, model string) (tier types.ModelT
 //   - default: the declaration's default, with the skills the declaration gives it.
 //
 // A nil matrix declines. set must not be nil.
-func AssignModelTier(ctx context.Context, set *types.ModelTierSet, matrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error), req types.ModelTierRequest, row types.Job) (types.JobModelTier, error) {
+func resolveModelTier(ctx context.Context, set *types.ModelTierSet, matrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error), req types.ModelTierRequest, row types.Job) (types.JobModelTier, error) {
 	if set == nil {
 		return types.JobModelTier{}, errors.New("job: no model tiers to assign from")
 	}
@@ -190,7 +190,7 @@ func AssignModelTier(ctx context.Context, set *types.ModelTierSet, matrix func(c
 // assignModelTier is the tier for row, written into plan. It runs under [Store.mutate]'s
 // lock with plan as it stood before the write, so the bound is read where it is spent.
 func (s *Store) assignModelTier(ctx context.Context, row types.Job, plan []types.Job) (types.JobModelTier, error) {
-	req := NewModelTierRequest(row, plan, s.modelTiers, nil)
+	req := newModelTierRequest(row, plan, s.modelTiers, nil)
 	if s.modelTierMatrix != nil && s.owners != nil && row.Model == "" && len(row.WritePaths) > 0 {
 		files := make([]string, len(row.WritePaths))
 		for i, p := range row.WritePaths {
@@ -202,12 +202,12 @@ func (s *Store) assignModelTier(ctx context.Context, row types.Job, plan []types
 		}
 		req.WriteProjects = projects
 	}
-	assigned, err := AssignModelTier(ctx, s.modelTiers, s.modelTierMatrix, req, row)
+	assigned, err := resolveModelTier(ctx, s.modelTiers, s.modelTierMatrix, req, row)
 	if err != nil {
 		return types.JobModelTier{}, err
 	}
 	others := slices.DeleteFunc(slices.Clone(plan), func(r types.Job) bool { return r.ID == row.ID })
-	if err := RefuseModelTierLimits(others, assigned, s.modelTiers); err != nil {
+	if err := refuseModelTierLimits(others, assigned, s.modelTiers); err != nil {
 		return types.JobModelTier{}, err
 	}
 	return assigned, nil
@@ -234,13 +234,13 @@ func checkMatrixAnswer(set *types.ModelTierSet, id string, answer types.JobModel
 	return answer, nil
 }
 
-// RefuseModelTierLimits refuses a fork that would leave more jobs live at assigned's tier
+// refuseModelTierLimits refuses a fork that would leave more jobs live at assigned's tier
 // than that tier's MaxLive bound allows. rows is the plan without the job being assigned;
 // a zero bound is unlimited, and a tier the set does not declare is an error.
 //
 // Read inside the store's write, so unlike [RefuseForkLimits] two concurrent forks cannot
 // both pass a bound the pair exceeds.
-func RefuseModelTierLimits(rows []types.Job, assigned types.JobModelTier, set *types.ModelTierSet) error {
+func refuseModelTierLimits(rows []types.Job, assigned types.JobModelTier, set *types.ModelTierSet) error {
 	tier, err := set.Parse(assigned.Name)
 	if err != nil {
 		return fmt.Errorf("job: %w", err)

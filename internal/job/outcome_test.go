@@ -59,7 +59,7 @@ func TestNewJobOutcomeReadsTheEndedRow(t *testing.T) {
 		Reason: "small checked job", Site: "magusfile.buzz:20", Model: "haiku",
 	}
 
-	got := NewJobOutcome(row, 160_000)
+	got := newJobOutcome(row, 160_000)
 
 	assert.Equal(t, types.JobOutcome{
 		Job: "a", ModelTier: "economy", Kind: types.JobKindCheck, Skills: types.SkillVariantFull,
@@ -75,7 +75,7 @@ func TestNewJobOutcomeOfARowWithNoTierNamesNone(t *testing.T) {
 	row := lease("a")
 	row.State = types.StatePass
 
-	got := NewJobOutcome(row, 5)
+	got := newJobOutcome(row, 5)
 
 	assert.Empty(t, got.ModelTier)
 	assert.Equal(t, "standard", got.Model, "the model the row named")
@@ -165,7 +165,7 @@ func TestStoreRecordsAnOutcomeWhenARowEnds(t *testing.T) {
 
 	jobs := recordedJobs(t, history)
 	require.Len(t, jobs, 1)
-	assert.Equal(t, NewJobOutcome(ended, jobs[0].Ended), jobs[0])
+	assert.Equal(t, newJobOutcome(ended, jobs[0].Ended), jobs[0])
 	assert.Equal(t, "standard", jobs[0].ModelTier)
 	assert.Equal(t, types.StateFail, jobs[0].State)
 	assert.Positive(t, jobs[0].Ended)

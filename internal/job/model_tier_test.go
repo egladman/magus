@@ -71,7 +71,7 @@ func TestNewModelTierRequestDerivesKindFromTheRow(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tt.want, NewModelTierRequest(tt.row, nil, nil, nil).Kind)
+			assert.Equal(t, tt.want, newModelTierRequest(tt.row, nil, nil, nil).Kind)
 		})
 	}
 }
@@ -80,7 +80,7 @@ func TestNewModelTierRequestCountsFilesOnce(t *testing.T) {
 	t.Parallel()
 
 	row := types.Job{WritePaths: []string{"internal/job/*.go", "run.go#func A", "run.go#func B", "docs", "docs"}}
-	assert.Equal(t, 3, NewModelTierRequest(row, nil, nil, nil).WriteFiles,
+	assert.Equal(t, 3, newModelTierRequest(row, nil, nil, nil).WriteFiles,
 		"a glob is one, and two claims in one file are that file once")
 }
 
@@ -97,7 +97,7 @@ func TestNewModelTierRequestCarriesTheRowAndItsParentsRank(t *testing.T) {
 	}
 	history := []types.ModelTierRecord{{Rank: 0, ModelTier: "economy", Jobs: 12}}
 
-	req := NewModelTierRequest(row, []types.Job{parent, row}, set, history)
+	req := newModelTierRequest(row, []types.Job{parent, row}, set, history)
 
 	require.NotNil(t, req.ParentRank)
 	assert.Equal(t, 2, *req.ParentRank)
@@ -120,16 +120,16 @@ func TestNewModelTierRequestLeavesRanksNilWhenNoneIsKnown(t *testing.T) {
 
 	set := tierSet(t)
 	orphan := types.Job{ID: "a", Parent: "gone", Model: "gpt"}
-	req := NewModelTierRequest(orphan, nil, set, nil)
+	req := newModelTierRequest(orphan, nil, set, nil)
 	assert.Nil(t, req.ParentRank, "a parent that is not in the plan has no rank")
 	assert.Nil(t, req.DeclaredRank, "a model that names no tier declares no rank")
 
-	viaHost := NewModelTierRequest(types.Job{ID: "b", Model: "opus"}, nil, set, nil)
+	viaHost := newModelTierRequest(types.Job{ID: "b", Model: "opus"}, nil, set, nil)
 	require.NotNil(t, viaHost.DeclaredRank)
 	assert.Equal(t, 2, *viaHost.DeclaredRank, "a host alias declares its tier's rank")
 
 	untiered := types.Job{ID: "wave"}
-	req = NewModelTierRequest(types.Job{ID: "wave/a", Parent: "wave"}, []types.Job{untiered}, set, nil)
+	req = newModelTierRequest(types.Job{ID: "wave/a", Parent: "wave"}, []types.Job{untiered}, set, nil)
 	assert.Nil(t, req.ParentRank, "a parent without a tier has no rank")
 }
 
@@ -199,8 +199,8 @@ func TestAssignModelTierPrecedence(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			req := NewModelTierRequest(tt.row, nil, set, nil)
-			got, err := AssignModelTier(t.Context(), set, tt.matrix.choose, req, tt.row)
+			req := newModelTierRequest(tt.row, nil, set, nil)
+			got, err := resolveModelTier(t.Context(), set, tt.matrix.choose, req, tt.row)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 			assert.Equal(t, tt.matrixCalls, tt.matrix.calls)
@@ -213,7 +213,7 @@ func TestAssignModelTierWithoutAMatrixTakesTheDefault(t *testing.T) {
 
 	set := tierSet(t)
 	row := types.Job{ID: "a"}
-	got, err := AssignModelTier(t.Context(), set, nil, NewModelTierRequest(row, nil, set, nil), row)
+	got, err := resolveModelTier(t.Context(), set, nil, newModelTierRequest(row, nil, set, nil), row)
 	require.NoError(t, err)
 	assert.Equal(t, types.ModelTierSourceDefault, got.Source)
 	assert.Equal(t, "standard", got.Name)
@@ -234,7 +234,7 @@ func TestAssignModelTierRefusesAnAliasThatNamesTwoTiers(t *testing.T) {
 	})
 	require.NoError(t, err)
 	row := types.Job{ID: "j", Model: "x"}
-	_, err = AssignModelTier(t.Context(), set, nil, NewModelTierRequest(row, nil, set, nil), row)
+	_, err = resolveModelTier(t.Context(), set, nil, newModelTierRequest(row, nil, set, nil), row)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "name a tier instead")
 	assert.ErrorContains(t, err, "harness a")
@@ -247,8 +247,8 @@ func TestAssignModelTierHandsTheMatrixItsRequest(t *testing.T) {
 	set := tierSet(t)
 	row := types.Job{ID: "a", WritePaths: []string{"a.go"}, Check: &types.LeaseCheck{Target: "test", Project: "."}}
 	matrix := countingMatrix{}
-	req := NewModelTierRequest(row, nil, set, nil)
-	_, err := AssignModelTier(t.Context(), set, matrix.choose, req, row)
+	req := newModelTierRequest(row, nil, set, nil)
+	_, err := resolveModelTier(t.Context(), set, matrix.choose, req, row)
 	require.NoError(t, err)
 	assert.Equal(t, req, matrix.seen)
 }
@@ -273,7 +273,7 @@ func TestAssignModelTierRefusesAMatrixThatIsWrong(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := AssignModelTier(t.Context(), set, tt.matrix.choose, NewModelTierRequest(row, nil, set, nil), row)
+			_, err := resolveModelTier(t.Context(), set, tt.matrix.choose, newModelTierRequest(row, nil, set, nil), row)
 			require.Error(t, err, "a wrong matrix fails the assignment, it never falls through to the default")
 			assert.ErrorContains(t, err, tt.want)
 		})
@@ -283,7 +283,7 @@ func TestAssignModelTierRefusesAMatrixThatIsWrong(t *testing.T) {
 func TestAssignModelTierWithoutDeclarationFails(t *testing.T) {
 	t.Parallel()
 
-	_, err := AssignModelTier(t.Context(), nil, nil, types.ModelTierRequest{}, types.Job{ID: "a"})
+	_, err := resolveModelTier(t.Context(), nil, nil, types.ModelTierRequest{}, types.Job{ID: "a"})
 	require.Error(t, err)
 }
 
@@ -313,7 +313,7 @@ func TestRefuseModelTierLimits(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			err := RefuseModelTierLimits(tt.rows, tt.assigned, set)
+			err := refuseModelTierLimits(tt.rows, tt.assigned, set)
 			if tt.wantErr == "" {
 				require.NoError(t, err)
 				return
@@ -329,7 +329,7 @@ func TestRefuseModelTierLimitsNamesTheBoundAndTheWayOut(t *testing.T) {
 
 	set := tierSet(t, types.ModelTierBounds{MaxLive: 1}, types.ModelTierBounds{}, types.ModelTierBounds{})
 	rows := []types.Job{{ID: "a", State: types.StateRunning, ModelTier: &types.JobModelTier{Name: "economy"}}}
-	err := RefuseModelTierLimits(rows, types.JobModelTier{Name: "economy"}, set)
+	err := refuseModelTierLimits(rows, types.JobModelTier{Name: "economy"}, set)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, `MaxLive bound declared at magusfile.buzz:3 allows 1`)
 	assert.ErrorContains(t, err, "job exit")

@@ -288,8 +288,8 @@ var fixed = map[string]string{
 // removal is why a rule the guard no longer has under its name is gone, and the name it
 // now has when it was renamed rather than dropped.
 type removal struct {
-	renamed string
-	why     string
+	replacement string
+	why         string
 }
 
 // removed maps each rule the guard no longer has under that name to its removal. A
@@ -303,8 +303,8 @@ var removed = map[string]removal{
 		why: "the guard no longer rewrites a shell command to close its stdin, since the hosts that need it already do",
 	},
 	"spawn-principal-for-economy": {
-		renamed: spawnAboveModelTier,
-		why:     "it compares any two model tiers by rank, not only principal against economy",
+		replacement: spawnAboveModelTier,
+		why:         "it compares any two model tiers by rank, not only principal against economy",
 	},
 }
 
@@ -362,9 +362,9 @@ func Resolve(declared map[string]Setting) (map[string]Setting, error) {
 func validate(name string, s Setting) error {
 	if _, ok := defaults[name]; !ok {
 		if r, gone := removed[name]; gone {
-			if r.renamed != "" {
+			if r.replacement != "" {
 				return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-					"built-in rule %q was renamed to %q; declare it under that name", name, r.renamed).WithWhy(r.why)
+					"built-in rule %q was renamed to %q; declare it under that name", name, r.replacement).WithWhy(r.why)
 			}
 			return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 				"built-in rule %q was removed; delete it from the declaration", name).WithWhy(r.why)

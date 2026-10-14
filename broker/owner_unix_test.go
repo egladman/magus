@@ -68,7 +68,7 @@ func TestAHeldCommandStopsAtItsDeadline(t *testing.T) {
 	assert.Equal(t, 2, running.Running[0].Slots)
 
 	awaitExit(t, done, "the group outlived its deadline")
-	assert.Eventually(t, func() bool { return !GroupAlive(pgid) }, 5*time.Second, 20*time.Millisecond,
+	assert.Eventually(t, func() bool { return !groupAlive(pgid) }, 5*time.Second, 20*time.Millisecond,
 		"the background sleep in the group is stopped too")
 
 	r := endedWork(t, addr)
@@ -124,5 +124,5 @@ func TestAReleasedHoldIsLeftAlone(t *testing.T) {
 	r, err := QueryWork(t.Context(), addr)
 	require.NoError(t, err)
 	assert.Empty(t, r.Ended)
-	assert.True(t, GroupAlive(cmd.Process.Pid), "a released hold is never stopped")
+	assert.True(t, groupAlive(cmd.Process.Pid), "a released hold is never stopped")
 }

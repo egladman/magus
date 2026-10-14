@@ -165,7 +165,7 @@ func (s *server) expire(sess *session, id string) {
 func (s *server) reapOrphan(hw *heldWork) {
 	hw.timer.Stop()
 	s.mu.Lock()
-	stop := !hw.stopped && GroupAlive(hw.hold.PGID)
+	stop := !hw.stopped && groupAlive(hw.hold.PGID)
 	hw.stopped = hw.stopped || stop
 	s.mu.Unlock()
 	if stop {
@@ -182,7 +182,7 @@ func (s *server) stopGroup(hw *heldWork, why string) {
 		s.opts.log.DebugContext(s.ctx, "signal a held command's group", slog.Int("pgid", pgid), attr.Error(err))
 	}
 	time.AfterFunc(killGrace, func() {
-		if GroupAlive(pgid) {
+		if groupAlive(pgid) {
 			_ = SignalGroup(pgid, true)
 		}
 	})
