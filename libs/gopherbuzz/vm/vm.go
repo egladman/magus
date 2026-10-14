@@ -2344,11 +2344,18 @@ func (vm *VM) buildObjectDef(decl *ast.ObjectDecl, methodCount, staticFieldCount
 		StaticFields: statics,
 		Env:          env,
 	}
-	// Emitted closures align by index with decl.Methods (see compileObjectDecl),
-	// so route each into the instance vtable or the statics table accordingly.
+	// Emitted closures align by index with decl.Methods minus its extern methods,
+	// which emit nothing (see compileObjectDecl), so route each into the instance
+	// vtable or the statics table accordingly.
+	declared := make([]*ast.FunDecl, 0, len(decl.Methods))
+	for _, m := range decl.Methods {
+		if !m.IsExtern {
+			declared = append(declared, m)
+		}
+	}
 	for i, m := range methods {
 		entry := methodEntry{Name: m.name, Fn: m.fun}
-		if i < len(decl.Methods) && decl.Methods[i].IsStatic {
+		if i < len(declared) && declared[i].IsStatic {
 			def.Statics = append(def.Statics, entry)
 		} else {
 			def.Methods = append(def.Methods, entry)
