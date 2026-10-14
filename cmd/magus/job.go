@@ -204,6 +204,13 @@ func openForkJobs(ctx context.Context, root string) (*job.Store, error) {
 			return nil, err
 		}
 		loc.ModelTiers, loc.ModelTierMatrix = m.ModelTiers(), m.ModelTierMatrix()
+		loc.Owners = func(ctx context.Context, files []string) ([]string, error) {
+			res, err := m.AffectedFromPaths(ctx, files)
+			if err != nil {
+				return nil, err
+			}
+			return res.Seed, nil
+		}
 	}
 	return job.NewStore(loc), nil
 }
@@ -715,19 +722,6 @@ func jobModelCell(row types.Job) string {
 	return orDash(row.Model)
 }
 
-// modelTierLine is the line `describe job` prints for the tier a job was assigned; see
-// job.Terms.
-func modelTierLine(t types.JobModelTier) string {
-	line := fmt.Sprintf("model tier: %s (rank %d), %s", t.Name, t.Rank, t.Source)
-	if t.Reason != "" {
-		line += fmt.Sprintf(": %q", t.Reason)
-	}
-	if t.Site != "" {
-		line += " at " + t.Site
-	}
-	return line
-}
-
 // jobHolderCell is who holds row as the tree names it: the server for its own jobs, the
 // checkout a session job was taken in, and "-" for one nobody has taken. The checkout is
 // the one fact that tells holders apart: every person and agent on a machine runs as the
@@ -1211,7 +1205,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			stored.ID, orDash(string(stored.State)), len(stored.WritePaths),
 			hint.DescribeJob.With(stored.ID), hint.JobExec.With(stored.ID))
 		if stored.ModelTier != nil {
-			fmt.Println(modelTierLine(*stored.ModelTier))
+			fmt.Printf("model tier: %s\n", stored.ModelTier)
 		}
 		if len(derived) > 0 {
 			fmt.Printf("its symbol goals claimed %d declaration(s) its write paths did not cover:\n", len(derived))
@@ -2755,7 +2749,7 @@ func printJobApply(out io.Writer, applied []job.Applied, notes map[string]rowNot
 		case a.Created:
 			fmt.Fprintf(out, "created %s, %s, with %d write path(s)\n", a.Next.ID, a.Next.State, len(a.Next.WritePaths))
 			if a.Next.ModelTier != nil {
-				fmt.Fprintf(out, "%s\n", modelTierLine(*a.Next.ModelTier))
+				fmt.Fprintf(out, "model tier: %s\n", a.Next.ModelTier)
 			}
 		case len(a.Changed) == 0:
 			fmt.Fprintf(out, "unchanged %s\n", a.Next.ID)

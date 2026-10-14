@@ -108,10 +108,13 @@ door writes it: `magus job fork`, `magus job apply`, or `magus\job.put` from a
 magusfile or the client MCP tool. It tries these in order and records which step
 decided:
 
-1. **The row.** A `model` that is a tier name wins (`row`). A `model` that names no
-   tier is kept as the row's word and the job takes the declared default's rank;
-   hosts name their models differently, so the fork records the mismatch in the
-   reason instead of refusing it. `magus job fork --model` takes either.
+1. **The row.** A `model` that is a tier name wins (`row`), and so does a `model`
+   that a harness's `hosts` function maps to a tier, such as `opus`: the job takes
+   that tier and keeps the model. An alias that two harnesses map to different
+   tiers fails the fork, since it names no one tier. A `model` that names no tier
+   and no alias is kept as the row's word and the job takes the declared default's
+   rank; hosts name their models differently, so the fork records the mismatch in
+   the reason instead of refusing it. `magus job fork --model` takes either.
 2. **The matrix.** The function registered with `magus\job.modelTier`, when the
    row names no model (`matrix`). It may decline with `null`.
 3. **The default.** The declaration's default, with the skill variant the
@@ -143,10 +146,14 @@ it never falls through to the default.
 ## Pick a tier with a matrix
 
 The matrix is a function of the job's declared record and the workspace's
-recorded history. It runs once, at fork, with the job store read-only: every
-`magus\job` member raises inside it. It returns `null` to let the default decide,
-or an object with `tier`, `skills` and a non-empty `reason`. A result missing any
-of the three fails the fork.
+recorded history. The record's `writeProjects` are the projects that own the
+job's write paths, found the way `magus describe job` finds a job's projects.
+`history` is empty today: the job outcomes it will read are not recorded yet.
+
+It runs once, at fork, with the job store read-only: every `magus\job` member
+raises inside it. It returns `null` to let the default decide, or an object with
+`tier`, `skills` and a non-empty `reason`. A result missing any of the three fails
+the fork.
 
 ```buzz
 import "magus";
@@ -181,8 +188,8 @@ magus\job.modelTier(choose);
 ```
 
 This one sends small, checked jobs to economy until economy has failed half of
-ten or more jobs of the same kind. The history is the same record
-`magus insight` reports, so the matrix and a person read one set of numbers.
+ten or more jobs of the same kind. Once the history is recorded it is the same
+set of numbers `magus insight` reports, so the matrix and a person read one record.
 The same file is the compiled example under `std/examples/magus`.
 
 Read-only and unchecked jobs fall through to the default, because a job nothing

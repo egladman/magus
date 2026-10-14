@@ -15,7 +15,7 @@ import (
 // declared record, its parent's assigned rank, and the recorded outcomes in history.
 //
 // rows is the plan the row joins, which is where the parent's rank is read. WriteProjects
-// stays empty: a project is a graph fact, and the store holds none.
+// stays empty: a project is a graph fact, which [Store] fills from Location.Owners.
 func NewModelTierRequest(row types.Job, rows []types.Job, set *types.ModelTierSet, history []types.ModelTierRecord) types.ModelTierRequest {
 	req := types.ModelTierRequest{
 		ID:            row.ID,
@@ -42,7 +42,7 @@ func NewModelTierRequest(row types.Job, rows []types.Job, set *types.ModelTierSe
 			req.ParentRank = &rank
 		}
 	}
-	if tier, ok := declaredModelTier(set, row.Model); ok {
+	if tier, _, ok, _ := declaredModelTier(set, row.Model); ok {
 		rank := tier.Rank()
 		req.DeclaredRank = &rank
 	}
@@ -89,14 +89,29 @@ func writeFileCount(writePaths []string) int {
 	return len(files)
 }
 
-// declaredModelTier is the tier a row's Model names, and false when Model is empty or
-// names no tier of set.
-func declaredModelTier(set *types.ModelTierSet, model string) (types.ModelTier, bool) {
+// declaredModelTier is the tier a row's Model names, and false when Model is empty or names
+// none. A model naming no tier of set is looked up in each host's alias list; host is the
+// harness whose alias it is, empty when Model is a tier name. An alias that two hosts map
+// to different tiers is an error, since the row would name no one tier.
+func declaredModelTier(set *types.ModelTierSet, model string) (tier types.ModelTier, host string, ok bool, err error) {
 	if set == nil || model == "" {
-		return types.ModelTier{}, false
+		return types.ModelTier{}, "", false, nil
 	}
-	tier, err := set.Parse(model)
-	return tier, err == nil
+	if tier, perr := set.Parse(model); perr == nil {
+		return tier, "", true, nil
+	}
+	for _, h := range set.Hosts() {
+		t, found := set.Resolve(h, model)
+		switch {
+		case !found:
+		case !ok:
+			tier, host, ok = t, h.ID, true
+		case t.Rank() != tier.Rank():
+			return types.ModelTier{}, "", false, fmt.Errorf("the model %s is the %s tier of harness %s and the %s tier of harness %s: name a tier instead",
+				model, tier.Name(), host, t.Name(), h.ID)
+		}
+	}
+	return tier, host, ok, nil
 }
 
 // AssignModelTier decides row's model tier and says why. It runs once, when the row is
@@ -105,9 +120,10 @@ func declaredModelTier(set *types.ModelTierSet, model string) (types.ModelTier, 
 //
 // The first step that answers decides, and the result records which:
 //
-//   - row: the row's Model names a tier of set. A Model naming no tier is kept as the
-//     row's word and takes the declared default's rank, since hosts name models
-//     differently and a refusal would force a tier onto a model that fits none.
+//   - row: the row's Model names a tier of set, or a model some host maps to one. A Model
+//     naming neither is kept as the row's word and takes the declared default's rank,
+//     since hosts name models differently and a refusal would force a tier onto a model
+//     that fits none.
 //   - matrix: matrix answered. It may decline with nil. An error from it, or an answer
 //     naming a tier outside set, a skill variant that is not one, or no reason, fails the
 //     assignment, so a matrix that is wrong never silently falls through to the default.
@@ -118,7 +134,12 @@ func AssignModelTier(ctx context.Context, set *types.ModelTierSet, matrix func(c
 	if set == nil {
 		return types.JobModelTier{}, errors.New("job: no model tiers to assign from")
 	}
-	if tier, ok := declaredModelTier(set, row.Model); ok {
+	tier, host, ok, err := declaredModelTier(set, row.Model)
+	if err != nil {
+		return types.JobModelTier{}, fmt.Errorf("job: %s: %w", row.ID, err)
+	}
+	switch {
+	case ok && host == "":
 		return types.JobModelTier{
 			Name:   tier.Name(),
 			Rank:   tier.Rank(),
@@ -126,8 +147,16 @@ func AssignModelTier(ctx context.Context, set *types.ModelTierSet, matrix func(c
 			Source: types.ModelTierSourceRow,
 			Reason: fmt.Sprintf("the job names the tier %s", tier.Name()),
 		}, nil
-	}
-	if row.Model != "" {
+	case ok:
+		return types.JobModelTier{
+			Name:   tier.Name(),
+			Rank:   tier.Rank(),
+			Skills: set.Skills(tier),
+			Source: types.ModelTierSourceRow,
+			Reason: fmt.Sprintf("the job names the model %s, which harness %s maps to the tier %s", row.Model, host, tier.Name()),
+			Model:  row.Model,
+		}, nil
+	case row.Model != "":
 		def := set.Default()
 		return types.JobModelTier{
 			Name:   def.Name(),
@@ -154,6 +183,7 @@ func AssignModelTier(ctx context.Context, set *types.ModelTierSet, matrix func(c
 		Skills: set.Skills(def),
 		Source: types.ModelTierSourceDefault,
 		Reason: "the declared default",
+		Site:   set.Site(),
 	}, nil
 }
 
@@ -161,6 +191,17 @@ func AssignModelTier(ctx context.Context, set *types.ModelTierSet, matrix func(c
 // lock with plan as it stood before the write, so the bound is read where it is spent.
 func (s *Store) assignModelTier(ctx context.Context, row types.Job, plan []types.Job) (types.JobModelTier, error) {
 	req := NewModelTierRequest(row, plan, s.modelTiers, nil)
+	if s.modelTierMatrix != nil && s.owners != nil && row.Model == "" && len(row.WritePaths) > 0 {
+		files := make([]string, len(row.WritePaths))
+		for i, p := range row.WritePaths {
+			files[i], _ = types.SplitClaim(p)
+		}
+		projects, err := s.owners(ctx, files)
+		if err != nil {
+			return types.JobModelTier{}, fmt.Errorf("job: finding the projects %s writes in: %w", row.ID, err)
+		}
+		req.WriteProjects = projects
+	}
 	assigned, err := AssignModelTier(ctx, s.modelTiers, s.modelTierMatrix, req, row)
 	if err != nil {
 		return types.JobModelTier{}, err
@@ -215,8 +256,8 @@ func RefuseModelTierLimits(rows []types.Job, assigned types.JobModelTier, set *t
 		}
 	}
 	if live > limit {
-		return fmt.Errorf("job: this would make %d live jobs at model tier %s, and its MaxLive bound in magus\\job.modelTiers allows %d,"+
-			" end one with `%s` first or fork at another tier", live, assigned.Name, limit, hint.JobExit.With("<job>"))
+		return fmt.Errorf("job: this would make %d live jobs at model tier %s, and its MaxLive bound declared at %s allows %d,"+
+			" end one with `%s` first or fork at another tier", live, assigned.Name, set.Site(), limit, hint.JobExit.With("<job>"))
 	}
 	return nil
 }

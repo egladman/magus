@@ -100,6 +100,7 @@ type Store struct {
 	// modelTiers and modelTierMatrix are Location's.
 	modelTiers      *types.ModelTierSet
 	modelTierMatrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error)
+	owners          func(context.Context, []string) ([]string, error)
 }
 
 // Location is where a Store lives: the repository whose rows these are, and the state
@@ -150,6 +151,10 @@ type Location struct {
 	// It runs inside the write, while the Store's locks are held, so it must not touch
 	// the Store.
 	ModelTierMatrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error)
+	// Owners names the projects that own a list of files, the ownership `describe job`
+	// reports as a job's projects. It is asked only to fill a matrix's request, so a Store
+	// with no matrix never calls it; nil leaves the request's WriteProjects empty.
+	Owners func(ctx context.Context, files []string) ([]string, error)
 }
 
 // NewStore returns the ledger for loc's repository, adopting the legacy cache-dir
@@ -165,7 +170,7 @@ type Location struct {
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
 	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, outputs: loc.Outputs, grader: loc.Grader, dryRun: loc.DryRun,
-		modelTiers: loc.ModelTiers, modelTierMatrix: loc.ModelTierMatrix}
+		modelTiers: loc.ModelTiers, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners}
 	s.path, s.err = jobsPath(loc)
 	return s
 }

@@ -1813,6 +1813,17 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	if tiers, ok := ws.(modelTiered); ok {
 		loc.ModelTiers, loc.ModelTierMatrix = tiers.ModelTiers(), tiers.ModelTierMatrix()
 	}
+	if owned, ok := ws.(interface {
+		AffectedFromPaths(ctx context.Context, paths []string) (*types.AffectedResult, error)
+	}); ok {
+		loc.Owners = func(ctx context.Context, files []string) ([]string, error) {
+			res, err := owned.AffectedFromPaths(ctx, files)
+			if err != nil {
+				return nil, err
+			}
+			return res.Seed, nil
+		}
+	}
 	// A Buzz process keeps the lease it was launched under in context. Do not
 	// rediscover it from the mutable environment at each job-store write: a script
 	// could otherwise unset BAGGAGE and become an apparent orchestrator mid-run. It is

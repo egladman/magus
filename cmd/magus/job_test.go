@@ -1359,14 +1359,3 @@ func TestJobModelCellFallsBackToTheAssignedTier(t *testing.T) {
 		})
 	}
 }
-
-// Fork and describe job print one line, with the reason and site only when the source gave
-// them.
-func TestModelTierLine(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, `model tier: economy (rank 0), matrix: "small" at magusfile.buzz`,
-		modelTierLine(types.JobModelTier{Name: "economy", Source: types.ModelTierSourceMatrix, Reason: "small", Site: "magusfile.buzz"}))
-	assert.Equal(t, "model tier: standard (rank 1), default",
-		modelTierLine(types.JobModelTier{Name: "standard", Rank: 1, Source: types.ModelTierSourceDefault}))
-}

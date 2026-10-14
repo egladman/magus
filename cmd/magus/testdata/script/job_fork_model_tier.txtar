@@ -16,15 +16,15 @@ cp $WORK/code.go f.go
 # The matrix answers for a one-file job.
 stdin $WORK/small.json
 exec magus job fork --stdin
-stdout '^model tier: economy \(rank 0\), matrix: "1 file" at magusfile\.buzz$'
+stdout '^model tier: economy \(rank 0\), matrix: "1 file in 1 project" at magusfile\.buzz$'
 exec magus describe job wave/small
-stdout '^model tier: economy \(rank 0\), matrix: "1 file" at magusfile\.buzz$'
+stdout '^model tier: economy \(rank 0\), matrix: "1 file in 1 project" at magusfile\.buzz$'
 stdout '^skills: full$'
 
 # It declines for a wider one, and the shipped default decides.
 stdin $WORK/wide.json
 exec magus job fork --stdin
-stdout '^model tier: standard \(rank 1\), default: "the declared default"$'
+stdout '^model tier: standard \(rank 1\), default: "the declared default" at magus/modeltiers$'
 exec magus describe job wave/wide
 stdout '^skills: short$'
 
@@ -55,7 +55,7 @@ exec magus ls jobs -o name
 stdin $WORK/applied.json
 exec magus job apply -f -
 stdout '^created wave/applied, declared, with 1 write path\(s\)$'
-stdout '^model tier: economy \(rank 0\), matrix: "1 file" at magusfile\.buzz$'
+stdout '^model tier: economy \(rank 0\), matrix: "1 file in 1 project" at magusfile\.buzz$'
 
 -- matrix.buzz --
 import "magus";
@@ -64,11 +64,11 @@ import "magus/modeltiers" as modeltiers;
 object Choice { tier: modeltiers\ModelTier, skills: magus\SkillVariant, reason: str }
 
 fun choose(req: ModelTierRequest) > Choice? {
-    if (req.writeFiles != 1) { return null; }
+    if (req.writeFiles != 1 or req.writeProjects.len() != 1) { return null; }
     return Choice{
         tier = modeltiers\ModelTier.economy,
         skills = magus\SkillVariant.full,
-        reason = "{req.writeFiles} file",
+        reason = "{req.writeFiles} file in {req.writeProjects.len()} project",
     };
 }
 

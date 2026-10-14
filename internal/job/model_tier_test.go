@@ -23,6 +23,10 @@ func tierSet(t *testing.T, bounds ...types.ModelTierBounds) *types.ModelTierSet 
 		Default: 1,
 		Bounds:  bounds,
 		Skills:  []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort, types.SkillVariantShort},
+		Hosts: map[types.HarnessKey][]string{
+			{ID: "claude-code"}: {"haiku", "sonnet", "opus"},
+			{ID: "other-host"}:  {"mini", "sonnet", "max"},
+		},
 	})
 	require.NoError(t, err)
 	return set
@@ -115,10 +119,14 @@ func TestNewModelTierRequestLeavesRanksNilWhenNoneIsKnown(t *testing.T) {
 	t.Parallel()
 
 	set := tierSet(t)
-	orphan := types.Job{ID: "a", Parent: "gone", Model: "haiku"}
+	orphan := types.Job{ID: "a", Parent: "gone", Model: "gpt"}
 	req := NewModelTierRequest(orphan, nil, set, nil)
 	assert.Nil(t, req.ParentRank, "a parent that is not in the plan has no rank")
 	assert.Nil(t, req.DeclaredRank, "a model that names no tier declares no rank")
+
+	viaHost := NewModelTierRequest(types.Job{ID: "b", Model: "opus"}, nil, set, nil)
+	require.NotNil(t, viaHost.DeclaredRank)
+	assert.Equal(t, 2, *viaHost.DeclaredRank, "a host alias declares its tier's rank")
 
 	untiered := types.Job{ID: "wave"}
 	req = NewModelTierRequest(types.Job{ID: "wave/a", Parent: "wave"}, []types.Job{untiered}, set, nil)
@@ -145,11 +153,31 @@ func TestAssignModelTierPrecedence(t *testing.T) {
 		},
 		{
 			name:   "a model naming no tier is kept with the default's rank",
-			row:    types.Job{ID: "a", Model: "haiku"},
+			row:    types.Job{ID: "a", Model: "gpt"},
 			matrix: countingMatrix{answer: economyAnswer()},
 			want: types.JobModelTier{
 				Name: "standard", Rank: 1, Skills: types.SkillVariantShort, Source: types.ModelTierSourceRow,
-				Reason: "the job names the model haiku, which no model tier maps to", Model: "haiku",
+				Reason: "the job names the model gpt, which no model tier maps to", Model: "gpt",
+			},
+			matrixCalls: 0,
+		},
+		{
+			name:   "a model a host maps to a tier takes that tier and keeps the model",
+			row:    types.Job{ID: "a", Model: "opus"},
+			matrix: countingMatrix{answer: economyAnswer()},
+			want: types.JobModelTier{
+				Name: "principal", Rank: 2, Skills: types.SkillVariantShort, Source: types.ModelTierSourceRow,
+				Reason: "the job names the model opus, which harness claude-code maps to the tier principal", Model: "opus",
+			},
+			matrixCalls: 0,
+		},
+		{
+			name:   "an alias two hosts map to the same tier is not ambiguous",
+			row:    types.Job{ID: "a", Model: "sonnet"},
+			matrix: countingMatrix{},
+			want: types.JobModelTier{
+				Name: "standard", Rank: 1, Skills: types.SkillVariantShort, Source: types.ModelTierSourceRow,
+				Reason: "the job names the model sonnet, which harness claude-code maps to the tier standard", Model: "sonnet",
 			},
 			matrixCalls: 0,
 		},
@@ -164,7 +192,7 @@ func TestAssignModelTierPrecedence(t *testing.T) {
 			name:        "a matrix that declines leaves the default",
 			row:         types.Job{ID: "a"},
 			matrix:      countingMatrix{},
-			want:        types.JobModelTier{Name: "standard", Rank: 1, Skills: types.SkillVariantShort, Source: types.ModelTierSourceDefault, Reason: "the declared default"},
+			want:        types.JobModelTier{Name: "standard", Rank: 1, Skills: types.SkillVariantShort, Source: types.ModelTierSourceDefault, Reason: "the declared default", Site: "magusfile.buzz:3"},
 			matrixCalls: 1,
 		},
 	}
@@ -189,6 +217,28 @@ func TestAssignModelTierWithoutAMatrixTakesTheDefault(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, types.ModelTierSourceDefault, got.Source)
 	assert.Equal(t, "standard", got.Name)
+	assert.Equal(t, "magusfile.buzz:3", got.Site, "the default record names the declaration")
+}
+
+func TestAssignModelTierRefusesAnAliasThatNamesTwoTiers(t *testing.T) {
+	t.Parallel()
+
+	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"low", "high"}, Default: 0,
+		Bounds: []types.ModelTierBounds{{}, {}},
+		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort},
+		Hosts: map[types.HarnessKey][]string{
+			{ID: "a"}: {"x", "y"},
+			{ID: "b"}: {"y", "x"},
+		},
+	})
+	require.NoError(t, err)
+	row := types.Job{ID: "j", Model: "x"}
+	_, err = AssignModelTier(t.Context(), set, nil, NewModelTierRequest(row, nil, set, nil), row)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "name a tier instead")
+	assert.ErrorContains(t, err, "harness a")
+	assert.ErrorContains(t, err, "harness b")
 }
 
 func TestAssignModelTierHandsTheMatrixItsRequest(t *testing.T) {
@@ -281,7 +331,7 @@ func TestRefuseModelTierLimitsNamesTheBoundAndTheWayOut(t *testing.T) {
 	rows := []types.Job{{ID: "a", State: types.StateRunning, ModelTier: &types.JobModelTier{Name: "economy"}}}
 	err := RefuseModelTierLimits(rows, types.JobModelTier{Name: "economy"}, set)
 	require.Error(t, err)
-	assert.ErrorContains(t, err, `MaxLive bound in magus\job.modelTiers allows 1`)
+	assert.ErrorContains(t, err, `MaxLive bound declared at magusfile.buzz:3 allows 1`)
 	assert.ErrorContains(t, err, "job exit")
 }
 
@@ -440,4 +490,63 @@ func TestApplyDryRunAssignsNothingAndRunsNoMatrix(t *testing.T) {
 	require.NotNil(t, plan[0].Next.ModelTier)
 	assert.Equal(t, "economy", plan[0].Next.ModelTier.Name)
 	assert.Equal(t, 1, matrix.calls)
+}
+
+func TestStoreFillsTheMatrixRequestWithTheProjectsThatOwnTheWritePaths(t *testing.T) {
+	t.Parallel()
+
+	matrix := countingMatrix{}
+	var asked [][]string
+	loc := tmpLoc(t, t.TempDir())
+	loc.ModelTiers, loc.ModelTierMatrix = tierSet(t), matrix.choose
+	loc.Owners = func(_ context.Context, files []string) ([]string, error) {
+		asked = append(asked, files)
+		return []string{"pkg/a"}, nil
+	}
+	s := NewStore(loc)
+
+	row := lease("a")
+	row.Model = ""
+	row.WritePaths = []string{"pkg/a/run.go#func A", "pkg/a/*.go"}
+	seed(t, s, row)
+
+	assert.Equal(t, [][]string{{"pkg/a/run.go", "pkg/a/*.go"}}, asked, "a claim is asked about as its file")
+	assert.Equal(t, []string{"pkg/a"}, matrix.seen.WriteProjects)
+
+	named := lease("b")
+	named.Model = "principal"
+	seed(t, s, named)
+	assert.Len(t, asked, 1, "a row that names its tier never reaches the matrix, so no one is asked")
+}
+
+func TestStoreAsksNoOneForOwnersWithoutAMatrix(t *testing.T) {
+	t.Parallel()
+
+	loc := tmpLoc(t, t.TempDir())
+	loc.ModelTiers = tierSet(t)
+	loc.Owners = func(context.Context, []string) ([]string, error) {
+		t.Error("Owners was asked with no matrix registered")
+		return nil, nil
+	}
+	row := lease("a")
+	row.Model = ""
+	seed(t, NewStore(loc), row)
+}
+
+func TestStoreFailsAForkWhoseOwnersCannotBeFound(t *testing.T) {
+	t.Parallel()
+
+	matrix := countingMatrix{}
+	loc := tmpLoc(t, t.TempDir())
+	loc.ModelTiers, loc.ModelTierMatrix = tierSet(t), matrix.choose
+	loc.Owners = func(context.Context, []string) ([]string, error) { return nil, errors.New("graph does not build") }
+	s := NewStore(loc)
+	row := lease("a")
+	row.Model = ""
+
+	_, err := s.Update(t.Context(), "a", func(cur *types.Job) { *cur = row })
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "graph does not build")
+	assert.Zero(t, matrix.calls, "the matrix is not fed a request with the projects missing")
 }
