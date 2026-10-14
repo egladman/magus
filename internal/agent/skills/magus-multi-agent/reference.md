@@ -36,7 +36,8 @@ different declarations of a file; `--depends-on` is for two jobs on the SAME one
   what serializes every other job that needed one function in it{{end}}.
 - Deleting is a valid route. When removing a code path, flag, fallback or test reaches
   the goal, the job that owns that declaration deletes it; a second job never adds a
-  parallel path beside it.
+  parallel path beside it. A job that replaces a path deletes the old one and declares
+  `absent` beside it, and never adds a parallel path beside one it replaces.
 
 The check is `<target> <project> [-- args]` with the `{{cmd "run"}}` implied (`"test ."`,
 `"go-test api -- -run TestStore"`), never the gate or a target that chains to it.
@@ -228,7 +229,7 @@ A goal names WHAT it examines and what must be true of it:
 | -------- | ----------------------------------------------- | ---------------------------------------------- |
 | `check`  | `passed`                                        | a recorded run, captured after the declaration |
 | `paths`  | `changed`, `present`, `absent`                  | the diff since the checkpoint, or the tree now |
-| `symbol` | `changed`, `present`, `absent`, `unreferenced`  | the knowledge graph, below file granularity    |
+| `symbol` | `changed`, `present`, `absent`, `unreferenced`, `signature` | the knowledge graph, below file granularity |
 
 One entry reads `{"id": "gone", "kind": "symbol", "expect": "absent", "symbols": ["LegacyAccountStore"]}`.
 Each kind has a default expectation (`passed` for a check, `changed` otherwise), so the

@@ -120,6 +120,27 @@ Then make the declaration gradeable, so the names are a contract, not a suggesti
   cannot tell the defining file or an import from real use{{end}}.
 - `symbol` + `unreferenced` for each helper the shared API replaces.
 
+Signature goals are the default for a job that adds or changes an exported API.
+`symbol` + `signature` holds the name to a declaration, so the interface is a
+contract and not only a name. The recipe:
+
+1. The root commits the stub: the declaration, with no body worth keeping.
+2. Run `{{cmd "graph build"}}`, so the index holds the stub.
+3. Fork the job with a `signature` goal and a `changed` goal on the same name. Leave
+   `signature` empty and the fork records the indexed one, which is how the stub
+   becomes the contract.
+
+Name what a job may break in its `breaks` list: the flags, JSON keys, exported
+symbols or stored formats you approved it breaking. An empty list means it breaks
+nothing on its own authority, and a worker that finds a break outside the list
+stops and reports it.
+
+Findings from the magus are work to finish, not noise. The unreferenced symbols
+`{{cmd "job fork"}}` lists in the job's write paths (`deletion_candidates` in
+`-o json`) and the symbols `{{cmd "job wait"}}` reports left unreferenced are each
+finished or deleted. The graph cannot see reflection, interface dispatch or a
+consumer outside the workspace, so confirm before deleting.
+
 Check each declared name with `{{cmd "refs"}}` before forking. A bare name that resolves
 to more than one definition is graded against one of them, silently.
 
