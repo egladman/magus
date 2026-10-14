@@ -170,6 +170,9 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "MCPTool", Zero: types.MCPTool{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMCPTool(v.(types.MCPTool)) }},
 	{Name: "MCPToolParam", Zero: types.MCPToolParam{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMCPToolParam(v.(types.MCPToolParam)) }},
 	{Name: "Match", Zero: types.KnowledgeMatch{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectKnowledgeMatch(v.(types.KnowledgeMatch)) }},
+	{Name: "ModelTierOutput", Zero: types.ModelTierOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectModelTierOutput(v.(types.ModelTierOutput), enums)
+	}},
 	{Name: "ModelTierRecord", Zero: types.ModelTierRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectModelTierRecord(v.(types.ModelTierRecord), enums)
 	}},

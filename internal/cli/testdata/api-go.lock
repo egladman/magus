@@ -185,6 +185,7 @@ github.com/egladman/magus.Magus.ListTargets method(ptr) func(ctx context.Context
 github.com/egladman/magus.Magus.MachineClaims method(ptr) func(ctx context.Context, targets []github.com/egladman/magus/types.Target, charms []string, extraArgs []string) []github.com/egladman/magus/types.MachineClaim
 github.com/egladman/magus.Magus.MetricsCollector method(ptr) func() (*MetricsCollector, bool)
 github.com/egladman/magus.Magus.MetricsSnapshot method(ptr) func(ctx context.Context) ([]byte, error)
+github.com/egladman/magus.Magus.ModelTierLens method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.ModelTierOutput, error)
 github.com/egladman/magus.Magus.ModelTierMatrix method(ptr) func() github.com/egladman/magus/types.ModelTierMatrix
 github.com/egladman/magus.Magus.ModelTiers method(ptr) func() *github.com/egladman/magus/types.ModelTierSet
 github.com/egladman/magus.Magus.OutputAttempts method(ptr) func(ctx context.Context, ref string) ([]OutputDescriptor, error)
@@ -1855,11 +1856,12 @@ github.com/egladman/magus/types.InsightAnalyzer type interface
 github.com/egladman/magus/types.InsightAnalyzer.Affinity imethod func(ctx context.Context, opts InsightOptions) (AffinityOutput, error)
 github.com/egladman/magus/types.InsightAnalyzer.Duplication imethod func(ctx context.Context) (DuplicationOutput, error)
 github.com/egladman/magus/types.InsightAnalyzer.Hotspots imethod func(ctx context.Context, opts InsightOptions) (HotspotOutput, error)
+github.com/egladman/magus/types.InsightAnalyzer.ModelTierLens imethod func(ctx context.Context) (ModelTierOutput, error)
 github.com/egladman/magus/types.InsightAnalyzer.Ownership imethod func(ctx context.Context, opts InsightOptions) (OwnershipOutput, error)
 github.com/egladman/magus/types.InsightAnalyzer.Trend imethod func(ctx context.Context, opts InsightOptions) (TrendOutput, error)
 github.com/egladman/magus/types.InsightAnalyzer.Unreferenced imethod func(ctx context.Context) (UnreferencedOutput, error)
 github.com/egladman/magus/types.InsightAnalyzer.Volatility imethod func(ctx context.Context) (VolatilityReport, error)
-github.com/egladman/magus/types.InsightDefinition const untyped string = "Insight shows where a codebase's attention and risk concentrate. Four lenses read VCS history: hotspots (churn x complexity, the prime refactoring targets), affinity (projects that change together, and whether a dependency edge explains it), ownership (author concentration and bus factor), and trend (rising vs cooling activity). A fifth lens, volatility, reads run-outcome history instead: targets whose pass/fail record flaps (a Wilson-scored flakiness signal). A sixth, unreferenced, reads the knowledge graph: code symbols nothing else in the workspace names."
+github.com/egladman/magus/types.InsightDefinition const untyped string = "Insight shows where a codebase's attention and risk concentrate. Four lenses read VCS history: hotspots (churn x complexity, the prime refactoring targets), affinity (projects that change together, and whether a dependency edge explains it), ownership (author concentration and bus factor), and trend (rising vs cooling activity). A fifth lens, volatility, reads run-outcome history instead: targets whose pass/fail record flaps (a Wilson-scored flakiness signal). A sixth, unreferenced, reads the knowledge graph: code symbols nothing else in the workspace names. A model-tier lens reads job history: what each model tier achieved on each kind of job."
 github.com/egladman/magus/types.InsightOptions type struct
 github.com/egladman/magus/types.InsightOptions.Commits field int
 github.com/egladman/magus/types.InsightOptions.Dir field string
@@ -1869,6 +1871,7 @@ github.com/egladman/magus/types.InsightReport type struct
 github.com/egladman/magus/types.InsightReport.Affinity field AffinityOutput "json:\"affinity\"    yaml:\"affinity\""
 github.com/egladman/magus/types.InsightReport.Duplication field DuplicationOutput "json:\"duplication\" yaml:\"duplication\""
 github.com/egladman/magus/types.InsightReport.Hotspots field HotspotOutput "json:\"hotspots\"    yaml:\"hotspots\""
+github.com/egladman/magus/types.InsightReport.ModelTiers field ModelTierOutput "json:\"model_tiers\" yaml:\"model_tiers\""
 github.com/egladman/magus/types.InsightReport.Ownership field OwnershipOutput "json:\"ownership\"   yaml:\"ownership\""
 github.com/egladman/magus/types.InsightReport.Trend field TrendOutput "json:\"trend\"       yaml:\"trend\""
 github.com/egladman/magus/types.InsightReport.Unreferenced field UnreferencedOutput "json:\"unreferenced\" yaml:\"unreferenced\""
@@ -1876,6 +1879,7 @@ github.com/egladman/magus/types.InsightReport.Volatility field VolatilityReport 
 github.com/egladman/magus/types.InsightView type struct
 github.com/egladman/magus/types.InsightView.Affinity field AffinityOutput "json:\"affinity\"   yaml:\"affinity\""
 github.com/egladman/magus/types.InsightView.Hotspots field HotspotOutput "json:\"hotspots\"   yaml:\"hotspots\""
+github.com/egladman/magus/types.InsightView.ModelTiers field *ModelTierOutput "json:\"model_tiers\" yaml:\"model_tiers\""
 github.com/egladman/magus/types.InsightView.Ownership field OwnershipOutput "json:\"ownership\"  yaml:\"ownership\""
 github.com/egladman/magus/types.InsightView.Trend field TrendOutput "json:\"trend\"      yaml:\"trend\""
 github.com/egladman/magus/types.InsightView.Volatility field *VolatilityReport "json:\"volatility\" yaml:\"volatility\""
@@ -1935,6 +1939,7 @@ github.com/egladman/magus/types.Job.RegisteredBy field Origin "json:\"registered
 github.com/egladman/magus/types.Job.Releases field []JobRelease "json:\"releases,omitempty\" yaml:\"releases,omitempty\""
 github.com/egladman/magus/types.Job.ReportedBase field string "json:\"reported_base,omitempty\" yaml:\"reported_base,omitempty\""
 github.com/egladman/magus/types.Job.Result field *JobResult "json:\"result,omitempty\"  yaml:\"result,omitempty\""
+github.com/egladman/magus/types.Job.ReworkRounds field int "json:\"rework_rounds,omitempty\" yaml:\"rework_rounds,omitempty\""
 github.com/egladman/magus/types.Job.Schema embedded Schema "yaml:\",inline\""
 github.com/egladman/magus/types.Job.StaleAt method func(now int64, after time.Duration) bool
 github.com/egladman/magus/types.Job.State field JobState "json:\"state,omitempty\" yaml:\"state,omitempty\""
@@ -1943,6 +1948,7 @@ github.com/egladman/magus/types.Job.Unmet method func(known []string) []string
 github.com/egladman/magus/types.Job.Updated field int64 "json:\"updated\" yaml:\"updated\""
 github.com/egladman/magus/types.Job.Validation field string "json:\"validation,omitempty\" yaml:\"validation,omitempty\""
 github.com/egladman/magus/types.Job.WaiterEvidence field *JobIntegration "json:\"waiter_evidence,omitempty\" yaml:\"waiter_evidence,omitempty\""
+github.com/egladman/magus/types.Job.Widenings field int "json:\"widenings,omitempty\"     yaml:\"widenings,omitempty\""
 github.com/egladman/magus/types.Job.WritePaths field []string "json:\"write_paths,omitempty\" yaml:\"write_paths,omitempty\""
 github.com/egladman/magus/types.Job.WriteProof field JobWriteProof "json:\"write_proof,omitempty\" yaml:\"write_proof,omitempty\""
 github.com/egladman/magus/types.JobAncestors func(rows []Job, id string) []Job
@@ -2025,6 +2031,7 @@ github.com/egladman/magus/types.JobOutcome.Model field string "json:\"model,omit
 github.com/egladman/magus/types.JobOutcome.ModelTier field string "json:\"model_tier,omitempty\"    yaml:\"model_tier,omitempty\""
 github.com/egladman/magus/types.JobOutcome.Reason field string "json:\"reason,omitempty\"        yaml:\"reason,omitempty\""
 github.com/egladman/magus/types.JobOutcome.ReworkRounds field int "json:\"rework_rounds,omitempty\" yaml:\"rework_rounds,omitempty\""
+github.com/egladman/magus/types.JobOutcome.Site field string "json:\"site,omitempty\"          yaml:\"site,omitempty\""
 github.com/egladman/magus/types.JobOutcome.Skills field SkillVariant "json:\"skills,omitempty\"        yaml:\"skills,omitempty\""
 github.com/egladman/magus/types.JobOutcome.Source field ModelTierSource "json:\"source,omitempty\"        yaml:\"source,omitempty\""
 github.com/egladman/magus/types.JobOutcome.State field JobState "json:\"state\"                   yaml:\"state\""
@@ -2688,6 +2695,9 @@ github.com/egladman/magus/types.ModelTierDeclaration.Site field string
 github.com/egladman/magus/types.ModelTierDeclaration.Skills field []SkillVariant
 github.com/egladman/magus/types.ModelTierDeclarationUnusable const DiagnosticCode = "MGS1052"
 github.com/egladman/magus/types.ModelTierMatrix type func(ctx context.Context, req ModelTierRequest) (*JobModelTier, error)
+github.com/egladman/magus/types.ModelTierOutput type struct
+github.com/egladman/magus/types.ModelTierOutput.Definition field string "json:\"definition\" yaml:\"definition\""
+github.com/egladman/magus/types.ModelTierOutput.Rows field []ModelTierRecord "json:\"rows\"       yaml:\"rows\""
 github.com/egladman/magus/types.ModelTierRecord type struct
 github.com/egladman/magus/types.ModelTierRecord.ChecksPerJob field float64 "json:\"checks_per_job\"    yaml:\"checks_per_job\""
 github.com/egladman/magus/types.ModelTierRecord.Fail field int "json:\"fail\"              yaml:\"fail\""
@@ -2738,6 +2748,7 @@ github.com/egladman/magus/types.ModelTierSource.Values method func() []string
 github.com/egladman/magus/types.ModelTierSourceDefault const ModelTierSource = "default"
 github.com/egladman/magus/types.ModelTierSourceMatrix const ModelTierSource = "matrix"
 github.com/egladman/magus/types.ModelTierSourceRow const ModelTierSource = "row"
+github.com/egladman/magus/types.ModelTiersDefinition const untyped string = "Model tiers reads job history, not git: each (model tier, job kind) pair's recorded outcomes. A tier's pass rate is scored by its Wilson lower bound, set beside how many checks, re-forks, rework rounds (a worker sent more work after it handed back) and widenings (write paths added to a taken job) its jobs took, and what they cost. It reports what each tier achieved; changing a tier is a person editing the declaration or matrix it names."
 github.com/egladman/magus/types.ModuleDefinition const untyped string = "A module is a magus standard-library namespace a magusfile imports for host capabilities - filesystem, exec, vcs, crypto, http, and more. Import each under its bare name (import \"fs\", then fs\\glob(...)); magus layers these methods onto Buzz's own stdlib. The magus forms are sandbox-aware; some methods also exist in Buzz's own stdlib."
 github.com/egladman/magus/types.ModuleEntry type struct
 github.com/egladman/magus/types.ModuleEntry.Doc field string "json:\"doc,omitempty\"     yaml:\"doc,omitempty\""

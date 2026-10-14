@@ -350,7 +350,8 @@ type ModelTierRecord struct {
 }
 
 // JobOutcome is one job's terminal record, kept after the row expires. Model is the id
-// the host reported; Ended is Unix milliseconds.
+// the host reported; Site is the file:line of the declaration or matrix that chose the
+// tier; Ended is Unix milliseconds.
 type JobOutcome struct {
 	Job           string          `json:"job"                     yaml:"job"`
 	ModelTier     string          `json:"model_tier,omitempty"    yaml:"model_tier,omitempty"`
@@ -359,6 +360,7 @@ type JobOutcome struct {
 	Model         string          `json:"model,omitempty"         yaml:"model,omitempty"`
 	Source        ModelTierSource `json:"source,omitempty"        yaml:"source,omitempty"`
 	Reason        string          `json:"reason,omitempty"        yaml:"reason,omitempty"`
+	Site          string          `json:"site,omitempty"          yaml:"site,omitempty"`
 	WriteFiles    int             `json:"write_files"             yaml:"write_files"`
 	State         JobState        `json:"state"                   yaml:"state"`
 	ChecksRun     int             `json:"checks_run"              yaml:"checks_run"`

@@ -678,6 +678,7 @@ func TestApplyWidensALiveJobAndKeepsItsState(t *testing.T) {
 	want := before[0].Clone()
 	want.WritePaths = []string{"a.go", "b.go"}
 	want.Updated = got[0].Next.Updated
+	want.Widenings = 1
 	assert.Equal(t, want, got[0].Next)
 	assert.Equal(t, types.StateRunning, got[0].Next.State)
 }

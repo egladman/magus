@@ -507,6 +507,36 @@ func ObjectDuplicationOutput(v types.DuplicationOutput, enums ffi.EnumCases) vm.
 	return out
 }
 
+func ObjectModelTierRecord(v types.ModelTierRecord, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("rank", vm.IntValue(int64(v.Rank)))
+	out.MapSet("modelTier", vm.StrValue(v.ModelTier))
+	out.MapSet("kind", enums.Case("JobKind", string(v.Kind)))
+	out.MapSet("jobs", vm.IntValue(int64(v.Jobs)))
+	out.MapSet("pass", vm.IntValue(int64(v.Pass)))
+	out.MapSet("fail", vm.IntValue(int64(v.Fail)))
+	out.MapSet("noReturn", vm.IntValue(int64(v.NoReturn)))
+	out.MapSet("passLower", vm.FloatValue(float64(v.PassLower)))
+	out.MapSet("checksPerJob", vm.FloatValue(float64(v.ChecksPerJob)))
+	out.MapSet("forksPerID", vm.FloatValue(float64(v.ForksPerID)))
+	out.MapSet("reworkPerJob", vm.FloatValue(float64(v.ReworkPerJob)))
+	out.MapSet("wideningsPerJob", vm.FloatValue(float64(v.WideningsPerJob)))
+	out.MapSet("meanCostUSD", vm.FloatValue(float64(v.MeanCostUSD)))
+	out.MapSet("medianTokens", vm.IntValue(int64(v.MedianTokens)))
+	return out
+}
+
+func ObjectModelTierOutput(v types.ModelTierOutput, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("definition", vm.StrValue(v.Definition))
+	itemsRows := make([]vm.Value, len(v.Rows))
+	for indexRows := range v.Rows {
+		itemsRows[indexRows] = ObjectModelTierRecord(v.Rows[indexRows], enums)
+	}
+	out.MapSet("rows", vm.ListValue(itemsRows))
+	return out
+}
+
 func ObjectInsightReport(v types.InsightReport, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("hotspots", ObjectHotspotOutput(v.Hotspots))
@@ -516,6 +546,7 @@ func ObjectInsightReport(v types.InsightReport, enums ffi.EnumCases) vm.Value {
 	out.MapSet("volatility", ObjectVolatilityReport(v.Volatility))
 	out.MapSet("unreferenced", ObjectUnreferencedOutput(v.Unreferenced, enums))
 	out.MapSet("duplication", ObjectDuplicationOutput(v.Duplication, enums))
+	out.MapSet("modelTiers", ObjectModelTierOutput(v.ModelTiers, enums))
 	return out
 }
 
@@ -2921,25 +2952,6 @@ func ObjectJobModelTier(v types.JobModelTier, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectModelTierRecord(v types.ModelTierRecord, enums ffi.EnumCases) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("rank", vm.IntValue(int64(v.Rank)))
-	out.MapSet("modelTier", vm.StrValue(v.ModelTier))
-	out.MapSet("kind", enums.Case("JobKind", string(v.Kind)))
-	out.MapSet("jobs", vm.IntValue(int64(v.Jobs)))
-	out.MapSet("pass", vm.IntValue(int64(v.Pass)))
-	out.MapSet("fail", vm.IntValue(int64(v.Fail)))
-	out.MapSet("noReturn", vm.IntValue(int64(v.NoReturn)))
-	out.MapSet("passLower", vm.FloatValue(float64(v.PassLower)))
-	out.MapSet("checksPerJob", vm.FloatValue(float64(v.ChecksPerJob)))
-	out.MapSet("forksPerID", vm.FloatValue(float64(v.ForksPerID)))
-	out.MapSet("reworkPerJob", vm.FloatValue(float64(v.ReworkPerJob)))
-	out.MapSet("wideningsPerJob", vm.FloatValue(float64(v.WideningsPerJob)))
-	out.MapSet("meanCostUSD", vm.FloatValue(float64(v.MeanCostUSD)))
-	out.MapSet("medianTokens", vm.IntValue(int64(v.MedianTokens)))
-	return out
-}
-
 func ObjectModelTierRequest(v types.ModelTierRequest, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StrValue(v.ID))
@@ -3040,6 +3052,8 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 		optModelTier = ObjectJobModelTier((*v.ModelTier), enums)
 	}
 	out.MapSet("modelTier", optModelTier)
+	out.MapSet("reworkRounds", vm.IntValue(int64(v.ReworkRounds)))
+	out.MapSet("widenings", vm.IntValue(int64(v.Widenings)))
 	optCheck := vm.Null
 	if v.Check != nil {
 		optCheck = ObjectLeaseCheck((*v.Check))

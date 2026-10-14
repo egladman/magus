@@ -86,7 +86,7 @@ var JobSchema = SchemaLedger{
 	Name:    "job",
 	Type:    reflect.TypeFor[Job](),
 	Version: JobSchemaVersion,
-	Added:   map[string]int{"breaks": 12, "model_tier": 12},
+	Added:   map[string]int{"breaks": 12, "model_tier": 12, "rework_rounds": 12, "widenings": 12},
 	// The four boundary renames, still folded from stored rows (see job.foldStoredNames),
 	// and completion_gates, which a stored row drops unread.
 	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates"},

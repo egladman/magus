@@ -716,6 +716,12 @@ type Job struct {
 	// output-only like Releases: a caller's value is replaced by the stored one, and nil
 	// means the workspace declared no model tiers when the row was written.
 	ModelTier *JobModelTier `json:"model_tier,omitempty" yaml:"model_tier,omitempty"`
+	// ReworkRounds counts the times the guard saw this row's holder sent more work after it
+	// handed back. Widenings counts the writes that added write paths after a holder took
+	// the row. Both are store-computed like ModelTier: a caller's value is replaced by the
+	// stored one.
+	ReworkRounds int `json:"rework_rounds,omitempty" yaml:"rework_rounds,omitempty"`
+	Widenings    int `json:"widenings,omitempty"     yaml:"widenings,omitempty"`
 	// Check is the one check this lease runs. See [LeaseCheck].
 	Check *LeaseCheck `json:"check,omitempty" yaml:"check,omitempty"`
 	// Validation is Check rendered as the command that runs it.

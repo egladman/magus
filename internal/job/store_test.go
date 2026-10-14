@@ -444,11 +444,12 @@ func TestJobForkWidensALiveRowInPlace(t *testing.T) {
 		write    []string
 		read     []string
 		want     types.JobState
+		widened  int
 	}{
-		{name: "a running row widened keeps running", from: types.StateRunning, criteria: "goal", write: []string{"a.go", "b.go"}, want: types.StateRunning},
+		{name: "a running row widened keeps running", from: types.StateRunning, criteria: "goal", write: []string{"a.go", "b.go"}, want: types.StateRunning, widened: 1},
 		{name: "an exited row given read paths stays exited", from: types.StateExited, criteria: "goal", write: []string{"a.go"}, read: []string{"docs"}, want: types.StateExited},
 		{name: "a re-fork moving no boundary hands the job out again", from: types.StateExited, criteria: "goal", write: []string{"a.go"}, want: types.StateDeclared},
-		{name: "a rewritten criteria hands the job out again", from: types.StateRunning, criteria: "new goal", write: []string{"a.go", "b.go"}, want: types.StateDeclared},
+		{name: "a rewritten criteria hands the job out again", from: types.StateRunning, criteria: "new goal", write: []string{"a.go", "b.go"}, want: types.StateDeclared, widened: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -477,6 +478,7 @@ func TestJobForkWidensALiveRowInPlace(t *testing.T) {
 				BaseVerdict:  taken.BaseVerdict,
 				Registered:   taken.Registered,
 				CheckoutRoot: taken.CheckoutRoot,
+				Widenings:    tc.widened,
 			}, stored), stored)
 		})
 	}

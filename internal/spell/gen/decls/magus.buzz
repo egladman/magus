@@ -61,6 +61,14 @@ export enum<str> SymbolIndexFreshness {
     unvouched = "unvouched",
 }
 
+export enum<str> JobKind {
+    check = "check",
+    symbol = "symbol",
+    paths = "paths",
+    script = "script",
+    prose = "prose",
+}
+
 export enum<str> SkillVariant {
     short = "short",
     full = "full",
@@ -70,14 +78,6 @@ export enum<str> ModelTierSource {
     row = "row",
     matrix = "matrix",
     default = "default",
-}
-
-export enum<str> JobKind {
-    check = "check",
-    symbol = "symbol",
-    paths = "paths",
-    script = "script",
-    prose = "prose",
 }
 
 export object Affected {
@@ -608,6 +608,28 @@ export object Duplication {
     answer: KnowledgeAnswer = KnowledgeAnswer{},
 }
 
+export object ModelTierRecord {
+    rank: int = 0,
+    modelTier: str = "",
+    kind: JobKind = JobKind.check,
+    jobs: int = 0,
+    pass: int = 0,
+    fail: int = 0,
+    noReturn: int = 0,
+    passLower: double = 0.0,
+    checksPerJob: double = 0.0,
+    forksPerID: double = 0.0,
+    reworkPerJob: double = 0.0,
+    wideningsPerJob: double = 0.0,
+    meanCostUSD: double = 0.0,
+    medianTokens: int = 0,
+}
+
+export object ModelTierOutput {
+    definition: str = "",
+    rows: [ModelTierRecord] = [],
+}
+
 export object InsightReport {
     hotspots: Hotspots = Hotspots{},
     affinity: Affinity = Affinity{},
@@ -616,6 +638,7 @@ export object InsightReport {
     volatility: Volatility = Volatility{},
     unreferenced: Unreferenced = Unreferenced{},
     duplication: Duplication = Duplication{},
+    modelTiers: ModelTierOutput = ModelTierOutput{},
 }
 
 export object Layer {
@@ -948,6 +971,8 @@ export object Job {
     breaks: [str] = [],
     model: str = "",
     modelTier: JobModelTier? = null,
+    reworkRounds: int = 0,
+    widenings: int = 0,
     check: LeaseCheck? = null,
     validation: str = "",
     goals: [Goal] = [],
@@ -1182,23 +1207,6 @@ export object JobStatus {
     undeclaredExports: [str] = [],
     leftUnreferenced: [str] = [],
     symbolDeltaKnown: bool = false,
-}
-
-export object ModelTierRecord {
-    rank: int = 0,
-    modelTier: str = "",
-    kind: JobKind = JobKind.check,
-    jobs: int = 0,
-    pass: int = 0,
-    fail: int = 0,
-    noReturn: int = 0,
-    passLower: double = 0.0,
-    checksPerJob: double = 0.0,
-    forksPerID: double = 0.0,
-    reworkPerJob: double = 0.0,
-    wideningsPerJob: double = 0.0,
-    meanCostUSD: double = 0.0,
-    medianTokens: int = 0,
 }
 
 export object ModelTierRequest {
