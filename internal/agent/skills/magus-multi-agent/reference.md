@@ -24,6 +24,12 @@ different declarations of a file; `--depends-on` is for two jobs on the SAME one
   claim pair it computed: the declarations the holder has touched so far, and the symbols
   the new job's goals name, with whether the two are disjoint. Re-fork both rows with the
   pair, or follow the other advice it prints. Neither row is written for you.
+- A project's magusfile is never held whole: fork refuses it with {{mgslink "MGS3036"}}
+  and lists its claims. Inside the `magus\project({...})` call a claim is a key path:
+  `magusfile.buzz#project.targets.test` holds only the `test` entry of `targets`.
+  A job holding it through a glob (`**/*.buzz`) narrows to the keys and declarations its
+  first write changes and releases the rest. A fork refused over a held magusfile opens
+  one release request for the holder (`{{cmd "session attention"}}`).
 - Two jobs that must edit the SAME declaration still have one owner. Give it to one
   job, or order them with `--depends-on`{{if .Full}}. Claiming the whole file, or a glob over its directory, is
   what serializes every other job that needed one function in it{{end}}.
