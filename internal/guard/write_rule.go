@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
@@ -186,7 +185,7 @@ func writeWorkspace(path string, at location) string {
 	if !filepath.IsAbs(path) {
 		return at.workspace
 	}
-	root, err := magus.FindRoot(filepath.Dir(path))
+	root, err := workspace.FindRoot(filepath.Dir(path))
 	if err != nil {
 		// A file in a directory not created yet: the hook's own checkout is the best fact.
 		return at.workspace

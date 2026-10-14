@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	// The interpreter a real magusfile load needs, which cmd/magus links in production.
@@ -1411,19 +1410,17 @@ func committedSpawnRule(t *testing.T, worktree string) string {
 	return r.Root()
 }
 
-func inspectMagus(t *testing.T, root string) *magus.Magus {
+func loadRules(t *testing.T, root string) *WorkspaceRules {
 	t.Helper()
-	ws, err := magus.Inspect(t.Context(), root)
+	rules, err := LoadWorkspaceRules(t.Context(), root, types.VCSOptions{})
 	require.NoError(t, err, "the working tree still loads")
-	m, ok := ws.(*magus.Magus)
-	require.True(t, ok)
-	return m
+	return rules
 }
 
 // A fresh checkout has no lineage recording that a spawn rule ever existed, so deleting the
 // rule from its working tree must not be what decides whether the approved rule is asked.
 func TestApprovedRuleAppliesAfterTheWorkingTreeDeletesIt(t *testing.T) {
-	m := inspectMagus(t, committedSpawnRule(t, "import \"magus\";\n"))
+	m := loadRules(t, committedSpawnRule(t, "import \"magus\";\n"))
 	require.Nil(t, m.SpawnRule(), "the working tree registers no rule")
 
 	ctx, _ := spawnFixture(t)
@@ -1435,7 +1432,7 @@ func TestApprovedRuleAppliesAfterTheWorkingTreeDeletesIt(t *testing.T) {
 // Resolving the approved rule is the one part of a spawn an agent can slow down, so running
 // out of time denies rather than letting the working tree's looser rule stand alone.
 func TestSlowApprovedRuleDenies(t *testing.T) {
-	m := inspectMagus(t, committedSpawnRule(t, `import "magus";
+	m := loadRules(t, committedSpawnRule(t, `import "magus";
 
 magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
     return magus\guard.allow();

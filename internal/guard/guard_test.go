@@ -6,15 +6,16 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	// Blank-imported so its init installs the spell registry's ensure hook, exactly as
@@ -24,13 +25,16 @@ import (
 	// catalog. See internal/interp/bindings/spell.go's init.
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/interp"
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -52,29 +56,37 @@ func unworded(v types.GuardJudgment) types.GuardJudgment {
 	return v
 }
 
+// WorkspaceInspect and WorkspaceCacheDir are the root package's Inspect and ResolveCacheDir.
+// This package cannot import the root package, which imports it, so the external test
+// package sets them (see workspace_rules_test.go) before any test runs.
+var (
+	WorkspaceInspect  func(ctx context.Context, root string) (types.WorkspaceRepository, error)
+	WorkspaceCacheDir func(root string) (string, error)
+)
+
 // testDependencies resolves the workspace the way the CLI's hookDeps does, so a rule graded
 // here reads the same tree the hook would.
 func testDependencies() Dependencies {
 	return Dependencies{
 		Inspect: func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
 			if root == "" {
-				found, err := magus.FindRoot("")
+				found, err := workspace.FindRoot("")
 				if err != nil {
 					return nil, err
 				}
 				root = found
 			}
-			return magus.Inspect(ctx, root)
+			return WorkspaceInspect(ctx, root)
 		},
 		CacheDir: func(root string) (string, error) {
 			if root == "" {
-				found, err := magus.FindRoot("")
+				found, err := workspace.FindRoot("")
 				if err != nil {
 					return "", err
 				}
 				root = found
 			}
-			return magus.ResolveCacheDir(root)
+			return WorkspaceCacheDir(root)
 		},
 		Spells: project.DefaultSpellRegistry().All,
 	}
@@ -293,9 +305,9 @@ func bash(command string) map[string]any {
 // side changes, or a request field it stops filling, fails here and not in a session.
 // Every rule the header lists needs a case.
 func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
-	root, err := magus.FindRoot("")
+	root, err := workspace.FindRoot("")
 	require.NoError(t, err)
-	m, err := magus.LoadGuardRules(t.Context(), root, types.VCSOptions{})
+	m, err := LoadWorkspaceRules(t.Context(), root, types.VCSOptions{})
 	require.NoError(t, err, "the policy loads the way the hook loads it")
 	require.NotNil(t, m.CommandRule(), "the root magusfile registers a command rule")
 	require.NotNil(t, m.SpawnRule(), "and a spawn rule")
@@ -1084,7 +1096,7 @@ func TestShellAdvisoriesNameACataloguedRule(t *testing.T) {
 // it does for a hook.
 func BenchmarkWithJobStoreRows(b *testing.B) {
 	testkit.Isolate(b)
-	root, err := magus.FindRoot("")
+	root, err := workspace.FindRoot("")
 	require.NoError(b, err)
 	cacheDir := b.TempDir()
 	at := location{cacheDir: cacheDir, workspace: root, dir: root}
@@ -1358,4 +1370,542 @@ func TestRankGraded(t *testing.T) {
 	strictDeps := withSetting(string(denyRuleSiblingCheckout), builtin.Deny)
 	assert.Equal(t, denyRuleSiblingCheckout, strictDeps.rankGraded(advisory, denyRuleSiblingCheckout, "relocated", rankSiblingCheckout).Rule.Name)
 	assert.Equal(t, advisory, withSetting(string(denyRuleSiblingCheckout), builtin.Off).rankGraded(advisory, denyRuleSiblingCheckout, "relocated", rankSiblingCheckout))
+}
+
+// The committed load is skipped only when no pending path can change what the root load
+// registers, so each shape that can is pinned here.
+func TestPendingTouchesLoad(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\n"), 0o644))
+	sources := []interp.SourceFile{
+		{Path: filepath.Join(root, "magusfile.buzz")},
+		{Path: filepath.Join(root, "hack", "policy", "guard.buzz")},
+	}
+	sep := string(filepath.Separator)
+	cases := []struct {
+		name    string
+		pending []string
+		want    bool
+	}{
+		{"a file the load read", []string{filepath.Join(root, "hack", "policy", "guard.buzz")}, true},
+		{"the root magusfile", []string{filepath.Join(root, "magusfile.buzz")}, true},
+		{"the config that shapes the load", []string{filepath.Join(root, "magus.yaml")}, true},
+		{"a new magusfiles source", []string{filepath.Join(root, "magusfiles", "a.buzz")}, true},
+		{"an untracked directory holding a source", []string{filepath.Join(root, "hack") + sep}, true},
+		{"an untracked magusfiles directory", []string{filepath.Join(root, "magusfiles") + sep}, true},
+		{"a spell no load read", []string{filepath.Join(root, "spells", "go", "spell.buzz")}, false},
+		{"an untracked directory elsewhere", []string{filepath.Join(root, "scratch") + sep}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, pendingTouchesLoad(root, newPendingSet(tc.pending), sources))
+		})
+	}
+}
+
+// A second Pending of an unchanged scope trusts the recorded answer, which is
+// how a hook avoids git status. The recorded file is rewritten with a sentinel
+// path under the same fingerprint; only a call that did not ask git can return
+// it. An edit, and a commit of that edit, both change the fingerprint, so the
+// sentinel is dropped and git answers again.
+func TestPendingReusesAStatusWhenNothingChanged(t *testing.T) {
+	t.Setenv("MAGUS_CACHE_DIR", "")
+	repo := testkit.NewRepo(t, map[string]string{"policy.buzz": "fun judge() > void {}\n"})
+	root := repo.Root()
+	git := func(args ...string) { repo.Git(args...) }
+	file := repo.Path("policy.buzz")
+
+	res, err := vcs.Resolve(t.Context(), root, "", types.VCSOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, res.VCS)
+	h := headPolicy{
+		workspace: root,
+		driver:    res.VCS,
+		repoRoot: func(ctx context.Context) (string, error) {
+			return res.VCS.Root(ctx, root)
+		},
+		batch:    &objectBatchState{},
+		cacheDir: WorkspaceCacheDir,
+	}
+	scope := []string{file}
+
+	got, err := h.Pending(t.Context(), scope)
+	require.NoError(t, err)
+	assert.Empty(t, got)
+
+	cache, ok := h.pendingCacheFile(scope)
+	require.True(t, ok)
+	body, err := os.ReadFile(cache)
+	require.NoError(t, err)
+	fp, _, ok := strings.Cut(string(body), "\n")
+	require.True(t, ok)
+	sentinel := filepath.Join(root, "sentinel.buzz")
+	require.NoError(t, os.WriteFile(cache, []byte(fp+"\n"+sentinel+"\n"), 0o644))
+
+	got, err = h.Pending(t.Context(), scope)
+	require.NoError(t, err)
+	assert.Equal(t, []string{sentinel}, got, "an unchanged tree must reuse the recorded pending list")
+
+	require.NoError(t, os.WriteFile(file, []byte("fun judge() > void { changed; }\n"), 0o644))
+	got, err = h.Pending(t.Context(), scope)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, canonicalPath(file), canonicalPath(got[0]), "an edit must ask git again")
+
+	git("add", "policy.buzz")
+	git("commit", "-q", "-m", "edit")
+	got, err = h.Pending(t.Context(), scope)
+	require.NoError(t, err)
+	assert.Empty(t, got, "a commit of that edit is clean, which HEAD has to say because the file bytes did not change again")
+}
+
+// gitPolicy is a committed repository holding files, and the approval authority over
+// it. git runs a command in the repository.
+func gitPolicy(t *testing.T, files map[string]string) (root string, h headPolicy, git func(...string)) {
+	t.Helper()
+	repo := testkit.NewRepo(t, files)
+	root = repo.Root()
+	git = func(args ...string) { repo.Git(args...) }
+	res, err := vcs.Resolve(t.Context(), root, "", types.VCSOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, res.VCS)
+	return root, headPolicy{
+		workspace: root,
+		driver:    res.VCS,
+		repoRoot:  func(ctx context.Context) (string, error) { return res.VCS.Root(ctx, root) },
+		batch:     &objectBatchState{},
+		cacheDir:  WorkspaceCacheDir,
+	}, git
+}
+
+// racingDriver runs before and after around each status, standing in for a
+// writer that races the hook.
+type racingDriver struct {
+	types.VCSDriver
+	before, after func()
+}
+
+func (d racingDriver) DirtyFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
+	d.before()
+	out, err := d.VCSDriver.DirtyFiles(ctx, dir, paths)
+	d.after()
+	return out, err
+}
+
+func (d racingDriver) CheckoutID(dir string) (string, bool) {
+	return d.VCSDriver.(vcs.CheckoutIDReader).CheckoutID(dir)
+}
+
+// A status answer is recorded only for the state it saw. Otherwise a file
+// swapped to its committed bytes while status runs, or a checkout moved after
+// it, files a clean answer under the key of a loosened tree, and the next hook
+// reads that tree as approved.
+func TestPendingRecordsOnlyTheStateStatusSaw(t *testing.T) {
+	t.Setenv("MAGUS_CACHE_DIR", "")
+	loosen := func(t *testing.T, file string) {
+		require.NoError(t, os.WriteFile(file, []byte("loosened\n"), 0o644))
+	}
+	cases := []struct {
+		name string
+		// setup leaves the file loosened; before and after race the status.
+		setup         func(t *testing.T, file string, git func(...string))
+		before, after func(t *testing.T, file string, git func(...string))
+		// restore puts the loosened bytes back once the racing call returns.
+		restore bool
+	}{
+		{
+			name:  "a file swapped to its committed bytes while status runs",
+			setup: func(t *testing.T, file string, _ func(...string)) { loosen(t, file) },
+			before: func(t *testing.T, file string, _ func(...string)) {
+				require.NoError(t, os.WriteFile(file, []byte("strict\n"), 0o644))
+			},
+			after:   func(*testing.T, string, func(...string)) {},
+			restore: true,
+		},
+		{
+			name: "the checkout moved after status",
+			setup: func(t *testing.T, file string, git func(...string)) {
+				loosen(t, file)
+				git("commit", "-q", "-am", "loosen")
+			},
+			before: func(*testing.T, string, func(...string)) {},
+			after:  func(_ *testing.T, _ string, git func(...string)) { git("reset", "-q", "--soft", "HEAD~1") },
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root, h, git := gitPolicy(t, map[string]string{"policy.buzz": "strict\n"})
+			file := filepath.Join(root, "policy.buzz")
+			tc.setup(t, file, git)
+			scope := []string{file}
+			racing := h
+			racing.driver = racingDriver{
+				VCSDriver: h.driver,
+				before:    func() { tc.before(t, file, git) },
+				after:     func() { tc.after(t, file, git) },
+			}
+			_, err := racing.Pending(t.Context(), scope)
+			require.NoError(t, err)
+			if tc.restore {
+				loosen(t, file)
+			}
+
+			got, err := h.Pending(t.Context(), scope)
+			require.NoError(t, err)
+			require.Len(t, got, 1, "the loosened file differs from HEAD")
+			assert.Equal(t, canonicalPath(file), canonicalPath(got[0]))
+		})
+	}
+}
+
+// Every scope keeps its own record, so the scopes a hook asks about in turn
+// do not evict each other, and the record lives in the cache dir magus.yaml
+// names.
+func TestPendingRecordsEachScopeInTheConfiguredCacheDir(t *testing.T) {
+	t.Setenv("MAGUS_CACHE_DIR", "")
+	root, h, _ := gitPolicy(t, map[string]string{
+		"magus.yaml": "cache:\n  dir: elsewhere\n",
+		"a.buzz":     "a\n",
+		"b.buzz":     "b\n",
+	})
+	scopeA := []string{filepath.Join(root, "a.buzz")}
+	scopeB := []string{filepath.Join(root, "b.buzz")}
+	for _, scope := range [][]string{scopeA, scopeB} {
+		_, err := h.Pending(t.Context(), scope)
+		require.NoError(t, err)
+	}
+	a, ok := h.pendingCacheFile(scopeA)
+	require.True(t, ok)
+	b, ok := h.pendingCacheFile(scopeB)
+	require.True(t, ok)
+	assert.NotEqual(t, a, b)
+	for _, p := range []string{a, b} {
+		assert.FileExists(t, p)
+		assert.Equal(t, filepath.Join(root, "elsewhere", "policy-pending"), filepath.Dir(p))
+	}
+	assert.NoDirExists(t, filepath.Join(root, ".magus"))
+}
+
+// A workspace nested in a repository has no marker of its own, and its
+// checkout id is read from the repository above it.
+func TestCheckoutIDReadsTheRepositoryAboveANestedWorkspace(t *testing.T) {
+	root, h, _ := gitPolicy(t, map[string]string{"sub/magusfile.buzz": "x\n"})
+	top, ok := checkoutID(h.driver, root)
+	require.True(t, ok)
+	nested, ok := checkoutID(h.driver, filepath.Join(root, "sub"))
+	require.True(t, ok)
+	assert.Equal(t, top, nested)
+}
+
+// Each hashed record is framed with its kind, so a file whose bytes spell out
+// the missing marker does not hash like an absent file.
+func TestHashPendingTellsContentFromAMissingFile(t *testing.T) {
+	root := t.TempDir()
+	p := filepath.Join(root, "x.buzz")
+	absent, ok := hashPending(root, []string{p})
+	require.True(t, ok)
+	require.NoError(t, os.WriteFile(p, []byte("\x07\x00\x00\x00missing"), 0o644))
+	present, ok := hashPending(root, []string{p})
+	require.True(t, ok)
+	assert.NotEqual(t, absent, present)
+}
+
+// unbatchedDriver is a driver with no object batch that counts the reads it
+// serves, as jj is.
+type unbatchedDriver struct {
+	types.VCSDriver
+	reads *[]string
+}
+
+func (d unbatchedDriver) ReadFileAt(ctx context.Context, root, rev, rel string) (string, error) {
+	*d.reads = append(*d.reads, rel)
+	return d.VCSDriver.ReadFileAt(ctx, root, rev, rel)
+}
+
+// Without a batch every approved read is a process, so a file the whole
+// tree's pending answer does not cover is read from disk. A batched authority
+// reads every path through the batch, since its pending answer may be scoped.
+func TestApprovedReaderReadsCleanFilesFromDiskWithoutABatch(t *testing.T) {
+	root, h, _ := gitPolicy(t, map[string]string{"clean.buzz": "clean\n", "edited.buzz": "committed\n"})
+	clean := filepath.Join(root, "clean.buzz")
+	edited := filepath.Join(root, "edited.buzz")
+	require.NoError(t, os.WriteFile(edited, []byte("loosened\n"), 0o644))
+
+	var reads []string
+	unbatched := h
+	unbatched.driver = unbatchedDriver{VCSDriver: h.driver, reads: &reads}
+	pending, err := unbatched.Pending(t.Context(), nil)
+	require.NoError(t, err)
+	read := approvedReader(t.Context(), unbatched, pending)
+	got, err := read(clean)
+	require.NoError(t, err)
+	assert.Equal(t, "clean\n", string(got))
+	got, err = read(edited)
+	require.NoError(t, err)
+	assert.Equal(t, "committed\n", string(got))
+	assert.Equal(t, []string{"edited.buzz"}, reads, "only the pending file costs a process")
+
+	assert.True(t, h.batched())
+	defer func() { _ = h.Close() }()
+	got, err = approvedReader(t.Context(), h, nil)(edited)
+	require.NoError(t, err)
+	assert.Equal(t, "committed\n", string(got), "a batched authority does not trust disk")
+}
+
+// The recorded answer is the guard's own state, private to its owner.
+func TestWritePendingIsOwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no POSIX modes")
+	}
+	ws := t.TempDir()
+	h := headPolicy{workspace: ws, cacheDir: func(root string) (string, error) { return filepath.Join(root, ".magus"), nil }}
+	h.writePending([]string{"hack"}, "fp", []string{"hack/a.buzz"})
+
+	got, ok := h.readPending([]string{"hack"}, "fp")
+	require.True(t, ok)
+	assert.Equal(t, []string{"hack/a.buzz"}, got)
+	path, ok := h.pendingCacheFile([]string{"hack"})
+	require.True(t, ok)
+	fi, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
+}
+
+// The working tree tightens at once and loosens only as far as the approved declaration,
+// which falls back to the compiled defaults where it says nothing.
+func TestStricterBuiltins(t *testing.T) {
+	defaults := builtin.Defaults()
+	require.Equal(t, builtin.Advise, defaults["capture-filter"], "the cases below assume capture-filter advises by default")
+	require.Equal(t, builtin.Deny, defaults["whole-tree"], "the cases below assume whole-tree denies by default")
+
+	cases := []struct {
+		name     string
+		approved map[string]builtin.Setting
+		working  map[string]builtin.Setting
+		rule     string
+		want     builtin.Setting
+	}{
+		{
+			name:    "a tightening applies before approval",
+			working: map[string]builtin.Setting{"capture-filter": {Decision: builtin.Deny}},
+			rule:    "capture-filter",
+			want:    builtin.Setting{Decision: builtin.Deny},
+		},
+		{
+			name:    "a loosening below the default waits",
+			working: map[string]builtin.Setting{"whole-tree": {Decision: builtin.Off}},
+			rule:    "whole-tree",
+			want:    builtin.Setting{Decision: builtin.Deny},
+		},
+		{
+			name:     "a loosening below the approved setting waits",
+			approved: map[string]builtin.Setting{"capture-filter": {Decision: builtin.Deny}},
+			working:  map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}},
+			rule:     "capture-filter",
+			want:     builtin.Setting{Decision: builtin.Deny},
+		},
+		{
+			name:     "an approved loosening applies",
+			approved: map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}},
+			working:  map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}},
+			rule:     "capture-filter",
+			want:     builtin.Setting{Decision: builtin.Off},
+		},
+		{
+			name:     "dropping an approved loosening restores the default at once",
+			approved: map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}},
+			rule:     "capture-filter",
+			want:     builtin.Setting{Decision: builtin.Advise},
+		},
+		{
+			name:     "fewer lines is stricter",
+			approved: map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 300}},
+			working:  map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 120}},
+			rule:     "read-navigation",
+			want:     builtin.Setting{Decision: builtin.Deny, Lines: 120},
+		},
+		{
+			name:     "raising lines waits",
+			approved: map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 120}},
+			working:  map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 300}},
+			rule:     "read-navigation",
+			want:     builtin.Setting{Decision: builtin.Deny, Lines: 120},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := stricterBuiltins(tc.approved, tc.working)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got[tc.rule])
+			assert.Len(t, got, len(defaults), "every compiled rule has a setting")
+		})
+	}
+}
+
+// Without an approval authority the working tree is the whole policy, so its loosening
+// applies at once.
+func TestEffectiveBuiltinsWithoutAnApprovalAuthority(t *testing.T) {
+	disabled := false
+	rules := &WorkspaceRules{root: t.TempDir(), opts: types.VCSOptions{Enabled: &disabled}, registry: workspace.NewWorkspaceRegistry()}
+
+	got, err := rules.effectiveBuiltins(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, builtin.Setting{Decision: builtin.Advise, Profile: types.GuardProfileLight}, got["stall"],
+		"nothing declared is the light level")
+	assert.Equal(t, builtin.Setting{Decision: builtin.Off}, got["root-repeat"], "a rule light leaves alone keeps its default")
+
+	rules.registry.SetBuiltins(map[string]builtin.Setting{"whole-tree": {Decision: builtin.Off}})
+	got, err = rules.effectiveBuiltins(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, builtin.Setting{Decision: builtin.Off}, got["whole-tree"])
+	assert.Equal(t, builtin.Setting{Decision: builtin.Advise}, got["capture-filter"])
+}
+
+// A builtins declaration is policy: the digest moves with it, and declaring one alone is
+// enough for there to be one.
+func TestPolicyDigestCoversBuiltins(t *testing.T) {
+	none := buildPolicy(nil, false, false, false, nil, nil)
+	assert.Empty(t, none.Digest)
+
+	off := buildPolicy(nil, false, false, false, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}}, nil)
+	deny := buildPolicy(nil, false, false, false, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Deny}}, nil)
+	lines := buildPolicy(nil, false, false, false, map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 120}}, nil)
+	moreLines := buildPolicy(nil, false, false, false, map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 300}}, nil)
+	assert.NotEmpty(t, off.Digest)
+	assert.Equal(t, 1, off.Builtins)
+	assert.NotEqual(t, off.Digest, deny.Digest)
+	assert.NotEqual(t, lines.Digest, moreLines.Digest)
+
+	shell := []workspace.ShellRule{{Name: "x", Decision: "deny", Program: "curl", Reason: "r"}}
+	assert.NotEqual(t,
+		buildPolicy(shell, false, false, false, nil, nil).Digest,
+		buildPolicy(shell, false, false, false, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}}, nil).Digest)
+}
+
+func TestPendingSetCoversFilesUnderAnUntrackedDirectory(t *testing.T) {
+	root := t.TempDir()
+	set := newPendingSet([]string{filepath.Join(root, "new") + string(filepath.Separator), filepath.Join(root, "a.buzz")})
+	assert.True(t, set.covers(filepath.Join(root, "a.buzz")))
+	assert.True(t, set.covers(filepath.Join(root, "new", "deep", "b.buzz")))
+	assert.False(t, set.covers(filepath.Join(root, "newer.buzz")), "a sibling sharing the prefix is not under it")
+	assert.False(t, set.covers(filepath.Join(root, "b.buzz")))
+}
+
+// profileRules isolates the test and returns rules with no approval authority, so the
+// working tree is the whole workspace policy, and the user tier's config directory. Rules
+// are registered directly rather than loaded, so no magusfile is compiled.
+func profileRules(t *testing.T, level types.GuardProfile) (*WorkspaceRules, string) {
+	t.Helper()
+	testkit.Isolate(t)
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	disabled := false
+	rules := &WorkspaceRules{root: t.TempDir(), opts: types.VCSOptions{Enabled: &disabled}, registry: workspace.NewWorkspaceRegistry()}
+	if level != "" {
+		rules.registry.SetProfile(level)
+	}
+	return rules, filepath.Join(home, "magus")
+}
+
+func userAgents(t *testing.T, dir, body string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), []byte(body), 0o600))
+}
+
+func TestGuardProfileUnsetIsLight(t *testing.T) {
+	rules, _ := profileRules(t, "")
+	assert.Equal(t, types.GuardProfileLight, EffectiveProfile(t.Context(), rules, ""))
+
+	approved, err := LoadApprovedProfile(t.Context(), rules.root)
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardProfileLight, approved, "no approval authority is light")
+	assert.Equal(t, types.GuardProfileLight, EffectiveProfile(t.Context(), nil, rules.root))
+}
+
+// A person's agents.profile raises the workspace's level and never lowers it, including
+// below the light a workspace that declares nothing gets.
+func TestGuardProfileUserTierOnlyTightens(t *testing.T) {
+	rules, user := profileRules(t, types.GuardProfileStandard)
+	assert.Equal(t, types.GuardProfileStandard, EffectiveProfile(t.Context(), rules, ""))
+
+	userAgents(t, user, "agents:\n  profile: strict\n")
+	assert.Equal(t, types.GuardProfileStrict, EffectiveProfile(t.Context(), rules, ""))
+	userAgents(t, user, "agents:\n  profile: off\n")
+	assert.Equal(t, types.GuardProfileStandard, EffectiveProfile(t.Context(), rules, ""))
+
+	unset, user := profileRules(t, "")
+	userAgents(t, user, "agents:\n  profile: off\n")
+	assert.Equal(t, types.GuardProfileLight, EffectiveProfile(t.Context(), unset, ""))
+
+	off, user := profileRules(t, types.GuardProfileOff)
+	assert.Equal(t, types.GuardProfileOff, EffectiveProfile(t.Context(), off, ""), "a workspace may declare off")
+	userAgents(t, user, "agents:\n  profile: standard\n")
+	assert.Equal(t, types.GuardProfileStandard, EffectiveProfile(t.Context(), off, ""))
+}
+
+// With no level that sets anything, a declaration still applies, and a magus.yaml that
+// does not load is reported beside the answer, never in place of it.
+func TestEffectiveBuiltinsReadsTheUserTier(t *testing.T) {
+	rules, user := profileRules(t, types.GuardProfileOff)
+	got, err := rules.effectiveBuiltins(t.Context())
+	require.NoError(t, err)
+	assert.Nil(t, got, "no level sets a rule yet, so nothing is declared")
+
+	rules.registry.SetBuiltins(map[string]builtin.Setting{"whole-tree": {Decision: builtin.Off}})
+	got, err = rules.effectiveBuiltins(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, builtin.Setting{Decision: builtin.Off}, got["whole-tree"])
+
+	userAgents(t, user, "agents:\n  billing: oauth\n")
+	got, err = rules.effectiveBuiltins(t.Context())
+	require.Error(t, err)
+	assert.Equal(t, builtin.Setting{Decision: builtin.Off}, got["whole-tree"], "the declaration still applies")
+	assert.Equal(t, builtin.Setting{Decision: builtin.Off}, BuiltinSettings(t.Context(), rules, "")["whole-tree"])
+}
+
+// A workspace whose level sets nothing still hands the hook the light level's settings, not
+// the bare defaults nil stands for.
+func TestBuiltinSettingsFallsBackToTheLightLevel(t *testing.T) {
+	rules, _ := profileRules(t, types.GuardProfileOff)
+	got := BuiltinSettings(t.Context(), rules, "")
+	require.NotNil(t, got, "the compiled-in light row resolves")
+	assert.Equal(t, lightBuiltins(), got)
+	assert.True(t, slices.ContainsFunc(slices.Collect(maps.Values(got)), func(s builtin.Setting) bool {
+		return s.Profile == types.GuardProfileLight
+	}), "the light row's settings are in it")
+}
+
+// The approved side alone resolves the declaration over the defaults when no working tree
+// loaded; with no approval authority that is the defaults.
+func TestLoadApprovedBuiltinsWithoutAnAuthority(t *testing.T) {
+	rules, user := profileRules(t, "")
+	got, err := LoadApprovedBuiltins(t.Context(), rules.root)
+	require.NoError(t, err)
+	assert.Equal(t, builtin.Setting{Decision: builtin.Deny}, got["whole-tree"])
+
+	userAgents(t, user, "agents:\n  profile: max\n")
+	_, err = LoadApprovedBuiltins(t.Context(), rules.root)
+	require.Error(t, err, "a magus.yaml that does not load is an error")
+}
+
+// The push facts come through the version control that resolves in the checkout: a
+// branch checkout names its branch, a detached one names none, and a directory under no
+// version control is unknown.
+func TestCheckoutStateAt(t *testing.T) {
+	repo := testkit.NewRepo(t, map[string]string{"README": "x\n"})
+	root := repo.Root()
+	repo.Git("update-ref", "refs/remotes/origin/main", "HEAD")
+
+	got := checkoutStateAt(t.Context(), root)
+	require.NotNil(t, got)
+	assert.NotEmpty(t, got.Branch)
+	assert.Equal(t, []string{"origin/main"}, got.RemoteBranches)
+
+	repo.Git("checkout", "-q", "--detach")
+	got = checkoutStateAt(t.Context(), root)
+	require.NotNil(t, got)
+	assert.Empty(t, got.Branch)
+
+	assert.Nil(t, checkoutStateAt(t.Context(), t.TempDir()), "outside any version control")
 }

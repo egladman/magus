@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
@@ -471,7 +470,7 @@ func TestColdApprovedCompileLapsesOnlyOnce(t *testing.T) {
 		"magusfile.buzz": "import \"magus\";\n\nmagus\\guard.command(fun (req: CommandRequest) > GuardVerdict {\n    return magus\\guard.deny(\"committed\");\n});\n",
 	})
 	repo.Magusfile("import \"magus\";\n")
-	rules, err := magus.LoadGuardRules(t.Context(), repo.Root(), types.VCSOptions{})
+	rules, err := LoadWorkspaceRules(t.Context(), repo.Root(), types.VCSOptions{})
 	require.NoError(t, err)
 	require.Nil(t, rules.CommandRule(), "the working tree drops the rule, so the approved one is pending")
 
@@ -538,7 +537,7 @@ func TestApprovedCommandRuleIgnoresAWorkingTreeEditOfItsSources(t *testing.T) {
 	judge := func(edit string) []types.GuardDecision {
 		t.Helper()
 		repo.Write("lib/policy.buzz", fmt.Sprintf(rule, edit))
-		rules, err := magus.LoadGuardRules(t.Context(), root, types.VCSOptions{})
+		rules, err := LoadWorkspaceRules(t.Context(), root, types.VCSOptions{})
 		require.NoError(t, err)
 		approved, err := rules.ApprovedCommandRule(t.Context())
 		require.NoError(t, err)

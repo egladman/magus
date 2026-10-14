@@ -14,15 +14,15 @@ import (
 	"golang.org/x/mod/modfile"
 	"mvdan.cc/sh/v3/syntax"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
 )
 
 // ownModule is the module this guard was compiled from, read off a type rather than
-// spelled out so a renamed fork still recognizes its own tree.
-var ownModule = reflect.TypeFor[magus.Magus]().PkgPath()
+// spelled out so a renamed fork still recognizes its own tree. The types package sits
+// directly under the module root.
+var ownModule = path.Dir(reflect.TypeFor[types.GuardJudgment]().PkgPath())
 
 // goCall is a go command read the way cmd/go reads it: -C in either position it accepts
 // (`go -C dir build`, `go build -C dir`), and the argv from the subcommand on with that

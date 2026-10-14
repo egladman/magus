@@ -1647,14 +1647,14 @@ func TestLoadApprovedSpawnRuleSurvivesABrokenWorkingTree(t *testing.T) {
 			root := committedDenyRule(t).Root()
 			tc.mutate(t, root)
 
-			rule, err := magus.LoadApprovedSpawnRule(t.Context(), root)
+			rule, err := guard.LoadApprovedSpawnRule(t.Context(), root)
 			require.NoError(t, err)
 			require.NotNil(t, rule)
 			got, err := rule(t.Context(), types.SpawnRequest{Kind: types.SpawnKindSpawn, Role: types.AgentRoleRoot}, hint.NewGate(t.TempDir(), "claude-code/s1"))
 			require.NoError(t, err)
 			assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "Name a model."}, got)
 
-			command, err := magus.LoadApprovedCommandRule(t.Context(), root)
+			command, err := guard.LoadApprovedCommandRule(t.Context(), root)
 			require.NoError(t, err)
 			require.NotNil(t, command)
 			got, err = command(t.Context(), types.CommandRequest{Command: "ls", Role: types.AgentRoleRoot}, hint.NewGate(t.TempDir(), "claude-code/s1"))
@@ -1818,27 +1818,6 @@ func resetWorkspaceMemo(t *testing.T) {
 		resetStartupSingletons()
 		version = savedVersion
 	})
-}
-
-// The push facts come through the version control that resolves in the checkout: a
-// branch checkout names its branch, a detached one names none, and a directory under no
-// version control is unknown.
-func TestCheckoutStateForGuard(t *testing.T) {
-	repo := committedDenyRule(t)
-	root := repo.Root()
-	repo.Git("update-ref", "refs/remotes/origin/main", "HEAD")
-
-	got := checkoutStateForGuard(t.Context(), root)
-	require.NotNil(t, got)
-	assert.NotEmpty(t, got.Branch)
-	assert.Equal(t, []string{"origin/main"}, got.RemoteBranches)
-
-	repo.Git("checkout", "-q", "--detach")
-	got = checkoutStateForGuard(t.Context(), root)
-	require.NotNil(t, got)
-	assert.Empty(t, got.Branch)
-
-	assert.Nil(t, checkoutStateForGuard(t.Context(), t.TempDir()), "outside any version control")
 }
 
 // The hook reads the root magusfile alone, so a working tree the full load would refuse,

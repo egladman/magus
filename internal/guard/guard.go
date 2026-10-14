@@ -19,7 +19,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
@@ -2321,7 +2320,7 @@ func hookLocation(ctx context.Context, deps Dependencies) location {
 // resolved config applies; another checkout reads its own magus.yaml, because a cache dir
 // configured in the orchestrator's tree says nothing about where a worker's cache lives.
 func hookLocationAt(deps Dependencies, dir string) location {
-	root, err := magus.FindRoot(dir)
+	root, err := workspace.FindRoot(dir)
 	if err != nil {
 		return location{}
 	}

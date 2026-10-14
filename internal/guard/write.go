@@ -15,12 +15,12 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"gopkg.in/yaml.v3"
@@ -140,7 +140,7 @@ func denyNotesWrite(deps Dependencies, writePath string) string {
 	if declared == "" {
 		return ""
 	}
-	root, err := magus.FindRoot("")
+	root, err := workspace.FindRoot("")
 	if err != nil {
 		return ""
 	}
@@ -1168,7 +1168,7 @@ func resolvedWriteContent(target string, fields writeFields) (string, bool) {
 // denyVCSOffSwitch is finding 3 of the guard-boundary audit (U8): a leased or
 // agent-attributed write that leaves vcs.enabled: false in a magus.yaml tier this
 // workspace reads. vcs.Resolve (vcs/vcs.go) turns that into VCSSourceDisabled, and the
-// guard's approval authority is HEAD of whatever VCS resolves (headPolicy, guard.go):
+// guard's approval authority is HEAD of whatever VCS resolves (headPolicy, workspace_rules.go):
 // with none resolved there is no HEAD to compare a policy edit against, so from that
 // write on every hack/policy/*.buzz rule stops being checked against an approved copy
 // before it takes effect. That is the guard's own foundational safety, so it is judged
@@ -1195,7 +1195,7 @@ func denyVCSOffSwitch(actingLease, writePath string, fields writeFields) writeGr
 	if actingLease == "" && trail.SpawnFromEnv().ParentSpanID == "" {
 		return writeGrade{}
 	}
-	root, err := magus.FindRoot("")
+	root, err := workspace.FindRoot("")
 	if err != nil {
 		return writeGrade{}
 	}

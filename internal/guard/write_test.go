@@ -455,7 +455,7 @@ func TestAdviseInstructionWrite(t *testing.T) {
 // workspace that did not opt in by DECLARING a store.
 func TestDenyNotesWrite(t *testing.T) {
 	root := t.TempDir()
-	// A workspace magus.FindRoot can resolve, so the rule reaches its real decision
+	// A workspace workspace.FindRoot can resolve, so the rule reaches its real decision
 	// rather than bailing out on a missing workspace and passing for the wrong reason.
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("// scratch\n"), 0o644))
 	cwd, err := os.Getwd()
@@ -1161,8 +1161,8 @@ func storeAt(ctx context.Context) *job.Store {
 	return job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
 }
 
-// vcsOffSwitchWorkspace puts the test in a workspace magus.FindRoot resolves, the way
-// TestDenyNotesWrite does: a marker file magus.FindRoot's own walk recognizes, so the rule
+// vcsOffSwitchWorkspace puts the test in a workspace workspace.FindRoot resolves, the way
+// TestDenyNotesWrite does: a marker file workspace.FindRoot's own walk recognizes, so the rule
 // reaches its real decision instead of bailing out on "no workspace" and passing for the
 // wrong reason.
 func vcsOffSwitchWorkspace(t *testing.T) string {

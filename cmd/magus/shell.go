@@ -1,7 +1,6 @@
 package main
 
 import (
-	"cmp"
 	"context"
 	"flag"
 	"fmt"
@@ -19,11 +18,8 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/internal/ward"
-	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
 )
 
 // magus shell is the guard with one door.
@@ -290,9 +286,9 @@ func shellInput(in io.Reader, operands []string) (string, error) {
 }
 
 // guardDependencies hands the guard the workspace facts its rules cannot resolve for
-// themselves: inspect, the cache dir, the loaded config, the spell catalog, graph and
-// symbol index lookups, VCS reads, and the loaded rules. All of them live in the CLI
-// rather than in the rules.
+// themselves: what guard.NewDependencies builds from the CLI's workspace open, cache dir
+// and loaded config, plus the graph and symbol index lookups and the model facts, which
+// only the CLI holds.
 //
 // rootOverride is the --root the command loaded its workspace with, "" for the cwd. A rule
 // asking for "the workspace" gets that one: resolving the cwd instead names a second
@@ -304,14 +300,11 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 
 // loadGuardDependencies is guardDependencies that also returns the rules it loaded, nil
 // when none loaded, for a caller that must know which files they came from.
-func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Dependencies, *magus.GuardRules) {
-	stop := traceFromContext(ctx).phase("guard.load_rules")
-	rules, loaded, loadErr := guard.TimeRuleLoad(ctx, func() (*magus.GuardRules, error) {
-		return loadGuardRules(ctx, rootOverride)
-	})
-	stop()
-	shellRules, shellDialect := workspaceShellRules(rules)
-	index := newGuardLookups(rootOverride)
+func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Dependencies, *guard.WorkspaceRules) {
+	root, err := guardRoot(rootOverride)
+	if err != nil {
+		root = ""
+	}
 	inspect := func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
 		if root == "" {
 			return inspectWorkspace(ctx, rootOverride)
@@ -319,68 +312,30 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 		return magus.Inspect(ctx, root,
 			magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
 	}
-	deps := guard.Dependencies{
-		Inspect:          inspect,
-		HumanOnlyRecord:  guardHumanOnlyRecord(rootOverride, inspect),
-		CacheDir:         guardCacheDir(rootOverride),
-		NotesShared:      globalCfg.Knowledge.Notes.Shared,
-		ShellRules:       shellRules,
-		ShellDialect:     shellDialect,
-		GraphStaleAdvice: index.staleGraphAdvice,
-		Spells:           project.DefaultSpellRegistry().All,
-		SymbolDefined:    index.symbolDefined,
-		IndexCause:       index.indexCause,
-		SymbolSites:      index.symbolSites,
-		Revision:         revisionForGuard,
-		GraphIDs:         index.graphIDs,
-		IndexedIDs:       index.indexedIDs,
-		TrackedFiles:     trackedFilesForGuard,
-		CheckoutState:    checkoutStateForGuard,
-		ModelRows:        guardModelRows(ctx, rootOverride),
-		ModelTiers:       guardModelTiers(ctx, rootOverride),
-		VCS: types.VCSOptions{
-			Enabled: globalCfg.VCS.Enabled, Name: globalCfg.VCS.Name, BaseRef: globalCfg.VCS.BaseRef,
-		},
-		BinaryVersion: version,
-		RuleLoad:      loaded,
-	}
 	// An unresolvable path leaves the trail row without one; the version still records.
-	deps.Binary, _ = runningBinaryPath()
-	if rules != nil {
-		deps.SpawnRule = rules.SpawnRule()
-		deps.ApprovedSpawnRule = rules.ApprovedSpawnRule
-		deps.CommandRule = rules.CommandRule()
-		deps.ApprovedCommandRule = func(ctx context.Context) (workspace.CommandRule, error) {
-			stop := traceFromContext(ctx).phase("guard.approved_resolve")
-			defer stop()
-			return rules.ApprovedCommandRule(ctx)
-		}
-		deps.WriteRule = rules.WriteRule()
-		deps.ApprovedWriteRule = rules.ApprovedWriteRule
-		deps.Policy = func() guard.PolicyState { return guardPolicyState(rules) }
-		setGuardBuiltins(ctx, &deps, rules, "")
-		return deps, rules
-	}
-	root, err := guardRoot(rootOverride)
-	if err != nil {
-		return deps, nil
-	}
-	// The approved sources load when the working tree does not, and they are what an agent
-	// breaking the working tree must not be able to turn off.
-	// Annotated like every other load failure: a binary older than the tree says so, and
-	// the guard reads that off the error to decide what the failure costs the session.
-	deps.LoadFailure = ward.ExplainStaleBinary(loadErr, version, globalCfg.RequiredVersion)
-	setGuardBuiltins(ctx, &deps, nil, root)
-	deps.ApprovedSpawnRule = func(ctx context.Context) (workspace.SpawnRule, error) {
-		return magus.LoadApprovedSpawnRule(ctx, root)
-	}
-	deps.ApprovedCommandRule = func(ctx context.Context) (workspace.CommandRule, error) {
-		return magus.LoadApprovedCommandRule(ctx, root)
-	}
-	deps.ApprovedWriteRule = func(ctx context.Context) (workspace.WriteRule, error) {
-		return magus.LoadApprovedWriteRule(ctx, root)
-	}
-	return deps, nil
+	binary, _ := runningBinaryPath()
+	deps, rules := guard.NewDependencies(ctx, guard.Wiring{
+		Root:            root,
+		Config:          globalCfg,
+		BinaryVersion:   version,
+		Binary:          binary,
+		Inspect:         inspect,
+		HumanOnlyRecord: guardHumanOnlyRecord(rootOverride, inspect),
+		CacheDir:        guardCacheDir(rootOverride),
+		Trace: func(ctx context.Context, phase string) func() {
+			return traceFromContext(ctx).phase(phase)
+		},
+	})
+	index := newGuardLookups(rootOverride)
+	deps.GraphStaleAdvice = index.staleGraphAdvice
+	deps.SymbolDefined = index.symbolDefined
+	deps.IndexCause = index.indexCause
+	deps.SymbolSites = index.symbolSites
+	deps.GraphIDs = index.graphIDs
+	deps.IndexedIDs = index.indexedIDs
+	deps.ModelRows = guardModelRows(ctx, rootOverride)
+	deps.ModelTiers = guardModelTiers(ctx, rootOverride)
+	return deps, rules
 }
 
 // guardHumanOnlyRecord answers what the workspace at root, "" for the one found from
@@ -496,13 +451,6 @@ func guardCacheDir(rootOverride string) func(root string) (string, error) {
 	}
 }
 
-// setGuardBuiltins sets deps' compiled-rule settings from magus.GuardBuiltins, traced.
-func setGuardBuiltins(ctx context.Context, deps *guard.Dependencies, rules *magus.GuardRules, root string) {
-	stop := traceFromContext(ctx).phase("guard.builtins_resolve")
-	defer stop()
-	deps.Builtins = magus.GuardBuiltins(ctx, rules, root)
-}
-
 // guardRoot finds the workspace whose rules the guard enforces, searching from override,
 // or from the cwd when it is "". A variable so the hook's own tests judge by the built-in
 // rules alone rather than by the policy of whichever checkout they happen to run in.
@@ -516,91 +464,14 @@ var guardRoot = magus.FindRoot
 // Not the full workspace load: that opens every project and costs an order of magnitude
 // more, on every agent tool call, for facts no guard rule reads. The rules that do need
 // the workspace open it through Dependencies.Inspect, and only when they apply.
-func loadGuardRules(ctx context.Context, rootOverride string) (*magus.GuardRules, error) {
+func loadGuardRules(ctx context.Context, rootOverride string) (*guard.WorkspaceRules, error) {
 	root, err := guardRoot(rootOverride)
 	if err != nil {
 		return nil, nil //nolint:nilnil,nilerr // outside a workspace there are no rules and nothing failed
 	}
-	return magus.LoadGuardRules(ctx, root, types.VCSOptions{
+	return guard.LoadWorkspaceRules(ctx, root, types.VCSOptions{
 		Enabled: globalCfg.VCS.Enabled, Name: globalCfg.VCS.Name, BaseRef: globalCfg.VCS.BaseRef,
 	})
-}
-
-// guardPolicyState describes the workspace's guard rules for the trail's lineage. The
-// approved ids are left to a callback, since reading them runs a process per file and the
-// lineage asks only when the policy moved.
-func guardPolicyState(rules *magus.GuardRules) guard.PolicyState {
-	policy := rules.Policy()
-	files := make([]string, len(policy.Sources))
-	for i, s := range policy.Sources {
-		files[i] = s.Path
-	}
-	return guard.PolicyState{
-		Files:       files,
-		Digest:      policy.Digest,
-		ShellRules:  policy.ShellRules,
-		SpawnRule:   policy.SpawnRule,
-		CommandRule: policy.CommandRule,
-		WriteRule:   policy.WriteRule,
-		Sources: func(ctx context.Context) []guard.PolicySource {
-			approved := rules.ApprovedContentIDs(ctx, files)
-			if approved == nil {
-				return nil
-			}
-			out := make([]guard.PolicySource, len(policy.Sources))
-			for i, s := range policy.Sources {
-				out[i] = guard.PolicySource{Path: s.Path, Worktree: s.ContentID, Approved: approved[s.Path]}
-			}
-			return out
-		},
-	}
-}
-
-// revisionForGuard answers the revision rev names in the checkout holding dir, for the
-// push gate, or "" when it cannot be read. Empty rev is the checkout's current revision;
-// empty dir is this process's working directory.
-//
-// Resolved through the VCS layer rather than by shelling out to git, because magus drives
-// four backends and the hook runs in whichever the workspace uses. Every failure answers
-// "": no VCS, an unreadable one, a rev that names nothing, or a repository with no commit
-// yet all mean the push gate has nothing to match a recorded run against, and it stands
-// down rather than refusing on an absence it cannot account for.
-func revisionForGuard(ctx context.Context, dir, rev string) string {
-	root, err := magus.FindRoot(dir)
-	if err != nil {
-		return ""
-	}
-	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
-	if err != nil || res.VCS == nil {
-		return ""
-	}
-	// Not Metadata: it runs a status among several processes and overruns the hook
-	// budget on Mercurial and Sapling.
-	c, err := res.VCS.FindCommit(ctx, root, rev)
-	if err != nil {
-		return ""
-	}
-	return cmp.Or(c.Short, c.ID)
-}
-
-// checkoutStateForGuard reads the checkout holding dir through the version control that
-// resolves there, for a rule judging a push or a commit, with the base ref that resolution
-// chose. Nil when there is none, when its driver cannot report the state, or when the read
-// fails: a rule reads nil as unknown.
-func checkoutStateForGuard(ctx context.Context, dir string) *types.CheckoutState {
-	if dir == "" {
-		return nil
-	}
-	res, err := vcs.Resolve(ctx, dir, "", types.VCSOptions{})
-	if err != nil || res.VCS == nil {
-		return nil
-	}
-	state, err := res.VCS.CheckoutState(ctx, dir)
-	if err != nil {
-		return nil
-	}
-	state.Base = res.Base
-	return &state
 }
 
 // guardLookupBudget bounds every graph-backed guard answer. The hook runs before every
@@ -729,52 +600,16 @@ func (l guardLookups) indexedIDs(_ context.Context, kind string) ([]string, bool
 	return a.ids, ok && a.found
 }
 
-// trackedFilesForGuard lists every file the checkout at root tracks, through whichever
-// version control the workspace uses; false when it cannot say before ctx ends.
-func trackedFilesForGuard(ctx context.Context, root string) ([]string, bool) {
-	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
-	if err != nil || res.VCS == nil {
-		return nil, false
-	}
-	files, err := res.VCS.TrackedFiles(ctx, root, []string{"."})
-	return files, err == nil && ctx.Err() == nil
-}
-
 // loadWorkspaceShellRules returns additive rules the root magusfile of the workspace found
 // from rootOverride declared via magus\guard.shell, and the last non-empty dialect among
 // them for outer parse. Missing or unloadable is empty so a magusfile typo cannot take
 // down every shell hook (built-ins still apply).
 func loadWorkspaceShellRules(ctx context.Context, rootOverride string) ([]guard.WorkspaceShellRule, guard.Dialect) {
 	rules, _ := loadGuardRules(ctx, rootOverride)
-	return workspaceShellRules(rules)
-}
-
-// workspaceShellRules converts the loaded rules' magus\guard.shell entries for the guard,
-// empty when nothing loaded.
-func workspaceShellRules(rules *magus.GuardRules) ([]guard.WorkspaceShellRule, guard.Dialect) {
 	if rules == nil {
 		return nil, ""
 	}
-	src := rules.ShellRules()
-	if len(src) == 0 {
-		return nil, ""
-	}
-	out := make([]guard.WorkspaceShellRule, len(src))
-	var dialect guard.Dialect
-	for i, r := range src {
-		out[i] = guard.WorkspaceShellRule{
-			Name:     r.Name,
-			Decision: r.Decision,
-			Program:  r.Program,
-			Args:     r.Args,
-			Reason:   r.Reason,
-			Dialect:  r.Dialect,
-		}
-		if r.Dialect != "" {
-			dialect = guard.Dialect(r.Dialect)
-		}
-	}
-	return out, dialect
+	return rules.ShellRules()
 }
 
 // guardDenyExitCode is what a denied command exits with.
