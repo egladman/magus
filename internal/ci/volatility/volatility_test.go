@@ -103,6 +103,7 @@ func TestWilsonLower(t *testing.T) {
 	assert.InDelta(t, 0.115, WilsonLower(3, 10), 0.02, "the same interval Score reads")
 	assert.Zero(t, WilsonLower(0, 0), "no trials is not a NaN")
 	assert.Zero(t, WilsonLower(0, 10), "no hits never goes negative")
+	assert.Zero(t, WilsonLower(0, 1), "no hits is exactly 0, not the rounding left of the terms that cancel")
 	assert.Greater(t, WilsonLower(100, 100), WilsonLower(10, 10), "more trials tighten the same rate")
 }
 

@@ -80,7 +80,8 @@ func score(s forecast.Stats, cfg Config) float64 {
 // WilsonLower is the lower bound of the Wilson score interval (z=1.96, 95% CI) for hits
 // out of total trials: 0 for no trials, and never negative.
 func WilsonLower(hits, total int) float64 {
-	if total <= 0 {
+	// At no hits the terms cancel exactly in theory but leave a rounding residue in floats.
+	if total <= 0 || hits <= 0 {
 		return 0
 	}
 	p := float64(hits) / float64(total)
