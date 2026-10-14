@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -1055,6 +1056,40 @@ func (v Value) EnumValue() (Value, bool) {
 		return Null, false
 	}
 	return v.asEnumVal().Val, true
+}
+
+// EnumDef returns an enum definition's name and its case names in declaration
+// order, and whether v is an enum definition at all: what `enum Tier { low, high }`
+// binds Tier to, not one of its cases. cases is a copy the caller may keep.
+func (v Value) EnumDef() (name string, cases []string, ok bool) {
+	if v.tag() != tagEnumDef {
+		return "", nil, false
+	}
+	def := v.asEnumDef()
+	return def.Name, slices.Clone(def.Cases), true
+}
+
+// EnumCase returns an enum case's enum name (the same string EnumDef reports for
+// its definition) and the case's name, and whether v is an enum case at all. A
+// host reads which case a Buzz value names this way; EnumValue gives its
+// `.value` instead, which an `enum<str>` may assign away from the case name.
+func (v Value) EnumCase() (enum, name string, ok bool) {
+	if v.tag() != tagEnumVal {
+		return "", "", false
+	}
+	ev := v.asEnumVal()
+	return ev.Enum, ev.Case, true
+}
+
+// MapKeyValues returns the map's keys as Values, parallel to MapValues: the
+// authoritative key, so a host can read a map keyed by an object instance or an
+// enum case, which MapKeys reduces to a display string. It returns nil when v is
+// not a map; the slice is the map's own, so do not modify it.
+func (v Value) MapKeyValues() []Value {
+	if v.tag() != tagMap {
+		return nil
+	}
+	return v.asMap().keyVals
 }
 
 // MapView returns the underlying map Value for maps and object instances.
