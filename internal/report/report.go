@@ -117,13 +117,14 @@ type GraphError struct {
 	Message string `json:"error"`
 }
 
-// VolatilityCall records a volatility outcome; emitted when a retry was triggered or regression suspected.
+// VolatilityCall records a volatility outcome; emitted when a retry was triggered, a
+// regression suspected, or a non-retryable failure kept retry_on_volatile from retrying.
 type VolatilityCall struct {
 	Project         string  `json:"project"`
 	Target          string  `json:"target"`
-	Status          string  `json:"status"` // "retried_volatile" | "retry_failed" | "suspected_regression"
+	Status          string  `json:"status"` // "retried_volatile" | "retry_failed" | "suspected_regression" | "not_retried"
 	Attempts        int     `json:"attempts"`
-	RetryReason     string  `json:"retry_reason,omitempty"` // "bootstrap" | "unaffected_failure" | "predicted_volatile"
+	RetryReason     string  `json:"retry_reason,omitempty"` // "bootstrap" | "unaffected_failure" | "predicted_volatile" | "non_retryable"
 	VolatilityScore float64 `json:"volatility_score,omitempty"`
 }
 

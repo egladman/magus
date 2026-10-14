@@ -28,7 +28,8 @@ target's history:
 
 History is consulted only for a failure that could clear on a rerun. A failure typed
 non-retryable (a refused configuration, or a run a person cancelled) is not re-run
-whatever the history says, and the decision's reason is `non_retryable`.
+whatever the history says, and the decision's reason is `non_retryable`, which a run's
+report records with the status `not_retried`.
 
 If the retry passes, the outcome is recorded as volatile and the run continues. If it
 fails again, magus flags a **suspected regression** and stops treating it as noise.

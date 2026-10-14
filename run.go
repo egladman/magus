@@ -2730,6 +2730,19 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 				VolatilityScore: rt.Score(p.Path, volatileTarget),
 			})
 		}
+	} else if decision.Reason == volatility.ReasonNonRetryable {
+		// retry_on_volatile was on and stood down, which the report says rather than leave
+		// a failure that reads as one nobody tried again.
+		if rw := report.WriterFromContext(ctx); rw != nil {
+			_ = report.Record(rw, report.VolatilityCall{
+				Project:         p.Path,
+				Target:          volatileTarget,
+				Status:          "not_retried",
+				Attempts:        attempts,
+				RetryReason:     string(decision.Reason),
+				VolatilityScore: rt.Score(p.Path, volatileTarget),
+			})
+		}
 	}
 
 	return err
