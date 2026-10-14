@@ -284,6 +284,7 @@ github.com/egladman/magus.ReadRecords func(stdin *os.File) (*github.com/egladman
 github.com/egladman/magus.ReaderArgv func(ctx context.Context, out *os.File) (argv []string, ok bool)
 github.com/egladman/magus.RecordPipeExit func(root string, cfg github.com/egladman/magus/internal/config.Config, status int, signal string)
 github.com/egladman/magus.RecordUpstream func(ctx context.Context, in *os.File, writes func(argv []string) bool) (pid int, ok bool)
+github.com/egladman/magus.RecordedHumanOnly func(ctx context.Context, lw *LazyWorkspace, cfg github.com/egladman/magus/internal/config.Config) (github.com/egladman/magus/types.HumanOnlyIndex, bool)
 github.com/egladman/magus.RecordedStaleIndexes func(ctx context.Context, lw *LazyWorkspace, cfg github.com/egladman/magus/internal/config.Config) ([]github.com/egladman/magus/types.KnowledgeStaleIndex, bool)
 github.com/egladman/magus.ResolveCacheDir func(root string, opts ...Option) (string, error)
 github.com/egladman/magus.RetryOnVolatile func(reason string) TargetOption
@@ -1770,6 +1771,16 @@ github.com/egladman/magus/types.HotspotOutput.Definition field string "json:\"de
 github.com/egladman/magus/types.HotspotOutput.Files field []FileHotspot "json:\"files,omitempty\" yaml:\"files,omitempty\""
 github.com/egladman/magus/types.HotspotOutput.Nodes field []Node "json:\"nodes\"      yaml:\"nodes\""
 github.com/egladman/magus/types.HotspotOutput.Since field string "json:\"since,omitempty\" yaml:\"since,omitempty\""
+github.com/egladman/magus/types.HumanOnlyIndex type struct
+github.com/egladman/magus/types.HumanOnlyIndex.Projects field []string "json:\"projects,omitempty\""
+github.com/egladman/magus/types.HumanOnlyIndex.Targets field []HumanOnlyTarget "json:\"targets,omitempty\""
+github.com/egladman/magus/types.HumanOnlyTarget type struct
+github.com/egladman/magus/types.HumanOnlyTarget.Compare method func(o TargetRef) int
+github.com/egladman/magus/types.HumanOnlyTarget.ReachedBy field []TargetRef "json:\"reached_by,omitempty\""
+github.com/egladman/magus/types.HumanOnlyTarget.Reason field string "json:\"reason\""
+github.com/egladman/magus/types.HumanOnlyTarget.Ref method func() string
+github.com/egladman/magus/types.HumanOnlyTarget.SkipCache field bool "json:\"skip_cache,omitempty\""
+github.com/egladman/magus/types.HumanOnlyTarget.TargetRef embedded TargetRef
 github.com/egladman/magus/types.Hunks func(path string, old []byte, new []byte, driver DiffDriver) ([]RegionChange, bool)
 github.com/egladman/magus/types.IgnorePattern type struct
 github.com/egladman/magus/types.IgnorePattern.Pattern field string "json:\"pattern\" yaml:\"pattern\" validate:\"required\""
