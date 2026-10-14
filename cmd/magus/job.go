@@ -1113,88 +1113,52 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		}
 		return jobEnter(ctx, store, row.ID, row.Enter)
 	}
+	var probe types.Job
+	row.Apply(&probe)
+	probe.ID = row.ID
+	// The fork door's own rule: magus\job.put and job apply still create an unscoped row,
+	// which TestForkMergeHoldsANewRowToTheLimits pins for put.
+	if err := job.RefuseUnscoped(probe); err != nil {
+		return usagef("magus job fork: %s", err)
+	}
 	store, err := openJobs(ctx, root, jobOpen{ModelTiers: true})
 	if err != nil {
 		return err
 	}
-	var probe types.Job
-	row.Apply(&probe)
-	probe.ID = row.ID
-	if err := job.RefuseUnscoped(probe); err != nil {
-		return usagef("magus job fork: %s", err)
-	}
-	if err := job.RefuseUngraded(probe); err != nil {
-		return usagef("magus job fork: %s", err)
-	}
-	plan, err := store.List()
-	if err != nil {
-		return err
-	}
-	if err := job.RefuseForkLimits(plan, row.ID, row.Parent, globalCfg.Jobs); err != nil {
-		return usagef("magus job fork: %s", err)
-	}
-	if row.Checkpoint, err = store.DeclaredCheckpoint(ctx, plan, row.ID, row.Checkpoint); err != nil {
-		return usagef("magus job fork: %s", err)
-	}
-	// The reader loads the graph only when a gate names a symbol, or when the deletion
-	// candidates ask for it, and the two share one load.
-	graph := newJobGraph(root, true)
-	symbols := graphSymbolReader(graph.load)
-	if err := job.RefuseAmbiguousSymbols(ctx, row.Goals, symbols); err != nil {
-		return usagef("magus job fork: %s", err)
-	}
-	probe, derived, err := resolveForkGoals(ctx, store, probe, symbols)
-	if err != nil {
-		return usagef("magus job fork: %s", err)
-	}
-	row.Goals, row.WritePaths = probe.Goals, probe.WritePaths
-	if err := job.RefuseDirectoryWritePaths(store, probe); err != nil {
-		return usagef("magus job fork: %s", err)
-	}
-	if err := job.RefuseUngradableClaims(ctx, store, probe); err != nil {
-		return usagef("magus job fork: %s", err)
-	}
-	if err := job.RefuseWholeFileConfigClaims(ctx, store, probe); err != nil {
-		return usagef("magus job fork: %s", err)
-	}
-	if err := job.RefuseSharedCheckout(store, plan, probe); err != nil {
-		return usagef("magus job fork: %s", err)
-	}
-	if err := job.RefuseUnorderedFileShare(ctx, store, plan, probe); err != nil {
-		return usagef("magus job fork: %s", err)
-	}
-	if err := job.RefuseNarrowedTests(store, probe); err != nil {
-		return usagef("magus job fork: %s", err)
-	}
-	// The guard grades the check against the rows just swept rather than sweep them again.
-	if err := job.RefuseDeniedCheck(job.WithSnapshot(ctx, job.Snapshot{Rows: plan}), store, probe); err != nil {
-		return usagef("magus job fork: %s", err)
-	}
-	proof := store.WriteProof(plan, probe)
 	// A writing job is verified against the diff since its checkpoint, so one forked without
 	// a checkpoint could never pass. The fork records this checkout's state instead; where it
 	// cannot be read (no VCS here) the row stays without one and wait says why it cannot verify.
-	if !row.ReadOnly && row.Checkpoint == "" {
+	if !probe.ReadOnly && probe.Checkpoint == "" {
 		if token, err := checkoutBaseToken(ctx, root); err == nil {
 			row.Checkpoint = token
 		}
 	}
-	declare := job.Declare(row, globalCfg.Jobs.DefaultTimeout)
-	stored, err := store.Update(ctx, row.ID, func(u *types.Job) {
-		declare(u)
-		u.WriteProof = proof
-	})
-	if err != nil {
+	// The reader loads the graph only when a gate names a symbol, or when the deletion
+	// candidates ask for it, and the two share one load.
+	graph := newJobGraph(root, true)
+	stored, err := job.ForkMerge(ctx, store, row.ID, job.Declare(row, globalCfg.Jobs.DefaultTimeout), globalCfg.Jobs, graphSymbolReader(graph.load))
+	var refused *job.RefusedError
+	switch {
+	case errors.As(err, &refused):
 		return err
+	case err != nil:
+		return usagef("magus job fork: %s", err)
 	}
+	derived := slices.DeleteFunc(slices.Clone(stored.WritePaths), func(p string) bool { return slices.Contains(probe.WritePaths, p) })
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
-	switch opts.Format {
-	case outputName:
+	if opts.Format == outputName {
 		return emitNames([]string{stored.ID})
+	}
+	// The notes compare the row with its peers, which the merge read and did not return.
+	plan, err := store.List()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
 	case outputText:
 		fmt.Printf("forked %s, %s, with %d write path(s). Its holder reads the terms with `%s` and takes it with `%s`\n",
 			stored.ID, orDash(string(stored.State)), len(stored.WritePaths),

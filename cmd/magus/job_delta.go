@@ -11,7 +11,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
-	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -105,23 +104,6 @@ func readSymbolDelta(ctx context.Context, root string, g *knowledge.Graph, drive
 	delta.Added = slices.Compact(delta.Added)
 	slices.Sort(delta.Left)
 	return delta, true
-}
-
-// resolveForkGoals is the fork door's half of what job.Apply and job.ForkMerge do to a row:
-// freeze its signature goals, derive the claims its symbol goals imply, and hold those to
-// job.PlaceDerivedClaims, the rule all three doors share. It returns the row with the
-// placed claims added to its write paths, and those claims.
-func resolveForkGoals(ctx context.Context, store *job.Store, row types.Job, read job.SymbolReader) (types.Job, []string, error) {
-	resolved, derived, err := job.ResolveSymbolGoals(ctx, row, read)
-	if err != nil {
-		return types.Job{}, nil, err
-	}
-	placed, err := job.PlaceDerivedClaims(ctx, store, derived)
-	if err != nil {
-		return types.Job{}, nil, err
-	}
-	resolved.WritePaths = append(slices.Clone(row.WritePaths), placed...)
-	return resolved, placed, nil
 }
 
 // goExport is a Go symbol's name as a goal spells it, `Type#Member` for a member, and
