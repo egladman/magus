@@ -151,7 +151,7 @@ github.com/egladman/magus.Magus.MetricsCollector method(ptr) func() (*MetricsCol
 github.com/egladman/magus.Magus.MetricsSnapshot method(ptr) func(ctx context.Context) ([]byte, error)
 github.com/egladman/magus.Magus.ModelTierLens method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.ModelTierOutput, error)
 github.com/egladman/magus.Magus.ModelTierMatrix method(ptr) func() github.com/egladman/magus/types.ModelTierMatrix
-github.com/egladman/magus.Magus.ModelTiers method(ptr) func() *github.com/egladman/magus/types.ModelTierSet
+github.com/egladman/magus.Magus.ModelTiers method(ptr) func(ctx context.Context) *github.com/egladman/magus/types.ModelTierSet
 github.com/egladman/magus.Magus.OutputAttempts method(ptr) func(ctx context.Context, ref string) ([]OutputDescriptor, error)
 github.com/egladman/magus.Magus.OutputByRef method(ptr) func(ctx context.Context, ref string) ([]byte, OutputDescriptor, error)
 github.com/egladman/magus.Magus.OutputByRefRemote method(ptr) func(ctx context.Context, ref string) ([]byte, OutputDescriptor, error)
@@ -350,7 +350,7 @@ github.com/egladman/magus.WorkspaceRegistry.Harnesses method(ptr) func() []strin
 github.com/egladman/magus.WorkspaceRegistry.Keep method(ptr) func(release func())
 github.com/egladman/magus.WorkspaceRegistry.LifecycleProvider method(ptr) func() string
 github.com/egladman/magus.WorkspaceRegistry.ModelTierMatrix method(ptr) func() github.com/egladman/magus/types.ModelTierMatrix
-github.com/egladman/magus.WorkspaceRegistry.ModelTiers method(ptr) func() *github.com/egladman/magus/types.ModelTierSet
+github.com/egladman/magus.WorkspaceRegistry.ModelTiers method(ptr) func(ctx context.Context) *github.com/egladman/magus/types.ModelTierSet
 github.com/egladman/magus.WorkspaceRegistry.Profile method(ptr) func() github.com/egladman/magus/types.GuardProfile
 github.com/egladman/magus.WorkspaceRegistry.ProjectPaths method(ptr) func() []string
 github.com/egladman/magus.WorkspaceRegistry.Providers method(ptr) func() []string
