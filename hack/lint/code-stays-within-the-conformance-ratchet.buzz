@@ -31,6 +31,15 @@ export fun check(files: [Path]) > [Finding] !> any {
     return judge(report);
 }
 
+// indexFix is what makes an index current. An indexer that is not installed is fixed by
+// installing it, which a rebuild cannot do; status says so in the index's detail.
+export fun indexFix(op: str, detail: str) > str {
+    if (detail.indexOf("is not installed") != null) {
+        return "Install {op}, then rerun lint: {detail}.";
+    }
+    return "Rebuild it with `magus graph build`, then rerun lint.";
+}
+
 // judge is check's verdict over a magus\conformance report.
 export fun judge(report: {str: any}) > [Finding] !> any {
     final found = mut [<Finding>];
@@ -42,7 +51,7 @@ export fun judge(report: {str: any}) > [Finding] !> any {
             final lang: str = idx["language"] ?? "";
             found.append(Finding{ path = project,
                 message = "the {lang} symbol index of {project} is {freshness}, so its conformance cannot be judged",
-                fix = "Rebuild it with `magus graph build`, then rerun lint." });
+                fix = indexFix(idx["op"] ?? "", detail: idx["detail"] ?? "") });
         }
     }
     final answer: {str: any} = report["answer"] ?? {<str: any>};
@@ -189,6 +198,17 @@ test "a stale index or an unknown answer fails instead of passing on what it lac
     final indexes: [any] = [fresh()];
     final unknown = judge({"indexes": indexes, "answer": answer});
     assert\equal(unknown.len(), want: 1, message: "an unknown answer");
+}
+
+test "a missing indexer is fixed by installing it, not by a rebuild" {
+    final missing: {str: any} = {"project": {"path": "docs"}, "op": "scip-buzz", "language": "buzz",
+        "freshness": "not-indexed", "detail": "the buzz SCIP indexer (scip-buzz) is not installed"};
+    final got = judge(report([fresh(), missing], rows: [<any>], stale: [<any>]));
+    assert\equal(got.len(), want: 1, message: "the missing indexer");
+    assert\equal(got[0].fix, want: "Install scip-buzz, then rerun lint: the buzz SCIP indexer (scip-buzz) is not installed.",
+        message: "names the install");
+    assert\equal(indexFix("scip", detail: ""), want: "Rebuild it with `magus graph build`, then rerun lint.",
+        message: "a stale index rebuilds");
 }
 
 test "a scoped key names its scope" {
