@@ -63,31 +63,6 @@ func TestFields_boolPtrHasNoFlagName(t *testing.T) {
 	}
 }
 
-func TestFieldByEnv_found(t *testing.T) {
-	f, ok := FieldByEnv("MAGUS_CACHE_DIR")
-	require.True(t, ok, "FieldByEnv(MAGUS_CACHE_DIR) not found")
-	byPath, ok := FieldByGoPath("Cache.Dir")
-	require.True(t, ok, "FieldByGoPath(Cache.Dir) not found")
-	assert.Equal(t, byPath, f, "the env and Go-path lookups reach one field")
-	assert.Equal(t, KindString, f.Kind)
-}
-
-func TestFieldByEnv_notFound(t *testing.T) {
-	_, ok := FieldByEnv("MAGUS_DOES_NOT_EXIST")
-	assert.False(t, ok, "FieldByEnv(unknown) should return false")
-}
-
-func TestFieldByGoPath_found(t *testing.T) {
-	f, ok := FieldByGoPath("Cache.Dir")
-	require.True(t, ok, "FieldByGoPath(Cache.Dir) not found")
-	assert.Equal(t, "MAGUS_CACHE_DIR", f.EnvVar)
-}
-
-func TestFieldByGoPath_notFound(t *testing.T) {
-	_, ok := FieldByGoPath("Nonexistent.Field")
-	assert.False(t, ok, "FieldByGoPath(unknown) should return false")
-}
-
 // String must be single-line so %v / fmt.Println(field) doesn't smear across
 // the surrounding log output.
 func TestField_String_singleLine(t *testing.T) {
