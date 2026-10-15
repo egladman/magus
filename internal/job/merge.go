@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
@@ -262,6 +263,9 @@ var mergeFields = []string{
 // unknownParams rejects a key outside that set. A dropped key reads to its sender exactly
 // like one that was taken into account, and the tool then reports the row as written.
 func unknownParams(params map[string]any) error {
+	if dir, ok := params["checkout"]; ok {
+		return fmt.Errorf("job: a put names checkout %v, which only a fork makes, `%s` makes it", dir, hint.JobFork.With("<job>", "--checkout", fmt.Sprint(dir)))
+	}
 	var unknown []string
 	for key := range params {
 		if key == "op" || key == "id" || slices.Contains(mergeFields, key) {

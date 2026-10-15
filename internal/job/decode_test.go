@@ -202,7 +202,7 @@ func TestStoreStampedIsWhatJobHasAndDeclarationLacks(t *testing.T) {
 
 	assert.ElementsMatch(t, []string{
 		"holder", "releases", "unattributed", "entries", "write_proof", "reported_base",
-		"base_verdict", "registered_by", "registered", "checkout_root", "end_reason", "created",
+		"base_verdict", "registered_by", "registered", "checkout_root", "worktree", "end_reason", "created",
 		"updated", "deadline", "result", "attempt", "gate_attempts", "last_run", "integration",
 		"waiter_evidence", "model_tier", "rework_rounds", "widenings", "generation", "attempts",
 		"prior", "rejection",
@@ -356,11 +356,13 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 	t.Parallel()
 
 	legacy := map[string]bool{"owned_paths": true, "forbidden_paths": true, "focus": true, "tier": true}
-	// The envelope and the key, which a put names outside its map, and decode.go's own
-	// legacy compat.
+	// The envelope and the key, which a put names outside its map, decode.go's own legacy
+	// compat, and checkout, which only a fork makes.
 	skipped := func(field string) bool {
-		return field == "schema_version" || field == "requires" || field == "id" || legacy[field]
+		return field == "schema_version" || field == "requires" || field == "id" || field == "checkout" || legacy[field]
 	}
+	_, err := DecodePut(map[string]any{"checkout": "/tmp/co"})
+	require.ErrorContains(t, err, "which only a fork makes")
 	for _, field := range jsonFields(types.Declaration{}) {
 		if skipped(field) {
 			continue
@@ -385,7 +387,7 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 				"check": map[string]any{"target": "test", "project": "internal/job"},
 			}}
 		}
-		_, err := DecodePut(map[string]any{field: value})
+		_, err = DecodePut(map[string]any{field: value})
 		require.NoError(t, err, "magus\\job.put rejects %q, which `magus job fork` accepts", field)
 	}
 	var current []string
