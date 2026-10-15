@@ -189,23 +189,21 @@ func TestApplyFindingsSaysAnInferredRefusalAsAdvice(t *testing.T) {
 	refusal := []costFinding{{rule: denyRuleOrchestratorGroundwork, deny: true, key: "k", say: "first line.\nwhy."}}
 	pass := types.GuardJudgment{Decision: decisionPass}
 
-	v := applyFindings(markers, pass, refusal, types.ThreadReported)
-	wantV := v
-	wantV.Decision, wantV.Reason = decisionDeny, "first line.\nwhy."
-	assert.Equal(t, wantV, v)
+	assert.Equal(t, types.GuardJudgment{
+		Decision: decisionDeny, Reason: "first line.\nwhy.", Rule: string(denyRuleOrchestratorGroundwork),
+	}, applyFindings(markers, pass, refusal, types.ThreadReported))
 
-	v = applyFindings(markers, pass, refusal, types.ThreadInferred)
-	wantV = v
-	wantV.Decision, wantV.Rule = decisionAdvise, string(denyRuleOrchestratorGroundwork)
-	wantV.Context = "first line." // advice carries the verdict line
-	assert.Equal(t, wantV, v)
+	assert.Equal(t, types.GuardJudgment{
+		Decision: decisionAdvise, Rule: string(denyRuleOrchestratorGroundwork),
+		Context: "first line.", // advice carries the verdict line
+	}, applyFindings(markers, pass, refusal, types.ThreadInferred))
 	assert.Equal(t, decisionPass, applyFindings(markers, pass, refusal, types.ThreadInferred).Decision, "once a session")
 
 	advised := types.GuardJudgment{Decision: decisionAdvise, Context: "earlier", Rule: "graph-stale"}
-	v = applyFindings(hint.NewGate(t.TempDir(), "s"), advised, []costFinding{{rule: denyRuleRootRepeat, key: "r", say: "again."}}, types.ThreadReported)
-	wantV = v
-	wantV.Context, wantV.Rule = "earlier\n\nagain.", "graph-stale" // added to the advice already there
-	assert.Equal(t, wantV, v)
+	assert.Equal(t, types.GuardJudgment{
+		Decision: decisionAdvise, Rule: "graph-stale",
+		Context: "earlier\n\nagain.", // added to the advice already there
+	}, applyFindings(hint.NewGate(t.TempDir(), "s"), advised, []costFinding{{rule: denyRuleRootRepeat, key: "r", say: "again."}}, types.ThreadReported))
 }
 
 func TestShadowVerdicts(t *testing.T) {

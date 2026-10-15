@@ -245,7 +245,7 @@ func TestConformLoadsFromYAML(t *testing.T) {
 		Ratchet:   "hack/policy/conform.json",
 		MinSample: 10,
 		Step:      0.05,
-		Gates:     Defaults().Knowledge.Conform.Gates,
+		Gates:     ConformGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
 		Checks: map[types.ConformMetric]map[types.ConformPopulation]ConformLimitConfig{
 			types.ConformDepFanout: {types.ConformPopSource: {Percentile: 90, Anchor: 20, Scopes: map[string]int{"cmd/tool": 31}}},
 		},
