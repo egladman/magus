@@ -126,7 +126,7 @@ func WithoutWorkspaceProviders() Option {
 
 // WorkspaceRegistry holds project-option overrides and target policies for a single Open.
 // Fill one with RegisterProject, then hand it to Open or Inspect with
-// [WithWorkspaceRegistry]. It is not safe for concurrent use while being filled.
+// [WithWorkspaceRegistry]. Its methods are safe for concurrent use.
 type WorkspaceRegistry struct{ r *workspace.WorkspaceRegistry }
 
 // NewWorkspaceRegistry returns an empty WorkspaceRegistry.

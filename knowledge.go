@@ -24,7 +24,6 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
-	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/deps"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -125,8 +124,9 @@ func buildRegisteredWorkspace(ctx context.Context, root string, getenv func(stri
 	if err != nil {
 		return nil, err
 	}
-	if err := configgen.ApplyEnv(&wcfg, getenv); err != nil {
-		return nil, fmt.Errorf("invalid configuration from the environment: %w", err)
+	// Its own cache.dir wins; MAGUS_CACHE_DIR places a workspace that declares none.
+	if wcfg.Cache.Dir == "" {
+		wcfg.Cache.Dir = getenv("MAGUS_CACHE_DIR")
 	}
 	wsRepo, err := Inspect(ctx, root, opts...)
 	if err != nil {

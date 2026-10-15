@@ -41,13 +41,13 @@ func (m *Magus) judge(ctx context.Context, req guard.Request) (types.GuardJudgme
 			if m.ownRoot(root) {
 				return m, nil
 			}
-			return Inspect(ctx, root)
+			return Inspect(ctx, root, m.processOptions()...)
 		},
 		CacheDir: func(root string) (string, error) {
 			if m.ownRoot(root) {
 				return m.CacheDir(), nil
 			}
-			return ResolveCacheDir(root)
+			return ResolveCacheDir(root, m.processOptions()...)
 		},
 	})
 	if deps.LoadFailure != nil {
