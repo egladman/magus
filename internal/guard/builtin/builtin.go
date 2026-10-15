@@ -29,22 +29,22 @@ const (
 // fires at, taken only by the rules params lists for it; 0 means unset, and the binary
 // ships no number for it.
 type Setting struct {
-	Decision Decision
+	Decision Decision `json:"decision"`
 	// Lines is the size of a whole read worth flagging.
-	Lines int
+	Lines int `json:"lines"`
 	// Tokens is a context size in tokens.
-	Tokens int
+	Tokens int `json:"tokens"`
 	// Calls is a count of calls in a row.
-	Calls int
+	Calls int `json:"calls"`
 	// Chars is the size of one tool result in characters.
-	Chars int
+	Chars int `json:"chars"`
 	// Markers are text a rule notices a write adding, each matched literally. Resolve
 	// fills the rule's own list when none is declared.
-	Markers []string
+	Markers []string `json:"markers"`
 	// Profile is the level whose row gave this setting, empty for one the workspace
 	// declared or a compiled default. A rule whose figures depend on the level and the
 	// account's billing reads it when no parameter is set.
-	Profile types.GuardProfile
+	Profile types.GuardProfile `json:"profile"`
 }
 
 const (

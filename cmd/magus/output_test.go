@@ -523,7 +523,9 @@ func TestOutputDstSilentTee(t *testing.T) {
 			global.silent = tc.silent
 
 			stdout := captureStdout(t, func() {
-				require.NoError(t, emitFormatted(OutputOptions{Format: outputJSON}, struct{ N int }{N: 7}))
+				require.NoError(t, emitFormatted(OutputOptions{Format: outputJSON}, struct {
+					N int `json:"N"`
+				}{N: 7}))
 			})
 
 			assert.Equal(t, tc.wantStdout, stdout)

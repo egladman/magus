@@ -77,8 +77,9 @@ type HarnessDescriptor struct {
 	Settings       []HarnessSetting   `json:"settings,omitempty"`
 	Limits         HarnessLimits      `json:"limits,omitzero"`
 	// Models are the rows of the models this host runs, as its harness_models op returns
-	// them; nil for a harness that publishes none.
-	Models []types.ModelPricing `json:"models,omitempty"`
+	// them; nil for a harness that publishes none. Never read from JSON: the op's rows
+	// are decoded separately, since types.ModelPricing carries no wire tags.
+	Models []types.ModelPricing `json:"-"`
 }
 
 // HarnessLimits are how long the host waits, in milliseconds: on a shell command in the
