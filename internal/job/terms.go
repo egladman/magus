@@ -61,6 +61,10 @@ type Terms struct {
 	// affinity as a reason to reduce parallelism, which is the orchestrator's call to
 	// make and not a path this worker is refused.
 	Affinity []TermsAffinity `json:"affinity,omitempty" yaml:"affinity,omitempty"`
+	// Grouping is the grouping lens over the groups that wrote in the lease's projects: what
+	// splitting or chaining work there cost before. Facts for the orchestrator, like
+	// Affinity; nil when it was not read.
+	Grouping *types.GroupingOutput `json:"grouping,omitempty" yaml:"grouping,omitempty"`
 	// Stage is where the workspace's releases stand, from its newest tag. The zero stage is
 	// unknown and renders nothing.
 	Stage types.ReleaseStage `json:"stage" yaml:"stage"`
@@ -115,6 +119,7 @@ type TermsFacts struct {
 	RegeneratedOutside []RegeneratedOutput
 	UnrunGates         []UnrunGate
 	Affinity           []TermsAffinity
+	Grouping           *types.GroupingOutput
 	Stage              types.ReleaseStage
 	DeletionCandidates []types.UnreferencedEntry
 }
@@ -131,6 +136,7 @@ func NewTerms(row types.Job, facts TermsFacts) Terms {
 		RegeneratedOutside: facts.RegeneratedOutside,
 		UnrunGates:         facts.UnrunGates,
 		Affinity:           facts.Affinity,
+		Grouping:           facts.Grouping,
 		Stage:              facts.Stage,
 		DeletionCandidates: facts.DeletionCandidates,
 	}
@@ -181,6 +187,9 @@ func (b Terms) String() string {
 			lines[i] = fmt.Sprintf("%s changes with %s in %d commits, and neither declares a dependency on the other", a.Project, a.With, a.Commits)
 		}
 		writeList(&s, "affinity warnings", lines)
+	}
+	if b.Grouping != nil {
+		writeList(&s, "grouping history", groupingLines(*b.Grouping))
 	}
 
 	switch {

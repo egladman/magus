@@ -74,6 +74,19 @@ func TestTermsRendersUnrunGatesAsASection(t *testing.T) {
 		"the section sits among the facts, ahead of the check")
 }
 
+// The grouping history renders only when it was read, and a lens with nothing for the
+// lease's projects says so rather than dropping the section.
+func TestTermsRendersTheGroupingHistoryWhenItWasRead(t *testing.T) {
+	t.Parallel()
+
+	assert.NotContains(t, NewTerms(briefRow(), TermsFacts{}).String(), "grouping history")
+
+	empty := GroupingRecords(nil, []string{"internal/a"})
+	got := NewTerms(briefRow(), TermsFacts{Grouping: &empty}).String()
+	assert.Contains(t, got, "\ngrouping history\n  none recorded for these projects\n")
+	assert.Less(t, strings.Index(got, "grouping history"), strings.Index(got, "the only check you run"))
+}
+
 // The interface is what the holder implements, so it leads; what the job may break, the
 // release stage and the deletion candidates follow the criteria in that order, and the
 // check stays the only check named.
