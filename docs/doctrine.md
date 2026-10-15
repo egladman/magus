@@ -377,9 +377,27 @@ is a toll, and a toll is removed. This principle never slows
 a cache hit stays instant, and the pause belongs to the act that leaves the
 machine.
 
-The mechanisms are the ones named above. The debt is the rest of magus:
-the console and the Go SDK have not been read against this entry, and until
-they are, their smoothness is unexamined rather than chosen.
+The [Go SDK](reference/go-sdk.md) has been read against this entry, and holds
+these rules:
+
+- Every verdict comes back with its reason and its rule: a
+  `types.GuardJudgment` names the rule that decided, a `JobStatus` lists its
+  violations, and a knowledge answer keeps unknown apart from absent.
+- No silent default. A workspace with a magusfile and no linked engine fails
+  with [MGS1104](reference/codes/capability/MGS1104.md), and a library
+  workspace reads no environment unless it is given `WithEnv`.
+- No helper hides a refusal: the SDK never retries, forks, escalates or
+  re-grades on the caller's behalf.
+- Ambient state appears in the signature. The lease rides `ctx` through
+  `types.WithJobLease`, the session is `WithSession`, the environment is
+  `WithEnv`, and stderr is `WithStderr`.
+- A swappable part is a small interface with one option (`WithVCSDriver`,
+  `WithObserver`, `WithCacheBackend`), built only where a second
+  implementation exists.
+- The root package grows only by wrapping code that already exists.
+
+The debt is the rest of magus: the console has not been read against this
+entry, and until it is, its smoothness is unexamined rather than chosen.
 
 ### Worth cloning
 
@@ -854,6 +872,8 @@ removed, with what decided each and where to check it.
 | a skill as the home of a rule that must hold on every edit                                                                    | not built: `magus-local-development` loaded in 154 of 756 sessions that edited Go (20 percent; 30 percent of roots, 20 percent of subagents), counting host edit tools only, so the figure is a floor. The load rate rose from 4 to 20 to 61 percent across three windows only as job briefs began naming the skill; no hook demands it. A rule every session must follow goes in `AGENTS.md`; see [Where a rule lives](https://github.com/egladman/magus/blob/main/CONTRIBUTING.md#where-a-rule-lives)                         | local skill audit, transcripts 2026-09-15 to 2026-10-13                                                              |
 | a host prompt when a worker adds a compat marker                                                                              | not built: a worker has no person to answer it, and prose forbidding compatibility shims since 2026-09-24 did not hold (14 of 34 `compat(until:)` shims landed after it, 6 after 2026-10-08). A worker's marker gets an advisory and one attention row for the root, as a stall does                                                                                                                                                                                                                                            | delete-bias measurement, 2026-10-13; [ADR 0009](decisions/0009-cost-profiles-for-agent-sessions.md)                  |
 | a model that watches workers for stalls, of any size                                                                          | not built: magus never calls a model, and the watcher would cost more than the stalls it caught. Across 1,393 subagent transcripts in the 14 days to 2026-10-13, every model tier hit runs of three or more failed calls at 3.0 to 5.1 per 1,000 calls, and all 570 such runs ended on the worker's next successful call                                                                                                                                                                                                        | subagent transcript measurement, 2026-10-13; [ADR 0009](decisions/0009-cost-profiles-for-agent-sessions.md)          |
+| an agent loop in the Go SDK: reading a model's tool call and choosing what runs next                                          | not built: magus is the substrate around a loop (leases, verdicts, graph answers, the trail, grades), and the loop belongs to the embedder. A loop would make magus a harness, the category its scope says it is not                                                                                                                                                                                                                                                                                                            | [scope](scope.md#where-others-drew-it); [the Go SDK](reference/go-sdk.md#what-the-sdk-leaves-out)                    |
+| a model router: per-call model choice, live switching, escalation                                                             | not built: the tier table is static and declared. A repository may pick a tier at fork time, with its answer and reason on the row; retrospective insight reports what each tier achieved; and a person changes the table, the human in the loop                                                                                                                                                                                                                                                                                | [ADR 0009](decisions/0009-cost-profiles-for-agent-sessions.md); [Human in the loop](#human-in-the-loop)              |
 | the root as the stall watcher                                                                                                 | not built: the root is the most expensive context in a session, so polling workers spends the dearest tokens on the cheapest work. The root receives one attention row for a block only it can clear                                                                                                                                                                                                                                                                                                                            | [ADR 0009](decisions/0009-cost-profiles-for-agent-sessions.md), 2026-10-13                                           |
 | a stall message that gives the worker the answer                                                                              | not built: the message names a region (the job's criteria, its write paths, the command that answers the refusal), never the fix. Handing over the answer makes a cheap model a typist for magus, and the text grows into a second skill nobody maintains                                                                                                                                                                                                                                                                       | [ADR 0009](decisions/0009-cost-profiles-for-agent-sessions.md), 2026-10-13                                           |
 | per-model stall behavior, or a model name in a Go conditional                                                                 | not built until measured: the tiers showed no gap (Haiku 3.6, Sonnet 3.0, Opus 3.3 and Fable 5.1 runs per 1,000 calls; the Haiku sample was 33 agents), so a per-model ladder waits for two weeks of shadow verdicts and goes only to a tier that stalls at least twice as often. A row states the model and the block count and never suggests another model                                                                                                                                                                   | subagent transcript measurement, 2026-10-13; [ADR 0009](decisions/0009-cost-profiles-for-agent-sessions.md)          |
