@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/spells"
 )
 
-func init() {
+func init() { //nolint:gochecknoinits // every binary that links internal/interp dispatches magusfile targets through this internal spell
 	// Internal: this is the dispatch path for a magusfile's OWN targets, not a
 	// toolchain adapter, and it is not one of the spells a user binds. See
 	// [spells.WithInternal] for why the distinction is load-bearing rather than

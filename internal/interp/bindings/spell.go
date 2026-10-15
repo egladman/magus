@@ -31,7 +31,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func init() {
+func init() { //nolint:gochecknoinits // project cannot link the Buzz VM; the ensure hook and import check register from the layer that can
 	// Lazy-register so fast subcommands (help, version) skip the registration loop entirely.
 	project.DefaultSpellRegistry().SetEnsureHook(ensureSpellsRegistered)
 	// Validate magus/spell/<handle> imports at magusfile load (did-you-mean for typos).

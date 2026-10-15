@@ -17,7 +17,7 @@ import (
 // secret provider needs the Buzz VM to run the spell's handler op. It registers itself
 // with the secret package at init, so core can resolve through a spell provider without
 // linking the VM: the same indirection ci_provider.go and remote_cache.go use.
-func init() {
+func init() { //nolint:gochecknoinits // internal/secret cannot link the Buzz VM; the opener registers from the layer that can
 	secret.RegisterProviderOpener(openSpellSecretProvider)
 }
 

@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func init() {
+func init() { //nolint:gochecknoinits // internal/interp cannot link the Buzz VM; the host bindings register from the layer that can
 	interp.RegisterBuzzHostBindings(registerAllBuzz)
 }
 

@@ -1707,7 +1707,7 @@ func nonLiteralInit(c locatedCall) string {
 	return ""
 }
 
-func init() { std.RegisterVCSLeaseGate(vcsCmdRefusal) }
+func init() { std.RegisterVCSLeaseGate(vcsCmdRefusal) } //nolint:gochecknoinits // std cannot import guard; every binary that links the guard registers the vcs lease gate
 
 // vcsCmdRefusal is lease-vcs for vcs\cmd, which a Buzz process runs under row in dir with
 // env, the environment the child starts with. The process knows no session or subagent, so

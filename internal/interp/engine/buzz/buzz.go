@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
-func init() {
+func init() { //nolint:gochecknoinits // the engine registry cannot import the Buzz engine; a blank import of buzzengine is the SDK contract
 	engine.Register("buzz", engineImpl{})
 }
 

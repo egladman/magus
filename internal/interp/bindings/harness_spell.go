@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func init() {
+func init() { //nolint:gochecknoinits // internal/agent cannot link the Buzz VM; the loader registers from the layer that can
 	agent.RegisterHarnessSpellLoader(loadHarnessFromSpell)
 }
 

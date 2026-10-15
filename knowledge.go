@@ -46,7 +46,7 @@ import (
 )
 
 // workspacegraph cannot import this package, so the builders are registered from here.
-func init() {
+func init() { //nolint:gochecknoinits // workspacegraph cannot import this package, so the builders register from here
 	workspacegraph.Register(workspacegraph.Builders{
 		BuildGlobal:          buildGlobalKnowledgeGraph,
 		Build:                buildKnowledgeGraph,

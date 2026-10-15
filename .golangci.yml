@@ -129,6 +129,11 @@ linters:
     # types is the near-leaf domain package; see the rule below.
     - depguard
 
+    # A new init() fails lint. Each kept site carries //nolint:gochecknoinits with its
+    # reason, which nolintlint requires, so adding one is a reviewable exception.
+    # Generated protobuf code and test files are excluded by path below.
+    - gochecknoinits
+
   settings:
     depguard:
       rules:
@@ -740,7 +745,11 @@ linters:
       # checks (gosec, gocritic, prealloc, bodyclose, misspell) that are noise in
       # test fixtures (synthetic responses, deliberate typo fixtures).
       - path: _test\.go
-        linters: [revive, unparam, errcheck, forcetypeassert, nilnil, gosec, gocritic, prealloc, bodyclose, misspell]
+        linters: [revive, unparam, errcheck, forcetypeassert, nilnil, gosec, gocritic, prealloc, bodyclose, misspell, gochecknoinits]
+
+      # protoc-gen-go emits an init() into every .pb.go and the file is never hand-edited.
+      - path: ^proto/gen/
+        linters: [gochecknoinits]
 
       # stdversion cannot model GOEXPERIMENT. internal/json/json_v2.go sits behind
       # //go:build goexperiment.jsonv2, where encoding/json/v2 IS available on the

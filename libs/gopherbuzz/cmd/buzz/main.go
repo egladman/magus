@@ -43,7 +43,7 @@ var (
 // zdef() into single-thread-affine C frameworks (macOS AppKit above all)
 // must issue those calls from the main thread; without the lock the main
 // goroutine may migrate. Free for everything else, so it is unconditional.
-func init() {
+func init() { //nolint:gochecknoinits // runtime.LockOSThread pins the main goroutine to the main thread only when called from init
 	runtime.LockOSThread()
 }
 

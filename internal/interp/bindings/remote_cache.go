@@ -25,7 +25,7 @@ import (
 // spell-backed remote cache needs the Buzz VM to run the backend spell's
 // handler ops. It registers itself with the cache package at init, so the magus
 // library can select the "spell" backend through a hook without linking the VM.
-func init() {
+func init() { //nolint:gochecknoinits // internal/cache cannot link the Buzz VM; the backend opener registers from the layer that can
 	cache.RegisterRemoteBackendOpener(openSpellRemoteBackend)
 }
 

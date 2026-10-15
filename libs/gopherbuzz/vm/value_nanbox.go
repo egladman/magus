@@ -164,7 +164,7 @@ var (
 	gHeapPtr atomic.Pointer[[]heapVal]
 )
 
-func init() {
+func init() { //nolint:gochecknoinits // seeds the heap table so the hot-path Load is never nil; atomic.Pointer has no by-value initializer
 	s := make([]heapVal, 0, 256)
 	gHeapPtr.Store(&s)
 	gHeapOwner = make([]*Owner, 0, 256)

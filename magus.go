@@ -230,7 +230,7 @@ func envGetter(env []string) func(string) string {
 }
 
 // internal/workspace cannot import this package, so the view is registered from here.
-func init() { workspace.SetView(internalView) }
+func init() { workspace.SetView(internalView) } //nolint:gochecknoinits // internal/workspace cannot import this package, so the view registers from here
 
 // internalView is workspace.View's answer: a *Magus as its internals, any other workspace
 // unchanged.
