@@ -390,8 +390,12 @@ func TestConformanceCallSequenceRow(t *testing.T) {
 	}}
 	out := g.Conformance(o)
 	row = conformanceRowFor(t, out, types.ConformanceCallSequence, types.ConformancePopSource, "")
-	assert.Equal(t, 1, row.Known)
-	assert.Equal(t, []types.ConformanceItem{{ID: "internal/a/a.go#A", Source: "internal/a/a.go:1", Measure: 8}}, row.Violations)
+	row.P50, row.P90, row.P95, row.P99 = 0, 0, 0, 0
+	assert.Equal(t, types.ConformanceRow{
+		Key: types.ConformanceKey{Metric: types.ConformanceCallSequence, Population: types.ConformancePopSource},
+		N:   3, Live: 8, Value: 7, Anchor: 7, Known: 1, Source: types.ConformanceFromAnchor,
+		Violations: []types.ConformanceItem{{ID: "internal/a/a.go#A", Source: "internal/a/a.go:1", Measure: 8}},
+	}, row)
 	assert.Equal(t, []types.ConformanceKnown{
 		{Metric: types.ConformanceCallSequence, Items: []string{"internal/c/c.go#C"}, Reason: "fold pending", Line: 3},
 	}, out.Stale, "C is under the value")

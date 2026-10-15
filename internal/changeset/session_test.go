@@ -158,8 +158,8 @@ func TestViewedAndSeenAreAppendedAsJSONLines(t *testing.T) {
 	assert.Equal(t, `{"id":"t1"}`+"\n"+`{"id":"t2"}`+"\n", string(seen))
 
 	restored := NewStore(dir).Attach("/w", "working", types.Diff{}, "")
-	assert.Equal(t, []string{"d2"}, restored.Viewed)
-	assert.Equal(t, []string{"t1", "t2"}, restored.SeenComments)
+	want := &types.DiffReview{ID: "rev1", Base: "working", Cursor: types.DiffCursor{Hunk: -1}, Viewed: []string{"d2"}, SeenComments: []string{"t1", "t2"}, Comments: []types.DiffComment{}}
+	assert.Equal(t, want, restored)
 }
 
 // Compaction is the one rewrite: once the file is file.CompactDue, it is rewritten to its last

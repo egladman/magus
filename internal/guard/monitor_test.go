@@ -143,8 +143,8 @@ func TestAWaitLoopIsDeniedWhicheverToolRunsIt(t *testing.T) {
 			env["hook_event_name"] = "PreToolUse"
 			env["tool_input"].(map[string]any)["command"] = loop
 			v := Judge(ctx, deps, Request{Input: hookJSON(t, env), Host: "claude-code"})
-			assert.Equal(t, "deny", v.Decision, "%s: %s", name, loop)
-			assert.Equal(t, string(denyRuleBusyWait), v.Rule, "%s: %s", name, loop)
+			shape, _ := spoken(v)
+			assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleBusyWait)}, shape, "%s: %s", name, loop)
 		}
 	}
 }

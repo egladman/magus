@@ -25,8 +25,13 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/report"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
+
+// TestMain keeps PIPETEST_*, which configures the stages this binary re-executes as, past
+// the isolation that drops every other variable.
+func TestMain(m *testing.M) { testkit.Main(m, "PIPETEST_*", spawn.AncestorsEnvVar) }
 
 // testRoot is the workspace root every stage of these tests records under.
 const testRoot = "/ws"

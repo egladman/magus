@@ -470,8 +470,11 @@ func TestDiffConformanceReadsTheRatchetAndItsBase(t *testing.T) {
 	assert.Equal(t, 70, base.Thresholds[0].Value, "the base is the record before the patch")
 	wantGates := shippedConformance().Gates
 	wantGates.MinCohort = 7
-	assert.Equal(t, wantGates, o.Gates, "a review's override wins and an unset one keeps the configured gate")
-	assert.Equal(t, generated, o.Generated)
+	want := ratchetConformance()
+	want.Gates = wantGates
+	want.Generated = generated
+	want.Ratchet = o.Ratchet
+	assert.Equal(t, want, o, "a review's override wins and an unset one keeps the configured gate")
 
 	_, base, _, err = diffConformance(ratchetConformance(), diffConfig{}, trailPatch, nil, readRatchet(ratchetHead))
 	require.NoError(t, err)

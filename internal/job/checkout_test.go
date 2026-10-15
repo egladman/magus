@@ -10,11 +10,31 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// The records-swept log is read by its last line and compacted to one line once it is due.
+func TestRecordsSweptKeepsItsLastPass(t *testing.T) {
+	t.Parallel()
+
+	s := tmpStore(t, t.TempDir())
+	path, err := s.Path()
+	require.NoError(t, err)
+	rows := []types.Job{{ID: "a"}}
+	passes := int64(2 + file.CompactSlack + 1)
+	for at := range passes {
+		s.writeRecordsSwept(at, rows)
+	}
+	read, err := file.ReadLines(filepath.Join(filepath.Dir(path), recordsSweptFile))
+	require.NoError(t, err)
+	assert.Len(t, read.Lines, 1, "the pass that made the log due rewrote it")
+	assert.True(t, s.recordsSwept(passes-1, rows))
+	assert.False(t, s.recordsSwept(passes-1, nil), "a row the last pass saw has gone")
+}
 
 // TestMain isolates the environment: lease markers live under XDG_STATE_HOME, and the
 // parallel tests here cannot pin it one test at a time.

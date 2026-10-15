@@ -142,10 +142,8 @@ func TestCheckConformanceRatchet(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := conformanceRunner(t, tc.ws).checkConformanceRatchet(nil)
 
-			assert.Equal(t, "conformance-ratchet", got.Name)
-			assert.Equal(t, tc.status, got.Status)
-			assert.Equal(t, tc.evidence, got.Evidence)
-			assert.Equal(t, tc.details, got.Details)
+			got.Message = ""
+			assert.Equal(t, types.Check{Name: "conformance-ratchet", Status: tc.status, Evidence: tc.evidence, Details: tc.details}, got)
 		})
 	}
 }
@@ -196,7 +194,6 @@ func TestCheckConformanceRatchetWithNoRatchetConfiguredIsQuiet(t *testing.T) {
 
 	got := r.checkConformanceRatchet(nil)
 
-	assert.Equal(t, types.CheckOK, got.Status)
-	assert.Equal(t, types.EvidenceMeasured, got.Evidence)
-	assert.Empty(t, got.Details)
+	got.Message = ""
+	assert.Equal(t, types.Check{Name: "conformance-ratchet", Status: types.CheckOK, Evidence: types.EvidenceMeasured}, got)
 }

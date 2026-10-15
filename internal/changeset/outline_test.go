@@ -115,7 +115,7 @@ func TestSetOutlineHoldsOneOutlinePerThreadInMemory(t *testing.T) {
 	}, other.Outlines)
 	assert.Equal(t, other.Outlines, s.Get("/w").Outlines)
 	drafts, err := NewStore(dir).LoadDrafts()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Empty(t, drafts, "an outline is never persisted")
 }
 

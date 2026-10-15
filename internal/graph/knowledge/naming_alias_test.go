@@ -43,11 +43,16 @@ func TestAliasCheckReportsAnAliasedImport(t *testing.T) {
 
 			require.Len(t, got[symID(use)], 1)
 			c := got[symID(use)][0]
-			assert.Equal(t, types.CheckImportAlias, c.Name)
-			assert.Equal(t, tc.message, c.Message)
 			n := len(c.Details)
 			require.Greater(t, n, len(tc.past))
-			assert.Equal(t, append(tc.past, "rename the package, or record a known entry with the reason"), c.Details[n-len(tc.past)-1:])
+			c.Details = c.Details[n-len(tc.past)-1:]
+			assert.Equal(t, types.Check{
+				Name:     types.CheckImportAlias,
+				Status:   types.CheckAdvice,
+				Evidence: types.EvidenceInferred,
+				Message:  tc.message,
+				Details:  append(tc.past, "rename the package, or record a known entry with the reason"),
+			}, c)
 		})
 	}
 }
