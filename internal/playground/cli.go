@@ -12,8 +12,7 @@ import (
 // are generated from.
 //
 // It is a read of a declaration, not a second copy of one. internal/cli is
-// pure data (it imports flag and time and nothing else), so it compiles to
-// js/wasm unchanged, and the console gets every subcommand and flag magus
+// pure data that compiles to js/wasm unchanged, and the console gets every subcommand and flag magus
 // actually has without listing any of them here.
 //
 // What the console still CANNOT do is run them. A browser has no processes, no

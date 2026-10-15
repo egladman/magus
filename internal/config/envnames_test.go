@@ -92,9 +92,9 @@ func TestMisconfiguredEnvNamesEachProblem(t *testing.T) {
 // pass it without saying what happened to it.
 func TestRetiredEnvIsNotRegistered(t *testing.T) {
 	for old := range retiredEnv {
-		assert.False(t, registeredEnv()[old], "%s is retired but still in EnvVarDocs", old)
+		assert.False(t, registeredEnv()[old], "%s is retired but still in EnvVars", old)
 	}
 	for name := range inheritedEnv {
-		assert.False(t, registeredEnv()[name], "%s is inherited-only but also in EnvVarDocs", name)
+		assert.False(t, registeredEnv()[name], "%s is inherited-only but also in EnvVars", name)
 	}
 }

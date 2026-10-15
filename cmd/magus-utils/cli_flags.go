@@ -328,30 +328,35 @@ func bindMethod(k cli.FlagKind) string {
 }
 
 // flagDefaultLiteral renders a Flag's default as Go source for the generated binder.
+// A nil Default is the kind's zero; a Default of another Go type panics, since the
+// binder would otherwise bind a default the declaration does not say.
 func flagDefaultLiteral(f cli.Flag) string {
 	switch f.Kind {
 	case cli.FlagBool:
-		if v, ok := f.Default.(bool); ok && v {
-			return "true"
-		}
-		return "false"
+		return fmt.Sprintf("%t", defaultAs[bool](f))
 	case cli.FlagInt:
-		if v, ok := f.Default.(int); ok {
-			return fmt.Sprintf("%d", v)
-		}
-		return "0"
+		return fmt.Sprintf("%d", defaultAs[int](f))
 	case cli.FlagDuration:
-		if v, ok := f.Default.(time.Duration); ok {
+		if v := defaultAs[time.Duration](f); v != 0 {
 			return fmt.Sprintf("time.Duration(%d)", int64(v))
 		}
 		return "0"
 	case cli.FlagString:
-		if v, ok := f.Default.(string); ok {
-			return fmt.Sprintf("%q", v)
-		}
-		return `""`
+		return fmt.Sprintf("%q", defaultAs[string](f))
 	}
 	panic("cliflags: unknown flag kind " + string(f.Kind))
+}
+
+func defaultAs[T any](f cli.Flag) T {
+	var zero T
+	if f.Default == nil {
+		return zero
+	}
+	v, ok := f.Default.(T)
+	if !ok {
+		panic(fmt.Sprintf("cliflags: flag --%s is %s but its default %v is a %T", f.Name, f.Kind, f.Default, f.Default))
+	}
+	return v
 }
 
 // renderConsts renders one command's flags, skipping a name it has already emitted so

@@ -161,7 +161,7 @@ func writeExitStatusRoff(w *writer, codes []ExitCode) {
 func writeEnvSectionRoff(w *writer) {
 	w.SH("Environment")
 	w.Indent()
-	for _, doc := range config.EnvVarDocs() {
+	for _, doc := range config.EnvVars() {
 		body := escape(doc.Desc)
 		if doc.Default != "" {
 			body += ` (default: ` + escape(doc.Default) + `)`

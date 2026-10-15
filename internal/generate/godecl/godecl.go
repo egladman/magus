@@ -3,7 +3,7 @@
 //
 // It is the reading half of the generator pipeline; [github.com/egladman/magus/internal/generate/emit]
 // is the writing half. Only the GENERIC readers live here: a struct's tags, a doc
-// line, a slice-of-struct literal, a file's flag bindings. Domain walkers that know
+// line, a file's flag bindings. Domain walkers that know
 // what the declaration MEANS (config's flag/env/yaml derivation, for one) stay beside
 // the schema they interpret, because their output type is domain-specific and moving
 // them here would drag that vocabulary along.
@@ -51,53 +51,6 @@ func Tag(raw, key string) string {
 // TagRaw returns the full value of key in a struct tag, options included.
 func TagRaw(raw, key string) string {
 	return reflect.StructTag(strings.Trim(raw, "`")).Get(key)
-}
-
-// StructLiteral is one entry of a slice-of-struct declaration: its field names mapped
-// to their string values. Only string-valued fields are captured, which is all a
-// generator reading a declaration table needs.
-type StructLiteral map[string]string
-
-// SliceOfStructs reads `var <name> = []T{{Field: "v", ...}, ...}` from file.
-//
-// This is the shape a declaration table takes in Go (the list of subcommands, of
-// modules, of diagnostics), and reading it from the AST rather than by matching text
-// means a reformatted, reordered or re-commented table still parses.
-func SliceOfStructs(file *ast.File, name string) []StructLiteral {
-	var out []StructLiteral
-	ast.Inspect(file, func(n ast.Node) bool {
-		vs, ok := n.(*ast.ValueSpec)
-		if !ok || len(vs.Names) == 0 || vs.Names[0].Name != name || len(vs.Values) == 0 {
-			return true
-		}
-		lit, ok := vs.Values[0].(*ast.CompositeLit)
-		if !ok {
-			return true
-		}
-		for _, el := range lit.Elts {
-			entry, ok := el.(*ast.CompositeLit)
-			if !ok {
-				continue
-			}
-			fields := StructLiteral{}
-			for _, f := range entry.Elts {
-				kv, ok := f.(*ast.KeyValueExpr)
-				if !ok {
-					continue
-				}
-				key, kok := kv.Key.(*ast.Ident)
-				val, vok := kv.Value.(*ast.BasicLit)
-				if kok && vok && val.Kind == token.STRING {
-					fields[key.Name] = strings.Trim(val.Value, `"`)
-				}
-			}
-			if len(fields) > 0 {
-				out = append(out, fields)
-			}
-		}
-		return false
-	})
-	return out
 }
 
 // flagBinders are the flag.FlagSet methods that name a flag in their first argument.

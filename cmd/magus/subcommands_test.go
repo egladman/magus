@@ -39,8 +39,8 @@ func TestCLICommandHeadsAreRealSubcommands(t *testing.T) {
 // rejects: `magus config mcp token print` (the operator token moved to `config token`),
 // `magus notes new <name>`, and a bare `magus ci`. Each had a real head, so nothing failed.
 //
-// Resolution walks internal/cli's tree, the same hand-maintained mirror
-// TestManpageCoversEverySubcommand pins to knownSubcommands at the top level. A mirror is
+// Resolution walks internal/cli's tree, which knownSubcommands is read from at the top
+// level. A mirror is
 // the strongest target available: most families dispatch on a bare switch with no
 // accept-list to read, so an assertion against the router itself needs those switches
 // restructured first. It is only worth as much as the mirror is complete, which is what
@@ -169,39 +169,6 @@ func TestCLICommandQueryOutputForm(t *testing.T) {
 	}
 }
 
-// TestManpageCoversEverySubcommand guards the drift that shipped `magus man` with pages for
-// 21 of 30 subcommands, vcs among them. internal/cli/registry.go is a hand-maintained
-// mirror of subcommands.go, and api_test.go cannot catch divergence: it locks api.lock against
-// API(), which is generated from the same registry.
-func TestManpageCoversEverySubcommand(t *testing.T) {
-	// `magus help` prints what `magus` prints; man(1) has no page for it.
-	const notDocumented = "help"
-
-	documented := make(map[string]bool, len(cli.All))
-	for _, c := range cli.All {
-		documented[c.Name] = true
-	}
-
-	for _, s := range subcommands {
-		if s.Name == notDocumented {
-			continue
-		}
-		if !documented[s.Name] {
-			t.Errorf("subcommand %q has no cli.All entry, so `magus man` installs no page for it "+
-				"and the docs site renders none - add one to internal/cli/registry.go", s.Name)
-		}
-	}
-
-	// A page for a command the dispatcher no longer routes is worse than a missing one:
-	// manpage/magus-churn.1 is a committed artifact of exactly that.
-	for _, c := range cli.All {
-		if !slices.Contains(knownSubcommands, c.Name) {
-			t.Errorf("cli.All documents %q, which knownSubcommands does not route - "+
-				"remove the entry, or restore the subcommand", c.Name)
-		}
-	}
-}
-
 // helpAliases are case labels every hand-rolled dispatcher below repeats to
 // route its own -h/--help/help handling. They are not children of anything and
 // are stripped before comparing a dispatcher's routed set against the registry.
@@ -212,7 +179,7 @@ var helpAliases = []string{"-h", "--help", "help"}
 // top-level switch statement, in source order, with helpAliases removed.
 //
 // This is TestDispatchSubCoversKnownSubcommands's technique (main.go's
-// dispatchSub vs subcommands.go's knownSubcommands) applied one level down: a
+// dispatchSub vs knownSubcommands) applied one level down: a
 // per-command dispatcher that routes a child with no matching entry in that
 // command's registry.Children is invisible to man pages, completions, and
 // --help, which is exactly the class of gap item 1 of the 2026-08 doctrine

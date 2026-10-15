@@ -10,7 +10,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_CACHE_DIR",
 		Flag:     fieldtype.FlagNames{Long: "cache-dir"},
 		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_CACHE_DIR",
+		Usage:    "MAGUS_CACHE_DIR: one dir for the entries and the checkout's own files (default: entries shared per repository, the rest in .magus/)",
+		Doc:      "One dir for the entries and the checkout's own files (default: entries shared per repository, the rest in .magus/)",
 	},
 	{
 		GoPath:   "Cache.Write.Enabled",
@@ -18,7 +19,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_CACHE_WRITE_ENABLED",
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
-		Usage:    "MAGUS_CACHE_WRITE_ENABLED",
+		Usage:    "MAGUS_CACHE_WRITE_ENABLED: when false, replay cache hits but never write new entries, locally or to a remote (default true)",
+		Doc:      "When false, replay cache hits but never write new entries, locally or to a remote (default true)",
 	},
 	{
 		GoPath:   "Cache.Include.OS.Enabled",
@@ -26,7 +28,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_CACHE_INCLUDE_OS_ENABLED",
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
-		Usage:    "MAGUS_CACHE_INCLUDE_OS_ENABLED",
+		Usage:    "MAGUS_CACHE_INCLUDE_OS_ENABLED: when true, this host property keys every cache entry; off by default because a manifest guard already refuses a cross...",
+		Doc:      "When true, this host property keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay",
 	},
 	{
 		GoPath:   "Cache.Include.Arch.Enabled",
@@ -34,7 +37,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_CACHE_INCLUDE_ARCH_ENABLED",
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
-		Usage:    "MAGUS_CACHE_INCLUDE_ARCH_ENABLED",
+		Usage:    "MAGUS_CACHE_INCLUDE_ARCH_ENABLED: when true, this host property keys every cache entry; off by default because a manifest guard already refuses a cross...",
+		Doc:      "When true, this host property keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay",
 	},
 	{
 		GoPath:   "Cache.SizeMB",
@@ -42,7 +46,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_CACHE_SIZE_MB",
 		Flag:     fieldtype.FlagNames{Long: "cache-size-mb"},
 		Kind:     fieldtype.KindInt,
-		Usage:    "MAGUS_CACHE_SIZE_MB",
+		Usage:    "MAGUS_CACHE_SIZE_MB: disk cap in MB (binary); 0 = unlimited",
+		Doc:      "Disk cap in MB (binary); 0 = unlimited",
 	},
 	{
 		GoPath:   "Cache.Remote.TrustedKeys",
@@ -50,7 +55,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_CACHE_REMOTE_TRUSTED_KEYS",
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindStringSlice,
-		Usage:    "MAGUS_CACHE_REMOTE_TRUSTED_KEYS",
+		Usage:    "MAGUS_CACHE_REMOTE_TRUSTED_KEYS: base64 Ed25519 public keys a remote artifact must be signed by; required when a backend is wired",
+		Doc:      "Base64 Ed25519 public keys a remote artifact must be signed by; required when a backend is wired",
 	},
 	{
 		GoPath:   "Cache.Remote.Insecure",
@@ -59,6 +65,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "cache-remote-insecure"},
 		Kind:     fieldtype.KindBool,
 		Usage:    "MAGUS_CACHE_REMOTE_INSECURE: Insecure disables remote-cache signature verification: unsigned artifacts are imported and produced with no trust set.",
+		Doc:      "Disables remote-cache signature verification: unsigned artifacts are imported and produced with no trust set. A shared cache without signing is a supply-chain hazard — use only for trusted single-repo CI, or to validate a backend before minting keys. When true, trusted_keys stops being required and InsecureReason starts",
 	},
 	{
 		GoPath:   "Cache.Remote.InsecureReason",
@@ -67,6 +74,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "cache-remote-insecure-reason"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_CACHE_REMOTE_INSECURE_REASON: InsecureReason is the prose behind Insecure, required whenever it is true.",
+		Doc:      "The prose behind Insecure, required whenever it is true. Same rule SkipCacheReason and DriftReason carry: switching off the check that says whether an artifact came from who it claims is a claim about this cache. This file is committed, so the next machine to trust the cache reads the answer here",
 	},
 	{
 		GoPath:   "Cache.Remote.Write.Enabled",
@@ -74,7 +82,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_CACHE_REMOTE_WRITE_ENABLED",
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
-		Usage:    "MAGUS_CACHE_REMOTE_WRITE_ENABLED",
+		Usage:    "MAGUS_CACHE_REMOTE_WRITE_ENABLED: when false, write the local tier but never the remote; unset writes the remote when the local tier is written and a s...",
+		Doc:      "When false, write the local tier but never the remote; unset writes the remote when the local tier is written and a signing key is held; true makes remote writes required",
 	},
 	{
 		GoPath:   "CI.MaxShards",
@@ -82,7 +91,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_CI_MAX_SHARDS",
 		Flag:     fieldtype.FlagNames{Long: "ci-max-shards"},
 		Kind:     fieldtype.KindInt,
-		Usage:    "MAGUS_CI_MAX_SHARDS",
+		Usage:    "MAGUS_CI_MAX_SHARDS: max parallel shards; -1 = unlimited",
+		Doc:      "Max parallel shards; -1 = unlimited",
 	},
 	{
 		GoPath:   "CI.RunnerPoolBudget",
@@ -90,7 +100,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_CI_RUNNER_POOL_BUDGET",
 		Flag:     fieldtype.FlagNames{Long: "ci-runner-pool-budget"},
 		Kind:     fieldtype.KindInt,
-		Usage:    "MAGUS_CI_RUNNER_POOL_BUDGET",
+		Usage:    "MAGUS_CI_RUNNER_POOL_BUDGET: GHA matrix-level concurrency cap; 0 = no cap",
+		Doc:      "GHA matrix-level concurrency cap; 0 = no cap",
 	},
 	{
 		GoPath:   "CI.RecordRuns",
@@ -99,6 +110,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "ci-record-runs"},
 		Kind:     fieldtype.KindBool,
 		Usage:    "MAGUS_CI_RECORD_RUNS: RecordRuns keeps the per-branch run log (forecast.Run) in the history file: which commit a branch passed or failed a ...",
+		Doc:      "Keeps the per-branch run log (forecast.Run) in the history file: which commit a branch passed or failed a target at, and when. On by default, because `--base last-passed` reads it and a CI run that cannot find its base gates less than it appears to",
 	},
 	{
 		GoPath:   "Volatility.Enabled",
@@ -106,7 +118,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_VOLATILITY_ENABLED",
 		Flag:     fieldtype.FlagNames{Long: "volatility-enabled"},
 		Kind:     fieldtype.KindBool,
-		Usage:    "MAGUS_VOLATILITY_ENABLED",
+		Usage:    "MAGUS_VOLATILITY_ENABLED: Enabled is the master switch for volatility detection and auto-retry; false disables all retry logic.",
+		Doc:      "The master switch for volatility detection and auto-retry; false disables all retry logic",
 	},
 	{
 		GoPath:   "Volatility.BootstrapSamples",
@@ -114,7 +127,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES",
 		Flag:     fieldtype.FlagNames{Long: "volatility-bootstrap-samples"},
 		Kind:     fieldtype.KindInt,
-		Usage:    "MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES",
+		Usage:    "MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES: outcomes below which all failures retry once",
+		Doc:      "Outcomes below which all failures retry once",
 	},
 	{
 		GoPath:   "Volatility.MinSamples",
@@ -122,7 +136,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_VOLATILITY_MIN_SAMPLES",
 		Flag:     fieldtype.FlagNames{Long: "volatility-min-samples"},
 		Kind:     fieldtype.KindInt,
-		Usage:    "MAGUS_VOLATILITY_MIN_SAMPLES",
+		Usage:    "MAGUS_VOLATILITY_MIN_SAMPLES: minimum outcomes before Wilson-score gates retry",
+		Doc:      "Minimum outcomes before Wilson-score gates retry",
 	},
 	{
 		GoPath:   "Volatility.Threshold",
@@ -130,7 +145,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_VOLATILITY_THRESHOLD",
 		Flag:     fieldtype.FlagNames{Long: "volatility-threshold"},
 		Kind:     fieldtype.KindFloat64,
-		Usage:    "MAGUS_VOLATILITY_THRESHOLD",
+		Usage:    "MAGUS_VOLATILITY_THRESHOLD: Wilson lower-bound above which a project+target is volatile",
+		Doc:      "Wilson lower-bound above which a project+target is volatile",
 	},
 	{
 		GoPath:   "Volatility.AnnotateGHA",
@@ -138,7 +154,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_VOLATILITY_ANNOTATE_GHA",
 		Flag:     fieldtype.FlagNames{Long: "volatility-annotate-gha"},
 		Kind:     fieldtype.KindBool,
-		Usage:    "MAGUS_VOLATILITY_ANNOTATE_GHA",
+		Usage:    "MAGUS_VOLATILITY_ANNOTATE_GHA: emit ::warning annotations and GITHUB_STEP_SUMMARY table",
+		Doc:      "Emit ::warning annotations and GITHUB_STEP_SUMMARY table",
 	},
 	{
 		GoPath:   "Telemetry.Enabled",
@@ -146,7 +163,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_TELEMETRY_ENABLED",
 		Flag:     fieldtype.FlagNames{Long: "telemetry-enabled"},
 		Kind:     fieldtype.KindBool,
-		Usage:    "MAGUS_TELEMETRY_ENABLED",
+		Usage:    "MAGUS_TELEMETRY_ENABLED: Enabled turns OTLP export on; magus connects to Endpoint when true.",
+		Doc:      "Turns OTLP export on; magus connects to Endpoint when true",
 	},
 	{
 		GoPath:   "Telemetry.Endpoint",
@@ -154,7 +172,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_TELEMETRY_ENDPOINT",
 		Flag:     fieldtype.FlagNames{Long: "telemetry-endpoint"},
 		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_TELEMETRY_ENDPOINT",
+		Usage:    "MAGUS_TELEMETRY_ENDPOINT: host:port; required when Enabled",
+		Doc:      "Host:port; required when Enabled",
 	},
 	{
 		GoPath:   "Telemetry.Protocol",
@@ -162,7 +181,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_TELEMETRY_PROTOCOL",
 		Flag:     fieldtype.FlagNames{Long: "telemetry-protocol"},
 		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_TELEMETRY_PROTOCOL",
+		Usage:    "MAGUS_TELEMETRY_PROTOCOL: OTLP wire protocol: grpc or http",
+		Doc:      "OTLP wire protocol: grpc or http",
 	},
 	{
 		GoPath:   "Telemetry.Insecure",
@@ -170,7 +190,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_TELEMETRY_INSECURE",
 		Flag:     fieldtype.FlagNames{Long: "telemetry-insecure"},
 		Kind:     fieldtype.KindBool,
-		Usage:    "MAGUS_TELEMETRY_INSECURE",
+		Usage:    "MAGUS_TELEMETRY_INSECURE: disable TLS",
+		Doc:      "Disable TLS",
 	},
 	{
 		GoPath:   "Telemetry.ServiceName",
@@ -178,7 +199,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_TELEMETRY_SERVICE_NAME",
 		Flag:     fieldtype.FlagNames{Long: "telemetry-service-name"},
 		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_TELEMETRY_SERVICE_NAME",
+		Usage:    "MAGUS_TELEMETRY_SERVICE_NAME: resource attribute service.name",
+		Doc:      "Resource attribute service.name",
 	},
 	{
 		GoPath:   "Telemetry.SampleRatio",
@@ -186,7 +208,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_TELEMETRY_SAMPLE_RATIO",
 		Flag:     fieldtype.FlagNames{Long: "telemetry-sample-ratio"},
 		Kind:     fieldtype.KindFloat64,
-		Usage:    "MAGUS_TELEMETRY_SAMPLE_RATIO",
+		Usage:    "MAGUS_TELEMETRY_SAMPLE_RATIO: head-based sampling ratio; 1.0 = all",
+		Doc:      "Head-based sampling ratio; 1.0 = all",
 	},
 	{
 		GoPath:   "Server.Enabled",
@@ -195,6 +218,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "server-enabled"},
 		Kind:     fieldtype.KindBool,
 		Usage:    "MAGUS_SERVER_ENABLED: Enabled lets a command hand itself to a running 'magus server'; false runs each invocation self-contained.",
+		Doc:      "Lets a command hand itself to a running `magus server`; false runs each invocation self-contained. Default true. With Enabled false an invocation never discovers or adopts the server and hosts its own per-process pool. Recursive magus calls still forward over a per-process socket to share the concurrency budget; only the server is opted out of",
 	},
 	{
 		GoPath:   "Server.Address",
@@ -203,6 +227,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "server-address"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_SERVER_ADDRESS: Address is the unix:// socket 'magus server' listens on; empty means server.sock in the runtime dir.",
+		Doc:      "The unix:// socket `magus server` listens on; empty means server.sock in the runtime dir",
 	},
 	{
 		GoPath:   "Server.IdleTTL",
@@ -211,6 +236,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "server-idle-ttl"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_SERVER_IDLE_TTL: IdleTTL controls workspace eviction in the multi-workspace server; 0 = default 6h.",
+		Doc:      "Controls workspace eviction in the multi-workspace server; 0 = default 6h",
 	},
 	{
 		GoPath:   "Server.Workspaces",
@@ -219,6 +245,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindStringSlice,
 		Usage:    "MAGUS_SERVER_WORKSPACES: Workspaces is the explicit list of workspace roots to serve; non-empty enables eager union of sandbox policies and re...",
+		Doc:      "The explicit list of workspace roots to serve; non-empty enables eager union of sandbox policies and rejects out-of-list workspaces (MGS2010)",
 	},
 	{
 		GoPath:   "Server.Maintenance.RotateActivities",
@@ -227,6 +254,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "server-maintenance-rotate-activities"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_SERVER_MAINTENANCE_ROTATE_ACTIVITIES: RotateActivities is only how often the server CHECKS whether the activity trail is due for a trim; it is not a retent...",
+		Doc:      "Only how often the server CHECKS whether the activity trail is due for a trim; it is not a retention age. The trail rotates on event count instead: 10000 events, with a per-kind floor that keeps a rare kind's newest entries no matter how loud its neighbors are (see maxEvents and perKindFloor in internal/trail). So there is no age cutoff this field could hand it: an age cutoff would have to decide whether it or the per-kind floor wins when the two disagree, and that policy does not exist. It runs hourly because a rotate on an already-small trail costs one stat",
 	},
 	{
 		GoPath:   "Server.Maintenance.RotateLogs",
@@ -235,6 +263,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "server-maintenance-rotate-logs"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_SERVER_MAINTENANCE_ROTATE_LOGS: RotateLogs is both how often the server checks the run-log journals AND, since the check doubles as the enforcement, ...",
+		Doc:      "Both how often the server checks the run-log journals AND, since the check doubles as the enforcement, the maximum age a kept journal may reach: a journal older than this is dropped even when the workspace is well under the count (500) and size (2GB) caps those also enforce, and the tightest of the three wins. Weekly by default, because run-logs otherwise have no age bound at all",
 	},
 	{
 		GoPath:   "Server.Maintenance.PrunePreserved",
@@ -243,6 +272,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "server-maintenance-prune-preserved"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_SERVER_MAINTENANCE_PRUNE_PRESERVED: PrunePreserved is only how often the server checks for expired 'vcs checkpoint --preserve' captures; it is not the re...",
+		Doc:      "Only how often the server checks for expired `vcs checkpoint --preserve` captures; it is not the retention window. That window is fixed at 30 days (vcs.preserveRetention) and stays out of this field on purpose: the days a preserved capture survives is a promise the `--preserve` flag itself advertises, and letting a per-server poll knob also change what gets deleted would make that promise mean whatever this config happened to say (see the rationale on vcs.PrunePreserved). Preserve prunes on its own call too, but only a repository preserved a SECOND time ever reaches that pass, so this scheduled job is what makes the promise hold for a repository preserved once and never again. Daily, since a capture surviving an extra day past the fixed window costs nothing",
 	},
 	{
 		GoPath:   "Server.Maintenance.SyncGraph",
@@ -250,7 +280,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_SERVER_MAINTENANCE_SYNC_GRAPH",
 		Flag:     fieldtype.FlagNames{Long: "server-maintenance-sync-graph"},
 		Kind:     fieldtype.KindDuration,
-		Usage:    "MAGUS_SERVER_MAINTENANCE_SYNC_GRAPH",
+		Usage:    "MAGUS_SERVER_MAINTENANCE_SYNC_GRAPH: reconcile the graph; default 6h (a safety net behind the VCS hook)",
+		Doc:      "Reconcile the graph; default 6h (a safety net behind the VCS hook)",
 	},
 	{
 		GoPath:   "Server.Maintenance.CheckReview",
@@ -259,6 +290,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "server-maintenance-check-review"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_SERVER_MAINTENANCE_CHECK_REVIEW: CheckReview notices a merge or a new remark on a review this tree took part in.",
+		Doc:      "Notices a merge or a new remark on a review this tree took part in. The only scheduled job that leaves the machine, so its default is the longest here: a pull request merges once, and a remark waiting fifteen minutes costs nobody anything",
 	},
 	{
 		GoPath:   "VCS.Enabled",
@@ -266,7 +298,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_VCS_ENABLED",
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
-		Usage:    "MAGUS_VCS_ENABLED",
+		Usage:    "MAGUS_VCS_ENABLED: master switch for VCS-driven affected detection; false makes affected fall back to all projects (default true)",
+		Doc:      "Master switch for VCS-driven affected detection; false makes affected fall back to all projects (default true)",
 	},
 	{
 		GoPath:   "VCS.Name",
@@ -274,7 +307,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_VCS_NAME",
 		Flag:     fieldtype.FlagNames{Long: "vcs-name"},
 		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_VCS_NAME",
+		Usage:    "MAGUS_VCS_NAME: pin VCS by name (git/hg/sl/jj); empty = autodetect",
+		Doc:      "Pin VCS by name (git/hg/sl/jj); empty = autodetect",
 	},
 	{
 		GoPath:   "VCS.BaseRef",
@@ -283,6 +317,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "vcs-base-ref"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_VCS_BASE_REF: BaseRef sets the default base ref.",
+		Doc:      "Sets the default base ref. Per-VCS overrides use MAGUS_VCS_<NAME>_BASE_REF (dynamic; not a Config field)",
 	},
 	{
 		GoPath:   "MCP.Enabled",
@@ -290,7 +325,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_MCP_ENABLED",
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
-		Usage:    "MAGUS_MCP_ENABLED",
+		Usage:    "MAGUS_MCP_ENABLED: when false, refuse to start the MCP server (default true)",
+		Doc:      "When false, refuse to start the MCP server (default true)",
 	},
 	{
 		GoPath:   "MCP.Address",
@@ -298,7 +334,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_MCP_ADDRESS",
 		Flag:     fieldtype.FlagNames{Long: "mcp-address"},
 		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_MCP_ADDRESS",
+		Usage:    "MAGUS_MCP_ADDRESS: host:port; default 127.0.0.1:7391",
+		Doc:      "Host:port; default 127.0.0.1:7391",
 	},
 	{
 		GoPath:   "MCP.HTTP",
@@ -307,6 +344,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
 		Usage:    "MAGUS_MCP_HTTP: HTTP serves /mcp on the server's HTTP listener.",
+		Doc:      "Serves /mcp on the server's HTTP listener. False leaves the route unmounted while `magus mcp` (stdio) and the server socket keep serving MCP, and the listener keeps the console and health routes. Default true",
 	},
 	{
 		GoPath:   "MCP.InsecureBind",
@@ -315,6 +353,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "mcp-insecure-bind"},
 		Kind:     fieldtype.KindBool,
 		Usage:    "MAGUS_MCP_INSECURE_BIND: InsecureBind permits a non-loopback Address.",
+		Doc:      "Permits a non-loopback Address. That listener serves bearer tokens over plaintext HTTP, so without it the server refuses to start rather than warn",
 	},
 	{
 		GoPath:   "Console.Enabled",
@@ -322,7 +361,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_CONSOLE_ENABLED",
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
-		Usage:    "MAGUS_CONSOLE_ENABLED",
+		Usage:    "MAGUS_CONSOLE_ENABLED: when false, the MCP HTTP server does not mount the console's read-only API and job service (default true when MCP is up)",
+		Doc:      "When false, the MCP HTTP server does not mount the console's read-only API and job service (default true when MCP is up)",
 	},
 	{
 		GoPath:   "Report.Filter",
@@ -331,6 +371,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindStringSlice,
 		Usage:    "MAGUS_REPORT_FILTER: Filter restricts event types via +type/-type/bare terms; any '+' sets default-deny.",
+		Doc:      "Restricts event types via +type/-type/bare terms; any \"+\" sets default-deny",
 	},
 	{
 		GoPath:   "Log.Format",
@@ -338,7 +379,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_LOG_FORMAT",
 		Flag:     fieldtype.FlagNames{Long: "log-format"},
 		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_LOG_FORMAT: Format is pretty|plain|text|json.",
+		Usage:    "MAGUS_LOG_FORMAT: Format is the log format: pretty, plain, text or json.",
+		Doc:      "The log format: pretty, plain, text or json",
 	},
 	{
 		GoPath:   "Log.Level",
@@ -347,6 +389,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "log-level"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_LOG_LEVEL: Level is the minimum log level; 'trace' also enables the startup timing table.",
+		Doc:      "The minimum log level; \"trace\" also enables the startup timing table",
 	},
 	{
 		GoPath:   "Log.Silent",
@@ -355,6 +398,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
 		Usage:    "MAGUS_LOG_SILENT: Silent suppresses progress like --quiet, and additionally bounds the failing-project dump (tail + path to the full lo...",
+		Doc:      "Suppresses progress like --quiet, and additionally bounds the failing-project dump (tail + path to the full log) and bubbles up only lines a target marks as a notice (\"magus:notice:\"). Like --quiet it prints a failure's reasoning only at -v. Normally set via -s/--silent; MAGUS_LOG_SILENT=1 is the env equivalent. Pointer to distinguish \"not set\" from explicit false",
 	},
 	{
 		GoPath:   "Log.Stream",
@@ -363,6 +407,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
 		Usage:    "MAGUS_LOG_STREAM: Stream shows every target's subprocess output live and interleaved, instead of withholding a passing target's output ...",
+		Doc:      "Shows every target's subprocess output live and interleaved, instead of withholding a passing target's output until it fails. This is deliberately NOT derived from Level: what gets logged and whether a target's own output is withheld are separate questions, and conflating them is why -v used to ambush people with a wall of concurrent output when they wanted a little more detail. Normally set via -vv (and implied by -vvv); MAGUS_LOG_STREAM=1 is the env equivalent. Pointer to distinguish \"not set\" from explicit false",
 	},
 	{
 		GoPath:   "Hints.Enabled",
@@ -371,6 +416,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
 		Usage:    "MAGUS_HINTS_ENABLED: Enabled controls whether hint messages (actionable nudges) are printed to stderr.",
+		Doc:      "Controls whether hint messages (actionable nudges) are printed to stderr. Defaults to true. Set hints.enabled: false in magus.yaml or MAGUS_HINTS_ENABLED=false to suppress all hint output. Pointer to distinguish \"not set\" from explicit false",
 	},
 	{
 		GoPath:   "Knowledge.Workspaces",
@@ -379,6 +425,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindStringSlice,
 		Usage:    "MAGUS_KNOWLEDGE_WORKSPACES: Workspaces are additional workspace roots to union into a '--global' knowledge-graph query (query/explain/path and gr...",
+		Doc:      "Additional workspace roots to union into a `--global` knowledge-graph query (query/explain/path and graph export/stats). Each is loaded and its node IDs are namespaced by the workspace (\"<name>//<id>\") so IDs from different repos cannot collide. Empty means --global covers only the current workspace",
 	},
 	{
 		GoPath:   "Knowledge.PublishedRef",
@@ -387,6 +434,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "knowledge-published-ref"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_KNOWLEDGE_PUBLISHED_REF: PublishedRef is the OCI artifact a published knowledge graph is READ from, as <registry>/<repository>:<tag>.",
+		Doc:      "The OCI artifact a published knowledge graph is READ from, as <registry>/<repository>:<tag>. Empty (the default) means this workspace pulls nothing and every graph is built locally",
 	},
 	{
 		GoPath:   "Knowledge.MaxSizeMB",
@@ -395,6 +443,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "knowledge-max-size-mb"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_KNOWLEDGE_MAX_SIZE_MB: MaxSizeMB is a soft cap on the knowledge shard store (<cache>/knowledge).",
+		Doc:      "A soft cap on the knowledge shard store (<cache>/knowledge). When exceeded after a build, least-recently-used shard files are evicted; an evicted shard is restored from the remote cache or rebuilt on the next query. 0 (default) is unlimited: the store self-reconciles deleted projects, so a cap mainly bounds transient bloat",
 	},
 	{
 		GoPath:   "Knowledge.VCS.Enabled",
@@ -402,7 +451,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_KNOWLEDGE_VCS_ENABLED",
 		Flag:     fieldtype.FlagNames{Long: "knowledge-vcs-enabled"},
 		Kind:     fieldtype.KindBool,
-		Usage:    "MAGUS_KNOWLEDGE_VCS_ENABLED",
+		Usage:    "MAGUS_KNOWLEDGE_VCS_ENABLED: Enabled folds VCS history (last commit, commit count) onto file nodes as the @vcs shard.",
+		Doc:      "Folds VCS history (last commit, commit count) onto file nodes as the @vcs shard",
 	},
 	{
 		GoPath:   "Knowledge.VCS.MaxCommits",
@@ -411,6 +461,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "knowledge-vcs-max-commits"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_KNOWLEDGE_VCS_MAX_COMMITS: MaxCommits bounds the history walk to the most recent N commits.",
+		Doc:      "Bounds the history walk to the most recent N commits. 0 uses a built-in default; a small value keeps the scan fast on a large repo at the cost of undercounting commits for long-lived files",
 	},
 	{
 		GoPath:   "Knowledge.VCS.Authorship",
@@ -419,6 +470,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
 		Usage:    "MAGUS_KNOWLEDGE_VCS_AUTHORSHIP: Authorship includes the 'author' nodes and 'authored' edges (who touched which files) in the graph.",
+		Doc:      "Includes the `author` nodes and `authored` edges (who touched which files) in the graph. Defaults to ON (nil = on): authorship is context that helps an agent, and the edges are already bounded by MaxCommits. Set false to keep only the per-file vcs_* attrs and omit the author layer",
 	},
 	{
 		GoPath:   "Knowledge.SymbolIndexing.Disabled",
@@ -427,6 +479,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "knowledge-symbol-indexing-disabled"},
 		Kind:     fieldtype.KindBool,
 		Usage:    "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED: Disabled opts out of background auto-indexing.",
+		Doc:      "Opts out of background auto-indexing. Auto-indexing is on by default in the server, so this is the switch to turn it off (e.g. the indexers are not installed and you index in CI instead)",
 	},
 	{
 		GoPath:   "Knowledge.SymbolIndexing.QuietSeconds",
@@ -435,6 +488,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "knowledge-symbol-indexing-quiet-seconds"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS: QuietSeconds is how long a project's sources must be quiet after the last change before it is re-indexed, so a burst ...",
+		Doc:      "How long a project's sources must be quiet after the last change before it is re-indexed, so a burst of edits coalesces into one run. 0 uses a built-in default",
 	},
 	{
 		GoPath:   "Knowledge.SymbolIndexing.MinIntervalSeconds",
@@ -443,6 +497,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "knowledge-symbol-indexing-min-interval-seconds"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS: MinIntervalSeconds is the minimum time between re-index runs for one project, a ceiling on how often the indexer fire...",
+		Doc:      "The minimum time between re-index runs for one project, a ceiling on how often the indexer fires however often files change. 0 uses a built-in default",
 	},
 	{
 		GoPath:   "Knowledge.Duplication.MinCallees",
@@ -450,7 +505,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_KNOWLEDGE_DUPLICATION_MIN_CALLEES",
 		Flag:     fieldtype.FlagNames{Long: "knowledge-duplication-min-callees"},
 		Kind:     fieldtype.KindInt,
-		Usage:    "MAGUS_KNOWLEDGE_DUPLICATION_MIN_CALLEES",
+		Usage:    "MAGUS_KNOWLEDGE_DUPLICATION_MIN_CALLEES: fewest callees a function needs before the lens compares it",
+		Doc:      "Fewest callees a function needs before the lens compares it",
 	},
 	{
 		GoPath:   "Knowledge.Duplication.MinShared",
@@ -458,7 +514,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_KNOWLEDGE_DUPLICATION_MIN_SHARED",
 		Flag:     fieldtype.FlagNames{Long: "knowledge-duplication-min-shared"},
 		Kind:     fieldtype.KindInt,
-		Usage:    "MAGUS_KNOWLEDGE_DUPLICATION_MIN_SHARED",
+		Usage:    "MAGUS_KNOWLEDGE_DUPLICATION_MIN_SHARED: fewest shared callees a pair needs to be reported",
+		Doc:      "Fewest shared callees a pair needs to be reported",
 	},
 	{
 		GoPath:   "Knowledge.Duplication.MinScore",
@@ -466,7 +523,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_KNOWLEDGE_DUPLICATION_MIN_SCORE",
 		Flag:     fieldtype.FlagNames{Long: "knowledge-duplication-min-score"},
 		Kind:     fieldtype.KindFloat64,
-		Usage:    "MAGUS_KNOWLEDGE_DUPLICATION_MIN_SCORE",
+		Usage:    "MAGUS_KNOWLEDGE_DUPLICATION_MIN_SCORE: lowest similarity score in [0,1] the lens reports",
+		Doc:      "Lowest similarity score in [0,1] the lens reports",
 	},
 	{
 		GoPath:   "Knowledge.Duplication.MinSpanRatio",
@@ -474,7 +532,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_KNOWLEDGE_DUPLICATION_MIN_SPAN_RATIO",
 		Flag:     fieldtype.FlagNames{Long: "knowledge-duplication-min-span-ratio"},
 		Kind:     fieldtype.KindFloat64,
-		Usage:    "MAGUS_KNOWLEDGE_DUPLICATION_MIN_SPAN_RATIO",
+		Usage:    "MAGUS_KNOWLEDGE_DUPLICATION_MIN_SPAN_RATIO: lowest ratio in [0,1] of the shorter function's span to the longer one's",
+		Doc:      "Lowest ratio in [0,1] of the shorter function's span to the longer one's",
 	},
 	{
 		GoPath:   "Knowledge.Duplication.IncludeTests",
@@ -482,7 +541,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_KNOWLEDGE_DUPLICATION_INCLUDE_TESTS",
 		Flag:     fieldtype.FlagNames{Long: "knowledge-duplication-include-tests"},
 		Kind:     fieldtype.KindBool,
-		Usage:    "MAGUS_KNOWLEDGE_DUPLICATION_INCLUDE_TESTS",
+		Usage:    "MAGUS_KNOWLEDGE_DUPLICATION_INCLUDE_TESTS: when true, the lens also compares test functions",
+		Doc:      "When true, the lens also compares test functions",
 	},
 	{
 		GoPath:   "Knowledge.Sessions.Disabled",
@@ -491,6 +551,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "knowledge-sessions-disabled"},
 		Kind:     fieldtype.KindBool,
 		Usage:    "MAGUS_KNOWLEDGE_SESSIONS_DISABLED: Disabled opts out entirely, so 'graph build' runs no adapter and '--no-sessions' becomes the permanent answer.",
+		Doc:      "Opts out entirely, so `graph build` runs no adapter and `--no-sessions` becomes the permanent answer. The switch to reach for when the transcripts on this machine are not yours to read",
 	},
 	{
 		GoPath:   "Knowledge.Notes.Shared",
@@ -499,6 +560,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "knowledge-notes-shared"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_KNOWLEDGE_NOTES_SHARED: Shared is the workspace-relative directory holding notes the TEAM has: committed, so git attributes each one to whoev...",
+		Doc:      "The workspace-relative directory holding notes the TEAM has: committed, so git attributes each one to whoever wrote it and review sees every change. Empty disables it entirely: no shard, no verification, no guard rule",
 	},
 	{
 		GoPath:   "Knowledge.Notes.Private",
@@ -507,6 +569,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "knowledge-notes-private"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_KNOWLEDGE_NOTES_PRIVATE: Private is a SECOND notes location, yours rather than the team's, and it may sit anywhere on disk: a vault, a scratch...",
+		Doc:      "A SECOND notes location, yours rather than the team's, and it may sit anywhere on disk: a vault, a scratch directory, somewhere outside any repository",
 	},
 	{
 		GoPath:   "Secret.Interactive",
@@ -515,6 +578,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "secret-interactive-timeout"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_SECRET_INTERACTIVE_TIMEOUT: Interactive bounds a provider read when stdin is a terminal.",
+		Doc:      "Bounds a provider read when stdin is a terminal. Default 60s",
 	},
 	{
 		GoPath:   "Secret.Unattended",
@@ -523,6 +587,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "secret-unattended-timeout"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_SECRET_UNATTENDED_TIMEOUT: Unattended bounds a provider read with no terminal to prompt on.",
+		Doc:      "Bounds a provider read with no terminal to prompt on. Default 10s",
 	},
 	{
 		GoPath:   "Diff.Tui",
@@ -531,6 +596,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
 		Usage:    "MAGUS_DIFF_TUI: Tui opens the interactive viewer when the terminal can draw it.",
+		Doc:      "Opens the interactive viewer when the terminal can draw it. nil = default true",
 	},
 	{
 		GoPath:   "Jobs.MaxDepth",
@@ -539,6 +605,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "jobs-max-depth"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_JOBS_MAX_DEPTH: MaxDepth is how many levels below its root job a fork may land.",
+		Doc:      "How many levels below its root job a fork may land. 0 = unlimited",
 	},
 	{
 		GoPath:   "Jobs.MaxLive",
@@ -547,6 +614,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "jobs-max-live"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_JOBS_MAX_LIVE: MaxLive is how many live jobs one root's tree may hold at once, the new one included.",
+		Doc:      "How many live jobs one root's tree may hold at once, the new one included. 0 = unlimited",
 	},
 	{
 		GoPath:   "Jobs.DefaultTimeout",
@@ -555,6 +623,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "jobs-default-timeout"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_JOBS_DEFAULT_TIMEOUT: DefaultTimeout bounds a fork that names no --timeout.",
+		Doc:      "Bounds a fork that names no --timeout. Zero = no bound",
 	},
 	{
 		GoPath:   "Jobs.StaleAfter",
@@ -563,6 +632,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "jobs-stale-after"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_JOBS_STALE_AFTER: StaleAfter ends a declared job nobody took and nobody updated for this long, and flags a taken one in 'magus ls jobs'...",
+		Doc:      "Ends a declared job nobody took and nobody updated for this long, and flags a taken one in `magus ls jobs` and `magus doctor`. Default 2h; 0 = never. Ending a row reads the workspace's own magus.yaml, never user-global config or the environment",
 	},
 	{
 		GoPath:   "Jobs.Retain",
@@ -571,6 +641,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "jobs-retain"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_JOBS_RETAIN: Retain is how long a job that is over (graded, ended, or exited with its result never collected), and the archive a c...",
+		Doc:      "How long a job that is over (graded, ended, or exited with its result never collected), and the archive a clear or a delete wrote, stay in the job store once nothing touches them. Default 168h; 0 keeps them forever. Like StaleAfter it reads the workspace's own magus.yaml only",
 	},
 	{
 		GoPath:   "Jobs.MaxValidations",
@@ -579,6 +650,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "jobs-max-validations"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_JOBS_MAX_VALIDATIONS: MaxValidations is how many 'magus run's one job tree's leased workers may have going at once; a run past it waits for...",
+		Doc:      "How many `magus run`s one job tree's leased workers may have going at once; a run past it waits for a seat and says whose run holds it. A run with no lease (the root, a person) is never counted. Default 1; 0 = unlimited. Workspace only, like StaleAfter",
 	},
 	{
 		GoPath:   "Concurrency",
@@ -587,6 +659,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "concurrency", Short: "j"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_CONCURRENCY: Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter.",
+		Doc:      "Caps concurrent builds; top-level and in-process fan-out share one limiter. Overrides concurrency_profile when set",
 	},
 	{
 		GoPath:   "ConcurrencyProfile",
@@ -595,6 +668,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "concurrency-profile"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_CONCURRENCY_PROFILE: ConcurrencyProfile sets the default width relative to the machine: conservative (half the cores), balanced (min(cores...",
+		Doc:      "Sets the default width relative to the machine: conservative (half the cores), balanced (min(cores, 8), the default) or aggressive (every core). Unset is balanced everywhere; magus reads no environment variable to change this, so CI asks for aggressive explicitly",
 	},
 	{
 		GoPath:   "Broker",
@@ -603,6 +677,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "broker"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_BROKER: Broker decides whether a run asks the broker, the per-user process holding this host's slots, declared memory and sha...",
+		Doc:      "Decides whether a run asks the broker, the per-user process holding this host's slots, declared memory and shared services: required (refuse a step when none answers), best-effort (the default: run unarbitrated and say so once), or off (never start or contact one; a run hosts its services itself)",
 	},
 	{
 		GoPath:   "ShutdownGrace",
@@ -611,6 +686,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "shutdown-grace"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_SHUTDOWN_GRACE: ShutdownGrace bounds how long the broker and the server take to stop after a first SIGTERM.",
+		Doc:      "Bounds how long the broker and the server take to stop after a first SIGTERM. The broker seats nothing new and waits this long for the runs holding claims or services to finish; the server cancels the runs it adopted and waits this long for them to unwind. A second SIGTERM, or a SIGINT to the broker, stops either at once. Zero stops at once on the first signal; negative is an error",
 	},
 	{
 		GoPath:   "MaxFailures",
@@ -619,6 +695,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "max-failures"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_MAX_FAILURES: MaxFailures bounds how many projects may fail before a run stops starting more.",
+		Doc:      "Bounds how many projects may fail before a run stops starting more. Zero, the default, is unlimited: a batch runs everything it can and reports every failure at once",
 	},
 	{
 		GoPath:   "TargetTimeout",
@@ -627,6 +704,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "target-timeout"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_TARGET_TIMEOUT: TargetTimeout bounds how long any single target may run before magus cancels it.",
+		Doc:      "Bounds how long any single target may run before magus cancels it. Zero, the default, means no limit",
 	},
 	{
 		GoPath:   "StallTimeout",
@@ -635,6 +713,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "stall-timeout"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_STALL_TIMEOUT: StallTimeout aborts an invocation that is making no progress at all: no target has started, finished, or written a li...",
+		Doc:      "Aborts an invocation that is making no progress at all: no target has started, finished, or written a line of output for this long while every selected project's lock is still held. Zero, the default, uses the built-in 15-minute window; a negative value turns the watchdog off",
 	},
 	{
 		GoPath:   "HistoryPath",
@@ -643,6 +722,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "history-path"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_HISTORY_PATH: HistoryPath is the path to the runtime-history JSON used by volatility detection, CI forecaster, graph timing, and bi...",
+		Doc:      "The path to the runtime-history JSON used by volatility detection, CI forecaster, graph timing, and bisect. Defaults to $XDG_STATE_HOME/magus/history/v1.json",
 	},
 	{
 		GoPath:   "DryRun",
@@ -651,6 +731,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "dry-run", Short: "u"},
 		Kind:     fieldtype.KindBool,
 		Usage:    "MAGUS_DRY_RUN: DryRun prints what would run without executing.",
+		Doc:      "Prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1",
 	},
 	{
 		GoPath:   "DefaultCharms",
@@ -659,6 +740,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindStringSlice,
 		Usage:    "MAGUS_DEFAULT_CHARMS: DefaultCharms are execution charms applied to every 'magus run' / 'magus x' by default, e.g.",
+		Doc:      "Execution charms applied to every `magus run` / `magus x` by default, e.g. [\"rw\"] to make targets write locally without typing :rw. Per-run :charms stack on top. The ci anchor still strips \"rw\" (RunCI), so a local `magus run ci` stays read-only; --no-default-charms ignores these for one run. `magus affected` does not apply them, so CI stays read-only unless explicit",
 	},
 	{
 		GoPath:   "Sandbox.Mode",
@@ -667,6 +749,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "sandbox"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_SANDBOX: Mode is off (the default), best-effort (landlock confines each child where the host has it, magus's own binding check...",
+		Doc:      "Off (the default), best-effort (landlock confines each child where the host has it, magus's own binding checks where it does not), or required (refuse to run, MGS2012, unless the kernel can confine every child: landlock ABI 3)",
 	},
 	{
 		GoPath:   "Sandbox.Env.Passthrough",
@@ -675,5 +758,6 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindStringSlice,
 		Usage:    "MAGUS_SANDBOX_ENV_PASSTHROUGH: Passthrough adds exact names and prefix patterns such as MISE_* to the built-in env allowlist.",
+		Doc:      "Adds exact names and prefix patterns such as MISE_* to the built-in env allowlist. A prefix must be at least three characters and end in \"_\"",
 	},
 }

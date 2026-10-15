@@ -16,6 +16,7 @@ package cli
 
 import (
 	"flag"
+	"fmt"
 	"time"
 )
 
@@ -33,6 +34,9 @@ type Command struct {
 	// Tags list keywords for the docs page's YAML frontmatter (search index).
 	// Auto-augmented with the canonical "cli, magus <name>, <name>" if empty.
 	Tags []string
+
+	// Group is the heading top-level help files this command under.
+	Group string
 
 	// Flags are the command-specific flags, as DATA rather than as a closure that
 	// registers them.
@@ -193,18 +197,18 @@ func bindFlags(fs *flag.FlagSet, flags []Flag) {
 	for _, f := range flags {
 		switch f.Kind {
 		case FlagBool:
-			fs.Bool(f.Name, decodeDefault[bool](f.Default), f.Doc)
+			fs.Bool(f.Name, decodeDefault[bool](f), f.Doc)
 		case FlagString:
-			fs.String(f.Name, decodeDefault[string](f.Default), f.Doc)
+			fs.String(f.Name, decodeDefault[string](f), f.Doc)
 		case FlagInt:
-			fs.Int(f.Name, decodeDefault[int](f.Default), f.Doc)
+			fs.Int(f.Name, decodeDefault[int](f), f.Doc)
 		case FlagDuration:
-			fs.Duration(f.Name, decodeDefault[time.Duration](f.Default), f.Doc)
+			fs.Duration(f.Name, decodeDefault[time.Duration](f), f.Doc)
 		case FlagCustom:
 			// Registered as a string for RENDERING only: this FlagSet is the one the
 			// man-page and docs generators walk, never the one the command parses
 			// with, so this decides how the flag is printed and nothing else.
-			fs.String(f.Name, decodeDefault[string](f.Default), f.Doc)
+			fs.String(f.Name, decodeDefault[string](f), f.Doc)
 		default:
 			// No silent fallback. An unset or misspelled Kind used to land on the
 			// string case, which binds a flag that parses but never means what it
@@ -215,14 +219,17 @@ func bindFlags(fs *flag.FlagSet, flags []Flag) {
 	}
 }
 
-// decodeDefault reads a Flag.Default of the expected type, falling back to the zero
-// value. A mismatched type is treated as unset rather than panicking: a wrong
-// default is a documentation bug, and failing the whole CLI over one would be a
-// worse outcome than binding the zero the field would have had anyway.
-func decodeDefault[T any](v any) T {
-	if t, ok := v.(T); ok {
-		return t
-	}
+// decodeDefault reads f.Default as the type its Kind binds; nil is the zero value.
+// A Default of any other type panics for the reason an unknown Kind does: the man
+// page would print a default the CLI does not have.
+func decodeDefault[T any](f Flag) T {
 	var zero T
-	return zero
+	if f.Default == nil {
+		return zero
+	}
+	t, ok := f.Default.(T)
+	if !ok {
+		panic(fmt.Sprintf("cli: flag --%s is %s but its default %v is a %T", f.Name, f.Kind, f.Default, f.Default))
+	}
+	return t
 }

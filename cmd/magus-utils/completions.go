@@ -1,13 +1,16 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
-	"github.com/egladman/magus/internal/generate/emit"
-	"github.com/egladman/magus/internal/generate/godecl"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+
+	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/generate/emit"
 )
 
 // The completion scripts are hand-written shell in four dialects, and the LOGIC in
@@ -23,39 +26,31 @@ import (
 // agent) had shipped without reaching any script, and run's --no-volatility-retry was
 // still spelled --no-flake-retry from before that rename.
 
-// subcommandDoc mirrors cmd/magus's subcommand struct.
-type subcommandDoc struct {
-	Name  string
-	Short string
-}
-
 // shellMarker names the generated list region; all four dialects comment with #.
 var shellMarker = emit.CommentMarker("#", "subcommands")
 
 func runCompletions(args []string) error {
 	fs := flag.NewFlagSet("completions", flag.ExitOnError)
-	subcommandsPath := fs.String("subcommands", "subcommands.go", "Go declaration of the CLI's subcommand table")
 	outDir := fs.String("out", "completions", "Directory holding the completion scripts")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	return writeCompletions(*outDir, slices.Concat(cli.All, []cli.Command{cli.Help}))
+}
 
-	subs, err := readSubcommands(*subcommandsPath)
-	if err != nil {
-		return err
-	}
+// writeCompletions fills the marked region of each completion script in dir with subs.
+func writeCompletions(dir string, subs []cli.Command) error {
 	if len(subs) == 0 {
-		return fmt.Errorf("completions: no subcommands found in %s, the parse is wrong, not the table", *subcommandsPath)
+		return errors.New("completions: no subcommands to write")
 	}
-
-	renderers := map[string]func([]subcommandDoc) string{
+	renderers := map[string]func([]cli.Command) string{
 		"magus.bash": renderBashList,
 		"magus.zsh":  renderZshList,
 		"magus.fish": renderFishList,
 		"magus.ps1":  renderPowerShellList,
 	}
 	for name, render := range renderers {
-		path := filepath.Join(*outDir, name)
+		path := filepath.Join(dir, name)
 		src, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -75,22 +70,7 @@ func runCompletions(args []string) error {
 	return nil
 }
 
-// readSubcommands reads the subcommand table out of the CLI's Go declaration of it.
-func readSubcommands(path string) ([]subcommandDoc, error) {
-	file, err := godecl.Parse(path)
-	if err != nil {
-		return nil, err
-	}
-	var out []subcommandDoc
-	for _, entry := range godecl.SliceOfStructs(file, "subcommands") {
-		if name := entry["Name"]; name != "" {
-			out = append(out, subcommandDoc{Name: name, Short: entry["Short"]})
-		}
-	}
-	return out, nil
-}
-
-func renderBashList(subs []subcommandDoc) string {
+func renderBashList(subs []cli.Command) string {
 	names := make([]string, len(subs))
 	for i, s := range subs {
 		names[i] = s.Name
@@ -98,7 +78,7 @@ func renderBashList(subs []subcommandDoc) string {
 	return `    local subcommands="` + strings.Join(names, " ") + `"`
 }
 
-func renderZshList(subs []subcommandDoc) string {
+func renderZshList(subs []cli.Command) string {
 	// The marker wraps the whole assignment, not just the entries: zsh does not treat
 	// "#" as a comment inside an array literal, so a marker between the parens is
 	// parsed as an array element and the closing paren then fails to parse.
@@ -116,7 +96,7 @@ func renderZshList(subs []subcommandDoc) string {
 	return b.String()
 }
 
-func renderFishList(subs []subcommandDoc) string {
+func renderFishList(subs []cli.Command) string {
 	var b strings.Builder
 	width := 0
 	for _, s := range subs {
@@ -137,7 +117,7 @@ func renderFishList(subs []subcommandDoc) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func renderPowerShellList(subs []subcommandDoc) string {
+func renderPowerShellList(subs []cli.Command) string {
 	// The marker wraps the assignment itself, so this emits it: PowerShell needs the
 	// continuation commas, and only the first line carries the variable name.
 	var lines []string

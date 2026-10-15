@@ -195,9 +195,6 @@ func TestFlagDefaultLiteral(t *testing.T) {
 		{"duration nil default", cli.Flag{Kind: cli.FlagDuration}, "0"},
 		{"string", cli.Flag{Kind: cli.FlagString, Default: "test"}, `"test"`},
 		{"string nil default", cli.Flag{Kind: cli.FlagString}, `""`},
-		// A Default of the wrong Go type falls back to the kind's zero rather than
-		// emitting something unparsable.
-		{"mistyped default", cli.Flag{Kind: cli.FlagInt, Default: "8"}, "0"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -206,6 +203,7 @@ func TestFlagDefaultLiteral(t *testing.T) {
 	}
 
 	assert.Panics(t, func() { flagDefaultLiteral(cli.Flag{Kind: cli.FlagCustom}) })
+	assert.Panics(t, func() { flagDefaultLiteral(cli.Flag{Name: "n", Kind: cli.FlagInt, Default: "8"}) })
 }
 
 func TestRenderConsts(t *testing.T) {

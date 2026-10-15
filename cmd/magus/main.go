@@ -16,8 +16,8 @@
 //	magus doctor                        validate the workspace
 //
 // magus help prints the full list of top-level subcommands, in the order and with the
-// descriptions subcommands in subcommands.go declares as the single source of
-// truth, kept short here rather than a second enumeration that can drift
+// descriptions internal/cli's registry declares as the single source of truth,
+// kept short here rather than a second enumeration that can drift
 // from it, as this comment once did (it advertised a `magus tail` that was
 // never a real subcommand).
 //
@@ -25,6 +25,7 @@
 //
 //go:generate go run ../magus-utils config -config ../../internal/config/config.go -fields-out ../../schema/gen/fields.go -fields-pkg schemagen -bind-out gen/bind.go -bind-pkg flaggen -apply-env-out ../../internal/config/gen/env.go -apply-env-pkg configgen
 //go:generate go run ../magus-utils cliflags -out gen/cli_flags.go -pkg flaggen
+//go:generate go run ../magus-utils completions -out completions
 package main
 
 import (
@@ -47,6 +48,7 @@ import (
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/cli"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/guard"
@@ -1120,6 +1122,16 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 	}
 }
 
+// knownSubcommands is the dispatcher's set, read from the registry so it cannot
+// disagree with help, the man pages or the completions.
+var knownSubcommands = func() []string {
+	names := make([]string, 0, len(cli.All)+1)
+	for _, c := range cli.All {
+		names = append(names, c.Name)
+	}
+	return append(names, cli.Help.Name)
+}()
+
 func unknownSubcommandUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	usage()
@@ -1128,13 +1140,14 @@ func unknownSubcommandUsage() {
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus [flags] <subcommand> [args]")
 	group := ""
-	for _, sc := range subcommands {
-		if sc.Group != group {
-			group = sc.Group
+	for _, c := range cli.All {
+		if c.Group != group {
+			group = c.Group
 			fmt.Fprintf(os.Stderr, "\n%s:\n", group)
 		}
-		fmt.Fprintf(os.Stderr, "  %-14s %s\n", sc.Name, sc.Short)
+		fmt.Fprintf(os.Stderr, "  %-14s %s\n", c.Name, c.Short)
 	}
+	fmt.Fprintf(os.Stderr, "  %-14s %s\n", cli.Help.Name, cli.Help.Short)
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Global flags (work before or after the subcommand):")
 	fmt.Fprintln(os.Stderr, "  --help, -h           show help (top-level or subcommand)")

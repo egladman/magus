@@ -1263,13 +1263,11 @@ func TestIsDeclaredRunRejectsEverythingButThreeBareTokens(t *testing.T) {
 }
 
 // TestDispatchSubCoversKnownSubcommands guards the drift that shipped `mcp` as a case
-// dispatchSub routed with no matching entry in subcommands.go's subcommands: `magus mcp`
+// dispatchSub routed with no matching entry in the command registry: `magus mcp`
 // worked when typed, but help, did-you-mean, the man pages, and every completion
-// script (all derived from subcommands / knownSubcommands) never mentioned it.
-// dispatchSub's switch and knownSubcommands are two separate declarations that can
-// drift exactly the way the three copies subcommands.go's own doc comment already
-// describes; this closes that gap mechanically instead of relying on someone
-// remembering to update both.
+// script (all derived from cli.All) never mentioned it. dispatchSub's switch and the
+// registry are two separate declarations that can drift; this closes that gap
+// mechanically instead of relying on someone remembering to update both.
 //
 // It reads dispatchSub's case labels out of main.go's source with go/parser rather
 // than exercising the switch at runtime: running it needs a loaded workspace for
@@ -1343,8 +1341,8 @@ func TestDispatchSubCoversKnownSubcommands(t *testing.T) {
 	slices.Sort(want)
 
 	if !slices.Equal(got, want) {
-		t.Errorf("dispatchSub's routed cases (+ help, version) = %v\nknownSubcommands (from subcommands.go) = %v\n"+
-			"a case dispatchSub routes must have an entry in subcommands.go's subcommands, and vice versa", got, want)
+		t.Errorf("dispatchSub's routed cases (+ help, version) = %v\nknownSubcommands (from cli.All) = %v\n"+
+			"a case dispatchSub routes must have an entry in internal/cli's All, and vice versa", got, want)
 	}
 }
 

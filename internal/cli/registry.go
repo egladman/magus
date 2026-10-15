@@ -1,45 +1,32 @@
 package cli
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
-// All is the ordered list of magus top-level commands consumed by the
-// man-page generator (cmd/magus-manpage).
-var All = []Command{
-	listCommand,
-	describeCommand,
-	runCommand,
-	xCommand,
-	whereCommand,
-	affectedCommand,
-	graphCommand,
-	queryCommand,
-	explainCommand,
-	pathCommand,
-	refsCommand,
-	watchCommand,
-	eventsCommand,
-	statusCommand,
-	cleanCommand,
-	shellCommand,
-	vcsCommand,
-	queueCommand,
-	doctorCommand,
-	configCommand,
-	sessionCommand,
-	jobCommand,
-	notesCommand,
-	diffCommand,
-	serverCommand,
-	brokerCommand,
-	mcpCommand,
-	buzzCommand,
-	completionCommand,
-	manCommand,
-	initCommand,
-	spellCommand,
-	agentCommand,
-	selfCommand,
-	versionCommand,
+// All is magus's top-level commands in the order `magus help` lists them.
+var All = slices.Concat(
+	group("Projects and targets", listCommand, describeCommand, whereCommand, runCommand,
+		affectedCommand, xCommand, cleanCommand, shellCommand),
+	group("Knowledge graph", queryCommand, refsCommand, explainCommand, pathCommand, graphCommand),
+	group("Changes and history", diffCommand, vcsCommand, sessionCommand, jobCommand, notesCommand, queueCommand),
+	group("Integrations and services", watchCommand, eventsCommand, serverCommand, brokerCommand,
+		mcpCommand, statusCommand, buzzCommand, spellCommand, agentCommand),
+	group("Setup and maintenance", initCommand, doctorCommand, configCommand, completionCommand,
+		manCommand, selfCommand, versionCommand),
+)
+
+// Help is `magus help`: help lists it and the shells complete it, but it is not in All
+// because it prints what a bare `magus` prints and has no man page.
+var Help = Command{Name: "help", Short: "Show this message", Group: "Setup and maintenance"}
+
+// group files commands under one help heading, which keeps a group's members contiguous.
+func group(heading string, commands ...Command) []Command {
+	for i := range commands {
+		commands[i].Group = heading
+	}
+	return commands
 }
 
 // commonTargets is the canonical set of project-scoped targets shared by

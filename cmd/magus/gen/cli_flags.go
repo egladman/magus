@@ -741,6 +741,27 @@ func BindDescribeSpells(fs *flag.FlagSet) *DescribeSpellsFlags {
 	return &f
 }
 
+// WhereFlags are the flags declared for `magus where`.
+type WhereFlags struct {
+	All     bool   // --all, -A
+	Filter  string // --filter
+	Glob    string // --glob
+	Regex   string // --regex
+	Literal string // --literal
+}
+
+// BindWhere registers `magus where`'s flags on fs and returns the destination.
+func BindWhere(fs *flag.FlagSet) *WhereFlags {
+	var f WhereFlags
+	fs.BoolVar(&f.All, FlagWhereAll, false, "Print all matching paths to stdout; do not error on ambiguity")
+	fs.BoolVar(&f.All, FlagWhereA, false, "Short for --all")
+	fs.StringVar(&f.Filter, FlagWhereFilter, "", "Restrict file search by pattern. Form: type=<glob|regex|literal>,pattern=<value>")
+	fs.StringVar(&f.Glob, FlagWhereGlob, "", "Restrict file search to paths matching a doublestar glob (shorthand for --filter type=glob,...)")
+	fs.StringVar(&f.Regex, FlagWhereRegex, "", "Restrict file search to paths matching a Go regexp (shorthand for --filter type=regex,...)")
+	fs.StringVar(&f.Literal, FlagWhereLiteral, "", "Restrict file search to paths containing this exact segment (shorthand for --filter type=literal,...)")
+	return &f
+}
+
 // RunFlags are the flags declared for `magus run`.
 //
 // It does NOT carry --skip: a custom-valued flag is bound by the command itself,
@@ -781,27 +802,6 @@ func BindRun(fs *flag.FlagSet) *RunFlags {
 	fs.IntVar(&f.NShards, FlagRunNShards, 0, "Without --stdin: the shard count the --shard label belongs to. With it the count is the saved plan's, and a different value is refused")
 	fs.BoolVar(&f.NoVolatilityRetry, FlagRunNoVolatilityRetry, false, "Disable volatility auto-retry for this run")
 	fs.BoolVar(&f.NoRedundancyCheck, FlagRunNoRedundancyCheck, false, "Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only")
-	return &f
-}
-
-// WhereFlags are the flags declared for `magus where`.
-type WhereFlags struct {
-	All     bool   // --all, -A
-	Filter  string // --filter
-	Glob    string // --glob
-	Regex   string // --regex
-	Literal string // --literal
-}
-
-// BindWhere registers `magus where`'s flags on fs and returns the destination.
-func BindWhere(fs *flag.FlagSet) *WhereFlags {
-	var f WhereFlags
-	fs.BoolVar(&f.All, FlagWhereAll, false, "Print all matching paths to stdout; do not error on ambiguity")
-	fs.BoolVar(&f.All, FlagWhereA, false, "Short for --all")
-	fs.StringVar(&f.Filter, FlagWhereFilter, "", "Restrict file search by pattern. Form: type=<glob|regex|literal>,pattern=<value>")
-	fs.StringVar(&f.Glob, FlagWhereGlob, "", "Restrict file search to paths matching a doublestar glob (shorthand for --filter type=glob,...)")
-	fs.StringVar(&f.Regex, FlagWhereRegex, "", "Restrict file search to paths matching a Go regexp (shorthand for --filter type=regex,...)")
-	fs.StringVar(&f.Literal, FlagWhereLiteral, "", "Restrict file search to paths containing this exact segment (shorthand for --filter type=literal,...)")
 	return &f
 }
 
@@ -905,6 +905,157 @@ func BindAffectedBisect(fs *flag.FlagSet) *AffectedBisectFlags {
 	fs.StringVar(&f.Bisect, FlagAffectedBisect, "", "Drive VCS bisect to find the commit that broke <project>")
 	fs.StringVar(&f.Good, FlagAffectedGood, "", "With --bisect: known-good commit SHA (auto-detected from history when empty)")
 	fs.StringVar(&f.Target, FlagAffectedTarget, "test", "With --bisect: magus target to bisect")
+	return &f
+}
+
+// CleanFlags are the flags declared for `magus clean`.
+type CleanFlags struct {
+	Cache bool // --cache
+}
+
+// BindClean registers `magus clean`'s flags on fs and returns the destination.
+func BindClean(fs *flag.FlagSet) *CleanFlags {
+	var f CleanFlags
+	fs.BoolVar(&f.Cache, FlagCleanCache, false, "Also invalidate magus cache entries for the selected projects")
+	return &f
+}
+
+// ShellFlags are the flags declared for `magus shell`.
+type ShellFlags struct {
+	Path                bool   // --path
+	Observe             bool   // --observe
+	Message             bool   // --message
+	Lease               string // --lease
+	AgentName           string // --agent-name
+	Transport           string // --transport
+	Session             string // --session
+	Agent               string // --agent
+	Transcript          string // --transcript
+	Event               string // --event
+	ReportsSkills       bool   // --reports-skills
+	ToolRows            string // --tool-rows
+	RendersAsk          bool   // --renders-ask
+	CallBackground      bool   // --call-background
+	CallTimeoutMs       int    // --call-timeout-ms
+	ForegroundDefaultMs int    // --foreground-default-ms
+	ForegroundMaxMs     int    // --foreground-max-ms
+}
+
+// BindShell registers `magus shell`'s flags on fs and returns the destination.
+func BindShell(fs *flag.FlagSet) *ShellFlags {
+	var f ShellFlags
+	fs.BoolVar(&f.Path, FlagShellPath, false, "Judge the input as a file path an edit is about to write, not as a shell command")
+	fs.BoolVar(&f.Observe, FlagShellObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
+	fs.BoolVar(&f.Message, FlagShellMessage, false, "Read the input as a message the person typed, without judging it: it records the topics the message raises, which a later rule reads, and the verdict is always pass")
+	fs.StringVar(&f.Lease, FlagShellLease, "", "The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE")
+	fs.StringVar(&f.AgentName, FlagShellAgentName, "", "Name of the agent host this invocation came from (attribution only); required with --transport")
+	fs.StringVar(&f.Transport, FlagShellTransport, "", "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session. Without --agent-name it is refused (MGS3024)")
+	fs.StringVar(&f.Session, FlagShellSession, "", "The host's own session id for this invocation")
+	fs.StringVar(&f.Agent, FlagShellAgent, "", "The host's id for the subagent making this call, empty for the main conversation; a subagent magus saw spawned is graded under its job")
+	fs.StringVar(&f.Transcript, FlagShellTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
+	fs.StringVar(&f.Event, FlagShellEvent, "", "The host's hook event name (e.g. PreToolUse)")
+	fs.BoolVar(&f.ReportsSkills, FlagShellReportsSkills, false, "This hook wiring reports when the host loads a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down")
+	fs.StringVar(&f.ToolRows, FlagShellToolRows, "", "The directory, relative to the workspace root, holding the host's tool rows that `magus agent harness install` writes; without it no tool is known and each call whose input shape names no command, path, search, prompt or skill is unjudged")
+	fs.BoolVar(&f.RendersAsk, FlagShellRendersAsk, false, "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny")
+	fs.BoolVar(&f.CallBackground, FlagShellCallBackground, false, "The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused")
+	fs.IntVar(&f.CallTimeoutMs, FlagShellCallTimeoutMs, 0, "The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default")
+	fs.IntVar(&f.ForegroundDefaultMs, FlagShellForegroundDefaultMs, 0, "The timeout in milliseconds the host gives a shell command that names none, declared by the wiring; without it the run-timeout advice stands down")
+	fs.IntVar(&f.ForegroundMaxMs, FlagShellForegroundMaxMs, 0, "The longest timeout in milliseconds the host lets a foreground shell command wait, declared by the wiring; without it the run-timeout advice stands down")
+	return &f
+}
+
+// QueryFlags are the flags declared for `magus query`.
+type QueryFlags struct {
+	Budget   int    // --budget
+	Kind     string // --kind
+	Refresh  bool   // --refresh
+	Global   bool   // --global
+	Identity bool   // --identity
+	Attempts bool   // --attempts
+	Publish  bool   // --publish
+	Stdin    bool   // --stdin
+	Open     bool   // --open
+	Print    bool   // --print
+	URL      string // --url
+	Secrets  bool   // --secrets
+}
+
+// QueryDefaults carries the defaults `magus query` resolves at runtime (config, a
+// package constant) rather than declaring as a literal.
+type QueryDefaults struct {
+	URL string // --url
+}
+
+// BindQuery registers `magus query`'s flags on fs and returns the destination.
+func BindQuery(fs *flag.FlagSet, d QueryDefaults) *QueryFlags {
+	var f QueryFlags
+	fs.IntVar(&f.Budget, FlagQueryBudget, 0, "Max nodes in the returned neighborhood (default 50)")
+	fs.StringVar(&f.Kind, FlagQueryKind, "", "Restrict matches to these node kinds (comma-separated)")
+	fs.BoolVar(&f.Refresh, FlagQueryRefresh, false, "Force a full graph rebuild before querying")
+	fs.BoolVar(&f.Global, FlagQueryGlobal, false, "Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace")
+	fs.BoolVar(&f.Identity, FlagQueryIdentity, false, "output <ref>: show the run's identity (descriptor, lineage, cache key, component digests)")
+	fs.BoolVar(&f.Attempts, FlagQueryAttempts, false, "output <ref>: list the ref's stored attempts (newest first)")
+	fs.BoolVar(&f.Publish, FlagQueryPublish, false, "output <ref>: upload this run's output to the remote cache as a signed bundle")
+	fs.BoolVar(&f.Stdin, FlagQueryStdin, false, "output: print records `-o jsonl` wrote, from stdin; writes nothing")
+	fs.BoolVar(&f.Open, FlagQueryOpen, false, "output <ref>: open the captured output in the browser log viewer (delivered privately)")
+	fs.BoolVar(&f.Print, FlagQueryPrint, false, "With --open, print the viewer URL instead of launching a browser")
+	fs.StringVar(&f.URL, FlagQueryURL, d.URL, "With --open, base URL of the log viewer page (override for a self-hosted mirror)")
+	fs.BoolVar(&f.Secrets, FlagQuerySecrets, false, "invocation <id>: list only the credential reads (reference and provider, never the value)")
+	return &f
+}
+
+// RefsFlags are the flags declared for `magus refs`.
+//
+// It does NOT carry --no-generated: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
+type RefsFlags struct {
+	Refresh     bool   // --refresh
+	Occurrences bool   // --occurrences
+	Definition  bool   // --definition
+	Source      bool   // --source
+	Text        bool   // --text
+	Limit       int    // --limit
+	Rename      string // --rename
+}
+
+// BindRefs registers `magus refs`'s flags on fs and returns the destination.
+func BindRefs(fs *flag.FlagSet) *RefsFlags {
+	var f RefsFlags
+	fs.BoolVar(&f.Refresh, FlagRefsRefresh, false, "Re-ingest the SCIP index before answering")
+	fs.BoolVar(&f.Occurrences, FlagRefsOccurrences, false, "Every exact source range, uncapped and verified against the tree: the view a mechanical edit needs. The default line list is capped and describes fan-in.")
+	fs.BoolVar(&f.Definition, FlagRefsDefinition, false, "Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed")
+	fs.BoolVar(&f.Source, FlagRefsSource, false, "With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n")
+	fs.BoolVar(&f.Text, FlagRefsText, false, "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope it, as grep's do; with none it searches the workspace")
+	fs.IntVar(&f.Limit, FlagRefsLimit, 0, "Print at most this many --text matches, then say how many more there were (0 for all). What `| head` would do, without losing the count or the exit code")
+	fs.StringVar(&f.Rename, FlagRefsRename, "", "Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is")
+	return &f
+}
+
+// ExplainFlags are the flags declared for `magus explain`.
+type ExplainFlags struct {
+	Refresh bool // --refresh
+	Global  bool // --global
+}
+
+// BindExplain registers `magus explain`'s flags on fs and returns the destination.
+func BindExplain(fs *flag.FlagSet) *ExplainFlags {
+	var f ExplainFlags
+	fs.BoolVar(&f.Refresh, FlagExplainRefresh, false, "Force a full graph rebuild before explaining")
+	fs.BoolVar(&f.Global, FlagExplainGlobal, false, "Resolve across the workspaces registered in config (knowledge.workspaces)")
+	return &f
+}
+
+// PathFlags are the flags declared for `magus path`.
+type PathFlags struct {
+	Refresh bool // --refresh
+	Global  bool // --global
+}
+
+// BindPath registers `magus path`'s flags on fs and returns the destination.
+func BindPath(fs *flag.FlagSet) *PathFlags {
+	var f PathFlags
+	fs.BoolVar(&f.Refresh, FlagPathRefresh, false, "Force a full graph rebuild before pathfinding")
+	fs.BoolVar(&f.Global, FlagPathGlobal, false, "Resolve endpoints across the workspaces registered in config (knowledge.workspaces)")
 	return &f
 }
 
@@ -1047,220 +1198,40 @@ func BindGraphDiff(fs *flag.FlagSet) *GraphDiffFlags {
 	return &f
 }
 
-// QueryFlags are the flags declared for `magus query`.
-type QueryFlags struct {
-	Budget   int    // --budget
-	Kind     string // --kind
-	Refresh  bool   // --refresh
-	Global   bool   // --global
-	Identity bool   // --identity
-	Attempts bool   // --attempts
-	Publish  bool   // --publish
-	Stdin    bool   // --stdin
-	Open     bool   // --open
-	Print    bool   // --print
-	URL      string // --url
-	Secrets  bool   // --secrets
-}
-
-// QueryDefaults carries the defaults `magus query` resolves at runtime (config, a
-// package constant) rather than declaring as a literal.
-type QueryDefaults struct {
-	URL string // --url
-}
-
-// BindQuery registers `magus query`'s flags on fs and returns the destination.
-func BindQuery(fs *flag.FlagSet, d QueryDefaults) *QueryFlags {
-	var f QueryFlags
-	fs.IntVar(&f.Budget, FlagQueryBudget, 0, "Max nodes in the returned neighborhood (default 50)")
-	fs.StringVar(&f.Kind, FlagQueryKind, "", "Restrict matches to these node kinds (comma-separated)")
-	fs.BoolVar(&f.Refresh, FlagQueryRefresh, false, "Force a full graph rebuild before querying")
-	fs.BoolVar(&f.Global, FlagQueryGlobal, false, "Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace")
-	fs.BoolVar(&f.Identity, FlagQueryIdentity, false, "output <ref>: show the run's identity (descriptor, lineage, cache key, component digests)")
-	fs.BoolVar(&f.Attempts, FlagQueryAttempts, false, "output <ref>: list the ref's stored attempts (newest first)")
-	fs.BoolVar(&f.Publish, FlagQueryPublish, false, "output <ref>: upload this run's output to the remote cache as a signed bundle")
-	fs.BoolVar(&f.Stdin, FlagQueryStdin, false, "output: print records `-o jsonl` wrote, from stdin; writes nothing")
-	fs.BoolVar(&f.Open, FlagQueryOpen, false, "output <ref>: open the captured output in the browser log viewer (delivered privately)")
-	fs.BoolVar(&f.Print, FlagQueryPrint, false, "With --open, print the viewer URL instead of launching a browser")
-	fs.StringVar(&f.URL, FlagQueryURL, d.URL, "With --open, base URL of the log viewer page (override for a self-hosted mirror)")
-	fs.BoolVar(&f.Secrets, FlagQuerySecrets, false, "invocation <id>: list only the credential reads (reference and provider, never the value)")
-	return &f
-}
-
-// ExplainFlags are the flags declared for `magus explain`.
-type ExplainFlags struct {
-	Refresh bool // --refresh
-	Global  bool // --global
-}
-
-// BindExplain registers `magus explain`'s flags on fs and returns the destination.
-func BindExplain(fs *flag.FlagSet) *ExplainFlags {
-	var f ExplainFlags
-	fs.BoolVar(&f.Refresh, FlagExplainRefresh, false, "Force a full graph rebuild before explaining")
-	fs.BoolVar(&f.Global, FlagExplainGlobal, false, "Resolve across the workspaces registered in config (knowledge.workspaces)")
-	return &f
-}
-
-// PathFlags are the flags declared for `magus path`.
-type PathFlags struct {
-	Refresh bool // --refresh
-	Global  bool // --global
-}
-
-// BindPath registers `magus path`'s flags on fs and returns the destination.
-func BindPath(fs *flag.FlagSet) *PathFlags {
-	var f PathFlags
-	fs.BoolVar(&f.Refresh, FlagPathRefresh, false, "Force a full graph rebuild before pathfinding")
-	fs.BoolVar(&f.Global, FlagPathGlobal, false, "Resolve endpoints across the workspaces registered in config (knowledge.workspaces)")
-	return &f
-}
-
-// RefsFlags are the flags declared for `magus refs`.
+// DiffFlags are the flags declared for `magus diff`.
 //
-// It does NOT carry --no-generated: a custom-valued flag is bound by the command itself,
+// It does NOT carry --conformance-min-share: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
-type RefsFlags struct {
-	Refresh     bool   // --refresh
-	Occurrences bool   // --occurrences
-	Definition  bool   // --definition
-	Source      bool   // --source
-	Text        bool   // --text
-	Limit       int    // --limit
-	Rename      string // --rename
+type DiffFlags struct {
+	Generated            bool   // --generated
+	Impact               bool   // --impact
+	NoTui                bool   // --no-tui
+	Watch                bool   // --watch
+	Ack                  bool   // --ack
+	Reason               string // --reason
+	Thread               string // --thread
+	Unread               bool   // --unread
+	Rev                  string // --rev
+	Patch                string // --patch
+	Baseline             string // --baseline
+	ConformanceMinCohort int    // --conformance-min-cohort
 }
 
-// BindRefs registers `magus refs`'s flags on fs and returns the destination.
-func BindRefs(fs *flag.FlagSet) *RefsFlags {
-	var f RefsFlags
-	fs.BoolVar(&f.Refresh, FlagRefsRefresh, false, "Re-ingest the SCIP index before answering")
-	fs.BoolVar(&f.Occurrences, FlagRefsOccurrences, false, "Every exact source range, uncapped and verified against the tree: the view a mechanical edit needs. The default line list is capped and describes fan-in.")
-	fs.BoolVar(&f.Definition, FlagRefsDefinition, false, "Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed")
-	fs.BoolVar(&f.Source, FlagRefsSource, false, "With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n")
-	fs.BoolVar(&f.Text, FlagRefsText, false, "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope it, as grep's do; with none it searches the workspace")
-	fs.IntVar(&f.Limit, FlagRefsLimit, 0, "Print at most this many --text matches, then say how many more there were (0 for all). What `| head` would do, without losing the count or the exit code")
-	fs.StringVar(&f.Rename, FlagRefsRename, "", "Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is")
-	return &f
-}
-
-// WatchFlags are the flags declared for `magus watch`.
-//
-// It does NOT carry --ignore: a custom-valued flag is bound by the command itself,
-// which must do so alongside this binder.
-type WatchFlags struct {
-	Debounce time.Duration // --debounce
-	Initial  bool          // --initial
-	Null     bool          // --null
-	Backend  string        // --backend
-}
-
-// BindWatch registers `magus watch`'s flags on fs and returns the destination.
-func BindWatch(fs *flag.FlagSet) *WatchFlags {
-	var f WatchFlags
-	fs.DurationVar(&f.Debounce, FlagWatchDebounce, time.Duration(200000000), "Quiet window before emitting a batch")
-	fs.BoolVar(&f.Initial, FlagWatchInitial, true, "Emit an --all batch on startup before watching")
-	fs.BoolVar(&f.Null, FlagWatchNull, false, "NUL-separate paths; double-NUL between batches")
-	fs.StringVar(&f.Backend, FlagWatchBackend, "fsnotify", "Notification backend: fsnotify, poll, or auto (probes fsnotify, falls back to poll)")
-	return &f
-}
-
-// EventsFlags are the flags declared for `magus events`.
-type EventsFlags struct {
-	Follow   bool          // --follow, -f
-	Type     string        // --type
-	Limit    int           // --limit
-	Interval time.Duration // --interval
-}
-
-// BindEvents registers `magus events`'s flags on fs and returns the destination.
-func BindEvents(fs *flag.FlagSet) *EventsFlags {
-	var f EventsFlags
-	fs.BoolVar(&f.Follow, FlagEventsFollow, false, "Keep streaming as events occur instead of exiting after the replay")
-	fs.BoolVar(&f.Follow, FlagEventsF, false, "Short for --follow")
-	fs.StringVar(&f.Type, FlagEventsType, "", "Restrict to these event types (comma-separated); default is every type except target.output")
-	fs.IntVar(&f.Limit, FlagEventsLimit, 20, "Replay this many recent invocations before following; 0 replays nothing (only new events), negative replays every retained run")
-	fs.DurationVar(&f.Interval, FlagEventsInterval, time.Duration(250000000), "How often --follow polls the run log for new events")
-	return &f
-}
-
-// StatusFlags are the flags declared for `magus status`.
-type StatusFlags struct {
-	Watch     time.Duration // --watch, -W
-	Compact   bool          // --compact, -c
-	Symbols   bool          // --symbols
-	Socket    string        // --socket
-	Probe     string        // --probe
-	Workspace string        // --workspace
-	Wait      bool          // --wait
-}
-
-// BindStatus registers `magus status`'s flags on fs and returns the destination.
-func BindStatus(fs *flag.FlagSet) *StatusFlags {
-	var f StatusFlags
-	fs.DurationVar(&f.Watch, FlagStatusWatch, 0, "Poll and reprint at this interval (minimum 15s; 0 means one-shot)")
-	fs.DurationVar(&f.Watch, FlagStatusW, 0, "Short for --watch")
-	fs.BoolVar(&f.Compact, FlagStatusCompact, false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
-	fs.BoolVar(&f.Compact, FlagStatusC, false, "Short for --compact")
-	fs.BoolVar(&f.Symbols, FlagStatusSymbols, false, "Include the expensive symbol-index freshness scan")
-	fs.StringVar(&f.Socket, FlagStatusSocket, "", "Proc server to report on, as a unix:// URL or bare path; default: MAGUS_PROC_SOCKET inside a run, else every live one in the socket dir. --probe asks the server at server.address unless this names one")
-	fs.StringVar(&f.Probe, FlagStatusProbe, "", "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)")
-	fs.StringVar(&f.Workspace, FlagStatusWorkspace, "", "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)")
-	fs.BoolVar(&f.Wait, FlagStatusWait, false, "Exit 0 once the build budget can seat the magus run reading this pipe (a free slot when none does); holds that run until then")
-	return &f
-}
-
-// CleanFlags are the flags declared for `magus clean`.
-type CleanFlags struct {
-	Cache bool // --cache
-}
-
-// BindClean registers `magus clean`'s flags on fs and returns the destination.
-func BindClean(fs *flag.FlagSet) *CleanFlags {
-	var f CleanFlags
-	fs.BoolVar(&f.Cache, FlagCleanCache, false, "Also invalidate magus cache entries for the selected projects")
-	return &f
-}
-
-// ShellFlags are the flags declared for `magus shell`.
-type ShellFlags struct {
-	Path                bool   // --path
-	Observe             bool   // --observe
-	Message             bool   // --message
-	Lease               string // --lease
-	AgentName           string // --agent-name
-	Transport           string // --transport
-	Session             string // --session
-	Agent               string // --agent
-	Transcript          string // --transcript
-	Event               string // --event
-	ReportsSkills       bool   // --reports-skills
-	ToolRows            string // --tool-rows
-	RendersAsk          bool   // --renders-ask
-	CallBackground      bool   // --call-background
-	CallTimeoutMs       int    // --call-timeout-ms
-	ForegroundDefaultMs int    // --foreground-default-ms
-	ForegroundMaxMs     int    // --foreground-max-ms
-}
-
-// BindShell registers `magus shell`'s flags on fs and returns the destination.
-func BindShell(fs *flag.FlagSet) *ShellFlags {
-	var f ShellFlags
-	fs.BoolVar(&f.Path, FlagShellPath, false, "Judge the input as a file path an edit is about to write, not as a shell command")
-	fs.BoolVar(&f.Observe, FlagShellObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
-	fs.BoolVar(&f.Message, FlagShellMessage, false, "Read the input as a message the person typed, without judging it: it records the topics the message raises, which a later rule reads, and the verdict is always pass")
-	fs.StringVar(&f.Lease, FlagShellLease, "", "The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE")
-	fs.StringVar(&f.AgentName, FlagShellAgentName, "", "Name of the agent host this invocation came from (attribution only); required with --transport")
-	fs.StringVar(&f.Transport, FlagShellTransport, "", "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session. Without --agent-name it is refused (MGS3024)")
-	fs.StringVar(&f.Session, FlagShellSession, "", "The host's own session id for this invocation")
-	fs.StringVar(&f.Agent, FlagShellAgent, "", "The host's id for the subagent making this call, empty for the main conversation; a subagent magus saw spawned is graded under its job")
-	fs.StringVar(&f.Transcript, FlagShellTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
-	fs.StringVar(&f.Event, FlagShellEvent, "", "The host's hook event name (e.g. PreToolUse)")
-	fs.BoolVar(&f.ReportsSkills, FlagShellReportsSkills, false, "This hook wiring reports when the host loads a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down")
-	fs.StringVar(&f.ToolRows, FlagShellToolRows, "", "The directory, relative to the workspace root, holding the host's tool rows that `magus agent harness install` writes; without it no tool is known and each call whose input shape names no command, path, search, prompt or skill is unjudged")
-	fs.BoolVar(&f.RendersAsk, FlagShellRendersAsk, false, "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny")
-	fs.BoolVar(&f.CallBackground, FlagShellCallBackground, false, "The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused")
-	fs.IntVar(&f.CallTimeoutMs, FlagShellCallTimeoutMs, 0, "The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default")
-	fs.IntVar(&f.ForegroundDefaultMs, FlagShellForegroundDefaultMs, 0, "The timeout in milliseconds the host gives a shell command that names none, declared by the wiring; without it the run-timeout advice stands down")
-	fs.IntVar(&f.ForegroundMaxMs, FlagShellForegroundMaxMs, 0, "The longest timeout in milliseconds the host lets a foreground shell command wait, declared by the wiring; without it the run-timeout advice stands down")
+// BindDiff registers `magus diff`'s flags on fs and returns the destination.
+func BindDiff(fs *flag.FlagSet) *DiffFlags {
+	var f DiffFlags
+	fs.BoolVar(&f.Generated, FlagDiffGenerated, false, "Include declared target outputs, which are folded away by default")
+	fs.BoolVar(&f.Impact, FlagDiffImpact, false, "Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, note anchors, and the evidence the authors consulted")
+	fs.BoolVar(&f.NoTui, FlagDiffNoTui, false, "Print the report instead of opening the interactive viewer")
+	fs.BoolVar(&f.Watch, FlagDiffWatch, false, "Re-read and re-render whenever the working tree changes")
+	fs.BoolVar(&f.Ack, FlagDiffAck, false, "Record that you have read the changed files at their current content; --impact reports what carries no such record")
+	fs.StringVar(&f.Reason, FlagDiffReason, "", "An optional note kept with an --ack, for the next reader of the report")
+	fs.StringVar(&f.Thread, FlagDiffThread, "", "Narrow the review to one pull request thread, by its id or the id of any comment in it, which the report lists beside each hunk while the server runs. The viewer opens on its hunk; printed, it shows the conversation, the hunk and its reach")
+	fs.BoolVar(&f.Unread, FlagDiffUnread, false, "Narrow the report to the hunks no read mark covers, under every -o; -o name prints one path:start-end per hunk. Always exits 0. Where the marks cannot be read it says the read state is unknown and calls no hunk unread")
+	fs.StringVar(&f.Rev, FlagDiffRev, "", "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work")
+	fs.StringVar(&f.Patch, FlagDiffPatch, "", "Review a patch somebody handed you instead of the working tree; `-` reads stdin")
+	fs.StringVar(&f.Baseline, FlagDiffBaseline, "", "The base's `graph export --symbols -o json`: adds what each changed symbol did to the API and the smallest semver bump that proves")
+	fs.IntVar(&f.ConformanceMinCohort, FlagDiffConformanceMinCohort, 0, "How many declarations a conformance norm needs before a changed symbol is compared against it; defaults to knowledge.conformance.gates.min_cohort")
 	return &f
 }
 
@@ -1301,353 +1272,6 @@ type VCSCheckpointFlags struct {
 func BindVCSCheckpoint(fs *flag.FlagSet) *VCSCheckpointFlags {
 	var f VCSCheckpointFlags
 	fs.BoolVar(&f.Preserve, FlagVCSCheckpointPreserve, false, "Also capture the uncommitted work and print a handle that restores it")
-	return &f
-}
-
-// QueueDescribeFlags are the flags declared for `magus queue describe`.
-type QueueDescribeFlags struct {
-	Provider      string // --provider
-	Base          string // --base
-	StatusContext string // --status-context
-	App           string // --app
-	Remote        string // --remote
-	VCS           string // --vcs
-}
-
-// BindQueueDescribe registers `magus queue describe`'s flags on fs and returns the destination.
-func BindQueueDescribe(fs *flag.FlagSet) *QueueDescribeFlags {
-	var f QueueDescribeFlags
-	fs.StringVar(&f.Provider, FlagQueueDescribeProvider, "", "`provider`: a built-in name (github) or a .buzz file")
-	fs.StringVar(&f.Base, FlagQueueDescribeBase, "", "`branch` the queue merges into")
-	fs.StringVar(&f.StatusContext, FlagQueueDescribeStatusContext, "merge-queue", "Commit status the queue posts, whose wiring is described; empty describes what the provider supports and reads no setup")
-	fs.StringVar(&f.App, FlagQueueDescribeApp, "", "`app` apply writes with, as the provider names it (github: a GitHub App's slug[:App ID], required with a --status-context)")
-	fs.StringVar(&f.Remote, FlagQueueDescribeRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
-	fs.StringVar(&f.VCS, FlagQueueDescribeVCS, "git", "Version control `backend` of the checkout at --root")
-	return &f
-}
-
-// QueueLsFlags are the flags declared for `magus queue ls`.
-type QueueLsFlags struct {
-	Provider string // --provider
-	Base     string // --base
-	Remote   string // --remote
-	VCS      string // --vcs
-}
-
-// BindQueueLs registers `magus queue ls`'s flags on fs and returns the destination.
-func BindQueueLs(fs *flag.FlagSet) *QueueLsFlags {
-	var f QueueLsFlags
-	fs.StringVar(&f.Provider, FlagQueueLsProvider, "", "`provider`: a built-in name (github) or a .buzz file")
-	fs.StringVar(&f.Base, FlagQueueLsBase, "", "`branch` the queue merges into")
-	fs.StringVar(&f.Remote, FlagQueueLsRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
-	fs.StringVar(&f.VCS, FlagQueueLsVCS, "git", "Version control `backend` of the checkout at --root")
-	return &f
-}
-
-// QueuePlanFlags are the flags declared for `magus queue plan`.
-type QueuePlanFlags struct {
-	Changes  string // --changes
-	Provider string // --provider
-	Out      string // --out
-	Depth    int    // --depth
-	Parallel int    // --parallel
-	Facts    string // --facts
-	Target   string // --target
-	Remote   string // --remote
-	VCS      string // --vcs
-}
-
-// BindQueuePlan registers `magus queue plan`'s flags on fs and returns the destination.
-func BindQueuePlan(fs *flag.FlagSet) *QueuePlanFlags {
-	var f QueuePlanFlags
-	fs.StringVar(&f.Changes, FlagQueuePlanChanges, "-", "The mergequeue.changes/v1 `document`, or `-` for stdin")
-	fs.StringVar(&f.Provider, FlagQueuePlanProvider, "", "`provider` approval at each head is checked with")
-	fs.StringVar(&f.Out, FlagQueuePlanOut, "", "`file` the mergequeue.plan/v1 document is written to")
-	fs.IntVar(&f.Depth, FlagQueuePlanDepth, 3, "Candidates of one partition that validate at once")
-	fs.IntVar(&f.Parallel, FlagQueuePlanParallel, 0, "Changes admitted at once; 0 is one per CPU")
-	fs.StringVar(&f.Facts, FlagQueuePlanFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
-	fs.StringVar(&f.Target, FlagQueuePlanTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
-	fs.StringVar(&f.Remote, FlagQueuePlanRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
-	fs.StringVar(&f.VCS, FlagQueuePlanVCS, "git", "Version control `backend` of the checkout at --root")
-	return &f
-}
-
-// QueueValidateFlags are the flags declared for `magus queue validate`.
-type QueueValidateFlags struct {
-	Stdin           bool   // --stdin
-	Gate            string // --gate
-	Regenerate      string // --regenerate
-	Verdicts        string // --verdicts
-	Only            string // --only
-	Parallel        int    // --parallel
-	RemoteCacheRead bool   // --remote-cache-read
-	Facts           string // --facts
-	Target          string // --target
-	Remote          string // --remote
-	VCS             string // --vcs
-}
-
-// BindQueueValidate registers `magus queue validate`'s flags on fs and returns the destination.
-func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
-	var f QueueValidateFlags
-	fs.BoolVar(&f.Stdin, FlagQueueValidateStdin, false, "Read the mergequeue.plan/v1 document from stdin; required")
-	fs.StringVar(&f.Gate, FlagQueueValidateGate, "", "`command` and its arguments, run with no shell in each candidate's checkout with the change's affected projects added ahead of its first `--`; exit 0 is green")
-	fs.StringVar(&f.Regenerate, FlagQueueValidateRegenerate, "", "`command` and its arguments, run with no shell in a candidate with the change's affected projects added ahead of its first `--` and the generated files to rewrite listed on stdin")
-	fs.StringVar(&f.Verdicts, FlagQueueValidateVerdicts, "", "`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>")
-	fs.StringVar(&f.Only, FlagQueueValidateOnly, "", "Validate this one `change`; the changes beneath it in its partition are merged under it but not gated")
-	fs.IntVar(&f.Parallel, FlagQueueValidateParallel, 0, "Candidates built or gated at once across every partition; 0 is one per CPU")
-	fs.BoolVar(&f.RemoteCacheRead, FlagQueueValidateRemoteCacheRead, false, "Let hooks read magus's remote cache from GitHub Actions through a loopback proxy that forwards lookups with the runner's token and refuses writes. Hooks get a stand-in token. Refused without runner credentials or a trusted key")
-	fs.StringVar(&f.Facts, FlagQueueValidateFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
-	fs.StringVar(&f.Target, FlagQueueValidateTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
-	fs.StringVar(&f.Remote, FlagQueueValidateRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
-	fs.StringVar(&f.VCS, FlagQueueValidateVCS, "git", "Version control `backend` of the checkout at --root")
-	return &f
-}
-
-// QueueGateFlags are the flags declared for `magus queue gate`.
-type QueueGateFlags struct {
-	Cache  string // --cache
-	Env    string // --env
-	Remote string // --remote
-	VCS    string // --vcs
-}
-
-// BindQueueGate registers `magus queue gate`'s flags on fs and returns the destination.
-func BindQueueGate(fs *flag.FlagSet) *QueueGateFlags {
-	var f QueueGateFlags
-	fs.StringVar(&f.Cache, FlagQueueGateCache, "", "`directory` the command's magus keeps its local cache tier and its spells' caches in, outside the box; empty keeps them in the box, as validate does")
-	fs.StringVar(&f.Env, FlagQueueGateEnv, "", "Comma-separated `names` of variables passed from this environment to the command's own magus")
-	fs.StringVar(&f.Remote, FlagQueueGateRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
-	fs.StringVar(&f.VCS, FlagQueueGateVCS, "git", "Version control `backend` of the checkout at --root")
-	return &f
-}
-
-// QueueApplyFlags are the flags declared for `magus queue apply`.
-type QueueApplyFlags struct {
-	Provider            string        // --provider
-	Base                string        // --base
-	Workflow            string        // --workflow
-	StatusContext       string        // --status-context
-	Once                bool          // --once
-	Interval            time.Duration // --interval
-	Committer           string        // --committer
-	App                 string        // --app
-	Regenerate          string        // --regenerate
-	ReproduceGate       string        // --reproduce-gate
-	ReproduceRegenerate string        // --reproduce-regenerate
-	Facts               string        // --facts
-	Target              string        // --target
-	Remote              string        // --remote
-	VCS                 string        // --vcs
-}
-
-// BindQueueApply registers `magus queue apply`'s flags on fs and returns the destination.
-func BindQueueApply(fs *flag.FlagSet) *QueueApplyFlags {
-	var f QueueApplyFlags
-	fs.StringVar(&f.Provider, FlagQueueApplyProvider, "", "`provider`: a built-in name (github) or a .buzz file")
-	fs.StringVar(&f.Base, FlagQueueApplyBase, "", "`branch` the queue merges into; a plan naming another is refused (MGS3028), and a run: source must have run on it")
-	fs.StringVar(&f.Workflow, FlagQueueApplyWorkflow, "", "`definition` a run: source must have run, started by an event that runs the base's own copy of it (github: .github/workflows/queue.yaml); required with a run: source, whose uploads are otherwise refused (MGS3027)")
-	fs.StringVar(&f.StatusContext, FlagQueueApplyStatusContext, "merge-queue", "Commit status the queue posts; branch protection requires it")
-	fs.BoolVar(&f.Once, FlagQueueApplyOnce, false, "Apply what <source> holds now and stop, rather than following it until it is complete")
-	fs.DurationVar(&f.Interval, FlagQueueApplyInterval, time.Duration(10000000000), "How often <source> is read while following it")
-	fs.StringVar(&f.Committer, FlagQueueApplyCommitter, "", "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops")
-	fs.StringVar(&f.App, FlagQueueApplyApp, "", "`app` whose credential the provider writes with, as the provider names it (github: a GitHub App's slug[:App ID], required). apply refuses to start when the base requires --status-context from another integration (MGS3019)")
-	fs.StringVar(&f.Regenerate, FlagQueueApplyRegenerate, "", "The base's regeneration `command`, run with no shell or credential: projects go ahead of its first `--`, files to rewrite on stdin. It runs only where the build tool proves the change misses its code; elsewhere apply checks the rest.")
-	fs.StringVar(&f.ReproduceGate, FlagQueueApplyReproduceGate, "", "The `command` validate's --gate is given, shown on each kick-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict")
-	fs.StringVar(&f.ReproduceRegenerate, FlagQueueApplyReproduceRegenerate, "", "The `command` validate's --regenerate is given, shown beside --reproduce-gate")
-	fs.StringVar(&f.Facts, FlagQueueApplyFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
-	fs.StringVar(&f.Target, FlagQueueApplyTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
-	fs.StringVar(&f.Remote, FlagQueueApplyRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
-	fs.StringVar(&f.VCS, FlagQueueApplyVCS, "git", "Version control `backend` of the checkout at --root")
-	return &f
-}
-
-// QueueReviewsFlags are the flags declared for `magus queue reviews`.
-type QueueReviewsFlags struct {
-	Provider string // --provider
-	Base     string // --base
-	Change   string // --change
-	Head     string // --head
-	Dismiss  bool   // --dismiss
-	Facts    string // --facts
-	Target   string // --target
-	Remote   string // --remote
-	VCS      string // --vcs
-}
-
-// BindQueueReviews registers `magus queue reviews`'s flags on fs and returns the destination.
-func BindQueueReviews(fs *flag.FlagSet) *QueueReviewsFlags {
-	var f QueueReviewsFlags
-	fs.StringVar(&f.Provider, FlagQueueReviewsProvider, "", "`provider`: a built-in name (github) or a .buzz file")
-	fs.StringVar(&f.Base, FlagQueueReviewsBase, "", "`branch` the change targets")
-	fs.StringVar(&f.Change, FlagQueueReviewsChange, "", "`id` of the change, as the provider names it (github: the pull request number)")
-	fs.StringVar(&f.Head, FlagQueueReviewsHead, "", "`commit` the change's head must be at; when it moved, nothing is classified or dismissed")
-	fs.BoolVar(&f.Dismiss, FlagQueueReviewsDismiss, false, "Dismiss each approval that does not carry, naming what changed since it")
-	fs.StringVar(&f.Facts, FlagQueueReviewsFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
-	fs.StringVar(&f.Target, FlagQueueReviewsTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
-	fs.StringVar(&f.Remote, FlagQueueReviewsRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
-	fs.StringVar(&f.VCS, FlagQueueReviewsVCS, "git", "Version control `backend` of the checkout at --root")
-	return &f
-}
-
-// DoctorFlags are the flags declared for `magus doctor`.
-type DoctorFlags struct {
-	Probe bool // --probe
-	Fix   bool // --fix
-	List  bool // --list
-}
-
-// BindDoctor registers `magus doctor`'s flags on fs and returns the destination.
-func BindDoctor(fs *flag.FlagSet) *DoctorFlags {
-	var f DoctorFlags
-	fs.BoolVar(&f.Probe, FlagDoctorProbe, false, "Run each declared tool-readiness probe instead of only listing it (forks a process per gated tool)")
-	fs.BoolVar(&f.Fix, FlagDoctorFix, false, "Run the remedy each finding names, where one exists (see --dry-run to list them first)")
-	fs.BoolVar(&f.List, FlagDoctorList, false, "Print every check magus would run (name, subject, and MGS code) without running any of them")
-	return &f
-}
-
-// ConfigSetFlags are the flags declared for `magus config set`.
-type ConfigSetFlags struct {
-	Global bool // --global
-}
-
-// BindConfigSet registers `magus config set`'s flags on fs and returns the destination.
-func BindConfigSet(fs *flag.FlagSet) *ConfigSetFlags {
-	var f ConfigSetFlags
-	fs.BoolVar(&f.Global, FlagConfigSetGlobal, false, "Write to the global config ($XDG_CONFIG_HOME/magus/magus.yaml)")
-	return &f
-}
-
-// ConfigHistoryPassedFlags are the flags declared for `magus config history passed`.
-type ConfigHistoryPassedFlags struct {
-	History string // --history
-	Ref     string // --ref
-	Commit  string // --commit
-	Target  string // --target
-	Status  string // --status
-}
-
-// ConfigHistoryPassedDefaults carries the defaults `magus config history passed` resolves at runtime (config, a
-// package constant) rather than declaring as a literal.
-type ConfigHistoryPassedDefaults struct {
-	History string // --history
-	Status  string // --status
-}
-
-// BindConfigHistoryPassed registers `magus config history passed`'s flags on fs and returns the destination.
-func BindConfigHistoryPassed(fs *flag.FlagSet, d ConfigHistoryPassedDefaults) *ConfigHistoryPassedFlags {
-	var f ConfigHistoryPassedFlags
-	fs.StringVar(&f.History, FlagConfigHistoryPassedHistory, d.History, "Path to the history JSON to write (default: configured history_path)")
-	fs.StringVar(&f.Ref, FlagConfigHistoryPassedRef, "", "Ref the run was on (git branch, hg named branch, jj bookmark)")
-	fs.StringVar(&f.Commit, FlagConfigHistoryPassedCommit, "", "Commit the run was at")
-	fs.StringVar(&f.Target, FlagConfigHistoryPassedTarget, "ci", "Target that ran")
-	fs.StringVar(&f.Status, FlagConfigHistoryPassedStatus, d.Status, "How the run came out: passed or failed")
-	return &f
-}
-
-// ConfigHistoryImportFlags are the flags declared for `magus config history import`.
-type ConfigHistoryImportFlags struct {
-	History string // --history
-}
-
-// ConfigHistoryImportDefaults carries the defaults `magus config history import` resolves at runtime (config, a
-// package constant) rather than declaring as a literal.
-type ConfigHistoryImportDefaults struct {
-	History string // --history
-}
-
-// BindConfigHistoryImport registers `magus config history import`'s flags on fs and returns the destination.
-func BindConfigHistoryImport(fs *flag.FlagSet, d ConfigHistoryImportDefaults) *ConfigHistoryImportFlags {
-	var f ConfigHistoryImportFlags
-	fs.StringVar(&f.History, FlagConfigHistoryImportHistory, d.History, "Path to the history JSON to write (default: configured history_path)")
-	return &f
-}
-
-// ConfigCachePruneFlags are the flags declared for `magus config cache prune`.
-type ConfigCachePruneFlags struct {
-	OlderThan time.Duration // --older-than
-	KeepLast  int           // --keep-last
-	Remote    bool          // --remote
-	DryRun    bool          // --dry-run
-}
-
-// BindConfigCachePrune registers `magus config cache prune`'s flags on fs and returns the destination.
-func BindConfigCachePrune(fs *flag.FlagSet) *ConfigCachePruneFlags {
-	var f ConfigCachePruneFlags
-	fs.DurationVar(&f.OlderThan, FlagConfigCachePruneOlderThan, 0, "Remove entries older than this duration (e.g. 168h = 7 days)")
-	fs.IntVar(&f.KeepLast, FlagConfigCachePruneKeepLast, 0, "Keep only the newest N entries, evict the rest (--remote only)")
-	fs.BoolVar(&f.Remote, FlagConfigCachePruneRemote, false, "Prune the configured remote backend instead of the local cache")
-	fs.BoolVar(&f.DryRun, FlagConfigCachePruneDryRun, false, "Print what would be removed without deleting anything")
-	return &f
-}
-
-// ConfigCacheExportFlags are the flags declared for `magus config cache export`.
-type ConfigCacheExportFlags struct {
-	To     string // --to
-	Remote bool   // --remote
-}
-
-// BindConfigCacheExport registers `magus config cache export`'s flags on fs and returns the destination.
-func BindConfigCacheExport(fs *flag.FlagSet) *ConfigCacheExportFlags {
-	var f ConfigCacheExportFlags
-	fs.StringVar(&f.To, FlagConfigCacheExportTo, "", "Write the archive to this file (default: stdout)")
-	fs.BoolVar(&f.Remote, FlagConfigCacheExportRemote, false, "Sign the caches the workspace's spells declare (go: GOCACHE and GOMODCACHE) and store them in the remote tier, instead of writing the local tier's archive")
-	return &f
-}
-
-// ConfigCacheImportFlags are the flags declared for `magus config cache import`.
-type ConfigCacheImportFlags struct {
-	Remote bool // --remote
-}
-
-// BindConfigCacheImport registers `magus config cache import`'s flags on fs and returns the destination.
-func BindConfigCacheImport(fs *flag.FlagSet) *ConfigCacheImportFlags {
-	var f ConfigCacheImportFlags
-	fs.BoolVar(&f.Remote, FlagConfigCacheImportRemote, false, "Restore the newest verified bundle of each cache the workspace's spells declare from the remote tier, instead of reading an archive")
-	return &f
-}
-
-// ConfigMCPConnectorCreateFlags are the flags declared for `magus config mcp connector create`.
-type ConfigMCPConnectorCreateFlags struct {
-	Name    string // --name
-	Expires string // --expires
-}
-
-// BindConfigMCPConnectorCreate registers `magus config mcp connector create`'s flags on fs and returns the destination.
-func BindConfigMCPConnectorCreate(fs *flag.FlagSet) *ConfigMCPConnectorCreateFlags {
-	var f ConfigMCPConnectorCreateFlags
-	fs.StringVar(&f.Name, FlagConfigMCPConnectorCreateName, "", "Name for this connector token (default: connector-N)")
-	fs.StringVar(&f.Expires, FlagConfigMCPConnectorCreateExpires, "", "Lifetime: a duration like 90d or 48h, at most 366d (default 90d)")
-	return &f
-}
-
-// ConfigTokenGenerateFlags are the flags declared for `magus config token generate`.
-type ConfigTokenGenerateFlags struct {
-	Force bool // --force
-}
-
-// BindConfigTokenGenerate registers `magus config token generate`'s flags on fs and returns the destination.
-func BindConfigTokenGenerate(fs *flag.FlagSet) *ConfigTokenGenerateFlags {
-	var f ConfigTokenGenerateFlags
-	fs.BoolVar(&f.Force, FlagConfigTokenGenerateForce, false, "Overwrite an existing token (rotation)")
-	return &f
-}
-
-// ConfigConsoleTokenCreateFlags are the flags declared for `magus config console token create`.
-type ConfigConsoleTokenCreateFlags struct {
-	Name    string // --name
-	Expires string // --expires
-	Viewer  bool   // --viewer
-	Code    bool   // --code
-}
-
-// BindConfigConsoleTokenCreate registers `magus config console token create`'s flags on fs and returns the destination.
-func BindConfigConsoleTokenCreate(fs *flag.FlagSet) *ConfigConsoleTokenCreateFlags {
-	var f ConfigConsoleTokenCreateFlags
-	fs.StringVar(&f.Name, FlagConfigConsoleTokenCreateName, "", "Name for this console token (default: console-N)")
-	fs.StringVar(&f.Expires, FlagConfigConsoleTokenCreateExpires, "", "Lifetime: a duration like 90d or 48h, at most 366d (default 90d)")
-	fs.BoolVar(&f.Viewer, FlagConfigConsoleTokenCreateViewer, false, "Mint a READ-ONLY viewer token: it can read the console and cannot submit jobs, edit memory, or open a share")
-	fs.BoolVar(&f.Code, FlagConfigConsoleTokenCreateCode, false, "Print a one-time code instead, for a console link's #code=; the console trades it for the token within a minute, once")
 	return &f
 }
 
@@ -1862,40 +1486,229 @@ func BindNotesCapture(fs *flag.FlagSet) *NotesCaptureFlags {
 	return &f
 }
 
-// DiffFlags are the flags declared for `magus diff`.
-//
-// It does NOT carry --conformance-min-share: a custom-valued flag is bound by the command itself,
-// which must do so alongside this binder.
-type DiffFlags struct {
-	Generated            bool   // --generated
-	Impact               bool   // --impact
-	NoTui                bool   // --no-tui
-	Watch                bool   // --watch
-	Ack                  bool   // --ack
-	Reason               string // --reason
-	Thread               string // --thread
-	Unread               bool   // --unread
-	Rev                  string // --rev
-	Patch                string // --patch
-	Baseline             string // --baseline
-	ConformanceMinCohort int    // --conformance-min-cohort
+// QueueDescribeFlags are the flags declared for `magus queue describe`.
+type QueueDescribeFlags struct {
+	Provider      string // --provider
+	Base          string // --base
+	StatusContext string // --status-context
+	App           string // --app
+	Remote        string // --remote
+	VCS           string // --vcs
 }
 
-// BindDiff registers `magus diff`'s flags on fs and returns the destination.
-func BindDiff(fs *flag.FlagSet) *DiffFlags {
-	var f DiffFlags
-	fs.BoolVar(&f.Generated, FlagDiffGenerated, false, "Include declared target outputs, which are folded away by default")
-	fs.BoolVar(&f.Impact, FlagDiffImpact, false, "Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, note anchors, and the evidence the authors consulted")
-	fs.BoolVar(&f.NoTui, FlagDiffNoTui, false, "Print the report instead of opening the interactive viewer")
-	fs.BoolVar(&f.Watch, FlagDiffWatch, false, "Re-read and re-render whenever the working tree changes")
-	fs.BoolVar(&f.Ack, FlagDiffAck, false, "Record that you have read the changed files at their current content; --impact reports what carries no such record")
-	fs.StringVar(&f.Reason, FlagDiffReason, "", "An optional note kept with an --ack, for the next reader of the report")
-	fs.StringVar(&f.Thread, FlagDiffThread, "", "Narrow the review to one pull request thread, by its id or the id of any comment in it, which the report lists beside each hunk while the server runs. The viewer opens on its hunk; printed, it shows the conversation, the hunk and its reach")
-	fs.BoolVar(&f.Unread, FlagDiffUnread, false, "Narrow the report to the hunks no read mark covers, under every -o; -o name prints one path:start-end per hunk. Always exits 0. Where the marks cannot be read it says the read state is unknown and calls no hunk unread")
-	fs.StringVar(&f.Rev, FlagDiffRev, "", "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work")
-	fs.StringVar(&f.Patch, FlagDiffPatch, "", "Review a patch somebody handed you instead of the working tree; `-` reads stdin")
-	fs.StringVar(&f.Baseline, FlagDiffBaseline, "", "The base's `graph export --symbols -o json`: adds what each changed symbol did to the API and the smallest semver bump that proves")
-	fs.IntVar(&f.ConformanceMinCohort, FlagDiffConformanceMinCohort, 0, "How many declarations a conformance norm needs before a changed symbol is compared against it; defaults to knowledge.conformance.gates.min_cohort")
+// BindQueueDescribe registers `magus queue describe`'s flags on fs and returns the destination.
+func BindQueueDescribe(fs *flag.FlagSet) *QueueDescribeFlags {
+	var f QueueDescribeFlags
+	fs.StringVar(&f.Provider, FlagQueueDescribeProvider, "", "`provider`: a built-in name (github) or a .buzz file")
+	fs.StringVar(&f.Base, FlagQueueDescribeBase, "", "`branch` the queue merges into")
+	fs.StringVar(&f.StatusContext, FlagQueueDescribeStatusContext, "merge-queue", "Commit status the queue posts, whose wiring is described; empty describes what the provider supports and reads no setup")
+	fs.StringVar(&f.App, FlagQueueDescribeApp, "", "`app` apply writes with, as the provider names it (github: a GitHub App's slug[:App ID], required with a --status-context)")
+	fs.StringVar(&f.Remote, FlagQueueDescribeRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
+	fs.StringVar(&f.VCS, FlagQueueDescribeVCS, "git", "Version control `backend` of the checkout at --root")
+	return &f
+}
+
+// QueueLsFlags are the flags declared for `magus queue ls`.
+type QueueLsFlags struct {
+	Provider string // --provider
+	Base     string // --base
+	Remote   string // --remote
+	VCS      string // --vcs
+}
+
+// BindQueueLs registers `magus queue ls`'s flags on fs and returns the destination.
+func BindQueueLs(fs *flag.FlagSet) *QueueLsFlags {
+	var f QueueLsFlags
+	fs.StringVar(&f.Provider, FlagQueueLsProvider, "", "`provider`: a built-in name (github) or a .buzz file")
+	fs.StringVar(&f.Base, FlagQueueLsBase, "", "`branch` the queue merges into")
+	fs.StringVar(&f.Remote, FlagQueueLsRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
+	fs.StringVar(&f.VCS, FlagQueueLsVCS, "git", "Version control `backend` of the checkout at --root")
+	return &f
+}
+
+// QueuePlanFlags are the flags declared for `magus queue plan`.
+type QueuePlanFlags struct {
+	Changes  string // --changes
+	Provider string // --provider
+	Out      string // --out
+	Depth    int    // --depth
+	Parallel int    // --parallel
+	Facts    string // --facts
+	Target   string // --target
+	Remote   string // --remote
+	VCS      string // --vcs
+}
+
+// BindQueuePlan registers `magus queue plan`'s flags on fs and returns the destination.
+func BindQueuePlan(fs *flag.FlagSet) *QueuePlanFlags {
+	var f QueuePlanFlags
+	fs.StringVar(&f.Changes, FlagQueuePlanChanges, "-", "The mergequeue.changes/v1 `document`, or `-` for stdin")
+	fs.StringVar(&f.Provider, FlagQueuePlanProvider, "", "`provider` approval at each head is checked with")
+	fs.StringVar(&f.Out, FlagQueuePlanOut, "", "`file` the mergequeue.plan/v1 document is written to")
+	fs.IntVar(&f.Depth, FlagQueuePlanDepth, 3, "Candidates of one partition that validate at once")
+	fs.IntVar(&f.Parallel, FlagQueuePlanParallel, 0, "Changes admitted at once; 0 is one per CPU")
+	fs.StringVar(&f.Facts, FlagQueuePlanFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
+	fs.StringVar(&f.Target, FlagQueuePlanTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
+	fs.StringVar(&f.Remote, FlagQueuePlanRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
+	fs.StringVar(&f.VCS, FlagQueuePlanVCS, "git", "Version control `backend` of the checkout at --root")
+	return &f
+}
+
+// QueueValidateFlags are the flags declared for `magus queue validate`.
+type QueueValidateFlags struct {
+	Stdin           bool   // --stdin
+	Gate            string // --gate
+	Regenerate      string // --regenerate
+	Verdicts        string // --verdicts
+	Only            string // --only
+	Parallel        int    // --parallel
+	RemoteCacheRead bool   // --remote-cache-read
+	Facts           string // --facts
+	Target          string // --target
+	Remote          string // --remote
+	VCS             string // --vcs
+}
+
+// BindQueueValidate registers `magus queue validate`'s flags on fs and returns the destination.
+func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
+	var f QueueValidateFlags
+	fs.BoolVar(&f.Stdin, FlagQueueValidateStdin, false, "Read the mergequeue.plan/v1 document from stdin; required")
+	fs.StringVar(&f.Gate, FlagQueueValidateGate, "", "`command` and its arguments, run with no shell in each candidate's checkout with the change's affected projects added ahead of its first `--`; exit 0 is green")
+	fs.StringVar(&f.Regenerate, FlagQueueValidateRegenerate, "", "`command` and its arguments, run with no shell in a candidate with the change's affected projects added ahead of its first `--` and the generated files to rewrite listed on stdin")
+	fs.StringVar(&f.Verdicts, FlagQueueValidateVerdicts, "", "`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>")
+	fs.StringVar(&f.Only, FlagQueueValidateOnly, "", "Validate this one `change`; the changes beneath it in its partition are merged under it but not gated")
+	fs.IntVar(&f.Parallel, FlagQueueValidateParallel, 0, "Candidates built or gated at once across every partition; 0 is one per CPU")
+	fs.BoolVar(&f.RemoteCacheRead, FlagQueueValidateRemoteCacheRead, false, "Let hooks read magus's remote cache from GitHub Actions through a loopback proxy that forwards lookups with the runner's token and refuses writes. Hooks get a stand-in token. Refused without runner credentials or a trusted key")
+	fs.StringVar(&f.Facts, FlagQueueValidateFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
+	fs.StringVar(&f.Target, FlagQueueValidateTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
+	fs.StringVar(&f.Remote, FlagQueueValidateRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
+	fs.StringVar(&f.VCS, FlagQueueValidateVCS, "git", "Version control `backend` of the checkout at --root")
+	return &f
+}
+
+// QueueGateFlags are the flags declared for `magus queue gate`.
+type QueueGateFlags struct {
+	Cache  string // --cache
+	Env    string // --env
+	Remote string // --remote
+	VCS    string // --vcs
+}
+
+// BindQueueGate registers `magus queue gate`'s flags on fs and returns the destination.
+func BindQueueGate(fs *flag.FlagSet) *QueueGateFlags {
+	var f QueueGateFlags
+	fs.StringVar(&f.Cache, FlagQueueGateCache, "", "`directory` the command's magus keeps its local cache tier and its spells' caches in, outside the box; empty keeps them in the box, as validate does")
+	fs.StringVar(&f.Env, FlagQueueGateEnv, "", "Comma-separated `names` of variables passed from this environment to the command's own magus")
+	fs.StringVar(&f.Remote, FlagQueueGateRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
+	fs.StringVar(&f.VCS, FlagQueueGateVCS, "git", "Version control `backend` of the checkout at --root")
+	return &f
+}
+
+// QueueApplyFlags are the flags declared for `magus queue apply`.
+type QueueApplyFlags struct {
+	Provider            string        // --provider
+	Base                string        // --base
+	Workflow            string        // --workflow
+	StatusContext       string        // --status-context
+	Once                bool          // --once
+	Interval            time.Duration // --interval
+	Committer           string        // --committer
+	App                 string        // --app
+	Regenerate          string        // --regenerate
+	ReproduceGate       string        // --reproduce-gate
+	ReproduceRegenerate string        // --reproduce-regenerate
+	Facts               string        // --facts
+	Target              string        // --target
+	Remote              string        // --remote
+	VCS                 string        // --vcs
+}
+
+// BindQueueApply registers `magus queue apply`'s flags on fs and returns the destination.
+func BindQueueApply(fs *flag.FlagSet) *QueueApplyFlags {
+	var f QueueApplyFlags
+	fs.StringVar(&f.Provider, FlagQueueApplyProvider, "", "`provider`: a built-in name (github) or a .buzz file")
+	fs.StringVar(&f.Base, FlagQueueApplyBase, "", "`branch` the queue merges into; a plan naming another is refused (MGS3028), and a run: source must have run on it")
+	fs.StringVar(&f.Workflow, FlagQueueApplyWorkflow, "", "`definition` a run: source must have run, started by an event that runs the base's own copy of it (github: .github/workflows/queue.yaml); required with a run: source, whose uploads are otherwise refused (MGS3027)")
+	fs.StringVar(&f.StatusContext, FlagQueueApplyStatusContext, "merge-queue", "Commit status the queue posts; branch protection requires it")
+	fs.BoolVar(&f.Once, FlagQueueApplyOnce, false, "Apply what <source> holds now and stop, rather than following it until it is complete")
+	fs.DurationVar(&f.Interval, FlagQueueApplyInterval, time.Duration(10000000000), "How often <source> is read while following it")
+	fs.StringVar(&f.Committer, FlagQueueApplyCommitter, "", "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops")
+	fs.StringVar(&f.App, FlagQueueApplyApp, "", "`app` whose credential the provider writes with, as the provider names it (github: a GitHub App's slug[:App ID], required). apply refuses to start when the base requires --status-context from another integration (MGS3019)")
+	fs.StringVar(&f.Regenerate, FlagQueueApplyRegenerate, "", "The base's regeneration `command`, run with no shell or credential: projects go ahead of its first `--`, files to rewrite on stdin. It runs only where the build tool proves the change misses its code; elsewhere apply checks the rest.")
+	fs.StringVar(&f.ReproduceGate, FlagQueueApplyReproduceGate, "", "The `command` validate's --gate is given, shown on each kick-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict")
+	fs.StringVar(&f.ReproduceRegenerate, FlagQueueApplyReproduceRegenerate, "", "The `command` validate's --regenerate is given, shown beside --reproduce-gate")
+	fs.StringVar(&f.Facts, FlagQueueApplyFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
+	fs.StringVar(&f.Target, FlagQueueApplyTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
+	fs.StringVar(&f.Remote, FlagQueueApplyRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
+	fs.StringVar(&f.VCS, FlagQueueApplyVCS, "git", "Version control `backend` of the checkout at --root")
+	return &f
+}
+
+// QueueReviewsFlags are the flags declared for `magus queue reviews`.
+type QueueReviewsFlags struct {
+	Provider string // --provider
+	Base     string // --base
+	Change   string // --change
+	Head     string // --head
+	Dismiss  bool   // --dismiss
+	Facts    string // --facts
+	Target   string // --target
+	Remote   string // --remote
+	VCS      string // --vcs
+}
+
+// BindQueueReviews registers `magus queue reviews`'s flags on fs and returns the destination.
+func BindQueueReviews(fs *flag.FlagSet) *QueueReviewsFlags {
+	var f QueueReviewsFlags
+	fs.StringVar(&f.Provider, FlagQueueReviewsProvider, "", "`provider`: a built-in name (github) or a .buzz file")
+	fs.StringVar(&f.Base, FlagQueueReviewsBase, "", "`branch` the change targets")
+	fs.StringVar(&f.Change, FlagQueueReviewsChange, "", "`id` of the change, as the provider names it (github: the pull request number)")
+	fs.StringVar(&f.Head, FlagQueueReviewsHead, "", "`commit` the change's head must be at; when it moved, nothing is classified or dismissed")
+	fs.BoolVar(&f.Dismiss, FlagQueueReviewsDismiss, false, "Dismiss each approval that does not carry, naming what changed since it")
+	fs.StringVar(&f.Facts, FlagQueueReviewsFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
+	fs.StringVar(&f.Target, FlagQueueReviewsTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
+	fs.StringVar(&f.Remote, FlagQueueReviewsRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
+	fs.StringVar(&f.VCS, FlagQueueReviewsVCS, "git", "Version control `backend` of the checkout at --root")
+	return &f
+}
+
+// WatchFlags are the flags declared for `magus watch`.
+//
+// It does NOT carry --ignore: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
+type WatchFlags struct {
+	Debounce time.Duration // --debounce
+	Initial  bool          // --initial
+	Null     bool          // --null
+	Backend  string        // --backend
+}
+
+// BindWatch registers `magus watch`'s flags on fs and returns the destination.
+func BindWatch(fs *flag.FlagSet) *WatchFlags {
+	var f WatchFlags
+	fs.DurationVar(&f.Debounce, FlagWatchDebounce, time.Duration(200000000), "Quiet window before emitting a batch")
+	fs.BoolVar(&f.Initial, FlagWatchInitial, true, "Emit an --all batch on startup before watching")
+	fs.BoolVar(&f.Null, FlagWatchNull, false, "NUL-separate paths; double-NUL between batches")
+	fs.StringVar(&f.Backend, FlagWatchBackend, "fsnotify", "Notification backend: fsnotify, poll, or auto (probes fsnotify, falls back to poll)")
+	return &f
+}
+
+// EventsFlags are the flags declared for `magus events`.
+type EventsFlags struct {
+	Follow   bool          // --follow, -f
+	Type     string        // --type
+	Limit    int           // --limit
+	Interval time.Duration // --interval
+}
+
+// BindEvents registers `magus events`'s flags on fs and returns the destination.
+func BindEvents(fs *flag.FlagSet) *EventsFlags {
+	var f EventsFlags
+	fs.BoolVar(&f.Follow, FlagEventsFollow, false, "Keep streaming as events occur instead of exiting after the replay")
+	fs.BoolVar(&f.Follow, FlagEventsF, false, "Short for --follow")
+	fs.StringVar(&f.Type, FlagEventsType, "", "Restrict to these event types (comma-separated); default is every type except target.output")
+	fs.IntVar(&f.Limit, FlagEventsLimit, 20, "Replay this many recent invocations before following; 0 replays nothing (only new events), negative replays every retained run")
+	fs.DurationVar(&f.Interval, FlagEventsInterval, time.Duration(250000000), "How often --follow polls the run log for new events")
 	return &f
 }
 
@@ -1975,6 +1788,32 @@ func BindBrokerStop(fs *flag.FlagSet) *BrokerStopFlags {
 	return &f
 }
 
+// StatusFlags are the flags declared for `magus status`.
+type StatusFlags struct {
+	Watch     time.Duration // --watch, -W
+	Compact   bool          // --compact, -c
+	Symbols   bool          // --symbols
+	Socket    string        // --socket
+	Probe     string        // --probe
+	Workspace string        // --workspace
+	Wait      bool          // --wait
+}
+
+// BindStatus registers `magus status`'s flags on fs and returns the destination.
+func BindStatus(fs *flag.FlagSet) *StatusFlags {
+	var f StatusFlags
+	fs.DurationVar(&f.Watch, FlagStatusWatch, 0, "Poll and reprint at this interval (minimum 15s; 0 means one-shot)")
+	fs.DurationVar(&f.Watch, FlagStatusW, 0, "Short for --watch")
+	fs.BoolVar(&f.Compact, FlagStatusCompact, false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
+	fs.BoolVar(&f.Compact, FlagStatusC, false, "Short for --compact")
+	fs.BoolVar(&f.Symbols, FlagStatusSymbols, false, "Include the expensive symbol-index freshness scan")
+	fs.StringVar(&f.Socket, FlagStatusSocket, "", "Proc server to report on, as a unix:// URL or bare path; default: MAGUS_PROC_SOCKET inside a run, else every live one in the socket dir. --probe asks the server at server.address unless this names one")
+	fs.StringVar(&f.Probe, FlagStatusProbe, "", "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)")
+	fs.StringVar(&f.Workspace, FlagStatusWorkspace, "", "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)")
+	fs.BoolVar(&f.Wait, FlagStatusWait, false, "Exit 0 once the build budget can seat the magus run reading this pipe (a free slot when none does); holds that run until then")
+	return &f
+}
+
 // BuzzFlags are the flags declared for `magus buzz`.
 type BuzzFlags struct {
 	E            string // -e
@@ -2001,40 +1840,6 @@ func BindBuzz(fs *flag.FlagSet) *BuzzFlags {
 	fs.BoolVar(&f.Embedded, FlagBuzzEmbedded, false, "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine")
 	fs.BoolVar(&f.NoAutoload, FlagBuzzNoAutoload, false, "Start the REPL without executing the magusfile")
 	fs.StringVar(&f.C, FlagBuzzC, "", "Change to `dir` before anything else, as go -C does, so script paths and imports resolve from it; lsp takes it only as the first flag")
-	return &f
-}
-
-// ManInstallFlags are the flags declared for `magus man install`.
-type ManInstallFlags struct {
-	Dir    string // --dir
-	DryRun bool   // --dry-run
-}
-
-// BindManInstall registers `magus man install`'s flags on fs and returns the destination.
-func BindManInstall(fs *flag.FlagSet) *ManInstallFlags {
-	var f ManInstallFlags
-	fs.StringVar(&f.Dir, FlagManInstallDir, "", "Directory for section 1 man pages (default: the user manpath)")
-	fs.BoolVar(&f.DryRun, FlagManInstallDryRun, false, "Print what would be written without touching the filesystem")
-	return &f
-}
-
-// InitFlags are the flags declared for `magus init`.
-type InitFlags struct {
-	Global bool   // --global
-	DryRun bool   // --dry-run
-	Local  bool   // --local
-	Force  bool   // --force
-	VCS    string // --vcs
-}
-
-// BindInit registers `magus init`'s flags on fs and returns the destination.
-func BindInit(fs *flag.FlagSet) *InitFlags {
-	var f InitFlags
-	fs.BoolVar(&f.Global, FlagInitGlobal, false, "Write only the global config; skip the workspace bootstrap")
-	fs.BoolVar(&f.DryRun, FlagInitDryRun, false, "Print the config, magusfile, and merge-driver destinations without writing any of them")
-	fs.BoolVar(&f.Local, FlagInitLocal, false, "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/")
-	fs.BoolVar(&f.Force, FlagInitForce, false, "Replace an existing config file with one holding no keys")
-	fs.StringVar(&f.VCS, FlagInitVCS, "", "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY")
 	return &f
 }
 
@@ -2160,6 +1965,201 @@ type AgentAdoptionFlags struct {
 func BindAgentAdoption(fs *flag.FlagSet) *AgentAdoptionFlags {
 	var f AgentAdoptionFlags
 	fs.StringVar(&f.Commands, FlagAgentAdoptionCommands, "", "File of shell commands, one per line; without it commands are read from stdin")
+	return &f
+}
+
+// InitFlags are the flags declared for `magus init`.
+type InitFlags struct {
+	Global bool   // --global
+	DryRun bool   // --dry-run
+	Local  bool   // --local
+	Force  bool   // --force
+	VCS    string // --vcs
+}
+
+// BindInit registers `magus init`'s flags on fs and returns the destination.
+func BindInit(fs *flag.FlagSet) *InitFlags {
+	var f InitFlags
+	fs.BoolVar(&f.Global, FlagInitGlobal, false, "Write only the global config; skip the workspace bootstrap")
+	fs.BoolVar(&f.DryRun, FlagInitDryRun, false, "Print the config, magusfile, and merge-driver destinations without writing any of them")
+	fs.BoolVar(&f.Local, FlagInitLocal, false, "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/")
+	fs.BoolVar(&f.Force, FlagInitForce, false, "Replace an existing config file with one holding no keys")
+	fs.StringVar(&f.VCS, FlagInitVCS, "", "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY")
+	return &f
+}
+
+// DoctorFlags are the flags declared for `magus doctor`.
+type DoctorFlags struct {
+	Probe bool // --probe
+	Fix   bool // --fix
+	List  bool // --list
+}
+
+// BindDoctor registers `magus doctor`'s flags on fs and returns the destination.
+func BindDoctor(fs *flag.FlagSet) *DoctorFlags {
+	var f DoctorFlags
+	fs.BoolVar(&f.Probe, FlagDoctorProbe, false, "Run each declared tool-readiness probe instead of only listing it (forks a process per gated tool)")
+	fs.BoolVar(&f.Fix, FlagDoctorFix, false, "Run the remedy each finding names, where one exists (see --dry-run to list them first)")
+	fs.BoolVar(&f.List, FlagDoctorList, false, "Print every check magus would run (name, subject, and MGS code) without running any of them")
+	return &f
+}
+
+// ConfigSetFlags are the flags declared for `magus config set`.
+type ConfigSetFlags struct {
+	Global bool // --global
+}
+
+// BindConfigSet registers `magus config set`'s flags on fs and returns the destination.
+func BindConfigSet(fs *flag.FlagSet) *ConfigSetFlags {
+	var f ConfigSetFlags
+	fs.BoolVar(&f.Global, FlagConfigSetGlobal, false, "Write to the global config ($XDG_CONFIG_HOME/magus/magus.yaml)")
+	return &f
+}
+
+// ConfigHistoryPassedFlags are the flags declared for `magus config history passed`.
+type ConfigHistoryPassedFlags struct {
+	History string // --history
+	Ref     string // --ref
+	Commit  string // --commit
+	Target  string // --target
+	Status  string // --status
+}
+
+// ConfigHistoryPassedDefaults carries the defaults `magus config history passed` resolves at runtime (config, a
+// package constant) rather than declaring as a literal.
+type ConfigHistoryPassedDefaults struct {
+	History string // --history
+	Status  string // --status
+}
+
+// BindConfigHistoryPassed registers `magus config history passed`'s flags on fs and returns the destination.
+func BindConfigHistoryPassed(fs *flag.FlagSet, d ConfigHistoryPassedDefaults) *ConfigHistoryPassedFlags {
+	var f ConfigHistoryPassedFlags
+	fs.StringVar(&f.History, FlagConfigHistoryPassedHistory, d.History, "Path to the history JSON to write (default: configured history_path)")
+	fs.StringVar(&f.Ref, FlagConfigHistoryPassedRef, "", "Ref the run was on (git branch, hg named branch, jj bookmark)")
+	fs.StringVar(&f.Commit, FlagConfigHistoryPassedCommit, "", "Commit the run was at")
+	fs.StringVar(&f.Target, FlagConfigHistoryPassedTarget, "ci", "Target that ran")
+	fs.StringVar(&f.Status, FlagConfigHistoryPassedStatus, d.Status, "How the run came out: passed or failed")
+	return &f
+}
+
+// ConfigHistoryImportFlags are the flags declared for `magus config history import`.
+type ConfigHistoryImportFlags struct {
+	History string // --history
+}
+
+// ConfigHistoryImportDefaults carries the defaults `magus config history import` resolves at runtime (config, a
+// package constant) rather than declaring as a literal.
+type ConfigHistoryImportDefaults struct {
+	History string // --history
+}
+
+// BindConfigHistoryImport registers `magus config history import`'s flags on fs and returns the destination.
+func BindConfigHistoryImport(fs *flag.FlagSet, d ConfigHistoryImportDefaults) *ConfigHistoryImportFlags {
+	var f ConfigHistoryImportFlags
+	fs.StringVar(&f.History, FlagConfigHistoryImportHistory, d.History, "Path to the history JSON to write (default: configured history_path)")
+	return &f
+}
+
+// ConfigCachePruneFlags are the flags declared for `magus config cache prune`.
+type ConfigCachePruneFlags struct {
+	OlderThan time.Duration // --older-than
+	KeepLast  int           // --keep-last
+	Remote    bool          // --remote
+	DryRun    bool          // --dry-run
+}
+
+// BindConfigCachePrune registers `magus config cache prune`'s flags on fs and returns the destination.
+func BindConfigCachePrune(fs *flag.FlagSet) *ConfigCachePruneFlags {
+	var f ConfigCachePruneFlags
+	fs.DurationVar(&f.OlderThan, FlagConfigCachePruneOlderThan, 0, "Remove entries older than this duration (e.g. 168h = 7 days)")
+	fs.IntVar(&f.KeepLast, FlagConfigCachePruneKeepLast, 0, "Keep only the newest N entries, evict the rest (--remote only)")
+	fs.BoolVar(&f.Remote, FlagConfigCachePruneRemote, false, "Prune the configured remote backend instead of the local cache")
+	fs.BoolVar(&f.DryRun, FlagConfigCachePruneDryRun, false, "Print what would be removed without deleting anything")
+	return &f
+}
+
+// ConfigCacheExportFlags are the flags declared for `magus config cache export`.
+type ConfigCacheExportFlags struct {
+	To     string // --to
+	Remote bool   // --remote
+}
+
+// BindConfigCacheExport registers `magus config cache export`'s flags on fs and returns the destination.
+func BindConfigCacheExport(fs *flag.FlagSet) *ConfigCacheExportFlags {
+	var f ConfigCacheExportFlags
+	fs.StringVar(&f.To, FlagConfigCacheExportTo, "", "Write the archive to this file (default: stdout)")
+	fs.BoolVar(&f.Remote, FlagConfigCacheExportRemote, false, "Sign the caches the workspace's spells declare (go: GOCACHE and GOMODCACHE) and store them in the remote tier, instead of writing the local tier's archive")
+	return &f
+}
+
+// ConfigCacheImportFlags are the flags declared for `magus config cache import`.
+type ConfigCacheImportFlags struct {
+	Remote bool // --remote
+}
+
+// BindConfigCacheImport registers `magus config cache import`'s flags on fs and returns the destination.
+func BindConfigCacheImport(fs *flag.FlagSet) *ConfigCacheImportFlags {
+	var f ConfigCacheImportFlags
+	fs.BoolVar(&f.Remote, FlagConfigCacheImportRemote, false, "Restore the newest verified bundle of each cache the workspace's spells declare from the remote tier, instead of reading an archive")
+	return &f
+}
+
+// ConfigMCPConnectorCreateFlags are the flags declared for `magus config mcp connector create`.
+type ConfigMCPConnectorCreateFlags struct {
+	Name    string // --name
+	Expires string // --expires
+}
+
+// BindConfigMCPConnectorCreate registers `magus config mcp connector create`'s flags on fs and returns the destination.
+func BindConfigMCPConnectorCreate(fs *flag.FlagSet) *ConfigMCPConnectorCreateFlags {
+	var f ConfigMCPConnectorCreateFlags
+	fs.StringVar(&f.Name, FlagConfigMCPConnectorCreateName, "", "Name for this connector token (default: connector-N)")
+	fs.StringVar(&f.Expires, FlagConfigMCPConnectorCreateExpires, "", "Lifetime: a duration like 90d or 48h, at most 366d (default 90d)")
+	return &f
+}
+
+// ConfigTokenGenerateFlags are the flags declared for `magus config token generate`.
+type ConfigTokenGenerateFlags struct {
+	Force bool // --force
+}
+
+// BindConfigTokenGenerate registers `magus config token generate`'s flags on fs and returns the destination.
+func BindConfigTokenGenerate(fs *flag.FlagSet) *ConfigTokenGenerateFlags {
+	var f ConfigTokenGenerateFlags
+	fs.BoolVar(&f.Force, FlagConfigTokenGenerateForce, false, "Overwrite an existing token (rotation)")
+	return &f
+}
+
+// ConfigConsoleTokenCreateFlags are the flags declared for `magus config console token create`.
+type ConfigConsoleTokenCreateFlags struct {
+	Name    string // --name
+	Expires string // --expires
+	Viewer  bool   // --viewer
+	Code    bool   // --code
+}
+
+// BindConfigConsoleTokenCreate registers `magus config console token create`'s flags on fs and returns the destination.
+func BindConfigConsoleTokenCreate(fs *flag.FlagSet) *ConfigConsoleTokenCreateFlags {
+	var f ConfigConsoleTokenCreateFlags
+	fs.StringVar(&f.Name, FlagConfigConsoleTokenCreateName, "", "Name for this console token (default: console-N)")
+	fs.StringVar(&f.Expires, FlagConfigConsoleTokenCreateExpires, "", "Lifetime: a duration like 90d or 48h, at most 366d (default 90d)")
+	fs.BoolVar(&f.Viewer, FlagConfigConsoleTokenCreateViewer, false, "Mint a READ-ONLY viewer token: it can read the console and cannot submit jobs, edit memory, or open a share")
+	fs.BoolVar(&f.Code, FlagConfigConsoleTokenCreateCode, false, "Print a one-time code instead, for a console link's #code=; the console trades it for the token within a minute, once")
+	return &f
+}
+
+// ManInstallFlags are the flags declared for `magus man install`.
+type ManInstallFlags struct {
+	Dir    string // --dir
+	DryRun bool   // --dry-run
+}
+
+// BindManInstall registers `magus man install`'s flags on fs and returns the destination.
+func BindManInstall(fs *flag.FlagSet) *ManInstallFlags {
+	var f ManInstallFlags
+	fs.StringVar(&f.Dir, FlagManInstallDir, "", "Directory for section 1 man pages (default: the user manpath)")
+	fs.BoolVar(&f.DryRun, FlagManInstallDryRun, false, "Print what would be written without touching the filesystem")
 	return &f
 }
 

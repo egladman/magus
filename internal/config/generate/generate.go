@@ -90,6 +90,7 @@ type FlagDef struct {
 	GoPath    string // Go field selector, e.g. "cfg.Cache.Dir"
 	YamlPath  string // dotted yaml path, e.g. "cache.dir"
 	Usage     string // sanitized one-line description for flag.Usage
+	Doc       string // the field's first doc paragraph, for the man page's ENVIRONMENT
 	// Floor makes the env var a floor rather than an override: ApplyEnv keeps the
 	// stronger of the configured value and the env's, by the type's WeakerThan. A text
 	// kind only. For a setting a parent process hands its children, which a child's own
@@ -183,7 +184,7 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 		// The flag help leads with the env var, then the field's doc comment when
 		// it has one. A field with no doc shows just the env var, not "ENV: ENV".
 		help := envVar
-		if usage := sanitizeUsage(firstDocLine(field.Doc)); usage != "" {
+		if usage := sanitizeUsage(firstDocLine(fieldDoc(field))); usage != "" {
 			help = envVar + ": " + usage
 		}
 
@@ -195,9 +196,50 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 			GoPath:    goSel,
 			YamlPath:  strings.Join(thisYAML, "."),
 			Usage:     help,
+			Doc:       docParagraph(fieldDoc(field), name),
 			Floor:     cli.floor && kind == "text",
 		})
 	}
+}
+
+// fieldDoc is the field's doc comment, or its trailing line comment when it has none.
+func fieldDoc(field *ast.Field) *ast.CommentGroup {
+	if field.Doc != nil {
+		return field.Doc
+	}
+	return field.Comment
+}
+
+// docParagraph returns the first paragraph of cg as one line, without the leading Go
+// identifier a doc comment opens with or its final period, so it reads as a clause
+// the man page can append the default and config key to.
+func docParagraph(cg *ast.CommentGroup, ident string) string {
+	if cg == nil {
+		return ""
+	}
+	var prose []string
+	for _, c := range cg.List {
+		line := strings.TrimSpace(strings.TrimPrefix(c.Text, "//"))
+		if line == "" {
+			if len(prose) > 0 {
+				break
+			}
+			continue
+		}
+		prose = append(prose, line)
+	}
+	text := strings.TrimSuffix(strings.Join(prose, " "), ".")
+	if rest, ok := strings.CutPrefix(text, ident+" "); ok {
+		text = rest
+		// "Level is the minimum log level" describes the setting as "The minimum log level".
+		for _, verb := range []string{"is ", "are "} {
+			text = strings.TrimPrefix(text, verb)
+		}
+	}
+	if text == "" {
+		return ""
+	}
+	return strings.ToUpper(text[:1]) + text[1:]
 }
 
 // exprTypeIdent returns the type name; "" for unsupported forms.

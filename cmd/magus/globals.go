@@ -256,18 +256,13 @@ func parseFlagValue(arg, name string) string {
 
 // ---- what each command actually bound, for the man page's parity gate ----
 
-// The man page's flag list is a SECOND copy of every command's flags, hand-written in
-// internal/cli/registry.go because the real ones are bound in closures inside this
-// package, which nothing outside `package main` can import. A second copy drifts: the
-// registry advertised --simple for months after that flag was deleted, and it has never
-// mentioned most of what `run` and `affected` actually accept.
-//
-// Moving 91 binding sites into an importable package would remove the copy outright, at
-// the cost of touching every command. This is the cheaper half of that trade and it buys
-// the part that matters: the copy stays, but it can no longer drift SILENTLY. cmdParse is
-// the single funnel every command's flags pass through, so recording there yields each
-// command's real, fully-bound flag set (config flags, display flags and local ones alike)
-// and TestManpageFlagsMatchTheCLI compares that against the registry.
+// The registry declares every command's flags and the binders in cmd/magus/gen are
+// generated from it, so a generated flag cannot drift from its man page. What still can
+// is a flag bound by hand: a FlagCustom flag's fs.Var call, and the config-derived
+// globals. cmdParse is the single funnel every command's flags pass through, so
+// recording there yields each command's real, fully-bound flag set (config flags,
+// display flags and local ones alike) and TestManpageFlagsMatchTheCLI compares that
+// against the registry.
 //
 // Recording is unconditional rather than test-gated. It is one map write per invocation
 // of one command, and a record that only exists under a test hook is a record that can be

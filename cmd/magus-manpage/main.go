@@ -286,7 +286,7 @@ func writeExitStatusMD(m *mdBuf, codes []cli.ExitCode) {
 
 func writeEnvSectionMD(m *mdBuf) {
 	m.h2("Environment")
-	for _, d := range config.EnvVarDocs() {
+	for _, d := range config.EnvVars() {
 		body := mdEsc(d.Desc)
 		if d.Default != "" {
 			body += " (default: " + mdEsc(d.Default) + ")"

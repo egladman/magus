@@ -8,12 +8,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/cli"
 )
 
 // awkwardSubs carries the two characters that have broken a generated script: a colon
 // terminates zsh's name:description pair, and an apostrophe closes the single-quoted
 // string in zsh, fish and PowerShell alike.
-var awkwardSubs = []subcommandDoc{
+var awkwardSubs = []cli.Command{
 	{Name: "run", Short: "Run it"},
 	{Name: "query", Short: "a node's neighborhood: really"},
 }
@@ -80,38 +82,6 @@ func TestRenderersAreDeterministic(t *testing.T) {
 	}
 }
 
-const subcommandsFixture = `package main
-
-type subcommand struct {
-	Name  string
-	Short string
-}
-
-var subcommands = []subcommand{
-	{Name: "run", Short: "Run it"},
-	{Name: "query", Short: "a node's neighborhood: really"},
-	{Short: "an entry with no Name"},
-}
-`
-
-func writeSubcommands(t *testing.T, dir, body string) string {
-	t.Helper()
-	path := filepath.Join(dir, "subcommands.go")
-	require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
-	return path
-}
-
-func TestReadSubcommandsDropsANamelessEntry(t *testing.T) {
-	got, err := readSubcommands(writeSubcommands(t, t.TempDir(), subcommandsFixture))
-	require.NoError(t, err)
-	assert.Equal(t, awkwardSubs, got)
-}
-
-func TestReadSubcommandsSurfacesAParseFailure(t *testing.T) {
-	_, err := readSubcommands(writeSubcommands(t, t.TempDir(), "package main\nvar x = (\n"))
-	assert.Error(t, err)
-}
-
 // completionsDir plants the four scripts with an empty generated region, which is what
 // a hand-written script looks like before the list is filled in.
 func completionsDir(t *testing.T) string {
@@ -127,12 +97,10 @@ func completionsDir(t *testing.T) string {
 	return dir
 }
 
-func TestRunCompletionsFillsEveryDialect(t *testing.T) {
-	src := t.TempDir()
+func TestWriteCompletionsFillsEveryDialect(t *testing.T) {
 	out := completionsDir(t)
-	table := writeSubcommands(t, src, subcommandsFixture)
 
-	require.NoError(t, runCompletions([]string{"-subcommands", table, "-out", out}))
+	require.NoError(t, writeCompletions(out, awkwardSubs))
 
 	read := func(name string) string {
 		body, err := os.ReadFile(filepath.Join(out, name))
@@ -156,20 +124,18 @@ func TestRunCompletionsFillsEveryDialect(t *testing.T) {
 	assert.Contains(t, read("magus.ps1"), "$subcommands = 'run', 'query'")
 }
 
-// TestRunCompletionsIsIdempotent covers the "already current" branch, which exists so a
+// TestWriteCompletionsIsIdempotent covers the "already current" branch, which exists so a
 // no-op regenerate does not touch an mtime and dirty every downstream cache key.
-func TestRunCompletionsIsIdempotent(t *testing.T) {
-	src := t.TempDir()
+func TestWriteCompletionsIsIdempotent(t *testing.T) {
 	out := completionsDir(t)
-	table := writeSubcommands(t, src, subcommandsFixture)
 
-	require.NoError(t, runCompletions([]string{"-subcommands", table, "-out", out}))
+	require.NoError(t, writeCompletions(out, awkwardSubs))
 	first, err := os.ReadFile(filepath.Join(out, "magus.bash"))
 	require.NoError(t, err)
 	stat, err := os.Stat(filepath.Join(out, "magus.bash"))
 	require.NoError(t, err)
 
-	require.NoError(t, runCompletions([]string{"-subcommands", table, "-out", out}))
+	require.NoError(t, writeCompletions(out, awkwardSubs))
 	second, err := os.ReadFile(filepath.Join(out, "magus.bash"))
 	require.NoError(t, err)
 	restat, err := os.Stat(filepath.Join(out, "magus.bash"))
@@ -179,36 +145,27 @@ func TestRunCompletionsIsIdempotent(t *testing.T) {
 	assert.Equal(t, stat.ModTime(), restat.ModTime(), "an unchanged script must not be rewritten")
 }
 
-// TestRunCompletionsRefusesAnEmptyTable: zero subcommands is the parse being wrong,
-// not the table, and writing an empty list into four scripts would ship it.
-func TestRunCompletionsRefusesAnEmptyTable(t *testing.T) {
-	src := t.TempDir()
-	table := writeSubcommands(t, src, "package main\n\nvar unrelated = 1\n")
-
-	err := runCompletions([]string{"-subcommands", table, "-out", completionsDir(t)})
+// TestWriteCompletionsRefusesAnEmptyTable: writing an empty list into four scripts
+// would ship shells that complete nothing.
+func TestWriteCompletionsRefusesAnEmptyTable(t *testing.T) {
+	err := writeCompletions(completionsDir(t), nil)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no subcommands found")
+	assert.Contains(t, err.Error(), "no subcommands")
 }
 
-// TestRunCompletionsNamesTheScriptMissingItsMarker. A generator cannot know where in a
+// TestWriteCompletionsNamesTheScriptMissingItsMarker. A generator cannot know where in a
 // hand-written file the region belongs, so it must refuse rather than append, and the
 // error has to say which of the four scripts it was reading.
-func TestRunCompletionsNamesTheScriptMissingItsMarker(t *testing.T) {
-	src := t.TempDir()
+func TestWriteCompletionsNamesTheScriptMissingItsMarker(t *testing.T) {
 	out := completionsDir(t)
 	require.NoError(t, os.WriteFile(filepath.Join(out, "magus.zsh"), []byte("# no markers here\n"), 0o644))
 
-	err := runCompletions([]string{"-subcommands", writeSubcommands(t, src, subcommandsFixture), "-out", out})
+	err := writeCompletions(out, awkwardSubs)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "magus.zsh")
 	assert.Contains(t, err.Error(), shellMarker.Begin)
 }
 
-func TestRunCompletionsSurfacesAMissingScript(t *testing.T) {
-	src := t.TempDir()
-	err := runCompletions([]string{
-		"-subcommands", writeSubcommands(t, src, subcommandsFixture),
-		"-out", filepath.Join(t.TempDir(), "absent"),
-	})
-	assert.Error(t, err)
+func TestWriteCompletionsSurfacesAMissingScript(t *testing.T) {
+	assert.Error(t, writeCompletions(filepath.Join(t.TempDir(), "absent"), awkwardSubs))
 }

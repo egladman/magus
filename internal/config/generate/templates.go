@@ -53,6 +53,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "{{.Flag}}"{{if .FlagShort}}, Short: "{{.FlagShort}}"{{end}}},
 		Kind:     fieldtype.{{kindConst .Kind}},
 		Usage:    "{{.Usage}}",
+		Doc:      {{printf "%q" .Doc}},
 	},
 {{- end}}
 }

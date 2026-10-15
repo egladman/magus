@@ -711,7 +711,7 @@ func shipsWithMagus(slash string) bool {
 	return !strings.HasPrefix(slash, "docs/") || strings.HasPrefix(slash, "docs/guides/integrations/agents/")
 }
 
-// TestEveryReadMagusEnvVarIsRegistered holds config.EnvVarDocs complete for what ships, and
+// TestEveryReadMagusEnvVarIsRegistered holds config.EnvVars complete for what ships, and
 // keeps this repository's own tooling clear of MGS1046. A name shipped code reads and
 // nobody registered is one doctor calls unknown and a near miss of it is not caught; a
 // tooling name a typo away from a registered one would stop every magus command in the
@@ -791,8 +791,8 @@ func TestEveryReadMagusEnvVarIsRegistered(t *testing.T) {
 	}
 	slices.Sort(missing)
 	assert.Empty(t, missing,
-		"these MAGUS_* names are read or exported by shipped code but missing from config.EnvVarDocs;\n"+
-			"register each with its doc, or rename it off the prefix:\n%s",
+		"these MAGUS_* names are read or exported by shipped code but missing from config.EnvVars;\n"+
+			"give each a config field or an envOnly entry, or rename it off the prefix:\n%s",
 		strings.Join(missing, "\n"))
 
 	var refused []string
