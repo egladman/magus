@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -53,12 +54,15 @@ func enumVal(name string, num int32) *descriptorpb.EnumValueDescriptorProto {
 	return &descriptorpb.EnumValueDescriptorProto{Name: proto.String(name), Number: proto.Int32(num)}
 }
 
-// loc places a comment at a line. The span is what protodesc turns into the line
-// number the page's source links point at; the columns are never read.
+// fixtureLineShift moves every fixture comment down its file, so a test can prove
+// a page does not depend on where a declaration sits.
+var fixtureLineShift int32
+
+// loc places a comment at a line; the columns are never read.
 func loc(path []int32, line int32, leading, trailing string) *descriptorpb.SourceCodeInfo_Location {
 	return &descriptorpb.SourceCodeInfo_Location{
 		Path:             path,
-		Span:             []int32{line, 0, 40},
+		Span:             []int32{line + fixtureLineShift, 0, 40},
 		LeadingComments:  proto.String(leading),
 		TrailingComments: proto.String(trailing),
 	}
@@ -644,8 +648,38 @@ func TestPageAndPackageOf(t *testing.T) {
 
 func TestSourceLink(t *testing.T) {
 	assert.Equal(t,
-		"[token.proto:12]("+docs.RepoBlob+"/proto/"+tokenPath+"#L12)",
-		sourceLink(tokenPath, 12))
+		"[token.proto]("+docs.RepoBlob+"/proto/"+tokenPath+")",
+		sourceLink(tokenPath))
+}
+
+// TestMovingADeclarationLeavesEveryPageUnchanged: a declaration that only moves
+// down its .proto file is not drift, so no committed page may change with it.
+func TestMovingADeclarationLeavesEveryPageUnchanged(t *testing.T) {
+	render := func(shift int32) map[string]string {
+		fixtureLineShift = shift
+		t.Cleanup(func() { fixtureLineShift = 0 })
+		dir := t.TempDir()
+		_, err := writeAll(fixtureAPI(t), dir)
+		require.NoError(t, err)
+		pages := map[string]string{}
+		require.NoError(t, filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			b, err := os.ReadFile(p)
+			rel, _ := filepath.Rel(dir, p)
+			pages[rel] = string(b)
+			return err
+		}))
+		return pages
+	}
+
+	before, after := render(0), render(250)
+	require.NotEmpty(t, before)
+	assert.Equal(t, before, after)
+	for name, page := range before {
+		assert.NotContains(t, page, "#L", name)
+	}
 }
 
 // TestWriteAllRendersEveryPageAndPrunesTheRest: the drift gate only compares
@@ -740,7 +774,7 @@ func unpadTables(page string) string {
 
 // TestServicePageStatesTheCallContract is what a third party builds a client
 // from without reading the schema: the HTTP path, the streaming shape, the
-// request and response types, and a link into the .proto line that defines each.
+// request and response types, and a link to the .proto file that defines each.
 func TestServicePageStatesTheCallContract(t *testing.T) {
 	body := renderedPage(t, "token/v1/token.md")
 
@@ -754,7 +788,7 @@ func TestServicePageStatesTheCallContract(t *testing.T) {
 	}, fm)
 
 	for _, want := range []string{
-		"`POST /magus.token.v1.TokenService/ListTokens`: unary. Source: [token.proto:14]",
+		"`POST /magus.token.v1.TokenService/ListTokens`: unary. Source: [token.proto]",
 		"`POST /magus.token.v1.TokenService/WatchTokens`: server streaming.",
 		"Takes [ListTokensRequest](#listtokensrequest), returns [ListTokensResponse](#listtokensresponse).",
 		"Package `magus.token.v1`, defined in `proto/magus/token/v1/token.proto`.",
@@ -962,7 +996,7 @@ func TestAMessageWithNoFieldsSaysSo(t *testing.T) {
 	body := renderedPage(t, "legacy/v1/legacy.md")
 
 	assert.Contains(t, body, "# LegacyService\n\n**Deprecated.**")
-	assert.Contains(t, body, "### PingRequest\n\nSource: [legacy.proto:1]")
+	assert.Contains(t, body, "### PingRequest\n\nSource: [legacy.proto]")
 	assert.Contains(t, body, "No fields.")
 }
 
