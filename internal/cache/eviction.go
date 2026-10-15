@@ -83,7 +83,7 @@ func (c *Cache) evictOldest(ctx context.Context, limit int64) {
 			}
 		}
 	}
-	_ = c.gcBlobs(ctx)
+	_ = c.gcBlobs(ctx, nil)
 }
 
 // markUsed records a hit on the entry for (projectPath, hash) by touching its manifest's

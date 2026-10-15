@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -1647,7 +1648,8 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 }
 
 // Delete removes cached manifests for the given project paths (all if none given).
-// Orphaned blobs are collected after manifests are deleted.
+// The blobs only those manifests held are collected at once; other unreferenced blobs
+// wait out blobGrace, since another checkout sharing the store may hold them.
 func (c *Cache) Delete(ctx context.Context, projectPaths ...string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -1656,6 +1658,22 @@ func (c *Cache) Delete(ctx context.Context, projectPaths ...string) error {
 	// The entries' logs and, in a checkout whose store is shared, the live logs its runs wrote.
 	logsDirs := slices.Compact([]string{filepath.Join(c.store, "logs"), filepath.Join(c.dir, "logs")})
 	outputsDir := filepath.Join(c.dir, "outputs")
+
+	released := map[string]struct{}{}
+	held := []string{manifestsDir}
+	if len(projectPaths) > 0 {
+		held = nil
+		for _, path := range projectPaths {
+			held = append(held, filepath.Join(manifestsDir, flattenPath(path)))
+		}
+	}
+	for _, dir := range held {
+		blobs, err := c.manifestBlobs(ctx, dir)
+		if err != nil {
+			return err
+		}
+		maps.Copy(released, blobs)
+	}
 
 	if len(projectPaths) == 0 {
 		// Clean everything.
@@ -1697,7 +1715,7 @@ func (c *Cache) Delete(ctx context.Context, projectPaths ...string) error {
 			}
 		}
 	}
-	return c.gcBlobs(ctx)
+	return c.gcBlobs(ctx, released)
 }
 
 // safePathIn joins name (a tar entry's slash-separated path) onto a store root and
@@ -1917,13 +1935,44 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 }
 
 // gcBlobs removes CAS blobs not referenced by any surviving manifest and not written or
-// claimed within blobGrace.
-func (c *Cache) gcBlobs(ctx context.Context) error {
-	casDir := filepath.Join(c.store, "cas")
-	manifestsDir := filepath.Join(c.store, "manifests")
+// claimed within blobGrace. A blob in released skips the grace: an explicit clean
+// deleted the entries holding it, and a replay of them has lost its entry anyway.
+func (c *Cache) gcBlobs(ctx context.Context, released map[string]struct{}) error {
+	referenced, err := c.manifestBlobs(ctx, filepath.Join(c.store, "manifests"))
+	if err != nil {
+		return err
+	}
+	if err := filepath.WalkDir(filepath.Join(c.store, "cas"), func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		blob := filepath.Base(p)
+		if _, ok := referenced[blob]; ok {
+			return nil
+		}
+		if _, ok := released[blob]; !ok {
+			// Statted now rather than from the walk's entry: a claim landing between the two
+			// is the case the grace exists for.
+			if info, err := os.Lstat(p); err != nil || time.Since(info.ModTime()) < blobGrace {
+				return nil //nolint:nilerr // a blob gone since the walk listed it needs no removal
+			}
+		}
+		_ = os.Remove(p) // p is always under c.store; symlink escapes are not a concern for a local cache
+		return nil
+	}); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("magus/cache: gc walk cas: %w", err)
+	}
+	return nil
+}
 
+// manifestBlobs returns the blobs the manifests under dir reference. A missing dir holds
+// none; an unreadable or corrupt manifest is warned about and skipped.
+func (c *Cache) manifestBlobs(ctx context.Context, dir string) (map[string]struct{}, error) {
 	referenced := map[string]struct{}{}
-	if err := filepath.WalkDir(manifestsDir, func(p string, d os.DirEntry, err error) error {
+	if err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".json") {
 			return err
 		}
@@ -1947,30 +1996,9 @@ func (c *Cache) gcBlobs(ctx context.Context) error {
 		}
 		return nil
 	}); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("magus/cache: gc walk manifests: %w", err)
+		return nil, fmt.Errorf("magus/cache: gc walk manifests: %w", err)
 	}
-
-	if err := filepath.WalkDir(casDir, func(p string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
-		}
-		if _, ok := referenced[filepath.Base(p)]; ok {
-			return nil
-		}
-		// Statted now rather than from the walk's entry: a claim landing between the two is
-		// the case the grace exists for.
-		if info, err := os.Lstat(p); err != nil || time.Since(info.ModTime()) < blobGrace {
-			return nil //nolint:nilerr // a blob gone since the walk listed it needs no removal
-		}
-		_ = os.Remove(p) // p is always under c.store; symlink escapes are not a concern for a local cache
-		return nil
-	}); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("magus/cache: gc walk cas: %w", err)
-	}
-	return nil
+	return referenced, nil
 }
 
 func (c *Cache) logPath(projectPath, hash string) string {

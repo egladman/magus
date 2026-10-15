@@ -64,7 +64,7 @@ func (c *Cache) Prune(ctx context.Context, cutoff time.Time, dryRun bool) (n int
 
 	// GC any blobs now unreferenced (no-op in dry-run mode).
 	if !dryRun && n > 0 {
-		err = c.gcBlobs(ctx)
+		err = c.gcBlobs(ctx, nil)
 	}
 	return n, freed, err
 }
