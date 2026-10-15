@@ -125,6 +125,16 @@ func isCheckpointDigest(digest string) bool {
 		strings.Trim(digest, "0123456789abcdef") == ""
 }
 
+// checkoutTokenIfReadable is [Store.CheckoutToken], empty where the checkout's version
+// control cannot say: a row declared there is written without a checkpoint.
+func (s *Store) checkoutTokenIfReadable(ctx context.Context) string {
+	token, err := s.CheckoutToken(ctx)
+	if err != nil {
+		return ""
+	}
+	return token
+}
+
 // declaredMerge is merge with the checkpoint it writes onto row id held to
 // [Store.DeclaredCheckpoint], storing that checkpoint expanded. A merge declaring a writing
 // row (a new one, or one that ended) that names none records the checkout's own; where none
@@ -134,8 +144,8 @@ func (s *Store) declaredMerge(ctx context.Context, rows []types.Job, id string, 
 	merge(&next)
 	written := next.Checkpoint
 	if !updates && !next.ReadOnly && strings.TrimSpace(written) == "" {
-		token, err := s.CheckoutToken(ctx)
-		if err != nil {
+		token := s.checkoutTokenIfReadable(ctx)
+		if token == "" {
 			return merge, nil
 		}
 		return func(u *types.Job) {

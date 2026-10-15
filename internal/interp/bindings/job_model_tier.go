@@ -225,16 +225,16 @@ func declareModelTiers(ctx context.Context, sess *buzz.Session, tiers, def, host
 			return types.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember, "skills for %s.%s: %v", enum, cases[i], err)
 		}
 	}
-	if decl.Hosts, err = declareTierHosts(ctx, sess, enum, cases, caseValues, hosts); err != nil {
-		return types.ModelTierDeclaration{}, err
+	if !hosts.IsNull() {
+		if decl.Hosts, err = declareTierHosts(ctx, sess, enum, cases, caseValues, hosts); err != nil {
+			return types.ModelTierDeclaration{}, err
+		}
 	}
 	return decl, nil
 }
 
+// declareTierHosts reads a declared hosts map; the caller skips a declaration with none.
 func declareTierHosts(ctx context.Context, sess *buzz.Session, enum string, cases []string, caseValues []vm.Value, hosts vm.Value) (map[types.HarnessKey][]string, error) {
-	if hosts.IsNull() {
-		return nil, nil
-	}
 	if !hosts.IsMap() {
 		return nil, modelTierUnusable(modelTiersMember,
 			"hosts must be a map from a magus\\HarnessKey to a function from a %s to a model alias, got %s", enum, hosts.Kind())

@@ -2639,7 +2639,8 @@ func reachOutside(checkout string, me types.Job, rel string) string {
 	outside := ""
 	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
-			return nil
+			// WalkDir reports an error only for a directory it could not list.
+			return filepath.SkipDir
 		}
 		under, err := filepath.Rel(root, p)
 		if err != nil {

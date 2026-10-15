@@ -161,8 +161,8 @@ func jsonMembers(t reflect.Type) []string {
 // is refused. A record that is not an object comes back as it was, for
 // [DecodeDeclaration] to refuse in its own words.
 func dropStoreStamped(raw []byte) ([]byte, error) {
-	var members map[string]json.RawMessage
-	if json.Unmarshal(raw, &members) != nil {
+	members, isObject := objectMembers(raw)
+	if !isObject {
 		return raw, nil
 	}
 	dropped := false
@@ -182,6 +182,15 @@ func dropStoreStamped(raw []byte) ([]byte, error) {
 		return raw, nil
 	}
 	return json.Marshal(members)
+}
+
+// objectMembers is raw's top-level members, false for a record that is not a JSON object.
+func objectMembers(raw []byte) (map[string]json.RawMessage, bool) {
+	var members map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &members); err != nil {
+		return nil, false
+	}
+	return members, true
 }
 
 // DecodeDeclarations reads the records `magus job apply -f` takes: one JSON object, a JSON
