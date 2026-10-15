@@ -11,7 +11,7 @@ and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 | `hostvocab`     | a host's tool name (`"Read"`, `"Bash"`) as a string literal in guard code                                   |
 | `ruletext`      | guard rule text (`"magus workspace:"`) in the guard's CLI half                                              |
 | `asciistrings`  | a typographic glyph in a string literal of a listed user-facing file                                        |
-| `importceiling` | a package importing more packages under a prefix than its ratchet allows                                    |
+| `benchbeside`   | an `// optimization:` comment or a `Cache`/`Memo` type in a package whose tests hold no benchmark           |
 | `stutter`       | an exported package-level name opening with its package's name                                              |
 | `filenames`     | a Go file name segment that splits into two segments the tree uses as file names                            |
 | `nameoutput`    | a `case outputName:` arm that does not render through an emitter                                            |

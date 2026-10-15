@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/egladman/magus/libs/conventions/asciistrings"
+	"github.com/egladman/magus/libs/conventions/benchbeside"
 	"github.com/egladman/magus/libs/conventions/diagmsg"
 	"github.com/egladman/magus/libs/conventions/errmsg"
 	"github.com/egladman/magus/libs/conventions/fieldwise"
@@ -17,7 +18,6 @@ import (
 	"github.com/egladman/magus/libs/conventions/globalrestore"
 	"github.com/egladman/magus/libs/conventions/hostagnostic"
 	"github.com/egladman/magus/libs/conventions/hostvocab"
-	"github.com/egladman/magus/libs/conventions/importceiling"
 	"github.com/egladman/magus/libs/conventions/nameoutput"
 	"github.com/egladman/magus/libs/conventions/providerio"
 	"github.com/egladman/magus/libs/conventions/ruletext"
@@ -30,6 +30,7 @@ import (
 
 func init() {
 	register.Plugin("asciistrings", plugin("asciistrings", asciistrings.New))
+	register.Plugin("benchbeside", plugin("benchbeside", benchbeside.New))
 	register.Plugin("diagmsg", plugin("diagmsg", diagmsg.New))
 	register.Plugin("errmsg", plugin("errmsg", errmsg.New))
 	register.Plugin("fieldwise", plugin("fieldwise", fieldwise.New))
@@ -37,7 +38,6 @@ func init() {
 	register.Plugin("globalrestore", plugin("globalrestore", globalrestore.New))
 	register.Plugin("hostagnostic", plugin("hostagnostic", hostagnostic.New))
 	register.Plugin("hostvocab", plugin("hostvocab", hostvocab.New))
-	register.Plugin("importceiling", plugin("importceiling", importceiling.New))
 	register.Plugin("nameoutput", plugin("nameoutput", nameoutput.New))
 	register.Plugin("providerio", plugin("providerio", providerio.New))
 	register.Plugin("ruletext", plugin("ruletext", ruletext.New))

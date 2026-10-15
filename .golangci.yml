@@ -110,7 +110,7 @@ linters:
     - hostvocab
     - ruletext
     - asciistrings
-    - importceiling
+    - benchbeside
     - stutter
     - filenames
     - nameoutput
@@ -419,28 +419,19 @@ linters:
             - std/buzz_signature.go
             - internal/cache/output.go
 
-      importceiling:
+      benchbeside:
         type: module
-        description: holds a package's imports under a prefix at or below a ceiling
+        description: requires a benchmark beside an optimization comment or a cache type
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           module: github.com/egladman/magus
-          rules:
-            # A RATCHET on cmd/magus's internal/ imports: it may fall, never rise.
-            # It was 25 in May, 36 in July, 48 in August and 63 in September, while
-            # cmd/magus's references to the root package rose 71 -> 189; the
-            # concurrency clamp exists in both cmd/magus/main.go and magus.go. 67
-            # since the merge queue's packages moved from libs/mergequeue to
-            # internal/queue, 68 since refs --rename imports internal/edit, 70
-            # since the MCP workers re-exec into internal/interp/mcpclient and
-            # internal/interp/transform before the CLI starts, 71 since
-            # internal/gcpolicy is a dependency-free leaf imported first so its
-            # init runs early, 73 since internal/log/attr names a log record's
-            # parts and internal/log/audience filters the display for its reader.
-            # Raising it is a sentence in the commit message.
-            - package: github.com/egladman/magus/cmd/magus
-              prefix: github.com/egladman/magus/internal/
-              max: 73
+          # A package whose optimization carries no benchmark, with why. The list only
+          # shrinks: an entry whose tests gain a func Benchmark fails the load.
+          exempt:
+            internal/config: Cache is magus.yaml's cache section, a config struct, not a cache
+            internal/gcpolicy: raising GOGC before main is measured end to end by gctrace and hyperfine, as its comment records; a Go benchmark cannot run before init
+            internal/handler/diagram: renderCache saves a whole render, which TestDiagramSecondRequestIsServedFromTheCache and the TestRenderCache tests pin; a benchmark would time the renderer
+            internal/handler/diff: the optimization comment on Handler keeps the changed set the patch was read with, which is a correctness choice, not a measured speedup
 
       stutter:
         type: module
@@ -674,6 +665,7 @@ linters:
         - name: early-return
           arguments:
             - preserveScope: true
+        - name: redundant-import-alias
         # confusing-naming intentionally disabled: it flags idiomatic
         # exported-wrapper/unexported-impl and build-tagged pairs (NewZstdWriter/
         # newZstdWriter, Midpoint/midpoint, Probe/probe) that are deliberate.

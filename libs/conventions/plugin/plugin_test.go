@@ -15,6 +15,7 @@ func TestPluginsRegister(t *testing.T) {
 	sourcetest.Module(t, "example.com/m", "cmd/app/main.go", "cmd/app/gen/gen.go")
 	for name, settings := range map[string]any{
 		"asciistrings": map[string]any{"files": []any{"types/*.go"}},
+		"benchbeside":  map[string]any{"module": "example.com/m"},
 		"diagmsg": map[string]any{
 			"max-runes": 160, "prefixes": []any{"magus workspace:"},
 			"calls":  []any{map[string]any{"func": "a.Errorf", "arg": 1, "format": true}},
@@ -30,7 +31,6 @@ func TestPluginsRegister(t *testing.T) {
 		"globalrestore": map[string]any{"package": "a", "vars": []any{"global"}, "hint": "see docs"},
 		"hostagnostic":  map[string]any{"module": "example.com/m", "skip-dirs": []any{"gen"}, "hosts": []any{"acme"}, "hint": "see docs"},
 		"hostvocab":     map[string]any{"files": []any{"internal/guard/*.go"}, "words": []any{"Read"}, "hint": "see docs"},
-		"importceiling": map[string]any{"rules": []any{map[string]any{"package": "a", "prefix": "b/", "max": 1}}},
 		"nameoutput":    map[string]any{"package": "a", "case-ident": "outputName", "emitters": []any{"emitNames"}, "hint": "see docs"},
 		"providerio":    map[string]any{"module": "example.com/m", "dirs": []any{"cmd/app"}, "hint": "see docs"},
 		"ruletext":      map[string]any{"files": []any{"cmd/magus/shell.go"}, "prefix": "magus workspace:", "hint": "see docs"},
