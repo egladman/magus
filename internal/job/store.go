@@ -62,10 +62,8 @@ var ErrMaxAttempts = errors.New("job: max_attempts reached")
 //     client MCP tool's magus\job and the console's read route).
 //   - An OS file lock beside jobs.jsonl serializes writers across PROCESSES. The CLI, the
 //     server, and an MCP client each hold their own Store on the same file, from any
-//     worktree or clone of the repository, and workers now register and heartbeat against
-//     it, so "one orchestrating agent writes this"
-//     (the assumption that made a cross-process race acceptable) stopped being true. Two
-//     read-modify-writes that interleave drop whichever row the loser had not read.
+//     worktree or clone of the repository, and workers register and heartbeat against it.
+//     Two read-modify-writes that interleave drop whichever row the loser had not read.
 //
 // Both are taken for the span of ONE call. A caller that merges fields by reading with
 // List and writing back the whole row takes them twice, and two such merges on one id
@@ -74,7 +72,8 @@ var ErrMaxAttempts = errors.New("job: max_attempts reached")
 // client MCP tool's magus\job.put) has to use.
 //
 // READS take neither. A write appends whole lines in one write or replaces the file by
-// rename, so a reader sees each row's previous line or its next one; blocking List behind
+// rename, so a reader sees each row's previous line or its next one, waiting [tailWait] out
+// an append it caught mid-write; blocking List behind
 // a writer in another process would buy nothing and would let a wedged writer stall the
 // console.
 type Store struct {

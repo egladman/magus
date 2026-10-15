@@ -146,7 +146,7 @@ type Goal struct {
 // meant before goals existed; a goal that named a kind and no expectation takes that
 // kind's natural one.
 //
-// Called at the WRITE boundary (Declaration.Apply, ParseMerge), never on read. That is the whole reason the enums have no empty member.
+// Called at the WRITE boundary (Declaration.Apply, job.PutMerge), never on read. That is the whole reason the enums have no empty member.
 func (g Goal) Resolve() Goal {
 	if g.Kind == "" {
 		g.Kind = GoalKindCheck
@@ -953,7 +953,7 @@ type PriorAttempt struct {
 // It is a DECLARATION and not a merge: every field it carries is written, so an omitted one
 // is cleared rather than kept. magus\job.put deliberately does the opposite,
 // since an agent advancing one field of a live row must not erase the rest (see
-// job.ParseMerge).
+// job.PutMerge).
 //
 // JSON only: this is decoded from stdin and never emitted, so it carries no yaml tags.
 //
@@ -1388,7 +1388,7 @@ func (r Declaration) check() (LeaseCheck, bool, error) {
 }
 
 // JobStateVocabulary is the closed set of job states, as an error quotes it. Shared by
-// Declaration.Validate and job.ParseMerge, the two places a caller-supplied state is
+// Declaration.Validate and job.PutMerge, the two places a caller-supplied state is
 // checked against the set.
 func JobStateVocabulary() string {
 	states := JobStates()
@@ -1444,7 +1444,7 @@ func cloneGoals(in []Goal) []Goal {
 	for i, goal := range in {
 		// RESOLVED on the way through, which is what makes this the write boundary the
 		// enums' no-empty-member rule depends on: every path that stores goals (Apply,
-		// ParseMerge) clones them through here.
+		// job.PutMerge) clones them through here.
 		out[i] = goal.Resolve()
 		out[i].Check.Args = slices.Clone(goal.Check.Args)
 		out[i].Paths = slices.Clone(goal.Paths)
