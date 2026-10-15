@@ -214,6 +214,37 @@ func TestManpageFlagsMatchTheCLI(t *testing.T) {
 	}
 }
 
+// The guard reads a `job fork` argv by the registry's copy of its flags, where a bool
+// flag takes no value; a flag the command binds differently leaves the guard reading a
+// value as an operand, or an operand as a value.
+func TestJobForkRegistryFlagsAreTheFlagsItBinds(t *testing.T) {
+	var fork cli.Command
+	for _, group := range cli.All {
+		for _, child := range group.Children {
+			if group.Name == "job" && child.Name == "fork" {
+				fork = child
+			}
+		}
+	}
+	require.NotEmpty(t, fork.Flags)
+
+	runCLIQuietly(t, "job", "fork", "-h")
+	bound, ok := recordedFlagsUnder("job fork")
+	require.True(t, ok, "job fork did not reach flag parsing under -h")
+	byName := map[string]recordedFlag{}
+	for _, f := range bound {
+		byName[f.Name] = f
+	}
+	for _, declared := range fork.Flags {
+		got, ok := byName[declared.Name]
+		if !assert.True(t, ok, "--%s is in the registry and not bound", declared.Name) {
+			continue
+		}
+		assert.Equal(t, declared.Doc, got.Usage, "--%s", declared.Name)
+		assert.Equal(t, declared.Kind == cli.FlagBool, got.Bool, "--%s: whether it takes a value", declared.Name)
+	}
+}
+
 // flagProbe is one command whose flags can be compared: the argv that reaches it, and the
 // man page's claim about it.
 type flagProbe struct {

@@ -282,6 +282,8 @@ var flagRecord struct {
 type recordedFlag struct {
 	Name  string
 	Usage string
+	// Bool is whether the flag takes no value, which the guard reads a command's argv by.
+	Bool bool
 }
 
 // recordFlagSet snapshots every flag bound for name. Called by cmdParse AFTER the local
@@ -289,7 +291,8 @@ type recordedFlag struct {
 func recordFlagSet(name string, fs *flag.FlagSet) {
 	var flags []recordedFlag
 	fs.VisitAll(func(f *flag.Flag) {
-		flags = append(flags, recordedFlag{Name: f.Name, Usage: f.Usage})
+		boolean, _ := f.Value.(interface{ IsBoolFlag() bool })
+		flags = append(flags, recordedFlag{Name: f.Name, Usage: f.Usage, Bool: boolean != nil && boolean.IsBoolFlag()})
 	})
 	flagRecord.Lock()
 	defer flagRecord.Unlock()
