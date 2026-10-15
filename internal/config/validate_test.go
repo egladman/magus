@@ -299,6 +299,12 @@ func TestValidate_Conform(t *testing.T) {
 			},
 			want: FieldFailure{Field: "knowledge.conform.checks.mode-knobs.source.anchor", Tag: "gte", Param: "0", Value: "-1"},
 		},
+		"export-scope below a zero anchor": {
+			edit: func(c *ConformConfig) {
+				c.Checks[types.ConformExportScope] = map[types.ConformPopulation]ConformLimitConfig{types.ConformPopMain: {Anchor: -1}}
+			},
+			want: FieldFailure{Field: "knowledge.conform.checks.export-scope.main.anchor", Tag: "gte", Param: "0", Value: "-1"},
+		},
 		"scope on a metric without scopes": {
 			edit: func(c *ConformConfig) {
 				c.Checks[types.ConformFileLines][types.ConformPopSource] = ConformLimitConfig{Percentile: 95, Anchor: 2200, Scopes: map[string]int{"cmd": 3000}}

@@ -220,9 +220,10 @@ func conformFailures(c ConformConfig) []FieldFailure {
 
 func conformLimitFailures(field string, metric types.ConformMetric, l ConformLimitConfig) []FieldFailure {
 	var out []FieldFailure
-	// mode-knobs is a list, not a distribution: anchor 0 names every function shared past the
-	// coupling rule, and percentile 0 measures no proposal.
-	list := metric == types.ConformModeKnobs
+	// mode-knobs and export-scope are lists, not distributions: anchor 0 names every function
+	// shared past the coupling rule or every export nothing outside its package uses, and
+	// percentile 0 measures no proposal.
+	list := metric == types.ConformModeKnobs || metric == types.ConformExportScope
 	switch {
 	case list && l.Percentile < 0:
 		out = append(out, FieldFailure{Field: field + ".percentile", Tag: "gte", Param: "0", Value: fmt.Sprint(l.Percentile)})
