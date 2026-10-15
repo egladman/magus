@@ -346,6 +346,7 @@ A blocked worker RAISES; it never stalls quietly.
   with `{{cmd "session dispose"}} <id> --reason "<why>"`{{if .Full}}. There is no expiry and no auto-dispose, because a
   request magus could answer on its own would not have needed a person{{end}}.
 - A worker that raised one waits for the disposition; it never chooses for itself.
+  It does not exit its row or report back first, because a reply that lands after the row ended reaches nobody.
 
 `{{cmd "session"}}` is how the root audits what a job RAN, as opposed to what it reported.
 `{{cmd "session"}} --since 2h -o json` answers what the fleet has been doing.
