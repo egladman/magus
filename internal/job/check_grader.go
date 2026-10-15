@@ -48,10 +48,10 @@ func SetCheckGrader(g CheckGrader) (previous CheckGrader) {
 	return previous
 }
 
-// graderFor is the store's own grader, else the installed one.
-func graderFor(store *Store) CheckGrader {
-	if store.grader != nil {
-		return store.grader
+// checkGrader is the store's own grader, else the installed one.
+func (s *Store) checkGrader() CheckGrader {
+	if s.grader != nil {
+		return s.grader
 	}
 	installedGraderMu.RLock()
 	defer installedGraderMu.RUnlock()
@@ -80,7 +80,7 @@ func RefuseDeniedCheck(ctx context.Context, store *Store, row types.Job) error {
 	if store == nil {
 		return nil
 	}
-	grader := graderFor(store)
+	grader := store.checkGrader()
 	if grader == nil {
 		return nil
 	}
