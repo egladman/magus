@@ -311,7 +311,7 @@ fun decoded(f: figure\Figure) > figure\Figure !> str {
 `
 
 // Draw lays fig out with figure\draw and paints it with Theme.page, the palette that
-// follows a page's CSS variables. anchorHref is figure's link template, {path} and {line}.
+// follows a page's CSS variables. anchorHref is figure's link template, with {path}.
 //
 // sess must resolve "magus/figure" and "magus", which the module imports for its record types.
 // Draw executes its entry program in sess, so a caller gives it a session of its own. A

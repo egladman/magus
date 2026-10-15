@@ -18,8 +18,8 @@ func TestFigureRegistersAtItsImportPath(t *testing.T) {
 	for _, m := range methods {
 		names = append(names, m.Name)
 	}
-	assert.Equal(t, []string{"without", "external", "of", "draw"}, names,
-		"only the authoring API and draw are exported; the layout and renderer stay private")
+	assert.Equal(t, []string{"without", "external", "of", "draw", "nodeFact"}, names,
+		"only the authoring API, draw and the stamp's node line are exported; the layout and renderer stay private")
 }
 
 func TestModelTiersRegistersTheDefaultDeclaration(t *testing.T) {

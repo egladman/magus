@@ -186,8 +186,7 @@ object Style {
     chipRadius: int = 2,            // tag chip, edge-label mask, legend swatch
     bendRadius: int = 8,            // raised to 6 when set lower; a leg too short for 6 is a validate finding
 
-    // A URL template with `{path}` and optionally `{line}`; when set, every anchored node
-    // links to its path, and a symbol anchor to its line.
+    // A URL template with `{path}`; when set, every anchored node links to its path.
     anchorHref: str = "",
 
     // The arrowhead is drawn in marker units. refX and the polygon derive from these, so
@@ -226,8 +225,11 @@ object Node {
     // Workspace-relative path this box depicts, checked at build time so a rename or delete
     // fails the diagram. Empty for a box that depicts no single place (an actor, a decision).
     anchor: str = "",
-    // The line a symbol anchor starts on, 0 when the anchor is a directory or a whole file.
-    line: int = 0,
+    // The symbol a box anchors at its definition, and that definition's signature as the
+    // index rendered it, null when it rendered none. Empty for a box anchoring no symbol.
+    // Neither is a position, so moving the definition moves neither.
+    symbol: str = "",
+    signature: str? = null,
     // A URL the box links to when what it depicts lives outside the repo: another service,
     // a vendor's docs. Painted as an <a>; unlike anchor, nothing checks it.
     link: str = "",
@@ -1196,21 +1198,18 @@ fun renderSecurity(n: Node, p: Palette, s: Style) > str {
 
 // renderNode wraps each node's shapes in one group a viewer can hook by id and anchor. With
 // Style.anchorHref set, an anchored node becomes a link: an SVG <a> is focusable and
-// followable before any script loads. A node with a link of its own is always one. The
-// anchor's line is painted only with anchorHref: the committed figures carry no line, so
-// an edit above the anchored symbol does not move them.
+// followable before any script loads. A node with a link of its own is always one. No
+// line is painted: a figure moves only when what it depicts does, never when an edit
+// shifts the anchored definition.
 fun renderNode(n: Node, p: Palette, s: Style) > str {
     var attrs = " data-node=\"" + escapeSvg(n.id) + "\"";
     if (n.anchor != "") { attrs = attrs + " data-anchor=\"" + escapeSvg(n.anchor) + "\""; }
-    if (s.anchorHref != "" and n.line > 0) { attrs = attrs + " data-line=\"{n.line}\""; }
     final body = renderNodeBody(n, p, s);
     if (n.link != "") {
         return "<a href=\"" + escapeSvg(n.link) + "\"" + attrs + "><g>" + body + "</g></a>";
     }
     if (s.anchorHref != "" and n.anchor != "") {
-        var line = "";
-        if (n.line > 0) { line = "{n.line}"; }
-        final href = s.anchorHref.replace("\{path\}", with: escapeSvg(n.anchor)).replace("\{line\}", with: line);
+        final href = s.anchorHref.replace("\{path\}", with: escapeSvg(n.anchor));
         return "<a href=\"" + href + "\"" + attrs + "><g>" + body + "</g></a>";
     }
     return "<g" + attrs + ">" + body + "</g>";
@@ -2797,7 +2796,7 @@ fun compose(declared: Sketch) > Sketch {
             label = shownLabel(d.label, id: shownLabel(o!.label, id: o!.id));
             if (anchor == "") { anchor = o!.anchor; }
         }
-        nodes.append(Node{ id = d.id, label = label, sub = d.sub, tag = d.tag, role = d.role, anchor = anchor, line = d.line, link = d.link });
+        nodes.append(Node{ id = d.id, label = label, sub = d.sub, tag = d.tag, role = d.role, anchor = anchor, symbol = d.symbol, signature = d.signature, link = d.link });
         i = i + 1;
     }
     foreach (o in observedOnly) {
@@ -5036,7 +5035,7 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
             boxH = mainSize;
         }
         nodes.append(Node{
-            id = n.id, label = n.label, sub = n.sub, tag = n.tag, role = n.role, anchor = n.anchor, line = n.line, link = n.link,
+            id = n.id, label = n.label, sub = n.sub, tag = n.tag, role = n.role, anchor = n.anchor, symbol = n.symbol, signature = n.signature, link = n.link,
             x = x, y = y, w = boxW, h = boxH,
         });
         ni = ni + 1;
@@ -7023,7 +7022,8 @@ object Part {
     role: str = "default",
     dirs: [str] = [<str>],
     anchor: str = "",
-    line: int = 0,
+    symbol: str = "",
+    signature: str? = null,
     link: str = "",
 }
 
@@ -7073,7 +7073,7 @@ object DrawnBand {
 }
 
 // draw lays f out and paints it with theme. anchorHref is a URL template: {path} takes a
-// box's anchor and {line} its symbol's line. Raises every finding at once, one per line,
+// box's anchor. Raises every finding at once, one per line,
 // each naming the call to change.
 export fun draw(f: Figure, theme: Theme, anchorHref: str = "") > str !> str {
     final named: str? = theme.value;
@@ -7083,6 +7083,18 @@ export fun draw(f: Figure, theme: Theme, anchorHref: str = "") > str !> str {
     if (theme == Theme.light) { p = lightPalette(); }
     if (theme == Theme.dark) { p = darkPalette(); }
     return renderSvg(d, p: p, s: Style{ anchorHref = anchorHref });
+}
+
+// nodeFact is the line a figure's stamp records for n. A box anchoring a symbol records the
+// symbol and its signature in place of the file it is defined in, so moving the definition,
+// in its file or to another, leaves the stamp alone and a signature change moves it, the
+// change `magus diff` classifies as a signature change. A signature the index rendered none
+// for is unknown.
+export fun nodeFact(n: Node) > str {
+    if (n.symbol == "") {
+        return "node {n.id} {n.role} {n.anchor} {n.label} / {n.sub}";
+    }
+    return "node {n.id} {n.role} {n.label} / {n.sub} symbol {n.symbol} {n.signature ?? "unknown"}";
 }
 
 fun laidOut(fig: Figure) > Diagram !> str {
@@ -7192,16 +7204,18 @@ fun resolvePart(b: Box, records: mut {str: magus\Dir}, actors: mut {str: Actor},
             found.append("{call} is a Look.decision; a directory is never a diamond, so draw the decision with external()");
         }
         var anchor = dir.path;
-        var line = 0;
+        var symbol = "";
+        var signature: str? = null;
         if (b.symbol != null) {
             final refs = b.symbol!;
+            symbol = refs.symbol;
+            signature = refs.signature;
             var at = false;
             final elsewhere: mut [str] = mut [<str>];
             foreach (site in refs.defs) {
                 if (at == false and inside(site.file, dir: dir.path)) {
                     at = true;
                     anchor = site.file;
-                    if (site.lines.len() > 0) { line = site.lines[0]; }
                 }
                 if (inside(site.file, dir: dir.path) == false) { elsewhere.append(site.file); }
             }
@@ -7215,7 +7229,7 @@ fun resolvePart(b: Box, records: mut {str: magus\Dir}, actors: mut {str: Actor},
         }
         return Part{
             id = dir.path, kind = "box", call = call, label = shownLabel(b.label, id: dir.path), sub = b.sub, tag = b.tag,
-            role = role, dirs = [dir.path], anchor = anchor, line = line,
+            role = role, dirs = [dir.path], anchor = anchor, symbol = symbol, signature = signature,
         };
     }
     if (b.group != null) {
@@ -7576,7 +7590,7 @@ fun lowered(fig: Figure) > Sketch !> str {
     foreach (part in parts) {
         f.nodes.append(Node{
             id = part.id, label = part.label, sub = part.sub, tag = part.tag, role = part.role,
-            anchor = part.anchor, line = part.line, link = part.link,
+            anchor = part.anchor, symbol = part.symbol, signature = part.signature, link = part.link,
         });
     }
     foreach (e in sortedEdges) { f.edges.append(e); }
@@ -7696,12 +7710,14 @@ fun newLayer(name: str, dirs: [magus\Dir]) > magus\Layer {
     return asRecord::<magus\Layer>({ "name": name, "declared": declared, "dirs": dirs });
 }
 
-fun refsAt(symbol: str, files: [str], line: int) > magus\RefsResult {
+fun refsAt(symbol: str, files: [str], line: int, signature: str? = null) > magus\RefsResult {
     final defs: mut [magus\RefSite] = mut [<magus\RefSite>];
     foreach (file in files) {
         defs.append(asRecord::<magus\RefSite>({ "file": file, "count": 1, "lines": [line] }));
     }
-    return asRecord::<magus\RefsResult>({ "symbol": symbol, "label": symbol, "defs": defs, "refs": [<magus\RefSite>] });
+    final record: mut {str: any} = mut { "symbol": symbol, "label": symbol, "defs": defs, "refs": [<magus\RefSite>] };
+    if (signature -> sig) { record["signature"] = sig; }
+    return asRecord::<magus\RefsResult>(record);
 }
 
 fun guardDir() > magus\Dir { return dirAt("internal/httpx"); }
@@ -7882,19 +7898,37 @@ test "markEdge labels a graph edge, and one the graph lacks is a finding" {
 }
 
 test "a symbol anchors its box at the definition" {
-    final ok = of("t").box(guardDir(), symbol: refsAt("httpx.Guard", files: ["internal/httpx/guard.go"], line: 12)).box(mcpDir()).edgesFromGraph();
+    final ok = of("t").box(guardDir(), symbol: refsAt("httpx.Guard", files: ["internal/httpx/guard.go"], line: 12, signature: "type Guard struct")).box(mcpDir()).edgesFromGraph();
     final d = ok.diagram() catch Diagram{};
-    assert\equal(lookupNode(d, id: "internal/httpx").anchor, want: "internal/httpx/guard.go", message: "the anchor is the defining file");
-    assert\equal(lookupNode(d, id: "internal/httpx").line, want: 12, message: "and its line");
-    final svg = draw(ok, theme: Theme.light, anchorHref: "/code/\{path\}#L\{line\}") catch "threw";
-    std\assert(svg.indexOf("<a href=\"/code/internal/httpx/guard.go#L12\" data-node=\"internal/httpx\" data-anchor=\"internal/httpx/guard.go\" data-line=\"12\">") != null, message: "the link carries the line: {svg}");
+    final node = lookupNode(d, id: "internal/httpx");
+    assert\equal(node.anchor, want: "internal/httpx/guard.go", message: "the anchor is the defining file");
+    assert\equal(node.symbol, want: "httpx.Guard", message: "and the symbol");
+    assert\equal(node.signature ?? "", want: "type Guard struct", message: "and its signature");
+    final svg = draw(ok, theme: Theme.light, anchorHref: "/code/\{path\}") catch "threw";
+    std\assert(svg.indexOf("<a href=\"/code/internal/httpx/guard.go\" data-node=\"internal/httpx\" data-anchor=\"internal/httpx/guard.go\">") != null, message: "the link names the file: {svg}");
     final committed = draw(ok, theme: Theme.light) catch "threw";
     std\assert(committed.indexOf("<g data-node=\"internal/httpx\" data-anchor=\"internal/httpx/guard.go\">") != null and committed.indexOf("data-line") == null,
-        message: "without anchorHref the anchor stays and the line does not: {committed}");
+        message: "without anchorHref the anchor stays and no line is painted: {committed}");
     final elsewhere = of("t").box(mcpDir(), symbol: refsAt("httpx.Guard", files: ["internal/httpx/guard.go"], line: 12)).unscoped(why: "x");
     std\assert(failure(elsewhere).indexOf("box(\"internal/handler/mcp\") anchors symbol \"httpx.Guard\", defined in internal/httpx/guard.go; box the directory that defines it") != null, message: "a symbol defined elsewhere");
     final none = of("t").box(guardDir(), symbol: refsAt("httpx.Gone", files: [<str>], line: 0));
     std\assert(failure(none).indexOf("box(\"internal/httpx\") anchors symbol \"httpx.Gone\", which has no definition in the index") != null, message: "a symbol with no definition");
+}
+
+fun guardFact(file: str, line: int, signature: str?) > str {
+    final f = of("t").box(guardDir(), symbol: refsAt("httpx.Guard", files: [file], line: line, signature: signature)).box(mcpDir()).edgesFromGraph();
+    final d = f.diagram() catch Diagram{};
+    return nodeFact(lookupNode(d, id: "internal/httpx"));
+}
+
+test "a moved definition leaves a node's stamp line alone and a signature change moves it" {
+    final at = guardFact("internal/httpx/guard.go", line: 12, signature: "type Guard struct");
+    assert\equal(guardFact("internal/httpx/guard.go", line: 40, signature: "type Guard struct"), want: at, message: "a line move is not drift");
+    assert\equal(guardFact("internal/httpx/policy.go", line: 3, signature: "type Guard struct"), want: at, message: "nor is a move to another file of the package");
+    std\assert(guardFact("internal/httpx/guard.go", line: 12, signature: "type Guard interface") != at, message: "a signature change is");
+    std\assert(guardFact("internal/httpx/guard.go", line: 12, signature: null).endsWith(" symbol httpx.Guard unknown"), message: "a signature the index rendered none for is unknown");
+    final plain = nodeFact(Node{ id = "internal/httpx", role = "default", anchor = "internal/httpx", label = "httpx" });
+    assert\equal(plain, want: "node internal/httpx default internal/httpx httpx / ", message: "a box anchoring no symbol keeps its line");
 }
 
 test "a zone takes a group whole" {

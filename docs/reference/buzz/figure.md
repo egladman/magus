@@ -74,3 +74,15 @@ draw lays f out and paints it with theme. anchorHref is a URL template: {path} t
 
 **Returns:** any
 
+### nodeFact
+
+nodeFact is the line a figure's stamp records for n. A box anchoring a symbol records the
+
+**Signature:** `figure\nodeFact(n) -> str`
+
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `n`       | `any` |          |             |
+
+**Returns:** any
+
