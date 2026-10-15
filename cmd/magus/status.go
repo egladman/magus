@@ -235,10 +235,8 @@ func printStatus(r types.StatusSnapshot, opts output.Options, animFrame int, com
 	return writeStatus(os.Stdout, r, opts, animFrame, compact)
 }
 
-// writeStatus renders one status frame to w. Split from printStatus so the
-// watch loop can render into a buffer and redraw it in place, rather than
-// printing straight at the terminal and having to erase the whole screen to
-// get rid of it.
+// writeStatus renders one status frame to w, so the watch loop can redraw a buffer
+// in place rather than erase the whole screen.
 func writeStatus(w io.Writer, r types.StatusSnapshot, opts output.Options, animFrame int, compact bool) error {
 	// TTY-ness is measured on os.Stdout, not on w, and that is deliberate: in
 	// watch mode w is a buffer this renders into before redrawing it in place,

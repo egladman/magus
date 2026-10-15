@@ -59,3 +59,4 @@
 {"kind":"known","metric":"dep-fanout","reason":"past its threshold when the ratchet was seeded at a0c2e2a5e3b8; an item leaves when it is fixed","items":[".","internal/doctor","internal/dry","internal/guard","internal/interp","internal/interp/bindings"]}
 {"kind":"known","metric":"dep-fanout","reason":"resolves the user state dir through libs/xdg for the ledger and lease markers beside internal/config; routing the state dir through Location is the follow-up","items":["internal/job"]}
 {"kind":"known","metric":"clone-tokens","reason":"proofread keeps its copy until libs/xdg/v0.1.0 is tagged; it requires published modules only","items":["libs/proofread/internal/xdg/xdg.go#homeDir","libs/xdg/xdg.go#homeDir"]}
+{"kind":"known","metric":"export-scope","reason":"NewEncoder's return type: callers hold it without naming it, and unexporting it would make an exported function return an unexported type","items":["internal/json/stream.go#Encoder"]}

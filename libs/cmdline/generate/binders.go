@@ -299,16 +299,16 @@ func bindMethod(k cmdline.Kind) string {
 func flagDefaultLiteral(f cmdline.Flag) string {
 	switch f.Kind {
 	case cmdline.Bool:
-		return fmt.Sprintf("%t", cmdline.DefaultOf[bool](f))
+		return fmt.Sprintf("%t", cmdline.TypedDefault[bool](f))
 	case cmdline.Int:
-		return fmt.Sprintf("%d", cmdline.DefaultOf[int](f))
+		return fmt.Sprintf("%d", cmdline.TypedDefault[int](f))
 	case cmdline.Duration:
-		if v := cmdline.DefaultOf[time.Duration](f); v != 0 {
+		if v := cmdline.TypedDefault[time.Duration](f); v != 0 {
 			return fmt.Sprintf("time.Duration(%d)", int64(v))
 		}
 		return "0"
 	case cmdline.String:
-		return fmt.Sprintf("%q", cmdline.DefaultOf[string](f))
+		return fmt.Sprintf("%q", cmdline.TypedDefault[string](f))
 	}
 	panic("binders: unknown flag kind " + string(f.Kind))
 }

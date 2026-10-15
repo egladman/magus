@@ -135,22 +135,22 @@ func (c Command) BindFlags(fs *flag.FlagSet) {
 	for _, f := range c.Flags {
 		switch f.Kind {
 		case Bool:
-			fs.Bool(f.Name, DefaultOf[bool](f), f.Doc)
+			fs.Bool(f.Name, TypedDefault[bool](f), f.Doc)
 		case String, Custom:
-			fs.String(f.Name, DefaultOf[string](f), f.Doc)
+			fs.String(f.Name, TypedDefault[string](f), f.Doc)
 		case Int:
-			fs.Int(f.Name, DefaultOf[int](f), f.Doc)
+			fs.Int(f.Name, TypedDefault[int](f), f.Doc)
 		case Duration:
-			fs.Duration(f.Name, DefaultOf[time.Duration](f), f.Doc)
+			fs.Duration(f.Name, TypedDefault[time.Duration](f), f.Doc)
 		default:
 			panic("cmdline: flag --" + f.Name + " has unknown kind " + string(f.Kind))
 		}
 	}
 }
 
-// DefaultOf returns f.Default as T, or T's zero value when it is nil. A Default of
+// TypedDefault returns f.Default as T, or T's zero value when it is nil. A Default of
 // another type panics; see BindFlags.
-func DefaultOf[T any](f Flag) T {
+func TypedDefault[T any](f Flag) T {
 	var zero T
 	if f.Default == nil {
 		return zero
