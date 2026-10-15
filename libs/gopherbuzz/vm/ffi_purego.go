@@ -44,20 +44,15 @@ import (
 	"github.com/ebitengine/purego"
 )
 
-// init registers the purego backend as the default FFI provider on supported
-// platforms. An embedder can still override it via RegisterFFIProvider. It also
-// wires the callback maker used by MakeCallback (ffi.go), since building a C
-// function pointer needs purego.NewCallback.
-func init() {
-	RegisterFFIProvider(puregoFFI{})
-	callbackMaker = puregoMakeCallback
-}
+// defaultFFIProvider is the purego backend, installed on supported platforms. An
+// embedder can still override it via RegisterFFIProvider.
+func defaultFFIProvider() FFIProvider { return puregoFFI{} }
 
-// puregoMakeCallback builds a C function pointer (purego.NewCallback) whose body
+// makeCallback builds a C function pointer (purego.NewCallback) whose body
 // re-enters Buzz to run fn. The C ABI restricts callbacks to integer/pointer/bool
 // arguments and a single such result (or void) — MakeCallback already rejected
 // floating types — so the reflect signature here uses only those kinds.
-func puregoMakeCallback(ctx context.Context, fn Value, ret CType, params []CType) (uintptr, error) {
+func makeCallback(ctx context.Context, fn Value, ret CType, params []CType) (uintptr, error) {
 	paramTypes := make([]reflect.Type, len(params))
 	for i, p := range params {
 		paramTypes[i] = cTypeToReflect(p)
