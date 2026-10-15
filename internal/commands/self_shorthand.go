@@ -23,8 +23,8 @@ at it. An existing mgs is left alone unless --force is given.`,
 		{Name: "force", Kind: cmdline.Bool, Doc: "Replace an existing file at the shorthand path"},
 	},
 	Examples: []cmdline.Example{
-		{"Install mgs next to magus", "magus self install-shorthand"},
-		{"Install it into ~/.local/bin instead", "magus self install-shorthand --dir ~/.local/bin"},
-		{"Replace an existing mgs", "magus self install-shorthand --force"},
+		{Comment: "Install mgs next to magus", Command: "magus self install-shorthand"},
+		{Comment: "Install it into ~/.local/bin instead", Command: "magus self install-shorthand --dir ~/.local/bin"},
+		{Comment: "Replace an existing mgs", Command: "magus self install-shorthand --force"},
 	},
 }

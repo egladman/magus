@@ -22,6 +22,6 @@ To bootstrap a workspace, use: magus init`,
 	Usage:    "magus self <subcommand> [flags]",
 	Children: []cmdline.Command{selfInstallShorthandCommand},
 	Examples: []cmdline.Example{
-		{"Install the mgs shorthand", "magus self install-shorthand"},
+		{Comment: "Install the mgs shorthand", Command: "magus self install-shorthand"},
 	},
 }
