@@ -22,7 +22,7 @@ import (
 // its environment, the running binary and the checkout's git directories. It creates
 // the private temp dir children get as TMPDIR (see privateTempDir). providers names the
 // spells in spellGrants that serve magus itself; see PolicyOptions.Providers. cacheDir
-// and storeDir are magus's own (workspace.CacheDir and workspace.StoreDir), one grant
+// and storeDir are magus's own (config.CacheDir and config.StoreDir), one grant
 // when they are the same directory.
 //
 // A sandbox.allow entry that cannot be honored, a literal path naming an unset
