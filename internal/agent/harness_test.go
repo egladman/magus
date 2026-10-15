@@ -1576,7 +1576,7 @@ func TestHarnessConfigsWirePromptAndSpawnHooksAndLeaveTheReplyCheckToThePerson(t
 		config := dogfoodedHookConfig
 		requireWired(t, config, "Stop", "", reply)
 		requireWired(t, config, "UserPromptSubmit", "", guard)
-		requireWired(t, config, "PreToolUse", "Agent", guard)
+		requireWired(t, config, "PreToolUse", "*", guard)
 		requireWired(t, config, "SubagentStop", "", guard)
 	})
 
@@ -1587,7 +1587,8 @@ func TestHarnessConfigsWirePromptAndSpawnHooksAndLeaveTheReplyCheckToThePerson(t
 				assert.NotContains(t, h.Command, reply, "the shipped Codex config leaves the reply check to the person")
 			}
 			requireWired(t, config, "UserPromptSubmit", "", guard)
-			requireWired(t, config, "PreToolUse", "collaborationspawn_agent", guard)
+			// The catch-all entry judges every tool, the spawn tools among them.
+			requireWired(t, config, "PreToolUse", "*", guard)
 			requireWired(t, config, "PostToolUse", "collaborationspawn_agent", guard)
 			requireWired(t, config, "SubagentStart", "", "magus-rehydrate.buzz")
 			requireWired(t, config, "SubagentStop", "", guard)

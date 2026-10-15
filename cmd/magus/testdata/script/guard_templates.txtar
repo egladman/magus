@@ -195,14 +195,14 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 # envelope, where the decoder finds no command, no path and no prompt and says there is
 # nothing to judge.
 stdin $WORK/null-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --tool-rows $WORK/tools
 ! stdout .
 
 # case: command/pass
 # No command field at all, and no other shape magus reads either. The envelope goes whole
 # and the decoder answers that it holds nothing to judge.
 stdin $WORK/no-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --tool-rows $WORK/tools
 ! stdout .
 
 # case: command/pass
@@ -1443,6 +1443,8 @@ magus\guard.builtins({"read-navigation": {"decision": "deny", "lines": 120}});
 1
 -- tools/runs --
 Bash
+-- tools/inert --
+TodoWrite
 -- read-ws/tools/version --
 1
 -- read-ws/tools/reads --
