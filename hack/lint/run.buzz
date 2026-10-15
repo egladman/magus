@@ -32,6 +32,7 @@ import "hack/lint/code-follows-mined-precedents" as precedents;
 import "hack/lint/code-stays-within-the-conformance-ratchet" as conformanceratchet;
 import "hack/lint/figure-modules-type-check-strictly" as figurecheck;
 import "hack/lint/generate-drift-throw-names-the-engine-drift-code" as generatedrift;
+import "hack/lint/generated-go-packages-name-their-owner" as generatedpackages;
 import "hack/lint/hack-scripts-parse-argv-with-flags" as scriptflags;
 import "hack/lint/hack-scripts-start-with-a-verb" as hackverbs;
 import "hack/lint/landing-rotator-slots-match-headline-count" as landing;
@@ -75,6 +76,7 @@ export fun rules() > [Rule] {
         Rule{ name = "root-project-declares-the-configs-its-tools-read", reads = rootconfigs\reads(), check = rootconfigs\check },
         Rule{ name = "skills-generate-declares-every-shipped-skill", reads = skills\reads(), check = skills\check },
         Rule{ name = "generate-drift-throw-names-the-engine-drift-code", reads = generatedrift\reads(), check = generatedrift\check },
+        Rule{ name = "generated-go-packages-name-their-owner", reads = generatedpackages\reads(), check = generatedpackages\check },
         Rule{ name = "landing-rotator-slots-match-headline-count", reads = landing\reads(), check = landing\check },
         Rule{ name = "buzz-glue-is-wired-as-plain-argv", reads = buzzglue\reads(), check = buzzglue\check },
         Rule{ name = "magusfiles-hold-no-tests", reads = magusfiletests\reads(), check = magusfiletests\check },
