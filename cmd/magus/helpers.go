@@ -438,7 +438,7 @@ func cliOptions() []magus.Option {
 	}
 }
 
-// magusInternals is what workspace.View adds to an opened *magus.Magus for magus's own
+// magusInternals is what workspace.ViewAs adds to an opened *magus.Magus for magus's own
 // packages: the methods whose signatures name internal types, which the public API leaves
 // off.
 type magusInternals interface {
@@ -448,7 +448,7 @@ type magusInternals interface {
 	Telemetry() observability.Provider
 }
 
-// viewInternals is m as workspace.View shows it to magus's own packages. It is also what a
+// viewInternals is m as workspace.ViewAs shows it to magus's own packages. It is also what a
 // context carries as the workspace (types.WithWorkspace), so std and the Buzz bindings
 // find the methods they assert for.
 func viewInternals(m *magus.Magus) magusInternals { return workspace.ViewAs[magusInternals](m) }

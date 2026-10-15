@@ -125,12 +125,12 @@ func (o Options) httpAddr() netip.AddrPort {
 // allows it as the bridge's CORS origin.
 const SiteOrigin = "https://eli.gladman.cc"
 
-// graphReader is the knowledge graph workspace.View adds to an opened *magus.Magus.
+// graphReader is the knowledge graph workspace.ViewAs adds to an opened *magus.Magus.
 type graphReader interface {
 	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
 }
 
-// telemetrySource is the observability provider workspace.View adds to an opened
+// telemetrySource is the observability provider workspace.ViewAs adds to an opened
 // *magus.Magus.
 type telemetrySource interface {
 	Telemetry() observability.Provider

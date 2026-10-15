@@ -881,7 +881,7 @@ func (s *Server) serveUnloaded(ctx context.Context) error {
 	return s.run(ctx, log, f)
 }
 
-// magusInternals is an opened *magus.Magus as workspace.View shows it to magus's own
+// magusInternals is an opened *magus.Magus as workspace.ViewAs shows it to magus's own
 // packages: with the knowledge graph and the observability provider, which the public
 // type does not carry.
 type magusInternals interface {
