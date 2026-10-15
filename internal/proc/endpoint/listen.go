@@ -37,14 +37,8 @@ func ListenUnix(path string) (*net.UnixListener, error) {
 // every socket is bound by its real name, so BoundAt reports false and a comparison
 // of names stands.
 func BoundAt(ln *net.UnixListener, path string) (bool, error) {
-	if boundAt == nil {
-		return false, nil
-	}
 	return boundAt(ln, path)
 }
-
-// boundAt is set on platforms that bind a socket through a directory descriptor.
-var boundAt func(ln *net.UnixListener, path string) (bool, error)
 
 // ListenUnixgram binds a *net.UnixConn in datagram mode at path, reaching one longer
 // than sun_path the same way ListenUnix does.
