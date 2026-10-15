@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -18,7 +19,7 @@ type tieredWorkspace struct {
 	set *types.ModelTierSet
 }
 
-func (w tieredWorkspace) ModelTiers() *types.ModelTierSet { return w.set }
+func (w tieredWorkspace) ModelTiers(context.Context) *types.ModelTierSet { return w.set }
 
 func declaredTiers(t *testing.T) *types.ModelTierSet {
 	t.Helper()

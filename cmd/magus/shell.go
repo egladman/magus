@@ -427,12 +427,14 @@ func guardModelTiers(ctx context.Context, rootOverride string) func() *types.Mod
 // workspaceModelTiers is the lazy reader of the model tiers the workspace inspect opens
 // declares. A workspace that does not load or declares no tiers yields nil.
 func workspaceModelTiers(ctx context.Context, inspect func(context.Context) (types.WorkspaceRepository, error)) func() *types.ModelTierSet {
-	return onceInspected(ctx, inspect, func(_ context.Context, ws types.WorkspaceRepository) *types.ModelTierSet {
-		tiered, ok := ws.(interface{ ModelTiers() *types.ModelTierSet })
+	return onceInspected(ctx, inspect, func(ctx context.Context, ws types.WorkspaceRepository) *types.ModelTierSet {
+		tiered, ok := ws.(interface {
+			ModelTiers(ctx context.Context) *types.ModelTierSet
+		})
 		if !ok {
 			return nil
 		}
-		return tiered.ModelTiers()
+		return tiered.ModelTiers(ctx)
 	})
 }
 

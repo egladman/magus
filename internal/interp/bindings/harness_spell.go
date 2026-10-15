@@ -137,11 +137,13 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 // the workspace declares no tiers, or the declaration maps no model for this harness: the
 // spell then renders no model line and the host's default applies.
 func cheapestTierModel(ctx context.Context, id string) string {
-	ws, ok := types.WorkspaceFromContext(ctx).(interface{ ModelTiers() *types.ModelTierSet })
+	ws, ok := types.WorkspaceFromContext(ctx).(interface {
+		ModelTiers(ctx context.Context) *types.ModelTierSet
+	})
 	if !ok {
 		return ""
 	}
-	set := ws.ModelTiers()
+	set := ws.ModelTiers(ctx)
 	if set == nil {
 		return ""
 	}

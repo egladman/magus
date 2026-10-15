@@ -192,7 +192,7 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 		if err != nil {
 			return nil, err
 		}
-		loc.ModelTiers, loc.ModelTierMatrix = m.ModelTiers(), m.ModelTierMatrix()
+		loc.ModelTiers, loc.ModelTierMatrix = m.ModelTiers(ctx), m.ModelTierMatrix()
 		loc.Owners = func(ctx context.Context, files []string) ([]string, error) {
 			res, err := m.AffectedFromPaths(ctx, files)
 			if err != nil {

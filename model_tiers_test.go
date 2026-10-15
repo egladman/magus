@@ -13,7 +13,7 @@ import (
 
 func TestModelTiersWithoutARegistry(t *testing.T) {
 	m := &Magus{}
-	assert.Nil(t, m.ModelTiers())
+	assert.Nil(t, m.ModelTiers(t.Context()))
 	assert.Nil(t, m.ModelTierMatrix())
 }
 
@@ -34,7 +34,7 @@ func TestModelTiersReadTheRegistry(t *testing.T) {
 	})
 	m := &Magus{wsReg: reg}
 
-	assert.Same(t, set, m.ModelTiers())
+	assert.Same(t, set, m.ModelTiers(t.Context()))
 	got, err := m.ModelTierMatrix()(context.Background(), types.ModelTierRequest{})
 	require.NoError(t, err)
 	assert.Equal(t, &types.JobModelTier{Name: "high", Rank: 1}, got)

@@ -246,7 +246,7 @@ func testModelTierSet(t *testing.T, enum string) *types.ModelTierSet {
 // The default builds on first ask and once; a declaration, or turning tiers off, wins over it.
 func TestWorkspaceRegistry_ModelTiers(t *testing.T) {
 	t.Run("no declaration and no default is nil", func(t *testing.T) {
-		assert.Nil(t, NewWorkspaceRegistry().ModelTiers())
+		assert.Nil(t, NewWorkspaceRegistry().ModelTiers(t.Context()))
 	})
 
 	t.Run("the default builds once, on the first ask", func(t *testing.T) {
@@ -255,8 +255,8 @@ func TestWorkspaceRegistry_ModelTiers(t *testing.T) {
 		shipped := testModelTierSet(t, "Shipped")
 		r.SetDefaultModelTiers(func() (*types.ModelTierSet, error) { builds++; return shipped, nil })
 		assert.Zero(t, builds, "registering the default builds nothing")
-		assert.Same(t, shipped, r.ModelTiers())
-		assert.Same(t, shipped, r.ModelTiers())
+		assert.Same(t, shipped, r.ModelTiers(t.Context()))
+		assert.Same(t, shipped, r.ModelTiers(t.Context()))
 		assert.Equal(t, 1, builds)
 	})
 
@@ -265,9 +265,9 @@ func TestWorkspaceRegistry_ModelTiers(t *testing.T) {
 		r.SetDefaultModelTiers(func() (*types.ModelTierSet, error) { return testModelTierSet(t, "Shipped"), nil })
 		first, second := testModelTierSet(t, "First"), testModelTierSet(t, "Second")
 		r.SetModelTiers(first)
-		assert.Same(t, first, r.ModelTiers())
+		assert.Same(t, first, r.ModelTiers(t.Context()))
 		r.SetModelTiers(second)
-		assert.Same(t, second, r.ModelTiers())
+		assert.Same(t, second, r.ModelTiers(t.Context()))
 	})
 
 	t.Run("a declaration of nil turns tiers off", func(t *testing.T) {
@@ -276,13 +276,13 @@ func TestWorkspaceRegistry_ModelTiers(t *testing.T) {
 			return nil, errors.New("the default must not build when tiers are off")
 		})
 		r.SetModelTiers(nil)
-		assert.Nil(t, r.ModelTiers())
+		assert.Nil(t, r.ModelTiers(t.Context()))
 	})
 
 	t.Run("a default that fails to build answers nil", func(t *testing.T) {
 		r := NewWorkspaceRegistry()
 		r.SetDefaultModelTiers(func() (*types.ModelTierSet, error) { return nil, errors.New("broken") })
-		assert.Nil(t, r.ModelTiers())
+		assert.Nil(t, r.ModelTiers(t.Context()))
 	})
 }
 

@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -24,7 +25,7 @@ const (
 // modelTiered is the workspace's model tier declaration, which the workspace the real
 // loader returns carries and a bare WorkspaceReader does not.
 type modelTiered interface {
-	ModelTiers() *types.ModelTierSet
+	ModelTiers(ctx context.Context) *types.ModelTierSet
 }
 
 // checkModelTierFit reports each (model tier, job kind) pair whose recorded jobs mostly did
@@ -39,7 +40,7 @@ func (r *runner) checkModelTierFit(_ []*types.Project) types.Check {
 	const name = "model-tier-fit"
 
 	tiered, ok := r.ws.(modelTiered)
-	if !ok || tiered.ModelTiers() == nil {
+	if !ok || tiered.ModelTiers(r.runCtx()) == nil {
 		return types.Check{
 			Name:     name,
 			Status:   types.CheckOK,
@@ -47,7 +48,7 @@ func (r *runner) checkModelTierFit(_ []*types.Project) types.Check {
 			Message:  "this workspace declares no model tiers, so no job is routed by one",
 		}
 	}
-	set := tiered.ModelTiers()
+	set := tiered.ModelTiers(r.runCtx())
 
 	var h forecast.History
 	if err := h.Load(r.runCtx(), r.opts.cfg.HistoryPath); err != nil {

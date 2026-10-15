@@ -433,7 +433,7 @@ func (r *WorkspaceRegistry) SetDefaultModelTiers(build func() (*types.ModelTierS
 // ModelTiers returns the workspace's model tiers: the magusfile's declaration, nil when it
 // turned them off, else the shipped default. It is nil too when the default cannot be
 // built, which is logged at error level.
-func (r *WorkspaceRegistry) ModelTiers() *types.ModelTierSet {
+func (r *WorkspaceRegistry) ModelTiers(ctx context.Context) *types.ModelTierSet {
 	r.mu.Lock()
 	if r.modelTiersDeclared || r.defaultModelTiers == nil {
 		defer r.mu.Unlock()
@@ -446,7 +446,7 @@ func (r *WorkspaceRegistry) ModelTiers() *types.ModelTierSet {
 	// registry. Two callers racing build the same set and the later one wins.
 	set, err := build()
 	if err != nil {
-		slog.With(attr.Component("magus")).Error("the default model tier declaration does not load", attr.Error(err))
+		slog.With(attr.Component("magus")).ErrorContext(ctx, "the default model tier declaration does not load", attr.Error(err))
 		return nil
 	}
 	r.mu.Lock()

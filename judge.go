@@ -53,7 +53,7 @@ func (m *Magus) judge(ctx context.Context, req guard.Request) (types.GuardJudgme
 	if deps.LoadFailure != nil {
 		return types.GuardJudgment{}, deps.LoadFailure
 	}
-	deps.ModelTiers = m.ModelTiers
+	deps.ModelTiers = func() *types.ModelTierSet { return m.ModelTiers(ctx) }
 	return guard.Judge(ctx, deps, req), nil
 }
 

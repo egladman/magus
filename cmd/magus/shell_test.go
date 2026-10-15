@@ -1731,7 +1731,7 @@ type tieredWorkspace struct {
 	set *types.ModelTierSet
 }
 
-func (w tieredWorkspace) ModelTiers() *types.ModelTierSet { return w.set }
+func (w tieredWorkspace) ModelTiers(context.Context) *types.ModelTierSet { return w.set }
 
 // The guard's model tiers open the workspace on the first ask and never again, so a spawn
 // that never asks, one bound to no tiered row, pays nothing for the load.

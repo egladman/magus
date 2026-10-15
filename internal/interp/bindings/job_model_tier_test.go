@@ -67,7 +67,7 @@ magus\job.modelTiers(Level, default: Level.high,
 `, "claude-code")
 	require.NoError(t, err)
 
-	set := reg.ModelTiers()
+	set := reg.ModelTiers(t.Context())
 	require.NotNil(t, set)
 	var names []string
 	for _, tier := range set.All() {
@@ -103,7 +103,7 @@ magus\job.modelTiers(Level, default: Level.low,
 	require.NoError(t, err, "a provider call that discards its key still wires the harness")
 	assert.Equal(t, []string{"cursor", "claude-code"}, reg.Harnesses())
 
-	set := reg.ModelTiers()
+	set := reg.ModelTiers(t.Context())
 	alias, err := set.Alias(types.HarnessKey{ID: "claude-code"}, set.Default())
 	require.NoError(t, err)
 	assert.Equal(t, "small", alias)
@@ -116,7 +116,7 @@ func TestModelTiersWithoutAHostsMapMapNoHarness(t *testing.T) {
 magus\job.modelTiers(Level, default: Level.low, bounds: bounds, skills: skills);
 `)
 	require.NoError(t, err)
-	_, err = reg.ModelTiers().Alias(types.HarnessKey{ID: "claude-code"}, reg.ModelTiers().Default())
+	_, err = reg.ModelTiers(t.Context()).Alias(types.HarnessKey{ID: "claude-code"}, reg.ModelTiers(t.Context()).Default())
 	require.ErrorContains(t, err, "maps no model for harness claude-code")
 }
 
@@ -124,7 +124,7 @@ func TestModelTiersDefaultToTheShippedDeclaration(t *testing.T) {
 	reg, err := loadModelTiers(t, `import "magus";`)
 	require.NoError(t, err)
 
-	set := reg.ModelTiers()
+	set := reg.ModelTiers(t.Context())
 	require.NotNil(t, set, "a workspace that declares nothing gets magus/modeltiers")
 	var names []string
 	for _, tier := range set.All() {
@@ -139,7 +139,7 @@ func TestModelTiersDefaultToTheShippedDeclaration(t *testing.T) {
 	require.NoError(t, err)
 	assert.Zero(t, set.Bounds(standard).MaxLive, "the default caps no tier's live jobs")
 	assert.Equal(t, types.SkillVariantFull, set.Skills(economy), "economy workers load the full skill bodies")
-	assert.Same(t, set, reg.ModelTiers(), "the default is built once")
+	assert.Same(t, set, reg.ModelTiers(t.Context()), "the default is built once")
 }
 
 func TestModelTiersNullTurnsThemOff(t *testing.T) {
@@ -148,7 +148,7 @@ import "magus";
 magus\job.modelTiers(null);
 `)
 	require.NoError(t, err)
-	assert.Nil(t, reg.ModelTiers(), "off is not the shipped default")
+	assert.Nil(t, reg.ModelTiers(t.Context()), "off is not the shipped default")
 }
 
 func TestModelTiersNullTakesNothingElse(t *testing.T) {

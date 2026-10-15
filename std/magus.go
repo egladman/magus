@@ -1833,11 +1833,11 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	// Recovered by assertion like workspaceCacheDir; declared here, inside the one
 	// declaration this door owns.
 	type modelTiered interface {
-		ModelTiers() *types.ModelTierSet
+		ModelTiers(ctx context.Context) *types.ModelTierSet
 		ModelTierMatrix() types.ModelTierMatrix
 	}
 	if tiers, ok := ws.(modelTiered); ok {
-		loc.ModelTiers, loc.ModelTierMatrix = tiers.ModelTiers(), tiers.ModelTierMatrix()
+		loc.ModelTiers, loc.ModelTierMatrix = tiers.ModelTiers(ctx), tiers.ModelTierMatrix()
 	}
 	if owned, ok := ws.(interface {
 		AffectedFromPaths(ctx context.Context, paths []string) (*types.AffectedResult, error)

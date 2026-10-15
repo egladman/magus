@@ -166,7 +166,7 @@ func (m *Magus) ModelTierLens(ctx context.Context) (types.ModelTierOutput, error
 	if err := hist.Load(ctx, m.cfg.HistoryPath); err != nil {
 		return types.ModelTierOutput{}, err
 	}
-	out.Rows = job.ModelTierRecords(hist.Jobs, m.ModelTiers())
+	out.Rows = job.ModelTierRecords(hist.Jobs, m.ModelTiers(ctx))
 	return out, nil
 }
 

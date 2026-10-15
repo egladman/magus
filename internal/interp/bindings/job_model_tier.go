@@ -391,7 +391,7 @@ func defaultModelTierSet(ctx context.Context) (*types.ModelTierSet, error) {
 // called, since the modelTiers and modelTier calls may come in either order.
 func buzzModelTierMatrix(sess *buzz.Session, reg *workspace.WorkspaceRegistry, matrix vm.Value, site string) types.ModelTierMatrix {
 	return func(ctx context.Context, req types.ModelTierRequest) (choice *types.JobModelTier, err error) {
-		set := reg.ModelTiers()
+		set := reg.ModelTiers(ctx)
 		if set == nil {
 			return nil, fmt.Errorf("%s: the workspace has no model tiers to choose among: magus\\job.modelTiers(null) turned them off", modelTierMember)
 		}
