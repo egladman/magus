@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-618-g1649b27e2-dirty (commit 1649b27e21599ae0f359b96ea94af66d21f60289, 2026-10-15T01:16:43-04:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-699-gb870b1664 (commit b870b16640a4da50dc2d2c2b535f453fed3b4488, 2026-10-15T14:12:57-04:00)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -141,13 +141,17 @@ internal/spell/gen/decls/*.buzz merge=magus linguist-generated
 internal/spell/gen/types/*.buzz merge=magus linguist-generated
 libs/conventions/MAGUS.md merge=magus linguist-generated
 libs/conventions/coverage.out merge=magus linguist-generated
-libs/conventions/gen/proofread merge=magus linguist-generated
-libs/conventions/gen/proofread.inputs merge=magus linguist-generated
 libs/diagnostics/MAGUS.md merge=magus linguist-generated
 libs/diagnostics/coverage.out merge=magus linguist-generated
 libs/gopherbuzz/MAGUS.md merge=magus linguist-generated
 libs/gopherbuzz/coverage.out merge=magus linguist-generated
 libs/gopherbuzz/token/testdata/fuzz/** merge=magus linguist-generated
+libs/proofread/MAGUS.md merge=magus linguist-generated
+libs/proofread/coverage.out merge=magus linguist-generated
+libs/proofread/gen/proofread merge=magus linguist-generated
+libs/proofread/gen/proofread.inputs merge=magus linguist-generated
+libs/proofread/postag/gen/model.gz merge=magus linguist-generated
+libs/proofread/postag/testdata/en_ewt-ud-test.conllu.gz merge=magus linguist-generated
 libs/scipbuzz/MAGUS.md merge=magus linguist-generated
 libs/scipbuzz/coverage.out merge=magus linguist-generated
 libs/scipbuzz/testdata/snapshots/gen/**/*.buzz merge=magus linguist-generated

@@ -411,7 +411,13 @@ import (
 //
 // 137: magus-multi-agent forks a worker's worktree with job fork --checkout; it and
 // magus-run split their over-long fix-loop sentences.
-const SkillVersion = 137
+//
+// 138: the short form of every skill but magus-multi-agent and magus-sdk is compressed
+// further: grammar words dropped, tables written as lists, and each passage both forms
+// carry split into a full and a short arm. Those two keep 137's text, whose rewrites the
+// compression predates. magus-multi-agent's reference.md carries short arms too, which no
+// install renders while Render keeps references full.
+const SkillVersion = 138
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -959,8 +965,8 @@ func (c *Catalog) RenderedSkills(form Form) ([]AgentSkill, error) {
 		// full twin when the acting lease says a delegated worker is running, and the
 		// session brief names it for the same reason. A description cannot route; a
 		// verdict that has read the lease can.
-		full.Description = "Full reference copy of " + def.Name + ", same scope with the worked examples kept. " +
-			"Load it instead of " + def.Name + " when magus names it, or when that skill left a step underspecified."
+		full.Description = "Full copy of " + def.Name + " with worked examples. " +
+			"Load it when magus names it or when " + def.Name + " left a step underspecified."
 		skills = append(skills, full)
 	}
 	return skills, nil

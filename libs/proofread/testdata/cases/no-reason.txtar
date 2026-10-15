@@ -1,0 +1,16 @@
+Cases written with the rule (2026-10-13), not drawn from a labeling round.
+An inline review comment of one sentence that asks for a change and gives no reason.
+-- hit/review-inline --
+Use a sync.Map here.
+This should be a constant.
+Please remove the debug print.
+The timeout needs to be configurable.
+Don't log the token.
+-- pass/review-inline --
+Use a sync.Map here: two workers write this map at once.
+Remove the debug print because it leaks the token.
+Should this be a constant?
+nit: use a constant here.
+The map is shared by both workers. Use a lock.
+Rename this to `cacheKey` so it matches the other call sites.
+Looks right to me.

@@ -1,17 +1,17 @@
 ---
 title: "template"
-description: "A house-style rule, off until a decisions table turns it on: it reports an agent-instructions template that does not render, so neither of its forms can be judged."
+description: "A house-style rule, off until a decisions table turns it on: it reports a skill template that does not render, so neither of its forms can be judged."
 tags: [proofread, rules, template, off]
 aliases: [reference/prose/template]
 ---
 
 # template
 
-A house-style rule, off until a decisions table turns it on: it reports an agent-instructions template that does not render, so neither of its forms can be judged.
+A house-style rule, off until a decisions table turns it on: it reports a skill template that does not render, so neither of its forms can be judged.
 
 ## What it catches
 
-An agent-instructions template that does not render, so neither of its forms can be judged.
+A skill template that does not render, so neither of its forms can be judged.
 
 ## Dimension
 
@@ -26,9 +26,9 @@ House style: the template form is internal/agent's. A body that does not render 
 
 The code is `PRF7004`. The decision depends on the kind of text judged:
 
-| Kind                          | Default |
-| ----------------------------- | ------- |
-| `agent-instructions-template` | off     |
+| Kind             | Default |
+| ---------------- | ------- |
+| `skill-template` | off     |
 
 House style ships `off`: the rule encodes one repository's conventions, not
 a rule of plain writing. A repository turns it on in its decisions table.
@@ -63,4 +63,4 @@ A finding names the rule, its code and the decision that applies, and links here
 
 - [All proofread rules](index.md) - every rule, grouped by what it checks
 - [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests
-- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries
+- [The findings contract](https://github.com/egladman/magus/blob/main/libs/proofread/README.md#findings) - the fields every finding carries

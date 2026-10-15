@@ -1,0 +1,5 @@
+Why does it race? The map has no lock. Is it fast? Is it safe? Yes.
+
+Why?
+
+Because.

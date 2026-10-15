@@ -1,0 +1,1 @@
+Every change here merged through egladman/magus#567's squash: the docs conventions lint skipping ignored pages, the testkit go env telemetry fix, the diff demo regeneration, and the import ceiling, which #567 then returned to 71. Nothing is left to merge.

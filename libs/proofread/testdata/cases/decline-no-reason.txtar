@@ -1,0 +1,14 @@
+Cases written with the rule (2026-10-13), not drawn from a labeling round.
+A short review reply that declines the change and gives no reason.
+-- hit/review-reply --
+Won't fix.
+No, I'd rather keep it.
+Not going to do this.
+Nope.
+wontfix
+-- pass/review-reply --
+Won't fix: the caller already sorts.
+No, the caller already sorts the keys before passing them in.
+No problem, fixed.
+Not going to change it because the API is public.
+Fixed, thanks.

@@ -1,13 +1,13 @@
 ---
 title: "leak"
-description: "A rule that denies on `doc-comment`, `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, `cli-help`, and `review-reply` and advises on `agent-reply` by default: it reports residue of a tool or a template: a citation marker or an unfilled placeholder."
+description: "A rule that denies on `doc-comment`, `reference`, `guide`, `change-description`, `agent-brief`, `agent-compact`, `commit-message`, `issue`, `release-notes`, `changelog`, `cli-help`, `review-summary`, `review-inline`, and `review-reply` and advises on `agent-reply` by default: it reports residue of a tool or a template: a citation marker or an unfilled placeholder."
 tags: [proofread, rules, leak, deny]
 aliases: [reference/prose/leak]
 ---
 
 # leak
 
-A rule that denies on `doc-comment`, `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, `cli-help`, and `review-reply` and advises on `agent-reply` by default: it reports residue of a tool or a template: a citation marker or an unfilled placeholder.
+A rule that denies on `doc-comment`, `reference`, `guide`, `change-description`, `agent-brief`, `agent-compact`, `commit-message`, `issue`, `release-notes`, `changelog`, `cli-help`, `review-summary`, `review-inline`, and `review-reply` and advises on `agent-reply` by default: it reports residue of a tool or a template: a citation marker or an unfilled placeholder.
 
 ## What it catches
 
@@ -32,12 +32,15 @@ The code is `PRF4005`. The decision depends on the kind of text judged:
 | `reference`          | deny    |
 | `guide`              | deny    |
 | `change-description` | deny    |
-| `agent-instructions` | deny    |
+| `agent-brief`        | deny    |
+| `agent-compact`      | deny    |
 | `commit-message`     | deny    |
 | `issue`              | deny    |
 | `release-notes`      | deny    |
 | `changelog`          | deny    |
 | `cli-help`           | deny    |
+| `review-summary`     | deny    |
+| `review-inline`      | deny    |
 | `review-reply`       | deny    |
 | `agent-reply`        | advise  |
 
@@ -71,4 +74,4 @@ A finding names the rule, its code and the decision that applies, and links here
 
 - [All proofread rules](index.md) - every rule, grouped by what it checks
 - [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests
-- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries
+- [The findings contract](https://github.com/egladman/magus/blob/main/libs/proofread/README.md#findings) - the fields every finding carries

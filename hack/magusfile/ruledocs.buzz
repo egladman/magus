@@ -284,14 +284,17 @@ fun kindLabel(kind: str) > str {
     return "`" + kind + "`";
 }
 
-// proofreadTier is the decision a rule is filed under: house rules ship off, and a rule that
-// denies anywhere is a deny rule.
+// proofreadTier is the decision a rule is filed under: house rules ship off, a rule that
+// denies anywhere is a deny rule, and one that advises nowhere is off.
 fun proofreadTier(r: ProofreadRule) > str {
     if (r.house) { return "off"; }
+    var advises = false;
     foreach (kind in r.kinds) {
         if (r.decisions[kind] == "deny") { return "deny"; }
+        if (r.decisions[kind] == "advise") { advises = true; }
     }
-    return "advise";
+    if (advises) { return "advise"; }
+    return "off";
 }
 
 fun kindsWith(r: ProofreadRule, decision: str) > [str] {
@@ -308,21 +311,30 @@ fun joinAnd(items: [str]) > str {
     return items.sub(0, len: items.len() - 1).join(", ") + ", and " + items[items.len() - 1];
 }
 
-// proofreadDescribe is the one sentence a proofread page and its frontmatter share.
+// proofreadDescribe is the one sentence a proofread page and its frontmatter share. It reads
+// the per-kind decisions the page's table prints, so the two cannot disagree: "a deny rule"
+// is said only of a rule that denies on every kind it judges.
 fun proofreadDescribe(r: ProofreadRule) > str {
     final denies = kindsWith(r, decision: "deny");
     final advises = kindsWith(r, decision: "advise");
+    final offs = kindsWith(r, decision: "off");
     if (r.house) {
         return "A house-style rule, off until a decisions table turns it on: it reports " + r.catches + ".";
     }
-    if (advises.len() == 0) {
+    if (advises.len() == 0 and offs.len() == 0) {
         return "A deny rule by default: it refuses " + r.catches + ".";
     }
-    if (denies.len() == 0) {
+    if (denies.len() == 0 and offs.len() == 0) {
         return "An advisory by default: it explains, and blocks nothing, on " + r.catches + ".";
     }
-    return "A rule that denies on " + joinAnd(denies) + " and advises on " + joinAnd(advises)
-        + " by default: it reports " + r.catches + ".";
+    if (denies.len() == 0 and advises.len() == 0) {
+        return "A rule that is off by default: it reports " + r.catches + " once a decisions table turns it on.";
+    }
+    final clauses = mut [<str>];
+    if (denies.len() > 0) { clauses.append("denies on " + joinAnd(denies)); }
+    if (advises.len() > 0) { clauses.append("advises on " + joinAnd(advises)); }
+    if (offs.len() > 0) { clauses.append("is off on " + joinAnd(offs)); }
+    return "A rule that " + joinAnd(clauses) + " by default: it reports " + r.catches + ".";
 }
 
 // proofreadOther is a decision the rule does not already take on its first kind, so the
@@ -407,7 +419,7 @@ export fun renderProofreadRule(r: ProofreadRule) > str {
         + "## See also\n\n"
         + "- [All proofread rules](index.md) - every rule, grouped by what it checks\n"
         + "- [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests\n"
-        + "- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries\n";
+        + "- [The findings contract](https://github.com/egladman/magus/blob/main/libs/proofread/README.md#findings) - the fields every finding carries\n";
 }
 
 // proofreadFamilies is the heading of each PRF family, keyed by the digit after the prefix.
@@ -700,6 +712,16 @@ test "a proofread rule with no known dimension raises" {
         }
         std\assert(message.startsWith("proofread rule blame has dimension"), message: "got: " + message);
     }
+}
+
+test "a rule that is off on a kind is not called a deny rule" {
+    final raw = `[{"name":"a","code":"PRF1","kinds":["reference","review-reply"],"decisions":{"reference":"off","review-reply":"deny"},"house":false,"dimension":"stance","catches":"x","why":""},`
+        + `{"name":"b","code":"PRF2","kinds":["reference"],"decisions":{"reference":"off"},"house":false,"dimension":"stance","catches":"x","why":""}]`;
+    final rules = proofreadRules(raw) catch [<ProofreadRule>];
+    std\assert(proofreadDescribe(rules[0]) == "A rule that denies on `review-reply` and is off on `reference` by default: it reports x.",
+        message: proofreadDescribe(rules[0]));
+    std\assert(proofreadDescribe(rules[1]) == "A rule that is off by default: it reports x once a decisions table turns it on.",
+        message: proofreadDescribe(rules[1]));
 }
 
 test "a house rule says it ships off" {

@@ -4,7 +4,7 @@ generated_from: internal/agent/skills/magus-upstream-docs/SKILL.md
 description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL."
 tags: [agents, skills, magus-upstream-docs]
 skill_full_bytes: 5144
-skill_short_bytes: 3908
+skill_short_bytes: 2923
 ---
 
 # magus-upstream-docs
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `137` |
+| `agent-skill-version` | `138` |
 | `knowledge-schema-version` | `21` |
-| `skill-content` | `d21462073818` |
+| `skill-content` | `15bfde926cf3` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -54,98 +54,74 @@ magus agent install --tar | tar -xO -f - magus-upstream-docs/SKILL.md
 ```
 
 ````markdown
-# Navigating the magus docs
+# magus docs
 
-magus ships one official documentation site. Use it for a magus-domain fact the
-workspace graph cannot give: the docs are the source of
-truth for magus's behavior.
+One official docs site.
+Use for magus-domain fact workspace graph cannot give: docs are source of truth for magus behavior.
+Docs lookup whose answer is all you need -> `magus-scout` agent, where harness installed one; otherwise worker on host's cheapest model.
 
-Send a docs lookup whose answer is all you need to the `magus-scout` agent, where your
-harness installed one. Otherwise use a worker on your host's cheapest model.
+Two places serve same pages:
+- magus repo (`magusfile.buzz` at root, `docs/` tree): query section (next), or read `docs/<name>.md` when you know page.
+- Published: `https://eli.gladman.cc/magus/`; every page also raw Markdown at `<page-url>index.md`.
 
-Two places serve the same pages:
+## In workspace: ask graph for passage
 
-- In the magus repo (a `magusfile.buzz` at the root, a `docs/` tree): query the section
-  (next), or read `docs/<name>.md` when you know the page.
-- Published: `https://eli.gladman.cc/magus/`. Every page is also raw Markdown at
-  `<page-url>index.md`.
-
-## In a magus workspace, ask the graph for the passage
-
-Every Markdown heading is a `docsection` node, so "where is this explained" is a
-query, not a scan:
+Every Markdown heading is `docsection` node -> "where is this explained" is query, not scan:
 
 ```sh
 magus query kind=docsection "cache key"
 ```
 
-Each result's id is `<path>#<anchor>`. Read that section, not the whole file. The index route below is for the PUBLISHED site,
-which has no graph.
+Result id: `<path>#<anchor>`. Each result: read that section, not whole file.
+Index route below: PUBLISHED site only, which has no graph.
 
-## Fast path: start from the index, do not guess URLs
+## Fast path: index, do not guess URLs
 
-Two files at the docs root turn "find the page" into a lookup:
-
-- `llms.txt`: one titled link per page to its raw Markdown (`<url>index.md`), with a
-  one-line description. Read it FIRST, then fetch the page's `index.md`.
-- `search-index.json`: an array of `{url, title, text, tags, description}`, one
-  record per page. Search it when you do not know the page name.
+Two files at docs root:
+- `llms.txt`: one titled link per page to raw Markdown (`<url>index.md`), one-line description. Read FIRST, then fetch page's `index.md`.
+- `search-index.json`: array of `{url, title, text, tags, description}`, one record per page. Search when you do not know page name.
 
 ## URL scheme
 
-Pages use extensionless directory URLs; append `index.md` for the raw source.
+Extensionless directory URLs; append `index.md` for raw source.
+- `go` spell: `/spells/go/` -> `/spells/go/index.md`
+- `magus run` command: `/manpage/magus-run/` -> `/manpage/magus-run/index.md`
+- diagnostic MGS2001: `/codes/sandbox/MGS2001/` -> `.../MGS2001/index.md`
 
-| You have                     | Page URL             | Raw Markdown                |
-| ---------------------------- | -------------------- | --------------------------- |
-| the `go` spell               | `/spells/go/`        | `/spells/go/index.md`       |
-| the `magus run` command      | `/manpage/magus-run/`| `/manpage/magus-run/index.md`|
-| diagnostic MGS2001           | `/codes/sandbox/MGS2001/` | `.../MGS2001/index.md` |
+## Where things live
 
-## Where things live (stable IDs route straight to a page)
+Each stable ID maps to fixed section:
+- CLI command / flag: `/manpage/magus-<cmd>/`
+- spell and ops: `/spells/<name>/`
+- diagnostic `MGSxxxx`: `/codes/` (grouped by family)
+- stdlib module (fs, os, http, ...): `/buzz/modules/<name>/`
+- core concept (targets, cache, charms, sandbox, affected, ...): `/<concept>/`
+- install / download: `/download/` and children
+- whole map: `/documentation/`
 
-Each stable ID maps to a fixed section:
+## Traversing
 
-| Looking for                        | Go to                        |
-| ---------------------------------- | ---------------------------- |
-| a CLI command / flag               | `/manpage/magus-<cmd>/`      |
-| a spell and its ops                | `/spells/<name>/`            |
-| a diagnostic `MGSxxxx`             | `/codes/` (grouped by family)|
-| a stdlib module (fs, os, http, ...)| `/buzz/modules/<name>/`      |
-| a core concept (targets, cache, charms, sandbox, affected, ...) | `/<concept>/` |
-| install / download                 | `/download/` and its children|
-| the whole map                      | `/documentation/`            |
-
-## Traversing within the docs
-
-Every page has three axes:
-
-- Breadcrumb (up): the trail back to `/documentation/`.
-- "In this section" (siblings + children): the other pages under this section's
-  landing.
-- Prev / next (pager): the adjacent pages in the section.
+Every page, three axes:
+- Breadcrumb (up): trail back to `/documentation/`.
+- "In this section" (siblings, children): other pages under section landing.
+- Prev / next (pager): adjacent pages in section.
 
 Land via `llms.txt`, then sweep siblings via "In this section".
 
-## The published site follows main, not your build
+## Published site follows main, not your build
 
-The site and its source links (`/blob/main/`) are rendered from main. The binary
-you run may be older. When they disagree, trust what the binary prints, such as
-`magus <command> -h`.
+Site and source links (`/blob/main/`) render from main; binary may be older.
+When they disagree -> trust binary output, like `magus <command> -h`.
+Linked file as your build has it: replace `blob/main` with `blob/<commit>`; commit from `magus version -o json`.
+Find symbol by name; line numbers move.
+If docs and behavior still disagree after that, and you have reproduction -> magus-upstream-source skill traces code at your build.
 
-To read a linked file as your build has it, replace `blob/main` with
-`blob/<commit>`. Take the commit from `magus version -o json`. Find the symbol by
-name, because line numbers move.
+## In magus repo
 
-If the docs and the behavior still disagree after that, and you have a
-reproduction, the magus-upstream-source skill traces the code at your build.
-
-## In the magus repo
-
-`docs/` Markdown is the source of truth; `docs/gen/` is generated (never edit it;
-change the source and regenerate). MAGUS.md is a routing index for HUMAN readers;
-do not answer from it: it is true only as of its last
-regeneration. `magus query "kind=doc"` lists every
-page from the graph.
+`docs/` Markdown: source of truth.
+`docs/gen/`: generated; never edit; change source, regenerate.
+MAGUS.md: routing index for HUMAN readers; do not answer from it: true only as of last regeneration.
+`magus query "kind=doc"` lists every page from graph.
 ````
 
 

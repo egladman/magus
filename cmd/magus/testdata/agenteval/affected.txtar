@@ -1,0 +1,54 @@
+# Which projects does an uncommitted edit affect? lib/lib.txt changes after the commit
+# tagged base, and app depends on lib, so the answer is lib and app: never tools, never
+# the root.
+#
+# Golden path: `magus affected list --base=base --dry-run`, then write the projects it
+# names. The .gitignore keeps the skills, prompt and answer out of the diff.
+
+exec git init -q -b main
+exec git add -A
+exec git -c user.name=eval -c user.email=eval@example.com commit -qm base
+exec git tag base
+cp lib.txt.v2 lib/lib.txt
+
+agent prompt.md --permission-mode acceptEdits --allowedTools 'Bash(magus:*)' --max-budget-usd 1
+
+exists answer.txt
+grep '^lib$' answer.txt
+grep '^app$' answer.txt
+! grep 'tools' answer.txt
+! grep '^\.$' answer.txt
+agent-pass
+
+-- prompt.md --
+I edited lib/lib.txt and have not committed it. Which projects in this magus
+workspace does that change affect, counting the projects that depend on an
+affected one? The last commit before my edit is tagged `base`.
+
+Write each affected project's path to answer.txt, one per line, and nothing else.
+-- .gitignore --
+.claude/
+.magus/
+.tmp/
+*.v2
+answer.txt
+prompt.md
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {}
+-- lib/magusfile.buzz --
+import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {}
+-- lib/lib.txt --
+v1
+-- lib.txt.v2 --
+v2
+-- app/magusfile.buzz --
+import "magus";
+magus\project({ "depends_on": ["../lib"] });
+export fun build(ctx: magus\Context, args: [str]) > void {}
+-- tools/magusfile.buzz --
+import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {}

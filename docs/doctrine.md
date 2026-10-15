@@ -558,6 +558,29 @@ it can prove, a planted token file that cannot grant more than a mint, a token
 that never mints a wider one, rather than claiming a sandbox it does not have
 ([Tokens and grants](concepts/tokens.md#trust-model)).
 
+### The outer harness stays outside
+
+magus is the outer harness: deterministic guides and sensors around an agent
+host's loop, never the loop itself ([Prior art and terminology](scope.md#prior-art-and-terminology)).
+The host is the inner harness. It decides what reaches the model and what a
+tool call does, and magus never enters that path.
+
+So magus judges and informs; it does not transform. A guard verdict allows,
+advises or denies an action and gives its reason. It never rewrites the
+command, the prompt or the reply on the way through. The text an agent loads
+from magus (skills, MAGUS.md, the AGENTS.md section) is written ahead of time,
+kept in version control and reviewed like code. Compressing it, proofreading
+it or regenerating it happens to those files, never at session start and never
+per request. magus runs no proxy between an agent and its provider and no step
+that edits context in flight.
+
+The reason is ownership. A provider changes how its harness loads context,
+caches it and calls tools on its own schedule, and a layer that rewrote text in
+flight would break quietly when it did: the same trade as
+[The host wiring is yours](#the-host-wiring-is-yours). It would also make the
+text a model saw differ from the text a person reviewed, which undoes the point
+of keeping that text in version control.
+
 ### A refusal carries its reason
 
 A refusal names the mechanism and a next step. Diagnostics are coded and

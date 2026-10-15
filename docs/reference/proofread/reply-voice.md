@@ -1,13 +1,13 @@
 ---
 title: "reply-voice"
-description: "A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, and `review-reply` and advises on `stylesheet` by default: it reports text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label."
+description: "A rule that denies on `reference`, `guide`, `change-description`, `agent-brief`, `commit-message`, `issue`, `release-notes`, `changelog`, `review-summary`, `review-inline`, `review-reply`, and `agent-compact` and advises on `stylesheet` by default: it reports text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label."
 tags: [proofread, rules, reply-voice, deny]
 aliases: [reference/prose/reply-voice]
 ---
 
 # reply-voice
 
-A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, and `review-reply` and advises on `stylesheet` by default: it reports text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label.
+A rule that denies on `reference`, `guide`, `change-description`, `agent-brief`, `commit-message`, `issue`, `release-notes`, `changelog`, `review-summary`, `review-inline`, `review-reply`, and `agent-compact` and advises on `stylesheet` by default: it reports text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label.
 
 ## What it catches
 
@@ -31,12 +31,15 @@ The code is `PRF1002`. The decision depends on the kind of text judged:
 | `reference`          | deny    |
 | `guide`              | deny    |
 | `change-description` | deny    |
-| `agent-instructions` | deny    |
+| `agent-brief`        | deny    |
 | `commit-message`     | deny    |
 | `issue`              | deny    |
 | `release-notes`      | deny    |
 | `changelog`          | deny    |
+| `review-summary`     | deny    |
+| `review-inline`      | deny    |
 | `review-reply`       | deny    |
+| `agent-compact`      | deny    |
 | `stylesheet`         | advise  |
 
 ## Changing it
@@ -69,4 +72,4 @@ A finding names the rule, its code and the decision that applies, and links here
 
 - [All proofread rules](index.md) - every rule, grouped by what it checks
 - [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests
-- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries
+- [The findings contract](https://github.com/egladman/magus/blob/main/libs/proofread/README.md#findings) - the fields every finding carries

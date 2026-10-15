@@ -51,7 +51,7 @@
 //     branch, one lowercase imperative line anywhere else.
 //   pull-request-text (deny, named): a pull request title, description or review reply,
 //     posted by any forge command its table lists, with a finding proofread in
-//     libs/conventions/proofread decides deny under hack/policy/proofread.buzz, a description past
+//     libs/proofread decides deny under hack/policy/proofread.buzz, a description past
 //     the word budget its diff earns after the lead, or a title the pr-title check would
 //     fail. Advise findings, prose outside the lead, bullets and headed sections, and an
 //     area the diff touches that the description never names are advised once per pull

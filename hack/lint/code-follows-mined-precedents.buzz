@@ -31,7 +31,7 @@ final THIS = "hack/lint/code-follows-mined-precedents.buzz";
 // project, so each project holding Go is named. proto's Go is all generated.
 export fun reads() > [str] {
     return ["**/*.go", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
-        "libs/figure/**/*.go","libs/gopherbuzz/**/*.go", "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go"];
+        "libs/figure/**/*.go","libs/gopherbuzz/**/*.go", "libs/proofread/**/*.go", "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go"];
 }
 
 // check fails every departure from an established precedent in FAMILIES that SANCTIONED does

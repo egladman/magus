@@ -5,7 +5,7 @@ import "fs";
 import "path";
 import "encoding/json";
 
-// RULES is this repository's decisions table for libs/conventions/proofread: the house style the
+// RULES is this repository's decisions table for libs/proofread: the house style the
 // judge ships off, turned on here, each with what justified it. A rule left out keeps its
 // shipped default. history stays off: a doc that says what a symbol replaced is judged by a
 // reader, and the symbol-docs lint never held it.
@@ -42,11 +42,38 @@ final RULES: {str: str} = {
     "comment-budget": "deny",
     "block-budget": "deny",
     "banned-word": "deny",
+    // The review rules ship off until a labeling round measures them; here they advise, each
+    // backed by the study or convention its page cites.
+    "no-reason": "advise",
+    "nit-label": "advise",
+    "empty-request-changes": "advise",
+    "approve-blocker": "advise",
+    "bare-lgtm": "advise",
+    "deferral-no-link": "advise",
+    "decline-no-reason": "advise",
+    "impatience": "advise",
+    // The list and date rules ship off until a labeling round measures them; here they advise,
+    // backed by the Google and Microsoft list guidance and the date mix in decision record 0001.
+    "list-marks": "advise",
+    "list-parallel": "advise",
+    "date-format": "advise",
+    // The agent-compact rules and the skill rules ship off until a labeling round measures them;
+    // here they advise, each backed by the token counts and studies its page cites. None denies
+    // while the short skill forms are not yet compressed to the floor.
+    "compact-filler": "advise",
+    "compact-markup": "advise",
+    "compact-costly-abbrev": "advise",
+    "compact-symbol-negation": "advise",
+    "compact-line": "advise",
+    "compact-duplicate": "advise",
+    "skill-description-budget": "advise",
+    "skill-set-description-budget": "advise",
+    "instruction-position": "advise",
 };
 
-// DECISIONS_FILE is RULES as the JSON file .claude/settings.json hands the proofread-reply
-// hook, which runs where this module cannot be imported, and the comment guard hands proofread
-// for a stylesheet read from stdin. A test holds the two equal.
+// DECISIONS_FILE is RULES as the JSON file a caller that cannot import this module hands
+// proofread: the console's stylesheet lint and the comment guard for a stylesheet read from
+// stdin. A test holds the two equal.
 export final DECISIONS_FILE = "hack/policy/proofread-decisions.json";
 
 // PATHS are the exemptions by workspace-relative glob, each with its reason. A glob that
@@ -93,7 +120,7 @@ export fun writeDecisions(files: [str]) > str !> any {
 }
 
 // decide is the decision this repository gives a finding of rule that a judge outside
-// libs/conventions reported as given: RULES wins, as it does for proofread.
+// libs/proofread reported as given: RULES wins, as it does for proofread.
 export fun decide(rule: str, given: str) > str {
     return RULES[rule] ?? given;
 }
