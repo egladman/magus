@@ -52,7 +52,10 @@ func rankSiblingCheckout(v ShellVerdict, reason string) ShellVerdict {
 // `--root`. Denying "other repository" here
 // would export a false positive about sibling checkouts to every consumer of
 // this guard to catch a mistake nobody makes.
-func denySiblingCheckout(callDir, command string, d Dialect) string {
+//
+// A checkout owned reports true for is the caller's own to work in: the checkout a fork made
+// for its job or for a job it forked. owned may be nil, and is asked only about a sibling.
+func denySiblingCheckout(callDir, command string, d Dialect, owned func(root string) bool) string {
 	// No call directory is the process's own, which a relative path already resolves from.
 	targets := magusCdTargets(command, d, cmp.Or(callDir, "."), userHome())
 	if len(targets) == 0 {
@@ -64,7 +67,7 @@ func denySiblingCheckout(callDir, command string, d Dialect) string {
 	}
 	for _, t := range targets {
 		root, common, ok := gitCheckout(t)
-		if !ok || common != hereCommon || root == hereRoot {
+		if !ok || common != hereCommon || root == hereRoot || (owned != nil && owned(root)) {
 			continue
 		}
 		return siblingCheckoutDenial(hereRoot, root)

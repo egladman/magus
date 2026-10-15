@@ -168,6 +168,10 @@ func judgeWorktreeRemove(ctx context.Context, deps Dependencies, at location, ca
 	var finished []types.Job
 	exited := ""
 	for _, row := range rows {
+		if row.Worktree.Standing() && samePath(row.Worktree.Root, co.Root) && !mayWorkIn(deps, rows, row) {
+			r.failed = append(r.failed, fmt.Sprintf("job %s's fork made it, and only that job's holder or the session that forked it removes it (`%s`)",
+				row.ID, hint.DescribeJob.With(row.ID)))
+		}
 		if !samePath(row.CheckoutRoot, co.Root) {
 			continue
 		}
@@ -208,6 +212,29 @@ func judgeWorktreeRemove(ctx context.Context, deps Dependencies, at location, ca
 	return r
 }
 
+// ownsCheckout reports whether root is a standing checkout a fork made for a job the
+// caller may work in (see [mayWorkIn]). A store that cannot be read owns nothing.
+func ownsCheckout(ctx context.Context, deps Dependencies, at location, root string) bool {
+	rows, err := jobRowsAt(ctx, at)
+	if err != nil {
+		return false
+	}
+	i := slices.IndexFunc(rows, func(row types.Job) bool { return row.Worktree.Standing() && samePath(row.Worktree.Root, root) })
+	return i >= 0 && mayWorkIn(deps, rows, rows[i])
+}
+
+// mayWorkIn reports whether the caller is row's holder or its root: the session holding row
+// or a job row descends from, or a caller holding no job that no session spawned.
+func mayWorkIn(deps Dependencies, rows []types.Job, row types.Job) bool {
+	if deps.lease == "" {
+		return deps.caller.Agent == ""
+	}
+	if deps.lease == row.ID {
+		return true
+	}
+	return slices.ContainsFunc(types.JobAncestors(rows, row.ID), func(a types.Job) bool { return a.ID == deps.lease })
+}
+
 // lockHeld is the condition a lock fails when nothing proves who holds it is done.
 func lockHeld(co types.RegisteredCheckout) string {
 	reason := "it is locked"
@@ -219,9 +246,20 @@ func lockHeld(co types.RegisteredCheckout) string {
 
 // lockOwner names the finished job whose worker locked co, when the caller is the
 // session that spawned it: a root caller, and a spawn record in its own session facts
-// naming the job. "" when nothing proves that. A lock `magus checkout` took is never one.
+// naming the job. "" when nothing proves that. A lock CreateCheckout took names the ended
+// job whose fork made the checkout, when the caller may work in it.
 func lockOwner(deps Dependencies, rows, finished []types.Job, co types.RegisteredCheckout) string {
-	if co.LockReason == vcs.CheckoutLockReason || !deps.caller.Identified() || deps.caller.Agent != "" {
+	if co.LockReason == vcs.CheckoutLockReason {
+		// `magus job fork --checkout` locks the checkouts it makes this way too: one an ended
+		// job owns is its holder's or its root's to remove.
+		for _, row := range rows {
+			if row.State.Terminal() && row.Worktree.Standing() && samePath(row.Worktree.Root, co.Root) && mayWorkIn(deps, rows, row) {
+				return row.ID
+			}
+		}
+		return ""
+	}
+	if !deps.caller.Identified() || deps.caller.Agent != "" {
 		return ""
 	}
 	if deps.lease != "" {

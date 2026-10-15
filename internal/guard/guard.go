@@ -1399,7 +1399,8 @@ func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir
 	script := denyScriptContent(deps, callDir, line, d)
 	script.Next, script.Lead = nil, ""
 	v = rankScriptContent(v, script)
-	v = deps.rankGraded(v, denyRuleSiblingCheckout, denySiblingCheckout(callDir, line, d), rankSiblingCheckout)
+	owned := func(root string) bool { return ownsCheckout(ctx, deps, at, root) }
+	v = deps.rankGraded(v, denyRuleSiblingCheckout, denySiblingCheckout(callDir, line, d, owned), rankSiblingCheckout)
 	v = rankWorktreeRemove(v, deps.grade(denyWorktreeRemove(ctx, deps, at, callDir, line, d)))
 	v = deps.rankGraded(v, denyRuleInterpreterRewrite, denyInterpreterRewrite(at, line, d), rankInterpreterRewrite)
 	v = deps.rankGraded(v, denyRuleConflictRewrite, denyConflictRewrite(at, line, d), rankConflictRewrite)
@@ -2133,6 +2134,9 @@ func withRegisteredBase(ctx context.Context, deps Dependencies, at location, age
 	}
 	i := slices.IndexFunc(snap.Rows, func(row types.Job) bool { return row.ID == agentJob })
 	if i < 0 || !snap.Rows[i].State.Live() || (snap.Rows[i].Registered != 0 && !baseSuperseded(ctx, deps, at, snap.Rows[i])) {
+		return ctx
+	}
+	if here, err := filepath.Abs(at.workspace); err != nil || job.WrongCheckout(snap.Rows[i], here) != nil {
 		return ctx
 	}
 	base, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).CheckoutToken(ctx)

@@ -1,12 +1,14 @@
 package guard
 
 import (
+	"fmt"
 	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/types"
 )
 
 // workerVCSOp names the version-control operation a worker lease may not run, short of a
@@ -33,6 +35,50 @@ func workerVCSOp(c hint.Invocation) string {
 		return ""
 	}
 	return c.Name + " " + sub
+}
+
+// addsCheckout reports a call that makes a second checkout of the repository by hand: `git
+// worktree add`, `hg share` or `jj workspace add`. Sapling has no such verb.
+func addsCheckout(c hint.Invocation) bool {
+	sub, rest := vcsSubcommand(c)
+	switch c.Name {
+	case "git":
+		return sub == "worktree" && firstWordIs(rest, "add")
+	case "hg":
+		return sub == "share"
+	case "jj":
+		return sub == "workspace" && firstWordIs(rest, "add")
+	}
+	return false
+}
+
+// removesOwnCheckout reports whether each worktree removal on command names the checkout
+// row's fork made for it, which its holder may remove; the worktree-remove rule still
+// judges whether that loses work.
+func removesOwnCheckout(command, cwd string, row types.Job) bool {
+	if !row.Worktree.Standing() {
+		return false
+	}
+	calls, ok := locateCalls(command, DialectBash, cwd, isWorktreeRemove, false)
+	if !ok || len(calls) == 0 {
+		return false
+	}
+	for _, c := range calls {
+		s, why := locateRemoval(c)
+		if why != "" || !samePath(s.target, row.Worktree.Root) {
+			return false
+		}
+	}
+	return true
+}
+
+// checkoutAddDenial words the lease-vcs refusal of a checkout made by hand. what is the
+// refused call as the reader typed it.
+func checkoutAddDenial(what string, row types.Job, role string) string {
+	return fmt.Sprintf("magus workspace: a job's checkout is made by the fork that declares the job, not by hand.\n"+
+		"%s makes one, and lease %s is %s. `%s` makes it, copies in the magus the forking checkout runs, "+
+		"takes the job there and nowhere else, and removes it once the job ends unless it holds work.",
+		what, row.ID, role, hint.JobFork.With("<job>", "--checkout", "<dir>"))
 }
 
 // workerGitVerbs read the repository, or touch only the worker's own index and branch. rm

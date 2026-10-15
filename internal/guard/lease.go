@@ -1644,6 +1644,12 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 	if !creates {
 		for _, c := range cmds {
 			if op := workerVCSOp(c); op != "" && !workerLands(c) {
+				if cwd, _ := deps.workingDir(); isWorktreeRemove(c) && removesOwnCheckout(command, cwd, me) {
+					continue
+				}
+				if addsCheckout(c) {
+					return checkoutAddDenial("`"+command+"`", me, role)
+				}
 				return workerVCSDenial("`"+command+"`", vcsRefusal{op: op, kind: vcsOpOrchestrated}, me, role)
 			}
 		}

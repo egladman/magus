@@ -313,6 +313,23 @@ func TestWorktreeRemoveRefusesALockItCannotProveIsYourFinishedWorkers(t *testing
 
 // A cherry-pick lands a worker's commits under new ids, amended and with more beside
 // them; what it changed reads the same in the caller's HEAD, so nothing is lost.
+// A checkout a job's fork made is that job's: the session that forked it removes it once the
+// job ended, over the lock the fork took, and a caller under another job is refused.
+func TestWorktreeRemoveHoldsAJobsCheckoutToItsRoot(t *testing.T) {
+	r := newWorktreeRepo(t)
+	wt := r.add("owned")
+	r.git(r.main, "worktree", "lock", "--reason", vcs.CheckoutLockReason, wt)
+	row := types.Job{ID: "w1", State: types.StatePass, CheckoutRoot: wt, Worktree: &types.JobWorktree{Root: wt, Source: r.main}}
+	remove := "git worktree remove -f -f " + wt
+
+	root := Dependencies{caller: job.Caller{Host: "claude", Session: "s1"}}
+	assert.Equal(t, ShellVerdict{}, r.judgeWith(root, r.main, remove, row), "the forking session removes its ended job's checkout")
+
+	foreign := Dependencies{caller: job.Caller{Host: "claude", Session: "s1", Agent: "agent-x"}, lease: "other"}
+	other := types.Job{ID: "other", State: types.StateRunning}
+	assertRemovalDenied(t, r.judgeWith(foreign, r.main, remove, row, other), "job w1's fork made it")
+}
+
 func TestWorktreeRemovePassesCommitsYourCheckoutHoldsUnderNewHashes(t *testing.T) {
 	r := newWorktreeRepo(t)
 	wt, row := r.workerWorktree(types.StatePass)

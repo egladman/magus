@@ -794,6 +794,36 @@ func TestDenyLeaseScopedVCS(t *testing.T) {
 	}
 }
 
+// A worker making a checkout by hand, in any backend's own verb, is pointed at the fork
+// that makes one.
+func TestDenyLeaseScopedVCSPointsACheckoutAddAtTheFork(t *testing.T) {
+	worker := narrowLease()
+	worker.Parent = "harness"
+	ctx, _ := fleetFixture(t, worker)
+	for _, command := range []string{"git worktree add ../x", "git -C . worktree add -b y ../y", "hg share . ../x", "jj workspace add ../x"} {
+		reason := denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, command)
+		assert.Contains(t, reason, "--checkout <dir>", "%q", command)
+		assert.Contains(t, reason, "harness", "%q", command)
+	}
+	assert.NotContains(t, denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, "git worktree remove ../x"), "--checkout")
+}
+
+// The holder of a job removes the checkout its fork made, and only that one; the
+// worktree-remove rule then judges whether removing it loses work.
+func TestDenyLeaseScopedVCSLetsAHolderRemoveItsOwnCheckout(t *testing.T) {
+	own := filepath.Join(t.TempDir(), "own")
+	worker := narrowLease()
+	worker.Parent = "harness"
+	worker.Worktree = &types.JobWorktree{Root: own}
+	ctx, _ := fleetFixture(t, worker)
+	// Only a fork writes the worktree record, so the store seeds the row without it.
+	ctx = job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{worker}})
+
+	assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, "git worktree remove "+own))
+	assert.NotEmpty(t, denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, "git worktree remove "+filepath.Join(t.TempDir(), "foreign")),
+		"a checkout the job does not own stays the orchestrator's")
+}
+
 // TestDenyLeaseScopedVCSStaysQuiet covers the silences: no lease, a parentless lease its
 // root session holds, and a lease nobody declared.
 func TestDenyLeaseScopedVCSStaysQuiet(t *testing.T) {
