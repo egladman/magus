@@ -2090,6 +2090,41 @@ github.com/egladman/magus/types.GraphView type struct
 github.com/egladman/magus/types.GraphView.BlastRadius field map[string]int
 github.com/egladman/magus/types.GraphView.DependsOn field map[string][]string
 github.com/egladman/magus/types.GraphView.Nodes field []string
+github.com/egladman/magus/types.GroupingChained const GroupingShape = "chained"
+github.com/egladman/magus/types.GroupingDefinition const untyped string = "Grouping reads job history, not git: each recorded job is chained (one worker whose write paths reach two or more projects), split (two or more jobs forked under one attempt of one parent) or solo. Per shape it sets the context a worker loaded before its first write and the context, wall time, denials and unattributed writes per group beside the pass rate. It is observational: jobs were not assigned to a shape at random, and bigger work is split more often, so it reports what each shape cost here and never which to choose; a person writes that rule. A shape with fewer than the minimum sample of groups, or with most trails rotated away, is unknown."
+github.com/egladman/magus/types.GroupingMeasured const GroupingVerdict = "measured"
+github.com/egladman/magus/types.GroupingMinSample const untyped int = 5
+github.com/egladman/magus/types.GroupingOutput type struct
+github.com/egladman/magus/types.GroupingOutput.Definition field string "json:\"definition\"   yaml:\"definition\""
+github.com/egladman/magus/types.GroupingOutput.MinSample field int "json:\"min_sample\"   yaml:\"min_sample\""
+github.com/egladman/magus/types.GroupingOutput.Rows field []GroupingRecord "json:\"rows\"         yaml:\"rows\""
+github.com/egladman/magus/types.GroupingOutput.Unclassified field int "json:\"unclassified\" yaml:\"unclassified\""
+github.com/egladman/magus/types.GroupingRecord type struct
+github.com/egladman/magus/types.GroupingRecord.ContextPerGroup field *float64 "json:\"context_per_group\"  yaml:\"context_per_group\""
+github.com/egladman/magus/types.GroupingRecord.DenialsPerJob field *float64 "json:\"denials_per_job\"    yaml:\"denials_per_job\""
+github.com/egladman/magus/types.GroupingRecord.Groups field int "json:\"groups\"  yaml:\"groups\""
+github.com/egladman/magus/types.GroupingRecord.Jobs field int "json:\"jobs\"    yaml:\"jobs\""
+github.com/egladman/magus/types.GroupingRecord.Known field int "json:\"known\"   yaml:\"known\""
+github.com/egladman/magus/types.GroupingRecord.PassLower field *float64 "json:\"pass_lower\" yaml:\"pass_lower\""
+github.com/egladman/magus/types.GroupingRecord.ReworkPerJob field *float64 "json:\"rework_per_job\"       yaml:\"rework_per_job\""
+github.com/egladman/magus/types.GroupingRecord.SetupShare field *float64 "json:\"setup_share\"         yaml:\"setup_share\""
+github.com/egladman/magus/types.GroupingRecord.SetupTokensMedian field *int64 "json:\"setup_tokens_median\" yaml:\"setup_tokens_median\""
+github.com/egladman/magus/types.GroupingRecord.Shape field GroupingShape "json:\"shape\"   yaml:\"shape\""
+github.com/egladman/magus/types.GroupingRecord.UnattributedPerJob field *float64 "json:\"unattributed_per_job\" yaml:\"unattributed_per_job\""
+github.com/egladman/magus/types.GroupingRecord.Verdict field GroupingVerdict "json:\"verdict\" yaml:\"verdict\""
+github.com/egladman/magus/types.GroupingRecord.WallMsPerGroup field *float64 "json:\"wall_ms_per_group\"  yaml:\"wall_ms_per_group\""
+github.com/egladman/magus/types.GroupingRecord.WideningsPerJob field *float64 "json:\"widenings_per_job\"    yaml:\"widenings_per_job\""
+github.com/egladman/magus/types.GroupingShape type string
+github.com/egladman/magus/types.GroupingShape.String method func() string
+github.com/egladman/magus/types.GroupingShape.Valid method func() bool
+github.com/egladman/magus/types.GroupingShape.Values method func() []string
+github.com/egladman/magus/types.GroupingSolo const GroupingShape = "solo"
+github.com/egladman/magus/types.GroupingSplit const GroupingShape = "split"
+github.com/egladman/magus/types.GroupingUnknown const GroupingVerdict = "unknown"
+github.com/egladman/magus/types.GroupingVerdict type string
+github.com/egladman/magus/types.GroupingVerdict.String method func() string
+github.com/egladman/magus/types.GroupingVerdict.Valid method func() bool
+github.com/egladman/magus/types.GroupingVerdict.Values method func() []string
 github.com/egladman/magus/types.GuardAdvise const GuardDecision = "advise"
 github.com/egladman/magus/types.GuardAllow const GuardDecision = "allow"
 github.com/egladman/magus/types.GuardBinary type struct
@@ -2485,6 +2520,9 @@ github.com/egladman/magus/types.JobOutcome.Job field string "json:\"job\"       
 github.com/egladman/magus/types.JobOutcome.Kind field JobKind "json:\"kind\"                    yaml:\"kind\""
 github.com/egladman/magus/types.JobOutcome.Model field string "json:\"model,omitempty\"         yaml:\"model,omitempty\""
 github.com/egladman/magus/types.JobOutcome.ModelTier field string "json:\"model_tier,omitempty\"    yaml:\"model_tier,omitempty\""
+github.com/egladman/magus/types.JobOutcome.Parent field string "json:\"parent,omitempty\"        yaml:\"parent,omitempty\""
+github.com/egladman/magus/types.JobOutcome.ParentAttempt field int "json:\"parent_attempt,omitzero\" yaml:\"parent_attempt,omitempty\""
+github.com/egladman/magus/types.JobOutcome.Projects field []string "json:\"projects,omitempty\"      yaml:\"projects,omitempty\""
 github.com/egladman/magus/types.JobOutcome.Reason field string "json:\"reason,omitempty\"        yaml:\"reason,omitempty\""
 github.com/egladman/magus/types.JobOutcome.Retry field RetryChange "json:\"retry,omitempty\"         yaml:\"retry,omitempty\""
 github.com/egladman/magus/types.JobOutcome.ReworkRounds field int "json:\"rework_rounds,omitempty\" yaml:\"rework_rounds,omitempty\""
@@ -2493,7 +2531,9 @@ github.com/egladman/magus/types.JobOutcome.Skills field SkillVariant "json:\"ski
 github.com/egladman/magus/types.JobOutcome.Source field ModelTierSource "json:\"source,omitempty\"        yaml:\"source,omitempty\""
 github.com/egladman/magus/types.JobOutcome.State field JobState "json:\"state\"                   yaml:\"state\""
 github.com/egladman/magus/types.JobOutcome.Tokens field *int64 "json:\"usage_tokens,omitzero\"   yaml:\"usage_tokens,omitempty\""
+github.com/egladman/magus/types.JobOutcome.Unattributed field int "json:\"unattributed,omitzero\"   yaml:\"unattributed,omitempty\""
 github.com/egladman/magus/types.JobOutcome.Widenings field int "json:\"widenings,omitempty\"     yaml:\"widenings,omitempty\""
+github.com/egladman/magus/types.JobOutcome.Work field *JobWork "json:\"work,omitzero\"           yaml:\"work,omitempty\""
 github.com/egladman/magus/types.JobOutcome.WriteFiles field int "json:\"write_files\"             yaml:\"write_files\""
 github.com/egladman/magus/types.JobOverlap type struct
 github.com/egladman/magus/types.JobOverlap.Claims field string "json:\"claims,omitempty\" yaml:\"claims,omitempty\""
@@ -2593,6 +2633,16 @@ github.com/egladman/magus/types.JobUnattributedWrite type struct
 github.com/egladman/magus/types.JobUnattributedWrite.At field int64 "json:\"at\" yaml:\"at\""
 github.com/egladman/magus/types.JobUnattributedWrite.Digest field string "json:\"digest\" yaml:\"digest\""
 github.com/egladman/magus/types.JobUnattributedWrite.Path field string "json:\"path\"   yaml:\"path\""
+github.com/egladman/magus/types.JobWork type struct
+github.com/egladman/magus/types.JobWork.Calls field int "json:\"calls\"  yaml:\"calls\""
+github.com/egladman/magus/types.JobWork.ContextTokens field *int64 "json:\"context_tokens,omitempty\" yaml:\"context_tokens,omitempty\""
+github.com/egladman/magus/types.JobWork.Denials field int "json:\"denials\" yaml:\"denials\""
+github.com/egladman/magus/types.JobWork.PeakTokens field *int64 "json:\"peak_tokens,omitempty\"    yaml:\"peak_tokens,omitempty\""
+github.com/egladman/magus/types.JobWork.SetupCalls field int "json:\"setup_calls\"             yaml:\"setup_calls\""
+github.com/egladman/magus/types.JobWork.SetupContext field *int64 "json:\"setup_context,omitempty\" yaml:\"setup_context,omitempty\""
+github.com/egladman/magus/types.JobWork.SetupMs field *int64 "json:\"setup_ms,omitempty\"       yaml:\"setup_ms,omitempty\""
+github.com/egladman/magus/types.JobWork.SetupTokens field *int64 "json:\"setup_tokens,omitempty\"   yaml:\"setup_tokens,omitempty\""
+github.com/egladman/magus/types.JobWork.Writes field int "json:\"writes\" yaml:\"writes\""
 github.com/egladman/magus/types.JobWriteProof type string
 github.com/egladman/magus/types.KindAuthor const untyped string = "author"
 github.com/egladman/magus/types.KindCharm const untyped string = "charm"

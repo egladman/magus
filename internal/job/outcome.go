@@ -191,13 +191,13 @@ func (s *Store) historyPath() (string, error) {
 type endings struct {
 	path  string
 	store *Store
-	held  []ending
+	held  []heldOutcome
 }
 
-// ending is one held row and what the write knew of it that the row does not carry: the
-// attempt its parent was on, and the trail its holder's calls were recorded in, empty when
-// that cannot be placed.
-type ending struct {
+// heldOutcome is one held row and what the write knew of it that the row does not carry:
+// the attempt its parent was on, and the trail its holder's calls were recorded in, empty
+// when that cannot be placed.
+type heldOutcome struct {
 	row           types.Job
 	parentAttempt int
 	trail         string
@@ -219,7 +219,7 @@ func (e *endings) hold(s *Store, plan []types.Job, row types.Job) error {
 		}
 		e.path = path
 	}
-	held := ending{row: row.Clone()}
+	held := heldOutcome{row: row.Clone()}
 	if i := slices.IndexFunc(plan, func(r types.Job) bool { return r.ID == row.Parent }); row.Parent != "" && i >= 0 {
 		held.parentAttempt = max(plan[i].Attempts, 1)
 	}
@@ -260,7 +260,7 @@ func (e endings) record(ctx context.Context, ended int64) error {
 
 // endedOutcome is h's outcome with what only the workspace and the trail can add. Projects
 // that do not resolve stay nil, which the grouping lens counts as unclassified.
-func (s *Store) endedOutcome(ctx context.Context, h ending, ended int64) types.JobOutcome {
+func (s *Store) endedOutcome(ctx context.Context, h heldOutcome, ended int64) types.JobOutcome {
 	out := newJobOutcome(h.row, ended)
 	out.ParentAttempt = h.parentAttempt
 	if s.owners != nil && len(h.row.WritePaths) > 0 {
