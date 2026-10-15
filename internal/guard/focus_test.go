@@ -107,7 +107,7 @@ func TestFocusVerdictStaysSilentInsideTheFocus(t *testing.T) {
 		"../.claude/skills/x/S.md", // the session's own instructions
 		"/elsewhere/other/x.go",    // outside the workspace: a different rule's business
 	} {
-		assert.Empty(t, focusVerdict(focus, nil, "","/ws", "/ws/app", []string{op}).Decision, op)
+		assert.Empty(t, focusVerdict(focus, nil, "", "/ws", "/ws/app", []string{op}).Decision, op)
 	}
 }
 
@@ -116,7 +116,7 @@ func TestFocusVerdictStaysSilentInsideTheFocus(t *testing.T) {
 func TestFocusVerdictPlacesAHomePathOutsideTheWorkspace(t *testing.T) {
 	focus, ok := project.FocusForPaths(newFocusFixture(), []string{"app/**"})
 	require.True(t, ok)
-	assert.Empty(t, focusVerdict(focus, nil, "lease-a", "/ws", "/ws/web",[]string{"~/.claude/plans/p/RESUME.md"}).Decision)
+	assert.Empty(t, focusVerdict(focus, nil, "lease-a", "/ws", "/ws/web", []string{"~/.claude/plans/p/RESUME.md"}).Decision)
 
 	home := t.TempDir()
 	assert.Equal(t, []string{filepath.Join(home, ".claude/plans/p/RESUME.md"), "/ws/web/x/y.go"},
