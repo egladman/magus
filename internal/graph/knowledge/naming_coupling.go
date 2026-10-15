@@ -17,10 +17,10 @@ const (
 
 // couplingCheck is the mirror of a clone: a function shared by callers that do not share its
 // knobs. It reports a function the change adds, renames or re-signs that is over-shared
-// (sharedUse.overShared) and listed in no mode-knobs known entry; and a re-signed function
-// with two or more caller packages or caller files whose body branches on a parameter, or
-// that offers an option one caller alone uses: a branch only one caller takes is a second
-// function under one name. The index holds no base signature, so every knob of a re-signed
+// (sharedUse.overShared) and listed in no mode-knobs known entry. It also reports a
+// re-signed function with two or more caller packages or caller files whose body branches
+// on a parameter, or that offers an option one caller alone uses: a branch only one caller
+// takes is a second function under one name. The index holds no base signature, so every knob of a re-signed
 // function is named, whether or not the change added it.
 //
 // Thresholds are read through Effective, never a constant or a live percentile. With no

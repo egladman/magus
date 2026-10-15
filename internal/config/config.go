@@ -828,15 +828,16 @@ func (c ConformConfig) Options() types.ConformOptions {
 // workspace with no knowledge.conform fails nothing magus would not fail on itself.
 //
 // An anchor is magus's own p99 at the measuring rev, rounded up to two significant
-// figures, except clone-tokens: its anchor is the smallest body worth one shared home,
-// just above the typical function (p50 58), and call-sequence: 7 is the run just below
-// maint-review's measured precision cut (a shared run of 8 callees caught B1, B7 and
-// B15), not a p99. The coupling keys pool source and main code under source, and
-// mode-knobs is a list, so its anchor is 0. The alias keys judge packages with 5 or more
-// importers, the median, and name-clash's anchor is its one measured case, 62. The percentile is where a proposal measures:
-// p99 for test files, function lengths and call sequences, since a long table test is
-// deliberate, p50 for clones, p90 for a shared body, p95 elsewhere. They name no path: an exclusion or a scope is one workspace's
-// layout, so it lives in that workspace's magus.yaml.
+// figures, with two exceptions. clone-tokens' anchor is the smallest body worth one shared
+// home, just above the typical function (p50 58). call-sequence's 7 is the run just below
+// maint-review's measured precision cut: a shared run of 8 callees caught B1, B7 and B15.
+// The coupling keys pool source and main code under source, and mode-knobs is a list, so
+// its anchor is 0. The alias keys judge packages with 5 or more importers, the median, and
+// name-clash's anchor is its one measured case, 62. The percentile is where a proposal
+// measures: p99 for test files, function lengths and call sequences, since a long table
+// test is deliberate, p50 for clones, p90 for a shared body, p95 elsewhere. They name no
+// path: an exclusion or a scope is one workspace's layout, so it lives in that workspace's
+// magus.yaml.
 func conformDefaults() ConformConfig {
 	limit := func(percentile float64, anchor int) ConformLimitConfig {
 		return ConformLimitConfig{Percentile: percentile, Anchor: anchor}

@@ -19,11 +19,11 @@ const (
 )
 
 // aliasCheck reads an import that must be aliased as advice that a package name is wrong. It
-// reports an aliased import, in a file holding a symbol the change adds, renames or
-// re-signs, of a package past the alias-share or name-clash value
-// [types.ConformOptions.Effective] enforces and listed in no known entry of that metric; and
-// a package the change introduces, every declaration of it new, whose package clause an
-// existing non-generated package already declares: the cheapest moment to rename it. The
+// reports two cases. One is an aliased import, in a file holding a symbol the change adds,
+// renames or re-signs, of a package past the alias-share or name-clash value
+// [types.ConformOptions.Effective] enforces and listed in no known entry of that metric.
+// The other is a package the change introduces, every declaration of it new, whose package
+// clause an existing non-generated package already declares: the cheapest moment to rename it. The
 // index holds no base, so an aliased import already in the file is reported as well as one
 // the change adds. Each finding goes on the file's or package's first subject by ID. With
 // no symbol index it is silent, and a language with no package clause reader yields nothing.
