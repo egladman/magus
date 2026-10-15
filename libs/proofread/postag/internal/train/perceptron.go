@@ -5,6 +5,7 @@ import (
 	"math"
 	"slices"
 
+	"github.com/egladman/magus/libs/proofread/postag"
 	"github.com/egladman/magus/libs/proofread/postag/internal/feature"
 )
 
@@ -71,7 +72,7 @@ func (p *perceptron) bump(f feature.Hash, class uint16, delta int32) {
 // quantize averages every weight and rounds it onto a scale where the largest
 // magnitude is levels. Weights that round to zero are dropped. It fails when
 // no step ran or no weight ever moved, since there is nothing to scale by.
-func (p *perceptron) quantize(levels int) (*quantized, error) {
+func (p *perceptron) quantize(levels int) (map[feature.Hash][]postag.Weight, error) {
 	if p.step == 0 {
 		return nil, errors.New("quantize: no update steps ran, so train for at least one iteration")
 	}
@@ -95,49 +96,26 @@ func (p *perceptron) quantize(levels int) (*quantized, error) {
 		return nil, errors.New("quantize: no weight moved from zero, so the training split gave the perceptron nothing to learn")
 	}
 
-	m := &quantized{weights: make(map[feature.Hash][]classWeight, len(p.params))}
+	weights := make(map[feature.Hash][]postag.Weight, len(p.params))
 
 	for f, ps := range p.params {
-		var cws []classWeight
+		var ws []postag.Weight
 
 		for j, q := range ps {
 			if w := int32(math.Round(avg[f][j] / peak * float64(levels))); w != 0 {
-				cws = append(cws, classWeight{class: q.class, weight: w})
+				ws = append(ws, postag.Weight{Class: q.class, Value: w})
 			}
 		}
 
-		if len(cws) == 0 {
+		if len(ws) == 0 {
 			continue
 		}
 
-		slices.SortFunc(cws, func(a, b classWeight) int { return int(a.class) - int(b.class) })
-		m.weights[f] = cws
+		slices.SortFunc(ws, func(a, b postag.Weight) int { return int(a.Class) - int(b.Class) })
+		weights[f] = ws
 	}
 
-	return m, nil
-}
-
-type classWeight struct {
-	class  uint16
-	weight int32
-}
-
-// quantized is the shipped model's weights, scored as postag.model.predict
-// scores them.
-type quantized struct {
-	weights map[feature.Hash][]classWeight
-}
-
-func (m *quantized) predict(feats []feature.Hash, scores []int64) uint16 {
-	clear(scores)
-
-	for _, f := range feats {
-		for _, cw := range m.weights[f] {
-			scores[cw.class] += int64(cw.weight)
-		}
-	}
-
-	return argmax(scores)
+	return weights, nil
 }
 
 // argmax breaks a tie toward the lowest class, as postag does.

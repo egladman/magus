@@ -15,16 +15,15 @@ type Tagged struct {
 // returns one Tagged per word, in order, and nil for no words. The result
 // depends only on words. Tag is safe for concurrent use; the first call
 // decodes the embedded model.
-//
-// Each class the model predicts is an XPOS and UPOS pair, not an XPOS mapped to
-// a UPOS afterwards: EWT splits IN into ADP and SCONJ and RB into ADV and PART
-// by context, which a mapping from XPOS and word cannot recover.
-func Tag(words []string) []Tagged {
+func Tag(words []string) []Tagged { return embedded().Tag(words) }
+
+// Tag tags words with m, as the package-level Tag does with the embedded
+// model.
+func (m *Model) Tag(words []string) []Tagged {
 	if len(words) == 0 {
 		return nil
 	}
 
-	m := loadModel()
 	out := make([]Tagged, len(words))
 	context := feature.Padded(words)
 	scores := make([]int32, len(m.classes))

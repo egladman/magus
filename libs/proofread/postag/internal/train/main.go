@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/libs/proofread/internal/conllu"
+	"github.com/egladman/magus/libs/proofread/postag"
 	"github.com/egladman/magus/libs/proofread/postag/internal/feature"
 )
 
@@ -55,17 +56,32 @@ func run(modelPath, testPath string, iterations int, seed uint64, levels int) er
 	t := newTrainer(splits["train"])
 	t.train(splits["train"], iterations, seed)
 
-	q, err := t.p.quantize(levels)
+	weights, err := t.p.quantize(levels)
+	if err != nil {
+		return err
+	}
+
+	labels := make([]postag.Label, len(t.classes))
+	for i, c := range t.classes {
+		labels[i] = postag.Label{UPOS: c.upos, XPOS: c.xpos}
+	}
+
+	m, err := postag.NewModel(labels, t.dict, weights)
 	if err != nil {
 		return err
 	}
 
 	elapsed := time.Since(start)
 
-	dev := t.evaluate(q, splits["dev"])
-	test := t.evaluate(q, splits["test"])
+	dev := evaluate(m, splits["dev"])
+	m.Accuracy = evaluate(m, splits["test"])
 
-	model, err := gzipBytes(t.encode(q, test))
+	raw, err := m.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	model, err := gzipBytes(raw)
 	if err != nil {
 		return err
 	}
@@ -84,9 +100,13 @@ func run(modelPath, testPath string, iterations int, seed uint64, levels int) er
 	}
 
 	fmt.Printf("trained %d passes in %s: %d classes, %d dictionary words, %d features\n",
-		iterations, elapsed.Round(time.Millisecond), len(t.classes), len(t.dict), len(q.weights))
-	fmt.Printf("dev:  UPOS %.4f XPOS %.4f over %d tokens\n", ratio(dev.upos, dev.tokens), ratio(dev.xpos, dev.tokens), dev.tokens)
-	fmt.Printf("test: UPOS %.4f XPOS %.4f over %d tokens\n", ratio(test.upos, test.tokens), ratio(test.xpos, test.tokens), test.tokens)
+		iterations, elapsed.Round(time.Millisecond), len(t.classes), len(t.dict), len(weights))
+	for _, s := range []struct {
+		name string
+		a    postag.Accuracy
+	}{{"dev: ", dev}, {"test:", m.Accuracy}} {
+		fmt.Printf("%s UPOS %.4f XPOS %.4f over %d tokens\n", s.name, ratio(s.a.UPOS, s.a.Words), ratio(s.a.XPOS, s.a.Words), s.a.Words)
+	}
 	fmt.Printf("model: %d bytes\n", len(model))
 
 	return nil
@@ -184,39 +204,24 @@ func (t *trainer) train(train []conllu.Sentence, iterations int, seed uint64) {
 	}
 }
 
-// evaluate tags each sentence exactly as postag.Tag does and counts the
-// tokens, the UPOS matches and the XPOS matches.
-func (t *trainer) evaluate(q *quantized, sentences []conllu.Sentence) (counts testCounts) {
-	scores := make([]int64, len(t.classes))
-
-	var feats []feature.Hash
-
+// evaluate tags each sentence with m and counts the words, the UPOS matches
+// and the XPOS matches.
+func evaluate(m *postag.Model, sentences []conllu.Sentence) (a postag.Accuracy) {
 	for _, s := range sentences {
-		context := feature.Padded(s.Forms())
-		prev, prev2 := feature.Start, feature.Start2
+		for i, got := range m.Tag(s.Forms()) {
+			a.Words++
 
-		for i, tok := range s.Words {
-			c, ok := t.dict[tok.Form]
-			if !ok {
-				feats = feature.Extract(feats[:0], context, i, tok.Form, prev, prev2)
-				c = q.predict(feats, scores)
+			if got.UPOS.String() == s.Words[i].UPOS {
+				a.UPOS++
 			}
 
-			counts.tokens++
-
-			if t.classes[c].upos == tok.UPOS {
-				counts.upos++
+			if string(got.XPOS) == s.Words[i].XPOS {
+				a.XPOS++
 			}
-
-			if t.classes[c].xpos == tok.XPOS {
-				counts.xpos++
-			}
-
-			prev, prev2 = c, prev
 		}
 	}
 
-	return counts
+	return a
 }
 
 func ratio(n, d int) float64 { return float64(n) / float64(d) }

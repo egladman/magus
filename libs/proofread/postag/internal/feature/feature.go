@@ -6,9 +6,6 @@ import (
 	"unicode/utf8"
 )
 
-// ModelMagic opens a postag model; the trainer writes it and postag checks it.
-const ModelMagic = "postag1\n"
-
 // Start and Start2 are the tags assumed before a sentence's first word.
 const (
 	Start  uint16 = 0xffff

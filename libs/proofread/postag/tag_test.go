@@ -42,7 +42,7 @@ func BenchmarkTag(b *testing.B) {
 		sentences[i] = Tokenize(s.Text)
 	}
 
-	loadModel()
+	embedded()
 	b.ReportAllocs()
 
 	for b.Loop() {
@@ -65,10 +65,8 @@ func TestTagAccuracy(t *testing.T) {
 			}
 		}
 	}
-	m := loadModel()
-	if tokens != m.testTokens || upos != m.testUPOS || xpos != m.testXPOS {
-		t.Errorf("tagged %d tokens, %d UPOS and %d XPOS right; the trainer counted %d, %d and %d",
-			tokens, upos, xpos, m.testTokens, m.testUPOS, m.testXPOS)
+	if got, want := (Accuracy{Words: tokens, UPOS: upos, XPOS: xpos}), embedded().Accuracy; got != want {
+		t.Errorf("tagged %+v right; the trainer counted %+v", got, want)
 	}
 	uposAcc, xposAcc := float64(upos)/float64(tokens), float64(xpos)/float64(tokens)
 	t.Logf("EWT test: UPOS %.4f, XPOS %.4f over %d tokens", uposAcc, xposAcc, tokens)
