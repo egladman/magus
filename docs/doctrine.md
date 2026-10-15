@@ -156,6 +156,9 @@ The conventions:
   edits decodes strictly (`internal/json`'s `StrictDecoder`): an unknown
   field, a duplicate key, a wrong kind or a bad value is an error naming
   `path:line`. A store only magus writes may skip a field a newer magus added.
+- **An old format is named, never read.** When a store changes shape, the old
+  file is not read as a second format and not skipped in silence: the error
+  names it and says how to move it aside.
 - **Readable with cat, grep and diff.** Text is UTF-8. The one binary
   exception is a blob holding the bytes a tool produced, stored verbatim.
 
@@ -179,9 +182,6 @@ being converted:
 - **Runtime history** is one compact JSON document (`history/v1.json`) shared
   by every workspace on the host, megabytes long and rewritten after every
   run. It is a log and wants appended lines.
-- **Review state** (`viewed.json`, `drafts.json`, `seen-threads.json`,
-  `reading.json`, `receipts.json`) and the guard's memos (`guard-rows.json`,
-  `guard-settings.json`, `guard-policy.json`) are single JSON documents.
 - **One file per entry, a JSON document inside.** Cache manifests, run
   descriptors, knowledge-graph shards, merge-queue verdicts, the service
   journal and connector records break the one-file and the line rules.
