@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
@@ -191,6 +192,22 @@ func CatalogFingerprint() string {
 	// concern, short enough to read in a diff and quote in an error message.
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
+
+// answerCatalogs identifies what a target that asks the binary for its answer reads from
+// the binary: the catalogs CatalogFingerprint covers plus the guard rule catalog that
+// magus\describe.rule() serves. A step keys on it in place of the build, so a rebuild
+// that changed none of them replays, and one that changed any of them misses.
+//
+// It does not cover rendering code, how describe.graphMarkdown lays a page out: a target
+// whose output depends on that keys the renderer's source, or declares skip_cache.
+var answerCatalogs = sync.OnceValue(func() string {
+	h := sha256.New()
+	fmt.Fprintf(h, "catalogs\x00%s\x00rules\x00", CatalogFingerprint())
+	for _, r := range guard.Rules() {
+		fmt.Fprintf(h, "%s\x00%s\x00%t\x00%s\x00%s\x00", r.Name, r.Decision, r.Fixed, r.Catches, r.Why)
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16]
+})
 
 // allModuleEntries returns every stdlib module with its methods populated. The
 // summary view (empty name) carries only names, so each is re-queried for detail.

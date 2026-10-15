@@ -148,13 +148,16 @@ type Magus struct {
 	magusfileExports map[string][]string
 
 	// binaryAnswerTargets are the targets whose bodies ask the running binary for their
-	// answer (interp.BinaryAnswerTargets). buildStep keys them on the build. Written once
+	// answer (interp.BinaryAnswerTargets). buildStep keys them on answerCatalogs. Written once
 	// by the load, read by every run after.
 	binaryAnswerTargets map[types.TargetRef]bool
 	// driftGateTargets are the targets that declare outputs and branch on the rw charm: without
 	// rw such a target compares its outputs, so its hit must find them as the entry
 	// recorded them (cache.Step.VerifyOutputs). Written once by the load.
 	driftGateTargets map[types.TargetRef]bool
+	// charmReads are the charms each target's body reads by literal name
+	// (ctx.hasCharm("rw")), which keyedWriteGrants consults. Written once by the load.
+	charmReads map[types.TargetRef][]string
 
 	// resolver is shared with preloadMagusfiles, so a magusfile with a top-level
 	// magus\secret.read costs one provider invocation rather than two.

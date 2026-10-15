@@ -341,7 +341,10 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 	var crossOut []crossOutput
 	binaryAnswerTargets := map[types.TargetRef]bool{}
 	driftGateTargets := map[types.TargetRef]bool{}
-	defer func() { m.binaryAnswerTargets, m.driftGateTargets = binaryAnswerTargets, driftGateTargets }()
+	charmReads := map[types.TargetRef][]string{}
+	defer func() {
+		m.binaryAnswerTargets, m.driftGateTargets, m.charmReads = binaryAnswerTargets, driftGateTargets, charmReads
+	}()
 	for _, p := range m.ws.All() {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -478,6 +481,12 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 				}
 				if slices.Contains(n.Charms, types.CharmReadWrite) {
 					branchesOnRW[n.Name] = true
+				}
+				for _, c := range n.Charms {
+					ref := types.TargetRef{Project: p.Path, Target: n.Name}
+					if c = types.NormalizeCharm(c); !slices.Contains(charmReads[ref], c) {
+						charmReads[ref] = append(charmReads[ref], c)
+					}
 				}
 				if !slices.Contains(p.MagusfileTargets, n.Name) {
 					p.MagusfileTargets = append(p.MagusfileTargets, n.Name)

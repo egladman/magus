@@ -197,9 +197,14 @@ the `Step`. magus writes these lines, in this order, into one hash:
   entry: without this line a compile-only `go::go-build` recorded a pass that the
   real `go-build` target then replayed. Plain target runs hash without it.
 - `charm:` lines: the active [charms](charms.md), sorted by name. A
-  charm-variant run (`lint:rw`) hashes differently from the bare run, because the
+  charm-variant run (`format:rw`) hashes differently from the bare run, because the
   charm changes behavior. Empty charms add nothing, so charm-less runs are
-  unaffected.
+  unaffected. A write grant (`rw`, `update`) keys only a step that can read it:
+  something in its `ctx.needs` closure branches on it by name
+  (`ctx.hasCharm("rw")`), declares in-place edits (`ctx.modifiesExistingFiles`), or
+  drives an op that patches its argv on it. Every other step, a test run say, hashes
+  as it would without the grant, so a local run under `default_charms: [rw]` and the
+  read-only `ci` gate share one entry.
 - `arg:` lines: one per argument after `--` (`magus run test -- -run
   TestFoo`), in the order given. Unlike charms and env these are never sorted,
   since `-run X` is not `X -run`; a run with different trailing args must not
@@ -241,16 +246,17 @@ the `Step`. magus writes these lines, in this order, into one hash:
   dependent misses transitively.
 - `spellDefVersion`: a fingerprint of the built-in spell definitions, so a magus
   upgrade that changes a spell forces a miss.
-- `binary`: the build of the running magus binary, a digest of its Go build ID, written
+- `catalogs`: a fingerprint of the catalogs compiled into the running magus binary
+  (diagnostic codes, built-in spells, the host module API and the guard rules), written
   only for a target whose body asks that binary for its answer: a `magus\describe`
   call, or a member that forks a nested magus (`magus\run`, `magus\cmd`,
-  `magus\doctor`, and the rest). A rules page rendered from `magus\describe.rule()` or
-  a `MAGUS.md` rendered by a nested `magus describe` changes when the binary is rebuilt
-  from changed code, and no file in the tree says so. magus finds these targets
+  `magus\doctor`, and the rest). A rules page rendered from `magus\describe.rule()`
+  changes when a rule does, and no file in the tree says so. magus finds these targets
   statically, following the body into its own helpers and into functions of a Buzz
-  module it imports; a call it cannot follow does not count. Two builds of the same
-  source share the line, so a rebuild alone costs nothing, and every other target
-  writes no line, so its key survives every rebuild.
+  module it imports; a call it cannot follow does not count. The line names what the
+  answer reads, not the build: a binary rebuilt with the same catalogs keeps the key.
+  Rendering code is not a catalog, so a target whose output depends on how magus lays
+  a page out keys that source, or declares `skip_cache`.
 - `tool:` lines: `spell:version` strings, sorted, so a toolchain upgrade
   (a new `go` or `prettier`) invalidates the key even when no source changed.
 
@@ -281,7 +287,7 @@ this list, it cannot move the key:
 <tr><td><code>exec:</code>: <code>ctx.withEnv</code>/<code>ctx.withCwd</code> overrides, sorted</td></tr>
 <tr><td><code>dep:</code>: each upstream target's resolved key, this same fold applied one level up</td></tr>
 <tr><td><code>spellDefVersion</code>: the built-in spell definitions</td></tr>
-<tr><td><code>binary</code>, <code>tool:</code>: the magus build, for a target that asks it; toolchain versions</td></tr>
+<tr><td><code>catalogs</code>, <code>tool:</code>: the binary's catalogs, for a target that asks it; toolchain versions</td></tr>
 </table>
 </figure>
 
@@ -297,8 +303,9 @@ hashed line above yields a new key, and thus a new (empty) slot:
   (a scanner database refreshing);
 - an upstream dependency's key changing (transitive invalidation);
 - a spell definition change (`spellDefVersion`) or a tool-version bump;
-- a rebuilt magus binary, for a target that asks it for its answer (`binary`);
-- applying or dropping a charm;
+- a magus binary whose catalogs changed, for a target that asks it for its answer
+  (`catalogs`);
+- applying or dropping a charm the step reads;
 - renaming the project or target.
 
 What does **not** invalidate: a file's mtime alone (content is what's hashed), or

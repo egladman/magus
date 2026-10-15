@@ -748,7 +748,8 @@ export fun lint(ctx: magus\Context, args: [str]) > void {}
 // renders the rules pages from magus\describe.rule(), the running binary's catalog, so a
 // binary rebuilt with new rules left the entry keyed on unchanged sources replaying the
 // old pages. A target reaching magus\describe or a nested magus, directly, through a
-// helper, or through an imported module's function, keys on the build; nothing else does.
+// helper, or through an imported module's function, keys on the binary's catalogs;
+// nothing else does, and no key carries the build itself.
 func TestStepKeysOnTheBinaryOnlyWhenItsBodyAsksIt(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
@@ -790,18 +791,22 @@ export fun plain() > void {}
 	p := m.Get(".")
 	require.NotNil(t, p, "root project")
 
-	build := buildinfo.Build()
-	require.NotEmpty(t, build)
+	catalogs := answerCatalogs()
+	require.NotEmpty(t, catalogs)
 	for _, target := range []string{"rules-generate", "index-generate", "nested"} {
-		assert.Equal(t, build, m.buildStep(p, target).BinaryBuild, target)
+		assert.Equal(t, catalogs, m.buildStep(p, target).Catalogs, target)
 		_, lines, err := m.ComputeTargetKey(context.Background(), ".", target, nil)
 		require.NoError(t, err, target)
-		assert.Contains(t, lines, "binary:"+build, "describe target --cache must mint the key a run does: %s", target)
+		assert.Contains(t, lines, "catalogs:"+catalogs, "describe target --cache must mint the key a run does: %s", target)
+		// A rebuild moves the build and nothing else here, so the build must not key it.
+		for _, line := range lines {
+			assert.NotContains(t, line, buildinfo.Build(), "a rebuilt binary with unchanged catalogs replays: %s", target)
+		}
 	}
-	assert.Empty(t, m.buildStep(p, "build").BinaryBuild, "a target that never asks the binary keeps its key across rebuilds")
+	assert.Empty(t, m.buildStep(p, "build").Catalogs, "a target that never asks the binary keeps its key when the catalogs change")
 	_, lines, err := m.ComputeTargetKey(context.Background(), ".", "build", nil)
 	require.NoError(t, err)
-	assert.NotContains(t, lines, "binary:"+build)
+	assert.NotContains(t, lines, "catalogs:"+catalogs)
 }
 
 // TestDriftGateVerifiesItsOutputsOnlyWithoutWrite: a target that declares outputs and
@@ -864,6 +869,48 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 	step := m.buildStep(p, "generate")
 	applyRunKeying(&step, p, nil, nil, nil)
 	assert.True(t, step.VerifyOutputs)
+}
+
+// TestWriteGrantKeysOnlyAStepThatReadsIt pins the charm half of keying only what changes
+// behavior: a default rw run of a check-only target shares the entry a ci run (rw
+// stripped) mints, while a target that branches on rw, edits in place, or composes one
+// that does keeps the two apart.
+func TestWriteGrantKeysOnlyAStepThatReadsIt(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	const mf = `import "magus";
+export fun check(ctx: magus\Context, args: [str]) > void {}
+export fun gen(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/**");
+    if (ctx.hasCharm("rw")) { return; }
+}
+export fun tidy(ctx: magus\Context, args: [str]) > void {
+    ctx.modifiesExistingFiles("*.txt");
+}
+export fun outer(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(gen);
+}
+export fun built(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("dist/**");
+}
+`
+	w.Magusfile(mf)
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	key := func(target string, charms ...string) string {
+		k, _, err := m.ComputeTargetKey(context.Background(), ".", target, charms)
+		require.NoError(t, err, target)
+		return k
+	}
+	for _, target := range []string{"check", "built"} {
+		assert.Equal(t, key(target), key(target, types.CharmReadWrite), "%s never reads rw", target)
+		assert.Equal(t, key(target), key(target, types.CharmUpdate), "%s never reads update", target)
+		assert.NotEqual(t, key(target), key(target, types.CharmCD), "%s: only the write grants are judged", target)
+	}
+	for _, target := range []string{"gen", "tidy", "outer"} {
+		assert.NotEqual(t, key(target), key(target, types.CharmReadWrite), "%s reads rw", target)
+	}
 }
 
 // TestInputsDynamicArgIsLoadError guards the loud-rejection contract: a

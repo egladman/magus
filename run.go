@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/audit"
-	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/internal/ci/forecast"
@@ -700,8 +699,9 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// cacheable rather than having to opt out with skip_cache.
 	step.Observations = append(step.Observations, p.TargetObservations[target]...)
 	if m.binaryAnswerTargets[types.TargetRef{Project: p.Path, Target: target}] {
-		step.BinaryBuild = buildinfo.Build()
+		step.Catalogs = answerCatalogs()
 	}
+	step.UnreadCharms = m.unreadWriteGrants(p, target)
 	updates := make([]types.Glob, 0, len(p.TargetUpdates[target]))
 	for _, ref := range p.TargetUpdates[target] {
 		updates = append(updates, ref.Rooted(p.Path))
@@ -957,6 +957,70 @@ func keysTools(p *types.Project, target string) bool {
 // author's skip_cache, a service, or a step that only runs installs.
 func alwaysRuns(p *types.Project, target string) bool {
 	return p.TargetPolicies[target].SkipCache || servesTarget(p.ResolvedSpells, target) || len(findInstallOps(p, target)) > 0
+}
+
+// unreadWriteGrants returns the write-granting charms (rw, update) that target's step on p
+// cannot read, which its key leaves out: a run under default_charms: [rw] and a ci run,
+// which strips rw, then share one entry. A step reads one when anything in its ctx.needs
+// closure declares in-place edits, branches on the charm by name, or drives an op that
+// patches its argv on the charm or computes its argv in the VM. An op whose spell does
+// not resolve counts as reading every charm. Declared outputs do not count: whether a
+// hit may restore them is VerifyOutputs, set from the same by-name read.
+//
+// Static, so it under-reports the way the drift gate's own detection does: a body that
+// names the charm through a variable, or reaches it through a helper the walk cannot
+// follow, is not seen.
+func (m *Magus) unreadWriteGrants(p *types.Project, target string) []string {
+	grants := []string{types.CharmReadWrite, types.CharmUpdate}
+	read := map[string]bool{}
+	_ = types.WalkChain(p, target, m.Get, func(v types.ChainVisit) error {
+		for _, c := range grants {
+			if !read[c] && m.readsCharm(v.Project, v.Target, c) {
+				read[c] = true
+			}
+		}
+		return nil
+	})
+	return slices.DeleteFunc(grants, func(c string) bool { return read[c] })
+}
+
+// readsCharm reports whether target's own body or ops on p can behave differently under
+// charm; see unreadWriteGrants for what counts.
+func (m *Magus) readsCharm(p *types.Project, target, charm string) bool {
+	if len(p.TargetUpdates[target]) > 0 {
+		return true
+	}
+	if slices.Contains(m.charmReads[types.TargetRef{Project: p.Path, Target: target}], charm) {
+		return true
+	}
+	opReads := func(op spells.Op) bool {
+		if op.Bin == "" {
+			return true
+		}
+		for name := range op.Charms {
+			if types.NormalizeCharm(name) == charm {
+				return true
+			}
+		}
+		return false
+	}
+	for _, use := range p.TargetSpellOps[target] {
+		i := slices.IndexFunc(p.ResolvedSpells, func(s *spells.Spell) bool { return s.Name() == use.Spell })
+		if i < 0 {
+			return true
+		}
+		for _, name := range use.Ops {
+			if op, ok := p.ResolvedSpells[i].Op(name); !ok || opReads(op) {
+				return true
+			}
+		}
+	}
+	for _, s := range p.ResolvedSpells {
+		if op, ok := s.Op(target); ok && opReads(op) {
+			return true
+		}
+	}
+	return false
 }
 
 // applyRunKeying stamps the key-relevant fields the RUN SCHEDULER adds on top of

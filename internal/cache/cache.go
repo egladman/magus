@@ -198,6 +198,9 @@ type Step struct {
 	WorkspaceRoot string
 	Target        string   // mixed into key to distinguish targets on the same sources
 	Charms        []string // active charm names (sorted), mixed into key so charm-variant runs differ
+	// UnreadCharms are the active charms this step cannot read, so they stay in its label
+	// and out of its key: a run with one shares an entry with a run without it.
+	UnreadCharms []string
 	// ExtraArgs are the args after `--`, forwarded to the target. They change what
 	// the target does, so like Charms they MUST key the cache: without them a run
 	// with different args replays the previous run's result. Order is significant
@@ -210,12 +213,11 @@ type Step struct {
 	// go-build target's entry.
 	Spell           string
 	SpellDefVersion string // built-in spell registry fingerprint; forces miss on a spell change
-	// BinaryBuild identifies the running binary's build (buildinfo.Build), set only for a
+	// Catalogs fingerprints the catalogs compiled into the running binary, set only for a
 	// step whose body asks that binary for its answer (a magus\describe call, a nested
-	// magus). Such an answer moves when the binary is rebuilt from changed code, with no
-	// file in the tree to key on. Empty writes no key line, so every other step keeps its
-	// key across rebuilds.
-	BinaryBuild  string
+	// magus). Such an answer moves when a catalog does, with no file in the tree to key
+	// on, and not when the binary is merely rebuilt. Empty writes no key line.
+	Catalogs     string
 	ToolVersions []string // "spell:tool:token" strings (run.go builds them); forces miss on toolchain upgrade
 	// PlatformIndependent drops the host-platform line from the key, so one entry
 	// serves every platform. Resolved from the target's declaration or its spells';
