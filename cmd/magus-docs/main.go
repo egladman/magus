@@ -30,17 +30,14 @@ import (
 const repoBlob = "https://github.com/egladman/magus/blob/main"
 
 // callbackURL is the source link for the Callback type; repoRoot is the module
-// root. Both are resolved in init() rather than main() so the docs the tests
-// generate via renderModule match the ones `go run` writes: `go test` runs from
-// the package directory and never calls main(), so anything resolved there would
-// silently differ under test and trip the drift gate.
-var callbackURL string
-var repoRoot string
-
-func init() {
-	repoRoot = findRepoRoot()
+// root. Both are package var initializers rather than set in main() so the docs
+// the tests generate via renderModule match the ones `go run` writes: `go test`
+// runs from the package directory and never calls main(), so anything resolved
+// there would silently differ under test and trip the drift gate.
+var (
+	repoRoot    = findRepoRoot()
 	callbackURL = sourceURL("std/module.go", "type Callback ")
-}
+)
 
 // findRepoRoot walks up from the working directory to the directory holding go.mod
 // (the module root), so source paths resolve whether the process runs from the
