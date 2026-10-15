@@ -23,8 +23,8 @@ argument names a kind: `proofread doc-comment` reads the symbols of
 `hack/lint/symbol-docs-follow-proofread-rules.buzz`, and a finding points at the
 declaration because an index records no position inside a doc. The page and
 agent-instruction kinds judge the files the arguments name;
-`change-description` and `review-reply` read the text on stdin, and `stylesheet`
-judges the files it names or, naming none, one on stdin. A finding from
+`change-description` and `review-reply` read the text on stdin under `--stdin`, and
+`stylesheet` judges the files it names or, under `--stdin`, one on stdin. A finding from
 text names its file, or the kind it read from stdin, and its line. A Go symbol
 and a TypeScript one meet the same rules. For a `skill-template`,
 what the short form shows meets the agent-compact rules, and what only the
@@ -57,7 +57,7 @@ agent-instruction budgets). With no table proofread holds text to shape, tone,
 claims and the generated-writing tells alone; a repository turns its house style
 on in its table.
 
-`-decisions <file>` reads the table, or stdin for `-` when the text itself is
+`--decisions <file>` reads the table, or stdin for `-` when the text itself is
 not on stdin:
 
 ```json
@@ -74,10 +74,10 @@ given, slash-separated with any leading `./` dropped, so a caller passing
 workspace-relative paths writes workspace-relative globs; `**` matches any
 number of directories. An unknown rule, a decision other than the three, a glob
 matching no file argument, and an unknown key are errors that exit 2 and name
-it. `-only` takes comma-separated rule names and judges by those alone; an
+it. `--only` takes comma-separated rule names and judges by those alone; an
 unknown name, or one the table leaves off for every file, exits 2.
-`-thread-length N` tells `long-thread` how many replies the author already
-posted in the thread, and `-anchored` that the reply sits on a line of the
+`--thread-length N` tells `long-thread` how many replies the author already
+posted in the thread, and `--anchored` that the reply sits on a line of the
 diff, an inline comment or a reply in its thread: that line is what it refers
 to, so `nonspecific` judges only top-level comments. The flags follow the kind. `proofread rules` writes every
 rule as its reference page shows it, `{name, code, kinds, decisions, house,
@@ -91,7 +91,7 @@ The findings JSON is the contract: any command that writes the same array, a
 team's own style checker or a reviewer it drives, feeds the same consumers, and
 the same decisions table applies to it. proofread writes one JSON array on
 stdout and, by default, exits 0 whatever it found; a finding is not a failure, and
-the caller decides what one costs. `-fail-on deny|advise|never` makes the exit code
+the caller decides what one costs. `--fail-on deny|advise|never` makes the exit code
 say it: 1 when a finding at or above that decision remains after suppression and
 the baseline, 0 otherwise, and 2 when proofread could not judge (a bad flag, a
 missing file, a malformed table), so a caller tells a finding from a failure. The
@@ -116,7 +116,7 @@ replies.
 
 ## Output, baselines and suppressions
 
-`-format` picks what proofread writes: `json` (the default) is the array above,
+`-o` picks what proofread writes: `json` (the default) is the array above,
 `sarif` is a SARIF 2.1.0 log for code scanning, and `rdjson` is reviewdog's
 diagnostic result. The SARIF log lists every rule in the driver, gives a deny
 finding the level `error` and an advise finding `warning`, and carries a
@@ -129,37 +129,37 @@ not known and the line for a finding about the whole text, and when there are
 findings it writes a count on stderr. Any other format exits 2.
 
 ```sh
-proofread reference -format sarif docs/*.md > proofread.sarif
-proofread reference -format rdjson docs/*.md | reviewdog -f=rdjson -reporter=github-pr-review
-proofread reference -format text -fail-on deny docs/*.md
+proofread reference -o sarif docs/*.md > proofread.sarif
+proofread reference -o rdjson docs/*.md | reviewdog -f=rdjson -reporter=github-pr-review
+proofread reference -o text --fail-on deny docs/*.md
 ```
 
 `proofread commit-message FILE` judges the message file a VCS hook passes. It drops
 the lines that start with `#` and the scissors line with everything after it, and a
-finding's line is its line in the file; with no argument it reads the message from
-stdin. The [proofread guide](https://eli.gladman.cc/magus/guides/proofread/)
+finding's line is its line in the file; with `--stdin` in place of the file it reads
+the message from stdin. The [proofread guide](https://eli.gladman.cc/magus/guides/proofread/)
 installs it as a git, Mercurial or Jujutsu check.
 
-`-record` keeps what happened to a file's findings, on this machine and nowhere
+`--record` keeps what happened to a file's findings, on this machine and nowhere
 else, under `$XDG_STATE_HOME/proofread/` (`~/.local/state/proofread/` when the
 variable is unset). Per file and rule it stores the findings' fingerprints, the
 hash of the rule, the match and the path that SARIF uses, and no text. On the next
-`-record` run of the same file a fingerprint that disappeared is `fixed`, one the
+`--record` run of the same file a fingerprint that disappeared is `fixed`, one the
 file now suppresses is `suppressed`, and one still reported is `reported`.
-`proofread stats [-format json|text]` prints each rule's counts and its
+`proofread stats [-o json|text]` prints each rule's counts and its
 `not_useful_rate`, (suppressed + reported) / (suppressed + reported + fixed), and
 flags a rule at or over 10% `probation` and at or over 25% `ship-off`. A run
 judges again without the file's suppressions to tell `suppressed` from `fixed`, and
-a rule the run did not judge (off, `-only`, another kind) keeps its state.
+a rule the run did not judge (off, `--only`, another kind) keeps its state.
 
-`-baseline FILE` adopts proofread on text that already has findings. The file
+`--baseline FILE` adopts proofread on text that already has findings. The file
 holds a count per file and rule, `{"version":1,"counts":{"docs/a.md":{"filler":2}}}`.
 A run tolerates up to each count and writes the findings past it: for a file and
 rule that is the last ones in the order proofread lists them. A count is a
-ceiling, so a file that improved reports nothing until `-prune` lowers it.
-`-baseline FILE -prune` rewrites the file to this run's counts and writes no
-findings, and creates it when it is missing; without `-prune` a missing file is an
-error. Commit the file, and run `-prune` as the findings are fixed.
+ceiling, so a file that improved reports nothing until `--prune` lowers it.
+`--baseline FILE --prune` rewrites the file to this run's counts and writes no
+findings, and creates it when it is missing; without `--prune` a missing file is an
+error. Commit the file, and run `--prune` as the findings are fixed.
 
 A suppression silences a rule at one place and gives its reason. In Markdown it is
 a comment before the line, `<!-- proofread off filler: quoted from the user -->`,
@@ -177,10 +177,10 @@ text, so a page can show the syntax.
 ## Voice files
 
 A voice file records one author's measured style per kind: change descriptions,
-review replies, commit messages and issues. `proofread voice build -kind KIND
-[FILE...]` measures the author's own texts, one per file, NUL-separated on stdin,
-or as JSON lines with `-field` (and `-kind-field` for a kind per line), and
-writes the file to `-o`, by default `$XDG_CONFIG_HOME/proofread/voice.json`
+review replies, commit messages and issues. `proofread voice build --kind KIND
+FILE...|--stdin` measures the author's own texts, one per file, NUL-separated on
+stdin, or as JSON lines with `--field` (and `--kind-field` for a kind per line),
+and writes the file to `--out`, by default `$XDG_CONFIG_HOME/proofread/voice.json`
 (under the OS config directory when unset, as magus resolves its own). It refuses that default inside a
 git work tree. The file holds aggregates alone, per kind: the texts and words
 counted, the first-person and future-tense rates, and the p10, p50 and p90 of
@@ -191,7 +191,7 @@ subject's characters. It holds no text, no content word and no path. It never
 leaves the machine and is never committed. Spelling, casing and semicolons are
 not measured.
 
-`-voice FILE` on any kind runs `voice-drift` (PRF1040), an advise-only rule
+`--voice FILE` on any kind runs `voice-drift` (PRF1040), an advise-only rule
 that reports a text once when two or more features measure outside the author's
 p10 to p90 range, naming each feature and its direction. A kind under 30 texts
 sets no range. A voice whose change descriptions use "I" at 10 or more per 1000
@@ -236,7 +236,7 @@ where a decisions table would deny it. The [proofread guide](https://eli.gladman
 | `reply-opener`       | PRF8001 | reply                            | deny                                 | a sentence that opens by contradicting ("No,", "As I said")                      |
 | `judgment-as-fact`   | PRF8002 | reply                            | advise                               | a recommendation with no reason ("This should be a map.")                        |
 | `stacked-hedge`      | PRF8003 | reply                            | advise                               | two softeners in a sentence, or an apology before the point                      |
-| `long-thread`        | PRF8004 | reply                            | advise                               | the author's fourth or later reply in a thread, given `-thread-length`           |
+| `long-thread`        | PRF8004 | reply                            | advise                               | the author's fourth or later reply in a thread, given `--thread-length`          |
 | `signpost`           | PRF4003 | pages, change description, reply | deny                                 | an announcement where the point should be ("Here's the thing")                   |
 | `chatbot`            | PRF4004 | pages, change description, reply | deny                                 | text addressed to a chat's user ("I hope this helps")                            |
 | `leak`               | PRF4005 | all                              | deny                                 | a citation marker or an unfilled placeholder                                     |

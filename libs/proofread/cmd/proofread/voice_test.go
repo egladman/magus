@@ -55,7 +55,7 @@ func readVoice(t *testing.T, path string) *proofread.Voice {
 
 func TestVoiceBuildMeasuresFilesIntoAPrivateFile(t *testing.T) {
 	dir := t.TempDir()
-	args := []string{"voice", "build", "-kind", "review-reply", "-o", filepath.Join(dir, "out", "voice.json")}
+	args := []string{"voice", "build", "-kind", "review-reply", "--out", filepath.Join(dir, "out", "voice.json")}
 
 	for i, text := range synthReplies(100) {
 		args = append(args, writeFile(t, dir, fmt.Sprintf("r%d.md", i), text))
@@ -98,8 +98,8 @@ func TestVoiceBuildReadsJSONLinesAndNULSeparatedStdin(t *testing.T) {
 	}
 
 	jsonl := filepath.Join(dir, "jsonl.json")
-	if code, _, stderr := runVoiceArgs(t, lines.String(), "voice", "build", "-kind", "review-reply",
-		"-field", "body", "-kind-field", "type", "-o", jsonl); code != exitOK {
+	if code, _, stderr := runVoiceArgs(t, lines.String(), "voice", "build", "--stdin", "-kind", "review-reply",
+		"-field", "body", "-kind-field", "type", "--out", jsonl); code != exitOK {
 		t.Fatalf("voice build from JSON lines: %s", stderr)
 	}
 
@@ -109,7 +109,7 @@ func TestVoiceBuildReadsJSONLinesAndNULSeparatedStdin(t *testing.T) {
 
 	nul := filepath.Join(dir, "nul.json")
 	if code, _, stderr := runVoiceArgs(t, "fix the build\n\nIt failed.\x00add a flag\x00\n", "voice", "build",
-		"-kind", "commit-message", "-o", nul); code != exitOK ||
+		"--stdin", "-kind", "commit-message", "--out", nul); code != exitOK ||
 		!strings.Contains(stderr, "commit-message: 2 texts, 8 words, under 1000, so voice-drift skips it\n") {
 		t.Fatalf("voice build from stdin: code %d stderr %q", code, stderr)
 	}
@@ -119,7 +119,7 @@ func TestVoiceBuildReadsJSONLinesAndNULSeparatedStdin(t *testing.T) {
 	}
 
 	named := filepath.Join(dir, "named.json")
-	if code, _, stderr := runVoiceArgs(t, "", "voice", "build", "-kind", "commit-message", "-o", named,
+	if code, _, stderr := runVoiceArgs(t, "", "voice", "build", "-kind", "commit-message", "--out", named,
 		writeFile(t, dir, "stdin", "fix the build\n\nIt failed.\x00add a flag\x00\n")); code != exitOK {
 		t.Fatalf("voice build from a file named stdin: %s", stderr)
 	}
@@ -137,14 +137,14 @@ func TestVoiceBuildRefusesADefaultPathInAWorkTree(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	code, _, stderr := runVoiceArgs(t, "It works.", "voice", "build", "-kind", "review-reply")
+	code, _, stderr := runVoiceArgs(t, "It works.", "voice", "build", "--stdin", "-kind", "review-reply")
 	if code != exitError || !strings.Contains(stderr, "is inside the git work tree") {
 		t.Errorf("voice build in a work tree: code %d stderr %q, want a refusal", code, stderr)
 	}
 
 	named := filepath.Join(config, "named.json")
-	if code, _, stderr := runVoiceArgs(t, "It works.", "voice", "build", "-kind", "review-reply", "-o", named); code != exitOK {
-		t.Errorf("voice build with -o in a work tree: code %d stderr %q, want it written", code, stderr)
+	if code, _, stderr := runVoiceArgs(t, "It works.", "voice", "build", "--stdin", "-kind", "review-reply", "--out", named); code != exitOK {
+		t.Errorf("voice build with --out in a work tree: code %d stderr %q, want it written", code, stderr)
 	}
 }
 
@@ -152,7 +152,7 @@ func TestVoiceBuildWritesTheDefaultPathOutsideAWorkTree(t *testing.T) {
 	config := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", config)
 
-	if code, _, stderr := runVoiceArgs(t, "It works.", "voice", "build", "-kind", "review-reply"); code != exitOK {
+	if code, _, stderr := runVoiceArgs(t, "It works.", "voice", "build", "--stdin", "-kind", "review-reply"); code != exitOK {
 		t.Fatalf("voice build: code %d stderr %q", code, stderr)
 	}
 
@@ -166,14 +166,18 @@ func TestVoiceBuildExitsTwoOnInputItCannotUse(t *testing.T) {
 		want        string
 	}{
 		{"no subcommand", "", []string{"voice"}, "proofread: voice takes a subcommand, build or eval\n"},
-		{"no kind", "It works.", []string{"voice", "build"},
-			"proofread: name the texts' kind with -kind, or with -kind-field for JSON lines\n"},
-		{"a kind field alone", "It works.", []string{"voice", "build", "-kind-field", "type"},
-			"proofread: -kind-field needs -field, since only JSON lines name a kind\n"},
-		{"a kind with no voice", "It works.", []string{"voice", "build", "-kind", "guide"},
+		{"no files and no --stdin", "It works.", []string{"voice", "build", "-kind", "issue"},
+			"proofread: name the files to measure, or pass --stdin to read the texts from stdin\n"},
+		{"--stdin beside a file", "It works.", []string{"voice", "build", "--stdin", "-kind", "issue", "a.md"},
+			"proofread: --stdin reads the texts, so name no file\n"},
+		{"no kind", "It works.", []string{"voice", "build", "--stdin"},
+			"proofread: name the texts' kind with --kind, or with --kind-field for JSON lines\n"},
+		{"a kind field alone", "It works.", []string{"voice", "build", "--stdin", "-kind-field", "type"},
+			"proofread: --kind-field needs --field, since only JSON lines name a kind\n"},
+		{"a kind with no voice", "It works.", []string{"voice", "build", "--stdin", "-kind", "guide"},
 			"proofread: a voice measures change-description, review-reply, commit-message and issue, not guide\n"},
-		{"no text", "\x00", []string{"voice", "build", "-kind", "issue"}, "proofread: no text has a prose word to measure\n"},
-		{"a line with no text", `{"text":1}`, []string{"voice", "build", "-kind", "issue", "-field", "text"},
+		{"no text", "\x00", []string{"voice", "build", "--stdin", "-kind", "issue"}, "proofread: no text has a prose word to measure\n"},
+		{"a line with no text", `{"text":1}`, []string{"voice", "build", "--stdin", "-kind", "issue", "-field", "text"},
 			"proofread: stdin:1: no string field \"text\"\n"},
 	}
 
@@ -263,7 +267,7 @@ func TestVoiceEvalWritesJSONPerKind(t *testing.T) {
 	owner, other := evalFiles(t)
 
 	code, stdout, stderr := runVoiceArgs(t, "", "voice", "eval", "-owner", owner, "-other", other, "-kind", "review-reply",
-		"-format", "json")
+		"-o", "json")
 	if code != exitOK || stderr != "" {
 		t.Fatalf("voice eval: code %d stderr %q", code, stderr)
 	}
@@ -308,14 +312,14 @@ func TestVoiceEvalExitsTwoOnInputItCannotUse(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"no other file", []string{"-owner", owner}, "proofread: voice eval needs -owner and -other\n"},
-		{"an operand", []string{"-owner", owner, "-other", other, "x.md"}, "proofread: voice eval reads -owner and -other, not x.md\n"},
-		{"an unknown format", []string{"-owner", owner, "-other", other, "-format", "sarif"},
-			"proofread: unknown format \"sarif\": write text or json\n"},
+		{"no other file", []string{"-owner", owner}, "proofread: voice eval needs --owner and --other\n"},
+		{"an operand", []string{"-owner", owner, "-other", other, "x.md"}, "proofread: voice eval reads --owner and --other, not x.md\n"},
+		{"an unknown format", []string{"-owner", owner, "-other", other, "-o", "sarif"},
+			"proofread: unknown -o \"sarif\": write text or json\n"},
 		{"no kind for a line", []string{"-owner", owner, "-other", other},
-			fmt.Sprintf("proofread: %s:1: no string field \"kind\" names a kind, and -kind gives none\n", other)},
+			fmt.Sprintf("proofread: %s:1: no string field \"kind\" names a kind, and --kind gives none\n", other)},
 		{"a negative pool", []string{"-owner", owner, "-other", other, "-pool", "-1"},
-			"proofread: -pool is -1: name a word count, or 0 to pool nothing\n"},
+			"proofread: --pool is -1: name a word count, or 0 to pool nothing\n"},
 		{"an unknown kind", []string{"-owner", owner, "-other", other, "-kind", "poem"},
 			fmt.Sprintf("proofread: %s: unknown kind \"poem\"\n", other)},
 	}
@@ -347,23 +351,23 @@ func TestRunJudgesWithAVoiceFile(t *testing.T) {
 		"computed from the sorted inputs, and the test suite covers the path: the handler reads all of the inputs, "+
 		"sorts them, and hashes the result; the ordering no longer affects the outcome, and the docs say so. ", 4)
 
-	code, stdout, stderr := runVoiceArgs(t, drafted, "review-reply", "-voice", path, "-only", "voice-drift")
+	code, stdout, stderr := runVoiceArgs(t, drafted, "review-reply", "--stdin", "-voice", path, "-only", "voice-drift")
 	if code != exitOK || !strings.Contains(stdout, `"rule":"voice-drift"`) || !strings.Contains(stdout, `"decision":"advise"`) {
 		t.Errorf("review-reply -voice: code %d stdout %s stderr %q, want one advise voice-drift finding", code, stdout, stderr)
 	}
 
-	if _, stdout, _ := runVoiceArgs(t, drafted, "review-reply", "-only", "voice-drift"); stdout != "[]\n" {
+	if _, stdout, _ := runVoiceArgs(t, drafted, "review-reply", "--stdin", "-only", "voice-drift"); stdout != "[]\n" {
 		t.Errorf("review-reply with no voice = %s, want no finding", stdout)
 	}
 
 	bad := writeFile(t, dir, "bad.json", `{"schema":"other"}`)
-	if code, _, stderr := runVoiceArgs(t, drafted, "review-reply", "-voice", bad); code != exitError ||
+	if code, _, stderr := runVoiceArgs(t, drafted, "review-reply", "--stdin", "-voice", bad); code != exitError ||
 		stderr != "proofread: voice "+bad+": schema \"other\" is not proofread-voice/3\n" {
 		t.Errorf("a bad voice file: code %d stderr %q", code, stderr)
 	}
 
 	old := writeFile(t, dir, "old.json", `{"schema":"proofread-voice/1","kinds":{"issue":{"ranges":{}}}}`)
-	if code, _, stderr := runVoiceArgs(t, drafted, "review-reply", "-voice", old); code != exitError ||
+	if code, _, stderr := runVoiceArgs(t, drafted, "review-reply", "--stdin", "-voice", old); code != exitError ||
 		!strings.Contains(stderr, "rerun `proofread voice build`") {
 		t.Errorf("a voice file from an earlier proofread: code %d stderr %q, want the command that rebuilds it", code, stderr)
 	}

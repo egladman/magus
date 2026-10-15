@@ -85,7 +85,7 @@ var reviewKindTexts = map[Rule]ruleText{
 			"Google's review guide (eng-practices, \"The Standard of Code Review\") asks the reviewer to " +
 			"say what blocks, and Ebert et al. (SANER 2019) found missing rationale the most frequent cause " +
 			"of confusion. A body naming code, a path, a line, a failure, a list of items or the inline " +
-			"comments passes. It needs the review's event (-event), and judges nothing without it. It is " +
+			"comments passes. It needs the review's event (--event), and judges nothing without it. It is " +
 			"inferred from those sources rather than measured, so it advises.",
 	},
 	RuleApproveBlocker: {
@@ -95,7 +95,7 @@ var reviewKindTexts = map[Rule]ruleText{
 		why: "Google's review guide (eng-practices, \"The Standard of Code Review\") approves a change once " +
 			"it improves code health and labels what is left as optional. An approval that names a blocker " +
 			"lets the change merge with the blocker in it, or leaves the author unsure the approval holds. " +
-			"\"non-blocking\" and \"no blockers\" are left alone. It needs the review's event (-event), and " +
+			"\"non-blocking\" and \"no blockers\" are left alone. It needs the review's event (--event), and " +
 			"judges nothing without it. It is a convention, not a study, so it advises.",
 	},
 	RuleBareLGTM: {

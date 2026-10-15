@@ -77,7 +77,7 @@ export fun judge(file: str, helps: [clihelp\Help], rows: {str: [any]}) > [Findin
 }
 
 fun judged(bin: str, table: str, text: str) > [any] !> any {
-    final run = proc\exec(bin, args: ["tool-description", "-decisions", table],
+    final run = proc\exec(bin, args: ["tool-description", "--stdin", "--decisions", table],
         opts: {"stdin": text, "quiet": true, "allow_failure": true});
     if (run.code != 0) {
         throw "proofread exited {run.code}: " + run.stderr.trim();

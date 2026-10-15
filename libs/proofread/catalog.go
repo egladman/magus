@@ -553,7 +553,7 @@ var coreTexts = map[Rule]ruleText{
 		dimension: DimensionStance,
 		catches:   "a review reply that is its author's fourth or later in a thread",
 		why: "A long exchange in text reads as a stalemate to the people watching it, and a call settles " +
-			"it faster. It needs the thread length (-thread-length), and stays silent without it.",
+			"it faster. It needs the thread length (--thread-length), and stays silent without it.",
 	},
 	RuleMessageLength: {
 		code:      "PRF9001",

@@ -31,15 +31,15 @@ func runCalibrate(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 	fset := flag.NewFlagSet("proofread calibrate", flag.ContinueOnError)
 	fset.SetOutput(stderr)
 	casesDir := fset.String("cases", "", "read labeled case files from this `dir` instead of the ones proofread carries")
-	format := fset.String("format", "table", "write `table` or json")
+	format := fset.String("o", "table", "write `table` or json")
 	sample := fset.String("sample", "", "judge the records of this JSON-lines `file`, or - for stdin")
-	kind := fset.String("kind", "", "with -sample, judge each text as this `kind`")
-	field := fset.String("field", "body", "with -sample, the comma-separated `fields` joined by newlines into each text")
-	group := fset.String("group", "", "with -sample, the comma-separated `fields` whose values group the rates")
+	kind := fset.String("kind", "", "with --sample, judge each text as this `kind`")
+	field := fset.String("field", "body", "with --sample, the comma-separated `fields` joined by newlines into each text")
+	group := fset.String("group", "", "with --sample, the comma-separated `fields` whose values group the rates")
 	gates := fset.Bool("gates", false, "hold each rule's shipped default against the precision its cases support, and exit 1 when one outruns it")
 
 	if err := fset.Parse(args); err != nil {
-		return 1
+		return exitError
 	}
 
 	if fset.NArg() > 0 {
@@ -47,19 +47,19 @@ func runCalibrate(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 	}
 
 	if *format != "table" && *format != "json" {
-		return failure(stderr, fmt.Errorf("-format %q is neither table nor json", *format))
+		return failure(stderr, fmt.Errorf("-o %q is neither table nor json", *format))
 	}
 
 	if *sample == "" {
 		if *kind != "" || *group != "" {
-			return failure(stderr, errors.New("-kind and -group need -sample"))
+			return failure(stderr, errors.New("--kind and --group need --sample"))
 		}
 
 		return replayCases(*casesDir, *format, *gates, stdout, stderr)
 	}
 
 	if *casesDir != "" || *gates {
-		return failure(stderr, errors.New("-cases and -gates replay the labeled cases and cannot be combined with -sample"))
+		return failure(stderr, errors.New("--cases and --gates replay the labeled cases and cannot be combined with --sample"))
 	}
 
 	k, err := sampleKind(*kind)
@@ -145,13 +145,13 @@ func dirName(dir string) string {
 // from one text.
 func sampleKind(name string) (proofread.Kind, error) {
 	if name == "" {
-		return "", errors.New("-sample needs -kind")
+		return "", errors.New("--sample needs --kind")
 	}
 
 	if kind, ok := proofread.ParseKind(name); ok {
 		if s, ok := kindCommand(kind); ok {
 			if s.kind == proofread.KindSkillTemplate {
-				return "", fmt.Errorf("-kind %s renders a template first and cannot be sampled", name)
+				return "", fmt.Errorf("--kind %s renders a template first and cannot be sampled", name)
 			}
 
 			return s.kind, nil

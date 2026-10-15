@@ -706,7 +706,7 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
         final bin = "{dir}/{proofread\binary}";
         final found = mut [<Judged>];
         final words = kind.split(" ");
-        final run = proc\exec(bin, args: words + ["-decisions", table],
+        final run = proc\exec(bin, args: words + ["--stdin", "--decisions", table],
             opts: {"stdin": text, "quiet": true, "allow_failure": true}) catch null;
         fs\remove(table) catch void;
         if (run == null or run!.code != 0) {
@@ -716,7 +716,7 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
             }
             found.append(Judged{ rule = "judge", line = 0,
                 message = "proofread did not run ({why}); run {proofread\home}/{proofread\binary} {kind} "
-                    + "with the text on stdin, and read why" });
+                    + "--stdin with the text on stdin, and read why" });
         } else {
             foreach (f in parseJudged(run!.stdout)) {
                 found.append(f);

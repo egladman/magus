@@ -44,7 +44,7 @@ export fun check(files: [Path]) > [Finding] !> any {
     final indexes: [any] = data["indexes"] ?? [<any>];
     final bin = "{proofread\home}/{proofread\binary}";
     final table = decisions\writeDecisions([<str>]);
-    final run = proc\exec(bin, args: ["doc-comment", "-decisions", table],
+    final run = proc\exec(bin, args: ["doc-comment", "--stdin", "--decisions", table],
         opts: {"stdin": json\stringify(symbols), "quiet": true, "allow_failure": true});
     fs\remove(table) catch void;
     if (run.code != 0) {

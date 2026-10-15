@@ -72,7 +72,7 @@ func runJudge(t *testing.T, stdin string) (code int, stdout, stderr string) {
 
 	var out, errOut bytes.Buffer
 
-	code = run([]string{"doc-comment"}, strings.NewReader(stdin), &out, &errOut)
+	code = run([]string{"doc-comment", "--stdin"}, strings.NewReader(stdin), &out, &errOut)
 
 	return code, out.String(), errOut.String()
 }
@@ -154,7 +154,7 @@ func TestRunKeepsInputOrderThenFindingOrder(t *testing.T) {
 		row("a", "", "doc-comment", proofread.RuleLeak, proofread.DecisionDeny, leakTBD, "TBD"),
 	)
 
-	assertArgs(t, []string{"doc-comment", "-decisions", houseTable(t, proofread.RuleTerms)}, in, want)
+	assertArgs(t, []string{"doc-comment", "--stdin", "-decisions", houseTable(t, proofread.RuleTerms)}, in, want)
 }
 
 func TestRunJudgesANameSuffixOnlyOnACallable(t *testing.T) {
@@ -175,7 +175,7 @@ func TestRunJudgesANameSuffixOnlyOnACallable(t *testing.T) {
 		t.Run("kind "+tc.kind, func(t *testing.T) {
 			in := `[{"node":"n","name":"configFor","kind":"` + tc.kind + `","doc":""}]`
 
-			assertArgs(t, []string{"doc-comment", "-decisions", decisions}, in, tc.want)
+			assertArgs(t, []string{"doc-comment", "--stdin", "-decisions", decisions}, in, tc.want)
 		})
 	}
 }
@@ -231,7 +231,7 @@ func TestRunJudgesAChangeDescriptionFromStdin(t *testing.T) {
 			"query after an edit answers from a graph that is already current. Until now the graph rebuilt inline on that "+
 			"query.'", "## Summary").at(2, 1, 11))
 
-	assertArgs(t, []string{"change-description"}, "fix: pin the key\n## Summary\n", want)
+	assertArgs(t, []string{"change-description", "--stdin"}, "fix: pin the key\n## Summary\n", want)
 }
 
 func TestRunJudgesAStylesheetCommentAtItsSourceLine(t *testing.T) {
@@ -255,7 +255,7 @@ func TestRunJudgesAStylesheetFromStdinWhenNoPathIsNamed(t *testing.T) {
 			"commit message.", "Used to")
 	f.Line = 4
 
-	assertArgs(t, []string{"stylesheet", "-decisions", decisions}, "/* Fine. */\n.a { color: red; }\n\n/* Used to be a grid. */\n"+
+	assertArgs(t, []string{"stylesheet", "--stdin", "-decisions", decisions}, "/* Fine. */\n.a { color: red; }\n\n/* Used to be a grid. */\n"+
 		".b { color: blue; }\n", rows(t, f))
 }
 
@@ -263,7 +263,7 @@ func TestRunJudgesAReviewReplyFromStdin(t *testing.T) {
 	want := rows(t, row("review-reply", "review-reply:1", "review-reply", proofread.RuleBuzzword, proofread.DecisionDeny,
 		"Replace 'delve' with what is actually so.", "delve").at(1, 8, 13))
 
-	assertArgs(t, []string{"review-reply"}, "Let me delve into the race.", want)
+	assertArgs(t, []string{"review-reply", "--stdin"}, "Let me delve into the race.", want)
 }
 
 // An inline comment's line is its referent, so with -anchored nonspecific
@@ -275,11 +275,11 @@ func TestRunTakesAnchored(t *testing.T) {
 	message := "Name what 'confusing' refers to and what to change: a line, an identifier in backticks, an " +
 		"example or the reason, as in 'This reads the map without the lock: `cache.get` races with `cache.put`.'"
 
-	assertArgs(t, []string{"review-reply", "-decisions", advise}, reply,
+	assertArgs(t, []string{"review-reply", "--stdin", "-decisions", advise}, reply,
 		rows(t, row("review-reply", "review-reply:1", "review-reply", proofread.RuleNonspecific, proofread.DecisionAdvise,
 			message, "confusing").at(1, 9, 18)))
-	assertArgs(t, []string{"review-reply", "-anchored", "-decisions", advise}, reply, "[]\n")
-	assertArgs(t, []string{"review-inline", "-decisions", advise}, reply, "[]\n")
+	assertArgs(t, []string{"review-reply", "--stdin", "-anchored", "-decisions", advise}, reply, "[]\n")
+	assertArgs(t, []string{"review-inline", "--stdin", "-decisions", advise}, reply, "[]\n")
 }
 
 // A summary's verdict decides whether its body contradicts it, so an approval
@@ -290,19 +290,19 @@ func TestRunTakesTheReviewEvent(t *testing.T) {
 	advise := writeFile(t, t.TempDir(), "d.json", `{"rules":{"approve-blocker":"advise"}}`)
 
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"review-summary", "-event", "APPROVE", "-decisions", advise}, strings.NewReader(body), &stdout, &stderr); code != exitOK ||
+	if code := run([]string{"review-summary", "--stdin", "-event", "APPROVE", "-decisions", advise}, strings.NewReader(body), &stdout, &stderr); code != exitOK ||
 		!strings.Contains(stdout.String(), `"approve-blocker"`) {
 		t.Errorf("APPROVE: code %d, stdout %s, stderr %s; want an approve-blocker finding", code, stdout.String(), stderr.String())
 	}
 
 	stdout.Reset()
 
-	if code := run([]string{"review-summary", "-event", "COMMENT", "-decisions", advise}, strings.NewReader(body), &stdout, &stderr); code != exitOK ||
+	if code := run([]string{"review-summary", "--stdin", "-event", "COMMENT", "-decisions", advise}, strings.NewReader(body), &stdout, &stderr); code != exitOK ||
 		strings.Contains(stdout.String(), `"approve-blocker"`) {
 		t.Errorf("COMMENT: code %d, stdout %s; want no approve-blocker finding", code, stdout.String())
 	}
 
-	if code := run([]string{"review-summary", "-event", "MERGE"}, strings.NewReader(body), &stdout, &stderr); code != exitError {
+	if code := run([]string{"review-summary", "--stdin", "-event", "MERGE"}, strings.NewReader(body), &stdout, &stderr); code != exitError {
 		t.Errorf("-event MERGE: code %d; want %d", code, exitError)
 	}
 }
@@ -317,12 +317,12 @@ func TestRunTakesTheThreadLengthAndTheDecisions(t *testing.T) {
 	deny := writeFile(t, t.TempDir(), "d.json", `{"rules":{"long-thread":"deny"}}`)
 	off := writeFile(t, t.TempDir(), "d.json", `{"rules":{"long-thread":"off"}}`)
 
-	assertArgs(t, []string{"review-reply", "-thread-length", "2"}, reply, "[]\n")
-	assertArgs(t, []string{"review-reply", "-thread-length", "3"}, reply,
+	assertArgs(t, []string{"review-reply", "--stdin", "-thread-length", "2"}, reply, "[]\n")
+	assertArgs(t, []string{"review-reply", "--stdin", "-thread-length", "3"}, reply,
 		rows(t, row("review-reply", "review-reply", "review-reply", proofread.RuleLongThread, proofread.DecisionAdvise, message, "")))
-	assertArgs(t, []string{"review-reply", "-thread-length", "3", "-decisions", deny}, reply,
+	assertArgs(t, []string{"review-reply", "--stdin", "-thread-length", "3", "-decisions", deny}, reply,
 		rows(t, row("review-reply", "review-reply", "review-reply", proofread.RuleLongThread, proofread.DecisionDeny, message, "")))
-	assertArgs(t, []string{"review-reply", "-thread-length", "3", "-decisions", off}, reply, "[]\n")
+	assertArgs(t, []string{"review-reply", "--stdin", "-thread-length", "3", "-decisions", off}, reply, "[]\n")
 }
 
 func TestRunSelectsRulesByOnlyAndDecisions(t *testing.T) {
@@ -332,9 +332,9 @@ func TestRunSelectsRulesByOnlyAndDecisions(t *testing.T) {
 	terms := row("n", "", "doc-comment", proofread.RuleTerms, proofread.DecisionDeny, termsMessage, "sub-agent").replacing("subagent")
 	decisions := houseTable(t, proofread.RuleTerms, proofread.RuleCommentBlock)
 
-	assertArgs(t, []string{"doc-comment"}, doc, rows(t, leak))
-	assertArgs(t, []string{"doc-comment", "-decisions", decisions}, doc, rows(t, terms, leak))
-	assertArgs(t, []string{"doc-comment", "-decisions", decisions, "-only", "terms, comment-block"}, doc, rows(t, terms))
+	assertArgs(t, []string{"doc-comment", "--stdin"}, doc, rows(t, leak))
+	assertArgs(t, []string{"doc-comment", "--stdin", "-decisions", decisions}, doc, rows(t, terms, leak))
+	assertArgs(t, []string{"doc-comment", "--stdin", "-decisions", decisions, "-only", "terms, comment-block"}, doc, rows(t, terms))
 }
 
 // A glob's entry overrides the table's rules for the files it matches, and a
@@ -474,14 +474,19 @@ func TestRunExitsTwoOnAFlagItCannotUse(t *testing.T) {
 		wantStderr string
 	}{
 		{"an unknown bar", []string{"reference", "-fail-on", "error", page},
-			"proofread: unknown -fail-on \"error\": want deny, advise or never\n"},
-		{"record with no file", []string{"change-description", "-record"},
-			"proofread: -record needs a file to judge, since an outcome is kept per path\n"},
+			"proofread: unknown --fail-on \"error\": want deny, advise or never\n"},
+		{"record with no file", []string{"change-description", "--stdin", "-record"},
+			"proofread: --record needs a file to judge, since an outcome is kept per path\n"},
 		{"two message files", []string{"commit-message", page, page},
 			"proofread: commit-message takes one message file, or reads stdin\n"},
 		{"stats with an argument", []string{"stats", "filler"}, "proofread: stats takes no arguments\n"},
 		{"a path for symbols", []string{"doc-comment", "a.md"},
 			"proofread: a path needs the reference subcommand, since symbols are read from stdin\n"},
+		{"stdin with no --stdin", []string{"review-reply"}, "proofread: pass --stdin to read the review-reply from stdin\n"},
+		{"a message with no file or --stdin", []string{"commit-message"},
+			"proofread: name a file, or pass --stdin to read the commit-message from stdin\n"},
+		{"--stdin beside a file", []string{"stylesheet", "--stdin", page}, "proofread: --stdin reads the stylesheet, so name no file\n"},
+		{"--stdin for a kind read from files", []string{"reference", "--stdin"}, "proofread: a reference is read from files, not stdin\n"},
 		{"rules with an argument", []string{"rules", "filler"}, "proofread: rules takes no arguments\n"},
 		{"explain with no rule", []string{"explain"}, "proofread: explain takes one rule name or code\n"},
 		{"explain an unknown rule", []string{"explain", "fillers"}, "proofread: unknown rule or code \"fillers\"\n"},
@@ -489,22 +494,22 @@ func TestRunExitsTwoOnAFlagItCannotUse(t *testing.T) {
 			"proofread: a change-description is read from stdin, not from a path\n"},
 		{"a missing file", []string{"reference", "missing.md"},
 			"proofread: read missing.md: open missing.md: no such file or directory\n"},
-		{"unknown rule to keep", []string{"doc-comment", "-only", "filler,fillers"}, "proofread: unknown rule \"fillers\"\n"},
-		{"an off rule to keep", []string{"doc-comment", "-only", "terms"},
-			"proofread: -only names \"terms\", which is off: set it to advise or deny in -decisions\n"},
-		{"unknown rule in the table", []string{"doc-comment", "-decisions", unknownRule},
+		{"unknown rule to keep", []string{"doc-comment", "--stdin", "-only", "filler,fillers"}, "proofread: unknown rule \"fillers\"\n"},
+		{"an off rule to keep", []string{"doc-comment", "--stdin", "-only", "terms"},
+			"proofread: --only names \"terms\", which is off: set it to advise or deny in --decisions\n"},
+		{"unknown rule in the table", []string{"doc-comment", "--stdin", "-decisions", unknownRule},
 			"proofread: decisions " + unknownRule + ": unknown rule \"fillers\"\n"},
-		{"unknown decision", []string{"doc-comment", "-decisions", badDecision},
+		{"unknown decision", []string{"doc-comment", "--stdin", "-decisions", badDecision},
 			"proofread: decisions " + badDecision + ": rule \"filler\": unknown decision \"error\": want off, advise or deny\n"},
 		{"unknown rule under a path", []string{"reference", "-decisions", unknownScopedRule, page},
 			"proofread: decisions " + unknownScopedRule + ": path \"*.md\": unknown rule \"tone\"\n"},
 		{"a glob matching no argument", []string{"reference", "-decisions", noMatch, page},
 			"proofread: decisions " + noMatch + ": path \"blog/**\" matches no file argument\n"},
-		{"an unknown field", []string{"doc-comment", "-decisions", unknownField},
+		{"an unknown field", []string{"doc-comment", "--stdin", "-decisions", unknownField},
 			"proofread: decisions " + unknownField + ": json: unknown field \"rule\"\n"},
-		{"decisions on stdin beside the text", []string{"review-reply", "-decisions", "-"},
-			"proofread: -decisions -: name the table's file, since the review-reply itself is read from stdin\n"},
-		{"a missing table", []string{"doc-comment", "-decisions", "missing.json"},
+		{"decisions on stdin beside the text", []string{"review-reply", "--stdin", "-decisions", "-"},
+			"proofread: --decisions -: name the table's file, since the review-reply itself is read from stdin\n"},
+		{"a missing table", []string{"doc-comment", "--stdin", "-decisions", "missing.json"},
 			"proofread: read decisions missing.json: open missing.json: no such file or directory\n"},
 	}
 
@@ -544,7 +549,7 @@ func TestRunWritesSARIFAndRDJSONForTheFormatFlag(t *testing.T) {
 
 	var log sarifLog
 
-	runInto(t, []string{"reference", "-format", "sarif", path}, &log)
+	runInto(t, []string{"reference", "-o", "sarif", path}, &log)
 
 	if res := log.Runs[0].Results; len(res) != 1 || res[0].RuleID != "buzzword-weak" ||
 		res[0].Locations[0].PhysicalLocation.ArtifactLocation.URI != path ||
@@ -554,7 +559,7 @@ func TestRunWritesSARIFAndRDJSONForTheFormatFlag(t *testing.T) {
 
 	var result rdResult
 
-	runInto(t, []string{"reference", "-format", "rdjson", path}, &result)
+	runInto(t, []string{"reference", "-o", "rdjson", path}, &result)
 
 	if d := result.Diagnostics; len(d) != 1 || d[0].Code.Value != "PRF4007" || d[0].Location.Path != path ||
 		d[0].Severity != "WARNING" {
@@ -565,8 +570,8 @@ func TestRunWritesSARIFAndRDJSONForTheFormatFlag(t *testing.T) {
 func TestRunRejectsAnUnknownFormat(t *testing.T) {
 	var out, errOut bytes.Buffer
 
-	code := run([]string{"reference", "-format", "xml"}, strings.NewReader(""), &out, &errOut)
-	if code != exitError || out.String() != "" || errOut.String() != "proofread: unknown -format \"xml\": want json, sarif, rdjson or text\n" {
+	code := run([]string{"reference", "-o", "xml"}, strings.NewReader(""), &out, &errOut)
+	if code != exitError || out.String() != "" || errOut.String() != "proofread: unknown -o \"xml\": want json, sarif, rdjson or text\n" {
 		t.Errorf("run: got code %d stdout %q stderr %q", code, out.String(), errOut.String())
 	}
 }
@@ -579,7 +584,7 @@ func TestRunHoldsAFileToItsBaseline(t *testing.T) {
 	var out, errOut bytes.Buffer
 
 	code := run([]string{"reference", "-baseline", baselinePath, page}, strings.NewReader(""), &out, &errOut)
-	if code != exitError || out.String() != "" || !strings.Contains(errOut.String(), "does not exist: run with -prune to create it") {
+	if code != exitError || out.String() != "" || !strings.Contains(errOut.String(), "does not exist: run with --prune to create it") {
 		t.Fatalf("a missing baseline: code %d stdout %q stderr %q", code, out.String(), errOut.String())
 	}
 
@@ -597,7 +602,7 @@ func TestRunNeedsABaselineForPrune(t *testing.T) {
 	var out, errOut bytes.Buffer
 
 	code := run([]string{"reference", "-prune"}, strings.NewReader(""), &out, &errOut)
-	if code != exitError || errOut.String() != "proofread: -prune needs -baseline\n" {
+	if code != exitError || errOut.String() != "proofread: --prune needs --baseline\n" {
 		t.Errorf("run: got code %d stderr %q", code, errOut.String())
 	}
 }
@@ -620,14 +625,14 @@ func TestRunWritesTextAndACountOnStderr(t *testing.T) {
 	bad := writeFile(t, dir, "bad.md", "# A\n\nIt is crucial.\n")
 	clean := writeFile(t, dir, "ok.md", "# A\n\nIt works.\n")
 
-	code, out, errOut := runArgs(t, []string{"reference", "-format", "text", bad}, "")
+	code, out, errOut := runArgs(t, []string{"reference", "-o", "text", bad}, "")
 	wantOut := bad + ":3:7: PRF4007 buzzword-weak [advise] " + weakCrucial + "\n"
 
 	if code != exitOK || out != wantOut || errOut != "proofread: 1 finding (0 deny, 1 advise)\n" {
 		t.Errorf("a finding: code %d stdout %q stderr %q, want stdout %q", code, out, errOut, wantOut)
 	}
 
-	code, out, errOut = runArgs(t, []string{"reference", "-format", "text", clean}, "")
+	code, out, errOut = runArgs(t, []string{"reference", "-o", "text", clean}, "")
 	if code != exitOK || out != "" || errOut != "" {
 		t.Errorf("no findings: code %d stdout %q stderr %q, want nothing", code, out, errOut)
 	}

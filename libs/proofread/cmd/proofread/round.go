@@ -197,10 +197,10 @@ func runRoundSample(args []string, stdout, stderr io.Writer) int {
 	maxPerText := fset.Int("max-per-text", 2, "keep at most `n` firings of a rule from one text")
 	decisionsPath := fset.String("decisions", "", "judge with the decisions table in this `file`; by default every sampled rule is deny")
 	outDir := fset.String("out", "", "write the round into this `dir`")
-	roundNum := fset.Int("round", 0, "the round `number` the candidate ids carry; by default read from a -out named round<N>")
+	roundNum := fset.Int("round", 0, "the round `number` the candidate ids carry; by default read from an --out named round<N>")
 	field := fset.String("field", "text", "the comma-separated `fields` joined by newlines into each text")
 	kindField := fset.String("kind-field", "kind", "the `field` naming each record's kind")
-	kindName := fset.String("kind", "", "judge a record whose -kind-field is empty as this `kind`")
+	kindName := fset.String("kind", "", "judge a record whose --kind-field is empty as this `kind`")
 
 	var excludes repeated
 
@@ -250,15 +250,15 @@ type sampleConfig struct {
 
 func (c *sampleConfig) resolve(rulesList, decisionsPath, kindName string, round int, sources, excludes []string) error {
 	if c.outDir == "" {
-		return errors.New("round sample needs -out")
+		return errors.New("round sample needs --out")
 	}
 
 	if c.seed == 0 {
-		return errors.New("round sample needs -seed, a nonzero seed fixed before the sample is seen")
+		return errors.New("round sample needs --seed, a nonzero seed fixed before the sample is seen")
 	}
 
 	if c.perRule < 1 || c.minPerSource < 0 || c.maxPerText < 1 {
-		return errors.New("-per-rule and -max-per-text must be at least 1, and -min-per-source at least 0")
+		return errors.New("--per-rule and --max-per-text must be at least 1, and --min-per-source at least 0")
 	}
 
 	if len(c.fields) == 0 {
@@ -292,7 +292,7 @@ func (c *sampleConfig) resolve(rulesList, decisionsPath, kindName string, round 
 	}
 
 	if len(c.rules) == 0 {
-		return errors.New("round sample needs -rules")
+		return errors.New("round sample needs --rules")
 	}
 
 	if err := c.resolveDecisions(decisionsPath); err != nil {
@@ -305,7 +305,7 @@ func (c *sampleConfig) resolve(rulesList, decisionsPath, kindName string, round 
 
 		n, err := strconv.Atoi(digits)
 		if !named || err != nil || n < 1 {
-			return fmt.Errorf("-out %s is not named round<N>, so pass -round", c.outDir)
+			return fmt.Errorf("--out %s is not named round<N>, so pass --round", c.outDir)
 		}
 
 		c.round = n
@@ -613,7 +613,7 @@ func (c *sampleConfig) readSource(s *sourceSpec) ([]*sampleText, error) {
 
 	for _, t := range out {
 		if t.kind == "" {
-			return nil, fmt.Errorf("source %s: record %d has no %q field and no -kind is given", s.Path, t.record, c.kindField)
+			return nil, fmt.Errorf("source %s: record %d has no %q field and no --kind is given", s.Path, t.record, c.kindField)
 		}
 
 		if _, err := sampleKind(string(t.kind)); err != nil {
@@ -1437,7 +1437,7 @@ func runRoundFreeze(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if *dir == "" || *guideline == "" || fset.NArg() > 0 {
-		return failure(stderr, errors.New("round freeze takes -dir DIR -guideline FILE and no operand"))
+		return failure(stderr, errors.New("round freeze takes --dir DIR --guideline FILE and no operand"))
 	}
 
 	g, err := parseGates(*gateList)
@@ -1612,7 +1612,7 @@ func runRoundScore(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if *dir == "" || fset.NArg() > 0 {
-		return failure(stderr, errors.New("round score takes -dir DIR and no operand"))
+		return failure(stderr, errors.New("round score takes --dir DIR and no operand"))
 	}
 
 	rec, err := scoreRound(*dir, *replay)
@@ -1698,7 +1698,7 @@ func checkFrozen(dir string, fr *freezeRecord) error {
 
 	if len(changed) > 0 {
 		return fmt.Errorf("round %d is void, since the rule files changed after its rule commit %s (%s), "+
-			"and -replay only reproduces its numbers", fr.Round, fr.RuleCommit, strings.Join(changed, ", "))
+			"and --replay only reproduces its numbers", fr.Round, fr.RuleCommit, strings.Join(changed, ", "))
 	}
 
 	if fr.Guideline == nil {
@@ -2051,7 +2051,7 @@ func runRoundPool(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if len(dirs) != 2 || fset.NArg() > 0 {
-		return failure(stderr, errors.New("round pool takes -dir DIR twice and no operand"))
+		return failure(stderr, errors.New("round pool takes --dir DIR twice and no operand"))
 	}
 
 	if *out != "" {

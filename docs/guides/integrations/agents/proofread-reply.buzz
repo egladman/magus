@@ -6,8 +6,8 @@
 // so the workspace stays CLOSED, and it needs only the proofread release binary:
 // https://github.com/egladman/magus/releases
 //
-// Wire it to your host's stop event. It reads the reply, runs `proofread agent-reply -format
-// json` over it, and hands back at most 5 findings in the shape the named host takes:
+// Wire it to your host's stop event. It reads the reply, runs `proofread agent-reply --stdin
+// -o json` over it, and hands back at most 5 findings in the shape the named host takes:
 //
 //   claude-code  Stop: hookSpecificOutput.additionalContext. Advice only; the stop goes
 //                through and the findings ride into the next turn.
@@ -39,7 +39,7 @@
 //
 //   --agent-name HOST  REQUIRED: the host this entry is wired into, the harness spell's own
 //                      name. Without it nothing is judged and MGS3024 goes to stderr
-//   --decisions FILE   a JSON decisions table passed to proofread as -decisions:
+//   --decisions FILE   a JSON decisions table passed to proofread as --decisions:
 //                      {"rules": {"<rule>": "deny" | "advise" | "off"}}. Keep it to
 //                      "rules": proofread refuses a "paths" glob that matches no file
 //                      argument, and a reply is read from stdin
@@ -184,9 +184,9 @@ fun resolveBin(flagged: str) > str {
 
 // judge runs bin over reply, or finds nothing when it fails.
 fun judge(bin: str, decisions: str, reply: str) > [Finding] {
-    final argv = mut ["agent-reply", "-format", "json"];
+    final argv = mut ["agent-reply", "--stdin", "-o", "json"];
     if (decisions != "") {
-        argv.append("-decisions");
+        argv.append("--decisions");
         argv.append(decisions);
     }
     final run = proc\exec(bin, args: argv,

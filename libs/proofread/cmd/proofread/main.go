@@ -90,32 +90,32 @@ func kindCommand(kind proofread.Kind) (subcommand, bool) {
 }
 
 var subcommands = []subcommand{
-	{"doc-comment", proofread.KindDocComment, inputSymbols, "", "judge the doc of each symbol in a JSON array on stdin"},
+	{"doc-comment", proofread.KindDocComment, inputSymbols, "--stdin", "judge the doc of each symbol in a JSON array on stdin"},
 	{"reference", proofread.KindReference, inputFiles, "FILE...", "judge Markdown pages a reader looks things up in"},
 	{"guide", proofread.KindGuide, inputFiles, "FILE...", "judge procedural pages, held to the guide rules too"},
 	{"agent-brief", proofread.KindAgentBrief, inputFiles, "FILE...", "judge hand-written instructions an agent loads as written"},
 	{"agent-compact", proofread.KindAgentCompact, inputFiles, "FILE...", "judge grammar-free text only an agent reads"},
 	{"skill-template", proofread.KindSkillTemplate, inputFiles, "FILE...", "judge skill template bodies that render into a short and a full form"},
-	{"change-description", proofread.KindChangeDescription, inputStdin, "", "judge a pull request on stdin, its title on the first line"},
-	{"review-summary", proofread.KindReviewSummary, inputStdin, "", "judge a review's body on stdin, its verdict in -event"},
-	{"review-inline", proofread.KindReviewInline, inputStdin, "", "judge a review comment on a line of the diff, on stdin"},
-	{"review-reply", proofread.KindReviewReply, inputStdin, "", "judge a reply in a review thread or a pull request comment, on stdin"},
-	{"diagnostic", proofread.KindDiagnostic, inputStdin, "", "judge one diagnostic a program prints, on stdin"},
-	{"commit-message", proofread.KindCommitMessage, inputStdin, "[FILE]", "judge a commit message from FILE or stdin, its subject on the first line"},
-	{"cli-help", proofread.KindCLIHelp, inputStdin, "", "judge a command's or a flag's help text on stdin"},
-	{"issue", proofread.KindIssue, inputStdin, "", "judge an issue on stdin, its title on the first line"},
+	{"change-description", proofread.KindChangeDescription, inputStdin, "--stdin", "judge a pull request on stdin, its title on the first line"},
+	{"review-summary", proofread.KindReviewSummary, inputStdin, "--stdin", "judge a review's body on stdin, its verdict in --event"},
+	{"review-inline", proofread.KindReviewInline, inputStdin, "--stdin", "judge a review comment on a line of the diff, on stdin"},
+	{"review-reply", proofread.KindReviewReply, inputStdin, "--stdin", "judge a reply in a review thread or a pull request comment, on stdin"},
+	{"diagnostic", proofread.KindDiagnostic, inputStdin, "--stdin", "judge one diagnostic a program prints, on stdin"},
+	{"commit-message", proofread.KindCommitMessage, inputStdin, "FILE|--stdin", "judge a commit message from FILE or stdin, its subject on the first line"},
+	{"cli-help", proofread.KindCLIHelp, inputStdin, "--stdin", "judge a command's or a flag's help text on stdin"},
+	{"issue", proofread.KindIssue, inputStdin, "--stdin", "judge an issue on stdin, its title on the first line"},
 	{"release-notes", proofread.KindReleaseNotes, inputFiles, "FILE...", "judge the notes a release ships with"},
 	{"changelog", proofread.KindChangelog, inputFiles, "FILE...", "judge a changelog or its fragments, in the Keep a Changelog shape"},
-	{"agent-reply", proofread.KindAgentReply, inputStdin, "", "judge what a coding agent writes back to its person, on stdin"},
-	{"tool-description", proofread.KindToolDescription, inputStdin, "", "judge a tool's or a skill's description, on stdin"},
-	{"stylesheet", proofread.KindStylesheet, inputStdin, "[FILE...]", "judge the comments of stylesheets, or of one on stdin"},
+	{"agent-reply", proofread.KindAgentReply, inputStdin, "--stdin", "judge what a coding agent writes back to its person, on stdin"},
+	{"tool-description", proofread.KindToolDescription, inputStdin, "--stdin", "judge a tool's or a skill's description, on stdin"},
+	{"stylesheet", proofread.KindStylesheet, inputStdin, "FILE...|--stdin", "judge the comments of stylesheets, or of one on stdin"},
 	{"rules", "", inputNone, "", "write every rule as the docs render it, as JSON"},
 	{"calibrate", "", inputNone, "", "replay the labeled cases and print each rule's precision and recall"},
 	{"stats", "", inputNone, "", "print each rule's recorded outcomes and not-useful rate"},
 	{"explain", "", inputNone, "RULE|CODE", "print what a rule catches, why, its default decisions and its page"},
-	{"voice build", "", inputNone, "[FILE...]", "measure your own texts into the voice file -voice reads"},
-	{"voice eval", "", inputNone, "", "score which shape features tell -owner's JSON-lines texts from -other's, per kind; -pool N measures chunks of N+ words, -seed S shuffles them"},
-	{"train", "", inputNone, "", "train the word-class model on UD English EWT into -model, its test split into -testdata"},
+	{"voice build", "", inputNone, "FILE...|--stdin", "measure your own texts into the voice file --voice reads"},
+	{"voice eval", "", inputNone, "", "score which shape features tell --owner's JSON-lines texts from --other's, per kind; --pool N measures chunks of N+ words, --seed S shuffles them"},
+	{"train", "", inputNone, "", "train the word-class model on UD English EWT into --model, its test split into --testdata"},
 }
 
 // usage lists every subcommand and the flags a kind takes.
@@ -125,31 +125,33 @@ func usage() string {
 	b.WriteString("usage: proofread <subcommand> [flags] [operand]\n\nsubcommands:\n")
 
 	for _, s := range subcommands {
-		fmt.Fprintf(&b, "  %-28s %-10s %s\n", s.name, s.operand, s.summary)
+		fmt.Fprintf(&b, "  %-28s %-16s %s\n", s.name, s.operand, s.summary)
 	}
 
 	b.WriteString("\nflags, after a kind:\n")
-	b.WriteString("  -decisions FILE    read the decisions table from FILE, or - for stdin\n")
-	b.WriteString("  -only RULES        judge by these comma-separated rules alone\n")
-	b.WriteString("  -thread-length N   the count of replies the author already posted in the thread\n")
-	b.WriteString("  -event EVENT       the verdict a review summary is posted with: APPROVE, REQUEST_CHANGES or COMMENT\n")
-	b.WriteString("  -anchored          with review-reply, judge as review-inline\n")
-	b.WriteString("  -voice FILE        judge with the voice file proofread voice build wrote\n")
-	b.WriteString("  -format FORMAT     write findings as json (default), sarif, rdjson or text\n")
-	b.WriteString("  -fail-on DECISION  exit 1 when a finding at or above deny, advise or never remains (default never)\n")
-	b.WriteString("  -record            keep this run's findings on this machine, to count what later runs fix\n")
-	b.WriteString("  -baseline FILE     write only the findings past the counts FILE holds\n")
-	b.WriteString("  -prune             with -baseline, rewrite FILE to this run's counts and write no findings\n")
-	b.WriteString("  -metrics           write each text's readability metrics instead of its findings\n")
-	b.WriteString("\nvoice build flags: -kind, -field, -kind-field, -o; voice eval flags: -owner, -other, -kind, -field, -kind-field, -format, -pool, -seed\n")
-	b.WriteString("train flags: -model, -testdata, -iterations, -seed, -levels\n")
+	b.WriteString("  --stdin              read the text to judge from stdin\n")
+	b.WriteString("  --decisions FILE     read the decisions table from FILE, or - for stdin\n")
+	b.WriteString("  --only RULES         judge by these comma-separated rules alone\n")
+	b.WriteString("  --thread-length N    the count of replies the author already posted in the thread\n")
+	b.WriteString("  --event EVENT        the verdict a review summary is posted with: APPROVE, REQUEST_CHANGES or COMMENT\n")
+	b.WriteString("  --anchored           with review-reply, judge as review-inline\n")
+	b.WriteString("  --voice FILE         judge with the voice file proofread voice build wrote\n")
+	b.WriteString("  -o FORMAT            write findings as json (default), sarif, rdjson or text\n")
+	b.WriteString("  --fail-on DECISION   exit 1 when a finding at or above deny, advise or never remains (default never)\n")
+	b.WriteString("  --record             keep this run's findings on this machine, to count what later runs fix\n")
+	b.WriteString("  --baseline FILE      write only the findings past the counts FILE holds\n")
+	b.WriteString("  --prune              with --baseline, rewrite FILE to this run's counts and write no findings\n")
+	b.WriteString("  --metrics            write each text's readability metrics instead of its findings\n")
+	b.WriteString("\nvoice build flags: --stdin, --kind, --field, --kind-field, --out; ")
+	b.WriteString("voice eval flags: --owner, --other, --kind, --field, --kind-field, -o, --pool, --seed\n")
+	b.WriteString("train flags: --model, --testdata, --iterations, --seed, --levels\n")
 	b.WriteString("\nA text silences a finding with \"<!-- proofread off RULE: REASON -->\" in Markdown or \"proofread:ignore RULE REASON\" in a doc comment.\n")
-	b.WriteString("Findings are a JSON array on stdout. Exit codes: 0 judged with no finding at the -fail-on bar, 1 a finding at it, 2 unusable subcommand, flags, decisions or input.\n")
+	b.WriteString("Findings are a JSON array on stdout. Exit codes: 0 judged with no finding at the --fail-on bar, 1 a finding at it, 2 unusable subcommand, flags, decisions or input.\n")
 
 	return b.String()
 }
 
-// The process exit codes: 0 for a run with no finding at the -fail-on bar, 1
+// The process exit codes: 0 for a run with no finding at the --fail-on bar, 1
 // for one with a finding at it, 2 for a run that could not judge.
 const (
 	exitOK       = 0
@@ -158,7 +160,7 @@ const (
 )
 
 // run returns the process exit code. A finding fails the run only at the
-// -fail-on bar; the caller otherwise decides what one costs.
+// --fail-on bar; the caller otherwise decides what one costs.
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usage())
@@ -194,6 +196,25 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return exitError
 }
 
+// checkInput holds a kind to one source of text: stdin under --stdin, or the
+// files named as arguments.
+func checkInput(kind proofread.Kind, fromStdin bool, args []string) error {
+	cmd, _ := kindCommand(kind)
+
+	switch {
+	case fromStdin && len(args) > 0:
+		return fmt.Errorf("--stdin reads the %s, so name no file", kind)
+	case fromStdin && cmd.input == inputFiles:
+		return fmt.Errorf("a %s is read from files, not stdin", kind)
+	case !fromStdin && len(args) == 0 && cmd.input != inputFiles && cmd.operand != "--stdin":
+		return fmt.Errorf("name a file, or pass --stdin to read the %s from stdin", kind)
+	case !fromStdin && len(args) == 0 && cmd.input != inputFiles:
+		return fmt.Errorf("pass --stdin to read the %s from stdin", kind)
+	}
+
+	return nil
+}
+
 func failure(stderr io.Writer, err error) int {
 	fmt.Fprintf(stderr, "proofread: %v\n", err)
 
@@ -220,17 +241,18 @@ func reachesBar(failOn string, out []finding) bool {
 func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("proofread "+string(kind), flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	fromStdin := fs.Bool("stdin", false, "read the text to judge from stdin")
 	decisionsPath := fs.String("decisions", "", "read the decisions table from this `file`, or - for stdin")
 	only := fs.String("only", "", "judge by these comma-separated `rules` alone")
 	threadLength := fs.Int("thread-length", 0, "the `count` of replies the author already posted in the thread")
 	event := fs.String("event", "", "the `verdict` a review summary is posted with: APPROVE, REQUEST_CHANGES or COMMENT")
 	anchored := fs.Bool("anchored", false, "with review-reply, judge as review-inline")
 	voicePath := fs.String("voice", "", "judge with the voice `file` proofread voice build wrote")
-	format := fs.String("format", "json", "write findings as `json`, sarif, rdjson or text")
+	format := fs.String("o", "json", "write findings as `json`, sarif, rdjson or text")
 	failOn := fs.String("fail-on", "never", "exit 1 when a finding at or above this `decision` remains: deny, advise or never")
 	record := fs.Bool("record", false, "keep this run's findings on this machine to count what later runs fix")
 	baselinePath := fs.String("baseline", "", "report only findings past the counts this baseline `file` holds")
-	prune := fs.Bool("prune", false, "with -baseline, rewrite the file to the counts this run found")
+	prune := fs.Bool("prune", false, "with --baseline, rewrite the file to the counts this run found")
 	metrics := fs.Bool("metrics", false, "write each text's readability metrics instead of its findings")
 
 	if err := fs.Parse(args); err != nil {
@@ -244,20 +266,24 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 		kind = proofread.KindReviewInline
 	}
 
+	if err := checkInput(kind, *fromStdin, fs.Args()); err != nil {
+		return failure(stderr, err)
+	}
+
 	if *metrics {
 		return runMetrics(kind, fs.Args(), stdin, stdout, stderr)
 	}
 
 	if !slices.Contains([]string{"", "APPROVE", "REQUEST_CHANGES", "COMMENT"}, *event) {
-		return failure(stderr, fmt.Errorf("unknown -event %q: want APPROVE, REQUEST_CHANGES or COMMENT", *event))
+		return failure(stderr, fmt.Errorf("unknown --event %q: want APPROVE, REQUEST_CHANGES or COMMENT", *event))
 	}
 
 	if !slices.Contains([]string{"deny", "advise", "never"}, *failOn) {
-		return failure(stderr, fmt.Errorf("unknown -fail-on %q: want deny, advise or never", *failOn))
+		return failure(stderr, fmt.Errorf("unknown --fail-on %q: want deny, advise or never", *failOn))
 	}
 
 	if *record && !fromFiles(kind, fs.Args()) {
-		return failure(stderr, errors.New("-record needs a file to judge, since an outcome is kept per path"))
+		return failure(stderr, errors.New("--record needs a file to judge, since an outcome is kept per path"))
 	}
 
 	t, err := readTable(*decisionsPath, kind, stdin, fs.Args())
@@ -393,7 +419,7 @@ func onlyList(list string, t table) ([]proofread.Rule, error) {
 		}
 
 		if !t.turnsOn(r, isHouse) {
-			return nil, fmt.Errorf("-only names %q, which is off: set it to advise or deny in -decisions", r)
+			return nil, fmt.Errorf("--only names %q, which is off: set it to advise or deny in --decisions", r)
 		}
 
 		out = append(out, r)
@@ -590,7 +616,7 @@ func readTable(p string, kind proofread.Kind, stdin io.Reader, args []string) (t
 
 	if p == "-" {
 		if !fromFiles(kind, args) {
-			return table{}, fmt.Errorf("-decisions -: name the table's file, since the %s itself is read from stdin", kind)
+			return table{}, fmt.Errorf("--decisions -: name the table's file, since the %s itself is read from stdin", kind)
 		}
 
 		data, err = io.ReadAll(stdin)

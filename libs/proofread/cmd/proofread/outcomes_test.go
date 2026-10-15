@@ -229,9 +229,9 @@ func TestRecordCountsFixedSuppressedAndReportedAcrossRuns(t *testing.T) {
 		t.Fatalf("after suppressing the other: stats = %+v, want %+v", rows, want)
 	}
 
-	code, out, _ := runArgs(t, []string{"stats", "-format", "text"}, "")
+	code, out, _ := runArgs(t, []string{"stats", "-o", "text"}, "")
 	if code != exitOK || out != "buzzword-weak        fixed 1  suppressed 1  reported 0  not useful 50.0%  ship-off\n" {
-		t.Errorf("stats -format text: code %d stdout %q", code, out)
+		t.Errorf("stats -o text: code %d stdout %q", code, out)
 	}
 
 	raw, err := os.ReadFile(filepath.Join(state, "proofread", "outcomes.json"))
@@ -276,11 +276,11 @@ func TestStatsWithNothingRecorded(t *testing.T) {
 		t.Errorf("stats: code %d stdout %q, want []", code, out)
 	}
 
-	if code, out, _ := runArgs(t, []string{"stats", "-format", "text"}, ""); code != exitOK || !strings.HasPrefix(out, "no outcomes recorded") {
-		t.Errorf("stats -format text: code %d stdout %q", code, out)
+	if code, out, _ := runArgs(t, []string{"stats", "-o", "text"}, ""); code != exitOK || !strings.HasPrefix(out, "no outcomes recorded") {
+		t.Errorf("stats -o text: code %d stdout %q", code, out)
 	}
 
-	if code, _, errOut := runArgs(t, []string{"stats", "-format", "xml"}, ""); code != exitError || errOut != "proofread: unknown -format \"xml\": want json or text\n" {
-		t.Errorf("stats -format xml: code %d stderr %q", code, errOut)
+	if code, _, errOut := runArgs(t, []string{"stats", "-o", "xml"}, ""); code != exitError || errOut != "proofread: unknown -o \"xml\": want json or text\n" {
+		t.Errorf("stats -o xml: code %d stderr %q", code, errOut)
 	}
 }

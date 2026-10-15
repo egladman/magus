@@ -11,9 +11,9 @@ import (
 const scissors = "# ------------------------ >8 ------------------------"
 
 // fromFiles reports whether the text kind judges is read from the files in
-// args. A commit message is read from stdin unless a message file is named,
-// the way a VCS hook passes it, and so is a stylesheet, which a guard hands
-// over as the text a write would leave.
+// args. A commit message is read from the message file a VCS hook names, or
+// from stdin under --stdin, and so is a stylesheet, which a guard hands over
+// on stdin as the text a write would leave.
 func fromFiles(kind proofread.Kind, args []string) bool {
 	return readsFiles(kind) ||
 		((kind == proofread.KindCommitMessage || kind == proofread.KindStylesheet) && len(args) > 0)

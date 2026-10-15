@@ -340,7 +340,7 @@ export fun cssJudgeRunner(workspace: str) > fun (css: str) > [CssFinding]? {
             return null;
         }
         final run = proc\exec("{dir}/{proofread\binary}",
-            args: ["stylesheet", "-decisions", workspace + "/" + decisions\DECISIONS_FILE],
+            args: ["stylesheet", "--stdin", "--decisions", workspace + "/" + decisions\DECISIONS_FILE],
             opts: {"stdin": css, "quiet": true, "allow_failure": true}) catch null;
         if (run == null or run!.code != 0) {
             return null;

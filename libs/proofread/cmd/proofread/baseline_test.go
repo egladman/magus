@@ -145,8 +145,8 @@ func TestApplyBaselineErrors(t *testing.T) {
 		prune      bool
 		want       string
 	}{
-		{"prune without a baseline", "", true, "-prune needs -baseline"},
-		{"a missing file", filepath.Join(dir, "missing.json"), false, "missing.json does not exist: run with -prune to create it"},
+		{"prune without a baseline", "", true, "--prune needs --baseline"},
+		{"a missing file", filepath.Join(dir, "missing.json"), false, "missing.json does not exist: run with --prune to create it"},
 		{"not JSON", writeFile(t, dir, "bad.json", "nope"), false, "read baseline"},
 		{"an unknown field", writeFile(t, dir, "field.json", `{"version":1,"counts":{},"extra":1}`), false, "unknown field"},
 		{"another version", writeFile(t, dir, "version.json", `{"version":2,"counts":{}}`), false, "is version 2, want 1"},

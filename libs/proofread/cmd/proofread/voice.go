@@ -39,11 +39,19 @@ func runVoiceBuild(args []string, stdin io.Reader, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	kind := fs.String("kind", "", "the `kind` of every text, or of every JSON line naming none")
 	field := fs.String("field", "", "read JSON lines and take each text from this `field`")
-	kindField := fs.String("kind-field", "", "with -field, take each text's kind from this `field`")
-	out := fs.String("o", "", "write the voice file to this `path` (default $XDG_CONFIG_HOME/proofread/voice.json)")
+	kindField := fs.String("kind-field", "", "with --field, take each text's kind from this `field`")
+	out := fs.String("out", "", "write the voice file to this `path` (default $XDG_CONFIG_HOME/proofread/voice.json)")
+	fromStdin := fs.Bool("stdin", false, "read the texts from stdin")
 
 	if err := fs.Parse(args); err != nil {
 		return exitError
+	}
+
+	switch {
+	case *fromStdin && fs.NArg() > 0:
+		return failure(stderr, errors.New("--stdin reads the texts, so name no file"))
+	case !*fromStdin && fs.NArg() == 0:
+		return failure(stderr, errors.New("name the files to measure, or pass --stdin to read the texts from stdin"))
 	}
 
 	texts, err := voiceTexts(proofread.Kind(*kind), *field, *kindField, fs.Args(), stdin)
@@ -64,7 +72,7 @@ func runVoiceBuild(args []string, stdin io.Reader, stderr io.Writer) int {
 
 		if tree := workTree(filepath.Dir(path)); tree != "" {
 			return failure(stderr, fmt.Errorf("the default voice path %s is inside the git work tree %s, "+
-				"where a commit could publish it: name the path with -o", path, tree))
+				"where a commit could publish it: name the path with --out", path, tree))
 		}
 	}
 
@@ -88,7 +96,7 @@ func runVoiceEval(args []string, stdout, stderr io.Writer) int {
 	kind := fs.String("kind", "", "the `kind` of every JSON line naming none")
 	field := fs.String("field", "text", "take each text from this `field`")
 	kindField := fs.String("kind-field", "kind", "take each text's kind from this `field`")
-	format := fs.String("format", "text", "write the separations as `text` or json")
+	format := fs.String("o", "text", "write the separations as `text` or json")
 	pool := fs.Int("pool", 0, "measure random chunks of at least this many `words` instead of single texts; 0 pools nothing")
 	seed := fs.Uint64("seed", proofread.VoiceSeed, "shuffle the texts under this `seed` before pooling")
 
@@ -98,15 +106,15 @@ func runVoiceEval(args []string, stdout, stderr io.Writer) int {
 
 	switch {
 	case *pool < 0:
-		return failure(stderr, fmt.Errorf("-pool is %d: name a word count, or 0 to pool nothing", *pool))
+		return failure(stderr, fmt.Errorf("--pool is %d: name a word count, or 0 to pool nothing", *pool))
 	case *owner == "" || *other == "":
-		return failure(stderr, errors.New("voice eval needs -owner and -other"))
+		return failure(stderr, errors.New("voice eval needs --owner and --other"))
 	case fs.NArg() > 0:
-		return failure(stderr, fmt.Errorf("voice eval reads -owner and -other, not %s", strings.Join(fs.Args(), " ")))
+		return failure(stderr, fmt.Errorf("voice eval reads --owner and --other, not %s", strings.Join(fs.Args(), " ")))
 	case *format != "text" && *format != "json":
-		return failure(stderr, fmt.Errorf("unknown format %q: write text or json", *format))
+		return failure(stderr, fmt.Errorf("unknown -o %q: write text or json", *format))
 	case *field == "":
-		return failure(stderr, errors.New("voice eval reads JSON lines: name the text's field with -field"))
+		return failure(stderr, errors.New("voice eval reads JSON lines: name the text's field with --field"))
 	}
 
 	read := func(path string) (map[proofread.Kind][]proofread.Shape, error) {
@@ -234,9 +242,9 @@ func separationTable(kind proofread.Kind, owner, other, pool int, seps []calibra
 func voiceTexts(kind proofread.Kind, field, kindField string, paths []string, stdin io.Reader) (map[proofread.Kind][]string, error) {
 	switch {
 	case kindField != "" && field == "":
-		return nil, errors.New("-kind-field needs -field, since only JSON lines name a kind")
+		return nil, errors.New("--kind-field needs --field, since only JSON lines name a kind")
 	case kind == "" && kindField == "":
-		return nil, errors.New("name the texts' kind with -kind, or with -kind-field for JSON lines")
+		return nil, errors.New("name the texts' kind with --kind, or with --kind-field for JSON lines")
 	}
 
 	out := map[proofread.Kind][]string{}
@@ -318,7 +326,7 @@ func jsonLineTexts(name string, r io.Reader, kind proofread.Kind, field, kindFie
 		}
 
 		if k == "" {
-			return fmt.Errorf("%s:%d: no string field %q names a kind, and -kind gives none", name, n, kindField)
+			return fmt.Errorf("%s:%d: no string field %q names a kind, and --kind gives none", name, n, kindField)
 		}
 
 		out[k] = append(out[k], text)

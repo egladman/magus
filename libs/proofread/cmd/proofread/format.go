@@ -41,7 +41,7 @@ func writeFindings(w io.Writer, format string, out []finding) error {
 	case "text":
 		return writeText(w, out)
 	default:
-		return fmt.Errorf("unknown -format %q: want json, sarif, rdjson or text", format)
+		return fmt.Errorf("unknown -o %q: want json, sarif, rdjson or text", format)
 	}
 
 	if err := json.NewEncoder(w).Encode(doc); err != nil {
@@ -83,7 +83,7 @@ func textLine(f finding) string {
 	return fmt.Sprintf("%s: %s %s [%s] %s", where, f.Code, f.Rule, f.Decision, strings.Join(strings.Fields(f.Message), " "))
 }
 
-// textSummary is the count line -format text writes on stderr, empty for no
+// textSummary is the count line -o text writes on stderr, empty for no
 // findings: "proofread: 3 findings (2 deny, 1 advise)".
 func textSummary(out []finding) string {
 	if len(out) == 0 {

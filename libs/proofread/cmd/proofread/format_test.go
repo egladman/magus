@@ -101,7 +101,7 @@ func TestWriteFindingsRejectsAnUnknownFormat(t *testing.T) {
 	var b bytes.Buffer
 
 	err := writeFindings(&b, "xml", nil)
-	if err == nil || err.Error() != `unknown -format "xml": want json, sarif, rdjson or text` {
+	if err == nil || err.Error() != `unknown -o "xml": want json, sarif, rdjson or text` {
 		t.Errorf("error = %v", err)
 	}
 

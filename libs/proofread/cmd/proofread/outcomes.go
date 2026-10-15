@@ -363,7 +363,7 @@ func (s outcomeState) stats() []ruleStat {
 func runStats(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("proofread stats", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	format := fs.String("format", "json", "write the stats as `json` or text")
+	format := fs.String("o", "json", "write the stats as `json` or text")
 
 	if err := fs.Parse(args); err != nil {
 		return exitError
@@ -392,7 +392,7 @@ func runStats(args []string, stdout, stderr io.Writer) int {
 		}
 	case "text":
 		if len(rows) == 0 {
-			fmt.Fprintln(stdout, "no outcomes recorded: run a kind with -record")
+			fmt.Fprintln(stdout, "no outcomes recorded: run a kind with --record")
 		}
 
 		for _, r := range rows {
@@ -405,7 +405,7 @@ func runStats(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stdout)
 		}
 	default:
-		return failure(stderr, fmt.Errorf("unknown -format %q: want json or text", *format))
+		return failure(stderr, fmt.Errorf("unknown -o %q: want json or text", *format))
 	}
 
 	return exitOK

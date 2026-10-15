@@ -73,7 +73,7 @@ func TestRunJudgesACommitMessageFileWithoutItsCommentLines(t *testing.T) {
 func TestRunJudgesACommitMessageOnStdinAsItWas(t *testing.T) {
 	var got []finding
 
-	code, out, errOut := runArgs(t, []string{"commit-message"}, "Fix the parser\n\nBody. "+stale+"\n")
+	code, out, errOut := runArgs(t, []string{"commit-message", "--stdin"}, "Fix the parser\n\nBody. "+stale+"\n")
 	if code != exitOK || errOut != "" {
 		t.Fatalf("run: code %d stderr %q", code, errOut)
 	}
@@ -96,7 +96,7 @@ func TestRunJudgesNothingInAMessageOfOnlyComments(t *testing.T) {
 func TestRunFailsAHookOnADeniedCommitMessage(t *testing.T) {
 	dir := t.TempDir()
 	bad := writeFile(t, dir, "BAD", "# comment\nFix the parser\n\nBody. "+stale+"\n")
-	args := []string{"commit-message", "-format", "text", "-fail-on", "deny", bad}
+	args := []string{"commit-message", "-o", "text", "-fail-on", "deny", bad}
 
 	code, out, errOut := runArgs(t, args, "")
 	if code != exitFindings || !strings.HasPrefix(out, bad+":4:") || !strings.Contains(out, "suppression-unused [deny]") ||

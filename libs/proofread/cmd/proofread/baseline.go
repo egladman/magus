@@ -38,7 +38,7 @@ type baseline struct {
 func applyBaseline(path string, prune bool, out []finding) ([]finding, error) {
 	if path == "" {
 		if prune {
-			return nil, errors.New("-prune needs -baseline")
+			return nil, errors.New("--prune needs --baseline")
 		}
 
 		return out, nil
@@ -95,7 +95,7 @@ func countFindings(out []finding) map[string]map[string]int {
 func readBaseline(path string) (baseline, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return baseline{}, fmt.Errorf("baseline %s does not exist: run with -prune to create it", path)
+		return baseline{}, fmt.Errorf("baseline %s does not exist: run with --prune to create it", path)
 	}
 
 	if err != nil {

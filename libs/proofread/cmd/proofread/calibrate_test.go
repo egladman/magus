@@ -16,7 +16,7 @@ import (
 
 func TestCalibrateReplaysTheCasesItCarries(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"calibrate", "-format", "json"}, strings.NewReader(""), &stdout, &stderr); code != 0 {
+	if code := run([]string{"calibrate", "-o", "json"}, strings.NewReader(""), &stdout, &stderr); code != 0 {
 		t.Fatalf("exit %d: %s", code, stderr.String())
 	}
 
@@ -59,7 +59,7 @@ func TestCalibrateWritesATableFromACasesDir(t *testing.T) {
 
 func TestCalibrateGatesTheCasesItCarries(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"calibrate", "-gates", "-format", "json"}, strings.NewReader(""), &stdout, &stderr); code != 1 {
+	if code := run([]string{"calibrate", "-gates", "-o", "json"}, strings.NewReader(""), &stdout, &stderr); code != 1 {
 		t.Fatalf("exit %d, want 1 while a rule ships past its cases: %s", code, stderr.String())
 	}
 
@@ -175,7 +175,7 @@ func TestCalibrateRatesASampleByGroup(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 
-	args := []string{"calibrate", "-sample", "-", "-kind", "review-reply", "-group", "user_type", "-format", "json"}
+	args := []string{"calibrate", "-sample", "-", "-kind", "review-reply", "-group", "user_type", "-o", "json"}
 	if code := run(args, strings.NewReader(sample), &stdout, &stderr); code != 0 {
 		t.Fatalf("exit %d: %s", code, stderr.String())
 	}
@@ -229,21 +229,21 @@ func TestCalibrateRefusesFlagsItCannotUse(t *testing.T) {
 		want  string
 	}{
 		"an operand":            {[]string{"x"}, "", `proofread: calibrate takes no operand, got "x"`},
-		"a format":              {[]string{"-format", "xml"}, "", `proofread: -format "xml" is neither table nor json`},
-		"a kind with no sample": {[]string{"-kind", "review-reply"}, "", "proofread: -kind and -group need -sample"},
-		"a sample with no kind": {[]string{"-sample", "-"}, "", "proofread: -sample needs -kind"},
+		"a format":              {[]string{"-o", "xml"}, "", `proofread: -o "xml" is neither table nor json`},
+		"a kind with no sample": {[]string{"-kind", "review-reply"}, "", "proofread: --kind and --group need --sample"},
+		"a sample with no kind": {[]string{"-sample", "-"}, "", "proofread: --sample needs --kind"},
 		"an unknown kind":       {[]string{"-sample", "-", "-kind", "poem"}, "", `proofread: unknown kind "poem"`},
 		"a template kind": {
 			[]string{"-sample", "-", "-kind", "skill-template"}, "",
-			"proofread: -kind skill-template renders a template first and cannot be sampled",
+			"proofread: --kind skill-template renders a template first and cannot be sampled",
 		},
 		"cases and a sample": {
 			[]string{"-sample", "-", "-cases", "d"}, "",
-			"proofread: -cases and -gates replay the labeled cases and cannot be combined with -sample",
+			"proofread: --cases and --gates replay the labeled cases and cannot be combined with --sample",
 		},
 		"gates and a sample": {
 			[]string{"-sample", "-", "-gates"}, "",
-			"proofread: -cases and -gates replay the labeled cases and cannot be combined with -sample",
+			"proofread: --cases and --gates replay the labeled cases and cannot be combined with --sample",
 		},
 		"a bad record": {[]string{"-sample", "-", "-kind", "diagnostic"}, "{}\n{", "proofread: sample line 2: unexpected end of JSON input"},
 		"an empty dir": {[]string{"-cases", "."}, "", "proofread: no case files in ."},

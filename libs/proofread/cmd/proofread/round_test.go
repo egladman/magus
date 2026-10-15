@@ -216,8 +216,8 @@ func TestRoundSampleRefusesAnUnusableCall(t *testing.T) {
 	}{
 		{"no seed", []string{"-rules", "claim", "-out", filepath.Join(tmp, "round1"), src}, "-seed"},
 		{"unknown rule", []string{"-rules", "nosuch", "-seed", "1", "-out", filepath.Join(tmp, "round1"), src}, "unknown rule"},
-		{"unnamed dir", []string{"-rules", "claim", "-seed", "1", "-out", filepath.Join(tmp, "x"), src}, "pass -round"},
-		{"no kind", []string{"-rules", "claim", "-seed", "1", "-out", filepath.Join(tmp, "round2"), src}, "no -kind"},
+		{"unnamed dir", []string{"-rules", "claim", "-seed", "1", "-out", filepath.Join(tmp, "x"), src}, "pass --round"},
+		{"no kind", []string{"-rules", "claim", "-seed", "1", "-out", filepath.Join(tmp, "round2"), src}, "no --kind"},
 	}
 
 	for _, tt := range tests {

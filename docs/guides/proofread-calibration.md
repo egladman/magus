@@ -77,13 +77,13 @@ file that mixes bots and people hides the worse of the two.
 
    ```sh
    proofread calibrate round sample \
-     -rules claim,absolute,issue-repro,ing-tail,participles \
-     -seed 20261101 -per-rule 40 -min-per-source 10 \
-     -exclude "$C/labels/candidates.jsonl" \
-     -exclude "$C/labels/round2/candidates.jsonl" \
-     -exclude "$C/labels/round3/candidates.jsonl" \
-     -exclude "$C/labels/round4/candidates.jsonl" \
-     -out "$C/labels/round5" \
+     --rules claim,absolute,issue-repro,ing-tail,participles \
+     --seed 20261101 --per-rule 40 --min-per-source 10 \
+     --exclude "$C/labels/candidates.jsonl" \
+     --exclude "$C/labels/round2/candidates.jsonl" \
+     --exclude "$C/labels/round3/candidates.jsonl" \
+     --exclude "$C/labels/round4/candidates.jsonl" \
+     --out "$C/labels/round5" \
      aidev-pr="$C/sources/aidev-pr.jsonl" \
      aidev-commit="$C/sources/aidev-commit.jsonl" \
      aidev-review-user="$C/sources/aidev-review-user.jsonl"
@@ -95,8 +95,8 @@ file that mixes bots and people hides the worse of the two.
 off still fires. Before judging, it drops a text its source already held and replaces
 anything that looks like an email, a token or a key with `[REDACTED]`. It then drops a
 firing whose text, sentence or context an exclude file or a committed case already
-showed, keeps at most two firings of a rule per text, and draws up to `-per-rule` firings
-from the seed. A source with at least `-min-per-source` fresh firings gets that many
+showed, keeps at most two firings of a rule per text, and draws up to `--per-rule` firings
+from the seed. A source with at least `--min-per-source` fresh firings gets that many
 first, so its own gate can run. `counts.json` records, per rule and per source, the
 firings seen, excluded, fresh and taken, with the sha256 of every source file.
 
@@ -107,9 +107,9 @@ A directory that already holds a sample is refused: start a new round directory 
 Freeze before anyone labels:
 
 ```sh
-proofread calibrate round freeze -dir "$C/labels/round5" \
-  -guideline libs/proofread/testdata/guideline.md \
-  -purpose "confirm claim and absolute after the round 4 guideline revisions"
+proofread calibrate round freeze --dir "$C/labels/round5" \
+  --guideline libs/proofread/testdata/guideline.md \
+  --purpose "confirm claim and absolute after the round 4 guideline revisions"
 ```
 
 `freeze` refuses a tree whose rule files are not committed, rule files that changed since
@@ -129,7 +129,7 @@ The default gates are the method's: advise needs a Wilson 95% lower bound of 0.7
 the worst source with 10 or more firings must also reach 0.70. A rule with any
 disagreement that either labeler left without a note fails the agreement gate, whatever
 its rate. Override one with
-`-gates`, for example `-gates z=2.24` on a rule's second attempt.
+`--gates`, for example `--gates z=2.24` on a rule's second attempt.
 
 ## 4. Label
 
@@ -169,7 +169,7 @@ a revision of `guideline.md` for the next round, never of this one.
 ## 6. Score
 
 ```sh
-proofread calibrate round score -dir "$C/labels/round5"
+proofread calibrate round score --dir "$C/labels/round5"
 ```
 
 `score` refuses a round with no freeze record, a round whose rule files changed since its
@@ -193,7 +193,7 @@ you promote it.
    one wrong. One round never promotes a rule to deny. Pool two scored rounds:
 
    ```sh
-   proofread calibrate round pool -dir "$C/labels/round5" -dir "$C/labels/round6"
+   proofread calibrate round pool --dir "$C/labels/round5" --dir "$C/labels/round6"
    ```
 
    `pool` scores each round the way `score` does, so it refuses a round that is not
@@ -204,8 +204,8 @@ you promote it.
    gate's 60, wrong stays within 1, and both rounds passed their own agreement gate. A
    rule that fired in only one round gets a null `deny_gate`. Each round's agreement gate
    and unnoted count ride along per rule, and `why` names whatever fell short.
-   Pass `-out FILE` to write the JSON there and print a table instead. `pool` never
-   writes into a round directory, and refuses an `-out` inside one.
+   Pass `--out FILE` to write the JSON there and print a table instead. `pool` never
+   writes into a round directory, and refuses an `--out` inside one.
 
 ## 8. Record the round
 
@@ -249,12 +249,12 @@ Each record under `libs/proofread/testdata/rounds/` names its rule commit, its s
 says `unrecorded` where the round kept no such fact.
 
 1. Check out the rule commit in a worktree and build `proofread` there.
-2. Re-score the labels. For a round scored after its rules moved on, `-replay` skips the
+2. Re-score the labels. For a round scored after its rules moved on, `--replay` skips the
    void check and marks the result as deciding nothing:
 
    ```sh
    cp -R "$C/labels/round4" /tmp/round4
-   proofread calibrate round score -dir /tmp/round4 -replay -out /tmp/round4/scores-replay.json
+   proofread calibrate round score --dir /tmp/round4 --replay --out /tmp/round4/scores-replay.json
    ```
 
 3. For a round drawn with `round sample`, re-draw it at the rule commit with the seed,
@@ -263,7 +263,7 @@ says `unrecorded` where the round kept no such fact.
    you whether you hold the same data.
 
 Rounds 1 to 4 were drawn by one-off scripts before `round sample` existed, so only their
-scores reproduce. Re-scoring round 4 with `-replay` gives its recorded counts and rates. Its
+scores reproduce. Re-scoring round 4 with `--replay` gives its recorded counts and rates. Its
 agreement gate now also needs a note on every disagreement, and three of its rules have
 one disagreement without one, so `round4.json` records those gates as failing, and
 `participles` no longer passes advise. Round 4's freeze records no sources, so it cannot
