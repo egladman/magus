@@ -376,8 +376,6 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           module: github.com/egladman/magus
-          # `magus run` is the command its errors name, not internal/run.
-          operations: [run]
           # A notice's error rides attr.Error, so the display names its origin once.
           notice-attrs:
             - github.com/egladman/magus/internal/log/attr.Notice
