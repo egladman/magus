@@ -68,3 +68,11 @@ func TestCheckoutLifecycleOnEveryBackend(t *testing.T) {
 		assert.Empty(t, listed)
 	})
 }
+
+func TestSaplingCreateCheckoutSaysWhyItDeclines(t *testing.T) {
+	err := saplingVCS{}.CreateCheckout(t.Context(), t.TempDir(), filepath.Join(t.TempDir(), "co"), "x")
+	var declined *types.VCSUnsupportedError
+	require.ErrorAs(t, err, &declined)
+	assert.Equal(t, &types.VCSUnsupportedError{VCS: "sl", Capability: types.CapCheckoutProvisioner}, declined)
+	assert.Contains(t, err.Error(), "sl has no command that makes a second working copy")
+}
