@@ -141,7 +141,7 @@ A figure nobody registers is checked by nothing.
   it is `docs/site/diagrams/all.buzz`: one import plus one entry.
 - `{{cmd "run"}} diagrams-generate docs` lays every figure out from the symbol index.
   It writes the light, dark and page SVGs, each with a JSON receipt{{if .Full}}: the
-  stamp, the claim counts, the findings, and the index digest it was drawn at{{end}}.
+  figure id, the stamp, the claim counts and the findings; no index digest{{end}}.
 - A docs page embeds a figure by id with `<!--diagram:<id>-->`.
 
 Source code can point back at a figure with a `magus:diagram <id>` comment beside the

@@ -104,8 +104,9 @@ change:
 `magus run diagrams-generate docs` lays every figure out from the symbol index
 and writes into `docs/assets/gen/` the dark and light pair the README loads,
 the page copy the site inlines, and a receipt beside each: the stamp, the claim
-counts, the findings and the index digest it was drawn at. The stamp is also in
-each SVG's metadata. It fails when the committed files move; `:rw` rewrites
+counts (imports, calls, flow) and the findings. The receipt carries no index
+digest, so it changes only when its figure does. The stamp is also in each SVG's
+metadata. It fails when the committed files move; `:rw` rewrites
 them. The site render reads only the page copies, so it never needs the index.
 
 ## The console view
