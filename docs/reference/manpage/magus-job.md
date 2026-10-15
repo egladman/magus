@@ -86,6 +86,9 @@ them and magus describe job prints one job's terms.
 **--check** *\<target\> \<project\> [-- args]*
 : The one check this job runs, as \`\<target\> \<project\> [-- args]\` (the \`magus run\` is implied)
 
+**--checkout** *string*
+: Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work
+
 **--checkpoint** *magus vcs checkpoint -o name*
 : The working state this job is handed, as \`magus vcs checkpoint -o name\` prints it
 
@@ -93,13 +96,13 @@ them and magus describe job prints one job's terms.
 : What this job is for and what done means, as prose; the machine-checkable half is --check, and the goals a --stdin record declares
 
 **--deny-paths** *string*
-: A path inside the write paths this job may not write; repeatable or comma-separated
+: A path this job may not write, carved out of its write paths; repeatable or comma-separated
 
 **--depends-on** *string*
 : A job this one waits on; repeatable or comma-separated
 
 **--model** *string*
-: The model the work was matched to
+: The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier
 
 **--parent** *string*
 : The job this one is forked from

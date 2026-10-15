@@ -76,6 +76,9 @@ them and magus describe job prints one job's terms.
 \fB\-\-check\fR \fI<target> <project> [-- args]\fR
 The one check this job runs, as `<target> <project> [\-\- args]` (the `magus run` is implied)
 .TP
+\fB\-\-checkout\fR \fIstring\fR
+Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work
+.TP
 \fB\-\-checkpoint\fR \fImagus vcs checkpoint -o name\fR
 The working state this job is handed, as `magus vcs checkpoint \-o name` prints it
 .TP
@@ -83,13 +86,13 @@ The working state this job is handed, as `magus vcs checkpoint \-o name` prints 
 What this job is for and what done means, as prose; the machine\-checkable half is \-\-check, and the goals a \-\-stdin record declares
 .TP
 \fB\-\-deny\-paths\fR \fIstring\fR
-A path inside the write paths this job may not write; repeatable or comma\-separated
+A path this job may not write, carved out of its write paths; repeatable or comma\-separated
 .TP
 \fB\-\-depends\-on\fR \fIstring\fR
 A job this one waits on; repeatable or comma\-separated
 .TP
 \fB\-\-model\fR \fIstring\fR
-The model the work was matched to
+The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier
 .TP
 \fB\-\-parent\fR \fIstring\fR
 The job this one is forked from

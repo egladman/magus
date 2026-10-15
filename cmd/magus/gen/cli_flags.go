@@ -295,6 +295,8 @@ const (
 	FlagJobExitStdin = "stdin"
 	// job fork: --check
 	FlagJobForkCheck = "check"
+	// job fork: --checkout
+	FlagJobForkCheckout = "checkout"
 	// job fork: --checkpoint
 	FlagJobForkCheckpoint = "checkpoint"
 	// job fork: --criteria
@@ -1737,6 +1739,7 @@ type JobForkFlags struct {
 	Check      string        // --check
 	Model      string        // --model
 	ReadOnly   bool          // --read-only
+	Checkout   string        // --checkout
 }
 
 // BindJobFork registers `magus job fork`'s flags on fs and returns the destination.
@@ -1749,8 +1752,9 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 	fs.StringVar(&f.Parent, FlagJobForkParent, "", "The job this one is forked from")
 	fs.StringVar(&f.Checkpoint, FlagJobForkCheckpoint, "", "The working state this job is handed, as `magus vcs checkpoint -o name` prints it")
 	fs.StringVar(&f.Check, FlagJobForkCheck, "", "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
-	fs.StringVar(&f.Model, FlagJobForkModel, "", "The model the work was matched to")
+	fs.StringVar(&f.Model, FlagJobForkModel, "", "The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier")
 	fs.BoolVar(&f.ReadOnly, FlagJobForkReadOnly, false, "A job that gathers evidence and writes nothing")
+	fs.StringVar(&f.Checkout, FlagJobForkCheckout, "", "Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work")
 	return &f
 }
 
