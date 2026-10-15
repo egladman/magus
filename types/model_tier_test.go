@@ -106,6 +106,30 @@ func TestModelTierAboveComparesOnlyWithinOneSet(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestModelTierWithinAllowsEqualAndLowerOnly(t *testing.T) {
+	t.Parallel()
+	set := mustTiers(t, threeTiers())
+	economy, _ := set.At(0)
+	standard, _ := set.At(1)
+	principal, _ := set.At(2)
+
+	require.NoError(t, standard.Within(standard), "a child may run at its parent's tier")
+	require.NoError(t, economy.Within(standard), "a child may run below its parent's tier")
+
+	err := principal.Within(standard)
+	require.Error(t, err)
+	assert.Equal(t, "model tier principal (rank 2) ranks above standard (rank 1)", err.Error())
+
+	foreign, _ := mustTiers(t, threeTiers()).At(2)
+	err = economy.Within(foreign)
+	require.Error(t, err, "a ceiling from another declaration bounds nothing")
+	assert.Contains(t, err.Error(), "different declarations")
+
+	err = economy.Within(ModelTier{})
+	require.Error(t, err, "an unassigned ceiling bounds nothing")
+	assert.Contains(t, err.Error(), "unassigned")
+}
+
 func TestModelTierZeroValueIsUnassigned(t *testing.T) {
 	t.Parallel()
 	var zero ModelTier

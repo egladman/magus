@@ -50,6 +50,20 @@ func (t ModelTier) Above(u ModelTier) (bool, error) {
 	return t.rank > u.rank, nil
 }
 
+// Within is nil when t ranks at or below ceiling, the bound a child's tier keeps to its
+// parent's. It errors naming both tiers when t ranks above ceiling, and as [ModelTier.Above]
+// does when the two cannot be compared.
+func (t ModelTier) Within(ceiling ModelTier) error {
+	above, err := t.Above(ceiling)
+	if err != nil {
+		return err
+	}
+	if above {
+		return fmt.Errorf("model tier %s (rank %d) ranks above %s (rank %d)", t.Name(), t.rank, ceiling.Name(), ceiling.rank)
+	}
+	return nil
+}
+
 // MarshalText writes the case name. There is no UnmarshalText: a name becomes a
 // ModelTier only through [ModelTierSet.Parse], against the declaration it belongs to.
 func (t ModelTier) MarshalText() ([]byte, error) { return []byte(t.Name()), nil }
