@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus guard: checking approval",
             "type": "command"
           }
@@ -16,7 +16,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus: recording the subagent",
             "type": "command"
           }
@@ -28,42 +28,12 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
-            "statusMessage": "magus guard: checking command",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "statusMessage": "magus guard: checking the call",
             "type": "command"
           }
         ],
-        "matcher": "Bash"
-      },
-      {
-        "hooks": [
-          {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-path.buzz -- --agent-name codex",
-            "statusMessage": "magus guard: checking file",
-            "type": "command"
-          }
-        ],
-        "matcher": "Edit|Write"
-      },
-      {
-        "hooks": [
-          {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
-            "statusMessage": "magus guard: checking MCP tool call",
-            "type": "command"
-          }
-        ],
-        "matcher": "mcp__.*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
-            "statusMessage": "magus guard: checking subagent spawn",
-            "type": "command"
-          }
-        ],
-        "matcher": "spawn_agent|collaborationspawn_agent|Agent"
+        "matcher": "*"
       }
     ],
     "SessionStart": [
@@ -111,7 +81,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus: joining the subagent to its spawn",
             "type": "command"
           }
@@ -122,7 +92,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus: recording the subagent's context",
             "type": "command"
           }
@@ -133,7 +103,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus: noting the request",
             "type": "command"
           }

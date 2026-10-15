@@ -40,82 +40,12 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --reports-skills --foreground-default-ms 120000 --foreground-max-ms 600000",
+            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --reports-skills --foreground-default-ms 120000 --foreground-max-ms 600000 --tool-rows .claude/magus/tools",
             "timeout": 10,
             "type": "command"
           }
         ],
-        "matcher": "Bash"
-      },
-      {
-        "hooks": [
-          {
-            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-path.buzz -- --agent-name claude-code --reports-skills",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Edit|Write|NotebookEdit"
-      },
-      {
-        "hooks": [
-          {
-            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --reports-skills",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "^mcp__magus__"
-      },
-      {
-        "hooks": [
-          {
-            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --reports-skills",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Read"
-      },
-      {
-        "hooks": [
-          {
-            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --reports-skills",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Grep|Glob"
-      },
-      {
-        "hooks": [
-          {
-            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --reports-skills",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Skill"
-      },
-      {
-        "hooks": [
-          {
-            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --reports-skills",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Agent|Task|SendMessage"
-      },
-      {
-        "hooks": [
-          {
-            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --reports-skills",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Monitor|TaskOutput|ScheduleWakeup|CronCreate"
+        "matcher": "*"
       }
     ],
     "SessionStart": [
