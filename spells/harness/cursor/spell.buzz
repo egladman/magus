@@ -320,7 +320,7 @@ test "guard command is the shipped Cursor Buzz port, not a shell script" {
     assert\isTrue(cmd.indexOf("cursor-hook.buzz") != null, "names the Cursor guard template");
     assert\isTrue(cmd.indexOf("docs/guides/integrations/agents/") != null, "lives with the other host glue");
     assert\isTrue(cmd.indexOf(" -- --agent-name {mgs_getName()}") != null, "names this host on the script argv");
-    assert\isTrue(cmd.endsWith(" --reports-skills"), "a SKILL.md Read reaches preToolUse, so skill loads are reported");
+    assert\isTrue(cmd.indexOf(" --reports-skills") != null, "a SKILL.md Read reaches preToolUse, so skill loads are reported");
 }
 
 test "harness_entries covers every Cursor event magus uses" {

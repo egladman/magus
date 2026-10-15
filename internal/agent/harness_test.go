@@ -1606,8 +1606,8 @@ func TestHarnessConfigsWirePromptAndSpawnHooksAndLeaveTheReplyCheckToThePerson(t
 		stop := requireWired(t, config, "stop", "", reply)
 		assert.Equal(t, "1", fmt.Sprint(stop.LoopLimit), "the reply check chains one followup at most")
 		requireWired(t, config, "beforeSubmitPrompt", "", "cursor-hook.buzz")
-		requireWired(t, config, "preToolUse", "Task", "cursor-hook.buzz")
-		requireWired(t, config, "preToolUse", "Shell", "cursor-hook.buzz")
+		// The catch-all entry judges every tool, Task and Shell among them.
+		requireWired(t, config, "preToolUse", "*", "cursor-hook.buzz")
 		requireWired(t, config, "postToolUseFailure", "Shell", "cursor-hook.buzz")
 		for _, event := range []string{"preToolUse", "postToolUse", "postToolUseFailure"} {
 			for _, h := range wiredOn(t, config, event) {

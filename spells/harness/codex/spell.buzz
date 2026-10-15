@@ -428,7 +428,7 @@ test "harness_skills installs both forms under .agents/skills" {
 
 test "every glue command names this host on its argv, and rehydrate takes none" {
     final named = " --agent-name {mgs_getName()}";
-    assert\isTrue(codex_guard_command().endsWith(named), "command hook");
+    assert\isTrue(codex_guard_command().indexOf(named + " ") != null, "command hook");
     assert\isTrue(codex_checkpoint_command().endsWith(named), "Stop checkpoint");
     assert\isTrue(codex_rehydrate_command().indexOf("--agent-name") == null, "rehydrate reads no host");
 }
