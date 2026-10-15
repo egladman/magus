@@ -225,13 +225,15 @@ func bootstrapLine(command string, d Dialect) bool {
 	return ok && shaped && "GOEXPERIMENT="+v == env
 }
 
-// cannotLoad reports whether the workspace at root fails to load with MGS1021 for the
-// binary judging the call. The hook runs the checkout's own ./magus when there is one, so
+// cannotLoad reports whether the workspace at root fails to load for the binary judging
+// the call in a way unloadCause blames on that binary: MGS1021, an unresolved import, or a
+// spell the binary does not ship. The hook runs the checkout's own ./magus when there is one, so
 // a binary that predates its sources answers for itself; with none, the binary on PATH
 // answers, and a tree it can load needs no recovery.
 func cannotLoad(ctx context.Context, deps Dependencies, root string) bool {
 	_, err := deps.inspect(ctx, root)
-	return errors.Is(err, types.WorkspaceNeedsNewerMagus)
+	cause := unloadCause(err, root).Cause
+	return cause == unloadStale || cause == unloadSkewedSpell
 }
 
 // ownSourceRoot reports whether dir is the root of a checkout of this guard's module.

@@ -409,7 +409,7 @@ func onlyEditorAssigns(assigns []*syntax.Assign) bool {
 // read-only or is the fix; the verb it names is the gated one, if any. A read-only scout
 // may also record its work, which reads its row from the job store.
 func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCall {
-	call := judgedCall{seam: seamCommand, what: "this command", lease: in.lease, builds: in.lease == ""}
+	call := judgedCall{seam: seamCommand, what: "this command", lease: in.lease, builds: in.lease == "", command: in.command, dialect: in.dialect}
 	if !call.builds {
 		role, _ := actingRole(ctx, at, in.lease, "")
 		call.builds = role == types.AgentRoleIntegrator
@@ -453,7 +453,8 @@ func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, 
 	why.WriteString("\nEdits, spawns, pushes and commands that change state wait until a magus loads the tree. " +
 		"Reads, `git status` and the fix still run, and so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`. " +
 		"So does getting the tree back to one a binary can be built from, each alone on its line: " +
-		"`git cherry-pick`, `git merge`, `git rebase` or `git revert` with `--abort` or `--continue`, and `git worktree add`.")
+		"`git cherry-pick`, `git merge`, `git rebase` or `git revert` with `--abort` or `--continue`, and `git worktree add`. " +
+		"So does putting back a file the load error names as an import it cannot find: `git mv` onto it, `git restore` or `git checkout --` of it, or a write to it.")
 	if fix.why != "" {
 		why.WriteString("\n" + fix.why)
 	}

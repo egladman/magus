@@ -272,6 +272,11 @@ type judgedCall struct {
 	// builds is whether the caller builds this checkout's binary: the root, or the
 	// checkout's integrator.
 	builds bool
+	// command and dialect are a command call's shell line, for loadRestore.
+	command string
+	dialect Dialect
+	// path is a write call's target, for loadRestore.
+	path string
 }
 
 // denyUnloaded turns asked into a deny when no side of the policy loaded, and reports
@@ -283,7 +288,8 @@ type judgedCall struct {
 // The binary judging the call cannot read the tree (older than it, or the checkout has no
 // ./magus): every call that changes state is denied, and it needs no record of an earlier
 // load, because a fresh worktree has none and is where this happens. The magusfile visibly
-// registering a guard rule is enough.
+// registering a guard rule is enough. A call that puts back a file the load error names
+// (loadRestore) is advised instead, since the load cannot recover otherwise.
 //
 // Otherwise a gated verb is denied when the last policy that did load registered seam's
 // rule. No record means no rule was ever seen to protect, and the call passes.
@@ -294,9 +300,17 @@ func denyUnloaded(asked *rulesAnswer, call judgedCall, at location) bool {
 	own := ownSourceRoot(at.workspace)
 	recorded := recordedRule(at.cacheDir, call.seam)
 	reason := unloadCause(asked.loadFailure, at.workspace)
+	holds := call.changes && reason.Cause != unloadNone && (recorded || declaresGuardRule(at.workspace))
+	if holds {
+		if why := loadRestore(call, asked.loadFailure, at); why != "" {
+			asked.answer = types.GuardVerdict{Decision: types.GuardAdvise, Reason: why}
+			asked.rule, asked.by = denyRuleStaleBinary, decidedByBuiltin
+			return false
+		}
+	}
 	var d denial
 	switch {
-	case call.changes && reason.Cause != unloadNone && (recorded || declaresGuardRule(at.workspace)):
+	case holds:
 		d, asked.rule = staleBinaryDenial(call, reason, failureLines(asked.failures), own, at.workspace), denyRuleStaleBinary
 	case call.verb != "" && recorded:
 		d, asked.rule = unloadedDenial(call, asked.failures, own, hasMagusBinary(at.workspace)), denyRulePolicyUnloaded
