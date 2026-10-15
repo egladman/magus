@@ -475,8 +475,9 @@ func namedDeclarations(claim string, all []string) []string {
 // ambiguousClaim is the MGS3031 reason for a claim naming several declarations of file:
 // the guard and `job wait` would hold every one of them, not the one its author meant.
 func ambiguousClaim(file, claim string, matched, all []string) string {
-	var alternatives []string
-	for _, d := range matched[:min(len(matched), 3)] {
+	shown := matched[:min(len(matched), 3)]
+	alternatives := make([]string, 0, len(shown))
+	for _, d := range shown {
 		alternatives = append(alternatives, "`"+claimWord(d, all)+"`")
 	}
 	return fmt.Sprintf("%q names %d declarations of %s (such as `%s`), and a claim guards exactly one; use a word only one of them has, such as %s",

@@ -279,8 +279,9 @@ func joinedBranches(err error, file string) []locatedBranch {
 			file = l.Path
 		}
 		if j, ok := e.(interface{ Unwrap() []error }); ok {
-			var out []locatedBranch
-			for _, b := range j.Unwrap() {
+			branches := j.Unwrap()
+			out := make([]locatedBranch, 0, len(branches))
+			for _, b := range branches {
 				out = append(out, joinedBranches(b, file)...)
 			}
 			return out

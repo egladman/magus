@@ -82,7 +82,8 @@ func gradeCompatMarker(ctx context.Context, deps Dependencies, at location, who 
 // it writes (Content, NewText and each edit's) against the text it replaces (OldText and
 // each edit's).
 func addedMarkers(fields writeFields, markers []string) []string {
-	added, removed := []string{fields.Content, fields.NewText}, []string{fields.OldText}
+	added := append(make([]string, 0, 2+len(fields.Edits)), fields.Content, fields.NewText)
+	removed := append(make([]string, 0, 1+len(fields.Edits)), fields.OldText)
 	for _, e := range fields.Edits {
 		added, removed = append(added, e.NewText), append(removed, e.OldText)
 	}

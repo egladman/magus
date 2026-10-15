@@ -300,7 +300,7 @@ func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row types
 
 // runs is every run ev holds: the check's, then each goal's.
 func (ev graded) runs() []types.JobAttempt {
-	out := []types.JobAttempt{ev.attempt}
+	out := append(make([]types.JobAttempt, 0, 1+len(ev.gateAttempts)), ev.attempt)
 	for _, g := range ev.gateAttempts {
 		out = append(out, g.Attempt)
 	}

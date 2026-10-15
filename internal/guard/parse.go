@@ -440,8 +440,9 @@ func mvOperands(args []string) []string {
 // the commands inside one, but a redirect there belongs to the inner parse tree and is
 // invisible to a walk of the outer one.
 func writeTargetCandidates(command string, depth int, d Dialect) []string {
-	var out []string
-	for _, p := range collectWriteCandidates(command, depth, d, "", "", func(_ string, w *syntax.Word) string { return literalWord(w.Parts) }) {
+	placed := collectWriteCandidates(command, depth, d, "", "", func(_ string, w *syntax.Word) string { return literalWord(w.Parts) })
+	out := slices.Grow([]string(nil), len(placed)) // stays nil for a line that writes nothing
+	for _, p := range placed {
 		out = append(out, p.word)
 	}
 	return out
