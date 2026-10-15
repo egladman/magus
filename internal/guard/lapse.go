@@ -132,10 +132,11 @@ func sameEncoding(a, b builtin.Setting) bool {
 // when nothing was. A file that cannot be read, or an older magus's guard-settings.json beside
 // it, is an error.
 func recallSettings(cacheDir string) (map[string]builtin.Setting, error) {
-	if cacheDir == "" {
-		return nil, nil
+	var held []settingLine
+	var err error
+	if cacheDir != "" {
+		held, err = settingsLog(cacheDir).Load()
 	}
-	held, err := settingsLog(cacheDir).Load()
 	if err != nil || len(held) == 0 {
 		return nil, err
 	}

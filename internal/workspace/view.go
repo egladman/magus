@@ -1,6 +1,10 @@
 package workspace
 
-import "github.com/egladman/magus/types"
+import (
+	"fmt"
+
+	"github.com/egladman/magus/types"
+)
 
 // view is View's answer, which the root magus package installs once, in its init.
 var view func(types.WorkspaceRepository) types.WorkspaceRepository
@@ -26,4 +30,15 @@ func View(ws types.WorkspaceRepository) types.WorkspaceRepository {
 		panic("workspace: View called with no root magus package linked")
 	}
 	return view(ws)
+}
+
+// ViewAs is View's answer as T, the interface a caller needs the internal methods through.
+// It panics when the answer is not a T, which only a build that drifted from the root
+// package's methods can be.
+func ViewAs[T any](ws types.WorkspaceRepository) T {
+	v, ok := View(ws).(T)
+	if !ok {
+		panic(fmt.Sprintf("workspace: the root magus package's view is %T, which lacks the methods of %T", View(ws), (*T)(nil)))
+	}
+	return v
 }

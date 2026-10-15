@@ -181,9 +181,10 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		if len(extraArgs) > 0 {
 			runOpts = append(runOpts, magus.WithExtraArgs(extraArgs))
 		}
-		return streamAffected(streamCtx, m, os.Stdin, target, af.Null, func(err error) {
+		streamAffected(streamCtx, m, os.Stdin, target, af.Null, func(err error) {
 			slog.ErrorContext(streamCtx, "affected --stdin", attr.Error(err))
 		}, runOpts...)
+		return nil
 	}
 
 	if target == "ls" {

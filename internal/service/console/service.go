@@ -359,9 +359,9 @@ func (s *Service) knowledgeGraph(ctx context.Context, withSymbols bool) (*knowle
 		return s.knowledgeGraphFn(ctx, withSymbols)
 	}
 	// The graph is one of the methods workspace.View adds to an opened *magus.Magus.
-	g := workspace.View(s.magus).(interface {
+	g := workspace.ViewAs[interface {
 		KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
-	})
+	}](s.magus)
 	if withSymbols {
 		return g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	}

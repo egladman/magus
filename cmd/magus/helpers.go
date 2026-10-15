@@ -451,4 +451,4 @@ type magusInternals interface {
 // viewInternals is m as workspace.View shows it to magus's own packages. It is also what a
 // context carries as the workspace (types.WithWorkspace), so std and the Buzz bindings
 // find the methods they assert for.
-func viewInternals(m *magus.Magus) magusInternals { return workspace.View(m).(magusInternals) }
+func viewInternals(m *magus.Magus) magusInternals { return workspace.ViewAs[magusInternals](m) }

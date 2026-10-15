@@ -891,7 +891,7 @@ type magusInternals interface {
 	Telemetry() observability.Provider
 }
 
-func viewInternals(m *magus.Magus) magusInternals { return workspace.View(m).(magusInternals) }
+func viewInternals(m *magus.Magus) magusInternals { return workspace.ViewAs[magusInternals](m) }
 
 // diagramWorkspace is the workspace plus the import graph the diagrams read.
 type diagramWorkspace struct{ *magus.Magus }

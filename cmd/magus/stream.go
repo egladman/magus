@@ -21,7 +21,7 @@ const streamAllSentinel = "\x00ALL"
 // any run. Builds run synchronously; batches arriving during a build are merged and run
 // after. streamAllSentinel triggers a full-workspace build. null reads NUL-separated
 // paths with double-NUL batch boundaries. Per-batch errors go to errFn.
-func streamAffected(ctx context.Context, m *magus.Magus, r io.Reader, target string, null bool, errFn func(error), runOpts ...magus.RunOption) error {
+func streamAffected(ctx context.Context, m *magus.Magus, r io.Reader, target string, null bool, errFn func(error), runOpts ...magus.RunOption) {
 	if errFn == nil {
 		errFn = func(error) {}
 	}
@@ -66,11 +66,11 @@ func streamAffected(ctx context.Context, m *magus.Magus, r io.Reader, target str
 		select {
 		case <-ctx.Done():
 			wg.Wait()
-			return nil
+			return
 		case paths, ok := <-batches:
 			if !ok {
 				wg.Wait()
-				return nil
+				return
 			}
 			if len(paths) == 0 {
 				continue
@@ -94,7 +94,7 @@ func streamAffected(ctx context.Context, m *magus.Magus, r io.Reader, target str
 				safeRun := func(p []string) {
 					defer func() {
 						if r := recover(); r != nil {
-							errFn(fmt.Errorf("magus: stream: panic: %v", r))
+							errFn(fmt.Errorf("stream: panic: %v", r))
 						}
 					}()
 					runBatch(p)

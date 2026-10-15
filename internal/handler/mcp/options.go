@@ -94,7 +94,7 @@ func (o Options) ReviewAnchors() func(ctx context.Context, rev types.Diff) ([]re
 	dirs := review.NoteDirs{Shared: notes.Shared, Private: notes.Private}
 	return func(ctx context.Context, rev types.Diff) ([]review.AnchorHit, error) {
 		return review.ChangesetAnchors(ctx, o.Magus.Root(), dirs, func(ctx context.Context) (*knowledge.Graph, error) {
-			return workspace.View(o.Magus).(graphReader).KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
+			return workspace.ViewAs[graphReader](o.Magus).KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 		}, rev)
 	}
 }

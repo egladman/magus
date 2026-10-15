@@ -765,7 +765,7 @@ func ImportAlias(lines [][]byte, line int, language string) string {
 	}
 	m := importSpec.FindSubmatch(bytes.TrimSpace(lines[line-1]))
 	// `import "p"` matches with the keyword as the name, and the keyword is never an alias.
-	if m == nil || string(m[1]) == "_" || string(m[1]) == "import" {
+	if len(m) < 2 || string(m[1]) == "_" || string(m[1]) == "import" {
 		return ""
 	}
 	return string(m[1])

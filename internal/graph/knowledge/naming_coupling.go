@@ -95,8 +95,10 @@ func overSharedMessage(label string, u sharedUse) string {
 
 // couplingDetails names every caller, then each value the rule read and where it came from.
 func couplingDetails(o types.ConformanceOptions, u sharedUse) []string {
-	details := []string{"callers: " + strings.Join(u.Callers, ", ")}
-	for _, m := range []types.ConformanceMetric{types.ConformanceSharedBody, types.ConformanceCallerSpread, types.ConformanceSharedReach} {
+	metrics := []types.ConformanceMetric{types.ConformanceSharedBody, types.ConformanceCallerSpread, types.ConformanceSharedReach}
+	details := make([]string, 0, 1+len(metrics))
+	details = append(details, "callers: "+strings.Join(u.Callers, ", "))
+	for _, m := range metrics {
 		v, src := o.Effective(couplingKey(m))
 		details = append(details, fmt.Sprintf("%s source: %d, the %s", m, v, thresholdSource(src)))
 	}

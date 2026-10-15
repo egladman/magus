@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus"
 )
@@ -96,7 +95,7 @@ func TestReadBatches_CancelUnblocksAParkedRead(t *testing.T) {
 	}
 }
 
-// TestStream_ContextCancellation verifies that streamAffected returns nil when ctx is
+// TestStream_ContextCancellation verifies that streamAffected returns when ctx is
 // already cancelled on entry.
 func TestStream_ContextCancellation(t *testing.T) {
 	t.Parallel()
@@ -105,7 +104,7 @@ func TestStream_ContextCancellation(t *testing.T) {
 	cancel()
 	pr, pw := io.Pipe()
 	pw.Close()
-	require.NoError(t, streamAffected(ctx, m, pr, "build", false, nil), "streamAffected with cancelled ctx")
+	streamAffected(ctx, m, pr, "build", false, nil)
 }
 
 // TestStream_EmptyBatchSkipped verifies that an input containing only blank
@@ -119,13 +118,13 @@ func TestStream_EmptyBatchSkipped(t *testing.T) {
 		io.WriteString(pw, "\n\n\n")
 		pw.Close()
 	}()
-	require.NoError(t, streamAffected(context.Background(), m, pr, "build", false, func(error) { errCalled = true }), "streamAffected (empty input)")
+	streamAffected(context.Background(), m, pr, "build", false, func(error) { errCalled = true })
 	assert.False(t, errCalled, "streamAffected (empty input): errFn called unexpectedly")
 }
 
 // TestStream_BatchErrorDoesNotStopTheLoop pins that a failed batch is reported through
-// errFn and skipped rather than ending the stream: the next change still gets a turn,
-// and streamAffected itself returns nil. Under --watch that is what turns a refused run (exit
+// errFn and skipped rather than ending the stream: the next change still gets a turn.
+// Under --watch that is what turns a refused run (exit
 // 75, another invocation holding the lock) into a retry on the next change.
 //
 // A zero Magus has no workspace, so every batch fails in AffectedFromPaths; the loop's
@@ -145,11 +144,10 @@ func TestStream_BatchErrorDoesNotStopTheLoop(t *testing.T) {
 		_, _ = io.WriteString(pw, "b\n\n")
 		_ = pw.Close()
 	}()
-	err := streamAffected(context.Background(), m, pr, "build", false, func(error) {
+	streamAffected(context.Background(), m, pr, "build", false, func(error) {
 		errs.Add(1)
 		once.Do(func() { close(firstFailed) })
 	})
-	require.NoError(t, err, "a batch failure must never become streamAffected's own return value")
 	assert.Equal(t, int32(2), errs.Load(), "both the failing batch and the next change must be attempted")
 }
 

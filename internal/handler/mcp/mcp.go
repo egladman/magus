@@ -199,7 +199,7 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, origin
 	// guards against.
 	var tel observability.Provider
 	if opts.Magus != nil {
-		tel = workspace.View(opts.Magus).(telemetrySource).Telemetry()
+		tel = workspace.ViewAs[telemetrySource](opts.Magus).Telemetry()
 	}
 	if opts.Magus == nil && opts.Unavailable != nil {
 		unavailable := func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
