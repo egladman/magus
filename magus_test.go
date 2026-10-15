@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	_ "github.com/egladman/magus/buzzengine" // Open and Inspect fail without the engine linked
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/config"

@@ -1,4 +1,4 @@
-package main
+package magus
 
 import (
 	"context"
@@ -11,16 +11,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
-
-// These live here rather than beside RecordedHumanOnly because the record is only as
-// true as the evaluation behind it, and this test binary links the Buzz interpreter the
-// root package's does not.
 
 const humanOnlyMagusfile = `import "magus";
 
@@ -50,17 +45,17 @@ func syncedHumanOnlyWorkspace(tb testing.TB) *testkit.Workspace {
 	w := testkit.NewWorkspace(tb)
 	w.Magusfile(humanOnlyMagusfile)
 	ctx := context.Background()
-	ws, err := magus.Inspect(ctx, w.Root())
+	ws, err := Inspect(ctx, w.Root())
 	require.NoError(tb, err)
-	_, err = magus.BuildKnowledgeGraph(ctx, ws, w.Root(), config.Config{}, false, slog.New(slog.DiscardHandler))
+	_, err = BuildKnowledgeGraph(ctx, ws, w.Root(), config.Config{}, false, slog.New(slog.DiscardHandler))
 	require.NoError(tb, err)
 	return w
 }
 
 // unopenable is a lazy workspace that fails, and counts, every open: a recorded read must
 // answer without one.
-func unopenable(root string, opens *int) *magus.LazyWorkspace {
-	return magus.NewLazyWorkspace(root, func(context.Context) (*magus.Magus, error) {
+func unopenable(root string, opens *int) *LazyWorkspace {
+	return NewLazyWorkspace(root, func(context.Context) (*Magus, error) {
 		*opens++
 		return nil, errors.New("a recorded read must not open the workspace")
 	})
@@ -77,7 +72,7 @@ func TestRecordedHumanOnlyAnswersOnlyWhileTheSourcesHold(t *testing.T) {
 	cfg := config.Config{}
 	opens := 0
 
-	got, ok := magus.RecordedHumanOnly(ctx, unopenable(root, &opens), cfg)
+	got, ok := RecordedHumanOnly(ctx, unopenable(root, &opens), cfg)
 	require.True(t, ok, "the sync recorded the targets and nothing has moved since")
 	assert.Equal(t, types.HumanOnlyIndex{
 		Projects: []string{"."},
@@ -90,10 +85,10 @@ func TestRecordedHumanOnlyAnswersOnlyWhileTheSourcesHold(t *testing.T) {
 	}, got, "the record is what the evaluation declares")
 
 	w.Magusfile(humanOnlyMagusfile + "\nexport fun extra(ctx: magus\\Context, args: [str]) > void {}\n")
-	_, ok = magus.RecordedHumanOnly(ctx, unopenable(root, &opens), cfg)
+	_, ok = RecordedHumanOnly(ctx, unopenable(root, &opens), cfg)
 	assert.False(t, ok, "an edited magusfile moves the domain fast stamp: a stale record is never an answer")
 
-	_, ok = magus.RecordedHumanOnly(ctx, unopenable(t.TempDir(), &opens), cfg)
+	_, ok = RecordedHumanOnly(ctx, unopenable(t.TempDir(), &opens), cfg)
 	assert.False(t, ok, "a workspace with no store has nothing recorded")
 	assert.Zero(t, opens, "RecordedHumanOnly never opens; the caller decides")
 }
@@ -116,7 +111,7 @@ func TestRecordedHumanOnlyIgnoresAManifestThatNeverRecordedIt(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, b, 0o644))
 
 	opens := 0
-	_, ok := magus.RecordedHumanOnly(ctx, unopenable(w.Root(), &opens), config.Config{})
+	_, ok := RecordedHumanOnly(ctx, unopenable(w.Root(), &opens), config.Config{})
 	assert.False(t, ok)
 	assert.Zero(t, opens)
 }
@@ -130,14 +125,14 @@ func BenchmarkHumanOnlyRead(b *testing.B) {
 	b.Run("recorded", func(b *testing.B) {
 		opens := 0
 		for b.Loop() {
-			if _, ok := magus.RecordedHumanOnly(ctx, unopenable(root, &opens), config.Config{}); !ok {
+			if _, ok := RecordedHumanOnly(ctx, unopenable(root, &opens), config.Config{}); !ok {
 				b.Fatal("the record went stale under the benchmark")
 			}
 		}
 	})
 	b.Run("inspect", func(b *testing.B) {
 		for b.Loop() {
-			ws, err := magus.Inspect(ctx, root)
+			ws, err := Inspect(ctx, root)
 			if err != nil {
 				b.Fatal(err)
 			}

@@ -301,3 +301,10 @@ func TestWorkspaceRegistry_ModelTierMatrixReplaces(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, &types.JobModelTier{Reason: "second"}, got)
 }
+
+func TestRegistryProfile(t *testing.T) {
+	r := NewWorkspaceRegistry()
+	assert.Empty(t, r.Profile(), "nothing declared is unset, which the guard reads as light")
+	r.SetProfile(types.GuardProfileStrict)
+	assert.Equal(t, types.GuardProfileStrict, r.Profile())
+}
