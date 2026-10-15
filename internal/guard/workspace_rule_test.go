@@ -290,9 +290,9 @@ func (s spellNotShipped) Error() string {
 
 func (s spellNotShipped) UnknownSpell() string { return string(s) }
 
-// skewedSpellLoad is what a ./magus built after the vale spell was removed reported for a
+// errSkewedSpellLoad is what a ./magus built after the vale spell was removed reported for a
 // tree that still imported it.
-var skewedSpellLoad = fmt.Errorf("magusfile: magusfile: magusfile.buzz: %w", spellNotShipped("vale"))
+var errSkewedSpellLoad = fmt.Errorf("magusfile: magusfile: magusfile.buzz: %w", spellNotShipped("vale"))
 
 // The two skews seen in the wild, a ./magus built on either side of the commit that removed
 // the vale spell and added magus\guard.builtins, are an error on every call: a call that
@@ -309,7 +309,7 @@ func TestSkewedBinaryIsAWorkspaceRuleErrorEveryCall(t *testing.T) {
 		judged  string
 	}{
 		"a ./magus built after the tree's spell was removed": {
-			skewedSpellLoad, skewedSay,
+			errSkewedSpellLoad, skewedSay,
 			`It ships no spell "vale", which the tree carries, so it was built from another commit. Fix: rebuild ./magus with ` + "`./magus run go-build .`.",
 		},
 		"a ./magus built before the tree's guard API": {
@@ -352,7 +352,7 @@ func TestSkewedBinaryIsAWorkspaceRuleErrorEveryCall(t *testing.T) {
 		ctx, _ := spawnFixture(t)
 		root := hookLocation(ctx, Dependencies{}).workspace
 		require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "vale"), 0o755))
-		assert.Empty(t, unloadCause(skewedSpellLoad, root).Spell)
+		assert.Empty(t, unloadCause(errSkewedSpellLoad, root).Spell)
 	})
 }
 

@@ -66,7 +66,7 @@ func TestConformValidateAcceptsAConfiguredPolicy(t *testing.T) {
 
 	o := conformOptions()
 	o.RatchetPath, o.Ratchet = "", ConformRatchet{}
-	assert.NoError(t, o.Validate(), "no ratchet configured: anchors only, and no schema to check")
+	require.NoError(t, o.Validate(), "no ratchet configured: anchors only, and no schema to check")
 
 	o = conformOptions()
 	o.Ratchet.Thresholds[0].Value = 2200

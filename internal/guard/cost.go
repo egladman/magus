@@ -124,8 +124,10 @@ var accounts sync.Map
 // root. A magus.yaml that does not load leaves billing unknown and no rows, and a declared
 // mode the environment contradicts yields the detected one.
 func accountAt(root string) account {
-	if got, ok := accounts.Load(root); ok && time.Since(got.(account).read) < accountTTL {
-		return got.(account)
+	if got, ok := accounts.Load(root); ok {
+		if cached, ok := got.(account); ok && time.Since(cached.read) < accountTTL {
+			return cached
+		}
 	}
 	a := account{read: time.Now()}
 	if agents, err := config.LoadAgents(root); err == nil {

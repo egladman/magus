@@ -510,7 +510,7 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 			return
 		}
 		s.releaseHold(sess, req.ID)
-		_ = w.write(typeHoldReply, f.ID, holdReply{ID: req.ID})
+		_ = w.write(typeHoldReply, f.ID, holdReply(req))
 
 	case typeWork:
 		_ = w.write(typeWorkReply, f.ID, s.work())

@@ -72,7 +72,7 @@ func TestNewDependenciesReportsAMagusfileThatDoesNotLoad(t *testing.T) {
 func TestNewDependenciesOutsideAWorkspace(t *testing.T) {
 	deps, rules := guard.NewDependencies(t.Context(), guard.Wiring{})
 	assert.Nil(t, rules)
-	assert.NoError(t, deps.LoadFailure)
+	require.NoError(t, deps.LoadFailure)
 	assert.Nil(t, deps.ApprovedCommandRule)
 	assert.Nil(t, deps.Policy)
 	assert.NotNil(t, deps.Spells, "the raw-tool rule still has the spell catalog")

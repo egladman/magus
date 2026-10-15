@@ -51,7 +51,7 @@ func heredocWrites(command string, d Dialect, start, home string) []heredocWrite
 			switch {
 			case (r.Op == syntax.Hdoc || r.Op == syntax.DashHdoc) && r.Hdoc != nil:
 				body = r.Hdoc
-			case (r.Op == syntax.RdrOut || r.Op == syntax.AppOut || r.Op == syntax.ClbOut) && (r.N == nil || r.N.Value == "1"):
+			case (r.Op == syntax.RdrOut || r.Op == syntax.AppOut || r.Op == syntax.RdrClob) && (r.N == nil || r.N.Value == "1"):
 				targets = append(targets, r.Word)
 			}
 		}

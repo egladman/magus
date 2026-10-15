@@ -2481,9 +2481,10 @@ const compatMarker = "compat(until: "
 // caller that has not moved.
 const deprecatedMarker = "Deprecated:"
 
-// impactLeftBehind is what a change keeps alive or leaves unused: the compat(until:) and
-// Deprecated: markers it added, and the symbols that lost their last use in it and are still
-// defined. Facts, not reasons: a marker says how long code stays, never whether it should.
+// impactLeftBehind is what a change keeps alive or leaves unused: the markers it added
+// (compat(until:) and Deprecated:), and the symbols that lost their last use in it and are
+// still defined. Facts, not reasons: a marker says how long code stays, never whether it
+// should.
 type impactLeftBehind struct {
 	Markers []leftMarker `json:"markers,omitempty" yaml:"markers,omitempty"`
 	// Unreferenced is readSymbolDelta's Left, known only when UnreferencedKnown is;

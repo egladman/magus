@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type retryableError struct {
@@ -66,7 +67,7 @@ func TestClassifyRetry(t *testing.T) {
 func TestNonRetryableKeepsTheErrorItWraps(t *testing.T) {
 	t.Parallel()
 
-	assert.NoError(t, NonRetryable(nil, RetryAfterConfig, "unused"))
+	require.NoError(t, NonRetryable(nil, RetryAfterConfig, "unused"))
 	boom := errors.New("boom")
 	err := NonRetryable(boom, RetryAfterConfig, "why")
 	assert.EqualError(t, err, "boom")
