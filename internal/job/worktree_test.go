@@ -133,6 +133,30 @@ func TestEndWorktreesRemovesACleanCheckoutOnceItsJobEnds(t *testing.T) {
 	assert.Empty(t, changed, "a removed checkout is not removed twice")
 }
 
+// The holder exits from inside its checkout, which stays and says how it goes; the next call
+// from elsewhere removes it.
+func TestEndWorktreesKeepsTheCheckoutTheCallRunsInAndSaysSo(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s, loc, _ := worktreeStore(t)
+	row := forkInto(t, s, "w1", "")
+	inside := NewStore(Location{CacheDir: loc.CacheDir, Root: row.Worktree.Root})
+	_, err := Exit(ctx, inside, "w1", nil, nil)
+	require.NoError(t, err)
+
+	changed, err := inside.EndWorktrees(ctx)
+	require.NoError(t, err)
+	require.Len(t, changed, 1)
+	assert.Contains(t, changed[0].Worktree.Kept, "this call runs in it; `magus job prune` from another checkout removes it")
+	assert.DirExists(t, row.Worktree.Root)
+
+	changed, err = s.EndWorktrees(ctx)
+	require.NoError(t, err)
+	require.Len(t, changed, 1)
+	assert.NotZero(t, changed[0].Worktree.Removed)
+	assert.NoDirExists(t, row.Worktree.Root)
+}
+
 func TestEndWorktreesKeepsACheckoutHoldingWorkAndSaysWhy(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()

@@ -173,8 +173,8 @@ func WrongCheckout(row types.Job, here string) error {
 
 // EndWorktrees removes the checkout each ended job owns, once removing it loses nothing,
 // and records on the row that it did, or why it kept it. It returns the rows whose record
-// changed. A checkout this store's own workspace sits in is left for a later call from
-// elsewhere, since removing it would pull the directory out from under the caller.
+// changed. A checkout this store's own workspace sits in is kept, saying so, for a later
+// call from elsewhere, since removing it would pull the directory out from under the caller.
 func (s *Store) EndWorktrees(ctx context.Context) ([]types.Job, error) {
 	rows, err := s.List()
 	if err != nil {
@@ -184,10 +184,15 @@ func (s *Store) EndWorktrees(ctx context.Context) ([]types.Job, error) {
 	var changed []types.Job
 	for _, row := range rows {
 		wt := row.Worktree
-		if !row.State.Terminal() || !wt.Standing() || (here != "" && within(here, wt.Root)) {
+		if !row.State.Terminal() || !wt.Standing() {
 			continue
 		}
-		kept := removeWorktree(ctx, *wt)
+		var kept string
+		if here != "" && within(here, wt.Root) {
+			kept = "this call runs in it; `" + hint.JobPrune.String() + "` from another checkout removes it"
+		} else {
+			kept = removeWorktree(ctx, *wt)
+		}
 		if kept != "" && kept == wt.Kept {
 			continue
 		}
