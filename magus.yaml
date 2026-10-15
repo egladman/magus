@@ -115,6 +115,7 @@ knowledge:
   # imports every package. Writing checks replaces the defaults whole, so every check is
   # restated here.
   conform:
+    ratchet: hack/policy/conformance.jsonl
     exclude: ["libs/gopherbuzz/**"]
     checks:
       file-lines:
@@ -136,6 +137,24 @@ knowledge:
         main: { percentile: 50, anchor: 80 }
       dep-fanout:
         source: { percentile: 95, anchor: 62, scopes: { cmd/magus: 89 } }
+      export-scope:
+        source: { percentile: 0, anchor: 0 }
+        main: { percentile: 0, anchor: 0 }
+      call-sequence:
+        source: { percentile: 99, anchor: 7 }
+        main: { percentile: 99, anchor: 7 }
+      shared-body:
+        source: { percentile: 90, anchor: 94 }
+      shared-reach:
+        source: { percentile: 95, anchor: 7 }
+      caller-spread:
+        source: { percentile: 95, anchor: 3 }
+      mode-knobs:
+        source: { percentile: 0, anchor: 0 }
+      alias-share:
+        source: { percentile: 95, anchor: 100, min_subject: 5 }
+      name-clash:
+        source: { percentile: 99, anchor: 62, min_subject: 5 }
   # This repository loads its own Claude Code sessions with the adapter it ships, the
   # same way it wires the guard template it ships rather than keeping a private copy. If
   # the recipe breaks for a reader, it broke here first.

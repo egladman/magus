@@ -11,7 +11,7 @@ import "magus/lint";
 export final ENFORCED = ["file-lines", "clone-tokens", "export-scope", "dep-fanout"];
 
 // RATCHET is the committed record knowledge.conform.ratchet names in magus.yaml.
-final RATCHET = "hack/policy/conform.jsonl";
+final RATCHET = "hack/policy/conformance.jsonl";
 
 // reads keys lint-rules on every Go source the lens measures, the ratchet and the policy
 // beside it: a tree glob stops at a nested project, so each project holding Go is named.
