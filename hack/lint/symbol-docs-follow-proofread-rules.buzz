@@ -39,7 +39,7 @@ export fun reads() > [str] {
 // pass: a rule reading nothing finds nothing.
 export fun check(files: [Path]) > [Finding] !> any {
     final data: {str: any} = magus\symbols();
-    final symbols: [any] = data["symbols"] ?? [<any>];
+    final symbols = ofLanguages(data["symbols"] ?? [<any>]);
     final indexes: [any] = data["indexes"] ?? [<any>];
     final bin = "{proofread\home}/{proofread\binary}";
     final table = decisions\writeDecisions([<str>]);
@@ -53,6 +53,18 @@ export fun check(files: [Path]) > [Finding] !> any {
     }
     final findings: [any] = json\parse(run.stdout);
     return judge(findings, judged: judgedCounts(symbols), indexes: indexes, sanctioned: SANCTIONED);
+}
+
+// ofLanguages keeps the symbols of LANGUAGES. magus\symbols returns every index, Buzz's
+// included once scip-buzz is installed, and reads keys none of the other languages' sources.
+fun ofLanguages(all: [any]) > [any] {
+    final kept = mut [<any>];
+    foreach (symbol in all) {
+        if (LANGUAGES.indexOf(symbol["language"] ?? "") != null) {
+            kept.append(symbol);
+        }
+    }
+    return kept;
 }
 
 // judgedCounts is how many symbols each language's index gave the runner.
@@ -224,6 +236,12 @@ test "the doc-comment budgets are denied and history stays off" {
         assert\equal(decisions\decide(rule, given: "off"), want: "deny", message: rule);
     }
     assert\equal(decisions\decide("history", given: "off"), want: "off", message: "history keeps its shipped off");
+}
+
+test "only the declared languages reach the runner" {
+    final got = ofLanguages([symbol("go"), symbol("buzz"), symbol("typescript")]);
+    assert\equal(got.len(), want: 2, message: "a Buzz symbol is not judged");
+    assert\equal(judgedCounts(got)["buzz"], want: null, message: "nor counted");
 }
 
 test "symbols are counted per language" {
