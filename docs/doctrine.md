@@ -178,7 +178,7 @@ gives every line its strict decoder. Nothing refuses a new JSON document, so
 the rule holds in review alone. The stores that do not follow it yet, as
 found on 2026-10-14, are the exceptions:
 
-- **Runtime history** is one compact JSON document (`history/v1.json`) shared
+- **Runtime history** is one compact JSON document (`$XDG_STATE_HOME/magus/history/v1.json`) shared
   by every workspace on the host, megabytes long and rewritten after every
   run. It is a log and wants appended lines.
 - **One file per entry, a JSON document inside.** Cache manifests, run
