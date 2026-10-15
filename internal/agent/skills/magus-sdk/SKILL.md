@@ -41,7 +41,7 @@ interface, and a caller who later needs `Run` should switch to `Open` and get
 the concrete type, not type-assert their way there.{{else}} A caller who later needs
 `Run` switches to `Open`; it never type-asserts its way there.{{end}}
 
-Both require `magus.WithSpawnRule(magus.TierCeiling)` (there is no default rule), and
+Both require `magus.WithSpawnRule(magus.TierCeiling)` (it has no default), and
 a workspace with a magusfile needs `import _ "github.com/egladman/magus/buzzengine"`.
 `magus.FindRoot(dir)` walks up from `dir` to the workspace root, the same walk the CLI
 does; an empty `dir` is an error, not the working directory.
@@ -55,8 +55,8 @@ does; an empty `dir` is an error, not the working directory.
 | `std.MagusPutJob`, `MagusQuery`, `MagusRefs`, `MagusTrailRead`, ... | the Buzz host modules' Go doors, with typed options (`types.JobPut`, `types.KnowledgeQueryOptions`, ...); `std` is in the Go API lock |
 
 The lease a call acts under rides `ctx` (`types.WithJobLease`). The SDK never retries,
-re-grades or routes around a refusal, and it has no agent loop: it answers what a loop
-asks and never decides what runs next.
+re-grades or routes around a refusal. It has no agent loop: it answers what a loop asks
+and never decides what runs next.
 
 ## The interface hierarchy: depend on the narrowest role
 
@@ -169,14 +169,14 @@ before you add a type{{if .Full}}; guess at the pattern instead and you misname 
   their `*Output` type directly, because they carry a real `Workspace` field a
   `{definition, count, items}` envelope cannot derive.
 
-**Evaluating a magusfile needs the Buzz engine linked.** The root package does not link
-it, so a program that loads magusfiles blank-imports
-`github.com/egladman/magus/buzzengine`, as `cmd/magus` does. Without it, `Open` and
-`Inspect` on a workspace where any project has a magusfile fail with
-`*types.EngineNotLinkedError` (MGS1104), whose message names the import; they never
-return a workspace missing that magusfile's targets. A workspace with no magusfile
-opens without the engine{{if .Full}}, and `TargetGraph` reads magusfile source
-statically through the exported `libs/gopherbuzz` parser either way{{end}}.
+**Evaluating a magusfile needs the Buzz engine linked.** A program that loads
+magusfiles blank-imports `github.com/egladman/magus/buzzengine`, as `cmd/magus` does.
+Without it, `Open` and `Inspect` fail with `*types.EngineNotLinkedError` (MGS1104) once
+any project has a magusfile, and never return a workspace missing its targets. A
+workspace with no magusfile opens without the engine.{{if .Full}}
+
+`TargetGraph` reads magusfile source statically through the exported `libs/gopherbuzz`
+parser, with or without the engine.{{end}}
 
 The other path builds the workspace in Go: the exported `Option`/`ProjectOption`/
 `BindingOption` wire API (`register.go`: `WithSpell`, `WithTarget`, `WithDependsOn`,
