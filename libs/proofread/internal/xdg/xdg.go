@@ -6,7 +6,7 @@ import (
 	"runtime"
 )
 
-// These copy the resolvers of magus's internal/config: libs cannot import the magus module.
+// A copy of libs/xdg until libs/xdg/v0.1.0 is tagged; libs cannot use a replace to it.
 
 // ConfigDir returns the base directory for user config, honoring XDG_CONFIG_HOME on
 // every platform. os.UserConfigDir consults it only on Linux, so it is checked first,
