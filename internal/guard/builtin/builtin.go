@@ -254,6 +254,7 @@ var defaults = map[string]Decision{
 	"shared-checkout":     Advise,
 	"skill-source":        Advise,
 	"source-read":         Advise,
+	"spawn-unplaced":      Advise,
 	"spawn-nested-waiter": Advise,
 	"split-run":           Advise,
 	"stage-classify":      Advise,

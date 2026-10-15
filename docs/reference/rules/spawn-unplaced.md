@@ -1,7 +1,7 @@
 ---
 title: "spawn-unplaced: a subagent's first call that no waiting spawn names, which then runs under no lease"
 description: "An advisory by default: it explains, and blocks nothing, on a subagent's first call that no waiting spawn names, which then runs under no lease."
-tags: [guard, rules, spawn-unplaced, ]
+tags: [guard, rules, spawn-unplaced, advise]
 ---
 
 # spawn-unplaced
@@ -18,7 +18,7 @@ Advice, not a refusal: the caller may be no worker at all, and spawns wait for t
 
 ## Default and override
 
-By default this rule takes the decision ``. A workspace sets it by name, in its root
+By default this rule takes the decision `advise`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
@@ -32,6 +32,7 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
+advise [spawn-unplaced]: ...
 ```
 
 A workspace that sets this rule to `deny` sees `deny [spawn-unplaced]: ...` instead.
