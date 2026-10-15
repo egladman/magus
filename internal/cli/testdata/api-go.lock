@@ -1581,58 +1581,6 @@ github.com/egladman/magus/types.ExpectPresent const GoalExpect = "present"
 github.com/egladman/magus/types.ExpectSignature const GoalExpect = "signature"
 github.com/egladman/magus/types.ExpectUnreferenced const GoalExpect = "unreferenced"
 github.com/egladman/magus/types.FanOut func(obs ...Observer) Observer
-github.com/egladman/magus/types.FeedbackAdvised const FeedbackSection = "advised"
-github.com/egladman/magus/types.FeedbackFine const FeedbackVerdict = "fine"
-github.com/egladman/magus/types.FeedbackMark type struct
-github.com/egladman/magus/types.FeedbackMark.At field int64 "json:\"at\""
-github.com/egladman/magus/types.FeedbackMark.Examples field []string "json:\"examples,omitempty\""
-github.com/egladman/magus/types.FeedbackMark.ID field string "json:\"id\""
-github.com/egladman/magus/types.FeedbackMark.Key field string "json:\"key\""
-github.com/egladman/magus/types.FeedbackMark.Note field string "json:\"note,omitempty\""
-github.com/egladman/magus/types.FeedbackMark.Rule field string "json:\"rule,omitempty\""
-github.com/egladman/magus/types.FeedbackMark.Section field FeedbackSection "json:\"section\""
-github.com/egladman/magus/types.FeedbackMark.Session field string "json:\"session\""
-github.com/egladman/magus/types.FeedbackMark.Verdict field FeedbackVerdict "json:\"verdict\""
-github.com/egladman/magus/types.FeedbackNextNotTaken const FeedbackSection = "next-not-taken"
-github.com/egladman/magus/types.FeedbackObservation type struct
-github.com/egladman/magus/types.FeedbackObservation.Agent field string
-github.com/egladman/magus/types.FeedbackObservation.At field int64
-github.com/egladman/magus/types.FeedbackObservation.Command field string
-github.com/egladman/magus/types.FeedbackObservation.Decision field string
-github.com/egladman/magus/types.FeedbackObservation.Lease field string
-github.com/egladman/magus/types.FeedbackObservation.Nexts field []string
-github.com/egladman/magus/types.FeedbackObservation.Path field string
-github.com/egladman/magus/types.FeedbackObservation.PreauthorizedBy field string
-github.com/egladman/magus/types.FeedbackObservation.Rule field string
-github.com/egladman/magus/types.FeedbackObservation.Shape field string
-github.com/egladman/magus/types.FeedbackObservation.Shapes field []string
-github.com/egladman/magus/types.FeedbackObservation.Tool field string
-github.com/egladman/magus/types.FeedbackRefused const FeedbackSection = "refused"
-github.com/egladman/magus/types.FeedbackSection type string
-github.com/egladman/magus/types.FeedbackSection.Letter method func() string
-github.com/egladman/magus/types.FeedbackSection.Validate method func() error
-github.com/egladman/magus/types.FeedbackSections var []FeedbackSection
-github.com/egladman/magus/types.FeedbackShouldAdvise const FeedbackVerdict = "should-advise"
-github.com/egladman/magus/types.FeedbackShouldDeny const FeedbackVerdict = "should-deny"
-github.com/egladman/magus/types.FeedbackSpawn type struct
-github.com/egladman/magus/types.FeedbackSpawn.Agent field string
-github.com/egladman/magus/types.FeedbackSpawn.At field int64
-github.com/egladman/magus/types.FeedbackSpawn.Child field string
-github.com/egladman/magus/types.FeedbackSpawn.Lease field string
-github.com/egladman/magus/types.FeedbackSpawn.Model field string
-github.com/egladman/magus/types.FeedbackTrail type struct
-github.com/egladman/magus/types.FeedbackTrail.Checkouts field []string
-github.com/egladman/magus/types.FeedbackTrail.End field int64
-github.com/egladman/magus/types.FeedbackTrail.Host field string
-github.com/egladman/magus/types.FeedbackTrail.Observations field []FeedbackObservation
-github.com/egladman/magus/types.FeedbackTrail.Session field string
-github.com/egladman/magus/types.FeedbackTrail.Spawns field []FeedbackSpawn
-github.com/egladman/magus/types.FeedbackTrail.Start field int64
-github.com/egladman/magus/types.FeedbackUnguarded const FeedbackSection = "unguarded"
-github.com/egladman/magus/types.FeedbackVerdict type string
-github.com/egladman/magus/types.FeedbackVerdict.Validate method func() error
-github.com/egladman/magus/types.FeedbackVerdicts var []FeedbackVerdict
-github.com/egladman/magus/types.FeedbackWrongDeny const FeedbackVerdict = "wrong-deny"
 github.com/egladman/magus/types.FileChange type struct
 github.com/egladman/magus/types.FileChange.Location method func() Location
 github.com/egladman/magus/types.FileChange.Path field string "json:\"path\""
@@ -4183,6 +4131,58 @@ github.com/egladman/magus/types.ToolVerdictUnreadable const untyped string = "un
 github.com/egladman/magus/types.Tracing func(ctx context.Context) bool
 github.com/egladman/magus/types.TrackedFileReporter type interface
 github.com/egladman/magus/types.TrackedFileReporter.TrackedFiles imethod func(ctx context.Context, dir string, paths []string) ([]string, error)
+github.com/egladman/magus/types.Trail type struct
+github.com/egladman/magus/types.Trail.Checkouts field []string
+github.com/egladman/magus/types.Trail.End field int64
+github.com/egladman/magus/types.Trail.Host field string
+github.com/egladman/magus/types.Trail.Observations field []TrailObservation
+github.com/egladman/magus/types.Trail.Session field string
+github.com/egladman/magus/types.Trail.Spawns field []TrailSpawn
+github.com/egladman/magus/types.Trail.Start field int64
+github.com/egladman/magus/types.TrailAdvised const TrailSection = "advised"
+github.com/egladman/magus/types.TrailFine const TrailVerdict = "fine"
+github.com/egladman/magus/types.TrailMark type struct
+github.com/egladman/magus/types.TrailMark.At field int64 "json:\"at\""
+github.com/egladman/magus/types.TrailMark.Examples field []string "json:\"examples,omitempty\""
+github.com/egladman/magus/types.TrailMark.ID field string "json:\"id\""
+github.com/egladman/magus/types.TrailMark.Key field string "json:\"key\""
+github.com/egladman/magus/types.TrailMark.Note field string "json:\"note,omitempty\""
+github.com/egladman/magus/types.TrailMark.Rule field string "json:\"rule,omitempty\""
+github.com/egladman/magus/types.TrailMark.Section field TrailSection "json:\"section\""
+github.com/egladman/magus/types.TrailMark.Session field string "json:\"session\""
+github.com/egladman/magus/types.TrailMark.Verdict field TrailVerdict "json:\"verdict\""
+github.com/egladman/magus/types.TrailNextNotTaken const TrailSection = "next-not-taken"
+github.com/egladman/magus/types.TrailObservation type struct
+github.com/egladman/magus/types.TrailObservation.Agent field string
+github.com/egladman/magus/types.TrailObservation.At field int64
+github.com/egladman/magus/types.TrailObservation.Command field string
+github.com/egladman/magus/types.TrailObservation.Decision field string
+github.com/egladman/magus/types.TrailObservation.Lease field string
+github.com/egladman/magus/types.TrailObservation.Nexts field []string
+github.com/egladman/magus/types.TrailObservation.Path field string
+github.com/egladman/magus/types.TrailObservation.PreauthorizedBy field string
+github.com/egladman/magus/types.TrailObservation.Rule field string
+github.com/egladman/magus/types.TrailObservation.Shape field string
+github.com/egladman/magus/types.TrailObservation.Shapes field []string
+github.com/egladman/magus/types.TrailObservation.Tool field string
+github.com/egladman/magus/types.TrailRefused const TrailSection = "refused"
+github.com/egladman/magus/types.TrailSection type string
+github.com/egladman/magus/types.TrailSection.Letter method func() string
+github.com/egladman/magus/types.TrailSection.Validate method func() error
+github.com/egladman/magus/types.TrailSections var []TrailSection
+github.com/egladman/magus/types.TrailShouldAdvise const TrailVerdict = "should-advise"
+github.com/egladman/magus/types.TrailShouldDeny const TrailVerdict = "should-deny"
+github.com/egladman/magus/types.TrailSpawn type struct
+github.com/egladman/magus/types.TrailSpawn.Agent field string
+github.com/egladman/magus/types.TrailSpawn.At field int64
+github.com/egladman/magus/types.TrailSpawn.Child field string
+github.com/egladman/magus/types.TrailSpawn.Lease field string
+github.com/egladman/magus/types.TrailSpawn.Model field string
+github.com/egladman/magus/types.TrailUnguarded const TrailSection = "unguarded"
+github.com/egladman/magus/types.TrailVerdict type string
+github.com/egladman/magus/types.TrailVerdict.Validate method func() error
+github.com/egladman/magus/types.TrailVerdicts var []TrailVerdict
+github.com/egladman/magus/types.TrailWrongDeny const TrailVerdict = "wrong-deny"
 github.com/egladman/magus/types.TreeCommit type struct
 github.com/egladman/magus/types.TreeCommit.CommitMeta embedded CommitMeta
 github.com/egladman/magus/types.TreeCommit.Parents field []string

@@ -21,7 +21,7 @@ func buildTrail(obs buzz.DirectObserver) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return bindinggen.ObjectFeedbackTrail(got), nil
+		return bindinggen.ObjectTrail(got), nil
 	}))
 	t.MapSet("shape", directVal(obs, "magus.trail.shape", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		return ffi.StrVal(trail.CommandShape(ffi.Str(args, 0))), nil
@@ -34,14 +34,14 @@ func buildTrail(obs buzz.DirectObserver) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.ObjectSlice(marks, bindinggen.ObjectFeedbackMark), nil
+		return ffi.ObjectSlice(marks, bindinggen.ObjectTrailMark), nil
 	}))
 	t.MapSet("mark", directVal(obs, "magus.trail.mark", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		m, err := std.MagusTrailMark(ctx, ffi.AnyMap(args, 0))
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return bindinggen.ObjectFeedbackMark(m), nil
+		return bindinggen.ObjectTrailMark(m), nil
 	}))
 	return t
 }

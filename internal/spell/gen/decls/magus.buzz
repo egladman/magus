@@ -1741,7 +1741,7 @@ export object ServiceLease {
     idle: str = "",
 }
 
-export object FeedbackMark {
+export object TrailMark {
     id: str = "",
     section: str = "",
     key: str = "",
@@ -1753,7 +1753,7 @@ export object FeedbackMark {
     examples: [str] = [],
 }
 
-export object FeedbackObservation {
+export object TrailObservation {
     at: int = 0,
     agent: str = "",
     lease: str = "",
@@ -1768,7 +1768,7 @@ export object FeedbackObservation {
     shapes: [str] = [],
 }
 
-export object FeedbackSpawn {
+export object TrailSpawn {
     at: int = 0,
     agent: str = "",
     child: str = "",
@@ -1776,14 +1776,14 @@ export object FeedbackSpawn {
     model: str = "",
 }
 
-export object FeedbackTrail {
+export object Trail {
     session: str = "",
     host: str = "",
     start: int = 0,
     end: int = 0,
     checkouts: [str] = [],
-    observations: [FeedbackObservation] = [],
-    spawns: [FeedbackSpawn] = [],
+    observations: [TrailObservation] = [],
+    spawns: [TrailSpawn] = [],
 }
 
 export extern fun affected(base: str = "") > Affected !> any;
@@ -1927,9 +1927,9 @@ export object vcs {
 
 // A session's guard record, read from the activity trail, and the verdicts a person gives its rows. Bound by hand in internal/interp/bindings (buildTrail).
 export object trail {
-    static extern fun mark(mark: FeedbackMark) > FeedbackMark !> any;
-    static extern fun marks() > [FeedbackMark] !> any;
-    static extern fun read(opts: {str: any} = {<str: any>}) > FeedbackTrail !> any;
+    static extern fun mark(mark: TrailMark) > TrailMark !> any;
+    static extern fun marks() > [TrailMark] !> any;
+    static extern fun read(opts: {str: any} = {<str: any>}) > Trail !> any;
     static extern fun shape(command: str) > str;
     static extern fun shapes(command: str) > [str];
 }

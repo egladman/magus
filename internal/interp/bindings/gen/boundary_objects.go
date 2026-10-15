@@ -3754,7 +3754,7 @@ func ObjectServiceLease(v types.ServiceLease) vm.Value {
 	return out
 }
 
-func ObjectFeedbackObservation(v types.FeedbackObservation) vm.Value {
+func ObjectTrailObservation(v types.TrailObservation) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("at", vm.IntValue(int64(v.At)))
 	out.MapSet("agent", vm.StrValue(v.Agent))
@@ -3779,7 +3779,7 @@ func ObjectFeedbackObservation(v types.FeedbackObservation) vm.Value {
 	return out
 }
 
-func ObjectFeedbackSpawn(v types.FeedbackSpawn) vm.Value {
+func ObjectTrailSpawn(v types.TrailSpawn) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("at", vm.IntValue(int64(v.At)))
 	out.MapSet("agent", vm.StrValue(v.Agent))
@@ -3789,7 +3789,7 @@ func ObjectFeedbackSpawn(v types.FeedbackSpawn) vm.Value {
 	return out
 }
 
-func ObjectFeedbackTrail(v types.FeedbackTrail) vm.Value {
+func ObjectTrail(v types.Trail) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("session", vm.StrValue(v.Session))
 	out.MapSet("host", vm.StrValue(v.Host))
@@ -3802,18 +3802,18 @@ func ObjectFeedbackTrail(v types.FeedbackTrail) vm.Value {
 	out.MapSet("checkouts", vm.ListValue(itemsCheckouts))
 	itemsObservations := make([]vm.Value, len(v.Observations))
 	for indexObservations := range v.Observations {
-		itemsObservations[indexObservations] = ObjectFeedbackObservation(v.Observations[indexObservations])
+		itemsObservations[indexObservations] = ObjectTrailObservation(v.Observations[indexObservations])
 	}
 	out.MapSet("observations", vm.ListValue(itemsObservations))
 	itemsSpawns := make([]vm.Value, len(v.Spawns))
 	for indexSpawns := range v.Spawns {
-		itemsSpawns[indexSpawns] = ObjectFeedbackSpawn(v.Spawns[indexSpawns])
+		itemsSpawns[indexSpawns] = ObjectTrailSpawn(v.Spawns[indexSpawns])
 	}
 	out.MapSet("spawns", vm.ListValue(itemsSpawns))
 	return out
 }
 
-func ObjectFeedbackMark(v types.FeedbackMark) vm.Value {
+func ObjectTrailMark(v types.TrailMark) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StrValue(v.ID))
 	out.MapSet("section", vm.StrValue(string(v.Section)))

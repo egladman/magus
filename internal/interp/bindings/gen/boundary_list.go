@@ -85,12 +85,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ExplainResult", Zero: types.KnowledgeExplainOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeExplainOutput(v.(types.KnowledgeExplainOutput), enums)
 	}},
-	{Name: "FeedbackMark", Zero: types.FeedbackMark{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFeedbackMark(v.(types.FeedbackMark)) }},
-	{Name: "FeedbackObservation", Zero: types.FeedbackObservation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
-		return ObjectFeedbackObservation(v.(types.FeedbackObservation))
-	}},
-	{Name: "FeedbackSpawn", Zero: types.FeedbackSpawn{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFeedbackSpawn(v.(types.FeedbackSpawn)) }},
-	{Name: "FeedbackTrail", Zero: types.FeedbackTrail{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFeedbackTrail(v.(types.FeedbackTrail)) }},
 	{Name: "FileChange", Zero: types.FileChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileChange(v.(types.FileChange)) }},
 	{Name: "FileClaim", Zero: types.FileClaim{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileClaim(v.(types.FileClaim)) }},
 	{Name: "FileEntry", Zero: types.FileEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileEntry(v.(types.FileEntry)) }},
@@ -258,6 +252,10 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "TermSize", Zero: types.TermSize{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTermSize(v.(types.TermSize)) }},
 	{Name: "ToolReport", Zero: types.ToolReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectToolReport(v.(types.ToolReport)) }},
 	{Name: "ToolRow", Zero: types.ToolRow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectToolRow(v.(types.ToolRow)) }},
+	{Name: "Trail", Zero: types.Trail{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrail(v.(types.Trail)) }},
+	{Name: "TrailMark", Zero: types.TrailMark{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailMark(v.(types.TrailMark)) }},
+	{Name: "TrailObservation", Zero: types.TrailObservation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailObservation(v.(types.TrailObservation)) }},
+	{Name: "TrailSpawn", Zero: types.TrailSpawn{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailSpawn(v.(types.TrailSpawn)) }},
 	{Name: "Trend", Zero: types.TrendOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrendOutput(v.(types.TrendOutput)) }},
 	{Name: "TrendEntry", Zero: types.TrendEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrendEntry(v.(types.TrendEntry)) }},
 	{Name: "URL", Zero: types.URL{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectURL(v.(types.URL)) }},
