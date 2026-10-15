@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"flag"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -11,16 +12,25 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
 
-func TestResolveOutput(t *testing.T) {
+func renderTemplate(w io.Writer, v any, body string) error {
+	return writeFormatted(w, output.Options{Format: outputTemplate, Template: body}, v)
+}
+
+func renderJSONL(w io.Writer, v any) error {
+	return writeFormatted(w, output.Options{Format: outputJSONL}, v)
+}
+
+func TestParseOutput(t *testing.T) {
 	// assertResolve checks a successful resolution's format and template.
-	assertResolve := func(input string, wantFmt Format, wantTmpl string) {
+	assertResolve := func(input string, wantFmt output.Format, wantTmpl string) {
 		t.Run("ok/"+input, func(t *testing.T) {
-			opts, err := ResolveOutput(input)
+			opts, err := output.Parse(input)
 			require.NoError(t, err)
-			assert.Equal(t, OutputOptions{Format: wantFmt, Template: wantTmpl}, opts)
+			assert.Equal(t, output.Options{Format: wantFmt, Template: wantTmpl}, opts)
 		})
 	}
 
@@ -40,7 +50,7 @@ func TestResolveOutput(t *testing.T) {
 	assertResolve("template=", outputTemplate, "")
 
 	t.Run("err/unknown", func(t *testing.T) {
-		_, err := ResolveOutput("unknown")
+		_, err := output.Parse("unknown")
 		assert.Error(t, err)
 	})
 }
@@ -70,7 +80,7 @@ func TestWriteTemplate(t *testing.T) {
 	assertTmpl := func(name, body, want string) {
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
-			require.NoError(t, writeTemplate(&buf, v, body))
+			require.NoError(t, renderTemplate(&buf, v, body))
 			assert.Equal(t, want, buf.String())
 		})
 	}
@@ -94,7 +104,7 @@ func TestWriteTemplate(t *testing.T) {
 
 func TestWriteTemplateBadSyntax(t *testing.T) {
 	var buf bytes.Buffer
-	err := writeTemplate(&buf, struct{}{}, "{{.MissingClose")
+	err := renderTemplate(&buf, struct{}{}, "{{.MissingClose")
 	require.Error(t, err, "expected parse error")
 	assert.Contains(t, err.Error(), "parse template")
 }
@@ -117,7 +127,7 @@ func TestWriteTemplateMissingFieldListsRecordFields(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			err := writeTemplate(&buf, tc.v, "{{.Workspace}}")
+			err := renderTemplate(&buf, tc.v, "{{.Workspace}}")
 
 			require.Error(t, err)
 			if tc.want == "" {
@@ -149,7 +159,7 @@ func TestWriteTemplateSprigHelpers(t *testing.T) {
 	assertTmpl := func(name, body, want string) {
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
-			require.NoError(t, writeTemplate(&buf, v, body))
+			require.NoError(t, renderTemplate(&buf, v, body))
 			assert.Equal(t, want, buf.String())
 		})
 	}
@@ -187,7 +197,7 @@ func TestWriteTemplateSprigHelpers(t *testing.T) {
 // drills into referenced struct types.
 func TestWriteTemplateFields(t *testing.T) {
 	var buf bytes.Buffer
-	require.NoError(t, writeTemplateFields(&buf, types.ProjectsOutput{
+	require.NoError(t, output.Fields(&buf, types.ProjectsOutput{
 		Projects: []types.ProjectEntry{{Path: "api"}},
 	}))
 	out := buf.String()
@@ -213,7 +223,7 @@ func TestWriteTemplateFields_arbitraryStruct(t *testing.T) {
 		Inners  []inner  `json:"inners"`
 	}
 	var buf bytes.Buffer
-	require.NoError(t, writeTemplateFields(&buf, outer{}))
+	require.NoError(t, output.Fields(&buf, outer{}))
 	out := buf.String()
 	assert.Contains(t, out, "name")
 	assert.Contains(t, out, "tags")
@@ -227,14 +237,14 @@ func TestWriteTemplateFields_arbitraryStruct(t *testing.T) {
 // A non-struct value has no fields to list.
 func TestWriteTemplateFields_nonStruct(t *testing.T) {
 	var buf bytes.Buffer
-	err := writeTemplateFields(&buf, "just a string")
+	err := output.Fields(&buf, "just a string")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no fields")
 }
 
 func TestWriteTemplateEnvBlocked(t *testing.T) {
 	var buf bytes.Buffer
-	err := writeTemplate(&buf, struct{}{}, `{{env "PATH"}}`)
+	err := renderTemplate(&buf, struct{}{}, `{{env "PATH"}}`)
 	require.Error(t, err, "expected error for blocked 'env' function")
 	assert.Contains(t, err.Error(), "parse template")
 }
@@ -259,7 +269,7 @@ func TestWriteJSONL(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, writeJSONL(&buf, v))
+	require.NoError(t, renderJSONL(&buf, v))
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	require.Len(t, lines, 2)
@@ -299,7 +309,7 @@ func TestOutputDstTeeWritesBoth(t *testing.T) {
 	defer cleanup()
 
 	v := struct{ X int }{X: 42}
-	require.NoError(t, writeJSON(w, v))
+	require.NoError(t, writeFormatted(w, output.Options{Format: outputJSON}, v))
 	cleanup()
 
 	got, err := os.ReadFile(teeTarget)
@@ -320,7 +330,7 @@ func TestOutputDstTeeAppends(t *testing.T) {
 		global.tee = prev
 		require.NoError(t, err, "outputDst call %d", i)
 		v := struct{ N int }{N: i}
-		require.NoError(t, writeJSON(w, v), "writeJSON call %d", i)
+		require.NoError(t, writeFormatted(w, output.Options{Format: outputJSON}, v), "write call %d", i)
 		cleanup()
 	}
 
@@ -354,7 +364,7 @@ func TestWriteJSONLAmbiguousIsAnError(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	err := writeJSONL(&buf, v)
+	err := renderJSONL(&buf, v)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "roots", "the error names the candidate fields")
 	assert.Contains(t, err.Error(), "nodes")
@@ -373,7 +383,7 @@ func TestWriteJSONLDeclaredPrimary(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, writeJSONL(&buf, v))
+	require.NoError(t, renderJSONL(&buf, v))
 	assert.Equal(t, "\"b\"\n\"c\"\n", buf.String())
 }
 
@@ -384,7 +394,7 @@ func TestWriteJSONLTopLevelSlice(t *testing.T) {
 		Path string `json:"path"`
 	}
 	var buf bytes.Buffer
-	require.NoError(t, writeJSONL(&buf, []proj{{Path: "api"}, {Path: "web"}}))
+	require.NoError(t, renderJSONL(&buf, []proj{{Path: "api"}, {Path: "web"}}))
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	require.Len(t, lines, 2)
@@ -397,7 +407,7 @@ func TestWriteJSONLTopLevelSlice(t *testing.T) {
 // is not an ambiguity.
 func TestWriteJSONLSingleRecord(t *testing.T) {
 	var buf bytes.Buffer
-	require.NoError(t, writeJSONL(&buf, struct {
+	require.NoError(t, renderJSONL(&buf, struct {
 		Name string `json:"name"`
 	}{Name: "api"}))
 	assert.Equal(t, 1, strings.Count(buf.String(), "\n"))
@@ -410,7 +420,7 @@ func TestWriteTemplateFieldsSliceElement(t *testing.T) {
 		Path string `json:"path"`
 	}
 	var buf bytes.Buffer
-	require.NoError(t, writeTemplateFields(&buf, []entry{{Path: "api"}}))
+	require.NoError(t, output.Fields(&buf, []entry{{Path: "api"}}))
 	out := buf.String()
 	assert.Contains(t, out, "entry:")
 	assert.Contains(t, out, "path")
@@ -447,7 +457,7 @@ func TestWriteFormattedJSON(t *testing.T) {
 		N    int    `json:"n"`
 	}{Name: "hello", N: 42}
 
-	opts := OutputOptions{Format: outputJSON}
+	opts := output.Options{Format: outputJSON}
 	require.NoError(t, writeFormatted(&buf, opts, v))
 
 	var decoded map[string]interface{}
@@ -457,32 +467,32 @@ func TestWriteFormattedJSON(t *testing.T) {
 
 func TestWriteFormattedUnknownFormat(t *testing.T) {
 	var buf bytes.Buffer
-	opts := OutputOptions{Format: "unsupported-format"}
+	opts := output.Options{Format: "unsupported-format"}
 	err := writeFormatted(&buf, opts, struct{}{})
 	require.Error(t, err, "expected error for unsupported format")
-	assert.Contains(t, err.Error(), "unsupported format")
+	assert.Contains(t, err.Error(), "does not render")
 }
 
 func TestResolveOutput_GraphFormatExtras(t *testing.T) {
 	t.Parallel()
-	for _, fmt := range []Format{outputDot, outputTree} {
-		opts, err := ResolveOutput(string(fmt), outputDot, outputTree)
-		require.NoError(t, err, "ResolveOutput(%q, extras)", fmt)
+	for _, fmt := range []output.Format{outputDot, outputTree} {
+		opts, err := output.Parse(string(fmt), outputDot, outputTree)
+		require.NoError(t, err, "output.Parse(%q, extras)", fmt)
 		assert.Equal(t, fmt, opts.Format)
 	}
 }
 
 func TestResolveOutput_RejectsGraphFormatsWithoutExtras(t *testing.T) {
 	t.Parallel()
-	for _, fmt := range []Format{outputDot, outputTree} {
-		_, err := ResolveOutput(string(fmt)) // no extra formats
-		assert.Error(t, err, "ResolveOutput(%q) should fail for non-graph commands", fmt)
+	for _, fmt := range []output.Format{outputDot, outputTree} {
+		_, err := output.Parse(string(fmt)) // no extra formats
+		assert.Error(t, err, "output.Parse(%q) should fail for non-graph commands", fmt)
 	}
 }
 
 func TestResolveOutput_MermaidIsUnknown(t *testing.T) {
 	t.Parallel()
-	_, err := ResolveOutput("mermaid", outputDot, outputTree, outputMarkdown, outputGraphML)
+	_, err := output.Parse("mermaid", outputDot, outputTree, outputMarkdown, outputGraphML)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `unknown output format "mermaid"`)
 }
@@ -523,7 +533,7 @@ func TestOutputDstSilentTee(t *testing.T) {
 			global.silent = tc.silent
 
 			stdout := captureStdout(t, func() {
-				require.NoError(t, emitFormatted(OutputOptions{Format: outputJSON}, struct {
+				require.NoError(t, emitFormatted(output.Options{Format: outputJSON}, struct {
 					N int `json:"N"`
 				}{N: 7}))
 			})

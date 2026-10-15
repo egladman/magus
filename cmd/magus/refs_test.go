@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -195,7 +196,9 @@ func TestEmitDefinitionsText(t *testing.T) {
 		Answer: types.KnowledgeAnswer{Verdict: types.VerdictFound},
 	}
 	var err error
-	got := captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout, OutputOptions{Format: FormatText}, out) })
+	got := captureStdout(t, func() {
+		err = emitDefinitions(context.Background(), os.Stdout, output.Options{Format: outputText}, out)
+	})
 	require.NoError(t, err)
 	assert.Equal(t, "symbol: symbol:a F().  (F)\n"+
 		"a.go:3-5  verified\nfunc F() {\n\treturn\n}\n"+
@@ -215,11 +218,15 @@ func TestEmitDefinitionsChangedExitsOne(t *testing.T) {
 		Answer: types.KnowledgeAnswer{Verdict: types.VerdictFound},
 	}
 	var err error
-	got := captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout, OutputOptions{Format: FormatText}, out) })
+	got := captureStdout(t, func() {
+		err = emitDefinitions(context.Background(), os.Stdout, output.Options{Format: outputText}, out)
+	})
 	assert.Equal(t, errSilent{exitCode: 1}, err)
 	assert.Contains(t, got, "a.go:3-5  changed  (edited since indexing; refresh with `")
 
-	got = captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout, OutputOptions{Format: outputName}, out) })
+	got = captureStdout(t, func() {
+		err = emitDefinitions(context.Background(), os.Stdout, output.Options{Format: outputName}, out)
+	})
 	assert.Equal(t, errSilent{exitCode: 1}, err)
 	assert.Equal(t, "b.go:1-2\n", got)
 }
@@ -232,12 +239,16 @@ func TestEmitDefinitionsStaleIndex(t *testing.T) {
 	out := types.KnowledgeDefinitionsOutput{Symbol: "symbol:a F().", Definitions: []types.KnowledgeDefinitionSite{site}, Answer: answer}
 
 	var err error
-	got := captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout, OutputOptions{Format: FormatText}, out) })
+	got := captureStdout(t, func() {
+		err = emitDefinitions(context.Background(), os.Stdout, output.Options{Format: outputText}, out)
+	})
 	require.NoError(t, err)
 	assert.Contains(t, got, staleIndexNotice(answer))
 
 	out.Definitions[0].Status = types.DefinitionUnverified
-	captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout, OutputOptions{Format: FormatText}, out) })
+	captureStdout(t, func() {
+		err = emitDefinitions(context.Background(), os.Stdout, output.Options{Format: outputText}, out)
+	})
 	assert.Equal(t, errSilent{exitCode: 1}, err)
 }
 
@@ -407,7 +418,7 @@ func TestReportRefsMissCarriesTheIndexCause(t *testing.T) {
 
 	var stderr bytes.Buffer
 	var err error
-	stdout := captureStdout(t, func() { err = reportRefsMiss(&stderr, OutputOptions{Format: outputJSON}, miss) })
+	stdout := captureStdout(t, func() { err = reportRefsMiss(&stderr, output.Options{Format: outputJSON}, miss) })
 	require.NoError(t, err)
 	var record types.KnowledgeRefsOutput
 	require.NoError(t, json.Unmarshal([]byte(stdout), &record), "stdout: %q", stdout)
@@ -427,7 +438,7 @@ func TestReportRefsMissCarriesTheIndexCause(t *testing.T) {
 	assert.Contains(t, stderr.String(), "fix: "+ans.IndexCause.Fix+"\n")
 
 	stderr.Reset()
-	stdout = captureStdout(t, func() { err = reportRefsMiss(&stderr, OutputOptions{Format: FormatText}, miss) })
+	stdout = captureStdout(t, func() { err = reportRefsMiss(&stderr, output.Options{Format: outputText}, miss) })
 	require.NoError(t, err)
 	assert.Empty(t, stdout, "text output keeps stdout for answers")
 	assert.Contains(t, stderr.String(), `magus refs: no node matches "Foo"`)

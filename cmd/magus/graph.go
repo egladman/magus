@@ -33,6 +33,7 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
 
@@ -407,7 +408,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		}, pos)
 	}
 
-	opts, err := ResolveOutput(global.output, outputGraphML, outputDot)
+	opts, err := output.Parse(global.output, outputGraphML, outputDot)
 	if err != nil {
 		return err
 	}
@@ -736,7 +737,7 @@ type graphRenderOptions struct {
 
 // renderWorkspaceGraph emits the project dependency graph; respects -o (text|json|yaml|dot|tree).
 func renderWorkspaceGraph(ctx context.Context, ws types.WorkspaceRepository, opts graphRenderOptions) error {
-	outOpts, err := ResolveOutput(global.output, outputDot, outputTree)
+	outOpts, err := output.Parse(global.output, outputDot, outputTree)
 	if err != nil {
 		return err
 	}

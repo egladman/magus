@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -182,7 +183,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// measured 48KB across four agent sessions that could not act on any of it.
 	// A structured invocation never gets this: -o jsonl on a TTY is rare, and the
 	// one free-text line it would add is not worth a special-cased typed event.
-	if global.silent && isInteractiveTTY() && global.output != string(FormatJSONL) {
+	if global.silent && isInteractiveTTY() && global.output != string(outputJSONL) {
 		// Says what arrives and when, rather than sending the reader to poll a
 		// dashboard in another terminal. This run BLOCKS: waiting for it is the
 		// normal thing to do, and every target that runs prints an output ref
@@ -1029,7 +1030,7 @@ type runOutput struct {
 // produced it. It DOES report the return value, because a dry run evaluates the
 // target body under a tracing context: the value is real, and omitting it made
 // `-o json` claim "no return value" for a target that had just produced one.
-func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, target string, charms []string, selection []types.Target, returns types.Returns, undeclaredSeeds []string) error {
+func emitRunResult(ctx context.Context, m *magus.Magus, opts output.Options, target string, charms []string, selection []types.Target, returns types.Returns, undeclaredSeeds []string) error {
 	out := runOutput{Target: target, Charms: charms, DryRun: globalCfg.DryRun, UndeclaredSeeds: undeclaredSeeds}
 	projects := m.ResolveProjects(selection)
 	out.Count = len(projects)

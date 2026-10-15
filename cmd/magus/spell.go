@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -97,7 +98,7 @@ func spellBuild(ctx context.Context, root string, args []string) error {
 	if len(pos) != 1 {
 		return usagef("magus spell build: want <dir>, got %d argument(s)", len(pos))
 	}
-	opts, err := ResolveOutput(global.output)
+	opts, err := output.Parse(global.output)
 	if err != nil {
 		return err
 	}
@@ -110,7 +111,7 @@ func spellBuild(ctx context.Context, root string, args []string) error {
 			return fmt.Errorf("spell build: %w", err)
 		}
 	}
-	if opts.Format == FormatText || opts.Format == FormatName {
+	if opts.Format == outputText || opts.Format == outputName {
 		return emitNames([]string{res.Digest.String()})
 	}
 	return emitFormatted(opts, res)
@@ -217,7 +218,7 @@ func spellPush(ctx context.Context, root string, args []string) error {
 	if len(pos) != 2 {
 		return usagef("magus spell push: want <dir>|magus/spell/<name> <registry>/<repository>:<tag>, got %d argument(s)", len(pos))
 	}
-	opts, err := ResolveOutput(global.output)
+	opts, err := output.Parse(global.output)
 	if err != nil {
 		return err
 	}
@@ -255,7 +256,7 @@ func spellPush(ctx context.Context, root string, args []string) error {
 	pinned.Tag, pinned.Digest = "", d
 	res.Reference = pinned.String()
 	res.Tags = append([]string{dest.Tag}, tags...)
-	if opts.Format == FormatText || opts.Format == FormatName {
+	if opts.Format == outputText || opts.Format == outputName {
 		return emitNames([]string{res.Reference})
 	}
 	return emitFormatted(opts, res)
@@ -309,7 +310,7 @@ func spellPull(ctx context.Context, root string, args []string) error {
 	if len(pos) < 1 || len(pos) > 2 {
 		return usagef("magus spell pull: want <reference> [<dir>], got %d argument(s)", len(pos))
 	}
-	opts, err := ResolveOutput(global.output)
+	opts, err := output.Parse(global.output)
 	if err != nil {
 		return err
 	}
@@ -379,11 +380,11 @@ func ejectSpell(root, name, dst string) (res spellPullResult, next string, err e
 		res.Override.Import, res.Override.Path), nil
 }
 
-func emitPull(opts OutputOptions, res spellPullResult) error {
+func emitPull(opts output.Options, res spellPullResult) error {
 	switch opts.Format {
-	case FormatText:
+	case outputText:
 		return emitNames([]string{res.Reference, res.Dir})
-	case FormatName:
+	case outputName:
 		return emitNames([]string{res.Reference})
 	default:
 		return emitFormatted(opts, res)
@@ -476,7 +477,7 @@ func spellLock(ctx context.Context, root string, args []string) error {
 	if len(pos) != 0 {
 		return usagef("magus spell lock: takes no arguments, got %d", len(pos))
 	}
-	opts, err := ResolveOutput(global.output)
+	opts, err := output.Parse(global.output)
 	if err != nil {
 		return err
 	}
@@ -504,7 +505,7 @@ func spellLock(ctx context.Context, root string, args []string) error {
 		e := lock.Spells[path]
 		res.Spells = append(res.Spells, spellLockEntry{Path: path, Tag: e.Tag, Digest: e.Digest})
 	}
-	if opts.Format == FormatText || opts.Format == FormatName {
+	if opts.Format == outputText || opts.Format == outputName {
 		return emitItemNames(res.Spells, func(e spellLockEntry) string { return e.Path + "@" + e.Digest.String() })
 	}
 	return emitFormatted(opts, res)
@@ -611,7 +612,7 @@ func spellLs(ctx context.Context, root string, args []string) error {
 	if len(pos) != 1 {
 		return usagef("magus spell ls: want <registry>/<repository> or %s, got %d argument(s)", shippedSpellsPath, len(pos))
 	}
-	opts, err := ResolveOutput(global.output)
+	opts, err := output.Parse(global.output)
 	if err != nil {
 		return err
 	}
@@ -620,7 +621,7 @@ func spellLs(ctx context.Context, root string, args []string) error {
 		if err != nil {
 			return fmt.Errorf("spell ls: %w", err)
 		}
-		if opts.Format == FormatText || opts.Format == FormatName {
+		if opts.Format == outputText || opts.Format == outputName {
 			return emitItemNames(shipped, func(s shippedSpell) string { return s.Reference })
 		}
 		return emitFormatted(opts, shippedSpellsResult{Spells: shipped})
@@ -640,7 +641,7 @@ func spellLs(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("spell ls: %w", err)
 	}
 	switch opts.Format {
-	case FormatText, FormatName:
+	case outputText, outputName:
 		return emitNames(tags)
 	default:
 		return emitFormatted(opts, spellLsResult{Repository: repo.String(), Tags: tags})

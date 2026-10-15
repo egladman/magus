@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -663,7 +664,7 @@ func TestCIWorkflowRendersPlanOutputsAndSummary(t *testing.T) {
 		"GITHUB_STEP_SUMMARY": out.Summary,
 	}
 	for _, m := range found {
-		opts, err := ResolveOutput(m[1])
+		opts, err := output.Parse(m[1])
 		require.NoError(t, err)
 		var b strings.Builder
 		require.NoError(t, writeFormatted(&b, opts, out))

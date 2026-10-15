@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -157,7 +158,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 
 	// Like `magus graph`, accept the graph-only -o formats on top of the common
 	// set; markdown renders the full MAGUS.md doc (the catalog + the graph).
-	opts, err := ResolveOutput(global.output, outputDot, outputMarkdown)
+	opts, err := output.Parse(global.output, outputDot, outputMarkdown)
 	if err != nil {
 		return err
 	}

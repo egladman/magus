@@ -581,7 +581,7 @@ func finalizeConfig() error {
 	//
 	// After Validate, which refuses "jsonl" from magus.yaml, env and --log-format:
 	// only -o jsonl opens the report stream the withheld results go to.
-	if global.output == string(FormatJSONL) {
+	if global.output == string(outputJSONL) {
 		globalCfg.Log.Format = "jsonl"
 	}
 	return nil

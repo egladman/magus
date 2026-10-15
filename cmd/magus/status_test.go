@@ -22,6 +22,7 @@ import (
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
 
@@ -1288,12 +1289,12 @@ func TestCompactServiceToken(t *testing.T) {
 
 func TestGridEnabledNeedsATerminalAndColor(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
-	assert.True(t, gridEnabled(OutputOptions{Format: outputText}, true))
-	assert.False(t, gridEnabled(OutputOptions{Format: outputText}, false))
-	assert.False(t, gridEnabled(OutputOptions{Format: outputJSON}, true))
+	assert.True(t, gridEnabled(output.Options{Format: outputText}, true))
+	assert.False(t, gridEnabled(output.Options{Format: outputText}, false))
+	assert.False(t, gridEnabled(output.Options{Format: outputJSON}, true))
 
 	t.Setenv("NO_COLOR", "1")
-	assert.False(t, gridEnabled(OutputOptions{Format: outputText}, true))
+	assert.False(t, gridEnabled(output.Options{Format: outputText}, true))
 }
 
 // TestWriteStatusStructuredFormats covers the dispatch: a machine-readable format bypasses
@@ -1309,21 +1310,21 @@ func TestWriteStatusStructuredFormats(t *testing.T) {
 
 	t.Run("json", func(t *testing.T) {
 		out := captureStdout(t, func() {
-			require.NoError(t, writeStatus(io.Discard, r, OutputOptions{Format: outputJSON}, 0, false))
+			require.NoError(t, writeStatus(io.Discard, r, output.Options{Format: outputJSON}, 0, false))
 		})
 		assert.Contains(t, out, `"dir": "/tmp/c"`)
 	})
 
 	t.Run("yaml", func(t *testing.T) {
 		out := captureStdout(t, func() {
-			require.NoError(t, writeStatus(io.Discard, r, OutputOptions{Format: outputYAML}, 0, false))
+			require.NoError(t, writeStatus(io.Discard, r, output.Options{Format: outputYAML}, 0, false))
 		})
 		assert.Contains(t, out, "dir: /tmp/c")
 	})
 
 	t.Run("compact wins over the text frame", func(t *testing.T) {
 		var buf bytes.Buffer
-		require.NoError(t, writeStatus(&buf, r, OutputOptions{Format: outputText}, 0, true))
+		require.NoError(t, writeStatus(&buf, r, output.Options{Format: outputText}, 0, true))
 		assert.Equal(t, "no broker · no server\n", buf.String())
 	})
 }

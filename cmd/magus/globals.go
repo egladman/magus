@@ -7,23 +7,18 @@ import (
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/cmdline/output"
 )
 
-// Bridge aliases: the output vocabulary lives in output.go (package main).
-// These keep the cmd/magus switch statements (case outputJSON, …) and OutputOptions
-// signatures reading naturally.
-
+// The -o formats under the names every command's switch spells them (case outputJSON);
+// the values are libs/cmdline/output's.
 const (
-	outputText     = FormatText
-	outputJSON     = FormatJSON
-	outputYAML     = FormatYAML
-	outputJSONL    = FormatJSONL
-	outputName     = FormatName
-	outputTemplate = FormatTemplate
-	outputDot      = FormatDot
-	outputTree     = FormatTree
-	outputMarkdown = FormatMarkdown
-	outputGraphML  = FormatGraphML
+	outputText     = output.Text
+	outputJSON     = output.JSON
+	outputYAML     = output.YAML
+	outputJSONL    = output.JSONL
+	outputName     = output.Name
+	outputTemplate = output.Template
 )
 
 // globalFlags carries display/verbosity flags shared across the top-level and every subcommand FlagSet
@@ -43,7 +38,7 @@ var global globalFlags
 // outputFormatHelp names the bare -o template form explicitly, because that is how a
 // caller discovers which field names a template may use: they are the -o json keys
 // (.name), not the Go field names (.Name), and nothing else advertises that.
-var outputFormatHelp = "Output format (" + JoinFormats(CommonFormats, "|") +
+var outputFormatHelp = "Output format (" + output.Join(output.Common, "|") +
 	"|template[=<go-template>]); default: text. Bare -o template lists the available " +
 	"template fields (they are the -o json names)"
 
@@ -220,8 +215,8 @@ func flagIsBool(f *flag.Flag) bool {
 	return ok && b.IsBoolFlag()
 }
 
-func outputOptionsOrDefault() (OutputOptions, error) {
-	return ResolveOutput(global.output)
+func outputOptionsOrDefault() (output.Options, error) {
+	return output.Parse(global.output)
 }
 
 // isFlagNamed and parseFlagValue recognize a flag the way Go's flag package does,

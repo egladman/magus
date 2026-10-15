@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
 
@@ -227,7 +228,7 @@ type refsMiss struct {
 // reportRefsMiss renders m. Under a structured format its record goes to stdout, so a
 // script reads the verdict and the index cause; the verdict block goes to stderr in every
 // format.
-func reportRefsMiss(stderr io.Writer, opts OutputOptions, m refsMiss) error {
+func reportRefsMiss(stderr io.Writer, opts output.Options, m refsMiss) error {
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		if err := emitFormatted(opts, types.KnowledgeRefsOutput{
@@ -441,7 +442,7 @@ func refsTextCmd(ctx context.Context, root, pattern string, scopeArgs []string, 
 // It reports; it does not edit. The output is what a caller needs to make the edit itself,
 // which is the same division every other magus verb keeps between naming what a change
 // touches and touching it.
-func emitOccurrences(ctx context.Context, root string, opts OutputOptions, refs types.KnowledgeRefsOutput, occurrences *magus.SymbolOccurrenceRead) error {
+func emitOccurrences(ctx context.Context, root string, opts output.Options, refs types.KnowledgeRefsOutput, occurrences *magus.SymbolOccurrenceRead) error {
 	if occurrences == nil {
 		// The probe itself failed, so magus cannot say where the symbol appears. Reporting
 		// an empty list here would read as "nowhere", which is the one answer it has no
@@ -713,7 +714,7 @@ func definitionRange(s types.KnowledgeDefinitionSite) string {
 // emitDefinitions renders `magus refs <symbol> --definition`. It exits 1 when a range no
 // longer holds what was indexed or cannot be read: the lines printed for it are not the
 // symbol's, and a caller editing by them would edit the wrong text.
-func emitDefinitions(ctx context.Context, w io.Writer, opts OutputOptions, out types.KnowledgeDefinitionsOutput) error {
+func emitDefinitions(ctx context.Context, w io.Writer, opts output.Options, out types.KnowledgeDefinitionsOutput) error {
 	var stale, verified int
 	for _, s := range out.Definitions {
 		switch s.Status {
@@ -821,7 +822,7 @@ func linesSuffix(lines []int) string {
 
 // refsRenameCmd is `magus refs <symbol> --rename <new>`: glue between the graph, the
 // occurrence read, the guard and internal/edit, which owns what a write may do.
-func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *knowledge.Graph, ref, to string, dryRun bool) error {
+func refsRenameCmd(ctx context.Context, root string, opts output.Options, g *knowledge.Graph, ref, to string, dryRun bool) error {
 	out := types.KnowledgeRenameOutput{
 		Definition:    types.KnowledgeRenameDefinition,
 		SchemaVersion: types.KnowledgeSchemaVersion,

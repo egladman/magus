@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"reflect"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -24,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/gcpolicy"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
 
@@ -486,57 +486,10 @@ func TestGraphExplorerLinkNeedsACommittedGraph(t *testing.T) {
 	assert.Equal(t, "", graphExplorerLink(t.Context(), t.TempDir()))
 }
 
-func TestJoinFormats(t *testing.T) {
-	assert.Equal(t, "text|json|yaml|jsonl|name", JoinFormats(CommonFormats, "|"))
-	assert.Equal(t, "json, yaml", JoinFormats([]Format{FormatJSON, FormatYAML}, ", "))
-	assert.Equal(t, "", JoinFormats(nil, ","))
-}
-
 func TestWriteYAMLIndentsTwo(t *testing.T) {
 	var buf bytes.Buffer
-	require.NoError(t, writeYAML(&buf, map[string]any{"outer": map[string]any{"inner": 1}}))
+	require.NoError(t, writeFormatted(&buf, output.Options{Format: outputYAML}, map[string]any{"outer": map[string]any{"inner": 1}}))
 	assert.Equal(t, "outer:\n  inner: 1\n", buf.String())
-}
-
-// TestTypeLabelDropsPackageQualifiers pins the -o template field listing's vocabulary: it
-// reads like the json shape, not like Go's fully-qualified type names.
-func TestTypeLabelDropsPackageQualifiers(t *testing.T) {
-	type row struct {
-		Ref   types.ProjectRef
-		Refs  []types.ProjectRef
-		Ptr   *types.ProjectRef
-		Table map[string][]int
-		Any   any
-		Err   error
-	}
-	rt := reflect.TypeOf(row{})
-	labelOf := func(name string) string {
-		f, ok := rt.FieldByName(name)
-		require.True(t, ok)
-		return typeLabel(f.Type)
-	}
-
-	assert.Equal(t, "ProjectRef", labelOf("Ref"))
-	assert.Equal(t, "[]ProjectRef", labelOf("Refs"))
-	assert.Equal(t, "*ProjectRef", labelOf("Ptr"))
-	assert.Equal(t, "map[string][]int", labelOf("Table"))
-	assert.Equal(t, "any", labelOf("Any"))
-	assert.Equal(t, "error", labelOf("Err"))
-	assert.Equal(t, "[]string", typeLabel(reflect.TypeOf([]string{})))
-}
-
-func TestJSONShapeMirrorsTheWireNames(t *testing.T) {
-	shaped, err := jsonShape(types.ProjectRef{Path: "web", Name: "web"})
-	require.NoError(t, err)
-
-	m, ok := shaped.(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "web", m["path"])
-	// Dir is json:"-": the template fields must not expose a host-absolute path.
-	assert.NotContains(t, m, "dir")
-
-	_, err = jsonShape(make(chan int))
-	assert.Error(t, err)
 }
 
 // TestTemplateFuncsExcludesTheNonHermetic pins the curated sprig subset: a build-tool
@@ -562,12 +515,12 @@ func TestEmitFormattedWritesToStdout(t *testing.T) {
 	global.tee = ""
 
 	out := captureStdout(t, func() {
-		require.NoError(t, emitFormatted(OutputOptions{Format: outputYAML}, types.ProjectRef{Path: "web", Name: "web"}))
+		require.NoError(t, emitFormatted(output.Options{Format: outputYAML}, types.ProjectRef{Path: "web", Name: "web"}))
 	})
 	assert.Contains(t, out, "path: web")
 
 	out = captureStdout(t, func() {
-		require.NoError(t, emitFormatted(OutputOptions{Format: outputTemplate, Template: "{{.path}}"}, types.ProjectRef{Path: "web"}))
+		require.NoError(t, emitFormatted(output.Options{Format: outputTemplate, Template: "{{.path}}"}, types.ProjectRef{Path: "web"}))
 	})
 	assert.Equal(t, "web", out)
 }

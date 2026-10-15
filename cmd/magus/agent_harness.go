@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
 
@@ -352,11 +353,11 @@ func workspaceHarnessNames(ws types.WorkspaceRepository) []string {
 }
 
 func writeHarnessVerification(w io.Writer, typed agent.HarnessVerification) error {
-	opts, err := ResolveOutput(global.output)
+	opts, err := output.Parse(global.output)
 	if err != nil {
 		return err
 	}
-	if opts.Format != FormatText {
+	if opts.Format != outputText {
 		return writeFormatted(w, opts, typed)
 	}
 	_, err = fmt.Fprintf(w, "%s %s harness: %s", typed.Status, typed.ID, typed.Path)

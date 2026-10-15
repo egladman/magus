@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -150,7 +151,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	if sf.Transport != "" {
 		forceQuietDisplay()
 	}
-	opts, err := ResolveOutput(global.output)
+	opts, err := output.Parse(global.output)
 	if err != nil {
 		return err
 	}
@@ -646,24 +647,24 @@ const guardDenyExitCode = 2
 // i.e. every format but text. The guard templates read the verdict off stdout and
 // one discards stderr outright, so an unconditional copy printed a kilobyte-plus
 // reason twice to an audience with a context budget.
-func enforceVerdict(opts OutputOptions, verdict types.GuardJudgment) error {
+func enforceVerdict(opts output.Options, verdict types.GuardJudgment) error {
 	return enforceVerdictTo(os.Stderr, opts, verdict)
 }
 
-func enforceVerdictTo(errOut io.Writer, opts OutputOptions, verdict types.GuardJudgment) error {
+func enforceVerdictTo(errOut io.Writer, opts output.Options, verdict types.GuardJudgment) error {
 	if verdict.Decision != "deny" && verdict.Decision != "ask" {
 		return nil
 	}
-	if opts.Format != FormatText {
+	if opts.Format != outputText {
 		fmt.Fprintln(errOut, verdict.Reason)
 	}
 	return errSilent{exitCode: guardDenyExitCode}
 }
 
 // writeGuardVerdict renders a verdict through the standard output arm.
-func writeGuardVerdict(out io.Writer, opts OutputOptions, verdict types.GuardJudgment) error {
+func writeGuardVerdict(out io.Writer, opts output.Options, verdict types.GuardJudgment) error {
 	switch opts.Format {
-	case FormatText:
+	case outputText:
 		switch verdict.Decision {
 		case "deny":
 			fmt.Fprintln(out, decisionLabel("deny", verdict.Rule)+" "+verdict.Reason)
@@ -675,7 +676,7 @@ func writeGuardVerdict(out io.Writer, opts OutputOptions, verdict types.GuardJud
 			fmt.Fprintln(out, "pass")
 		}
 		return nil
-	case FormatName:
+	case outputName:
 		fmt.Fprintln(out, verdict.Decision)
 		return nil
 	}

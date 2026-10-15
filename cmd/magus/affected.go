@@ -29,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -860,13 +861,13 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 // command, so -o selects the encoding. Marshaling here directly would ignore it and
 // print JSON for `-o yaml`, in both flag positions.
 //
-// FormatText maps to JSON rather than to a prose rendering, because the plan has
+// outputText maps to JSON rather than to a prose rendering, because the plan has
 // no prose rendering to fall back on: the default output IS the machine-readable
 // document, and a workflow that pipes `--plan` without -o must keep getting it.
-func emitPlan(opts OutputOptions, out planOutput) error {
+func emitPlan(opts output.Options, out planOutput) error {
 	switch opts.Format {
 	case outputText, outputJSON:
-		return emitFormatted(OutputOptions{Format: outputJSON}, out)
+		return emitFormatted(output.Options{Format: outputJSON}, out)
 	case outputName:
 		return emitItemNames(out.Matrix, func(s planShard) string { return s.Shard })
 	default:

@@ -36,6 +36,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/types"
@@ -318,7 +319,7 @@ func (t diffTUITerm) ok() bool { return t.Reads && t.Paints }
 //
 // It takes the terminal as an ARGUMENT rather than probing it, which is what makes this
 // testable without a pty.
-func wantsTUI(rf *flaggen.DiffFlags, src diffInput, format Format, term diffTUITerm, enabled bool) bool {
+func wantsTUI(rf *flaggen.DiffFlags, src diffInput, format output.Format, term diffTUITerm, enabled bool) bool {
 	switch {
 	case rf.NoTui, !enabled:
 		return false
@@ -373,7 +374,7 @@ func (in diffInput) readPatch(ctx context.Context, m *magus.Magus, paths []strin
 // impact is ADDITIVE: with it off, every byte emitted here is what this command emitted
 // before the flag existed, which is what lets a script parsing `magus diff -o json` keep
 // working and what keeps the flag honest about being context rather than a gate.
-func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputOptions, rf *flaggen.DiffFlags, gates types.DiffOptions, rootOverride string, tui, impact bool, scopePaths []string) error {
+func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.Options, rf *flaggen.DiffFlags, gates types.DiffOptions, rootOverride string, tui, impact bool, scopePaths []string) error {
 	patch, base, err := src.readPatch(ctx, m, scopePaths)
 	if err != nil {
 		return err
@@ -576,7 +577,7 @@ func short(rev string) string {
 // threadPrint is what printThread reads one thread from. The patch, the changeset annotation
 // and the notes join are the CLI's own; assembling a record from them is review.NewThreadInput's.
 type threadPrint struct {
-	opts OutputOptions
+	opts output.Options
 	// id names the thread: its first comment, or any reply in it.
 	id       string
 	patch    string

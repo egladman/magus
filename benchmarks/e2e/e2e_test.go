@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -218,7 +219,7 @@ func TestRunWithJSONLSink(t *testing.T) {
 	targets, err := m.ExpandPath(types.Target{Name: "build"})
 	require.NoError(t, err, "ExpandPath")
 	var buf, notices bytes.Buffer
-	sink, err := magus.NewSink(magus.FormatJSONL, &buf, &notices)
+	sink, err := magus.NewSink(output.JSONL, &buf, &notices)
 	require.NoError(t, err, "NewSink")
 	require.NoError(t, m.Run(ctx, targets, magus.WithSink(sink)), "Run")
 	require.NoError(t, sink.Close(), "Close")

@@ -39,13 +39,6 @@ github.com/egladman/magus.Event.Target field string "json:\"target,omitempty\""
 github.com/egladman/magus.Event.Text field string "json:\"text,omitempty\""
 github.com/egladman/magus.Event.Ts field int64 "json:\"ts\""
 github.com/egladman/magus.FindRoot func(dir string) (string, error)
-github.com/egladman/magus.Format type string
-github.com/egladman/magus.FormatJSON const Format = "json"
-github.com/egladman/magus.FormatJSONL const Format = "jsonl"
-github.com/egladman/magus.FormatName const Format = "name"
-github.com/egladman/magus.FormatTemplate const Format = "template"
-github.com/egladman/magus.FormatText const Format = "text"
-github.com/egladman/magus.FormatYAML const Format = "yaml"
 github.com/egladman/magus.HumanOnly func(reason string) TargetOption
 github.com/egladman/magus.IgnoreGlob func(pattern string) github.com/egladman/magus/types.IgnorePattern
 github.com/egladman/magus.IgnoreLiteral func(pattern string) github.com/egladman/magus/types.IgnorePattern
@@ -197,7 +190,7 @@ github.com/egladman/magus.MetricsCollector type struct
 github.com/egladman/magus.MetricsCollector.Collect method(ptr) func(ctx context.Context) (go.opentelemetry.io/otel/sdk/metric/metricdata.ResourceMetrics, error)
 github.com/egladman/magus.NewLazyWorkspace func(root string, open func(context.Context) (*Magus, error)) *LazyWorkspace
 github.com/egladman/magus.NewLimiter func(n int) *Limiter
-github.com/egladman/magus.NewSink func(format Format, stdout io.Writer, stderr io.Writer, opts ...SinkOption) (*Sink, error)
+github.com/egladman/magus.NewSink func(format github.com/egladman/magus/libs/cmdline/output.Format, stdout io.Writer, stderr io.Writer, opts ...SinkOption) (*Sink, error)
 github.com/egladman/magus.NewWorkspaceRegistry func() *WorkspaceRegistry
 github.com/egladman/magus.Open func(ctx context.Context, root string, opts ...Option) (*Magus, error)
 github.com/egladman/magus.Option type = github.com/egladman/magus/internal/workspace.Option

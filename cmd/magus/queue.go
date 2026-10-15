@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/queue/client"
 	"github.com/egladman/magus/internal/queue/provider"
 	"github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/spells"
 	magustypes "github.com/egladman/magus/types"
 )
@@ -279,11 +280,11 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 	if err := queueRequired("describe", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}); err != nil {
 		return err
 	}
-	opts, err := ResolveOutput(global.output)
+	opts, err := output.Parse(global.output)
 	if err != nil {
 		return err
 	}
-	if opts.Format != FormatText && opts.Format != FormatJSON && opts.Format != FormatJSONL {
+	if opts.Format != outputText && opts.Format != outputJSON && opts.Format != outputJSONL {
 		return usagef("magus queue describe: -o %s is not supported (want text, json or jsonl)", opts.Format)
 	}
 	drv, cl, err := e.open(ctx, f.Remote, f.VCS)
@@ -309,7 +310,7 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	if opts.Format != FormatText {
+	if opts.Format != outputText {
 		return queue.WriteCapabilities(e.stdout, f.Base, caps)
 	}
 	if err := caps.Check(); err != nil {
@@ -480,11 +481,11 @@ func queueReviews(ctx context.Context, e *queueEnv, args []string) error {
 	if err := queueRequired("reviews", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}, [2]string{"change", f.Change}); err != nil {
 		return err
 	}
-	opts, err := ResolveOutput(global.output)
+	opts, err := output.Parse(global.output)
 	if err != nil {
 		return err
 	}
-	if opts.Format != FormatText && opts.Format != FormatJSON && opts.Format != FormatJSONL {
+	if opts.Format != outputText && opts.Format != outputJSON && opts.Format != outputJSONL {
 		return usagef("magus queue reviews: -o %s is not supported (want text, json or jsonl)", opts.Format)
 	}
 	drv, cl, err := e.open(ctx, f.Remote, f.VCS)
@@ -515,7 +516,7 @@ func queueReviews(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	if opts.Format != FormatText {
+	if opts.Format != outputText {
 		return queue.WriteReviews(e.stdout, report)
 	}
 	return queue.WriteReviewLines(e.stdout, report)

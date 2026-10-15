@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
@@ -56,7 +57,7 @@ func TestStageRowSaysAdvisoryForAMemberTheCompositeCarriesOnPast(t *testing.T) {
 	require.True(t, p.TargetPolicies["security"].Advisory, "the fixture declares an advisory target")
 
 	var out bytes.Buffer
-	sink, err := NewSink(FormatText, io.Discard, &out)
+	sink, err := NewSink(output.Text, io.Discard, &out)
 	require.NoError(t, err, "NewSink")
 
 	obs := stageObserver{out: sink, label: "fixture", policies: targetPolicies(p)}
@@ -200,7 +201,7 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	t.Cleanup(func() { _ = m.Close() })
 
 	var stream, notices bytes.Buffer
-	sink, err := NewSink(FormatJSONL, &stream, &notices)
+	sink, err := NewSink(output.JSONL, &stream, &notices)
 	require.NoError(t, err)
 	err = m.Run(t.Context(), []types.Target{{Path: ".", Name: "build"}}, WithSink(sink))
 	require.NoError(t, sink.Close(), "flush the stream before reading it")
@@ -1400,7 +1401,7 @@ type recordedOutputOverlap struct {
 func recordOutputOverlapEvents(t *testing.T, steps []cache.Step) []recordedOutputOverlap {
 	t.Helper()
 	var buf bytes.Buffer
-	sink, err := NewSink(FormatJSONL, &buf, io.Discard)
+	sink, err := NewSink(output.JSONL, &buf, io.Discard)
 	require.NoError(t, err)
 	checkOutputOverlap(t.Context(), steps, sink)
 	require.NoError(t, sink.Close())
@@ -1485,7 +1486,7 @@ func TestCheckMissingDependencies_ReportsScopeLabelAsTarget(t *testing.T) {
 	written := map[string][]string{"producer": {"/ws/consumer/generated.go"}}
 
 	var buf bytes.Buffer
-	sink, err := NewSink(FormatJSONL, &buf, io.Discard)
+	sink, err := NewSink(output.JSONL, &buf, io.Discard)
 	require.NoError(t, err)
 	checkMissingDependencies(t.Context(), []*types.Project{consumer}, map[string]*types.Project{}, written, "3 projects", sink)
 	require.NoError(t, sink.Close())
@@ -1997,7 +1998,7 @@ func TestRun_NonRetryableFailureRecordsNotRetried(t *testing.T) {
 	t.Cleanup(func() { _ = m.Close() })
 
 	var stream, notices bytes.Buffer
-	sink, err := NewSink(FormatJSONL, &stream, &notices)
+	sink, err := NewSink(output.JSONL, &stream, &notices)
 	require.NoError(t, err)
 	err = m.Run(t.Context(), []types.Target{{Path: ".", Name: "refused"}}, WithSink(sink))
 	require.NoError(t, sink.Close(), "flush the stream before reading it")

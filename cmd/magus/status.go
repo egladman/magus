@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
 
@@ -229,7 +230,7 @@ func clampStatusWatch(interval time.Duration) time.Duration {
 }
 
 // printStatus renders one status snapshot; animFrame drives the active-cell pulse (0 = static).
-func printStatus(r types.StatusSnapshot, opts OutputOptions, animFrame int, compact bool) error {
+func printStatus(r types.StatusSnapshot, opts output.Options, animFrame int, compact bool) error {
 	return writeStatus(os.Stdout, r, opts, animFrame, compact)
 }
 
@@ -237,7 +238,7 @@ func printStatus(r types.StatusSnapshot, opts OutputOptions, animFrame int, comp
 // watch loop can render into a buffer and redraw it in place, rather than
 // printing straight at the terminal and having to erase the whole screen to
 // get rid of it.
-func writeStatus(w io.Writer, r types.StatusSnapshot, opts OutputOptions, animFrame int, compact bool) error {
+func writeStatus(w io.Writer, r types.StatusSnapshot, opts output.Options, animFrame int, compact bool) error {
 	// TTY-ness is measured on os.Stdout, not on w, and that is deliberate: in
 	// watch mode w is a buffer this renders into before redrawing it in place,
 	// so the terminal being rendered FOR is still standard output.
@@ -258,7 +259,7 @@ func writeStatus(w io.Writer, r types.StatusSnapshot, opts OutputOptions, animFr
 // must already account for TERM=dumb (see [tty.CanRender]): the grid draws
 // SGR colors and a braille spinner unconditionally, so a dumb terminal that
 // merely passed a bare TTY check would render them as garbage.
-func gridEnabled(opts OutputOptions, canRender bool) bool {
+func gridEnabled(opts output.Options, canRender bool) bool {
 	return opts.Format == outputText && canRender && os.Getenv("NO_COLOR") == ""
 }
 
@@ -1421,7 +1422,7 @@ func printLockStatus(w io.Writer, locks []types.StatusLock) {
 // tall as the terminal, where erasing upward would walk off the top and eat the
 // transcript above. Falling back is worse than redrawing in place and much
 // better than a corrupted screen.
-func paintStatusFrame(p *tty.InlineView, inline bool, r types.StatusSnapshot, opts OutputOptions, animFrame int, compact bool) error {
+func paintStatusFrame(p *tty.InlineView, inline bool, r types.StatusSnapshot, opts output.Options, animFrame int, compact bool) error {
 	if !inline {
 		return printStatus(r, opts, animFrame, compact)
 	}

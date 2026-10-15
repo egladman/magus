@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
 
@@ -153,7 +154,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		if oerr != nil {
 			return oerr
 		}
-		if outOpts.Format != FormatText {
+		if outOpts.Format != outputText {
 			return usagef("magus query output --stdin: -o %s is not supported; it prints each record's output, and the records themselves are already the structured form", outOpts.Format)
 		}
 		return printOutputRecords(os.Stdin, os.Stdout, noticeLines{ctx: ctx, level: slog.LevelInfo})
@@ -244,7 +245,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		input += " kind=" + k
 	}
 
-	read := graphRead{Input: input, Budget: qf.Budget, Nearest: opts.Format == FormatText}
+	read := graphRead{Input: input, Budget: qf.Budget, Nearest: opts.Format == outputText}
 	var res queryResult
 	if qf.Refresh || qf.Global || !askServer(ctx, root, readQuery, &read, &res) {
 		ws, err := openForRead(ctx, root)
@@ -317,13 +318,13 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 
 // outputRefOpts carries the options for `magus query output <ref>`.
 type outputRefOpts struct {
-	open       bool          // open the browser log viewer instead of printing
-	printURL   bool          // with open, print the URL instead of launching a browser
-	viewerBase string        // log viewer base URL
-	attempts   bool          // list the ref's stored executions instead of printing output
-	identity   bool          // show the run's identity (descriptor, lineage, key digests)
-	publish    bool          // upload this run's output to the remote as a signed bundle
-	out        OutputOptions // -o: text prints raw bytes, json/yaml prints the descriptor record
+	open       bool           // open the browser log viewer instead of printing
+	printURL   bool           // with open, print the URL instead of launching a browser
+	viewerBase string         // log viewer base URL
+	attempts   bool           // list the ref's stored executions instead of printing output
+	identity   bool           // show the run's identity (descriptor, lineage, key digests)
+	publish    bool           // upload this run's output to the remote as a signed bundle
+	out        output.Options // -o: text prints raw bytes, json/yaml prints the descriptor record
 }
 
 // queryOutputRef retrieves a target's captured output by reference id (or unique prefix). The
@@ -337,7 +338,7 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	// silently answered with the bytes: the accepted-and-ignored failure -o exists to
 	// avoid, and worse here than elsewhere because the fallback looks like real output.
 	switch o.out.Format {
-	case FormatText, FormatJSON, FormatJSONL, FormatYAML:
+	case outputText, outputJSON, outputJSONL, outputYAML:
 	default:
 		return usagef("magus query output: -o %s is not supported; a captured log has no fields to render, so json, jsonl and yaml (the record around the bytes) are the only structured forms", o.out.Format)
 	}
@@ -398,12 +399,12 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	// Remote-aware: a ref unknown locally may have been published from CI or a
 	// teammate's machine, so the print path consults the remote bundle namespace
 	// before reporting it missing.
-	if o.out.Format != FormatText {
+	if o.out.Format != outputText {
 		rec, rerr := m.OutputRecordByRef(ctx, ref)
 		if rerr != nil {
 			return reportRefLookupError(ctx, m, ref, rerr)
 		}
-		if o.out.Format == FormatJSONL {
+		if o.out.Format == outputJSONL {
 			// A slice, or writeJSONL would stream one of the record's list fields.
 			return emitFormatted(o.out, []types.StoredOutput{rec})
 		}
@@ -452,9 +453,9 @@ type trailPayloadRecord struct {
 // queryTrailPayload prints a payload the activity trail stored under a non-out prefix: a
 // guard verdict (grd), an MCP request or response (mcp). The ref names its own store, so a
 // miss here is final and the run-output store is not consulted.
-func queryTrailPayload(ctx context.Context, root, ref string, out OutputOptions) error {
+func queryTrailPayload(ctx context.Context, root, ref string, out output.Options) error {
 	switch out.Format {
-	case FormatText, FormatJSON, FormatYAML:
+	case outputText, outputJSON, outputYAML:
 	default:
 		return usagef("magus query output: -o %s is not supported; a stored payload has no fields to render, so json and yaml are the only structured forms", out.Format)
 	}
@@ -471,7 +472,7 @@ func queryTrailPayload(ctx context.Context, root, ref string, out OutputOptions)
 	if err != nil {
 		return fmt.Errorf("magus query output: read %s: %w", ref, err)
 	}
-	if out.Format == FormatJSON || out.Format == FormatYAML {
+	if out.Format == outputJSON || out.Format == outputYAML {
 		return emitFormatted(out, trailPayloadRecord{Ref: ref, Output: string(data)})
 	}
 	// A verdict is stored without a trailing newline, so it would run into the prompt.
@@ -486,12 +487,12 @@ func queryTrailPayload(ctx context.Context, root, ref string, out OutputOptions)
 // first. Every attempt of a step shares the step's ref; the attempt id is the
 // execution-unique handle, and passing a full attempt id to `magus query output`
 // retrieves that exact execution's bytes.
-func listOutputAttempts(ctx context.Context, m *magus.Magus, ref string, out OutputOptions) error {
+func listOutputAttempts(ctx context.Context, m *magus.Magus, ref string, out output.Options) error {
 	list, err := m.OutputAttempts(ctx, ref)
 	if err != nil {
 		return reportRefLookupError(ctx, m, ref, err)
 	}
-	if out.Format == FormatJSON || out.Format == FormatYAML {
+	if out.Format == outputJSON || out.Format == outputYAML {
 		return emitFormatted(out, list)
 	}
 	// Head the listing with the STEP's identity: the portable ref when a v2
@@ -541,7 +542,7 @@ type invocationRecord struct {
 // This exists because the events were written and unreachable. The reference and provider were
 // recorded on every read, docs/concepts/secrets.md offered that as the audit trail, and the id
 // magus prints (`inv:`) resolved to nothing, so the trail was a claim rather than a record.
-func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, out OutputOptions) error {
+func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, out output.Options) error {
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return err
@@ -648,7 +649,7 @@ type outputIdentityRecord struct {
 // component classes: the machine-comparable half of the works-on-my-machine story
 // (two machines compare digests to learn WHICH class disagrees; `describe target
 // --cache --against` then names the exact line).
-func showOutputIdentity(ctx context.Context, m *magus.Magus, ref string, out OutputOptions) error {
+func showOutputIdentity(ctx context.Context, m *magus.Magus, ref string, out output.Options) error {
 	desc, err := m.OutputDescriptorByRef(ctx, ref)
 	if err != nil {
 		return reportRefLookupError(ctx, m, ref, err)

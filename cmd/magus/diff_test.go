@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -50,7 +51,7 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 		name    string
 		flags   flaggen.DiffFlags
 		src     diffInput
-		format  Format
+		format  output.Format
 		term    diffTUITerm
 		enabled bool
 		want    bool

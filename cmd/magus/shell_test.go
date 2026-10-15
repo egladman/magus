@@ -29,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -187,7 +188,7 @@ func TestGuardDecisionsCoverEveryVerdictTheHookEmits(t *testing.T) {
 
 	for _, d := range agent.GuardDecisions() {
 		var out strings.Builder
-		require.NoError(t, writeGuardVerdict(&out, OutputOptions{Format: FormatText}, types.GuardJudgment{
+		require.NoError(t, writeGuardVerdict(&out, output.Options{Format: outputText}, types.GuardJudgment{
 			SchemaVersion: agent.GuardSchemaVersion,
 			Decision:      d,
 			Reason:        "why",
@@ -787,7 +788,7 @@ func TestHookCmd_EnvelopeWithNothingToJudge(t *testing.T) {
 // reachable and correct while the process exited 0, so a host read success and ran the
 // command anyway: the guard looked installed and enforced nothing.
 func TestEnforceVerdictBlocksOnlyDeny(t *testing.T) {
-	text := OutputOptions{Format: FormatText}
+	text := output.Options{Format: outputText}
 	err := enforceVerdict(text, types.GuardJudgment{Decision: "deny", Reason: "no"})
 	require.Error(t, err, "a deny must exit non-zero or it blocks nothing")
 	var silent errSilent
@@ -800,20 +801,20 @@ func TestEnforceVerdictBlocksOnlyDeny(t *testing.T) {
 
 	// The exit code is the enforcement and does not depend on the rendering: a structured
 	// consumer that got a zero status would be told the same lie in a different shape.
-	require.Error(t, enforceVerdict(OutputOptions{Format: FormatJSON}, types.GuardJudgment{Decision: "deny", Reason: "no"}))
+	require.Error(t, enforceVerdict(output.Options{Format: outputJSON}, types.GuardJudgment{Decision: "deny", Reason: "no"}))
 }
 
 // TestEnforceVerdictBlocksAnAsk pins that an ask stops the call wherever nothing renders the
 // host's prompt. A glue that reads only the exit status would otherwise take the person's
 // approval as already given. The shipped templates read stdout and exit 0 themselves.
 func TestEnforceVerdictBlocksAnAsk(t *testing.T) {
-	err := enforceVerdict(OutputOptions{Format: FormatText}, types.GuardJudgment{Decision: "ask", Reason: "publish?"})
+	err := enforceVerdict(output.Options{Format: outputText}, types.GuardJudgment{Decision: "ask", Reason: "publish?"})
 	var silent errSilent
 	require.ErrorAs(t, err, &silent)
 	assert.Equal(t, guardDenyExitCode, silent.exitCode)
 
 	var stdout bytes.Buffer
-	require.NoError(t, writeGuardVerdict(&stdout, OutputOptions{Format: FormatText},
+	require.NoError(t, writeGuardVerdict(&stdout, output.Options{Format: outputText},
 		types.GuardJudgment{Decision: "ask", Rule: "push-ungated", Reason: "publish?"}))
 	assert.Equal(t, "ask [push-ungated]: publish?\n", stdout.String())
 }
@@ -827,14 +828,14 @@ func TestGuardDenyPrintsItsReasonOnce(t *testing.T) {
 	deny := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: "because"}
 
 	var stdout bytes.Buffer
-	require.NoError(t, writeGuardVerdict(&stdout, OutputOptions{Format: FormatText}, deny))
+	require.NoError(t, writeGuardVerdict(&stdout, output.Options{Format: outputText}, deny))
 	assert.Equal(t, 1, strings.Count(stdout.String(), "because"), "stdout renders the reason once")
 	assert.Empty(t, captureStderr(t, func() {
-		_ = enforceVerdict(OutputOptions{Format: FormatText}, deny)
+		_ = enforceVerdict(output.Options{Format: outputText}, deny)
 	}), "and stderr must not repeat what stdout just said")
 
 	assert.Contains(t, captureStderr(t, func() {
-		_ = enforceVerdict(OutputOptions{Format: FormatJSON}, deny)
+		_ = enforceVerdict(output.Options{Format: outputJSON}, deny)
 	}), "because", "a structured format renders no prose, so stderr carries it")
 }
 
@@ -2008,7 +2009,7 @@ func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 	require.NotEmpty(t, ref, "a repeat deny cites its full verdict: %s", again.Reason)
 
 	out := captureStdout(t, func() {
-		require.NoError(t, queryTrailPayload(t.Context(), worktree, ref, OutputOptions{Format: FormatText}))
+		require.NoError(t, queryTrailPayload(t.Context(), worktree, ref, output.Options{Format: outputText}))
 	})
 	assert.Contains(t, out, "see: https://eli.gladman.cc/magus/reference/rules/")
 

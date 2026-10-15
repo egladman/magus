@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -68,7 +69,7 @@ func graphDiff(ctx context.Context, root string, args []string) error {
 		return errSilent{exitCode: 2}
 	}
 
-	outOpts, err := ResolveOutput(global.output, outputMarkdown)
+	outOpts, err := output.Parse(global.output, outputMarkdown)
 	if err != nil {
 		return err
 	}

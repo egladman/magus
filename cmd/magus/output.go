@@ -6,18 +6,24 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"maps"
 	"os"
 	"reflect"
-	"slices"
 	"strings"
 	"text/template"
 
 	sprig "github.com/Masterminds/sprig/v3"
-	"gopkg.in/yaml.v3"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/cmdline/output"
+)
+
+// The -o formats only magus's graph commands accept, passed to output.Parse as extras.
+const (
+	outputDot      output.Format = "dot"
+	outputTree     output.Format = "tree"
+	outputMarkdown output.Format = "markdown" // describe graph: target catalog + dependency graph as a Markdown doc
+	outputGraphML  output.Format = "graphml"  // graph export: GraphML XML for external graph viewers
 )
 
 // structuredStdout is where structured output goes besides the --tee file. --silent
@@ -45,7 +51,7 @@ func outputDst() (io.Writer, func() error, error) {
 // openSink builds the invocation's one sink for its -o format, over stdout (mirrored to
 // --tee) and stderr; close flushes it and closes the tee. A text sink whose stdout a
 // magus stage reads also writes its records there (see pipeRecordStage).
-func openSink(ctx context.Context, opts OutputOptions) (*magus.Sink, func() error, error) {
+func openSink(ctx context.Context, opts output.Options) (*magus.Sink, func() error, error) {
 	stdout := io.Writer(os.Stdout)
 	tee := &lazyFile{path: global.tee}
 	if global.tee != "" {
@@ -55,7 +61,7 @@ func openSink(ctx context.Context, opts OutputOptions) (*magus.Sink, func() erro
 	if opts.Format == outputText && pipeStageFromContext(ctx).writesRecords() {
 		sinkOpts = append(sinkOpts, magus.WithSinkRecords(stdout))
 	}
-	sink, err := magus.NewSink(magus.Format(opts.Format), stdout, os.Stderr, sinkOpts...)
+	sink, err := magus.NewSink(opts.Format, stdout, os.Stderr, sinkOpts...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -91,7 +97,7 @@ func (l *lazyFile) Close() error {
 // mirrored to --tee) and closes it. It owns the outputDst/cleanup pair so every
 // command's `-o json|yaml|jsonl|template` arm is one call instead of repeating the
 // same dst/defer/writeFormatted dance.
-func emitFormatted(opts OutputOptions, v any) error {
+func emitFormatted(opts output.Options, v any) error {
 	w, cleanup, err := outputDst()
 	if err != nil {
 		return err
@@ -103,10 +109,9 @@ func emitFormatted(opts OutputOptions, v any) error {
 // emitNames writes the `-o name` form: one bare token per line, to the structured-output
 // destination (stdout, mirrored to --tee).
 //
-// writeFormatted does not implement outputName and cannot: which field IS the identity of
+// The output package does not render -o name and cannot: which field IS the identity of
 // a record is the command's to say, not the renderer's. So a command that offers -o name
-// renders it through here. Without an arm, -o name reached writeFormatted's default case
-// and died with "unsupported format", which reads as a broken flag rather than a gap.
+// renders it through here.
 func emitNames(names []string) error {
 	w, cleanup, err := outputDst()
 	if err != nil {
@@ -135,149 +140,16 @@ func emitItemNames[T any](items []T, name func(T) string) error {
 	return emitNames(names)
 }
 
-func writeJSON(w io.Writer, v any) error {
-	b, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return err
-	}
-	if _, err := w.Write(b); err != nil {
-		return err
-	}
-	_, err = w.Write([]byte{'\n'})
-	return err
+// outputWriter renders json, yaml, jsonl and template through magus's one JSON codec,
+// so -o json and a template see the same wire form every other byte magus writes has.
+var outputWriter = output.Writer{
+	Codec: output.Codec{Marshal: json.Marshal, Unmarshal: json.Unmarshal},
+	Funcs: templateFuncs(),
 }
 
-func writeYAML(w io.Writer, v any) error {
-	enc := yaml.NewEncoder(w)
-	enc.SetIndent(2)
-	if err := enc.Encode(v); err != nil {
-		return err
-	}
-	return enc.Close()
-}
-
-// jsonlPrimaryTag is the struct tag naming the collection -o jsonl streams:
-// `jsonl:"primary"` on exactly one slice field of an output type.
-const jsonlPrimaryTag = "jsonl"
-
-// writeJSONL streams v's primary collection as one JSON value per line.
-//
-// Which collection that is must be DECLARED (`jsonl:"primary"`) once a type carries more
-// than one. The rule used to be "the only slice field", which silently degraded to
-// printing the whole object as a single line the day a type grew a second list, so
-// -o jsonl became -o json, at exit 0, for the consumer least able to notice. An
-// undeclared ambiguity is an error naming the candidates instead.
-func writeJSONL(w io.Writer, v any) error {
-	enc := json.NewEncoder(w)
-	rv := reflect.ValueOf(v)
-	for rv.Kind() == reflect.Pointer {
-		rv = rv.Elem()
-	}
-	switch rv.Kind() {
-	case reflect.Slice, reflect.Array:
-		return encodeEach(enc, rv)
-	case reflect.Struct:
-		path, err := jsonlPrimaryField(rv.Type())
-		if err != nil {
-			return err
-		}
-		if len(path) > 0 {
-			return encodeEach(enc, rv.FieldByIndex(path))
-		}
-	}
-	return enc.Encode(v)
-}
-
-// jsonlPrimaryField returns the index path of rt's streamable collection, or nil when
-// rt has none. It errors when the choice is ambiguous: more than one field marked
-// primary, or several collections with none marked.
-//
-// It descends into EMBEDDED structs because json flattens them: a wrapper that adds
-// one field beside an embedded result puts that result's own collections on the wire
-// at the top level, and counting only the wrapper's own fields would elect the added
-// field as the stream nobody declared.
-func jsonlPrimaryField(rt reflect.Type) ([]int, error) {
-	var tagged []int
-	var taggedKey string
-	var candidates [][]int
-	var keys []string
-
-	var walk func(reflect.Type, []int) error
-	walk = func(t reflect.Type, prefix []int) error {
-		for i := range t.NumField() {
-			f := t.Field(i)
-			if !f.IsExported() {
-				continue
-			}
-			at := append(append([]int(nil), prefix...), i)
-			if f.Anonymous && f.Type.Kind() == reflect.Struct && f.Tag.Get("json") == "" {
-				if err := walk(f.Type, at); err != nil {
-					return err
-				}
-				continue
-			}
-			if jsonFieldKey(f) == "" {
-				continue
-			}
-			if f.Type.Kind() != reflect.Slice && f.Type.Kind() != reflect.Array {
-				continue
-			}
-			if f.Tag.Get(jsonlPrimaryTag) == "primary" {
-				if tagged != nil {
-					return fmt.Errorf("-o jsonl: %s marks both %q and %q as jsonl:\"primary\", exactly one collection streams",
-						typeLabel(rt), taggedKey, jsonFieldKey(f))
-				}
-				tagged, taggedKey = at, jsonFieldKey(f)
-			}
-			candidates = append(candidates, at)
-			keys = append(keys, jsonFieldKey(f))
-		}
-		return nil
-	}
-	if err := walk(rt, nil); err != nil {
-		return nil, err
-	}
-
-	if tagged != nil {
-		return tagged, nil
-	}
-	switch len(candidates) {
-	case 0:
-		return nil, nil
-	case 1:
-		return candidates[0], nil
-	}
-	return nil, fmt.Errorf("-o jsonl: %s carries %d collections (%s) and none is marked jsonl:\"primary\", so there is no single stream to emit, use -o json for the whole record",
-		typeLabel(rt), len(keys), strings.Join(keys, ", "))
-}
-
-// encodeEach writes one JSON line per element of list.
-func encodeEach(enc json.Encoder, list reflect.Value) error {
-	for i := range list.Len() {
-		if err := enc.Encode(list.Index(i).Interface()); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// writeFormatted dispatches v to json/yaml/jsonl/template based on opts.Format.
-func writeFormatted(w io.Writer, opts OutputOptions, v any) error {
-	switch opts.Format {
-	case outputJSON:
-		return writeJSON(w, v)
-	case outputYAML:
-		return writeYAML(w, v)
-	case outputJSONL:
-		return writeJSONL(w, v)
-	case outputTemplate:
-		if opts.Template == "" { // bare "-o template": document the fields instead of rendering
-			return writeTemplateFields(w, v)
-		}
-		return writeTemplate(w, v, opts.Template)
-	default:
-		return fmt.Errorf("writeFormatted: unsupported format %q", opts.Format)
-	}
+// writeFormatted renders v in opts' structured format to w.
+func writeFormatted(w io.Writer, opts output.Options, v any) error {
+	return outputWriter.Write(w, opts, v)
 }
 
 // flagWasSet reports whether flag name was explicitly set (not just defaulted) on fs.
@@ -289,81 +161,6 @@ func flagWasSet(fs *flag.FlagSet, name string) bool {
 		}
 	})
 	return found
-}
-
-// writeTemplate executes a Go text/template body against v. The template sees the
-// SAME shape as -o json: field names are the json-tag keys ({{.path}}), NOT the
-// PascalCase Go struct fields.
-//
-// That choice is deliberate and is the kubectl -o go-template model rather than
-// docker --format's. -o json is the reference a template is authored against: a
-// reader runs the command with -o json, sees "cache_key", and writes {{.cache_key}}.
-// Binding to Go identifiers instead would name fields that appear in NO other output
-// format, leaving nothing to read them off, and would couple user templates to
-// internal field names so a rename breaks them silently. The json tags are already a
-// versioned wire contract; Go identifiers are not.
-//
-// The cost, accepted: the round-trip coerces numbers to float64 (see below), and a
-// caller who types the Go casing gets an error rather than a guess. Bare -o template
-// lists the available fields, and the execute error points at it. We guarantee that by first normalizing v through the
-// codec (marshal to JSON, then unmarshal into a plain any), so the template ranges
-// over map[string]any / []any exactly as -o json renders it. This makes -o json a
-// faithful reference for authoring templates (the kubectl -o go-template model), and
-// keeps template field names stable with the json contract rather than with Go
-// identifiers. Numbers arrive as float64 (json's default for any); text/template
-// prints whole values without a fractional part (float64(26) -> "26").
-// Helpers: a curated subset of sprig (strings, lists, dicts, encoding, paths, defaults, semver).
-// Excluded: env/expandenv, now/date/uuidv4, crypto, getHostByName, fail.
-// No trailing newline is appended (templates control whitespace, matching kubectl -o go-template).
-func writeTemplate(w io.Writer, v any, body string) error {
-	// missingkey=error, because the data is a map keyed by JSON TAG and the default
-	// is to render a misspelled key as "<no value>" and exit 0. A caller who writes
-	// {{.Name}} instead of {{.name}} (the Go field name rather than the wire name)
-	// otherwise gets empty output and a success status, which is the worst outcome for
-	// the machine-readable format an agent scripts against.
-	t, err := template.New("output").Funcs(templateFuncs()).Option("missingkey=error").Parse(body)
-	if err != nil {
-		return fmt.Errorf("parse template: %w", err)
-	}
-	shaped, err := jsonShape(v)
-	if err != nil {
-		return fmt.Errorf("shape template data: %w", err)
-	}
-	if err := t.Execute(w, shaped); err != nil {
-		// Names the contract AND the exact way to see it. A template error that only
-		// says "no entry for key" leaves the reader guessing at casing, which is the
-		// state this whole path was in when it rendered nothing and exited 0.
-		return fmt.Errorf("execute template: template fields are the -o json names, not the Go field names (.name, not .Name): "+
-			"%sto list every field this command exposes, rerun it with a bare -o template (no '=' and no body): %w", topLevelFields(shaped), err)
-	}
-	return nil
-}
-
-// topLevelFields names the keys the template ran against, as a clause ending in ": ".
-// It is empty when the record is not an object (a list has no field names to offer).
-// A field the record omits (omitempty) is not listed, because the template cannot read it.
-func topLevelFields(shaped any) string {
-	record, ok := shaped.(map[string]any)
-	if !ok || len(record) == 0 {
-		return ""
-	}
-	return fmt.Sprintf("this record's top-level fields are %s: ", strings.Join(slices.Sorted(maps.Keys(record)), ", "))
-}
-
-// jsonShape round-trips v through the codec so the result is the plain-any mirror of
-// v's JSON form (map[string]any/[]any/float64/string/bool/nil), keyed by json tags.
-// -o template renders against this so its field names match -o json exactly, under
-// whichever codec build (encoding/json or json/v2) is active.
-func jsonShape(v any) (any, error) {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	var shaped any
-	if err := json.Unmarshal(b, &shaped); err != nil {
-		return nil, err
-	}
-	return shaped, nil
 }
 
 // excludedSprigFuncs lists sprig entries absent from magus templates (non-hermetic or dangerous).
@@ -388,7 +185,7 @@ func templateFuncs() template.FuncMap {
 	}
 	// Preserve magus's original bindings; magus's list-first join wins over sprig's
 	// reversed (sep-first) join. templateJoin (not strings.Join) so it also handles
-	// the []any that json-normalization produces for list fields; see writeTemplate.
+	// the []any that json-normalization produces for list fields.
 	f["join"] = templateJoin
 	f["upper"] = strings.ToUpper
 	f["lower"] = strings.ToLower
@@ -411,217 +208,6 @@ func templateJoin(list any, sep string) string {
 	parts := make([]string, rv.Len())
 	for i := range parts {
 		parts[i] = fmt.Sprint(rv.Index(i).Interface())
-	}
-	return strings.Join(parts, sep)
-}
-
-// writeTemplateFields prints the fields available to -o template / -o json for v,
-// instead of rendering v: what bare "-o template" (no body) produces, the template
-// fields documenting themselves. It REFLECTS v's type directly (the same approach config
-// uses in collectSchema), so it works for ANY output type without a curated set, and
-// lists each exported field by its json-tag key (the vocabulary -o json and -o
-// template share) with its type. Referenced struct types are listed too, so a nested
-// shape (e.g. .projects -> []ProjectEntry) is drillable in the same output. Reflection
-// cannot read Go doc comments, so this is field names + types only, no per-field docs.
-func writeTemplateFields(w io.Writer, v any) error {
-	rt := structType(reflect.TypeOf(v))
-	if rt == nil {
-		// A command whose whole output is a list (or a map of records) still has fields
-		// worth listing: the ELEMENT's, which are what a template body ranges over.
-		// Refusing there left `describe target -o template` with nothing to read the
-		// field names off, which is the one thing bare -o template exists for.
-		rt = structType(elemType(reflect.TypeOf(v)))
-	}
-	if rt == nil {
-		return fmt.Errorf("-o template: %T has no fields to list", v)
-	}
-	fmt.Fprintln(w, "# fields for -o json / -o template (bare -o template lists these):")
-	seen := map[reflect.Type]bool{}
-	queue := []reflect.Type{rt}
-	for len(queue) > 0 {
-		t := queue[0]
-		queue = queue[1:]
-		if seen[t] {
-			continue
-		}
-		seen[t] = true
-		for _, ref := range writeFieldBlock(w, t) {
-			if !seen[ref] {
-				queue = append(queue, ref)
-			}
-		}
-	}
-	return nil
-}
-
-// writeFieldBlock prints one struct type's exported fields as `<json-key>  <type>`,
-// json-key column aligned, under a `<TypeName>:` header, and returns the named struct
-// types those fields reference (through slice/pointer/map wrappers) so the caller can
-// list them too.
-func writeFieldBlock(w io.Writer, t reflect.Type) []reflect.Type {
-	type field struct{ key, typ string }
-	var fields []field
-	var refs []reflect.Type
-	width := 0
-	// VisibleFields reaches an embedded struct's fields, which json promotes to the top level.
-	for _, f := range reflect.VisibleFields(t) {
-		if !f.IsExported() || f.Anonymous || strings.HasSuffix(f.Tag.Get("json"), ",unknown") {
-			continue
-		}
-		key := jsonFieldKey(f)
-		if key == "" { // json:"-"
-			continue
-		}
-		fields = append(fields, field{key, typeLabel(f.Type)})
-		if len(key) > width {
-			width = len(key)
-		}
-		if st := structType(elemType(f.Type)); st != nil {
-			refs = append(refs, st)
-		}
-	}
-	fmt.Fprintf(w, "\n%s:\n", t.Name())
-	for _, f := range fields {
-		fmt.Fprintf(w, "  %-*s  %s\n", width, f.key, f.typ)
-	}
-	return refs
-}
-
-// structType dereferences pointers and returns rt when it is a struct, else nil.
-func structType(rt reflect.Type) reflect.Type {
-	for rt != nil && rt.Kind() == reflect.Pointer {
-		rt = rt.Elem()
-	}
-	if rt == nil || rt.Kind() != reflect.Struct {
-		return nil
-	}
-	return rt
-}
-
-// elemType unwraps slice/array/pointer/map(value) wrappers to the element type, so a
-// field like []ProjectEntry or *Target surfaces the struct it references.
-func elemType(rt reflect.Type) reflect.Type {
-	for rt != nil {
-		switch rt.Kind() {
-		case reflect.Pointer, reflect.Slice, reflect.Array, reflect.Map:
-			rt = rt.Elem()
-		default:
-			return rt
-		}
-	}
-	return rt
-}
-
-// jsonFieldKey returns the json object key for a struct field: its json-tag name, the
-// Go field name when there is no tag (encoding/json's default), or "" when the field
-// is json-excluded (json:"-").
-func jsonFieldKey(f reflect.StructField) string {
-	tag, ok := f.Tag.Lookup("json")
-	if !ok {
-		return f.Name
-	}
-	switch name, _, _ := strings.Cut(tag, ","); name {
-	case "-":
-		return ""
-	case "":
-		return f.Name
-	default:
-		return name
-	}
-}
-
-// typeLabel renders a reflect.Type as a readable field type, dropping package
-// qualifiers ("types.ProjectEntry" -> "ProjectEntry", "time.Duration" -> "Duration")
-// so the listing reads like the json shape rather than Go's fully-qualified names.
-func typeLabel(rt reflect.Type) string {
-	switch rt.Kind() {
-	case reflect.Pointer:
-		return "*" + typeLabel(rt.Elem())
-	case reflect.Slice, reflect.Array:
-		return "[]" + typeLabel(rt.Elem())
-	case reflect.Map:
-		return "map[" + typeLabel(rt.Key()) + "]" + typeLabel(rt.Elem())
-	case reflect.Interface:
-		if rt.NumMethod() == 0 {
-			return "any"
-		}
-	}
-	if n := rt.Name(); n != "" {
-		return n
-	}
-	return rt.String()
-}
-
-// Format identifies how a command renders structured output (-o/--output).
-// This is a CLI-presentation concern, so it lives in package main rather than in
-// the domain types package.
-type Format string
-
-const (
-	FormatText     Format = "text"
-	FormatJSON     Format = "json"
-	FormatYAML     Format = "yaml"
-	FormatJSONL    Format = "jsonl" // one JSON object per line; streams elements of the primary collection field
-	FormatName     Format = "name"
-	FormatTemplate Format = "template" // -o template=<go-template>
-
-	// Graph-only output formats. Not accepted by other commands.
-
-	FormatDot      Format = "dot"
-	FormatTree     Format = "tree"
-	FormatMarkdown Format = "markdown" // describe graph: target catalog + dependency graph as a Markdown doc
-	FormatGraphML  Format = "graphml"  // graph export: GraphML XML for external graph viewers
-)
-
-// CommonFormats are the formats every structured command accepts. The
-// template= form is handled separately by ResolveOutput.
-var CommonFormats = []Format{FormatText, FormatJSON, FormatYAML, FormatJSONL, FormatName}
-
-// OutputOptions is the parsed -o value; Template is set when Format is FormatTemplate.
-// Obtain one from ResolveOutput — the zero value (empty Format) is not a valid
-// opts and matches no renderer.
-type OutputOptions struct {
-	Format   Format
-	Template string
-}
-
-// ResolveOutput parses an -o/--output value into an OutputOptions. An empty input
-// resolves to FormatText; a "template=<body>" input resolves to FormatTemplate
-// carrying the body. Any extra formats (e.g. the graph-only FormatDot/
-// Tree) are matched verbatim and take precedence over the built-in set, letting
-// a command opt into formats beyond CommonFormats. Unknown values are an error.
-func ResolveOutput(input string, extra ...Format) (OutputOptions, error) {
-	if input == "" {
-		return OutputOptions{Format: FormatText}, nil
-	}
-	for _, v := range extra {
-		if string(v) == input {
-			return OutputOptions{Format: v}, nil
-		}
-	}
-	if body, ok := strings.CutPrefix(input, "template="); ok {
-		// An empty body ("-o template=") means "list the fields", same as bare
-		// "-o template" below, not an error. A non-empty body renders.
-		return OutputOptions{Format: FormatTemplate, Template: body}, nil
-	}
-	if input == "template" {
-		// Bare "-o template" (no body): print the output's templatable fields
-		// instead of rendering: the self-documentation of the template fields.
-		return OutputOptions{Format: FormatTemplate, Template: ""}, nil
-	}
-	for _, v := range CommonFormats {
-		if string(v) == input {
-			return OutputOptions{Format: v}, nil
-		}
-	}
-	return OutputOptions{}, fmt.Errorf("unknown output format %q (choose: %s, template=<go-template>)", input, JoinFormats(CommonFormats, ", "))
-}
-
-// JoinFormats renders fs as a sep-joined string for help and error text.
-func JoinFormats(fs []Format, sep string) string {
-	parts := make([]string, len(fs))
-	for i, f := range fs {
-		parts[i] = string(f)
 	}
 	return strings.Join(parts, sep)
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -66,7 +67,7 @@ func newRunningWorkspace(t *testing.T, output string, runErr error) (*magus.Magu
 func exportJSONL(t *testing.T, ctx context.Context, ref string) string {
 	t.Helper()
 	return captureStdout(t, func() {
-		require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{out: OutputOptions{Format: FormatJSONL}}))
+		require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{out: output.Options{Format: outputJSONL}}))
 	})
 }
 
@@ -96,7 +97,7 @@ func TestOutputImportRoundTripPrintsTheSameBytes(t *testing.T) {
 	ctx := withMagus(context.Background(), m)
 
 	local := captureStdout(t, func() {
-		require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{out: OutputOptions{Format: FormatText}}))
+		require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{out: output.Options{Format: outputText}}))
 	})
 	require.Contains(t, local, "FAIL")
 	jsonl := exportJSONL(t, ctx, ref)
@@ -120,7 +121,7 @@ func TestQueryOutputTextPrintsAFailedRunsErrorToStderr(t *testing.T) {
 	var stdout string
 	stderr := captureStderr(t, func() {
 		stdout = captureStdout(t, func() {
-			require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{out: OutputOptions{Format: FormatText}}))
+			require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{out: output.Options{Format: outputText}}))
 		})
 	})
 
@@ -143,7 +144,7 @@ func TestQueryOutputNamesTheFailedNeed(t *testing.T) {
 
 	t.Run("text", func(t *testing.T) {
 		stderr := captureStderr(t, func() {
-			require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{out: OutputOptions{Format: FormatText}}))
+			require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{out: output.Options{Format: outputText}}))
 		})
 		assert.Contains(t, stderr, "ctx.needs: golangci exited 1", "the error notice is unchanged")
 		assert.Contains(t, stderr, "lint-go")
@@ -152,7 +153,7 @@ func TestQueryOutputNamesTheFailedNeed(t *testing.T) {
 
 	t.Run("identity", func(t *testing.T) {
 		stdout := captureStdout(t, func() {
-			require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{identity: true, out: OutputOptions{Format: FormatText}}))
+			require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{identity: true, out: output.Options{Format: outputText}}))
 		})
 		assert.Contains(t, stdout, "ctx.needs: golangci exited 1")
 		assert.Contains(t, stdout, want)
@@ -160,7 +161,7 @@ func TestQueryOutputNamesTheFailedNeed(t *testing.T) {
 
 	t.Run("json", func(t *testing.T) {
 		stdout := captureStdout(t, func() {
-			require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{out: OutputOptions{Format: FormatJSON}}))
+			require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{out: output.Options{Format: outputJSON}}))
 		})
 		assert.Contains(t, stdout, `"failed_need_target": "lint-go"`)
 		assert.Contains(t, stdout, `"failed_need_ref": "`+memberRef+`"`)
@@ -261,7 +262,7 @@ func TestQueryOutputTextPrintsNoErrorForAPassingRun(t *testing.T) {
 
 	stderr := captureStderr(t, func() {
 		out := captureStdout(t, func() {
-			require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{out: OutputOptions{Format: FormatText}}))
+			require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{out: output.Options{Format: outputText}}))
 		})
 		assert.Equal(t, "fine\n", out)
 	})
@@ -309,7 +310,7 @@ func TestOutputImportRefusesActingOnARecord(t *testing.T) {
 	}
 	assert.Error(t, queryCmd(context.Background(), "", []string{"output", "out1a2b3c", "--stdin"}), "--stdin takes no ref")
 
-	global.output = string(FormatJSON)
+	global.output = string(outputJSON)
 	assert.Error(t, queryCmd(context.Background(), "", []string{"output", "--stdin"}), "-o json with --stdin")
 }
 
@@ -344,7 +345,7 @@ func TestOutputImportNeutralizesWhatItPrints(t *testing.T) {
 
 func jsonMarshalLine(v any) ([]byte, error) {
 	var buf bytes.Buffer
-	if err := writeJSONL(&buf, []any{v}); err != nil {
+	if err := renderJSONL(&buf, []any{v}); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil

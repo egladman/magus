@@ -167,7 +167,7 @@ func TestQueryAndExplainResultsCarryTheNextField(t *testing.T) {
 // protecting against, so the walk descends into the embedded result.
 func TestJSONLStaysAmbiguousForAQueryCarryingNext(t *testing.T) {
 	var buf bytes.Buffer
-	err := writeJSONL(&buf, queryWithNext{Next: nextFixture})
+	err := renderJSONL(&buf, queryWithNext{Next: nextFixture})
 
 	require.Error(t, err)
 	for _, key := range []string{"matches", "nodes", "links", "next"} {
@@ -191,6 +191,6 @@ func TestJSONLFindsAPrimaryInsideAnEmbeddedResultNext(t *testing.T) {
 	}{NextStreamable: NextStreamable{Rows: []string{"a", "b"}}, Next: nextFixture}
 
 	var buf bytes.Buffer
-	require.NoError(t, writeJSONL(&buf, v))
+	require.NoError(t, renderJSONL(&buf, v))
 	assert.Equal(t, []string{`"a"`, `"b"`}, strings.Fields(strings.TrimSpace(buf.String())))
 }

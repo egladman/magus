@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
 
@@ -112,16 +113,16 @@ func appliedDecision(r types.RuleDoc) string {
 }
 
 // emitRuleList renders the catalog as a table, denies first.
-func emitRuleList(opts OutputOptions, rules []types.RuleDoc) error {
+func emitRuleList(opts output.Options, rules []types.RuleDoc) error {
 	// -o name is one id per line on every other describe noun, and a caller piping this
 	// into a loop wants the names rather than the table.
-	if opts.Format == FormatName {
+	if opts.Format == outputName {
 		for _, r := range rules {
 			fmt.Println(r.Name)
 		}
 		return nil
 	}
-	if opts.Format != FormatText {
+	if opts.Format != outputText {
 		return writeFormatted(os.Stdout, opts, rules)
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
@@ -149,12 +150,12 @@ func emitRuleList(opts OutputOptions, rules []types.RuleDoc) error {
 // Deliberately short. The long rationale a verdict used to carry belongs in the rule's
 // docs page, not here: this is the answer to "what is this thing", asked by someone who
 // just read the slug off a refusal.
-func emitRuleDetail(opts OutputOptions, doc types.RuleDoc) error {
-	if opts.Format == FormatName {
+func emitRuleDetail(opts output.Options, doc types.RuleDoc) error {
+	if opts.Format == outputName {
 		fmt.Println(doc.Name)
 		return nil
 	}
-	if opts.Format != FormatText {
+	if opts.Format != outputText {
 		return writeFormatted(os.Stdout, opts, doc)
 	}
 	if doc.Workspace == "" {

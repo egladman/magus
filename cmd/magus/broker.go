@@ -370,7 +370,7 @@ func noticeBroker(ctx context.Context, pid int) {
 		return
 	}
 	attrs := []slog.Attr{attr.Notice(""), attr.Component("magus")}
-	if global.output == string(FormatJSONL) {
+	if global.output == string(outputJSONL) {
 		attrs = append(attrs,
 			slog.Int("pid", pid),
 			slog.String("log", brokerLogPath()),

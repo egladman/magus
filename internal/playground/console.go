@@ -60,11 +60,11 @@ type ExecResult struct {
 	Clear bool
 }
 
-// commands is the completable command set: this console's own verbs plus every
+// completable is the completable command set: this console's own verbs plus every
 // real magus subcommand, read from the command registry (see cli.go). The list
 // used to be hand-written here and named nine things, of which three were not
 // magus subcommands at all and most of magus was missing.
-var commands = completableCommands()
+var completable = completableCommands()
 
 func NewConsole(info BuildInfo) *Console { return &Console{info: info} }
 
@@ -145,7 +145,7 @@ func (s *Console) Complete(line string) (replacement string, listing []Line) {
 
 	if sp == -1 {
 		prefix, base = "", line
-		candidates = filterPrefix(commands, base)
+		candidates = filterPrefix(completable, base)
 	} else {
 		cmd := line[:sp]
 		base = strings.TrimLeft(line[sp+1:], " ")

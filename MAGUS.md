@@ -68,7 +68,7 @@ magus graph export -o json  # the whole graph
 | function   |    3000+ | `magus query kind=function`   | `apiBase`, `main`, `describe`                                                                                    |
 | import     |     100+ | `magus query kind=import`     | `std`, `magus`, `fs`                                                                                             |
 | rationale  |        9 | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                           |
-| package    |     100+ | `magus query kind=package`    | `golang.org/x/tools`, `@biomejs/biome`, `typescript`                                                             |
+| package    |     100+ | `magus query kind=package`    | `golang.org/x/tools`, `gopkg.in/yaml.v3`, `@biomejs/biome`                                                       |
 | link       |      90+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`               |
 | marker     |        3 | `magus query kind=marker`     | `magus:diagram server-http`, `magus:skills`, `magus:diagram server-share`                                        |
 

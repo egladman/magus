@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -183,7 +184,7 @@ func TestQueryOutputReadsTrailPayloads(t *testing.T) {
 	assert.Equal(t, "the full verdict\n", out)
 
 	out = captureStdout(t, func() {
-		require.NoError(t, queryTrailPayload(ctx, "", ref, OutputOptions{Format: FormatJSON}))
+		require.NoError(t, queryTrailPayload(ctx, "", ref, output.Options{Format: outputJSON}))
 	})
 	assert.JSONEq(t, `{"ref":"`+ref+`","output":"the full verdict"}`, out)
 
@@ -192,7 +193,7 @@ func TestQueryOutputReadsTrailPayloads(t *testing.T) {
 	missing := "grd" + strings.Repeat("0", 16)
 	stderr := captureStderr(t, func() {
 		var silent errSilent
-		require.ErrorAs(t, queryTrailPayload(ctx, "", missing, OutputOptions{Format: FormatText}), &silent)
+		require.ErrorAs(t, queryTrailPayload(ctx, "", missing, output.Options{Format: outputText}), &silent)
 	})
 	assert.Contains(t, stderr, `no stored payload for ref "`+missing+`"`)
 }
@@ -223,7 +224,7 @@ func TestShowOutputIdentity_RevisionRendering(t *testing.T) {
 	ref := cache.PortableRef(key)
 
 	out := captureStdout(t, func() {
-		require.NoError(t, showOutputIdentity(ctx, m, ref, OutputOptions{}))
+		require.NoError(t, showOutputIdentity(ctx, m, ref, output.Options{}))
 	})
 	assert.Contains(t, out, "rev:     "+firstRev[:12], "the descriptor records the revision HEAD was at when the target ran")
 	assert.NotContains(t, out, "recorded at", "HEAD has not moved yet, so nothing to call out")
@@ -234,7 +235,7 @@ func TestShowOutputIdentity_RevisionRendering(t *testing.T) {
 	require.NotEqual(t, firstRev, secondRev)
 
 	out = captureStdout(t, func() {
-		require.NoError(t, showOutputIdentity(ctx, m, ref, OutputOptions{}))
+		require.NoError(t, showOutputIdentity(ctx, m, ref, output.Options{}))
 	})
 	assert.Contains(t, out,
 		"recorded at "+firstRev[:12]+", you are on "+secondRev[:12]+".",
@@ -672,7 +673,7 @@ func TestQueryInvocationTextResultLinesCarryProjectTargetAndRef(t *testing.T) {
 	finish(errors.New("lint failed"))
 
 	out := captureStdout(t, func() {
-		require.NoError(t, queryInvocation(ctx, "", id, false, OutputOptions{Format: FormatText}))
+		require.NoError(t, queryInvocation(ctx, "", id, false, output.Options{Format: outputText}))
 	})
 
 	assert.Contains(t, out, "result    fail api lint out9bddb214656e exit status 1\n", "the first line of the text follows the ref")

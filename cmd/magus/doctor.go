@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
 
@@ -120,7 +121,7 @@ func doctorCmd(ctx context.Context, root string, rc runConfig, args []string) er
 // The name is printed alone on its line so the identifier is what a reader copies, and
 // the subject sits underneath rather than beside it: a name column wide enough for
 // "stale-spell-shadow-acknowledgments" pushes every subject past a terminal's width.
-func emitDoctorChecks(opts OutputOptions, checks []doctor.CheckInfo) error {
+func emitDoctorChecks(opts output.Options, checks []doctor.CheckInfo) error {
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, checks)
@@ -150,7 +151,7 @@ func emitDoctorChecks(opts OutputOptions, checks []doctor.CheckInfo) error {
 	return nil
 }
 
-func emitDoctor(opts OutputOptions, out types.DoctorReport) error {
+func emitDoctor(opts output.Options, out types.DoctorReport) error {
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
