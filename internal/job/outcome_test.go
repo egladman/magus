@@ -109,11 +109,11 @@ func TestModelTierRecordsFoldsEachTierAndKind(t *testing.T) {
 
 	economyPass := func(job string) types.JobOutcome {
 		o := outcome(job, "economy", types.JobKindCheck, types.StatePass)
-		o.ChecksRun, o.CostUSD, o.ContextTokens = 2, 0.5, 100
+		o.ChecksRun, o.CostUSD, o.Tokens = 2, new(0.5), new(int64(100))
 		return o
 	}
 	failed := outcome("a", "economy", types.JobKindCheck, types.StateFail)
-	failed.ChecksRun, failed.CostUSD, failed.ContextTokens, failed.ReworkRounds, failed.Widenings = 4, 1.5, 300, 3, 1
+	failed.ChecksRun, failed.CostUSD, failed.Tokens, failed.ReworkRounds, failed.Widenings = 4, new(1.5), new(int64(300)), 3, 1
 	outcomes := []types.JobOutcome{
 		economyPass("a"), failed, economyPass("b"),
 		outcome("c", "economy", types.JobKindProse, types.StateNoReturn),
@@ -137,8 +137,10 @@ func TestModelTierRecordsFoldsEachTierAndKind(t *testing.T) {
 		Rank: 0, ModelTier: "economy", Kind: types.JobKindCheck,
 		Jobs: 3, Pass: 2, Fail: 1,
 		ChecksPerJob: 8.0 / 3, ForksPerID: 3.0 / 2, ReworkPerJob: 1, WideningsPerJob: 1.0 / 3,
-		MeanCostUSD: 2.5 / 3, MedianTokens: 100, FirstAttempts: 3, FirstPass: 2,
+		MeanCostUSD: new(2.5 / 3), MedianTokens: new(int64(100)), FirstAttempts: 3, FirstPass: 2,
 	}, got[0], "a was forked twice, and the running and untiered outcomes do not count")
+	assert.Nil(t, got[2].MeanCostUSD, "no outcome carries a cost, so it is unknown and not 0")
+	assert.Nil(t, got[2].MedianTokens)
 	wantProse := got[1]
 	wantProse.ModelTier, wantProse.Kind, wantProse.NoReturn = "economy", types.JobKindProse, 1
 	assert.Equal(t, wantProse, got[1])
@@ -191,11 +193,25 @@ func TestModelTierRecordsMedianOfAnEvenCountIsTheMiddlePairsMean(t *testing.T) {
 	var outcomes []types.JobOutcome
 	for i, tokens := range []int64{400, 100, 300, 200} {
 		o := outcome("job"+strconv.Itoa(i), "economy", types.JobKindCheck, types.StatePass)
-		o.ContextTokens = tokens
+		o.Tokens = &tokens
 		outcomes = append(outcomes, o)
 	}
 
-	assert.Equal(t, int64(250), ModelTierRecords(outcomes, tierSet(t))[0].MedianTokens)
+	assert.Equal(t, new(int64(250)), ModelTierRecords(outcomes, tierSet(t))[0].MedianTokens)
+}
+
+// One outcome without a figure makes the group's figure unknown: a mean over the others
+// would read as the group's.
+func TestModelTierRecordsFigureSomeOutcomesLackIsUnknown(t *testing.T) {
+	t.Parallel()
+
+	known := outcome("a", "economy", types.JobKindCheck, types.StatePass)
+	known.CostUSD, known.Tokens = new(1.0), new(int64(100))
+	got := ModelTierRecords([]types.JobOutcome{known, outcome("b", "economy", types.JobKindCheck, types.StatePass)}, tierSet(t))
+
+	require.Len(t, got, 1)
+	assert.Nil(t, got[0].MeanCostUSD)
+	assert.Nil(t, got[0].MedianTokens)
 }
 
 func TestStoreRecordsAnOutcomeWhenARowEnds(t *testing.T) {

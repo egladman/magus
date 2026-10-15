@@ -166,12 +166,14 @@ func modelTiersToProto(o *types.ModelTierOutput) *insightv1.ModelTierOutput {
 				ForksPerId:      r.ForksPerID,
 				ReworkPerJob:    r.ReworkPerJob,
 				WideningsPerJob: r.WideningsPerJob,
-				MeanCostUsd:     r.MeanCostUSD,
-				MedianTokens:    r.MedianTokens,
-				FirstAttempts:   int32(r.FirstAttempts),
-				FirstPass:       int32(r.FirstPass),
-				FirstPassLower:  r.FirstPassLower,
-				NotRetryable:    int32(r.NotRetryable),
+				// TODO: the wire has no unknown for these two, so an unknown figure goes out
+				// as 0 until the fields are optional and the console renders unknown.
+				MeanCostUsd:    derefOrZero(r.MeanCostUSD),
+				MedianTokens:   derefOrZero(r.MedianTokens),
+				FirstAttempts:  int32(r.FirstAttempts),
+				FirstPass:      int32(r.FirstPass),
+				FirstPassLower: r.FirstPassLower,
+				NotRetryable:   int32(r.NotRetryable),
 			}
 		}),
 	}
@@ -262,6 +264,15 @@ func volatilityToProto(r *types.VolatilityReport) *insightv1.VolatilityReport {
 			}
 		}),
 	}
+}
+
+// derefOrZero is *p, or T's zero for nil, for a wire field that has no unknown.
+func derefOrZero[T any](p *T) T {
+	var zero T
+	if p == nil {
+		return zero
+	}
+	return *p
 }
 
 // mapSlice converts a domain slice to its wire slice, keeping an empty input nil so an absent

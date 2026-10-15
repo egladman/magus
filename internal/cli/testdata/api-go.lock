@@ -2072,8 +2072,7 @@ github.com/egladman/magus/types.JobModelTier.String method func() string
 github.com/egladman/magus/types.JobOutcome type struct
 github.com/egladman/magus/types.JobOutcome.Attempt field int "json:\"attempt,omitzero\"        yaml:\"attempt,omitempty\""
 github.com/egladman/magus/types.JobOutcome.ChecksRun field int "json:\"checks_run\"              yaml:\"checks_run\""
-github.com/egladman/magus/types.JobOutcome.ContextTokens field int64 "json:\"context_tokens\"          yaml:\"context_tokens\""
-github.com/egladman/magus/types.JobOutcome.CostUSD field float64 "json:\"cost_usd\"                yaml:\"cost_usd\""
+github.com/egladman/magus/types.JobOutcome.CostUSD field *float64 "json:\"usage_cost_usd,omitzero\" yaml:\"usage_cost_usd,omitempty\""
 github.com/egladman/magus/types.JobOutcome.DurationMs field int64 "json:\"duration_ms\"             yaml:\"duration_ms\""
 github.com/egladman/magus/types.JobOutcome.Ended field int64 "json:\"ended\"                   yaml:\"ended\""
 github.com/egladman/magus/types.JobOutcome.Job field string "json:\"job\"                     yaml:\"job\""
@@ -2087,6 +2086,7 @@ github.com/egladman/magus/types.JobOutcome.Site field string "json:\"site,omitem
 github.com/egladman/magus/types.JobOutcome.Skills field SkillVariant "json:\"skills,omitempty\"        yaml:\"skills,omitempty\""
 github.com/egladman/magus/types.JobOutcome.Source field ModelTierSource "json:\"source,omitempty\"        yaml:\"source,omitempty\""
 github.com/egladman/magus/types.JobOutcome.State field JobState "json:\"state\"                   yaml:\"state\""
+github.com/egladman/magus/types.JobOutcome.Tokens field *int64 "json:\"usage_tokens,omitzero\"   yaml:\"usage_tokens,omitempty\""
 github.com/egladman/magus/types.JobOutcome.Widenings field int "json:\"widenings,omitempty\"     yaml:\"widenings,omitempty\""
 github.com/egladman/magus/types.JobOutcome.WriteFiles field int "json:\"write_files\"             yaml:\"write_files\""
 github.com/egladman/magus/types.JobOverlap type struct
@@ -2778,8 +2778,8 @@ github.com/egladman/magus/types.ModelTierRecord.FirstPassLower field float64 "js
 github.com/egladman/magus/types.ModelTierRecord.ForksPerID field float64 "json:\"forks_per_id\"      yaml:\"forks_per_id\""
 github.com/egladman/magus/types.ModelTierRecord.Jobs field int "json:\"jobs\"              yaml:\"jobs\""
 github.com/egladman/magus/types.ModelTierRecord.Kind field JobKind "json:\"kind\"              yaml:\"kind\""
-github.com/egladman/magus/types.ModelTierRecord.MeanCostUSD field float64 "json:\"mean_cost_usd\"     yaml:\"mean_cost_usd\""
-github.com/egladman/magus/types.ModelTierRecord.MedianTokens field int64 "json:\"median_tokens\"     yaml:\"median_tokens\""
+github.com/egladman/magus/types.ModelTierRecord.MeanCostUSD field *float64 "json:\"mean_cost_usd\"     yaml:\"mean_cost_usd\""
+github.com/egladman/magus/types.ModelTierRecord.MedianTokens field *int64 "json:\"median_tokens\"     yaml:\"median_tokens\""
 github.com/egladman/magus/types.ModelTierRecord.ModelTier field string "json:\"model_tier\"        yaml:\"model_tier\""
 github.com/egladman/magus/types.ModelTierRecord.NoReturn field int "json:\"no_return\"         yaml:\"no_return\""
 github.com/egladman/magus/types.ModelTierRecord.NotRetryable field int "json:\"not_retryable\"     yaml:\"not_retryable\""

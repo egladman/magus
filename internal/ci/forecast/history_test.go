@@ -43,7 +43,8 @@ func TestHistorySchemaLockIsStructural(t *testing.T) {
 			// job, never its prose, file contents or output.
 			"job": true, "model_tier": true, "kind": true, "skills": true, "model": true,
 			"source": true, "reason": true, "site": true, "write_files": true, "state": true,
-			"checks_run": true, "context_tokens": true, "cost_usd": true,
+			// What a host reported the job used, absent when none did.
+			"checks_run": true, "usage_tokens": true, "usage_cost_usd": true,
 			"duration_ms": true, "ended": true, "rework_rounds": true, "widenings": true,
 			// The attempt's number and the RetryChange case naming what must change first.
 			"attempt": true, "retry": true,

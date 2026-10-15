@@ -110,7 +110,7 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 				Rank: 0, ModelTier: "economy", Kind: types.JobKindCheck,
 				Jobs: 12, Pass: 9, Fail: 2, NoReturn: 1,
 				PassLower: 0.48, ChecksPerJob: 1.5, ForksPerID: 1.1, ReworkPerJob: 0.25, WideningsPerJob: 0.5,
-				MeanCostUSD: 0.07, MedianTokens: 41_000,
+				MeanCostUSD: new(0.07), MedianTokens: new(int64(41_000)),
 				FirstAttempts: 10, FirstPass: 7, FirstPassLower: 0.39, NotRetryable: 2,
 			}},
 		},

@@ -20,7 +20,7 @@ import (
 // newJobOutcome is row's terminal record, kept in the history file after the row expires.
 // ended is Unix milliseconds.
 //
-// The row carries no token count or cost, so those stay zero until a host reports them
+// The row carries no token count or cost, so those stay unknown until a host reports them
 // onto it. ChecksRun counts the runs the row kept evidence of: its own check's and one per
 // goal. Retry classifies the attempt from the row alone: an outcome is recorded under the
 // store's lock, where the trail's denials are not read.
@@ -68,7 +68,7 @@ func ModelTierRecords(outcomes []types.JobOutcome, set *types.ModelTierSet) []ty
 		rec                    types.ModelTierRecord
 		ids                    map[string]struct{}
 		checks, rework, widens int
-		cost                   float64
+		costs                  []float64
 		tokens                 []int64
 	}
 	groups := map[key]*fold{}
@@ -110,8 +110,12 @@ func ModelTierRecords(outcomes []types.JobOutcome, set *types.ModelTierSet) []ty
 		f.checks += o.ChecksRun
 		f.rework += o.ReworkRounds
 		f.widens += o.Widenings
-		f.cost += o.CostUSD
-		f.tokens = append(f.tokens, o.ContextTokens)
+		if o.CostUSD != nil {
+			f.costs = append(f.costs, *o.CostUSD)
+		}
+		if o.Tokens != nil {
+			f.tokens = append(f.tokens, *o.Tokens)
+		}
 	}
 	out := make([]types.ModelTierRecord, 0, len(groups))
 	for _, f := range groups {
@@ -122,8 +126,20 @@ func ModelTierRecords(outcomes []types.JobOutcome, set *types.ModelTierSet) []ty
 		f.rec.ForksPerID = n / float64(len(f.ids))
 		f.rec.ReworkPerJob = float64(f.rework) / n
 		f.rec.WideningsPerJob = float64(f.widens) / n
-		f.rec.MeanCostUSD = f.cost / n
-		f.rec.MedianTokens = median(f.tokens)
+		// A figure some outcomes lack is unknown for the group: a mean over the ones that
+		// carry it would read as the group's.
+		if len(f.costs) == f.rec.Jobs {
+			sum := 0.0
+			for _, c := range f.costs {
+				sum += c
+			}
+			mean := sum / n
+			f.rec.MeanCostUSD = &mean
+		}
+		if len(f.tokens) == f.rec.Jobs {
+			mid := median(f.tokens)
+			f.rec.MedianTokens = &mid
+		}
 		out = append(out, f.rec)
 	}
 	declaredFirst := func(rank int) int {

@@ -589,8 +589,16 @@ func ObjectModelTierRecord(v types.ModelTierRecord, enums ffi.EnumCases) vm.Valu
 	out.MapSet("forksPerID", vm.FloatValue(float64(v.ForksPerID)))
 	out.MapSet("reworkPerJob", vm.FloatValue(float64(v.ReworkPerJob)))
 	out.MapSet("wideningsPerJob", vm.FloatValue(float64(v.WideningsPerJob)))
-	out.MapSet("meanCostUSD", vm.FloatValue(float64(v.MeanCostUSD)))
-	out.MapSet("medianTokens", vm.IntValue(int64(v.MedianTokens)))
+	optMeanCostUSD := vm.Null
+	if v.MeanCostUSD != nil {
+		optMeanCostUSD = vm.FloatValue(float64((*v.MeanCostUSD)))
+	}
+	out.MapSet("meanCostUSD", optMeanCostUSD)
+	optMedianTokens := vm.Null
+	if v.MedianTokens != nil {
+		optMedianTokens = vm.IntValue(int64((*v.MedianTokens)))
+	}
+	out.MapSet("medianTokens", optMedianTokens)
 	out.MapSet("firstAttempts", vm.IntValue(int64(v.FirstAttempts)))
 	out.MapSet("firstPass", vm.IntValue(int64(v.FirstPass)))
 	out.MapSet("firstPassLower", vm.FloatValue(float64(v.FirstPassLower)))

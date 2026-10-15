@@ -348,52 +348,55 @@ type ModelTierRequest struct {
 // the Wilson lower bound of the pass rate; the per-job figures are means. FirstAttempts
 // counts the endings of a job's first attempt and FirstPass those that passed, with
 // FirstPassLower their Wilson lower bound; NotRetryable counts the endings classified as
-// needing a change before another attempt could help.
+// needing a change before another attempt could help. MeanCostUSD and MedianTokens are nil,
+// unknown, unless every counted outcome carries the figure.
 type ModelTierRecord struct {
-	Rank            int     `json:"rank"              yaml:"rank"`
-	ModelTier       string  `json:"model_tier"        yaml:"model_tier"`
-	Kind            JobKind `json:"kind"              yaml:"kind"`
-	Jobs            int     `json:"jobs"              yaml:"jobs"`
-	Pass            int     `json:"pass"              yaml:"pass"`
-	Fail            int     `json:"fail"              yaml:"fail"`
-	NoReturn        int     `json:"no_return"         yaml:"no_return"`
-	PassLower       float64 `json:"pass_lower"        yaml:"pass_lower"`
-	ChecksPerJob    float64 `json:"checks_per_job"    yaml:"checks_per_job"`
-	ForksPerID      float64 `json:"forks_per_id"      yaml:"forks_per_id"`
-	ReworkPerJob    float64 `json:"rework_per_job"    yaml:"rework_per_job"`
-	WideningsPerJob float64 `json:"widenings_per_job" yaml:"widenings_per_job"`
-	MeanCostUSD     float64 `json:"mean_cost_usd"     yaml:"mean_cost_usd"`
-	MedianTokens    int64   `json:"median_tokens"     yaml:"median_tokens"`
-	FirstAttempts   int     `json:"first_attempts"    yaml:"first_attempts"`
-	FirstPass       int     `json:"first_pass"        yaml:"first_pass"`
-	FirstPassLower  float64 `json:"first_pass_lower"  yaml:"first_pass_lower"`
-	NotRetryable    int     `json:"not_retryable"     yaml:"not_retryable"`
+	Rank            int      `json:"rank"              yaml:"rank"`
+	ModelTier       string   `json:"model_tier"        yaml:"model_tier"`
+	Kind            JobKind  `json:"kind"              yaml:"kind"`
+	Jobs            int      `json:"jobs"              yaml:"jobs"`
+	Pass            int      `json:"pass"              yaml:"pass"`
+	Fail            int      `json:"fail"              yaml:"fail"`
+	NoReturn        int      `json:"no_return"         yaml:"no_return"`
+	PassLower       float64  `json:"pass_lower"        yaml:"pass_lower"`
+	ChecksPerJob    float64  `json:"checks_per_job"    yaml:"checks_per_job"`
+	ForksPerID      float64  `json:"forks_per_id"      yaml:"forks_per_id"`
+	ReworkPerJob    float64  `json:"rework_per_job"    yaml:"rework_per_job"`
+	WideningsPerJob float64  `json:"widenings_per_job" yaml:"widenings_per_job"`
+	MeanCostUSD     *float64 `json:"mean_cost_usd"     yaml:"mean_cost_usd"`
+	MedianTokens    *int64   `json:"median_tokens"     yaml:"median_tokens"`
+	FirstAttempts   int      `json:"first_attempts"    yaml:"first_attempts"`
+	FirstPass       int      `json:"first_pass"        yaml:"first_pass"`
+	FirstPassLower  float64  `json:"first_pass_lower"  yaml:"first_pass_lower"`
+	NotRetryable    int      `json:"not_retryable"     yaml:"not_retryable"`
 }
 
 // JobOutcome is one job's terminal record, kept after the row expires. Model is the id
 // the host reported; Site is the file:line of the declaration or matrix that chose the
 // tier; Ended is Unix milliseconds. Attempt numbers the attempt that ended, from 1, and
 // Retry is what must change before another attempt could help, empty when repeating may.
+// Tokens and CostUSD are what a host reported the job used, nil when none did: no host
+// reports them yet, and an unreported figure is unknown, not zero.
 type JobOutcome struct {
-	Job           string          `json:"job"                     yaml:"job"`
-	ModelTier     string          `json:"model_tier,omitempty"    yaml:"model_tier,omitempty"`
-	Kind          JobKind         `json:"kind"                    yaml:"kind"`
-	Skills        SkillVariant    `json:"skills,omitempty"        yaml:"skills,omitempty"`
-	Model         string          `json:"model,omitempty"         yaml:"model,omitempty"`
-	Source        ModelTierSource `json:"source,omitempty"        yaml:"source,omitempty"`
-	Reason        string          `json:"reason,omitempty"        yaml:"reason,omitempty"`
-	Site          string          `json:"site,omitempty"          yaml:"site,omitempty"`
-	WriteFiles    int             `json:"write_files"             yaml:"write_files"`
-	State         JobState        `json:"state"                   yaml:"state"`
-	ChecksRun     int             `json:"checks_run"              yaml:"checks_run"`
-	ContextTokens int64           `json:"context_tokens"          yaml:"context_tokens"`
-	CostUSD       float64         `json:"cost_usd"                yaml:"cost_usd"`
-	DurationMs    int64           `json:"duration_ms"             yaml:"duration_ms"`
-	Ended         int64           `json:"ended"                   yaml:"ended"`
-	ReworkRounds  int             `json:"rework_rounds,omitempty" yaml:"rework_rounds,omitempty"`
-	Widenings     int             `json:"widenings,omitempty"     yaml:"widenings,omitempty"`
-	Attempt       int             `json:"attempt,omitzero"        yaml:"attempt,omitempty"`
-	Retry         RetryChange     `json:"retry,omitempty"         yaml:"retry,omitempty"`
+	Job          string          `json:"job"                     yaml:"job"`
+	ModelTier    string          `json:"model_tier,omitempty"    yaml:"model_tier,omitempty"`
+	Kind         JobKind         `json:"kind"                    yaml:"kind"`
+	Skills       SkillVariant    `json:"skills,omitempty"        yaml:"skills,omitempty"`
+	Model        string          `json:"model,omitempty"         yaml:"model,omitempty"`
+	Source       ModelTierSource `json:"source,omitempty"        yaml:"source,omitempty"`
+	Reason       string          `json:"reason,omitempty"        yaml:"reason,omitempty"`
+	Site         string          `json:"site,omitempty"          yaml:"site,omitempty"`
+	WriteFiles   int             `json:"write_files"             yaml:"write_files"`
+	State        JobState        `json:"state"                   yaml:"state"`
+	ChecksRun    int             `json:"checks_run"              yaml:"checks_run"`
+	Tokens       *int64          `json:"usage_tokens,omitzero"   yaml:"usage_tokens,omitempty"`
+	CostUSD      *float64        `json:"usage_cost_usd,omitzero" yaml:"usage_cost_usd,omitempty"`
+	DurationMs   int64           `json:"duration_ms"             yaml:"duration_ms"`
+	Ended        int64           `json:"ended"                   yaml:"ended"`
+	ReworkRounds int             `json:"rework_rounds,omitempty" yaml:"rework_rounds,omitempty"`
+	Widenings    int             `json:"widenings,omitempty"     yaml:"widenings,omitempty"`
+	Attempt      int             `json:"attempt,omitzero"        yaml:"attempt,omitempty"`
+	Retry        RetryChange     `json:"retry,omitempty"         yaml:"retry,omitempty"`
 }
 
 // JobModelTier is the tier recorded on a job row when it was assigned: the case name and

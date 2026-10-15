@@ -25,7 +25,8 @@
 //	              a model alias), reason(string: the sentence that chose the tier),
 //	              site(string: the file:line of the declaration that chose it),
 //	              write_files, checks_run, rework_rounds, widenings(int), state(enum),
-//	              context_tokens(int64), cost_usd(float64), duration_ms, ended(int64)
+//	              usage_tokens(int64), usage_cost_usd(float64), both absent when no host
+//	              reported them, duration_ms, ended(int64)
 //
 // DO NOT add: source code, file contents, env vars, secrets, tokens, PR numbers,
 // author identity, error messages, or stdout/stderr captures. Any new field must
