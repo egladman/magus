@@ -1,4 +1,4 @@
-package main
+package train
 
 import (
 	"crypto/sha256"
@@ -39,7 +39,7 @@ func fetch(name string) ([]byte, error) {
 		return nil, err
 	}
 
-	dir := filepath.Join(cache, "magus", "postag", "UD_English-EWT-"+ewtRelease)
+	dir := filepath.Join(cache, "proofread", "UD_English-EWT-"+ewtRelease)
 
 	path := filepath.Join(dir, name)
 	if b, err := os.ReadFile(path); err == nil && digest(b) == want {

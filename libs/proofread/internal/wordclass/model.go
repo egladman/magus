@@ -1,4 +1,4 @@
-package postag
+package wordclass
 
 import (
 	"bytes"
@@ -11,8 +11,6 @@ import (
 	"maps"
 	"slices"
 	"sync"
-
-	"github.com/egladman/magus/libs/proofread/postag/internal/feature"
 )
 
 //go:embed gen/model.gz
@@ -54,7 +52,7 @@ type Model struct {
 
 	classes []class
 	dict    map[string]uint16
-	feats   map[feature.Hash]span
+	feats   map[Hash]span
 	// weights holds every feature's weights back to back in hash order; a span
 	// indexes one feature's run.
 	weights []Weight
@@ -63,7 +61,7 @@ type Model struct {
 var embedded = sync.OnceValue(func() *Model {
 	m, err := unzip(modelGz)
 	if err != nil {
-		panic(fmt.Sprintf("postag: embedded model: %v", err))
+		panic(fmt.Sprintf("wordclass: embedded model: %v", err))
 	}
 
 	return m
@@ -89,11 +87,11 @@ func unzip(gz []byte) (*Model, error) {
 // index in labels it is always tagged with; weights holds each feature's
 // weights in ascending class order. It fails on a label whose UPOS is not
 // one of the constants and on a class index past labels.
-func NewModel(labels []Label, dict map[string]uint16, weights map[feature.Hash][]Weight) (*Model, error) {
+func NewModel(labels []Label, dict map[string]uint16, weights map[Hash][]Weight) (*Model, error) {
 	m := &Model{
 		classes: make([]class, len(labels)),
 		dict:    make(map[string]uint16, len(dict)),
-		feats:   make(map[feature.Hash]span, len(weights)),
+		feats:   make(map[Hash]span, len(weights)),
 	}
 
 	for i, l := range labels {
@@ -160,7 +158,7 @@ func (m *Model) MarshalBinary() ([]byte, error) {
 	hashes := slices.Sorted(maps.Keys(m.feats))
 	b = binary.AppendUvarint(b, uint64(len(hashes)))
 
-	var last feature.Hash
+	var last Hash
 
 	for _, h := range hashes {
 		b = binary.AppendUvarint(b, uint64(h-last))
@@ -187,7 +185,7 @@ func (m *Model) MarshalBinary() ([]byte, error) {
 func (m *Model) UnmarshalBinary(data []byte) error {
 	raw, ok := bytes.CutPrefix(data, []byte(magic))
 	if !ok {
-		return errors.New("not a postag model")
+		return errors.New("not a wordclass model")
 	}
 
 	r := &modelReader{buf: raw}
@@ -226,7 +224,7 @@ func (m *Model) UnmarshalBinary(data []byte) error {
 		return r.err
 	}
 
-	out.feats = make(map[feature.Hash]span, nFeats)
+	out.feats = make(map[Hash]span, nFeats)
 
 	var h uint64
 	for range nFeats {
@@ -240,7 +238,7 @@ func (m *Model) UnmarshalBinary(data []byte) error {
 		}
 
 		s.end = uint32(len(out.weights))
-		out.feats[feature.Hash(h)] = s
+		out.feats[Hash(h)] = s
 
 		if r.err != nil {
 			break
@@ -342,7 +340,7 @@ func (r *modelReader) class(n int) uint16 {
 }
 
 // predict returns the highest-scoring class, the lowest index on a tie.
-func (m *Model) predict(feats []feature.Hash, scores []int32) uint16 {
+func (m *Model) predict(feats []Hash, scores []int32) uint16 {
 	clear(scores)
 
 	for _, f := range feats {

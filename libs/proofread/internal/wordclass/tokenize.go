@@ -1,4 +1,4 @@
-package postag
+package wordclass
 
 import (
 	"slices"

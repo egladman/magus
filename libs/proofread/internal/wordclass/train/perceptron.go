@@ -1,12 +1,11 @@
-package main
+package train
 
 import (
 	"errors"
 	"math"
 	"slices"
 
-	"github.com/egladman/magus/libs/proofread/postag"
-	"github.com/egladman/magus/libs/proofread/postag/internal/feature"
+	"github.com/egladman/magus/libs/proofread/internal/wordclass"
 )
 
 type param struct {
@@ -21,15 +20,15 @@ type param struct {
 // of Honnibal's 2013 tagger: a weight's running total is only brought up to
 // date when that weight changes.
 type perceptron struct {
-	params map[feature.Hash][]param
+	params map[wordclass.Hash][]param
 	step   int64
 }
 
 func newPerceptron() *perceptron {
-	return &perceptron{params: make(map[feature.Hash][]param)}
+	return &perceptron{params: make(map[wordclass.Hash][]param)}
 }
 
-func (p *perceptron) predict(feats []feature.Hash, scores []int64) uint16 {
+func (p *perceptron) predict(feats []wordclass.Hash, scores []int64) uint16 {
 	clear(scores)
 
 	for _, f := range feats {
@@ -41,7 +40,7 @@ func (p *perceptron) predict(feats []feature.Hash, scores []int64) uint16 {
 	return argmax(scores)
 }
 
-func (p *perceptron) update(truth, guess uint16, feats []feature.Hash) {
+func (p *perceptron) update(truth, guess uint16, feats []wordclass.Hash) {
 	p.step++
 	if truth == guess {
 		return
@@ -53,7 +52,7 @@ func (p *perceptron) update(truth, guess uint16, feats []feature.Hash) {
 	}
 }
 
-func (p *perceptron) bump(f feature.Hash, class uint16, delta int32) {
+func (p *perceptron) bump(f wordclass.Hash, class uint16, delta int32) {
 	ps := p.params[f]
 
 	i := slices.IndexFunc(ps, func(q param) bool { return q.class == class })
@@ -72,12 +71,12 @@ func (p *perceptron) bump(f feature.Hash, class uint16, delta int32) {
 // quantize averages every weight and rounds it onto a scale where the largest
 // magnitude is levels. Weights that round to zero are dropped. It fails when
 // no step ran or no weight ever moved, since there is nothing to scale by.
-func (p *perceptron) quantize(levels int) (map[feature.Hash][]postag.Weight, error) {
+func (p *perceptron) quantize(levels int) (map[wordclass.Hash][]wordclass.Weight, error) {
 	if p.step == 0 {
 		return nil, errors.New("quantize: no update steps ran, so train for at least one iteration")
 	}
 
-	avg := make(map[feature.Hash][]float64, len(p.params))
+	avg := make(map[wordclass.Hash][]float64, len(p.params))
 
 	var peak float64
 
@@ -96,14 +95,14 @@ func (p *perceptron) quantize(levels int) (map[feature.Hash][]postag.Weight, err
 		return nil, errors.New("quantize: no weight moved from zero, so the training split gave the perceptron nothing to learn")
 	}
 
-	weights := make(map[feature.Hash][]postag.Weight, len(p.params))
+	weights := make(map[wordclass.Hash][]wordclass.Weight, len(p.params))
 
 	for f, ps := range p.params {
-		var ws []postag.Weight
+		var ws []wordclass.Weight
 
 		for j, q := range ps {
 			if w := int32(math.Round(avg[f][j] / peak * float64(levels))); w != 0 {
-				ws = append(ws, postag.Weight{Class: q.class, Value: w})
+				ws = append(ws, wordclass.Weight{Class: q.class, Value: w})
 			}
 		}
 
@@ -111,14 +110,14 @@ func (p *perceptron) quantize(levels int) (map[feature.Hash][]postag.Weight, err
 			continue
 		}
 
-		slices.SortFunc(ws, func(a, b postag.Weight) int { return int(a.Class) - int(b.Class) })
+		slices.SortFunc(ws, func(a, b wordclass.Weight) int { return int(a.Class) - int(b.Class) })
 		weights[f] = ws
 	}
 
 	return weights, nil
 }
 
-// argmax breaks a tie toward the lowest class, as postag does.
+// argmax breaks a tie toward the lowest class, as wordclass does.
 func argmax(scores []int64) uint16 {
 	best := 0
 

@@ -6,14 +6,14 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/libs/proofread/postag"
+	"github.com/egladman/magus/libs/proofread/internal/wordclass"
 )
 
 // tagged is one sentence as the grammar measures read it: its words as
-// [postag.Tokenize] splits them, lowercased, and their tags.
+// [wordclass.Tokenize] splits them, lowercased, and their tags.
 type tagged struct {
 	words []string
-	tags  []postag.Tagged
+	tags  []wordclass.Tagged
 }
 
 // grammarFeatures are the rates of [Shape.Grammar]. Each approximates a
@@ -60,7 +60,7 @@ type grammarMeasures struct {
 func measureGrammar(sentences [][]string, words int) grammarMeasures {
 	counts := make([]int, len(grammarFeatures))
 
-	var sequence []postag.UPOS
+	var sequence []wordclass.UPOS
 
 	for _, sentence := range sentences {
 		s := tagSentence(sentence)
@@ -101,14 +101,14 @@ func tagSentence(sentence []string) tagged {
 
 	var words []string
 
-	for _, w := range postag.Tokenize(strings.Join(prose, " ")) {
+	for _, w := range wordclass.Tokenize(strings.Join(prose, " ")) {
 		// Markdown emphasis is layout, which [Shape.Layout] counts.
 		if strings.Trim(w, "*_") != "" {
 			words = append(words, w)
 		}
 	}
 
-	tags := postag.Tag(words)
+	tags := wordclass.Tag(words)
 	for i, w := range words {
 		words[i] = strings.ReplaceAll(strings.ToLower(w), "’", "'")
 	}
@@ -121,21 +121,21 @@ func tagSentence(sentence []string) tagged {
 // share of 4-gram positions whose UPOS 4-gram occurs at least twice in the
 // text. They count a template across a dataset's texts, and their rate is the
 // share of texts holding one.
-func templateRate(sequence []postag.UPOS) float64 {
+func templateRate(sequence []wordclass.UPOS) float64 {
 	positions := len(sequence) - templateLength + 1
 	if positions <= 0 {
 		return 0
 	}
 
-	counts := map[[templateLength]postag.UPOS]int{}
+	counts := map[[templateLength]wordclass.UPOS]int{}
 	for i := range positions {
-		counts[[templateLength]postag.UPOS(sequence[i:i+templateLength])]++
+		counts[[templateLength]wordclass.UPOS(sequence[i:i+templateLength])]++
 	}
 
 	repeated := 0
 
 	for i := range positions {
-		if counts[[templateLength]postag.UPOS(sequence[i:i+templateLength])] > 1 {
+		if counts[[templateLength]wordclass.UPOS(sequence[i:i+templateLength])] > 1 {
 			repeated++
 		}
 	}
@@ -146,7 +146,7 @@ func templateRate(sequence []postag.UPOS) float64 {
 // tagCompression is Shaib et al.'s CR-POS turned over: the gzip size of the
 // space-joined UPOS sequence over its raw size, so a more repetitive sequence
 // scores lower.
-func tagCompression(sequence []postag.UPOS) float64 {
+func tagCompression(sequence []wordclass.UPOS) float64 {
 	if len(sequence) == 0 {
 		return 0
 	}
@@ -168,11 +168,11 @@ func tagCompression(sequence []postag.UPOS) float64 {
 	return float64(buf.Len()) / float64(len(raw))
 }
 
-func isUPOS(t postag.Tagged, tags ...postag.UPOS) bool { return slices.Contains(tags, t.UPOS) }
+func isUPOS(t wordclass.Tagged, tags ...wordclass.UPOS) bool { return slices.Contains(tags, t.UPOS) }
 
 // finite reports whether t is a finite verb, which ends a sentence-initial
 // participial clause without the comma that closes one.
-func finite(t postag.Tagged) bool {
+func finite(t wordclass.Tagged) bool {
 	switch t.XPOS {
 	case "VBZ", "VBP", "VBD", "MD":
 		return true
@@ -188,12 +188,12 @@ func finite(t postag.Tagged) bool {
 // subject such as "Running the tests takes time".
 func participialClause(s tagged, i int) bool {
 	t := s.tags[i]
-	if (t.XPOS != "VBG" && t.XPOS != "VBN") || !isUPOS(t, postag.VERB, postag.AUX) {
+	if (t.XPOS != "VBG" && t.XPOS != "VBN") || !isUPOS(t, wordclass.VERB, wordclass.AUX) {
 		return false
 	}
 
 	start := 0
-	for start < i && s.tags[start].UPOS == postag.PUNCT {
+	for start < i && s.tags[start].UPOS == wordclass.PUNCT {
 		start++
 	}
 
@@ -211,7 +211,7 @@ func participialClause(s tagged, i int) bool {
 		return false
 	}
 
-	return s.words[i-1] == "," && i+1 < len(s.words) && !isUPOS(s.tags[i+1], postag.PUNCT, postag.CCONJ)
+	return s.words[i-1] == "," && i+1 < len(s.words) && !isUPOS(s.tags[i+1], wordclass.PUNCT, wordclass.CCONJ)
 }
 
 // nominalizationSuffixes are Biber's -tion, -ment, -ness and -ity, with the
@@ -231,7 +231,7 @@ var notNominalizations = wordSet(
 const minNominalizationStem = 3
 
 func nominalization(s tagged, i int) bool {
-	if s.tags[i].UPOS != postag.NOUN {
+	if s.tags[i].UPOS != wordclass.NOUN {
 		return false
 	}
 
@@ -271,20 +271,20 @@ var (
 // participle, an adverb or "not" allowed between, with no "by" before the
 // clause ends: "the cache was rebuilt", not "the cache was rebuilt by CI".
 func agentlessPassive(s tagged, i int) bool {
-	if !(beForms[s.words[i]] && s.tags[i].UPOS == postag.AUX) && !getForms[s.words[i]] {
+	if !(beForms[s.words[i]] && s.tags[i].UPOS == wordclass.AUX) && !getForms[s.words[i]] {
 		return false
 	}
 
 	j := i + 1
-	for j < len(s.words) && j-i <= 2 && isUPOS(s.tags[j], postag.ADV, postag.PART) {
+	for j < len(s.words) && j-i <= 2 && isUPOS(s.tags[j], wordclass.ADV, wordclass.PART) {
 		j++
 	}
 
-	if j >= len(s.words) || s.tags[j].XPOS != "VBN" || s.tags[j].UPOS != postag.VERB {
+	if j >= len(s.words) || s.tags[j].XPOS != "VBN" || s.tags[j].UPOS != wordclass.VERB {
 		return false
 	}
 
-	for k := j + 1; k < len(s.words) && !isUPOS(s.tags[k], postag.PUNCT, postag.SCONJ); k++ {
+	for k := j + 1; k < len(s.words) && !isUPOS(s.tags[k], wordclass.PUNCT, wordclass.SCONJ); k++ {
 		if s.words[k] == "by" {
 			return false
 		}
@@ -296,14 +296,14 @@ func agentlessPassive(s tagged, i int) bool {
 // phrasalCoordination matches "and" between two nouns or two adjectives, as
 // Biber counts it, so the rate compares with Reinhart et al.'s.
 func phrasalCoordination(s tagged, i int) bool {
-	if s.tags[i].UPOS != postag.CCONJ || !strings.EqualFold(s.words[i], "and") || i == 0 || i+1 >= len(s.words) {
+	if s.tags[i].UPOS != wordclass.CCONJ || !strings.EqualFold(s.words[i], "and") || i == 0 || i+1 >= len(s.words) {
 		return false
 	}
 
 	before, after := s.tags[i-1], s.tags[i+1]
-	nouns := isUPOS(before, postag.NOUN, postag.PROPN) && isUPOS(after, postag.NOUN, postag.PROPN)
+	nouns := isUPOS(before, wordclass.NOUN, wordclass.PROPN) && isUPOS(after, wordclass.NOUN, wordclass.PROPN)
 
-	return nouns || (before.UPOS == postag.ADJ && after.UPOS == postag.ADJ)
+	return nouns || (before.UPOS == wordclass.ADJ && after.UPOS == wordclass.ADJ)
 }
 
 // downtoners is Biber's list (1988, Appendix II, feature 46).
@@ -314,19 +314,21 @@ var downtoners = wordSet(
 
 // downtoner matches a word of the list read as an adverb, so "the only way"
 // is not one.
-func downtoner(s tagged, i int) bool { return downtoners[s.words[i]] && s.tags[i].UPOS == postag.ADV }
+func downtoner(s tagged, i int) bool {
+	return downtoners[s.words[i]] && s.tags[i].UPOS == wordclass.ADV
+}
 
 // concessive matches "though" and "although" that open a clause; a
 // sentence-final "though" is an adverb.
 func concessive(s tagged, i int) bool {
-	return (s.words[i] == "though" || s.words[i] == "although") && s.tags[i].UPOS == postag.SCONJ
+	return (s.words[i] == "though" || s.words[i] == "although") && s.tags[i].UPOS == wordclass.SCONJ
 }
 
 // participlePostmodifier matches a noun followed at once by a present
 // participle: "a job running every night". A progressive puts a form of be
-// between them, so "the job's running" is not one once [postag.Tokenize]
+// between them, so "the job's running" is not one once [wordclass.Tokenize]
 // splits the "'s".
 func participlePostmodifier(s tagged, i int) bool {
-	return s.tags[i].UPOS == postag.NOUN && i+1 < len(s.words) && s.tags[i+1].XPOS == "VBG" &&
-		s.tags[i+1].UPOS == postag.VERB
+	return s.tags[i].UPOS == wordclass.NOUN && i+1 < len(s.words) && s.tags[i+1].XPOS == "VBG" &&
+		s.tags[i+1].UPOS == wordclass.VERB
 }

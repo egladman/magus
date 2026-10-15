@@ -1,6 +1,4 @@
-package postag
-
-import "github.com/egladman/magus/libs/proofread/postag/internal/feature"
+package wordclass
 
 // Tagged is one word and its tags. XPOS is the Penn Treebank tag, such as
 // [VBN].
@@ -25,17 +23,17 @@ func (m *Model) Tag(words []string) []Tagged {
 	}
 
 	out := make([]Tagged, len(words))
-	context := feature.Padded(words)
+	context := Padded(words)
 	scores := make([]int32, len(m.classes))
 
-	var feats []feature.Hash
+	var feats []Hash
 
-	prev, prev2 := feature.Start, feature.Start2
+	prev, prev2 := Start, Start2
 
 	for i, w := range words {
 		c, ok := m.dict[w]
 		if !ok {
-			feats = feature.Extract(feats[:0], context, i, w, prev, prev2)
+			feats = Extract(feats[:0], context, i, w, prev, prev2)
 			c = m.predict(feats, scores)
 		}
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/libs/proofread/postag"
+	"github.com/egladman/magus/libs/proofread/internal/wordclass"
 )
 
 // grammarCount counts feature's matches in text, split as [MeasureShape]
@@ -108,16 +108,16 @@ func TestGrammarFeaturesAreNamedOnce(t *testing.T) {
 }
 
 func TestTemplateRate(t *testing.T) {
-	cycle := []postag.UPOS{postag.DET, postag.NOUN, postag.VERB, postag.PUNCT}
+	cycle := []wordclass.UPOS{wordclass.DET, wordclass.NOUN, wordclass.VERB, wordclass.PUNCT}
 
 	cases := map[string]struct {
-		sequence []postag.UPOS
+		sequence []wordclass.UPOS
 		want     float64
 	}{
 		// Five 4-grams; the first and the last are both DET NOUN VERB PUNCT.
 		"one sentence shape twice": {slices.Concat(cycle, cycle), 0.4},
 		"no repeat": {
-			[]postag.UPOS{postag.DET, postag.NOUN, postag.VERB, postag.ADP, postag.DET, postag.ADJ, postag.NOUN}, 0,
+			[]wordclass.UPOS{wordclass.DET, wordclass.NOUN, wordclass.VERB, wordclass.ADP, wordclass.DET, wordclass.ADJ, wordclass.NOUN}, 0,
 		},
 		"under one 4-gram": {cycle[:3], 0},
 	}
@@ -132,11 +132,11 @@ func TestTemplateRate(t *testing.T) {
 }
 
 func TestTagCompressionIsLowerForRepeatedSyntax(t *testing.T) {
-	var repeated, varied []postag.UPOS
+	var repeated, varied []wordclass.UPOS
 
 	for i := range 200 {
-		repeated = append(repeated, postag.UPOS(1+i%4))
-		varied = append(varied, postag.UPOS(1+(i*7+i*i/3)%17))
+		repeated = append(repeated, wordclass.UPOS(1+i%4))
+		varied = append(varied, wordclass.UPOS(1+(i*7+i*i/3)%17))
 	}
 
 	r, v := tagCompression(repeated), tagCompression(varied)

@@ -1,11 +1,12 @@
-package main
+package train
 
 import (
 	"bytes"
 	"cmp"
 	"compress/gzip"
-	"flag"
+	"errors"
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -13,26 +14,38 @@ import (
 	"time"
 
 	"github.com/egladman/magus/libs/proofread/internal/conllu"
-	"github.com/egladman/magus/libs/proofread/postag"
-	"github.com/egladman/magus/libs/proofread/postag/internal/feature"
+	"github.com/egladman/magus/libs/proofread/internal/wordclass"
 )
 
-func main() {
-	modelPath := flag.String("model", "gen/model.gz", "where to write the model")
-	testPath := flag.String("testdata", "testdata/en_ewt-ud-test.conllu.gz", "where to write the gzipped test split")
-	iterations := flag.Int("iterations", 10, "passes over the training split")
-	seed := flag.Uint64("seed", 1, "seed for the per-pass shuffle")
-	// Tuned on dev: past 1024 levels and 10 passes, accuracy holds and the model grows.
-	levels := flag.Int("levels", 1024, "the largest quantized weight")
-	flag.Parse()
+// The defaults proofread train passes. Tuned on dev: past 1024 levels and 10
+// passes, accuracy holds and the model grows.
+const (
+	DefaultIterations = 10
+	DefaultSeed       = 1
+	DefaultLevels     = 1024
+)
 
-	if err := run(*modelPath, *testPath, *iterations, *seed, *levels); err != nil {
-		fmt.Fprintf(os.Stderr, "train: %v\n", err)
-		os.Exit(1)
-	}
+// Options are one training run's settings.
+type Options struct {
+	ModelPath  string // where the gzipped model is written
+	TestPath   string // where the gzipped EWT test split is written, for the accuracy test
+	Iterations int    // passes over the training split
+	Seed       uint64 // seeds the per-pass shuffle
+	Levels     int    // the largest quantized weight
 }
 
-func run(modelPath, testPath string, iterations int, seed uint64, levels int) error {
+// Run trains a wordclass model on UD English EWT, fetched by a pinned digest
+// or read from the cache, writes it and the test split to o's paths, and
+// reports the accuracy it measured to w. It needs the network on a cold cache.
+func Run(w io.Writer, o Options) error {
+	if o.ModelPath == "" || o.TestPath == "" {
+		return errors.New("train needs both a model path and a test split path")
+	}
+
+	if o.Iterations < 1 || o.Levels < 1 {
+		return fmt.Errorf("train needs at least 1 iteration and 1 level, got %d and %d", o.Iterations, o.Levels)
+	}
+
 	splits := map[string][]conllu.Sentence{}
 
 	var testRaw []byte
@@ -54,19 +67,19 @@ func run(modelPath, testPath string, iterations int, seed uint64, levels int) er
 
 	start := time.Now()
 	t := newTrainer(splits["train"])
-	t.train(splits["train"], iterations, seed)
+	t.train(splits["train"], o.Iterations, o.Seed)
 
-	weights, err := t.p.quantize(levels)
+	weights, err := t.p.quantize(o.Levels)
 	if err != nil {
 		return err
 	}
 
-	labels := make([]postag.Label, len(t.classes))
+	labels := make([]wordclass.Label, len(t.classes))
 	for i, c := range t.classes {
-		labels[i] = postag.Label{UPOS: c.upos, XPOS: c.xpos}
+		labels[i] = wordclass.Label{UPOS: c.upos, XPOS: c.xpos}
 	}
 
-	m, err := postag.NewModel(labels, t.dict, weights)
+	m, err := wordclass.NewModel(labels, t.dict, weights)
 	if err != nil {
 		return err
 	}
@@ -91,23 +104,23 @@ func run(modelPath, testPath string, iterations int, seed uint64, levels int) er
 		return err
 	}
 
-	if err := writeFile(modelPath, model); err != nil {
+	if err := writeFile(o.ModelPath, model); err != nil {
 		return err
 	}
 
-	if err := writeFile(testPath, testGz); err != nil {
+	if err := writeFile(o.TestPath, testGz); err != nil {
 		return err
 	}
 
-	fmt.Printf("trained %d passes in %s: %d classes, %d dictionary words, %d features\n",
-		iterations, elapsed.Round(time.Millisecond), len(t.classes), len(t.dict), len(weights))
+	fmt.Fprintf(w, "trained %d passes in %s: %d classes, %d dictionary words, %d features\n",
+		o.Iterations, elapsed.Round(time.Millisecond), len(t.classes), len(t.dict), len(weights))
 	for _, s := range []struct {
 		name string
-		a    postag.Accuracy
+		a    wordclass.Accuracy
 	}{{"dev: ", dev}, {"test:", m.Accuracy}} {
-		fmt.Printf("%s UPOS %.4f XPOS %.4f over %d tokens\n", s.name, ratio(s.a.UPOS, s.a.Words), ratio(s.a.XPOS, s.a.Words), s.a.Words)
+		fmt.Fprintf(w, "%s UPOS %.4f XPOS %.4f over %d tokens\n", s.name, ratio(s.a.UPOS, s.a.Words), ratio(s.a.XPOS, s.a.Words), s.a.Words)
 	}
-	fmt.Printf("model: %d bytes\n", len(model))
+	fmt.Fprintf(w, "model: %d bytes\n", len(model))
 
 	return nil
 }
@@ -181,19 +194,19 @@ func (t *trainer) train(train []conllu.Sentence, iterations int, seed uint64) {
 	rng := rand.New(rand.NewPCG(seed, seed))
 	scores := make([]int64, len(t.classes))
 
-	var feats []feature.Hash
+	var feats []wordclass.Hash
 
 	for range iterations {
 		rng.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
 
 		for _, s := range order {
-			context := feature.Padded(s.Forms())
-			prev, prev2 := feature.Start, feature.Start2
+			context := wordclass.Padded(s.Forms())
+			prev, prev2 := wordclass.Start, wordclass.Start2
 
 			for i, tok := range s.Words {
 				guess, ok := t.dict[tok.Form]
 				if !ok {
-					feats = feature.Extract(feats[:0], context, i, tok.Form, prev, prev2)
+					feats = wordclass.Extract(feats[:0], context, i, tok.Form, prev, prev2)
 					guess = t.p.predict(feats, scores)
 					t.p.update(t.index[class{xpos: tok.XPOS, upos: tok.UPOS}], guess, feats)
 				}
@@ -206,7 +219,7 @@ func (t *trainer) train(train []conllu.Sentence, iterations int, seed uint64) {
 
 // evaluate tags each sentence with m and counts the words, the UPOS matches
 // and the XPOS matches.
-func evaluate(m *postag.Model, sentences []conllu.Sentence) (a postag.Accuracy) {
+func evaluate(m *wordclass.Model, sentences []conllu.Sentence) (a wordclass.Accuracy) {
 	for _, s := range sentences {
 		for i, got := range m.Tag(s.Forms()) {
 			a.Words++

@@ -115,6 +115,7 @@ var subcommands = []subcommand{
 	{"explain", "", inputNone, "RULE|CODE", "print what a rule catches, why, its default decisions and its page"},
 	{"voice build", "", inputNone, "[FILE...]", "measure your own texts into the voice file -voice reads"},
 	{"voice eval", "", inputNone, "", "score which shape features tell -owner's JSON-lines texts from -other's, per kind; -pool N measures chunks of N+ words, -seed S shuffles them"},
+	{"train", "", inputNone, "", "train the word-class model on UD English EWT into -model, its test split into -testdata"},
 }
 
 // usage lists every subcommand and the flags a kind takes.
@@ -141,6 +142,7 @@ func usage() string {
 	b.WriteString("  -prune             with -baseline, rewrite FILE to this run's counts and write no findings\n")
 	b.WriteString("  -metrics           write each text's readability metrics instead of its findings\n")
 	b.WriteString("\nvoice build flags: -kind, -field, -kind-field, -o; voice eval flags: -owner, -other, -kind, -field, -kind-field, -format, -pool, -seed\n")
+	b.WriteString("train flags: -model, -testdata, -iterations, -seed, -levels\n")
 	b.WriteString("\nA text silences a finding with \"<!-- proofread off RULE: REASON -->\" in Markdown or \"proofread:ignore RULE REASON\" in a doc comment.\n")
 	b.WriteString("Findings are a JSON array on stdout. Exit codes: 0 judged with no finding at the -fail-on bar, 1 a finding at it, 2 unusable subcommand, flags, decisions or input.\n")
 
@@ -177,6 +179,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runStats(rest, stdout, stderr)
 	case "voice":
 		return runVoice(rest, stdin, stdout, stderr)
+	case "train":
+		return runTrain(rest, stdout, stderr)
 	}
 
 	if kind, ok := proofread.ParseKind(name); ok { // compat: see proofread's kindAliases

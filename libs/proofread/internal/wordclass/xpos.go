@@ -1,4 +1,4 @@
-package postag
+package wordclass
 
 // XPOS is a Penn Treebank part-of-speech tag, as EWT spells it. The zero value
 // is no tag.

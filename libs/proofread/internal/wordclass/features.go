@@ -1,4 +1,4 @@
-package feature
+package wordclass
 
 import (
 	"strings"
