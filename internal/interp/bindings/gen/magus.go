@@ -6,11 +6,13 @@ package gen
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/types"
 )
 
 // RegisterMagus builds the "magus" module map and returns it.
@@ -85,7 +87,10 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("query", vm.DirectValue("magus.query", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		query := ffi.Str(bzArgs, 0)
-		opts := ffi.AnyMap(bzArgs, 1)
+		opts, err := decodeKnowledgeQueryOptions("magus\\query", ffi.AnyMap(bzArgs, 1))
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
 		ret0, err := std.MagusQuery(ctx, query, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -112,7 +117,10 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("refs", vm.DirectValue("magus.refs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		symbol := ffi.Str(bzArgs, 0)
-		opts := ffi.AnyMap(bzArgs, 1)
+		opts, err := decodeKnowledgeRefsOptions("magus\\refs", ffi.AnyMap(bzArgs, 1))
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
 		ret0, err := std.MagusRefs(ctx, symbol, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -273,4 +281,81 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.BoolVal(ret0), nil
 	}))
 	return m
+}
+
+func decodeKnowledgeQueryOptions(member string, in map[string]any) (types.KnowledgeQueryOptions, error) {
+	var out types.KnowledgeQueryOptions
+	for key, v := range in {
+		switch key {
+		case "budget":
+			switch x := v.(type) {
+			case int64:
+				out.Budget = int(x)
+			case float64:
+				out.Budget = int(x)
+			case int:
+				out.Budget = x
+			default:
+				return out, fmt.Errorf("%s: %s must be a number, got %T", member, key, v)
+			}
+		case "limit":
+			switch x := v.(type) {
+			case int64:
+				out.Limit = int(x)
+			case float64:
+				out.Limit = int(x)
+			case int:
+				out.Limit = x
+			default:
+				return out, fmt.Errorf("%s: %s must be a number, got %T", member, key, v)
+			}
+		case "offset":
+			switch x := v.(type) {
+			case int64:
+				out.Offset = int(x)
+			case float64:
+				out.Offset = int(x)
+			case int:
+				out.Offset = x
+			default:
+				return out, fmt.Errorf("%s: %s must be a number, got %T", member, key, v)
+			}
+		default:
+			return out, fmt.Errorf("%s: unknown option %q (want budget, limit, offset)", member, key)
+		}
+	}
+	return out, nil
+}
+
+func decodeKnowledgeRefsOptions(member string, in map[string]any) (types.KnowledgeRefsOptions, error) {
+	var out types.KnowledgeRefsOptions
+	for key, v := range in {
+		switch key {
+		case "limit":
+			switch x := v.(type) {
+			case int64:
+				out.Limit = int(x)
+			case float64:
+				out.Limit = int(x)
+			case int:
+				out.Limit = x
+			default:
+				return out, fmt.Errorf("%s: %s must be a number, got %T", member, key, v)
+			}
+		case "offset":
+			switch x := v.(type) {
+			case int64:
+				out.Offset = int(x)
+			case float64:
+				out.Offset = int(x)
+			case int:
+				out.Offset = x
+			default:
+				return out, fmt.Errorf("%s: %s must be a number, got %T", member, key, v)
+			}
+		default:
+			return out, fmt.Errorf("%s: unknown option %q (want limit, offset)", member, key)
+		}
+	}
+	return out, nil
 }
