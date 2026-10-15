@@ -598,6 +598,14 @@ var ruleDocBriefPlainCommands = denyDoc(types.RuleDoc{ //nolint:unused // read t
 		"A spawn into a shared checkout passes. It cannot tell a brief that says the same thing in other words from one that never says it.",
 })
 
+var ruleDocUnjudgedTool = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+	Name:    string(denyRuleUnjudgedTool),
+	Catches: "a tool call whose input carries nothing any rule reads, from a tool the guard does not know",
+	Why: "Every harness wires every tool to the guard, which judges a call by the shape of its input: a command line, a file path read or written, a search, a spawn's prompt, a skill load. " +
+		"A tool whose input has none of those shapes, and which the guard's known-tool table does not list, could do whatever a rule exists to stop with no rule seeing it; a tool the table lists as touching nothing (a todo list, a plan, a web lookup) passes. " +
+		"It advises by default, since the guard cannot know such a tool is harmful; a workspace that wants every call judged sets it to deny. A finished call is never named.",
+})
+
 var ruleDocMonitorDuplicate = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
 	Name:    string(denyRuleMonitorDuplicate),
 	Catches: "a second live watcher on one subject, or one on work the agent backgrounded itself",

@@ -622,6 +622,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	description := ""
 	mcpTool, readOnlyTool := "", false
 	var write writeFields
+	unjudged := ""
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
 	// a wrapper that passed them meant them.
@@ -648,7 +649,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		if who.Agent == "" {
 			who.Agent = env.Who.Agent
 		}
-		if req.DryRun && env.NothingToJudge {
+		if req.DryRun && env.NothingToJudge && env.UnjudgedTool == "" {
 			return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 		}
 		if env.LoadedSkill != "" && !req.DryRun {
@@ -661,11 +662,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			at := hookLocation(ctx, deps)
 			joinStartedChild(withJobStoreRows(ctx, at), at, hint.NewGate(at.cacheDir, who.factsKey()), who, env.ChildStarted, time.Now())
 		}
-		if env.NothingToJudge {
+		if env.NothingToJudge && env.UnjudgedTool == "" {
 			// A host envelope whose tool_input carries no command, path or prompt (a todo
 			// list, a search) has nothing any rule can read. Falling through judged the raw
 			// JSON as a shell line, so a denied command merely NAMED inside a todo blocked
-			// the tool call that wrote the todo.
+			// the tool call that wrote the todo. A call to a tool the known-tool table does not
+			// list goes on to unjudged-tool instead.
 			if env.AgentTranscript != "" {
 				recordAgentUsage(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), who.Agent, env.AgentTranscript)
 			}
@@ -681,7 +683,14 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		description = env.Description
 		write = env.Write
 		hasInput = input != ""
+		if env.UnjudgedTool != "" {
+			unjudged = env.UnjudgedTool
+			input, hasInput = unjudged, true
+		}
 		switch {
+		case env.Read != "" && !req.Observe:
+			// A read is judged as the line it stands for, whichever tool performs it.
+			input = env.Read
 		case env.LoadedSkill != "" && !req.Observe:
 			// A skill loaded by reading its file is still a read, judged as the line a
 			// host's read tool is restated as.
@@ -756,6 +765,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	switch {
 	case req.Observe:
 		tool = hookToolRead
+	case unjudged != "":
+		tool = hookToolCall
 	case isPath:
 		tool = hookToolWrite
 	}
@@ -817,6 +828,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		// No rule judges a read or a search, so none is run: the observation IS the whole
 		// contribution. Running the write rules here would only ever manufacture a false
 		// advisory about editing a file the agent opened read-only.
+	case unjudged != "":
+		refuseWith(denyRuleUnjudgedTool, denyUnjudgedTool(unjudged))
+		pending.speak(markers, &verdict, whys)
 	case isPath:
 		said := ""
 		// adviceKind is which rung spoke, for the verdict to name.
@@ -1085,6 +1099,10 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			}
 		}
 		call := shellCall{background: req.CallBackground, timeout: req.CallTimeout, foregroundDefault: req.HostForegroundDefault, foregroundMax: req.HostForegroundMax}
+		if env.IsWatch {
+			// The host's foreground limits are its shell tool's; a watcher has its own expiry.
+			call.foregroundDefault, call.foregroundMax = 0, 0
+		}
 		// Read once for the two rules below, and only for a call one of them can judge.
 		worker := sync.OnceValues(func() (workerRun, bool) {
 			if !call.background && !call.declared() {
@@ -1551,22 +1569,19 @@ func envelopeWritePath(input map[string]any) string {
 }
 
 // The tool labels recorded on an activity event. They are magus's OWN vocabulary, chosen by
-// which flags the wrapper passed, never a host's tool name.
+// the call's shape and the flags the wrapper passed, never a host's tool name.
 //
-// That division is the whole design: only the wrapper knows that its host calls a read
-// "Read" or "read_file", and mapping those names here would be a per-host branch, so the
-// next change to any host would mean a magus release. The matcher in a host's own config is
-// where the host's vocabulary lives.
-//
-// The hostagnostic linter matches host NAMES, so a switch over "Read"/"Bash" (a
-// per-host branch in everything but spelling) passes it untouched.
-// The hostvocab linter is the layer that catches that one: a host's
-// word for a tool may not appear as a string literal in guard code at all, so a lookup
-// table is no cheaper than a switch. These three constants are what it leaves room for.
+// A host's words for its tools live in one place, knownTools in tools.go, the table a
+// catch-all hook entry needs because it cannot say per tool what the tool does. The
+// hostvocab linter keeps them there: a host's word for a tool may not appear as a string
+// literal anywhere else in guard code, since a switch over "Read"/"Bash" is a per-host
+// branch the hostagnostic linter cannot see.
 const (
 	hookToolCommand = "shell.command"
 	hookToolWrite   = "file.write"
 	hookToolRead    = "file.read"
+	// hookToolCall is a call no rule could read; its recorded input is the tool's name.
+	hookToolCall = "tool.call"
 )
 
 // decodeHookEnvelope pulls the thing to judge out of a host's hook payload, reporting
@@ -1620,11 +1635,16 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		// client and status among them, reaching no rule at all.
 		req.Value = buildCall(tool, env.ToolInput, env.Cwd)
 		req.MCPTool, req.ReadOnlyTool = tool, mcpReadsOnly(tool, env.ToolInput)
+	case capabilityOf(env.ToolName) == toolInert && envelopeString(env.ToolInput, "skill") == "":
+		// Ahead of every shape: a web fetch's prompt is no spawn's brief, and a tool that
+		// touches nothing has nothing to judge whatever its fields are called.
+		req.NothingToJudge = true
 	case isPatch:
 		// A patch is a write, whichever field the host put it in. Ahead of the command arm
 		// because one host sends it as `command`, where it would be judged as a shell line.
 		if len(files) == 0 {
 			req.NothingToJudge = true
+			req.UnjudgedTool = unjudgedTool(env)
 			break
 		}
 		req.Value, req.IsPath = files[0].Path, true
@@ -1649,6 +1669,11 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		// A host's own content or file search, judged as the shell line it stands for so
 		// the search rules hold on that channel too.
 		req.Value = nativeSearchLine(env.ToolInput)
+	case envelopeWritePath(env.ToolInput) != "" && capabilityOf(env.ToolName) == toolReads:
+		// A file path is a read or a write, and only the tool knows which.
+		req.Value = envelopeWritePath(env.ToolInput)
+		req.Read = readLine(req.Value, env.ToolInput)
+		req.LoadedSkill = envelopeSkillRead(env.ToolInput)
 	case envelopeWritePath(env.ToolInput) != "":
 		req.Value, req.IsPath = envelopeWritePath(env.ToolInput), true
 		// Read by shape, like the path: a whole-file write carries its content, an edit the
@@ -1732,6 +1757,7 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 			return hookRequest{}, false
 		}
 		req.NothingToJudge = true
+		req.UnjudgedTool = unjudgedTool(env)
 		if env.AgentID != "" {
 			req.AgentTranscript = env.AgentTranscriptPath
 		}
@@ -1741,6 +1767,8 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 			req.ChildStarted = env.AgentID
 		}
 	}
+	req.Inert = req.NothingToJudge && capabilityOf(env.ToolName) == toolInert &&
+		req.LoadedSkill == "" && req.ChildStarted == "" && req.AgentTranscript == ""
 	return req, true
 }
 
@@ -1794,7 +1822,16 @@ type hookRequest struct {
 	// NothingToJudge is a recognized host envelope carrying no command, path or prompt.
 	// Distinct from "not an envelope", which is judged as the literal text it is.
 	NothingToJudge bool
-	IsSpawn        bool
+	// UnjudgedTool names the tool of a nothing-to-judge call the known-tool table does not
+	// know, "" for any other: the call no rule could read.
+	UnjudgedTool string
+	// Inert is a nothing-to-judge call to a tool the table calls inert, which records
+	// nothing either: the read-only fast path answers it without loading any rule.
+	Inert bool
+	// Read is the shell line a read tool's call stands for, "" for any other call; Value
+	// is then the path it reads.
+	Read    string
+	IsSpawn bool
 	// IsContinue is a message to an existing subagent; Target is the agent it addresses.
 	IsContinue bool
 	Target     string

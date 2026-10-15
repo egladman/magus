@@ -179,7 +179,14 @@ func boundedPhase[T any](ctx context.Context, phase string, call func(context.Co
 //
 // base resolves the trail's location, names the judging binary and carries the spell
 // catalog when judge has not answered; judge loads the rest itself, inside the bound.
+//
+// A call to a tool the known-tool table calls inert, carrying nothing a rule reads, passes
+// without judge running at all: every tool reaches the guard, and loading the workspace's
+// rules for a todo list costs the host a hook's worth of waiting.
 func JudgeWithin(ctx context.Context, base Dependencies, req Request, judge func(context.Context) types.GuardJudgment) types.GuardJudgment {
+	if inertCall(req) {
+		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+	}
 	if req.DryRun {
 		return judge(ctx)
 	}
@@ -275,7 +282,7 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 		who.Transcript = cmp.Or(who.Transcript, env.Who.Transcript)
 		who.Event = cmp.Or(who.Event, env.Who.Event)
 		who.Agent = cmp.Or(who.Agent, env.Who.Agent)
-		input, isPath, readOnly = env.Value, isPath || env.IsPath, env.ReadOnlyTool
+		input, isPath, readOnly = cmp.Or(env.Read, env.Value), isPath || env.IsPath, env.ReadOnlyTool
 	}
 	mark := begunJudgment(ctx)
 	mark.end()

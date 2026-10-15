@@ -57,10 +57,10 @@ func beginJudgment(cacheDir, sessionKey string, now time.Time) judgmentMark {
 // session's next judgment. Judge ends the mark it finds on the returned context.
 //
 // cacheDir resolves a workspace's cache directory, as [Dependencies.CacheDir] does. Nothing
-// is marked for a request Judge would not judge: no input, an observation, a message, or a
-// dry run.
+// is marked for a request Judge would not judge: no input, an observation, a message, a
+// dry run, or a call the read-only fast path answers.
 func BeginJudgment(ctx context.Context, cacheDir func(root string) (string, error), req Request) context.Context {
-	if req.Input == "" || req.Observe || req.Message || req.DryRun {
+	if req.Input == "" || req.Observe || req.Message || req.DryRun || inertCall(req) {
 		return ctx
 	}
 	who := hookAttribution{Host: req.Host, Session: req.Session, Window: req.Window}

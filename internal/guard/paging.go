@@ -56,12 +56,22 @@ func gradeReadPaging(deps Dependencies, facts hint.Gate, agent, dir, command str
 			continue
 		}
 		tally := readPagingKind(agent, rel)
-		if facts.MarkFired(tally + hint.MarkerKind("-"+strconv.Itoa(first)+"-"+strconv.Itoa(last))) {
+		window := tally + hint.MarkerKind("-"+strconv.Itoa(first)+"-"+strconv.Itoa(last))
+		if facts.AlreadyFired(window) {
 			continue
 		}
-		if n := facts.Count(tally); n >= readPagingRefused {
-			return denyReadPaging(m, n)
+		n := facts.Count(tally)
+		if n < readPagingRefused {
+			facts.MarkFired(window)
+			continue
 		}
+		// A refused window was never read, so it is not recorded as one: asked again, by
+		// any tool, it is refused again.
+		v := denyReadPaging(m, n)
+		if deps.grade(v).Deny == "" {
+			facts.MarkFired(window)
+		}
+		return v
 	}
 	return ShellVerdict{}
 }

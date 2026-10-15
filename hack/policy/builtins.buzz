@@ -88,6 +88,10 @@ export final BUILTINS: {str: any} = {
     // symbol search through.
     "symbol-search": "deny",
     "throwaway-copy": "deny",
+    // 2026-10-14: every harness now hooks every tool, and this tree wants a call no rule
+    // could read stopped rather than noted. A tool that touches nothing belongs in the
+    // guard's known-tool table, not past this rule.
+    "unjudged-tool": "deny",
     // 2026-09-24: the day MAGUS_NO_WAIT was removed, agents prefixed 462 commands with it,
     // copied from 33 briefs.
     "unknown-env": "deny",

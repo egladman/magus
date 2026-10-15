@@ -36,6 +36,7 @@ func TestDefaults(t *testing.T) {
 		"spawn-duplicate":      Deny,
 		"background-left":      Deny,
 		"background-unbounded": Deny,
+		"unjudged-tool":        Advise,
 
 		"orchestrator-groundwork": Deny,
 		"spawn-above-parent-tier": Deny,

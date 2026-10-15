@@ -181,6 +181,7 @@ var defaults = map[string]Decision{
 	"stage-all":              Advise,
 	"symbol-search":          Advise,
 	"throwaway-copy":         Advise,
+	"unjudged-tool":          Advise,
 	"unknown-env":            Advise,
 
 	// Irreversible, or a boundary someone else drew.
