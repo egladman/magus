@@ -16,7 +16,7 @@ export final build = "magus run proofread-build libs/proofread";
 
 // PACKAGES are the directories under home whose non-test Go the binary links. A directory
 // that does not exist lists nothing.
-final PACKAGES = [".", "postag", "postag/internal/feature", command];
+final PACKAGES = [".", "postag", "postag/internal/feature", "internal/xdg", command];
 
 // sources lists every file proofread is linked from, relative to dir, the libs/proofread
 // module: its go.mod and go.sum, the non-test Go of the packages it builds, the tagger
@@ -76,7 +76,7 @@ export fun whyStale(dir: str) > str {
 test "a proofread that is missing or linked from other sources is stale" {
     final dir = fs\tempDir("proofread") catch "";
     std\assert(dir != "", message: "a temp dir");
-    foreach (sub in ["postag/internal/feature", "postag/gen", "cmd/proofread", "testdata/cases", "gen"]) {
+    foreach (sub in ["postag/internal/feature", "postag/gen", "internal/xdg", "cmd/proofread", "testdata/cases", "gen"]) {
         fs\mkdirAll("{dir}/{sub}") catch void;
     }
     fs\writeFile("{dir}/go.mod", content: "module m\n") catch void;
@@ -86,11 +86,12 @@ test "a proofread that is missing or linked from other sources is stale" {
     fs\writeFile("{dir}/postag/tag.go", content: "package postag\n") catch void;
     fs\writeFile("{dir}/postag/internal/feature/feature.go", content: "package feature\n") catch void;
     fs\writeFile("{dir}/postag/gen/model.gz", content: "model") catch void;
+    fs\writeFile("{dir}/internal/xdg/xdg.go", content: "package xdg\n") catch void;
     fs\writeFile("{dir}/cmd/proofread/main.go", content: "package main\n") catch void;
     fs\writeFile("{dir}/testdata/cases/filler.txtar", content: "-- hit/reference --\nx\n") catch void;
 
     std\assert((sources(dir) catch [<str>]).join(",") == "go.mod,go.sum,proofread.go,postag/tag.go,"
-        + "postag/internal/feature/feature.go,cmd/proofread/main.go,postag/gen/model.gz,testdata/cases/filler.txtar",
+        + "postag/internal/feature/feature.go,internal/xdg/xdg.go,cmd/proofread/main.go,postag/gen/model.gz,testdata/cases/filler.txtar",
         message: (sources(dir) catch [<str>]).join(","));
     std\assert(whyStale(dir) == "libs/proofread/gen/proofread is not built", message: whyStale(dir));
 
