@@ -703,6 +703,11 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			}
 			row.ModelTier = &assigned
 		}
+		if i < 0 || prev.Model != row.Model || prev.Parent != row.Parent {
+			if aerr := refuseAboveParent(s.modelTiers, row, f.Jobs); aerr != nil {
+				return aerr
+			}
+		}
 		// The counters are the store's: a whole-row write cannot set them, and only a
 		// write that adds write paths to a row its holder already took counts a widening.
 		row.Widenings = prev.Widenings

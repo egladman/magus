@@ -213,6 +213,48 @@ func (s *Store) assignModelTier(ctx context.Context, row types.Job, plan []types
 	return assigned, nil
 }
 
+// refuseAboveParent refuses row's tier when it ranks above the tier row's parent in plan
+// was forked at. Only a proven pair is judged: a parent missing from plan, recording no
+// tier, or recording one set no longer declares at that rank bounds nothing. The way up is
+// a person's: a child never outranks the work that handed it out.
+func refuseAboveParent(set *types.ModelTierSet, row types.Job, plan []types.Job) error {
+	if set == nil || row.Parent == "" || row.ModelTier == nil {
+		return nil
+	}
+	i := slices.IndexFunc(plan, func(r types.Job) bool { return r.ID == row.Parent })
+	if i < 0 {
+		return nil
+	}
+	parent, ok := declaredTier(set, plan[i].ModelTier)
+	if !ok {
+		return nil
+	}
+	child, ok := declaredTier(set, row.ModelTier)
+	if !ok {
+		return nil
+	}
+	if child.Within(parent) == nil {
+		return nil
+	}
+	err := fmt.Errorf("job: %s would run at model tier %s, and its parent %s was forked at %s; a child never outranks its parent,"+
+		" so fork it at %s or lower (`--model %s`), or a person forks it at %s as a row of its own",
+		row.ID, row.ModelTier, row.Parent, plan[i].ModelTier, parent.Name(), parent.Name(), child.Name())
+	return types.NonRetryable(err, types.RetryAfterPerson, "a person forks the higher-tier row")
+}
+
+// declaredTier is the tier record names in set, false when record is nil or set has no
+// case of that name at that rank.
+func declaredTier(set *types.ModelTierSet, record *types.JobModelTier) (types.ModelTier, bool) {
+	if record == nil {
+		return types.ModelTier{}, false
+	}
+	t, ok := set.At(record.Rank)
+	if !ok || t.Name() != record.Name {
+		return types.ModelTier{}, false
+	}
+	return t, true
+}
+
 // checkMatrixAnswer holds a matrix's answer to the declaration it chose from. The answer
 // is stored as given once it agrees with set, with the source made the matrix's whatever
 // the function wrote there.

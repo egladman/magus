@@ -550,3 +550,95 @@ func TestStoreFailsAForkWhoseOwnersCannotBeFound(t *testing.T) {
 	assert.ErrorContains(t, err, "graph does not build")
 	assert.Zero(t, matrix.calls, "the matrix is not fed a request with the projects missing")
 }
+
+func TestStoreRefusesAChildAboveItsParentsTier(t *testing.T) {
+	t.Parallel()
+
+	s := tieredStore(t, tierSet(t), nil)
+	parent := lease("p")
+	parent.Model = "economy"
+	seed(t, s, parent)
+
+	child := lease("c")
+	child.Parent, child.Model = "p", "principal"
+	_, err := s.Update(t.Context(), "c", func(cur *types.Job) { *cur = child })
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "c would run at model tier principal (rank 2)")
+	assert.ErrorContains(t, err, "its parent p was forked at economy (rank 0)")
+	assert.ErrorContains(t, err, "fork it at economy or lower (`--model economy`), or a person forks it at principal as a row of its own")
+	verdict := types.ClassifyRetry(err)
+	assert.False(t, verdict.Retryable)
+	assert.Equal(t, types.RetryAfterPerson, verdict.Change)
+
+	child.Model = ""
+	_, err = s.Update(t.Context(), "c", func(cur *types.Job) { *cur = child })
+	require.Error(t, err, "the declared default is held to the parent's tier too")
+	assert.ErrorContains(t, err, "c would run at model tier standard (rank 1)")
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "a refused fork writes nothing")
+}
+
+func TestStoreForksAChildAtOrBelowItsParentsTier(t *testing.T) {
+	t.Parallel()
+
+	s := tieredStore(t, tierSet(t), nil)
+	parent := lease("p")
+	parent.Model = "standard"
+	seed(t, s, parent)
+
+	equal := lease("p/equal")
+	equal.Parent, equal.Model = "p", "standard"
+	assert.Equal(t, "standard", seed(t, s, equal).ModelTier.Name)
+
+	lower := lease("p/lower")
+	lower.Parent, lower.Model = "p", "haiku"
+	assert.Equal(t, "economy", seed(t, s, lower).ModelTier.Name, "a host's model resolves to its tier and is held by rank")
+
+	orphan := lease("o")
+	orphan.Model = "principal"
+	assert.Equal(t, "principal", seed(t, s, orphan).ModelTier.Name, "a row with no parent has no ceiling")
+}
+
+func TestStoreRefusesReparentingUnderALowerTier(t *testing.T) {
+	t.Parallel()
+
+	s := tieredStore(t, tierSet(t), nil)
+	low := lease("low")
+	low.Model = "economy"
+	seed(t, s, low)
+	row := lease("a")
+	row.Model = "standard"
+	seed(t, s, row)
+
+	_, err := s.Update(t.Context(), "a", func(cur *types.Job) { cur.Parent = "low" })
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "its parent low was forked at economy (rank 0)")
+}
+
+func TestRefuseAboveParentJudgesOnlyAProvenPair(t *testing.T) {
+	t.Parallel()
+
+	set := tierSet(t)
+	principal := &types.JobModelTier{Name: "principal", Rank: 2}
+	tests := []struct {
+		name string
+		plan []types.Job
+	}{
+		{"parent missing from the plan", nil},
+		{"parent records no tier", []types.Job{{ID: "p"}}},
+		{"parent's tier is declared at another rank", []types.Job{{ID: "p", ModelTier: &types.JobModelTier{Name: "economy", Rank: 1}}}},
+		{"parent's tier is no longer declared", []types.Job{{ID: "p", ModelTier: &types.JobModelTier{Name: "tiny", Rank: 0}}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.NoError(t, refuseAboveParent(set, types.Job{ID: "c", Parent: "p", ModelTier: principal}, tt.plan))
+		})
+	}
+
+	proven := []types.Job{{ID: "p", ModelTier: &types.JobModelTier{Name: "economy", Rank: 0}}}
+	require.Error(t, refuseAboveParent(set, types.Job{ID: "c", Parent: "p", ModelTier: principal}, proven))
+	assert.NoError(t, refuseAboveParent(nil, types.Job{ID: "c", Parent: "p", ModelTier: principal}, proven), "a workspace without tiers bounds nothing")
+}
