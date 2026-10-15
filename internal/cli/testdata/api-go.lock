@@ -2817,6 +2817,7 @@ github.com/egladman/magus/types.ModelTier.IsZero method func() bool
 github.com/egladman/magus/types.ModelTier.MarshalText method func() ([]byte, error)
 github.com/egladman/magus/types.ModelTier.Name method func() string
 github.com/egladman/magus/types.ModelTier.Rank method func() int
+github.com/egladman/magus/types.ModelTier.Within method func(ceiling ModelTier) error
 github.com/egladman/magus/types.ModelTierBounds type struct
 github.com/egladman/magus/types.ModelTierBounds.MaxContext field int64
 github.com/egladman/magus/types.ModelTierBounds.MaxLive field int
