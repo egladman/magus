@@ -501,15 +501,15 @@ const modelTierCols: Column<ModelTierRowView>[] = [
     key: "cost",
     label: "Mean cost",
     numeric: true,
-    text: (r) => (r.meanCostUsd > 0 ? "$" + r.meanCostUsd.toFixed(2) : "-"),
-    sort: (r) => r.meanCostUsd,
+    text: (r) => (r.meanCostUsd === undefined ? "unknown" : "$" + r.meanCostUsd.toFixed(2)),
+    sort: (r) => r.meanCostUsd ?? -1,
   },
   {
     key: "tokens",
     label: "Median tokens",
     numeric: true,
-    text: (r) => (r.medianTokens > 0 ? fmtCount(r.medianTokens) : "-"),
-    sort: (r) => r.medianTokens,
+    text: (r) => (r.medianTokens === undefined ? "unknown" : fmtCount(r.medianTokens)),
+    sort: (r) => r.medianTokens ?? -1,
   },
 ];
 

@@ -5,5 +5,5 @@
   showed every tier as free. A job outcome now records `usage_tokens` and `usage_cost_usd`
   only when a host reported them, and a lens row's `mean_cost_usd` and `median_tokens` are
   `null` unless every job in the row carries the figure. The `context_tokens` and `cost_usd`
-  zeros an older magus wrote into the history are not read. The console dashboard still
-  shows `0` for an unknown figure until its wire fields become optional.
+  zeros an older magus wrote into the history are not read. The insight API's two fields are
+  optional, absent when unknown, and the console dashboard shows `unknown` for them.

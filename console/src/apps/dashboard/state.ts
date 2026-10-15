@@ -767,7 +767,8 @@ export interface VolatilityView {
 }
 // One (model tier, job kind) pair's recorded outcomes. rank is the tier's place in the
 // current declaration, -1 for a tier it no longer names. passLower is the Wilson lower bound of
-// the pass rate; the per-job figures are means over the pair's jobs.
+// the pass rate; the per-job figures are means over the pair's jobs. meanCostUsd and
+// medianTokens are undefined when unknown, which is not a zero.
 export interface ModelTierRowView {
   label: string; // "<tier> / <kind>"
   rank: number;
@@ -780,8 +781,8 @@ export interface ModelTierRowView {
   forksPerId: number;
   reworkPerJob: number;
   wideningsPerJob: number;
-  meanCostUsd: number;
-  medianTokens: number;
+  meanCostUsd?: number;
+  medianTokens?: number;
 }
 export interface ModelTierView {
   rows: ModelTierRowView[];
@@ -911,7 +912,7 @@ export function mapInsight(w: Insight): InsightView {
             reworkPerJob: r.reworkPerJob,
             wideningsPerJob: r.wideningsPerJob,
             meanCostUsd: r.meanCostUsd,
-            medianTokens: Number(r.medianTokens),
+            medianTokens: r.medianTokens === undefined ? undefined : Number(r.medianTokens),
           })),
         }
       : null,

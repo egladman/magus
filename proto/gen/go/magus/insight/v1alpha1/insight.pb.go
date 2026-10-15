@@ -1210,8 +1210,10 @@ type ModelTierRecord struct {
 	ForksPerId      float64                `protobuf:"fixed64,10,opt,name=forks_per_id,json=forksPerId,proto3" json:"forks_per_id,omitempty"`
 	ReworkPerJob    float64                `protobuf:"fixed64,11,opt,name=rework_per_job,json=reworkPerJob,proto3" json:"rework_per_job,omitempty"`
 	WideningsPerJob float64                `protobuf:"fixed64,12,opt,name=widenings_per_job,json=wideningsPerJob,proto3" json:"widenings_per_job,omitempty"`
-	MeanCostUsd     float64                `protobuf:"fixed64,13,opt,name=mean_cost_usd,json=meanCostUsd,proto3" json:"mean_cost_usd,omitempty"`
-	MedianTokens    int64                  `protobuf:"varint,14,opt,name=median_tokens,json=medianTokens,proto3" json:"median_tokens,omitempty"`
+	// mean_cost_usd and median_tokens are absent, unknown, unless every counted outcome
+	// carries the figure; zero is a measured zero.
+	MeanCostUsd  *float64 `protobuf:"fixed64,13,opt,name=mean_cost_usd,json=meanCostUsd,proto3,oneof" json:"mean_cost_usd,omitempty"`
+	MedianTokens *int64   `protobuf:"varint,14,opt,name=median_tokens,json=medianTokens,proto3,oneof" json:"median_tokens,omitempty"`
 	// first_attempts counts the endings of a job's first attempt and first_pass those that
 	// passed; first_pass_lower is their Wilson lower bound, as pass_lower is for every ending.
 	// not_retryable counts the endings classified as needing a change before another attempt.
@@ -1338,15 +1340,15 @@ func (x *ModelTierRecord) GetWideningsPerJob() float64 {
 }
 
 func (x *ModelTierRecord) GetMeanCostUsd() float64 {
-	if x != nil {
-		return x.MeanCostUsd
+	if x != nil && x.MeanCostUsd != nil {
+		return *x.MeanCostUsd
 	}
 	return 0
 }
 
 func (x *ModelTierRecord) GetMedianTokens() int64 {
-	if x != nil {
-		return x.MedianTokens
+	if x != nil && x.MedianTokens != nil {
+		return *x.MedianTokens
 	}
 	return 0
 }
@@ -1903,7 +1905,7 @@ const file_magus_insight_v1alpha1_insight_proto_rawDesc = "" +
 	"\n" +
 	"definition\x18\x01 \x01(\tR\n" +
 	"definition\x12;\n" +
-	"\x04rows\x18\x02 \x03(\v2'.magus.insight.v1alpha1.ModelTierRecordR\x04rows\"\xc8\x04\n" +
+	"\x04rows\x18\x02 \x03(\v2'.magus.insight.v1alpha1.ModelTierRecordR\x04rows\"\xf6\x04\n" +
 	"\x0fModelTierRecord\x12\x12\n" +
 	"\x04rank\x18\x01 \x01(\x05R\x04rank\x12\x1d\n" +
 	"\n" +
@@ -1920,14 +1922,16 @@ const file_magus_insight_v1alpha1_insight_proto_rawDesc = "" +
 	" \x01(\x01R\n" +
 	"forksPerId\x12$\n" +
 	"\x0erework_per_job\x18\v \x01(\x01R\freworkPerJob\x12*\n" +
-	"\x11widenings_per_job\x18\f \x01(\x01R\x0fwideningsPerJob\x12\"\n" +
-	"\rmean_cost_usd\x18\r \x01(\x01R\vmeanCostUsd\x12#\n" +
-	"\rmedian_tokens\x18\x0e \x01(\x03R\fmedianTokens\x12%\n" +
+	"\x11widenings_per_job\x18\f \x01(\x01R\x0fwideningsPerJob\x12'\n" +
+	"\rmean_cost_usd\x18\r \x01(\x01H\x00R\vmeanCostUsd\x88\x01\x01\x12(\n" +
+	"\rmedian_tokens\x18\x0e \x01(\x03H\x01R\fmedianTokens\x88\x01\x01\x12%\n" +
 	"\x0efirst_attempts\x18\x0f \x01(\x05R\rfirstAttempts\x12\x1d\n" +
 	"\n" +
 	"first_pass\x18\x10 \x01(\x05R\tfirstPass\x12(\n" +
 	"\x10first_pass_lower\x18\x11 \x01(\x01R\x0efirstPassLower\x12#\n" +
-	"\rnot_retryable\x18\x12 \x01(\x05R\fnotRetryable\"\x81\x02\n" +
+	"\rnot_retryable\x18\x12 \x01(\x05R\fnotRetryableB\x10\n" +
+	"\x0e_mean_cost_usdB\x10\n" +
+	"\x0e_median_tokens\"\x81\x02\n" +
 	"\x11ConformanceOutput\x12\x1e\n" +
 	"\n" +
 	"definition\x18\x01 \x01(\tR\n" +
@@ -2047,6 +2051,7 @@ func file_magus_insight_v1alpha1_insight_proto_init() {
 	if File_magus_insight_v1alpha1_insight_proto != nil {
 		return
 	}
+	file_magus_insight_v1alpha1_insight_proto_msgTypes[14].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

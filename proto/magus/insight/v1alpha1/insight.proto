@@ -228,8 +228,10 @@ message ModelTierRecord {
   double forks_per_id = 10;
   double rework_per_job = 11;
   double widenings_per_job = 12;
-  double mean_cost_usd = 13;
-  int64 median_tokens = 14;
+  // mean_cost_usd and median_tokens are absent, unknown, unless every counted outcome
+  // carries the figure; zero is a measured zero.
+  optional double mean_cost_usd = 13;
+  optional int64 median_tokens = 14;
   // first_attempts counts the endings of a job's first attempt and first_pass those that
   // passed; first_pass_lower is their Wilson lower bound, as pass_lower is for every ending.
   // not_retryable counts the endings classified as needing a change before another attempt.

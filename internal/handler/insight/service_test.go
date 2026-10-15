@@ -212,7 +212,7 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 				Rank: 0, ModelTier: "economy", Kind: "check",
 				Jobs: 12, Pass: 9, Fail: 2, NoReturn: 1,
 				PassLower: 0.48, ChecksPerJob: 1.5, ForksPerId: 1.1, ReworkPerJob: 0.25, WideningsPerJob: 0.5,
-				MeanCostUsd: 0.07, MedianTokens: 41_000,
+				MeanCostUsd: new(0.07), MedianTokens: new(int64(41_000)),
 				FirstAttempts: 10, FirstPass: 7, FirstPassLower: 0.39, NotRetryable: 2,
 			}},
 		},
@@ -284,6 +284,25 @@ func TestGetInsight_ZeroTimeIsUnset(t *testing.T) {
 	require.Nil(t, hot.GetNodes()[1].GetLastCommitTime())
 	require.Nil(t, hot.GetFiles()[0].GetLastCommitTime())
 	require.Nil(t, got.GetVolatility().GetTargets()[0].GetLastPassTime())
+}
+
+// An unknown cost or token figure is absent on the wire, never a zero a reader takes as
+// measured, and a measured zero stays present.
+func TestGetInsight_UnknownCostIsAbsent(t *testing.T) {
+	got, err := get(t, cannedInsightSource{view: types.InsightView{ModelTiers: &types.ModelTierOutput{
+		Rows: []types.ModelTierRecord{
+			{ModelTier: "economy", Kind: "check"},
+			{ModelTier: "standard", Kind: "check", MeanCostUSD: new(0.0), MedianTokens: new(int64(0))},
+		},
+	}}})
+	require.NoError(t, err)
+	rows := got.GetModelTiers().GetRows()
+	require.Len(t, rows, 2)
+	require.Nil(t, rows[0].MeanCostUsd, "unknown cost")
+	require.Nil(t, rows[0].MedianTokens, "unknown tokens")
+	require.NotNil(t, rows[1].MeanCostUsd, "a measured zero cost")
+	require.NotNil(t, rows[1].MedianTokens, "a measured zero token count")
+	require.Zero(t, rows[1].GetMeanCostUsd())
 }
 
 func TestGetInsight_NoWorkspaceIsUnavailable(t *testing.T) {
