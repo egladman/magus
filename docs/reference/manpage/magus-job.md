@@ -1,6 +1,6 @@
 ---
 title: magus job
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: "The POSIX child lifecycle over delegated work: fork declares a job, exec takes the lease on it in this checkout, exit returns it with its result, wait verifies that result, and run submits one of the server's own jobs."
 tags: [cli, magus job, job, jobs, lease, agents, delegation]
 ---
@@ -84,13 +84,13 @@ them and magus describe job prints one job's terms.
 ### job fork options
 
 **--check** *\<target\> \<project\> [-- args]*
-: The one check this job runs, as \`\<target\> \<project\> [-- args]\` (the \`magus run\` is implied)
+: The one check this job runs, as \<target\> \<project\> [-- args] (the \`magus run\` is implied)
 
 **--checkout** *string*
 : Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work
 
 **--checkpoint** *magus vcs checkpoint -o name*
-: The working state this job is handed, as \`magus vcs checkpoint -o name\` prints it
+: The working state this job is handed, as magus vcs checkpoint -o name prints it
 
 **--criteria** *string*
 : What this job is for and what done means, as prose; the machine-checkable half is --check, and the goals a --stdin record declares
@@ -123,12 +123,12 @@ them and magus describe job prints one job's terms.
 : Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout
 
 **--write-paths** *\<file\>#\<declaration\>*
-: A path this job may write, or \`\<file\>#\<declaration\>\` to claim one declaration of a file (a path holding a literal # is spelled \`./a#b.md\` or \`a\\#b.md\`); repeatable or comma-separated
+: A path this job may write, or \<file\>#\<declaration\> to claim one declaration of a file (a path holding a literal # is spelled \`./a#b.md\` or \`a\\#b.md\`); repeatable or comma-separated
 
 ### job apply options
 
 **-f** *-*
-: The records to apply: a file, or \`-\` for stdin; one JSON job, a JSON array, or one job per line
+: The records to apply: a file, or - for stdin; one JSON job, a JSON array, or one job per line
 
 ### job exec options
 
@@ -149,7 +149,7 @@ them and magus describe job prints one job's terms.
 ### job wait options
 
 **--evidence** *\<goal\>*
-: Grade check goal \`\<goal\>\` against the run \`\<ref\>\` recorded in THIS checkout instead of the job's own; \`check\` names the job's check. The changed paths must read the same here as in the job's checkout; repeatable
+: Grade check goal \<goal\> against the run \`\<ref\>\` recorded in THIS checkout instead of the job's own; \`check\` names the job's check. The changed paths must read the same here as in the job's checkout; repeatable
 
 **--integration**
 : Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state

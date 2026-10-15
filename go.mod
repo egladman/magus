@@ -87,6 +87,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
+	github.com/egladman/magus/libs/cmdline v0.1.0
 	github.com/egladman/magus/libs/diagnostics v0.2.0
 	github.com/egladman/magus/libs/gopherbuzz v0.2.0
 	github.com/egladman/magus/libs/xdg v0.1.0
@@ -136,6 +137,8 @@ tool (
 // the code beside it. Their one cost downstream is `go install
 // github.com/egladman/magus/cmd/magus@...`, which refuses any module whose go.mod
 // carries a replace directive (see internal/agent/skills/magus-sdk/SKILL.md).
+replace github.com/egladman/magus/libs/cmdline => ./libs/cmdline
+
 replace github.com/egladman/magus/libs/diagnostics => ./libs/diagnostics
 
 replace github.com/egladman/magus/libs/gopherbuzz => ./libs/gopherbuzz

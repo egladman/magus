@@ -1,7 +1,4 @@
-// writer (this file) emits the groff_man(7) subset that magus's man pages use;
-// the escape* helpers handle roff special characters. Free of magus-specific types.
-
-package cli
+package generate
 
 import (
 	"fmt"
@@ -42,7 +39,7 @@ func (w *writer) P() {
 // Para writes a plain-text paragraph, escaping special chars and splitting
 // on blank lines with .PP between them. Use for Long / description fields.
 func (w *writer) Para(text string) {
-	parts := SplitParas(text)
+	parts := splitParas(text)
 	for i, p := range parts {
 		if i > 0 {
 			w.P()
@@ -106,8 +103,8 @@ func escapeHyphen(s string) string {
 	return strings.ReplaceAll(s, "-", `\-`)
 }
 
-// SplitParas splits text on blank lines, returning trimmed paragraphs.
-func SplitParas(text string) []string {
+// splitParas splits text on blank lines, returning trimmed paragraphs.
+func splitParas(text string) []string {
 	var paras []string
 	var cur strings.Builder
 	for _, line := range strings.Split(text, "\n") {

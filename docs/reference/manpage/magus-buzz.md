@@ -1,6 +1,6 @@
 ---
 title: magus buzz
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: Run Buzz from a REPL, a file, stdin, or an inline snippet, with the Buzz stdlib, every magus host module, and the magus namespace available.
 tags: [cli, magus buzz, buzz, scripting, repl, lsp]
 ---
@@ -56,16 +56,16 @@ runs the same from any directory: magus buzz -C "$ROOT" -s hooks/guard.buzz.
 ## Options
 
 **-C** *dir*
-: Change to \`dir\` before anything else, as go -C does, so script paths and imports resolve from it; lsp takes it only as the first flag
+: Change to dir before anything else, as go -C does, so script paths and imports resolve from it; lsp takes it only as the first flag
 
 **--check**
 : Parse and type-check the named files without running them; report every diagnostic
 
 **--coverprofile** *-t*
-: Write an LCOV coverprofile for the file under \`-t\` (requires \`-t\`)
+: Write an LCOV coverprofile for the file under -t (requires \`-t\`)
 
 **-e** *code*
-: Execute \`code\` given on the command line instead of a file
+: Execute code given on the command line instead of a file
 
 **--embedded**
 : Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine
@@ -77,7 +77,7 @@ runs the same from any directory: magus buzz -C "$ROOT" -s hooks/guard.buzz.
 : Print where compile and import time went, after the script runs
 
 **--record** *magus query output \<ref\>*
-: Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (\`magus query output \<ref\>\` reopens it)
+: Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (magus query output \<ref\> reopens it)
 
 **-t**
 : Run the file's test "..." {} blocks and report pass/fail

@@ -399,11 +399,11 @@ func renderRepoLock(t *testing.T) []string {
 //
 //	magus run go-api-generate .
 func TestGoAPILockUpToDate(t *testing.T) {
-	committed, err := os.ReadFile(filepath.Join("..", "..", "internal", "cli", "testdata", "api-go.lock"))
-	require.NoError(t, err, "read internal/cli/testdata/api-go.lock")
+	committed, err := os.ReadFile(filepath.Join("..", "..", "internal", "commands", "testdata", "api-go.lock"))
+	require.NoError(t, err, "read internal/commands/testdata/api-go.lock")
 
 	assert.Equal(t, strings.Split(strings.TrimSuffix(string(committed), "\n"), "\n"), renderRepoLock(t),
-		"internal/cli/testdata/api-go.lock is out of date; run: magus run go-api-generate .")
+		"internal/commands/testdata/api-go.lock is out of date; run: magus run go-api-generate .")
 }
 
 func TestGoAPILockCoversEveryPublicPackage(t *testing.T) {

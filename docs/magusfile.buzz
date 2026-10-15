@@ -48,7 +48,7 @@ magus\project({
                 "../README.md", "../CONTRIBUTING.md", "../blog/**", "../assets/**",
                 "../std/**/*.go", "../host/**/*.go",
                 "../spells/**/*.buzz", "../internal/spell/**/*.go",
-                "../internal/cli/**/*.go", "../internal/config/**/*.go",
+                "../internal/commands/**/*.go", "../libs/cmdline/**/*.go", "../internal/config/**/*.go",
                 "../internal/render/**/*.go", "../internal/graph/**/*.go",
                 "../cmd/magus-docs/**/*.go", "../cmd/magus-spelldocs/**/*.go",
                 "../cmd/magus-manpage/**/*.go", "../cmd/magus-examples/**/*.go",
@@ -92,7 +92,8 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(workspace\file("std/**/*.go"), workspace\file("host/**/*.go"),
         workspace\file("spells/**/*.buzz"), workspace\file("internal/spell/**/*.go"),
-        workspace\file("internal/cli/**/*.go"), workspace\file("internal/config/**/*.go"),
+        workspace\file("internal/commands/**/*.go"), workspace\file("libs/cmdline/**/*.go"),
+        workspace\file("internal/config/**/*.go"),
         workspace\file("internal/render/**/*.go"), workspace\file("internal/graph/**/*.go"),
         workspace\file("cmd/magus-docs/**/*.go"), workspace\file("cmd/magus-spelldocs/**/*.go"),
         workspace\file("cmd/magus-manpage/**/*.go"), workspace\file("cmd/magus-examples/**/*.go"),

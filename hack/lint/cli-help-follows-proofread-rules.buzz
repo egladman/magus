@@ -1,6 +1,6 @@
 // cli-help-follows-proofread-rules holds the help text of magus's own commands and flags to
 // libs/proofread's cli-help kind, under this repository's decisions table
-// (hack/policy/proofread.buzz). The text is read from internal/cli/registry.go, where the man
+// (hack/policy/proofread.buzz). The text is read from internal/commands/registry.go, where the man
 // pages, the generated flag bindings and `--help` all take it from: the quoted Doc of a flag,
 // and the Short and the one-line Description of a command. A Long description is several
 // paragraphs by design and is not judged.
@@ -20,7 +20,7 @@ import "hack/lint/support" as support;
 import "hack/policy/proofread" as decisions;
 import "libs/proofread/proofread" as proofread;
 
-export final REGISTRY = "internal/cli/registry.go";
+export final REGISTRY = "internal/commands/registry.go";
 
 // THIS is where a finding sends a reader to baseline a text.
 final THIS = "hack/lint/cli-help-follows-proofread-rules.buzz";
@@ -35,7 +35,7 @@ final KEY = 60;
 
 // BASELINE is each help text that broke a cli-help rule when the kind arrived, by its first
 // KEY bytes: a sentence over 40 words, text over 240 runes, a spaced hyphen as a dash, or a
-// filler word. Reword the text in internal/cli/registry.go and delete its entry; the man
+// filler word. Reword the text in internal/commands/registry.go and delete its entry; the man
 // pages and the flag bindings regenerate from it.
 export final BASELINE: [str] = [];
 
@@ -266,7 +266,7 @@ test "the baseline names only texts the registry still holds, and nothing outsid
 
 test "the registry's help text is judged by the built proofread" {
     final long = "Pass the flag to replay the build from the cache when the key matches. ".repeat(5);
-    final got = checkAgainst(support\fixture({"internal/cli/registry.go": "var x = 1\n\tDoc: \"{long}\",\n\tShort: \"Pass the flag\",\n"}),
+    final got = checkAgainst(support\fixture({"internal/commands/registry.go": "var x = 1\n\tDoc: \"{long}\",\n\tShort: \"Pass the flag\",\n"}),
         baseline: [<str>]);
     assert\equal(got.len(), want: 1, message: "{support\messages(got)}");
     assert\equal(got[0].line, want: 2, message: "the line of the text");
@@ -274,7 +274,7 @@ test "the registry's help text is judged by the built proofread" {
 }
 
 test "a registry holding no help text is an error, not a pass" {
-    final got = check(support\fixture({"internal/cli/registry.go": "package cli\n"}));
+    final got = check(support\fixture({"internal/commands/registry.go": "package commands\n"}));
     assert\equal(got.len(), want: 1, message: "one error");
     assert\equal(got[0].message.indexOf("silence, not a pass") != null, want: true, message: got[0].message);
 }

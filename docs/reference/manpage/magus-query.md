@@ -1,6 +1,6 @@
 ---
 title: magus query
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: "Resolve search terms to knowledge-graph nodes and return the ranked matches plus their neighborhood; also retrieves a target's captured output by ref and a run's journal by invocation id."
 tags: [cli, magus query, query, knowledge graph, search, output, reference, invocation, journal, audit]
 ---
@@ -83,7 +83,7 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 : invocation \<id\>: list only the credential reads (reference and provider, never the value)
 
 **--stdin** *-o jsonl*
-: output: print records \`-o jsonl\` wrote, from stdin; writes nothing
+: output: print records -o jsonl wrote, from stdin; writes nothing
 
 **--url** *string* (default: https://eli.gladman.cc/magus/console/logs/)
 : With --open, base URL of the log viewer page (override for a self-hosted mirror)

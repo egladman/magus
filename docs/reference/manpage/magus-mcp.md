@@ -1,6 +1,6 @@
 ---
 title: magus mcp
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: Serve the MCP tools over stdin and stdout for the agent host that launched the process, against the workspace it was launched in, with no server and no token.
 tags: [cli, magus mcp, mcp, agent, stdio]
 ---

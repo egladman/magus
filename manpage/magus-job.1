@@ -74,13 +74,13 @@ them and magus describe job prints one job's terms.
 .RS
 .TP
 \fB\-\-check\fR \fI<target> <project> [-- args]\fR
-The one check this job runs, as `<target> <project> [\-\- args]` (the `magus run` is implied)
+The one check this job runs, as <target> <project> [\-\- args] (the `magus run` is implied)
 .TP
 \fB\-\-checkout\fR \fIstring\fR
 Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work
 .TP
 \fB\-\-checkpoint\fR \fImagus vcs checkpoint -o name\fR
-The working state this job is handed, as `magus vcs checkpoint \-o name` prints it
+The working state this job is handed, as magus vcs checkpoint \-o name prints it
 .TP
 \fB\-\-criteria\fR \fIstring\fR
 What this job is for and what done means, as prose; the machine\-checkable half is \-\-check, and the goals a \-\-stdin record declares
@@ -113,13 +113,13 @@ Read one job as JSON on stdin instead of taking it from flags
 Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout
 .TP
 \fB\-\-write\-paths\fR \fI<file>#<declaration>\fR
-A path this job may write, or `<file>#<declaration>` to claim one declaration of a file (a path holding a literal # is spelled `./a#b.md` or `a\(rs#b.md`); repeatable or comma\-separated
+A path this job may write, or <file>#<declaration> to claim one declaration of a file (a path holding a literal # is spelled `./a#b.md` or `a\(rs#b.md`); repeatable or comma\-separated
 .RE
 .SS job apply options
 .RS
 .TP
 \fB\-f\fR \fI-\fR
-The records to apply: a file, or `\-` for stdin; one JSON job, a JSON array, or one job per line
+The records to apply: a file, or \- for stdin; one JSON job, a JSON array, or one job per line
 .RE
 .SS job exec options
 .RS
@@ -143,7 +143,7 @@ Read this job's result from stdin; without it the job is abandoned
 .RS
 .TP
 \fB\-\-evidence\fR \fI<goal>\fR
-Grade check goal `<goal>` against the run `<ref>` recorded in THIS checkout instead of the job's own; `check` names the job's check. The changed paths must read the same here as in the job's checkout; repeatable
+Grade check goal <goal> against the run `<ref>` recorded in THIS checkout instead of the job's own; `check` names the job's check. The changed paths must read the same here as in the job's checkout; repeatable
 .TP
 \fB\-\-integration\fR
 Grade only the job's check goals against the runs the \-\-stdin result names in THIS checkout, and record that beside its state

@@ -1,6 +1,6 @@
 ---
 title: magus describe
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool, tool, file, graph, harness) and list every entity of that kind, or detail one when a name is given.
 tags: [cli, magus describe, spell, charm, target, project, workspace, module, mcp-tool, tool, file, graph, harness, introspection]
 ---
@@ -38,7 +38,7 @@ step at a time.
 ### describe target options
 
 **--against** *ref*
-: With --cache: diff the live key inputs against the stored lines behind an output \`ref\`
+: With --cache: diff the live key inputs against the stored lines behind an output ref
 
 **--cache**
 : Show the live cache key, the ref a run would print, the component classes behind it, and what moved since the last recorded run

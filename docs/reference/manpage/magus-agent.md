@@ -1,6 +1,6 @@
 ---
 title: magus agent
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: Render agent skills, adapt a user-owned harness, or review recurring guard feedback; it never writes the AGENTS.md you own.
 tags: [cli, magus agent, skills, agents, AGENTS.md, install, harness]
 ---

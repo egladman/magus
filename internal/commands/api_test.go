@@ -1,4 +1,4 @@
-package cli
+package commands
 
 import (
 	"os"
@@ -16,11 +16,11 @@ import (
 // API cannot silently change without the diff appearing in a PR. On failure,
 // regenerate:
 //
-//	go generate ./internal/cli/...
+//	./magus run man-generate . -s
 func TestAPIUpToDate(t *testing.T) {
 	committed, err := os.ReadFile(filepath.Join("testdata", "api.lock"))
 	require.NoError(t, err, "read testdata/api.lock")
 	got := strings.Join(API(config.KnownKeys()), "\n") + "\n"
 	assert.Equal(t, string(committed), got,
-		"internal/cli/testdata/api.lock is out of date; run: go generate ./internal/cli/...")
+		"internal/commands/testdata/api.lock is out of date; run: ./magus run man-generate . -s")
 }

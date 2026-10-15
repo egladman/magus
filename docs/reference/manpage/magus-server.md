@@ -1,6 +1,6 @@
 ---
 title: magus server
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: "Start, stop, reload or check the magus server a person starts: MCP over HTTP, the console, the APIs, background jobs and the warm graph and symbol watch."
 tags: [cli, magus server, server, mcp, console, socket, persistent]
 ---

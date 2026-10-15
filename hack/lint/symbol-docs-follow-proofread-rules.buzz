@@ -29,7 +29,7 @@ export fun reads() > [str] {
         "libs/proofread/**/*.go", "libs/proofread/proofread.buzz",
         "hack/policy/proofread.buzz", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
         "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go", "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go",
-        "libs/xdg/**/*.go", "console/**/*.ts", "docs/**/*.ts", "docs/guides/integrations/agents/**/*.ts",
+        "libs/xdg/**/*.go", "libs/cmdline/**/*.go", "console/**/*.ts", "docs/**/*.ts", "docs/guides/integrations/agents/**/*.ts",
         "libs/textsearch/**/*.ts"];
 }
 

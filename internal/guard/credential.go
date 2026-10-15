@@ -28,7 +28,7 @@ type credentialInvocation struct {
 }
 
 // credentialInvocations is every such command. TestCredentialVerbsExistInTheRegistry holds
-// each to a command internal/cli declares, so a rename fails there rather than dropping out.
+// each to a command internal/commands declares, so a rename fails there rather than dropping out.
 var credentialInvocations = []credentialInvocation{
 	{words: []string{"config", "token", "print"}},
 	{words: []string{"config", "token", "generate"}},

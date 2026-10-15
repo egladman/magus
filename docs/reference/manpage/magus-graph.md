@@ -1,6 +1,6 @@
 ---
 title: magus graph
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: "Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage)."
 tags: [cli, magus graph, graph, knowledge graph, dependency graph, export, graphml]
 ---
@@ -132,7 +132,7 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
 : Deprecated alias for --reproducible
 
 **--symbols** *magus diff --baseline*
-: Include every indexed code symbol, which the whole-graph export leaves out; a \`magus diff --baseline\` needs them
+: Include every indexed code symbol, which the whole-graph export leaves out; a magus diff --baseline needs them
 
 **--targets**
 : With --open: open the target dependency graph instead of the knowledge graph; pass a project path to scope it

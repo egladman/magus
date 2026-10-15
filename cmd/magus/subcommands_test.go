@@ -14,10 +14,11 @@ import (
 	"testing"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
-	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/cmdline"
 )
 
 // TestCLICommandHeadsAreRealSubcommands guards against the drift that shipped a
@@ -39,7 +40,7 @@ func TestCLICommandHeadsAreRealSubcommands(t *testing.T) {
 // rejects: `magus config mcp token print` (the operator token moved to `config token`),
 // `magus notes new <name>`, and a bare `magus ci`. Each had a real head, so nothing failed.
 //
-// Resolution walks internal/cli's tree, which knownSubcommands is read from at the top
+// Resolution walks internal/commands' tree, which knownSubcommands is read from at the top
 // level. A mirror is
 // the strongest target available: most families dispatch on a bare switch with no
 // accept-list to read, so an assertion against the router itself needs those switches
@@ -56,12 +57,12 @@ func TestCLICommandPathsResolve(t *testing.T) {
 
 // resolveCommandPath reports whether tokens name a routable subcommand chain.
 func resolveCommandPath(tokens []string) error {
-	children := cli.All
+	children := commands.Root.Children
 	for i, tok := range tokens {
-		idx := slices.IndexFunc(children, func(c cli.Command) bool { return c.Name == tok })
+		idx := slices.IndexFunc(children, func(c cmdline.Command) bool { return c.Name == tok })
 		if idx < 0 {
 			parent := "magus " + strings.Join(tokens[:i], " ")
-			return fmt.Errorf("%q is not a subcommand of %q - fix the hint, or add the entry to internal/cli/registry.go",
+			return fmt.Errorf("%q is not a subcommand of %q - fix the hint, or add the entry to internal/commands/registry.go",
 				tok, strings.TrimSpace(parent))
 		}
 		children = children[idx].Children
@@ -96,7 +97,7 @@ func TestCLICommandLsNounsAreDocumented(t *testing.T) {
 	documented := slices.Sorted(slices.Values(childNames(t, "ls")))
 	routed := slices.Sorted(slices.Values(lsNouns))
 	if !slices.Equal(documented, routed) {
-		t.Errorf("internal/cli documents ls nouns %v, lsCmd routes %v", documented, routed)
+		t.Errorf("internal/commands documents ls nouns %v, lsCmd routes %v", documented, routed)
 	}
 }
 
@@ -108,19 +109,19 @@ func TestCLICommandLsNounsAreDocumented(t *testing.T) {
 func TestCLIDescribeNounsAreAccepted(t *testing.T) {
 	for _, name := range childNames(t, "describe") {
 		if describeAlias[name] == "" {
-			t.Errorf("internal/cli documents `magus describe %s`, which describeAlias does not accept", name)
+			t.Errorf("internal/commands documents `magus describe %s`, which describeAlias does not accept", name)
 		}
 	}
 }
 
 func childNames(t *testing.T, command string) []string {
 	t.Helper()
-	idx := slices.IndexFunc(cli.All, func(c cli.Command) bool { return c.Name == command })
+	idx := slices.IndexFunc(commands.Root.Children, func(c cmdline.Command) bool { return c.Name == command })
 	if idx < 0 {
-		t.Fatalf("no cli.All entry for %q", command)
+		t.Fatalf("no commands.Root.Children entry for %q", command)
 	}
-	names := make([]string, 0, len(cli.All[idx].Children))
-	for _, child := range cli.All[idx].Children {
+	names := make([]string, 0, len(commands.Root.Children[idx].Children))
+	for _, child := range commands.Root.Children[idx].Children {
 		names = append(names, child.Name)
 	}
 	return names
@@ -248,13 +249,13 @@ func dispatcherCases(t *testing.T, file, funcName string) []string {
 	return cases
 }
 
-// registryChildren walks cli.All down a dotted command path (e.g. "config",
+// registryChildren walks commands.Root.Children down a dotted command path (e.g. "config",
 // "mcp", "connector") and returns the names of that command's declared
 // Children.
 func registryChildren(t *testing.T, path ...string) []string {
 	t.Helper()
-	cmds := cli.All
-	var cur cli.Command
+	cmds := commands.Root.Children
+	var cur cmdline.Command
 	found := false
 	for i, name := range path {
 		found = false
@@ -289,7 +290,7 @@ func registryChildren(t *testing.T, path ...string) []string {
 func TestDispatcherChildrenAreDeclared(t *testing.T) {
 	tests := []struct {
 		command string   // registry path, for the failure message
-		path    []string // dotted command path into cli.All
+		path    []string // dotted command path into commands.Root.Children
 		file    string
 		fn      string
 		exempt  []string
@@ -383,9 +384,9 @@ func TestServerDispatcherChildrenAreDeclared(t *testing.T) {
 }
 
 // walkRegistryCommands visits every node in the recursive registry tree
-// (internal/cli.All plus every Children entry, at any depth), calling visit
+// (internal/commands.Root.Children plus every Children entry, at any depth), calling visit
 // with the dotted path of command words leading to it.
-func walkRegistryCommands(cmds []cli.Command, prefix []string, visit func(path []string, c cli.Command)) {
+func walkRegistryCommands(cmds []cmdline.Command, prefix []string, visit func(path []string, c cmdline.Command)) {
 	for _, c := range cmds {
 		path := append(append([]string{}, prefix...), c.Name)
 		visit(path, c)
@@ -420,8 +421,8 @@ func walkRegistryCommands(cmds []cli.Command, prefix []string, visit func(path [
 // gives the real CLI. A token that is neither a known global flag nor a
 // matching child name stops the walk; per-command flags are never expected
 // to precede their own subcommand in these examples.
-func resolveRegistryPath(globalFS *flag.FlagSet, args []string) (path []cli.Command, matched bool) {
-	cmds := cli.All
+func resolveRegistryPath(globalFS *flag.FlagSet, args []string) (path []cmdline.Command, matched bool) {
+	cmds := commands.Root.Children
 	for i := 0; i < len(args); {
 		tok := args[i]
 		if strings.HasPrefix(tok, "-") {
@@ -464,8 +465,8 @@ func resolveRegistryPath(globalFS *flag.FlagSet, args []string) (path []cli.Comm
 // section shows it in context); flag.FlagSet panics on a duplicate Var call,
 // so this is the one safe way to layer several nodes' declared flags onto one
 // FlagSet without assuming which level actually owns a given name.
-func bindUnlessRegistered(fs *flag.FlagSet, node cli.Command) {
-	if !node.HasFlags() {
+func bindUnlessRegistered(fs *flag.FlagSet, node cmdline.Command) {
+	if len(node.Flags) == 0 {
 		return
 	}
 	tmp := flag.NewFlagSet("tmp", flag.ContinueOnError)
@@ -478,7 +479,7 @@ func bindUnlessRegistered(fs *flag.FlagSet, node cli.Command) {
 }
 
 // TestRegistryExamplesParse dry-parses every EXAMPLES entry in the CLI
-// registry (internal/cli/registry.go and every command's Children) against
+// registry (internal/commands/registry.go and every command's Children) against
 // the flag set its own resolved command actually binds: the same three
 // binders cmdParse composes (config flags, display flags, the command's own
 // declared Flags), so a bogus or misspelled flag in a documented example is
@@ -507,7 +508,7 @@ func TestRegistryExamplesParse(t *testing.T) {
 	// example like `--tee build.jsonl` leaks global.tee into every later test in
 	// the package, and the next config-view test faithfully tees into the cwd.
 	t.Cleanup(snapshotGlobals())
-	walkRegistryCommands(cli.All, nil, func(path []string, c cli.Command) {
+	walkRegistryCommands(commands.Root.Children, nil, func(path []string, c cmdline.Command) {
 		for _, ex := range c.Examples {
 			t.Run(strings.Join(path, "_")+"/"+ex.Comment, func(t *testing.T) {
 				if knownBrokenExamples[ex.Command] {

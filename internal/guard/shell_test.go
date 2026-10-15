@@ -9,11 +9,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -2529,10 +2530,10 @@ func TestCredentialVerbsAreDeniedToAnAgent(t *testing.T) {
 func TestCredentialVerbsExistInTheRegistry(t *testing.T) {
 	for _, inv := range credentialInvocations {
 		spelled := strings.Join(inv.words, " ")
-		cmds := cli.All
-		var found *cli.Command
+		cmds := commands.Root.Children
+		var found *cmdline.Command
 		for _, w := range inv.words {
-			i := slices.IndexFunc(cmds, func(c cli.Command) bool { return c.Name == w })
+			i := slices.IndexFunc(cmds, func(c cmdline.Command) bool { return c.Name == w })
 			if !assert.GreaterOrEqual(t, i, 0, "%q: no command %q in the registry", spelled, w) {
 				found = nil
 				break
@@ -2543,7 +2544,7 @@ func TestCredentialVerbsExistInTheRegistry(t *testing.T) {
 		if found == nil || inv.flag == "" {
 			continue
 		}
-		assert.True(t, slices.ContainsFunc(found.Flags, func(f cli.Flag) bool { return f.Name == inv.flag }),
+		assert.True(t, slices.ContainsFunc(found.Flags, func(f cmdline.Flag) bool { return f.Name == inv.flag }),
 			"%q: no flag --%s in the registry", spelled, inv.flag)
 	}
 }

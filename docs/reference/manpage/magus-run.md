@@ -1,6 +1,6 @@
 ---
 title: magus run
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.
 tags: [cli, magus run, run, target, build, test, ci]
 ---
@@ -91,7 +91,7 @@ plan renders more than once without being computed again.
 **--upstream**
 : With --graph: show dependents instead of dependencies
 
-## Targets
+## Operands
 
 **ls**
 : Print selected projects without executing anything

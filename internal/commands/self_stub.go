@@ -1,11 +1,13 @@
 //go:build noselfupdate
 
-package cli
+package commands
+
+import "github.com/egladman/magus/libs/cmdline"
 
 // selfCommand (noselfupdate build) - update is compiled in by default and is
 // omitted here because this build used -tags noselfupdate. install-shorthand
 // does not touch the updater, so it survives into this build.
-var selfCommand = Command{
+var selfCommand = cmdline.Command{
 	Name:        "self",
 	Short:       "Manage the magus binary (install-shorthand; update disabled by -tags noselfupdate)",
 	Description: "Manage the magus binary in place; self-update is compiled out of this build via -tags noselfupdate, leaving install-shorthand for the mgs shorthand.",
@@ -18,8 +20,8 @@ downloads and replaces the binary, is not available. Rebuild without
 
 To bootstrap a workspace, use: magus init`,
 	Usage:    "magus self <subcommand> [flags]",
-	Children: []Command{selfInstallShorthandCommand},
-	Examples: []Example{
+	Children: []cmdline.Command{selfInstallShorthandCommand},
+	Examples: []cmdline.Example{
 		{"Install the mgs shorthand", "magus self install-shorthand"},
 	},
 }

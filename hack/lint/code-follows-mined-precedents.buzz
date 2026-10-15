@@ -32,7 +32,7 @@ final THIS = "hack/lint/code-follows-mined-precedents.buzz";
 export fun reads() > [str] {
     return ["**/*.go", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
         "libs/figure/**/*.go","libs/gopherbuzz/**/*.go", "libs/proofread/**/*.go", "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go",
-        "libs/xdg/**/*.go"];
+        "libs/xdg/**/*.go", "libs/cmdline/**/*.go"];
 }
 
 // check fails every departure from an established precedent in FAMILIES that SANCTIONED does

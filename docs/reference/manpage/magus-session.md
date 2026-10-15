@@ -1,6 +1,6 @@
 ---
 title: magus session
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: "One family over the repository's session store: list what magus invocations ran and the host session each ran in, list the blocks agents raised, close one by hand, and take the host-hook ingest that writes it all."
 tags: [cli, magus session, sessions, attention, history, worktrees, agents, guard]
 ---

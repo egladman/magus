@@ -1,6 +1,6 @@
 ---
 title: magus vcs
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: "Stage a change the way the workspace's declarations say it should be staged, and settle an in-progress merge's conflicted generated files by regenerating them once."
 tags: [cli, magus vcs, git, merge, conflicts, generated files, staging]
 ---
@@ -95,10 +95,10 @@ base in yourself on the others, then run resolve.
 ### vcs resolve options
 
 **--against** *ref*
-: Merge this \`ref\` first, then settle what it conflicts with
+: Merge this ref first, then settle what it conflicts with
 
 **--hook** *hook*
-: Run as the git \`hook\` named, once the operation has the whole tree: regenerate what it changed and stage the result; wired by the merge driver's registration, not run by hand
+: Run as the git hook named, once the operation has the whole tree: regenerate what it changed and stage the result; wired by the merge driver's registration, not run by hand
 
 ### vcs checkpoint options
 

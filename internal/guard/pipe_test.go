@@ -6,7 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/commands"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,9 +29,9 @@ func TestPipeRecordsNameRealFields(t *testing.T) {
 	}
 	for verb, rec := range pipeRecords {
 		if verb == "ls" {
-			i := slices.IndexFunc(cli.All, func(c cli.Command) bool { return c.Name == "ls" })
+			i := slices.IndexFunc(commands.Root.Children, func(c cmdline.Command) bool { return c.Name == "ls" })
 			require.GreaterOrEqual(t, i, 0)
-			example := strings.Join(exampleCommands(cli.All[i]), "\n")
+			example := strings.Join(exampleCommands(commands.Root.Children[i]), "\n")
 			assert.Contains(t, example, "{{range ."+rec.list+"}}{{."+rec.id+"}}", verb)
 			assert.Empty(t, rec.count, "ls has no count field the registry documents")
 			continue
@@ -57,7 +58,7 @@ func TestPipeRecordsNameRealFields(t *testing.T) {
 	}
 }
 
-func exampleCommands(c cli.Command) []string {
+func exampleCommands(c cmdline.Command) []string {
 	var out []string
 	for _, e := range c.Examples {
 		out = append(out, e.Command)

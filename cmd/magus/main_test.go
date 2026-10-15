@@ -1341,8 +1341,8 @@ func TestDispatchSubCoversKnownSubcommands(t *testing.T) {
 	slices.Sort(want)
 
 	if !slices.Equal(got, want) {
-		t.Errorf("dispatchSub's routed cases (+ help, version) = %v\nknownSubcommands (from cli.All) = %v\n"+
-			"a case dispatchSub routes must have an entry in internal/cli's All, and vice versa", got, want)
+		t.Errorf("dispatchSub's routed cases (+ help, version) = %v\nknownSubcommands (from commands.Root) = %v\n"+
+			"a case dispatchSub routes must have an entry in internal/commands' Root, and vice versa", got, want)
 	}
 }
 

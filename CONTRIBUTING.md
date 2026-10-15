@@ -85,15 +85,15 @@ promise forbids, and the answer is a second name rather than a redefinition.
 
 **Four compatibility gates catch a break before review does**, one per public interface:
 
-| Interface      | Gate                                                                                                                                             |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| CLI            | `internal/cli/testdata/api.lock`, a drift-gated snapshot of every subcommand, flag, config key, and target                                       |
-| protobuf       | `buf breaking`, composed into `lint`                                                                                                             |
-| magusfile keys | the `required_version` floor, plus doctor's check that the floor is accurate                                                                     |
-| Go SDK         | `internal/cli/testdata/api-go.lock`, a drift-gated snapshot of every exported declaration of the root package, `types`, `libs/testkit` and `std` |
+| Interface      | Gate                                                                                                                                                  |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CLI            | `internal/commands/testdata/api.lock`, a drift-gated snapshot of every subcommand, flag, config key, and operand                                      |
+| protobuf       | `buf breaking`, composed into `lint`                                                                                                                  |
+| magusfile keys | the `required_version` floor, plus doctor's check that the floor is accurate                                                                          |
+| Go SDK         | `internal/commands/testdata/api-go.lock`, a drift-gated snapshot of every exported declaration of the root package, `types`, `libs/testkit` and `std` |
 
 A diff to `api.lock` is the signal to read carefully: a line removed there is a
-removed part of the public interface. Regenerate it with `go generate ./internal/cli/...`
+removed part of the public interface. Regenerate it with `magus run man-generate .`
 after an intentional addition, and treat a deletion as a question rather than a
 regeneration.
 

@@ -1,6 +1,6 @@
 ---
 title: magus status
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.
 tags: [cli, magus status, status, concurrency, pool, server, monitoring]
 ---

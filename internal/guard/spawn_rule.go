@@ -17,13 +17,14 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/types"
 )
 
@@ -587,7 +588,7 @@ func execFlagTakesValue(name string) bool {
 	if takes, known := MagusFlagTakesValue(name); known {
 		return takes
 	}
-	for _, group := range cli.All {
+	for _, group := range commands.Root.Children {
 		if group.Name != hint.JobExec.Head() {
 			continue
 		}
@@ -595,8 +596,8 @@ func execFlagTakesValue(name string) bool {
 			if verb.Name != hint.JobExec.Leaf() {
 				continue
 			}
-			i := slices.IndexFunc(verb.Flags, func(f cli.Flag) bool { return f.Name == name })
-			return i >= 0 && verb.Flags[i].Kind != cli.FlagBool
+			i := slices.IndexFunc(verb.Flags, func(f cmdline.Flag) bool { return f.Name == name })
+			return i >= 0 && verb.Flags[i].Kind != cmdline.Bool
 		}
 	}
 	return false

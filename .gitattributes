@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-739-gdb83ec283 (commit db83ec28344328d4e7f042be50289d277591832c, 2026-10-15T15:49:39-04:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-758-gf849f2244-dirty (commit f849f22440edb9cd4a77b820139453cd9387b06e, 2026-10-15T17:34:18-04:00)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -124,8 +124,8 @@ gen/site/assets/go-coverage.svg merge=magus linguist-generated
 gen/site/assets/typescript-coverage.svg merge=magus linguist-generated
 gen/symbol-index.json merge=magus linguist-generated
 gen/target-graph.json merge=magus linguist-generated
-internal/cli/testdata/api-go.lock merge=magus linguist-generated
-internal/cli/testdata/api.lock merge=magus linguist-generated
+internal/commands/testdata/api-go.lock merge=magus linguist-generated
+internal/commands/testdata/api.lock merge=magus linguist-generated
 internal/config/gen/*.go merge=magus linguist-generated
 internal/handler/mcp/gen/registry.go merge=magus linguist-generated
 internal/interp/bindings/gen/*.go merge=magus linguist-generated
@@ -139,6 +139,8 @@ internal/job/gen/*.json merge=magus linguist-generated
 internal/langservice/manifest_data.go merge=magus linguist-generated
 internal/spell/gen/decls/*.buzz merge=magus linguist-generated
 internal/spell/gen/types/*.buzz merge=magus linguist-generated
+libs/cmdline/MAGUS.md merge=magus linguist-generated
+libs/cmdline/coverage.out merge=magus linguist-generated
 libs/conventions/MAGUS.md merge=magus linguist-generated
 libs/conventions/coverage.out merge=magus linguist-generated
 libs/diagnostics/MAGUS.md merge=magus linguist-generated

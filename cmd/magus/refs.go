@@ -33,7 +33,7 @@ import (
 func refsCmd(ctx context.Context, root string, args []string) error {
 	var rf *flaggen.RefsFlags
 	// --no-generated stays hand-bound, like watch's --ignore: it is declared in
-	// internal/cli/registry.go (Kind: FlagCustom) for the man page, but bound here
+	// internal/commands/registry.go (Kind: cmdline.Custom) for the man page, but bound here
 	// directly rather than through flaggen.RefsFlags.
 	var noGenerated bool
 	pos, err := cmdParse("refs", args, func(fs *flag.FlagSet) {

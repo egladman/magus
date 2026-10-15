@@ -1,6 +1,6 @@
 ---
 title: magus queue
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: List the changes carrying merge intent, plan them into partitions of independent changes, validate speculative candidates, and merge the green ones through the provider.
 tags: [cli, magus queue, merge queue, stacked changes, pull requests, ci]
 ---
@@ -44,85 +44,85 @@ apply report what would merge and call nothing on the provider.
 ### queue describe options
 
 **--app** *app*
-: \`app\` apply writes with, as the provider names it (github: a GitHub App's slug[:App ID], required with a --status-context)
+: app apply writes with, as the provider names it (github: a GitHub App's slug[:App ID], required with a --status-context)
 
 **--base** *branch*
-: \`branch\` the queue merges into
+: branch the queue merges into
 
 **--provider** *provider*
-: \`provider\`: a built-in name (github) or a .buzz file
+: provider: a built-in name (github) or a .buzz file
 
 **--remote** *remote* (default: origin)
-: Name of the configured \`remote\` changes and the base are fetched from
+: Name of the configured remote changes and the base are fetched from
 
 **--status-context** *string* (default: merge-queue)
 : Commit status the queue posts, whose wiring is described; empty describes what the provider supports and reads no setup
 
 **--vcs** *backend* (default: git)
-: Version control \`backend\` of the checkout at --root
+: Version control backend of the checkout at --root
 
 ### queue ls options
 
 **--base** *branch*
-: \`branch\` the queue merges into
+: branch the queue merges into
 
 **--provider** *provider*
-: \`provider\`: a built-in name (github) or a .buzz file
+: provider: a built-in name (github) or a .buzz file
 
 **--remote** *remote* (default: origin)
-: Name of the configured \`remote\` changes and the base are fetched from
+: Name of the configured remote changes and the base are fetched from
 
 **--vcs** *backend* (default: git)
-: Version control \`backend\` of the checkout at --root
+: Version control backend of the checkout at --root
 
 ### queue plan options
 
 **--changes** *document* (default: -)
-: The mergequeue.changes/v1 \`document\`, or \`-\` for stdin
+: The mergequeue.changes/v1 document, or \`-\` for stdin
 
 **--depth** *int* (default: 3)
 : Candidates of one partition that validate at once
 
 **--facts** *command*
-: \`command\` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers
+: command and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers
 
 **--out** *file*
-: \`file\` the mergequeue.plan/v1 document is written to
+: file the mergequeue.plan/v1 document is written to
 
 **--parallel** *int*
 : Changes admitted at once; 0 is one per CPU
 
 **--provider** *provider*
-: \`provider\` approval at each head is checked with
+: provider approval at each head is checked with
 
 **--remote** *remote* (default: origin)
-: Name of the configured \`remote\` changes and the base are fetched from
+: Name of the configured remote changes and the base are fetched from
 
 **--target** *target* (default: ci)
-: magus \`target\` the affected set is computed for; not with --facts
+: magus target the affected set is computed for; not with --facts
 
 **--vcs** *backend* (default: git)
-: Version control \`backend\` of the checkout at --root
+: Version control backend of the checkout at --root
 
 ### queue validate options
 
 **--facts** *command*
-: \`command\` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers
+: command and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers
 
 **--gate** *command*
-: \`command\` and its arguments, run with no shell in each candidate's checkout with the change's affected projects added ahead of its first \`--\`; exit 0 is green
+: command and its arguments, run with no shell in each candidate's checkout with the change's affected projects added ahead of its first \`--\`; exit 0 is green
 
 **--only** *change*
-: Validate this one \`change\`; the changes beneath it in its partition are merged under it but not gated
+: Validate this one change; the changes beneath it in its partition are merged under it but not gated
 
 **--parallel** *int*
 : Candidates built or gated at once across every partition; 0 is one per CPU
 
 **--regenerate** *command*
-: \`command\` and its arguments, run with no shell in a candidate with the change's affected projects added ahead of its first \`--\` and the generated files to rewrite listed on stdin
+: command and its arguments, run with no shell in a candidate with the change's affected projects added ahead of its first \`--\` and the generated files to rewrite listed on stdin
 
 **--remote** *remote* (default: origin)
-: Name of the configured \`remote\` changes and the base are fetched from
+: Name of the configured remote changes and the base are fetched from
 
 **--remote-cache-read**
 : Let hooks read magus's remote cache from GitHub Actions through a loopback proxy that forwards lookups with the runner's token and refuses writes. Hooks get a stand-in token. Refused without runner credentials or a trusted key
@@ -131,41 +131,41 @@ apply report what would merge and call nothing on the provider.
 : Read the mergequeue.plan/v1 document from stdin; required
 
 **--target** *target* (default: ci)
-: magus \`target\` the affected set is computed for; not with --facts
+: magus target the affected set is computed for; not with --facts
 
 **--vcs** *backend* (default: git)
-: Version control \`backend\` of the checkout at --root
+: Version control backend of the checkout at --root
 
 **--verdicts** *directory*
-: \`directory\` the plan and the verdicts are written to, one entry per change; apply reads it as its \<source\>
+: directory the plan and the verdicts are written to, one entry per change; apply reads it as its \<source\>
 
 ### queue gate options
 
 **--cache** *directory*
-: \`directory\` the command's magus keeps its local cache tier and its spells' caches in, outside the box; empty keeps them in the box, as validate does
+: directory the command's magus keeps its local cache tier and its spells' caches in, outside the box; empty keeps them in the box, as validate does
 
 **--env** *names*
-: Comma-separated \`names\` of variables passed from this environment to the command's own magus
+: Comma-separated names of variables passed from this environment to the command's own magus
 
 **--remote** *remote* (default: origin)
-: Name of the configured \`remote\` changes and the base are fetched from
+: Name of the configured remote changes and the base are fetched from
 
 **--vcs** *backend* (default: git)
-: Version control \`backend\` of the checkout at --root
+: Version control backend of the checkout at --root
 
 ### queue apply options
 
 **--app** *app*
-: \`app\` whose credential the provider writes with, as the provider names it (github: a GitHub App's slug[:App ID], required). apply refuses to start when the base requires --status-context from another integration (MGS3019)
+: app whose credential the provider writes with, as the provider names it (github: a GitHub App's slug[:App ID], required). apply refuses to start when the base requires --status-context from another integration (MGS3019)
 
 **--base** *branch*
-: \`branch\` the queue merges into; a plan naming another is refused (MGS3028), and a run: source must have run on it
+: branch the queue merges into; a plan naming another is refused (MGS3028), and a run: source must have run on it
 
 **--committer** *string*
 : "Name \<email\>" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops
 
 **--facts** *command*
-: \`command\` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers
+: command and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers
 
 **--interval** *duration* (default: 10s)
 : How often \<source\> is read while following it
@@ -174,60 +174,60 @@ apply report what would merge and call nothing on the provider.
 : Apply what \<source\> holds now and stop, rather than following it until it is complete
 
 **--provider** *provider*
-: \`provider\`: a built-in name (github) or a .buzz file
+: provider: a built-in name (github) or a .buzz file
 
 **--regenerate** *command*
-: The base's regeneration \`command\`, run with no shell or credential: projects go ahead of its first \`--\`, files to rewrite on stdin. It runs only where the build tool proves the change misses its code; elsewhere apply checks the rest.
+: The base's regeneration command, run with no shell or credential: projects go ahead of its first \`--\`, files to rewrite on stdin. It runs only where the build tool proves the change misses its code; elsewhere apply checks the rest.
 
 **--remote** *remote* (default: origin)
-: Name of the configured \`remote\` changes and the base are fetched from
+: Name of the configured remote changes and the base are fetched from
 
 **--reproduce-gate** *command*
-: The \`command\` validate's --gate is given, shown on each kick-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict
+: The command validate's --gate is given, shown on each kick-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict
 
 **--reproduce-regenerate** *command*
-: The \`command\` validate's --regenerate is given, shown beside --reproduce-gate
+: The command validate's --regenerate is given, shown beside --reproduce-gate
 
 **--status-context** *string* (default: merge-queue)
 : Commit status the queue posts; branch protection requires it
 
 **--target** *target* (default: ci)
-: magus \`target\` the affected set is computed for; not with --facts
+: magus target the affected set is computed for; not with --facts
 
 **--vcs** *backend* (default: git)
-: Version control \`backend\` of the checkout at --root
+: Version control backend of the checkout at --root
 
 **--workflow** *definition*
-: \`definition\` a run: source must have run, started by an event that runs the base's own copy of it (github: .github/workflows/queue.yaml); required with a run: source, whose uploads are otherwise refused (MGS3027)
+: definition a run: source must have run, started by an event that runs the base's own copy of it (github: .github/workflows/queue.yaml); required with a run: source, whose uploads are otherwise refused (MGS3027)
 
 ### queue reviews options
 
 **--base** *branch*
-: \`branch\` the change targets
+: branch the change targets
 
 **--change** *id*
-: \`id\` of the change, as the provider names it (github: the pull request number)
+: id of the change, as the provider names it (github: the pull request number)
 
 **--dismiss**
 : Dismiss each approval that does not carry, naming what changed since it
 
 **--facts** *command*
-: \`command\` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers
+: command and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers
 
 **--head** *commit*
-: \`commit\` the change's head must be at; when it moved, nothing is classified or dismissed
+: commit the change's head must be at; when it moved, nothing is classified or dismissed
 
 **--provider** *provider*
-: \`provider\`: a built-in name (github) or a .buzz file
+: provider: a built-in name (github) or a .buzz file
 
 **--remote** *remote* (default: origin)
-: Name of the configured \`remote\` changes and the base are fetched from
+: Name of the configured remote changes and the base are fetched from
 
 **--target** *target* (default: ci)
-: magus \`target\` the affected set is computed for; not with --facts
+: magus target the affected set is computed for; not with --facts
 
 **--vcs** *backend* (default: git)
-: Version control \`backend\` of the checkout at --root
+: Version control backend of the checkout at --root
 
 ## Subcommands
 

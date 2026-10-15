@@ -50,7 +50,7 @@ var registeredEnv = sync.OnceValue(func() map[string]bool {
 	docs := EnvVars()
 	out := make(map[string]bool, len(docs))
 	for _, d := range docs {
-		out[d.EnvVar] = true
+		out[d.Name] = true
 	}
 	return out
 })

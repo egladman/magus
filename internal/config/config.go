@@ -15,6 +15,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	queuetypes "github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/schema"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -965,14 +966,6 @@ type Telemetry struct {
 	Headers     map[string]string `json:"headers" yaml:"headers"`                                        // static OTLP request headers
 }
 
-// EnvVarDoc documents one MAGUS_* environment variable.
-type EnvVarDoc struct {
-	EnvVar  string // full name, e.g. "MAGUS_CACHE_DIR"
-	YAMLKey string // equivalent magus.yaml path, e.g. "cache.dir"
-	Default string // human-readable default; empty = unset
-	Desc    string // one-line description
-}
-
 // Report controls JSONL event emission for magus run.
 type Report struct {
 	// Filter restricts event types via +type/-type/bare terms; any "+" sets default-deny.
@@ -988,11 +981,11 @@ func boolPtr(v bool) *bool { return &v }
 // KnownEnvVar and EnvVarProblem (MGS1046) answer from it, so a name missing here is
 // reported as unknown by doctor and can draw a did-you-mean refusal.
 // TestEveryReadMagusEnvVarIsRegistered fails when shipped code reads a name it lacks.
-func EnvVars() []EnvVarDoc {
+func EnvVars() []cmdline.Env {
 	defaults := reflect.ValueOf(Defaults())
-	out := make([]EnvVarDoc, 0, len(schema.Fields)+len(envOnly))
+	out := make([]cmdline.Env, 0, len(schema.Fields)+len(envOnly))
 	for _, f := range schema.Fields {
-		out = append(out, EnvVarDoc{EnvVar: f.EnvVar, YAMLKey: f.YamlPath, Default: defaultText(defaults, f.GoPath), Desc: f.Doc})
+		out = append(out, cmdline.Env{Name: f.EnvVar, Key: f.YamlPath, Default: defaultText(defaults, f.GoPath), Doc: f.Doc})
 	}
 	return append(out, envOnly...)
 }
@@ -1038,7 +1031,7 @@ func defaultText(defaults reflect.Value, goPath string) string {
 // envOnly are the variables no config field carries, so the schema cannot list them:
 // secrets kept out of committed files, overrides of build-time values, and the
 // plumbing magus sets for its own children.
-var envOnly = []EnvVarDoc{
+var envOnly = []cmdline.Env{
 	{"MAGUS_CACHE_SIGNING_KEY", "", "", "Env-only, no magus.yaml equivalent: the Ed25519 seed that signs remote-cache writes (see `magus config cache-key`); env-only because a signing secret in a committed file is not a secret"},
 	{"MAGUS_CACHE_TOOL_VERSION", "", "project", "Env-only, no magus.yaml equivalent: how tool versions key the cache: project (per project), workspace (once for the workspace), or off"},
 	{"MAGUS_VCS_<NAME>_BASE_REF", "", "", "Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs"},

@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
 )
 
@@ -228,7 +228,7 @@ func TestRunAffectedFlagParity(t *testing.T) {
 // vacuously if it were not for its own emptiness check.
 func registryFlagNames(t *testing.T, command string) map[string]struct{} {
 	t.Helper()
-	for _, c := range cli.All {
+	for _, c := range commands.Root.Children {
 		if c.Name != command {
 			continue
 		}

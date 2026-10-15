@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/commands"
+	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/cmdline/generate"
 )
 
 func manCmd(args []string) error {
@@ -34,7 +36,9 @@ func manCmd(args []string) error {
 	if fs.NArg() != 0 {
 		return fmt.Errorf("magus man install: unexpected argument %q", fs.Arg(0))
 	}
-	pages := cli.RoffPages("", version)
+	root := commands.Root
+	root.Env = config.EnvVars()
+	pages := generate.Roff(root, "", version)
 	// Before MkdirAll: the destination is usually outside the repo, so describing
 	// it must not create it.
 	if *dryRun {

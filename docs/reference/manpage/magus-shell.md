@@ -1,6 +1,6 @@
 ---
 title: magus shell
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: Read one shell command, or one path an edit is about to write, and report what this workspace would rather you ran.
 tags: [cli, magus shell, guard, conventions, hook, pre-tool-use]
 ---
@@ -126,7 +126,7 @@ not block every tool call.
 : The host's own session id for this invocation
 
 **--tool-rows** *magus agent harness install*
-: The directory, relative to the workspace root, holding the host's tool rows that \`magus agent harness install\` writes; without it no tool is known and each call whose input shape names no command, path, search, prompt or skill is unjudged
+: The directory, relative to the workspace root, holding the host's tool rows that magus agent harness install writes; without it no tool is known and each call whose input shape names no command, path, search, prompt or skill is unjudged
 
 **--transcript** *string*
 : Path to the host's own log of this session, recorded as a pointer; magus never opens it

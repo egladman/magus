@@ -1,6 +1,6 @@
 ---
 title: magus diff
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: "Report every uncommitted change annotated with what the workspace knows: whether it is generated, how widely its changed symbols are referenced, whether its symbols are public API, and what coverage was observed."
 tags: [cli, magus diff, diff, review, changeset, semver]
 ---
@@ -134,7 +134,7 @@ performance metric, and a performance metric gets gamed rather than met.
 : Record that you have read the changed files at their current content; --impact reports what carries no such record
 
 **--baseline** *graph export --symbols -o json*
-: The base's \`graph export --symbols -o json\`: adds what each changed symbol did to the API and the smallest semver bump that proves
+: The base's graph export --symbols -o json: adds what each changed symbol did to the API and the smallest semver bump that proves
 
 **--conformance-min-cohort** *int*
 : How many declarations a conformance norm needs before a changed symbol is compared against it; defaults to knowledge.conformance.gates.min_cohort
@@ -152,7 +152,7 @@ performance metric, and a performance metric gets gamed rather than met.
 : Print the report instead of opening the interactive viewer
 
 **--patch** *-*
-: Review a patch somebody handed you instead of the working tree; \`-\` reads stdin
+: Review a patch somebody handed you instead of the working tree; - reads stdin
 
 **--reason** *string*
 : An optional note kept with an --ack, for the next reader of the report

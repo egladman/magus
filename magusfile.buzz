@@ -58,6 +58,7 @@ import "project/libs/proofread" as proofreadlib;
 import "project/libs/testlayout";
 import "project/libs/scipbuzz";
 import "project/libs/xdg";
+import "project/libs/cmdline";
 
 // Declaring trusted keys is what enables the cache; the insecure arm ignores them all.
 // This reads raw env while the engine reads parsed config, so the two can disagree.
@@ -648,36 +649,37 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
         "."], ".", {});
 }
 
-// Renders the roff man pages into manpage/ and refreshes internal/cli/testdata/api.lock,
-// both serialized from the internal/cli registry. The Markdown manpages belong to docs/.
+// Renders the roff man pages into manpage/ and refreshes internal/commands/testdata/api.lock,
+// both serialized from the internal/commands tree. The Markdown manpages belong to docs/.
 export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
     // Both lines compile internal/spell, which go:embeds generated files, so every generator
     // writing Go under internal/ or types/gen must finish first or MGS4008 refuses the run.
     ctx.needs(spells_generate, job_generate, bindings_generate, langservice_generate,
               mcp_tools_generate, config_generate, mocks_generate);
     ctx.readsFiles("cmd/magus-manpage/**/*.go", "internal/**/*.go", "types/**/*.go",
+        "libs/cmdline/**/*.go",
         "go.mod", "go.sum", "go.work", "go.work.sum",
         "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json");
-    ctx.writesFiles("manpage/*.1", "internal/cli/testdata/api.lock");
+    ctx.writesFiles("manpage/*.1", "internal/commands/testdata/api.lock");
     fs\mkdirAll("manpage");
     proc\exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
-    proc\exec("go", ["generate", "./internal/cli/..."]);
+    proc\exec("go", ["generate", "./internal/commands/..."]);
 }
 
 // Renders every exported declaration of the public Go packages (the list lives in
-// cmd/magus-utils/public_api.go) into internal/cli/testdata/api-go.lock, beside the CLI's api.lock.
+// cmd/magus-utils/public_api.go) into internal/commands/testdata/api-go.lock, beside the CLI's api.lock.
 export fun go_api_generate(ctx: magus\Context, args: [str]) > void !> any {
     // The packages are type-checked from source and the root embeds generated files, so
     // every generator writing Go under internal/ or types/gen must finish first.
     ctx.needs(spells_generate, job_generate, bindings_generate, langservice_generate,
               mcp_tools_generate, config_generate, mocks_generate);
-    ctx.readsFiles("cmd/magus-utils/**/*.go", "*.go", "types/**/*.go", "libs/testkit/**/*.go",
+    ctx.readsFiles("cmd/magus-utils/**/*.go", "*.go", "types/**/*.go", "libs/testkit/**/*.go", "libs/cmdline/**/*.go",
         "internal/**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
         "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json");
-    ctx.writesFiles("internal/cli/testdata/api-go.lock");
-    proc\exec("go", ["run", "./cmd/magus-utils", "goapi", "-out", "internal/cli/testdata/api-go.lock"]);
+    ctx.writesFiles("internal/commands/testdata/api-go.lock");
+    proc\exec("go", ["run", "./cmd/magus-utils", "goapi", "-out", "internal/commands/testdata/api-go.lock"]);
 }
 
 fun pull_request_event(ctx: magus\Context, target: str) > serialize\Boxed? !> any {
@@ -2139,10 +2141,10 @@ fun coverage_blocks_ran(profiles: [str]) > {str: bool} !> any {
 export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     // test reads every module's Go files, which each library test's own format rewrites.
     ctx.needs(gopherbuzz\format, diagnostics\format, conventions\format,
-        testlayout\format, scipbuzz\format, xdg\format);
+        testlayout\format, scipbuzz\format, xdg\format, cmdline\format);
     // generate first: the denominator reads every Go file the generators write.
     ctx.needs(generate, test, gopherbuzz\test, diagnostics\test,
-        conventions\test, testlayout\test, scipbuzz\test, xdg\test, buzz_test);
+        conventions\test, testlayout\test, scipbuzz\test, xdg\test, cmdline\test, buzz_test);
     ctx.writesFiles("gen/site/assets/go-coverage.svg", "gen/site/assets/buzz-coverage.svg",
         "gen/site/assets/typescript-coverage.svg");
     if (!fs\exists("gen/site/index.html")) {
@@ -2160,7 +2162,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     final go_totals = cov\treeTotals(tables, blocks: coverage_blocks_ran(
         [COVERAGE_PROFILE, "libs/gopherbuzz/coverage.out", "libs/diagnostics/coverage.out",
          "libs/conventions/coverage.out", "libs/testlayout/coverage.out",
-         "libs/scipbuzz/coverage.out", "libs/xdg/coverage.out"]));
+         "libs/scipbuzz/coverage.out", "libs/xdg/coverage.out", "libs/cmdline/coverage.out"]));
     final go_pct = cov\formatPercent(go_totals["covered"], statements: go_totals["statements"]);
     final buzz_pct = fs\readFile("coverage/buzz/coverage.txt").trim();
     final typescript_pct = fs\readFile(typescript).trim();
@@ -2301,6 +2303,7 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/figure/magusfile.buzz", "libs/gopherbuzz/magusfile.buzz",
                    "libs/testlayout/magusfile.buzz", "libs/textsearch/magusfile.buzz",
                    "libs/scipbuzz/magusfile.buzz", "libs/xdg/magusfile.buzz",
+                   "libs/cmdline/magusfile.buzz",
                    "proto/magusfile.buzz", "docs/tour/*.buzz",
                    ".golangci.yml", ".mockery.yaml", ".markdownlintignore", ".markdownlint.json",
                    ".gitattributes", "dprint-base.json",
@@ -2321,23 +2324,26 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/diagnostics/**/*.md", "libs/figure/**/*.md",
                    "libs/gopherbuzz/**/*.md", "libs/testlayout/**/*.md",
                    "libs/textsearch/**/*.md", "libs/scipbuzz/**/*.md", "libs/xdg/**/*.md",
+                   "libs/cmdline/**/*.md",
                    "proto/**/*.md",
                    "**/*_test.go", "libs/conventions/**/*_test.go", "libs/proofread/**/*_test.go",
                    "libs/diagnostics/**/*_test.go", "libs/figure/**/*_test.go",
                    "libs/gopherbuzz/**/*_test.go", "libs/testlayout/**/*_test.go",
                    "libs/scipbuzz/**/*_test.go", "libs/xdg/**/*_test.go",
+                   "libs/cmdline/**/*_test.go",
                    "**/*.go",
                    "libs/conventions/**/*.go", "libs/proofread/go.mod", "libs/proofread/go.sum",
                    "libs/proofread/**/*.go",
                    "libs/diagnostics/**/*.go", "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go",
                    "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go", "libs/xdg/**/*.go",
+                   "libs/cmdline/**/*.go",
                    "console/**/*.ts", "docs/**/*.ts",
                    "docs/guides/integrations/agents/**/*.ts", "libs/textsearch/**/*.ts",
                    "**/*.buzz", "console/**/*.buzz", "docs/**/*.buzz",
                    "docs/guides/integrations/agents/**/*.buzz", "libs/conventions/**/*.buzz",
                    "libs/diagnostics/**/*.buzz", "libs/figure/**/*.buzz", "libs/gopherbuzz/**/*.buzz",
                    "libs/scipbuzz/**/*.buzz", "libs/testlayout/**/*.buzz", "libs/textsearch/**/*.buzz",
-                   "libs/xdg/**/*.buzz",
+                   "libs/xdg/**/*.buzz", "libs/cmdline/**/*.buzz",
                    "proto/**/*.buzz",
                    "**/*.css", "console/**/*.css", "docs/**/*.css",
                    "**/*.html", "console/**/*.html", "docs/**/*.html",
@@ -2451,7 +2457,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     // lint reads libs/**/*.go and test reads **/*.go, which each nested module's format
     // rewrites (MGS4008).
     ctx.needs(gopherbuzz\format, diagnostics\format, conventions\format,
-        testlayout\format, scipbuzz\format, xdg\format);
+        testlayout\format, scipbuzz\format, xdg\format, cmdline\format);
     if (!advisories\inheritedFatal(args)) {
         ctx.needs(lint, build, test, security);
         return;

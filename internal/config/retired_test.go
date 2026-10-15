@@ -33,7 +33,7 @@ func TestRetiredEnvReplacementsAreKnown(t *testing.T) {
 	}
 	// A key can carry a flat name of its own (sandbox.mode is MAGUS_SANDBOX).
 	for _, d := range EnvVars() {
-		known[d.EnvVar] = true
+		known[d.Name] = true
 	}
 	for old, r := range retiredEnv {
 		if r.replacement == "" {

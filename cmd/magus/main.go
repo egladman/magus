@@ -16,7 +16,7 @@
 //	magus doctor                        validate the workspace
 //
 // magus help prints the full list of top-level subcommands, in the order and with the
-// descriptions internal/cli's registry declares as the single source of truth,
+// descriptions internal/commands declares as the single source of truth,
 // kept short here rather than a second enumeration that can drift
 // from it, as this comment once did (it advertised a `magus tail` that was
 // never a real subcommand).
@@ -48,7 +48,7 @@ import (
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/guard"
@@ -1125,11 +1125,11 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 // knownSubcommands is the dispatcher's set, read from the registry so it cannot
 // disagree with help, the man pages or the completions.
 var knownSubcommands = func() []string {
-	names := make([]string, 0, len(cli.All)+1)
-	for _, c := range cli.All {
+	names := make([]string, 0, len(commands.Root.Children)+1)
+	for _, c := range commands.Root.Children {
 		names = append(names, c.Name)
 	}
-	return append(names, cli.Help.Name)
+	return append(names, commands.Help.Name)
 }()
 
 func unknownSubcommandUsage() {
@@ -1140,14 +1140,14 @@ func unknownSubcommandUsage() {
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus [flags] <subcommand> [args]")
 	group := ""
-	for _, c := range cli.All {
+	for _, c := range commands.Root.Children {
 		if c.Group != group {
 			group = c.Group
 			fmt.Fprintf(os.Stderr, "\n%s:\n", group)
 		}
 		fmt.Fprintf(os.Stderr, "  %-14s %s\n", c.Name, c.Short)
 	}
-	fmt.Fprintf(os.Stderr, "  %-14s %s\n", cli.Help.Name, cli.Help.Short)
+	fmt.Fprintf(os.Stderr, "  %-14s %s\n", commands.Help.Name, commands.Help.Short)
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Global flags (work before or after the subcommand):")
 	fmt.Fprintln(os.Stderr, "  --help, -h           show help (top-level or subcommand)")

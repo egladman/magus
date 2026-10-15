@@ -1,6 +1,6 @@
 ---
 title: magus broker
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: "Check or stop the broker: the per-user process that holds this host's concurrency slots, declared memory and shared services, which a run starts on its own."
 tags: [cli, magus broker, broker, capacity, memory_mb, services, concurrency]
 ---

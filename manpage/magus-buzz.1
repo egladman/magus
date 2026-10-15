@@ -46,16 +46,16 @@ runs the same from any directory: magus buzz \-C "$ROOT" \-s hooks/guard.buzz.
 .RS
 .TP
 \fB\-C\fR \fIdir\fR
-Change to `dir` before anything else, as go \-C does, so script paths and imports resolve from it; lsp takes it only as the first flag
+Change to dir before anything else, as go \-C does, so script paths and imports resolve from it; lsp takes it only as the first flag
 .TP
 \fB\-\-check\fR
 Parse and type\-check the named files without running them; report every diagnostic
 .TP
 \fB\-\-coverprofile\fR \fI-t\fR
-Write an LCOV coverprofile for the file under `\-t` (requires `\-t`)
+Write an LCOV coverprofile for the file under \-t (requires `\-t`)
 .TP
 \fB\-e\fR \fIcode\fR
-Execute `code` given on the command line instead of a file
+Execute code given on the command line instead of a file
 .TP
 \fB\-\-embedded\fR
 Relax upstream strictness (top\-level statements, optional argument labels) to match the magusfile engine
@@ -67,7 +67,7 @@ Start the REPL without executing the magusfile
 Print where compile and import time went, after the script runs
 .TP
 \fB\-\-record\fR \fImagus query output <ref>\fR
-Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (`magus query output <ref>` reopens it)
+Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (magus query output <ref> reopens it)
 .TP
 \fB\-t\fR
 Run the file's test "..." {} blocks and report pass/fail

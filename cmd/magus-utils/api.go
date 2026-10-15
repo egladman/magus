@@ -5,22 +5,22 @@ import (
 	"os"
 	"strings"
 
-	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/generate/emit"
 )
 
 // runAPI writes magus's public CLI API as a sorted .lock snapshot (the same plain
-// sorted-line format as urls.lock): one line per subcommand, flag, project target,
-// and config key. Committed and drift-gated, its diff is what a reviewer inspects
-// for backward-incompatible changes: a removed line is a removed API element.
+// sorted-line format as urls.lock): one line per subcommand, flag, operand and
+// config key. Committed and drift-gated, its diff is what a reviewer inspects for
+// backward-incompatible changes: a removed line is a removed API element.
 func runAPI(args []string) error {
 	fs := flag.NewFlagSet("api", flag.ContinueOnError)
 	out := fs.String("out", "", "write the public-API lock to this path (default: stdout)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	data := []byte(strings.Join(cli.API(config.KnownKeys()), "\n") + "\n")
+	data := []byte(strings.Join(commands.API(config.KnownKeys()), "\n") + "\n")
 	if *out == "" {
 		_, err := os.Stdout.Write(data)
 		return err

@@ -18,7 +18,7 @@ final RATCHET = "hack/policy/conformance.jsonl";
 export fun reads() > [str] {
     return ["**/*.go", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
         "libs/figure/**/*.go", "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go", "libs/xdg/**/*.go",
-        RATCHET, "magus.yaml"];
+        "libs/cmdline/**/*.go", RATCHET, "magus.yaml"];
 }
 
 // check fails each violation of an ENFORCED metric, each known entry that no longer

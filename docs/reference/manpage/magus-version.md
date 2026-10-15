@@ -1,6 +1,6 @@
 ---
 title: magus version
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: Print the magus version string, git commit hash, and build date for the currently installed binary, plus the version reported by the server serving this workspace.
 tags: [cli, magus version, version, build info, commit, server]
 ---

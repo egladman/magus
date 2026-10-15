@@ -19,12 +19,13 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -554,12 +555,12 @@ func parseTargetRun(c hint.Invocation) (targetRun, bool) {
 // verbFlagTakesValue reports whether a flag consumes the next word, asking verb's own flags
 // in the registry the CLI parses with before magus's global set.
 func verbFlagTakesValue(verb, name string) bool {
-	for _, cmd := range cli.All {
+	for _, cmd := range commands.Root.Children {
 		if cmd.Name != verb {
 			continue
 		}
-		if i := slices.IndexFunc(cmd.Flags, func(f cli.Flag) bool { return f.Name == name }); i >= 0 {
-			return cmd.Flags[i].Kind != cli.FlagBool
+		if i := slices.IndexFunc(cmd.Flags, func(f cmdline.Flag) bool { return f.Name == name }); i >= 0 {
+			return cmd.Flags[i].Kind != cmdline.Bool
 		}
 	}
 	takes, _ := MagusFlagTakesValue(name)
@@ -1362,7 +1363,7 @@ func verbArgv(args []string, verb hint.Command) (operands []string, flags map[st
 		name, value, joined := strings.Cut(strings.TrimLeft(a, "-"), "=")
 		takes, _ := MagusFlagTakesValue(name)
 		if own, ok := verbFlag(verb, name); ok {
-			takes = own.Kind != cli.FlagBool
+			takes = own.Kind != cmdline.Bool
 		}
 		switch {
 		case joined:
@@ -1378,8 +1379,8 @@ func verbArgv(args []string, verb hint.Command) (operands []string, flags map[st
 }
 
 // verbFlag looks name up among verb's own flags in the registry the CLI parses with.
-func verbFlag(verb hint.Command, name string) (cli.Flag, bool) {
-	for _, group := range cli.All {
+func verbFlag(verb hint.Command, name string) (cmdline.Flag, bool) {
+	for _, group := range commands.Root.Children {
 		if group.Name != verb.Head() {
 			continue
 		}
@@ -1387,12 +1388,12 @@ func verbFlag(verb hint.Command, name string) (cli.Flag, bool) {
 			if sub.Name != verb.Leaf() {
 				continue
 			}
-			if i := slices.IndexFunc(sub.Flags, func(f cli.Flag) bool { return f.Name == name }); i >= 0 {
+			if i := slices.IndexFunc(sub.Flags, func(f cmdline.Flag) bool { return f.Name == name }); i >= 0 {
 				return sub.Flags[i], true
 			}
 		}
 	}
-	return cli.Flag{}, false
+	return cmdline.Flag{}, false
 }
 
 // stdinRecord is the text a statement feeds its command from a heredoc or a here-string,

@@ -3,83 +3,20 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/libs/cmdline"
 )
 
 // awkwardSubs carries the two characters that have broken a generated script: a colon
 // terminates zsh's name:description pair, and an apostrophe closes the single-quoted
 // string in zsh, fish and PowerShell alike.
-var awkwardSubs = []cli.Command{
+var awkwardSubs = []cmdline.Command{
 	{Name: "run", Short: "Run it"},
 	{Name: "query", Short: "a node's neighborhood: really"},
-}
-
-func TestRenderBashList(t *testing.T) {
-	assert.Equal(t,
-		`    local subcommands="run query"`,
-		renderBashList(awkwardSubs))
-}
-
-func TestRenderZshListEscapesColonsAndApostrophes(t *testing.T) {
-	want := "            subcommands=(\n" +
-		"                'run:Run it'\n" +
-		"                'query:a node" + `'\''` + "s neighborhood" + `\:` + " really'\n" +
-		"            )"
-	assert.Equal(t, want, renderZshList(awkwardSubs))
-}
-
-// TestRenderZshListWrapsTheWholeAssignment: zsh does not treat "#" as a comment inside
-// an array literal, so a marker between the parens parses as an element and the closing
-// paren then fails. The renderer therefore has to emit both parens itself.
-func TestRenderZshListWrapsTheWholeAssignment(t *testing.T) {
-	got := renderZshList(awkwardSubs)
-	assert.True(t, strings.HasPrefix(got, "            subcommands=("), got)
-	assert.True(t, strings.HasSuffix(got, "            )"), got)
-}
-
-func TestRenderFishListPadsToTheWidestNameAndDropsTheLastContinuation(t *testing.T) {
-	want := "        run   'Run it' \\" + "\n" +
-		`        query 'a node\'s neighborhood: really'`
-	assert.Equal(t, want, renderFishList(awkwardSubs))
-}
-
-func TestRenderPowerShellListBreaksAtSix(t *testing.T) {
-	subs := []subcommandDoc{
-		{Name: "a"}, {Name: "b"}, {Name: "c"}, {Name: "d"},
-		{Name: "e"}, {Name: "f"}, {Name: "g"},
-	}
-	want := "    $subcommands = 'a', 'b', 'c', 'd', 'e', 'f',\n" +
-		"                   'g'"
-	assert.Equal(t, want, renderPowerShellList(subs))
-}
-
-// TestRenderPowerShellListSingleRow: the sole row carries the variable name and no
-// trailing comma, which is the shape a short list has to produce.
-func TestRenderPowerShellListSingleRow(t *testing.T) {
-	assert.Equal(t,
-		"    $subcommands = 'run', 'query'",
-		renderPowerShellList(awkwardSubs))
-}
-
-// TestRenderersAreDeterministic guards the property the whole drift gate rests on: the
-// same input must render the same bytes, or every generate run reports drift.
-func TestRenderersAreDeterministic(t *testing.T) {
-	for name, render := range map[string]func([]subcommandDoc) string{
-		"bash": renderBashList,
-		"zsh":  renderZshList,
-		"fish": renderFishList,
-		"ps1":  renderPowerShellList,
-	} {
-		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, render(awkwardSubs), render(awkwardSubs))
-		})
-	}
 }
 
 // completionsDir plants the four scripts with an empty generated region, which is what
@@ -87,7 +24,7 @@ func TestRenderersAreDeterministic(t *testing.T) {
 func completionsDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	for _, name := range []string{"magus.bash", "magus.zsh", "magus.fish", "magus.ps1"} {
+	for name := range completionScripts {
 		body := "# leading logic\n" +
 			shellMarker.Begin + "\n" +
 			shellMarker.End + "\n" +
@@ -110,7 +47,7 @@ func TestWriteCompletionsFillsEveryDialect(t *testing.T) {
 
 	// The hand-written shell around the region is what the marker design exists to
 	// leave alone; a whole-file rewrite would take it with it.
-	for _, name := range []string{"magus.bash", "magus.zsh", "magus.fish", "magus.ps1"} {
+	for name := range completionScripts {
 		body := read(name)
 		assert.Contains(t, body, "# leading logic\n", name)
 		assert.Contains(t, body, "# trailing logic\n", name)

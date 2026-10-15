@@ -1,6 +1,6 @@
 ---
 title: magus affected
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.
 tags: [cli, magus affected, affected, changed files, vcs, git, bisect, ci]
 ---
@@ -123,7 +123,7 @@ that way: magus affected generate --no-default-charms | magus affected ci --plan
 **--upstream**
 : With --graph: show dependents instead of dependencies
 
-## Targets
+## Operands
 
 **ls**
 : Print selected projects without executing anything
