@@ -9,7 +9,8 @@
 //
 // No rule separates "runtime" from "pushgate": both are two known words with
 // the separator dropped, and only a person knows the first is one word. The
-// allow setting is where that is said.
+// allow setting is where that is said. A file named after its own package never
+// counts: Go package names are concatenated lowercase by convention.
 package filenames
 
 import (
@@ -133,7 +134,7 @@ func (c *checker) run(pass *analysis.Pass) error {
 			continue
 		}
 		for _, seg := range c.segments(filepath.Base(name)) {
-			if slices.Contains(c.opts.Allow, seg) {
+			if slices.Contains(c.opts.Allow, seg) || seg == strings.TrimSuffix(f.Name.Name, "_test") {
 				continue
 			}
 			// Both halves at least two letters, so a stray prefix such as the
