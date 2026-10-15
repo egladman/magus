@@ -311,3 +311,58 @@ func TestDecodeHarnessModelsRefusesAMap(t *testing.T) {
 
 	assert.Error(t, err)
 }
+
+// The Claude Code rows name the exact model id each shipped tier runs on, and each is a row
+// of its own table, so a reported model resolves to a tier by equality and never by a name.
+func TestClaudeCodeRowsNameAModelForEveryShippedTier(t *testing.T) {
+	d := loadShippedHarness(t, "claude-code")
+	drv, ok := project.DefaultSpellRegistry().Lookup("claude-code")
+	require.True(t, ok)
+	resp, err := drv.Invoke(context.Background(), spells.InvokeRequest{Target: spells.HarnessModelsContract})
+	require.NoError(t, err)
+	tiers, err := decodeHarnessTierModels(resp.Data)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{
+		"economy": "claude-haiku-5-5", "standard": "claude-sonnet-5-5", "principal": "claude-opus-5-5",
+	}, tiers)
+	ids := map[string]bool{}
+	for _, row := range d.Models {
+		ids[row.ID] = true
+	}
+	for tier, id := range tiers {
+		assert.True(t, ids[id], "tier %s runs %s, which is a row", tier, id)
+	}
+}
+
+// A declaration that does not map the harness falls to the harness's own rows, and rows
+// that declare tiers without the cheapest one are an error naming the row to add, never a
+// render with no model.
+func TestCheapestTierModelReadsTheHarnessRows(t *testing.T) {
+	ctx := tieredContext(t, tiersMapping(t, map[types.HarnessKey][]string{{ID: "other"}: {"mini", "max"}}))
+
+	model, err := cheapestTierModel(ctx, "rowed", map[string]string{"small": "m-small-1", "large": "m-large-1"})
+	require.NoError(t, err)
+	assert.Equal(t, "m-small-1", model, "the exact id the harness row names for the cheapest tier")
+
+	model, err = cheapestTierModel(ctx, "rowless", nil)
+	require.NoError(t, err)
+	assert.Empty(t, model, "a harness that declares no tier takes no per-agent model")
+
+	_, err = cheapestTierModel(ctx, "rowed", map[string]string{"large": "m-large-1"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `add "tier": "small"`)
+	assert.Contains(t, err.Error(), "magusfile.buzz:3")
+
+	mapped := tieredContext(t, tiersMapping(t, map[types.HarnessKey][]string{{ID: "rowed"}: {"tiny", "big"}}))
+	model, err = cheapestTierModel(mapped, "rowed", map[string]string{"small": "m-small-1"})
+	require.NoError(t, err)
+	assert.Equal(t, "tiny", model, "the workspace's own mapping wins over the harness rows")
+}
+
+func TestDecodeHarnessTierModelsRefusesATierTwice(t *testing.T) {
+	_, err := decodeHarnessTierModels([]any{
+		map[string]any{"id": "m-1", "tier": "economy"},
+		map[string]any{"id": "m-2", "tier": "economy"},
+	})
+	assert.EqualError(t, err, "rows m-1 and m-2 both declare tier economy")
+}

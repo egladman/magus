@@ -8,6 +8,8 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/testkit/register"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -333,4 +335,39 @@ func TestModelTierMatrixMisdeclarationIsCoded(t *testing.T) {
 		require.ErrorContains(t, err, string(types.ModelTierDeclarationUnusable))
 		assert.ErrorContains(t, err, "root magusfile")
 	})
+}
+
+// A workspace that declares no tiers gets the shipped ones mapped to each wired harness's
+// own model rows, by the exact ids they name, so a spawn's model resolves to a tier.
+func TestModelTiersDefaultMapsTheHarnessRows(t *testing.T) {
+	rows := func(tiers ...string) spells.Option {
+		return spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			if req.Target != spells.HarnessModelsContract {
+				return nil, nil
+			}
+			list := []any{}
+			for _, tier := range tiers {
+				list = append(list, map[string]any{"id": "m-" + tier, "tier": tier})
+			}
+			return list, nil
+		})
+	}
+	full := register.Spell(t, "tiered-test", rows("economy", "standard", "principal"))
+	reg, err := loadModelTiers(t, `import "magus";`, full)
+	require.NoError(t, err)
+	set := reg.ModelTiers(t.Context())
+	require.NotNil(t, set)
+	economy, err := set.Parse("economy")
+	require.NoError(t, err)
+	alias, err := set.Alias(types.HarnessKey{ID: full}, economy)
+	require.NoError(t, err)
+	assert.Equal(t, "m-economy", alias)
+	resolved, ok := set.Resolve(types.HarnessKey{ID: full}, "m-principal")
+	require.True(t, ok)
+	assert.Equal(t, "principal", resolved.Name())
+
+	partial := register.Spell(t, "half-tiered-test", rows("economy"))
+	_, err = defaultModelTierSet(t.Context(), []string{partial})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `add "tier": "standard"`)
 }

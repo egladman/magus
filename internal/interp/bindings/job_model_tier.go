@@ -49,7 +49,7 @@ func registerModelTiers(ctx context.Context, sess *buzz.Session, obs buzz.Direct
 	if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
 		// The context outlives the load that built it: a fork asks long after.
 		defaultCtx := context.WithoutCancel(ctx)
-		reg.SetDefaultModelTiers(func() (*types.ModelTierSet, error) { return defaultModelTierSet(defaultCtx) })
+		reg.SetDefaultModelTiers(func() (*types.ModelTierSet, error) { return defaultModelTierSet(defaultCtx, reg.Harnesses()) })
 	}
 	// Per session, not per registry, as registerFunctionRule counts.
 	registered := false
@@ -355,8 +355,9 @@ func enumCaseValues(ctx context.Context, sess *buzz.Session, def vm.Value, cases
 	return slices.Clone(list.ListItems()), nil
 }
 
-// defaultModelTierSet maps no harness to a model.
-func defaultModelTierSet(ctx context.Context) (*types.ModelTierSet, error) {
+// defaultModelTierSet maps each harness in wired whose model rows declare tiers to those
+// rows' exact model ids (harnessTierHosts), and no other harness.
+func defaultModelTierSet(ctx context.Context, wired []string) (*types.ModelTierSet, error) {
 	// No registry on this session: it declares nothing into the workspace.
 	ctx = workspace.ContextWithRegistry(ctx, nil)
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithParseCache(parsecache.Shared()))
@@ -384,6 +385,11 @@ func defaultModelTierSet(ctx context.Context) (*types.ModelTierSet, error) {
 		return nil, errors.New("magus/modeltiers: the module declared nothing")
 	}
 	decl.Site = "magus/modeltiers"
+	hosts, err := harnessTierHosts(ctx, decl.Cases, wired)
+	if err != nil {
+		return nil, fmt.Errorf("magus/modeltiers: %w", err)
+	}
+	decl.Hosts = hosts
 	return types.NewModelTierSet(decl)
 }
 
