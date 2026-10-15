@@ -114,7 +114,9 @@ func TestLoadFailureDenyNamesTheRebuildInMagusOwnCheckout(t *testing.T) {
 		"  worktree: the magusfile failed to load: "+errStaleLoad.Error()+"\n"+
 		"  approved: the rule could not be resolved: approved magusfile: "+errStaleLoad.Error()+"\n"+
 		"Edits, spawns, pushes and commands that change state wait until a magus loads the tree. "+
-		"Reads, `git status` and the fix still run, and so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`.\n"+
+		"Reads, `git status` and the fix still run, and so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`. "+
+		"So does getting the tree back to one a binary can be built from, each alone on its line: "+
+		"`git cherry-pick`, `git merge`, `git rebase` or `git revert` with `--abort` or `--continue`, and `git worktree add`.\n"+
 		"If the rebuild cannot load the tree either, bootstrap over it, alone on its line: "+
 		"`GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`. If the error names a magusfile line instead, fix that line.\n"+
 		"see: "+ruleDocsBase+"stale-binary/", stored)

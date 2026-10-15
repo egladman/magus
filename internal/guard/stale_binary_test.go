@@ -593,6 +593,28 @@ func TestEveryMCPToolIsClassifiedForAStaleBinary(t *testing.T) {
 func TestRecoveryLine(t *testing.T) {
 	for _, tc := range []struct {
 		line, lease string
+		builds      bool
+		want        bool
+	}{
+		{"git cherry-pick --abort", "lease-a", false, true},
+		{"GIT_EDITOR=true git cherry-pick --continue", "lease-a", false, true},
+		{"git merge --abort", "", true, true},
+		{"git rebase --continue", "lease-a", false, true},
+		{"git revert --abort", "lease-a", false, true},
+		{"git worktree add ../scratch HEAD", "lease-a", false, true},
+		{"git cherry-pick abc123", "lease-a", false, false},
+		{"git cherry-pick --abort && git push", "lease-a", false, false},
+		{"FOO=1 git cherry-pick --continue", "lease-a", false, false},
+		{"git worktree remove ../scratch", "lease-a", false, false},
+		{"./magus run go-build . -s", "lease-a", true, true},
+		{"GOEXPERIMENT=jsonv2 go build -trimpath -o magus ./cmd/magus", "lease-a", true, true},
+		{workerPlacementRun, "lease-a", true, true},
+		{"./magus run test .", "lease-a", true, false},
+	} {
+		assert.Equal(t, tc.want, recoveryLine(tc.line, DialectBash, tc.lease, tc.builds), "%s (lease %q, builds %v)", tc.line, tc.lease, tc.builds)
+	}
+	for _, tc := range []struct {
+		line, lease string
 		want        bool
 	}{
 		{"./magus run go-build .", "", true},
@@ -618,6 +640,6 @@ func TestRecoveryLine(t *testing.T) {
 		{"/repo/magus buzz hack/dev/other.buzz", "lease-a", false},
 		{"/repo/magus buzz hack/dev/bootstrap-worktree.buzz -- --job x --from /repo", "", false},
 	} {
-		assert.Equal(t, tc.want, recoveryLine(tc.line, DialectBash, tc.lease), "%s (lease %q)", tc.line, tc.lease)
+		assert.Equal(t, tc.want, recoveryLine(tc.line, DialectBash, tc.lease, tc.lease == ""), "%s (lease %q)", tc.line, tc.lease)
 	}
 }

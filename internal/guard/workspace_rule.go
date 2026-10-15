@@ -269,6 +269,9 @@ type judgedCall struct {
 	what string
 	// lease is the acting lease, "" for the orchestrator or a person.
 	lease string
+	// builds is whether the caller builds this checkout's binary: the root, or the
+	// checkout's integrator.
+	builds bool
 }
 
 // denyUnloaded turns asked into a deny when no side of the policy loaded, and reports
@@ -302,7 +305,7 @@ func denyUnloaded(asked *rulesAnswer, call judgedCall, at location) bool {
 	}
 	// One string, verdict first: verdictParts splits it again when the deny is worded.
 	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: d.full()}
-	asked.next = binaryRemedy(own, hasMagusBinary(at.workspace), call.lease).next(asked.rule)
+	asked.next = binaryRemedy(own, hasMagusBinary(at.workspace), call.lease, call.builds).next(asked.rule)
 	asked.by = decidedByBuiltin
 	return true
 }
@@ -346,7 +349,7 @@ func failureLines(failures []trail.RuleFailure) []string {
 // unloadedDenial is the deny for a gated verb while the policy that registered seam's rule
 // does not load. own is a checkout of magus itself, where the fix is a rebuild of ./magus.
 func unloadedDenial(call judgedCall, failures []trail.RuleFailure, own, hasBinary bool) denial {
-	fix := binaryRemedy(own, hasBinary, call.lease)
+	fix := binaryRemedy(own, hasBinary, call.lease, call.builds)
 	var why strings.Builder
 	why.WriteString("This workspace registered a " + call.seam.member() + " rule the last time it loaded, and now neither the working tree nor its approved copy loads:")
 	for _, f := range failures {
@@ -525,9 +528,9 @@ func judgingBinaryNote(deps Dependencies, at location, loadFailure error, lease 
 		}
 		switch j.unload.Cause {
 		case unloadStale:
-			j.fix = binaryRemedy(ownSourceRoot(j.root), j.hasBinary, lease).say
+			j.fix = binaryRemedy(ownSourceRoot(j.root), j.hasBinary, lease, false).say
 		case unloadSkewedSpell:
-			j.fix = binaryRemedy(true, j.hasBinary, lease).say
+			j.fix = binaryRemedy(true, j.hasBinary, lease, false).say
 		}
 	}
 	return j.String()

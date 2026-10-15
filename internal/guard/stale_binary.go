@@ -345,17 +345,24 @@ func scoutRecord(args []string) bool {
 }
 
 // recoveryLine reports the line that gets a binary able to load this tree: the rebuild, the
-// relink, or the bootstrap it falls back to. Each stands alone on its line. A leased
-// worker's only one is the placement of its base's binary: a worker building a second is
-// the thing the deny exists to prevent.
-func recoveryLine(command string, d Dialect, lease string) bool {
+// relink, or the bootstrap it falls back to, and for anyone the line that finishes or backs
+// out of an interrupted cherry-pick, merge or rebase, or adds a worktree, since a tree left
+// mid-pick links no binary at all. Each stands alone on its line. builds is whether the
+// caller builds this checkout's binary: the root, or the checkout's integrator. Any other
+// leased worker's only binary fix is the placement of its base's: a worker building a
+// second is the thing the deny exists to prevent.
+func recoveryLine(command string, d Dialect, lease string, builds bool) bool {
 	call, ok := soleCall(command, d)
 	if !ok {
 		return false
 	}
 	words := literalWords(call.Args)
-	if lease != "" {
-		return len(call.Assigns) == 0 && len(words) >= 3 && path.Base(words[0]) == "magus" && words[1] == "buzz" && words[2] == placementScript
+	if vcsRecoveryLine(words) && onlyEditorAssigns(call.Assigns) {
+		return true
+	}
+	placement := len(call.Assigns) == 0 && len(words) >= 3 && path.Base(words[0]) == "magus" && words[1] == "buzz" && words[2] == placementScript
+	if lease != "" && (placement || !builds) {
+		return placement
 	}
 	switch prog := path.Base(words[0]); {
 	case words[0] == "go":
@@ -372,11 +379,41 @@ func recoveryLine(command string, d Dialect, lease string) bool {
 	return false
 }
 
+// vcsRecoveryLine reports a git line that continues or aborts an interrupted cherry-pick,
+// merge, rebase or revert, or adds a worktree.
+func vcsRecoveryLine(words []string) bool {
+	if len(words) < 3 || path.Base(words[0]) != "git" {
+		return false
+	}
+	switch words[1] {
+	case "cherry-pick", "merge", "rebase", "revert":
+		return len(words) == 3 && (words[2] == "--abort" || words[2] == "--continue")
+	case "worktree":
+		return words[2] == "add"
+	}
+	return false
+}
+
+// onlyEditorAssigns reports an environment prefix that sets nothing but the editor git
+// opens for a continued pick's message.
+func onlyEditorAssigns(assigns []*syntax.Assign) bool {
+	for _, a := range assigns {
+		if a.Name == nil || (a.Name.Value != "GIT_EDITOR" && a.Name.Value != "GIT_SEQUENCE_EDITOR") {
+			return false
+		}
+	}
+	return true
+}
+
 // commandCall describes a shell line to denyUnloaded. A line is a change unless it proves
 // read-only or is the fix; the verb it names is the gated one, if any. A read-only scout
 // may also record its work, which reads its row from the job store.
 func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCall {
-	call := judgedCall{seam: seamCommand, what: "this command", lease: in.lease}
+	call := judgedCall{seam: seamCommand, what: "this command", lease: in.lease, builds: in.lease == ""}
+	if !call.builds {
+		role, _ := actingRole(ctx, at, in.lease, "")
+		call.builds = role == types.AgentRoleIntegrator
+	}
 	if call.verb = gatedVerb(in.command, in.dialect); call.verb != "" {
 		call.what, call.changes = call.verb, true
 		return call
@@ -384,7 +421,7 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCa
 	if in.mcpTool != "" {
 		call.what = "this call to the magus " + in.mcpTool + " tool"
 	}
-	call.changes = !in.readOnly && !readOnlyLine(in.command, in.dialect) && !recoveryLine(in.command, in.dialect, in.lease)
+	call.changes = !in.readOnly && !readOnlyLine(in.command, in.dialect) && !recoveryLine(in.command, in.dialect, in.lease, call.builds)
 	if call.changes && in.lease != "" && scoutLine(in.command, in.dialect) {
 		_, row := actingRole(ctx, at, in.lease, "")
 		call.changes = !row.ReadOnly
@@ -397,7 +434,7 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCa
 // the call, the failures and the fallbacks behind the ref.
 func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, own bool, root string) denial {
 	hasBinary := hasMagusBinary(root)
-	fix := binaryRemedy(own, hasBinary, call.lease)
+	fix := binaryRemedy(own, hasBinary, call.lease, call.builds)
 	problem := "the magus judging this is older than this workspace and cannot load its guard policy"
 	switch {
 	case reason.Cause == unloadSkewedSpell:
@@ -414,7 +451,9 @@ func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, 
 		why.WriteString("\n  " + f)
 	}
 	why.WriteString("\nEdits, spawns, pushes and commands that change state wait until a magus loads the tree. " +
-		"Reads, `git status` and the fix still run, and so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`.")
+		"Reads, `git status` and the fix still run, and so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`. " +
+		"So does getting the tree back to one a binary can be built from, each alone on its line: " +
+		"`git cherry-pick`, `git merge`, `git rebase` or `git revert` with `--abort` or `--continue`, and `git worktree add`.")
 	if fix.why != "" {
 		why.WriteString("\n" + fix.why)
 	}
@@ -437,7 +476,10 @@ func (f binaryFix) next(rule denyRuleName) []types.NextStep {
 // binaryRemedy is the fix for a binary that cannot load the tree, by who is asking. A
 // leased worker is never told to build: there is one binary per base, and the main
 // session builds it and places a copy in each worker checkout.
-func binaryRemedy(own, hasBinary bool, lease string) binaryFix {
+func binaryRemedy(own, hasBinary bool, lease string, builds bool) binaryFix {
+	if builds {
+		lease = ""
+	}
 	switch {
 	case lease != "" && own:
 		return binaryFix{

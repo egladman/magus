@@ -156,7 +156,10 @@ spawns, pushes, the magus verbs that write shared state, shell commands it canno
 are read-only, and the magus MCP tools that write (`client`, and `diff` with an `op`
 other than `state` or `thread`). Reads still run, as do `git status` and the fix itself,
 so the session can repair what denied it. A read-only scout's lease may still run
-`magus job exec`, `magus job exit` and `magus buzz --record`. The deny is filed under the
+`magus job exec`, `magus job exit` and `magus buzz --record`. Getting the tree back to
+one a binary can be built from still runs too, each command alone on its line:
+`git cherry-pick`, `git merge`, `git rebase` or `git revert` with `--abort` or
+`--continue`, and `git worktree add`; the checkout's integrator may also rebuild. The deny is filed under the
 `stale-binary` rule: it prints the cause and the one likeliest command, and the fallbacks
 sit behind its `full verdict:` ref.
 
