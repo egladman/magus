@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -68,7 +69,7 @@ func configToken(args []string) error {
 		return nil
 	default:
 		fs.Usage()
-		return usagef("magus config token: unknown subcommand %q", sub)
+		return exit.Usagef("magus config token: unknown subcommand %q", sub)
 	}
 }
 

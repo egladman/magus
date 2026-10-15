@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
@@ -62,7 +63,7 @@ func status(ctx context.Context, args []string) error {
 
 	if f.Wait {
 		if f.Probe != "" || f.Watch != 0 {
-			return usagef("magus status: --wait prints no snapshot; it does not combine with --probe or --watch")
+			return exit.Usagef("magus status: --wait prints no snapshot; it does not combine with --probe or --watch")
 		}
 		return awaitBudget(ctx, extractRootFlag(args))
 	}

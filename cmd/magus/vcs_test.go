@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -290,7 +291,7 @@ func TestVCSAddUntrackedNeedsAReason(t *testing.T) {
 
 	require.Error(t, err, "a bare --untracked swept in every undeclared file with nothing recorded")
 	assert.Contains(t, err.Error(), `magus vcs add --untracked --reason "<why>"`)
-	assert.IsType(t, errUsage{}, err, "a missing required flag is misuse, which the CLI exits 2 for")
+	assert.Equal(t, exit.Usage, exit.Code(err), "a missing required flag is misuse, which the CLI exits 2 for")
 }
 
 // TestVCSAddReportsTheReason covers the keeping half: the reason reaches the terminal

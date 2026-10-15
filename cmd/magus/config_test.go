@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/cmdline/exit"
 )
 
 func TestRunConfigView_Text(t *testing.T) {
@@ -104,9 +105,7 @@ func TestRunConfigCmd_NoArgs(t *testing.T) {
 	err := configCmd(context.Background(), "", cfg, nil)
 	require.Error(t, err, "no args should be a usage error, not a quiet success")
 
-	var usage errUsage
-	require.ErrorAs(t, err, &usage, "should be errUsage so it exits %d", exitUsage)
-	assert.Equal(t, exitUsage, mapExitCode(err))
+	assert.Equal(t, exit.Usage, mapExitCode(err))
 }
 
 // TestUsageErrorsExitTwo pins the exit-code contract itself: an explicit help request
@@ -114,7 +113,7 @@ func TestRunConfigCmd_NoArgs(t *testing.T) {
 func TestUsageErrorsExitTwo(t *testing.T) {
 	assert.Equal(t, 0, mapExitCode(nil), "success")
 	assert.Equal(t, 0, mapExitCode(flag.ErrHelp), "an explicit -h is a request that was satisfied")
-	assert.Equal(t, exitUsage, mapExitCode(usagef("bad invocation")), "misuse")
+	assert.Equal(t, exit.Usage, mapExitCode(exit.Usagef("bad invocation")), "misuse")
 	assert.Equal(t, 1, mapExitCode(errors.New("the work failed")), "runtime failure")
 }
 

@@ -17,6 +17,7 @@ import (
 
 	"github.com/egladman/magus/broker"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -78,9 +79,9 @@ func TestBrokerStatusExitsNonZeroWithNoneRunning(t *testing.T) {
 	globalCfg.Broker = types.BrokerRequired
 
 	err := brokerStatus(t.Context(), nil)
-	var silent errSilent
+	var silent reportedExit
 	require.ErrorAs(t, err, &silent)
-	assert.Equal(t, 1, silent.exitCode)
+	assert.Equal(t, 1, silent.ExitCode())
 }
 
 func TestBrokerStatusPrintsItsRows(t *testing.T) {
@@ -143,8 +144,7 @@ func TestServerRowsNameEveryListener(t *testing.T) {
 func TestBrokerRefusesANegativeIdleExit(t *testing.T) {
 	privateSockDir(t)
 	err := brokerCmd(t.Context(), []string{"--idle-exit", "-1s"})
-	var usage errUsage
-	require.ErrorAs(t, err, &usage)
+	require.Equal(t, exit.Usage, exit.Code(err))
 	assert.False(t, broker.Live(t.Context(), broker.DefaultAddr()), "nothing was bound")
 }
 

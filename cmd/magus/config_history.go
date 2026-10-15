@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
+	"github.com/egladman/magus/libs/cmdline/exit"
 )
 
 func configHistoryUsage() {
@@ -43,7 +44,7 @@ func configHistoryCmd(ctx context.Context, _ string, cfg config.Config, args []s
 	case "dedup":
 		return runHistoryDedup(ctx, rest)
 	default:
-		return usagef("magus config history: unknown subcommand %q (choose: import, passed, dedup)", sub)
+		return exit.Usagef("magus config history: unknown subcommand %q (choose: import, passed, dedup)", sub)
 	}
 }
 
@@ -88,7 +89,7 @@ func runHistoryPassed(ctx context.Context, cfg config.Config, args []string) err
 	}
 	st := forecast.RunStatus(hf.Status)
 	if st != forecast.RunPassed && st != forecast.RunFailed {
-		return usagef("magus config history passed: --status must be %q or %q, got %q",
+		return exit.Usagef("magus config history passed: --status must be %q or %q, got %q",
 			forecast.RunPassed, forecast.RunFailed, hf.Status)
 	}
 	// Skipped, not failed. A workspace that turned the run log off wired this step in

@@ -34,6 +34,7 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -51,7 +52,7 @@ import (
 func jobCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 {
 		jobUsage()
-		return usagef("magus job: requires a subcommand (fork, apply, exec, exit, wait, run, rm or prune)")
+		return exit.Usagef("magus job: requires a subcommand (fork, apply, exec, exit, wait, run, rm or prune)")
 	}
 	switch args[0] {
 	case "-h", "--help", "help":
@@ -76,7 +77,7 @@ func jobCmd(ctx context.Context, root string, args []string) error {
 	case "prune":
 		return jobPrune(ctx, root, args[1:])
 	default:
-		return usagef("magus job: unknown subcommand %q (want fork, apply, exec, exit, wait, watch, run, rm or prune; `%s` lists what is in flight)", args[0], hint.LsJobs)
+		return exit.Usagef("magus job: unknown subcommand %q (want fork, apply, exec, exit, wait, watch, run, rm or prune; `%s` lists what is in flight)", args[0], hint.LsJobs)
 	}
 }
 
@@ -379,7 +380,7 @@ func lsJobs(root string, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return usagef("magus ls jobs: takes no arguments (got %q)", rest[0])
+		return exit.Usagef("magus ls jobs: takes no arguments (got %q)", rest[0])
 	}
 	ctx := context.Background()
 	store, err := openJobs(ctx, root, jobOpen{})
@@ -845,7 +846,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) != 1 {
-		return usagef("magus describe job: requires exactly one job")
+		return exit.Usagef("magus describe job: requires exactly one job")
 	}
 	root = resolveRootOrEmpty(root)
 	store, err := openJobs(ctx, root, jobOpen{DryRun: globalCfg.DryRun})
@@ -874,7 +875,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 
 	status, err := job.GradeGates(ctx, store, row.ID, jobObserver(root, graph))
 	if err != nil {
-		return usagef("magus describe job: %s", err)
+		return exit.Usagef("magus describe job: %s", err)
 	}
 	if gradesSymbols(leases, row.ID) {
 		status.StaleIndexes = types.StaleIndexProjects(graph.staleIndexes(ctx))
@@ -1134,22 +1135,22 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	switch {
 	case stdin:
 		if len(pos) > 0 {
-			return usagef("magus job fork: --stdin reads the id from the record, so %q is one id too many", pos[0])
+			return exit.Usagef("magus job fork: --stdin reads the id from the record, so %q is one id too many", pos[0])
 		}
 		if row, err = job.DecodeDeclaration(os.Stdin); err != nil {
-			return usagef("magus job fork: %s (`%s` prints the schema it must satisfy)", err, hint.JobFork.With("--schema"))
+			return exit.Usagef("magus job fork: %s (`%s` prints the schema it must satisfy)", err, hint.JobFork.With("--schema"))
 		}
 	case len(pos) != 1:
-		return usagef("magus job fork: requires exactly one job id, or --stdin with a job on it")
+		return exit.Usagef("magus job fork: requires exactly one job id, or --stdin with a job on it")
 	default:
 		if declared.checkout != "" {
 			if declared.checkout, err = filepath.Abs(declared.checkout); err != nil {
-				return usagef("magus job fork: --checkout: %s", err)
+				return exit.Usagef("magus job fork: --checkout: %s", err)
 			}
 		}
 		row = declared.row(pos[0])
 		if err := row.Validate(); err != nil {
-			return usagef("magus job fork: %s", err)
+			return exit.Usagef("magus job fork: %s", err)
 		}
 	}
 
@@ -1200,7 +1201,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	case errors.As(err, &refused):
 		return err
 	case err != nil:
-		return usagef("magus job fork: %s", err)
+		return exit.Usagef("magus job fork: %s", err)
 	}
 	var asked types.Job
 	row.Apply(&asked)
@@ -1286,7 +1287,7 @@ func workspaceStage(ctx context.Context, m *magus.Magus) types.ReleaseStage {
 func jobEnter(ctx context.Context, store *job.Store, id, rel string) error {
 	stored, err := store.Enter(ctx, id, rel)
 	if err != nil {
-		return usagef("magus job fork: %s", err)
+		return exit.Usagef("magus job fork: %s", err)
 	}
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -1391,7 +1392,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 		return jobExecCommand(ctx, root, pos, timeout, slots, command)
 	}
 	if len(pos) != 1 {
-		return usagef("magus job exec: requires exactly one job (`%s` lists them)", hint.LsJobs)
+		return exit.Usagef("magus job exec: requires exactly one job (`%s` lists them)", hint.LsJobs)
 	}
 	root = resolveRootOrEmpty(root)
 	if root == "" {
@@ -1436,14 +1437,14 @@ const jobExecGrace = 10 * time.Second
 func jobExecCommand(ctx context.Context, root string, pos []string, timeout time.Duration, slots int, command []string) error {
 	switch {
 	case len(pos) > 0:
-		return usagef("magus job exec: a command after -- runs under your own lease and takes no job; drop %q",
+		return exit.Usagef("magus job exec: a command after -- runs under your own lease and takes no job; drop %q",
 			strings.Join(pos, " "))
 	case timeout <= 0:
-		return usagef("magus job exec: a command after -- needs --timeout, a positive duration such as 10m: nothing else ends it")
+		return exit.Usagef("magus job exec: a command after -- needs --timeout, a positive duration such as 10m: nothing else ends it")
 	case len(command) == 0:
-		return usagef("magus job exec: --timeout bounds the command after --, and none follows it")
+		return exit.Usagef("magus job exec: --timeout bounds the command after --, and none follows it")
 	case slots < 1:
-		return usagef("magus job exec: --slots is %d; a running command takes at least 1", slots)
+		return exit.Usagef("magus job exec: --slots is %d; a running command takes at least 1", slots)
 	}
 	root = resolveRootOrEmpty(root)
 	spawn := trail.SpawnFromEnv()
@@ -1584,9 +1585,9 @@ func jobExit(ctx context.Context, root string, args []string) error {
 	}
 	switch {
 	case len(pos) == 0:
-		return usagef("magus job exit: name the job to end")
+		return exit.Usagef("magus job exit: name the job to end")
 	case stdin && len(pos) > 1:
-		return usagef("magus job exit: --stdin files one result onto one job, and %d are named", len(pos))
+		return exit.Usagef("magus job exit: --stdin files one result onto one job, and %d are named", len(pos))
 	}
 	root = resolveRootOrEmpty(root)
 	store, err := openJobs(ctx, root, jobOpen{})
@@ -1600,14 +1601,14 @@ func jobExit(ctx context.Context, root string, args []string) error {
 
 	result, err := job.DecodeResult(os.Stdin)
 	if err != nil {
-		return usagef("magus job exit: %s (`%s` prints the schema it must satisfy)", err, hint.JobExit.With("--schema"))
+		return exit.Usagef("magus job exit: %s (`%s` prints the schema it must satisfy)", err, hint.JobExit.With("--schema"))
 	}
 	// Exit owns the portable evidence snapshot for every declared gate. Keeping the
 	// CLI as a decoder/renderer avoids a second lifecycle that silently files only
 	// the historical primary check.
 	stored, err := job.Exit(ctx, store, pos[0], &result, storedAttempts(root))
 	if err != nil {
-		return usagef("magus job exit: %s", err)
+		return exit.Usagef("magus job exit: %s", err)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -1642,7 +1643,7 @@ func abandonJobs(ctx context.Context, store *job.Store, ids []string) error {
 	}
 	ended := endWorktrees(ctx, os.Stdout, store)
 	if len(refused) > 0 {
-		return errors.Join(usagef("magus job exit: %d of %d jobs not ended:\n  %s", len(refused), len(ids), strings.Join(refused, "\n  ")), ended)
+		return errors.Join(exit.Usagef("magus job exit: %d of %d jobs not ended:\n  %s", len(refused), len(ids), strings.Join(refused, "\n  ")), ended)
 	}
 	return ended
 }
@@ -1763,7 +1764,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		return nil
 	}
 	if len(pos) != 1 {
-		return usagef("magus job wait: requires exactly one job")
+		return exit.Usagef("magus job wait: requires exactly one job")
 	}
 	root = resolveRootOrEmpty(root)
 
@@ -1784,24 +1785,24 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	if stdin {
 		decoded, derr := job.DecodeResult(os.Stdin)
 		if derr != nil {
-			return usagef("magus job wait: %s (`%s` prints the schema it must satisfy)", derr, hint.JobWait.With("--schema"))
+			return exit.Usagef("magus job wait: %s (`%s` prints the schema it must satisfy)", derr, hint.JobWait.With("--schema"))
 		}
 		result = &decoded
 	}
 	if integration {
 		if result == nil {
-			return usagef("magus job wait: --integration grades runs in this checkout, and only a --stdin result can name them")
+			return exit.Usagef("magus job wait: --integration grades runs in this checkout, and only a --stdin result can name them")
 		}
 		return jobWaitIntegration(ctx, store, root, pos[0], *result)
 	}
 	if len(evidence) > 0 && (stdin || integration) {
-		return usagef("magus job wait: --evidence starts from the result filed with the job, so it takes neither --stdin nor --integration")
+		return exit.Usagef("magus job wait: --evidence starts from the result filed with the job, so it takes neither --stdin nor --integration")
 	}
 	status, err := job.Wait(ctx, store, pos[0], result, storedAttempts(root), jobObserver(root, newJobGraph(root, true)), evidence)
 	if err != nil {
 		// An ended job that filed nothing still owns its checkout, and its waiter is the one
 		// caller left to remove it.
-		return errors.Join(usagef("magus job wait: %s", err), endWorktrees(ctx, os.Stdout, store))
+		return errors.Join(exit.Usagef("magus job wait: %s", err), endWorktrees(ctx, os.Stdout, store))
 	}
 	if rows, err := store.List(); err == nil {
 		status.Entries = job.Entries(rows, status.Job)
@@ -1827,7 +1828,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	if err != nil || status.Verified {
 		return err
 	}
-	return errSilent{exitCode: 1}
+	return exit.Reported(exit.Failure)
 }
 
 // jobWaitIntegration is `job wait --integration`: the job's check goals graded against
@@ -1842,7 +1843,7 @@ func jobWaitIntegration(ctx context.Context, store *job.Store, root, id string, 
 	}
 	grade, err := job.WaitIntegration(ctx, store, id, result, storedAttempts(root), checkout, jobSymbolReader(root, true))
 	if err != nil {
-		return usagef("magus job wait: %s", err)
+		return exit.Usagef("magus job wait: %s", err)
 	}
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -1864,7 +1865,7 @@ func jobWaitIntegration(ctx context.Context, store *job.Store, root, id string, 
 	if err != nil || grade.Verified {
 		return err
 	}
-	return errSilent{exitCode: 1}
+	return exit.Reported(exit.Failure)
 }
 
 // jobWatch follows one job's feed in this terminal, one line per event, until interrupted.
@@ -1901,7 +1902,7 @@ func jobWatch(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) != 1 {
-		return usagef("magus job watch: requires exactly one job")
+		return exit.Usagef("magus job watch: requires exactly one job")
 	}
 	id := pos[0]
 	root = resolveRootOrEmpty(root)
@@ -2170,7 +2171,7 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) != 1 {
-		return usagef("magus job rm: requires exactly one job")
+		return exit.Usagef("magus job rm: requires exactly one job")
 	}
 	store, err := openJobs(ctx, resolveRootOrEmpty(root), jobOpen{})
 	if err != nil {
@@ -2178,7 +2179,7 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 	}
 	dropped, err := store.Delete(ctx, pos[0], force)
 	if err != nil {
-		return usagef("magus job rm: %s", err)
+		return exit.Usagef("magus job rm: %s", err)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -2232,25 +2233,25 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) > 0 {
-		return usagef("magus job apply: the records name their jobs, so %q is one argument too many", pos[0])
+		return exit.Usagef("magus job apply: the records name their jobs, so %q is one argument too many", pos[0])
 	}
 	var in io.Reader
 	switch file {
 	case "":
-		return usagef("magus job apply: name the records with -f <file>, or -f - for stdin")
+		return exit.Usagef("magus job apply: name the records with -f <file>, or -f - for stdin")
 	case "-":
 		in = os.Stdin
 	default:
 		f, err := os.Open(file)
 		if err != nil {
-			return usagef("magus job apply: %s", err)
+			return exit.Usagef("magus job apply: %s", err)
 		}
 		defer f.Close()
 		in = f
 	}
 	records, err := job.DecodeDeclarations(in)
 	if err != nil {
-		return usagef("magus job apply: %s (`%s` prints the schema each record must satisfy)", err, hint.JobFork.With("--schema"))
+		return exit.Usagef("magus job apply: %s (`%s` prints the schema each record must satisfy)", err, hint.JobFork.With("--schema"))
 	}
 	root = resolveRootOrEmpty(root)
 	// A dry run assigns no tier, so it runs no matrix.
@@ -2264,7 +2265,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	}
 	applied, err := job.Apply(ctx, store, records, globalCfg.Jobs, jobSymbolReader(root, true), checkpoint, globalCfg.DryRun)
 	if err != nil {
-		return usagef("magus job apply: %s", err)
+		return exit.Usagef("magus job apply: %s", err)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -2445,7 +2446,7 @@ func jobPrune(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) > 0 {
-		return usagef("magus job prune: takes no arguments (got %q)", pos[0])
+		return exit.Usagef("magus job prune: takes no arguments (got %q)", pos[0])
 	}
 	store, err := openJobs(ctx, resolveRootOrEmpty(root), jobOpen{})
 	if err != nil {

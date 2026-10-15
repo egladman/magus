@@ -65,7 +65,7 @@ func TestShellStdinJudgesWithOnlyTheFlagsItIsGiven(t *testing.T) {
 	var out bytes.Buffer
 	err := shellStdin(ctx, strings.NewReader("git stash"), &out, []string{"-o", "name"})
 
-	var silent errSilent
+	var silent reportedExit
 	require.ErrorAs(t, err, &silent)
 	assert.Equal(t, "deny\n", out.String())
 	assert.True(t, global.quiet, "the caller's flags are back once the call returns")
@@ -220,9 +220,9 @@ func TestHookCmd(t *testing.T) {
 		// rendered verdict on stdout is unchanged, and the error is the blocking
 		// signal a host reads. Anything OTHER than that is a real failure.
 		if err := shellStdin(ctx, strings.NewReader(stdin), &out, args); err != nil {
-			var silent errSilent
+			var silent reportedExit
 			require.ErrorAs(t, err, &silent)
-			require.Equal(t, guardDenyExitCode, silent.exitCode)
+			require.Equal(t, guardDenyExitCode, silent.ExitCode())
 		}
 		return out.String()
 	}
@@ -305,9 +305,9 @@ func TestHookCmd_UnreadableStdinFailsClosed(t *testing.T) {
 
 	var out bytes.Buffer
 	err := shellStdin(ctx, truncated(), &out, []string{"-o", "name"})
-	var silent errSilent
+	var silent reportedExit
 	require.ErrorAs(t, err, &silent)
-	assert.Equal(t, guardDenyExitCode, silent.exitCode)
+	assert.Equal(t, guardDenyExitCode, silent.ExitCode())
 	assert.Equal(t, "deny\n", out.String())
 
 	// The reason names what happened and what to do about it, so a blocked agent is
@@ -390,9 +390,9 @@ func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
 	// git stash is denied, so hookCmd reports it by exiting non-zero while still
 	// rendering the verdict in the requested format.
 	err := shellStdin(ctx, strings.NewReader("git stash"), &out, []string{"-o", "name"})
-	var silent errSilent
+	var silent reportedExit
 	require.ErrorAs(t, err, &silent)
-	require.Equal(t, guardDenyExitCode, silent.exitCode)
+	require.Equal(t, guardDenyExitCode, silent.ExitCode())
 	assert.Equal(t, "deny\n", out.String())
 
 	events, err := trail.ReadRecent(dir, 1)
@@ -791,9 +791,9 @@ func TestEnforceVerdictBlocksOnlyDeny(t *testing.T) {
 	text := output.Options{Format: outputText}
 	err := enforceVerdict(text, types.GuardJudgment{Decision: "deny", Reason: "no"})
 	require.Error(t, err, "a deny must exit non-zero or it blocks nothing")
-	var silent errSilent
+	var silent reportedExit
 	require.ErrorAs(t, err, &silent)
-	assert.Equal(t, guardDenyExitCode, silent.exitCode)
+	assert.Equal(t, guardDenyExitCode, silent.ExitCode())
 
 	require.NoError(t, enforceVerdict(text, types.GuardJudgment{Decision: "advise", Context: "fyi"}),
 		"advice teaches and must never block")
@@ -809,9 +809,9 @@ func TestEnforceVerdictBlocksOnlyDeny(t *testing.T) {
 // approval as already given. The shipped templates read stdout and exit 0 themselves.
 func TestEnforceVerdictBlocksAnAsk(t *testing.T) {
 	err := enforceVerdict(output.Options{Format: outputText}, types.GuardJudgment{Decision: "ask", Reason: "publish?"})
-	var silent errSilent
+	var silent reportedExit
 	require.ErrorAs(t, err, &silent)
-	assert.Equal(t, guardDenyExitCode, silent.exitCode)
+	assert.Equal(t, guardDenyExitCode, silent.ExitCode())
 
 	var stdout bytes.Buffer
 	require.NoError(t, writeGuardVerdict(&stdout, output.Options{Format: outputText},
@@ -907,9 +907,9 @@ func TestHookCmdShortensARepeatedDenial(t *testing.T) {
 		var out strings.Builder
 		global = globalFlags{}
 		err := shellStdin(ctx, strings.NewReader(command), &out, []string{"--session", session})
-		var silent errSilent
+		var silent reportedExit
 		require.ErrorAs(t, err, &silent)
-		require.Equal(t, guardDenyExitCode, silent.exitCode)
+		require.Equal(t, guardDenyExitCode, silent.ExitCode())
 		return out.String()
 	}
 	const see = "\nsee: https://eli.gladman.cc/magus/reference/rules/whole-tree/"
@@ -1117,7 +1117,7 @@ func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
 	envelope := fmt.Sprintf(`{"hook_event_name":"PreToolUse","cwd":%q,"tool_input":{"command":"git commit -m done"}}`, root)
 	var out bytes.Buffer
 	err = shellStdin(context.Background(), strings.NewReader(envelope), &out, []string{"-o", "name"})
-	var silent errSilent
+	var silent reportedExit
 	require.ErrorAs(t, err, &silent, "the worker lease bound in the envelope's checkout must deny the commit")
 	assert.Equal(t, "deny\n", out.String())
 
@@ -1178,9 +1178,9 @@ func TestHookCmdErrorsOnAnUndeclaredLease(t *testing.T) {
 
 	var out bytes.Buffer
 	err := shellStdin(ctx, strings.NewReader("magus run test ."), &out, []string{"--lease", "harness/typo", "-o", "json"})
-	var silent errSilent
+	var silent reportedExit
 	require.ErrorAs(t, err, &silent, "an assertion that does not resolve must not exit 0")
-	assert.Equal(t, guardDenyExitCode, silent.exitCode)
+	assert.Equal(t, guardDenyExitCode, silent.ExitCode())
 	assert.Contains(t, out.String(), `"decision": "deny"`)
 	assert.Contains(t, out.String(), "is not declared")
 	assert.Contains(t, out.String(), `"lease": "harness/typo"`, "the verdict names the row it graded against")
@@ -1404,18 +1404,18 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 
 	t.Run("--lease denies a write into another lease's paths", func(t *testing.T) {
 		got, err := run(owned, "--path", "--lease", "lease-b", "-o", "name")
-		var silent errSilent
+		var silent reportedExit
 		require.ErrorAs(t, err, &silent)
-		require.Equal(t, guardDenyExitCode, silent.exitCode)
+		require.Equal(t, guardDenyExitCode, silent.ExitCode())
 		assert.Equal(t, "deny\n", got)
 	})
 
 	t.Run("the baggage claim answers when no record does", func(t *testing.T) {
 		t.Setenv(trail.EnvBaggage, "userId=alice,"+trail.BaggageLease+"=lease-b")
 		_, err := run(owned, "--path", "-o", "name")
-		var silent errSilent
+		var silent reportedExit
 		require.ErrorAs(t, err, &silent)
-		require.Equal(t, guardDenyExitCode, silent.exitCode)
+		require.Equal(t, guardDenyExitCode, silent.ExitCode())
 	})
 
 	// Baggage a magus member does not appear in is a fleet nobody enrolled: another tenant's

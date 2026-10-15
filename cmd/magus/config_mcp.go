@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -54,7 +55,7 @@ func configMCPCmd(args []string) error {
 		// Moved to `magus config token`: this is the OPERATOR credential, not an MCP
 		// one, and leaving it here taught every reader the opposite. Same hard-redirect
 		// shape as the list -> ls rename below.
-		return usagef("magus config mcp: the operator token moved to `%s` "+
+		return exit.Usagef("magus config mcp: the operator token moved to `%s` "+
 			"(it is not an MCP credential; for an MCP client use `%s`)", hint.ConfigToken, hint.ConfigMCPConnectorCreate)
 	case "connector":
 		return configMCPConnector(subArgs)
@@ -63,7 +64,7 @@ func configMCPCmd(args []string) error {
 		return nil
 	default:
 		fs.Usage()
-		return usagef("magus config mcp: unknown subcommand %q", sub)
+		return exit.Usagef("magus config mcp: unknown subcommand %q", sub)
 	}
 }
 
@@ -104,11 +105,11 @@ func configMCPConnector(args []string) error {
 		fs.Usage()
 		return nil
 	case "list":
-		return usagef("magus config mcp connector: `list` is now `ls` "+
+		return exit.Usagef("magus config mcp connector: `list` is now `ls` "+
 			"(run `%s`)", hint.ConfigMCPConnectorLs)
 	default:
 		fs.Usage()
-		return usagef("magus config mcp connector: unknown subcommand %q", sub)
+		return exit.Usagef("magus config mcp connector: unknown subcommand %q", sub)
 	}
 }
 

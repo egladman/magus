@@ -9,6 +9,7 @@ them is a second copy that can drift.
 | ------------------- | --------------------------------------------------------------------------- |
 | `cmdline`           | `Command`, `Flag`, `Kind`, `Operand`, `Example`, `ExitCode`, `Env`, `File`, `Walk` |
 | `cmdline/generate`  | `Binders`, `Roff`, `Markdown`, `Completion`, `Lock`                         |
+| `cmdline/exit`      | `OK`, `Failure`, `Usage`, `TempFail`, `Usagef`, `Reported`, `Code`, `AlreadyReported` |
 | `cmdline/output`    | `Format`, `Parse`, `Join`, `Writer`, `Codec`, `Fields`: the `-o` value and its json, yaml, jsonl and template renderers |
 
 The root `Command` names the program: its `Flags` are the global flags and its

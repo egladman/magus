@@ -9,6 +9,7 @@ import (
 	"fmt"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/spells"
 	"io/fs"
 	"log/slog"
@@ -89,7 +90,7 @@ func describeCmd(ctx context.Context, root string, args []string) error {
 			// Removed noun: the knowledge-graph export moved to the graph home.
 			slog.ErrorContext(ctx, fmt.Sprintf("`describe knowledge` moved to `%s`", hint.GraphExport),
 				attr.Notice(""), attr.Component("magus describe"))
-			return errSilent{exitCode: 2}
+			return exit.Reported(exit.Usage)
 		}
 		slog.ErrorContext(ctx, fmt.Sprintf("unknown noun %q", noun), attr.Notice(""), attr.Component("magus describe"))
 		spellings := make([]string, 0, len(describeAlias)) // every accepted spelling, sorted for a stable suggestion
@@ -101,7 +102,7 @@ func describeCmd(ctx context.Context, root string, args []string) error {
 			interactive.Hint(ctx, fmt.Sprintf("did you mean %q?", sug))
 		}
 		describeUnknownNounUsage()
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 }
 
@@ -295,7 +296,7 @@ func unknownEntity(kind, name string, all []string) error {
 		msg += fmt.Sprintf("; did you mean %q?", sug)
 	}
 	slog.ErrorContext(context.Background(), msg, attr.Notice(""), attr.Component("magus describe "+kind))
-	return errSilent{exitCode: 2}
+	return exit.Reported(exit.Usage)
 }
 
 func describeSpells(ctx context.Context, root string, args []string) error {
@@ -664,17 +665,17 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 			// silently answering one would misread as the other having no output.
 			slog.ErrorContext(ctx, "--explain traces the rendered command and --cache keys the inputs; run them separately",
 				attr.Notice(""), attr.Component("magus describe target"))
-			return errSilent{exitCode: 2}
+			return exit.Reported(exit.Usage)
 		}
 		return describeTargetCache(ctx, root, pos, tf.Against, tf.NoDefaultCharms, tf.Inputs)
 	}
 	if tf.NoDefaultCharms {
 		slog.ErrorContext(ctx, "--no-default-charms applies only to --cache", attr.Notice(""), attr.Component("magus describe target"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	if tf.Inputs {
 		slog.ErrorContext(ctx, "--inputs applies only to --cache", attr.Notice(""), attr.Component("magus describe target"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	if len(pos) == 0 {
 		return describeTargets(ctx, root)
@@ -744,7 +745,7 @@ type targetCacheLastRun struct {
 func describeTargetCache(ctx context.Context, root string, pos []string, against string, noDefaultCharms, showInputs bool) error {
 	if len(pos) == 0 {
 		slog.ErrorContext(ctx, "requires a <target> [project] argument", attr.Notice(""), attr.Component("magus describe target --cache"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	t, err := types.ParseTarget(pos[0])
 	hintCanonicalSpelling(ctx, t)
@@ -768,13 +769,13 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 	}
 	if len(evaluated) == 0 {
 		slog.ErrorContext(ctx, fmt.Sprintf("no project matches %q", pos[0]), attr.Notice(""), attr.Component("magus describe target --cache"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	if against != "" && len(evaluated) > 1 {
 		slog.ErrorContext(ctx, fmt.Sprintf("%q resolves to %d projects; --against compares ONE step; name the project (e.g. `%s`)",
 			pos[0], len(evaluated), hint.DescribeTarget.With(pos[0], evaluated[0].Project, "--cache", "--against", against)),
 			attr.Notice(""), attr.Component("magus describe target --cache"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	// The key must match what a run computes, so merge magus.yaml default charms
@@ -798,7 +799,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		case errors.Is(err, fs.ErrNotExist):
 			slog.ErrorContext(ctx, fmt.Sprintf("ref %s resolves but has no stored key inputs (the run predates key-input persistence); re-run the target once to record them", storedRef),
 				attr.Notice(""), attr.Component("magus describe target --cache"))
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		case err != nil:
 			return fmt.Errorf("magus describe target --cache: read stored key inputs for %s: %w", storedRef, err)
 		}
@@ -861,7 +862,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 			return err
 		}
 		if mismatched {
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		}
 		return nil
 	case outputName:
@@ -873,7 +874,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 			return err
 		}
 		if mismatched {
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		}
 		return nil
 	}
@@ -930,7 +931,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 	// --against is a comparison a script should be able to gate on, so a mismatch
 	// exits non-zero (the report above is the explanation, already printed).
 	if mismatched {
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	return nil
 }
@@ -1257,7 +1258,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 func describeTarget(ctx context.Context, root string, pos []string, explain bool) error {
 	if len(pos) == 0 {
 		slog.ErrorContext(ctx, "requires a <target> [project] argument", attr.Notice(""), attr.Component("magus describe target"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	t, err := types.ParseTarget(pos[0])
@@ -1590,7 +1591,7 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 	}
 	if len(pos) == 0 {
 		slog.ErrorContext(ctx, "requires at least one <path> argument", attr.Notice(""), attr.Component("magus describe file"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	opts, err := outputOptionsOrDefault()

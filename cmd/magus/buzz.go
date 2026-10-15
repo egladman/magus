@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
@@ -191,17 +192,17 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 	}
 	isRepl := bf.E == "" && !bf.Test && !bf.Check && len(rest) == 0
 	if !isRepl && bf.NoAutoload {
-		return usagef("magus buzz: --%s applies to the REPL, not to a script, -%s, or -%s",
+		return exit.Usagef("magus buzz: --%s applies to the REPL, not to a script, -%s, or -%s",
 			flaggen.FlagBuzzNoAutoload, flaggen.FlagBuzzE, flaggen.FlagBuzzT)
 	}
 	if bf.Coverprofile != "" && !bf.Test {
-		return usagef("magus buzz: --%s requires -%s", flaggen.FlagBuzzCoverprofile, flaggen.FlagBuzzT)
+		return exit.Usagef("magus buzz: --%s requires -%s", flaggen.FlagBuzzCoverprofile, flaggen.FlagBuzzT)
 	}
 	// Refused rather than ordered, because either order is a defensible reading and
 	// picking one silently gives back an answer to a question nobody asked: -t runs the
 	// file, --check is the mode that does not.
 	if bf.Check && bf.Test {
-		return usagef("magus buzz: --%s and -%s are different modes; --%s does not run the file",
+		return exit.Usagef("magus buzz: --%s and -%s are different modes; --%s does not run the file",
 			flaggen.FlagBuzzCheck, flaggen.FlagBuzzT, flaggen.FlagBuzzCheck)
 	}
 	// A trace (-vvv) already carries a profile and prints it when the process
@@ -221,7 +222,7 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 		// name a source no reader can open at the position reported. `magus buzz -e`
 		// already surfaces a compile error on its own, since it compiles before it runs.
 		if bf.E != "" || len(rest) == 0 || (len(rest) == 1 && rest[0] == "-") {
-			return usagef("magus buzz: --%s takes one or more file paths", flaggen.FlagBuzzCheck)
+			return exit.Usagef("magus buzz: --%s takes one or more file paths", flaggen.FlagBuzzCheck)
 		}
 		ctx, cerr := buzzScriptContext(ctx, root)
 		if cerr != nil {
@@ -350,7 +351,7 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 		} else if ret.IsInt() && ret.AsInt() != 0 {
 			// `fun main() > int` is upstream's exit-status convention, and the checker
 			// permits it; discarding the value made such a script always exit 0.
-			testErr = errSilent{exitCode: int(ret.AsInt())}
+			testErr = exit.Reported(int(ret.AsInt()))
 		}
 	}
 	if cov != nil {
@@ -688,7 +689,7 @@ func cutBuzzWorkDir(args []string) (dir string, rest []string, ok bool) {
 // the directory it changes is its own.
 func buzzChdir(dir string) error {
 	if err := os.Chdir(dir); err != nil {
-		return usagef("magus buzz: -%s %s: %v", flaggen.FlagBuzzC, dir, errors.Unwrap(err))
+		return exit.Usagef("magus buzz: -%s %s: %v", flaggen.FlagBuzzC, dir, errors.Unwrap(err))
 	}
 	return nil
 }
@@ -872,9 +873,9 @@ func buzzCheck(ctx context.Context, files []string, embedded bool) error {
 		}
 	}
 	if failed > 0 {
-		// errSilent: every diagnostic is already on stderr with its own position, so a
+		// Reported: every diagnostic is already on stderr with its own position, so a
 		// trailing "N errors" wrapper would be the only line without one.
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	return nil
 }

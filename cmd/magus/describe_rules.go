@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
@@ -55,7 +56,7 @@ func describeRules(ctx context.Context, args []string) error {
 	}
 
 	if len(names) > 1 {
-		return usagef("magus describe rule: names one rule (got %d); the bare noun lists them all", len(names))
+		return exit.Usagef("magus describe rule: names one rule (got %d); the bare noun lists them all", len(names))
 	}
 	declared, loadErr := declaredBuiltins()
 	if len(names) == 0 {
@@ -74,7 +75,7 @@ func describeRules(ctx context.Context, args []string) error {
 			slog.InfoContext(ctx, fmt.Sprintf("did you mean %q?", near), attr.Notice(""))
 		}
 		slog.InfoContext(ctx, fmt.Sprintf("`%s` lists every rule this workspace enforces", hint.DescribeRules), attr.Notice(""))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	doc.Workspace = workspaceSetting(declared, doc.Name)
 	return errors.Join(emitRuleDetail(opts, doc), loadErr)

@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -55,18 +56,18 @@ func graphDiff(ctx context.Context, root string, args []string) error {
 	gotRev, gotFile := rev != "", len(pos) > 0
 	if gotRev == gotFile { // neither or both
 		slog.ErrorContext(ctx, "give exactly one of a baseline export file or --rev <revision>", attr.Notice("magus graph diff"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	if gotFile && len(pos) > 1 {
 		slog.ErrorContext(ctx, "takes a single baseline export file", attr.Notice("magus graph diff"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	if gotRev && globalScope {
 		// A --rev base is always a single-workspace domain-only build, while --global
 		// qualifies the current side's node IDs by workspace; diffing the two would
 		// report every node added/removed. Reject rather than emit a garbage diff.
 		slog.ErrorContext(ctx, "--rev cannot be combined with --global (the base is built single-workspace)", attr.Notice("magus graph diff"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	outOpts, err := output.Parse(global.output, outputMarkdown)

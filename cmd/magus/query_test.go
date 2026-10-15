@@ -192,7 +192,7 @@ func TestQueryOutputReadsTrailPayloads(t *testing.T) {
 
 	missing := "grd" + strings.Repeat("0", 16)
 	stderr := captureStderr(t, func() {
-		var silent errSilent
+		var silent reportedExit
 		require.ErrorAs(t, queryTrailPayload(ctx, "", missing, output.Options{Format: outputText}), &silent)
 	})
 	assert.Contains(t, stderr, `no stored payload for ref "`+missing+`"`)

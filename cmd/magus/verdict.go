@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -119,9 +120,9 @@ func emitNearest(ctx context.Context, id string) {
 // left nothing for a script to branch on. A found verdict never reaches here.
 func exitForVerdict(v types.KnowledgeVerdict) error {
 	if v == types.VerdictUnknown {
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
-	return errSilent{exitCode: 2}
+	return exit.Reported(exit.Usage)
 }
 
 // exitForQuery maps a search's answer to the process status: 0 when query can answer
@@ -140,7 +141,7 @@ func exitForVerdict(v types.KnowledgeVerdict) error {
 // non-zero and teach a caller to ignore the status.
 func exitForQuery(out types.KnowledgeQueryOutput) error {
 	if out.MatchCount == 0 && out.Answer.Verdict == types.VerdictUnknown {
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	return nil
 }

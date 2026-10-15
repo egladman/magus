@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -174,8 +175,8 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	}
 
 	input, readErr := shellInput(in, fset.Args())
-	if err, ok := readErr.(errUsage); ok { //nolint:errorlint // a usage error is this function's own, never wrapped
-		return err
+	if exit.Code(readErr) == exit.Usage {
+		return readErr
 	}
 	// A failed read is not an empty input, and collapsing the two cleared every
 	// command whose payload arrived truncated. Answered as a deny so the exit is 2,
@@ -284,7 +285,7 @@ func shellInput(in io.Reader, operands []string) (string, error) {
 	case 1:
 		return operands[0], nil
 	default:
-		return "", usagef("magus shell: quote the whole command as one argument: magus shell '%s'",
+		return "", exit.Usagef("magus shell: quote the whole command as one argument: magus shell '%s'",
 			strings.Join(operands, " "))
 	}
 }
@@ -658,7 +659,7 @@ func enforceVerdictTo(errOut io.Writer, opts output.Options, verdict types.Guard
 	if opts.Format != outputText {
 		fmt.Fprintln(errOut, verdict.Reason)
 	}
-	return errSilent{exitCode: guardDenyExitCode}
+	return exit.Reported(guardDenyExitCode)
 }
 
 // writeGuardVerdict renders a verdict through the standard output arm.

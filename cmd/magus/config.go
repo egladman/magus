@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/vcs"
 )
@@ -41,7 +42,7 @@ func configCmd(ctx context.Context, root string, cfg config.Config, args []strin
 	rest := fs.Args()
 	if len(rest) == 0 {
 		fs.Usage()
-		return usagef("magus config: subcommand required (want view, set, history, cache, or mcp)")
+		return exit.Usagef("magus config: subcommand required (want view, set, history, cache, or mcp)")
 	}
 	sub, subArgs := rest[0], rest[1:]
 	switch sub {
@@ -64,7 +65,7 @@ func configCmd(ctx context.Context, root string, cfg config.Config, args []strin
 		return nil
 	default:
 		fs.Usage()
-		return usagef("magus config: unknown subcommand %q (want view, set, history, cache, token, mcp, or console)", sub)
+		return exit.Usagef("magus config: unknown subcommand %q (want view, set, history, cache, token, mcp, or console)", sub)
 	}
 }
 
@@ -160,7 +161,7 @@ func runConfigSet(ctx context.Context, args []string) error {
 	}
 	if fs.NArg() != 1 {
 		fs.Usage()
-		return usagef("magus config set: requires one argument in key=<key>,value=<value> form")
+		return exit.Usagef("magus config set: requires one argument in key=<key>,value=<value> form")
 	}
 	key, value, err := parseConfigSetArg(fs.Arg(0))
 	if err != nil {

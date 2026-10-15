@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -2015,7 +2016,7 @@ func TestScopeFromArgs(t *testing.T) {
 	t.Run("a bare dash is a source, and says where it moved", func(t *testing.T) {
 		_, err := scopeFromArgs([]string{"-"})
 		require.Error(t, err)
-		assert.IsType(t, errUsage{}, err)
+		assert.Equal(t, exit.Usage, exit.Code(err))
 		assert.Contains(t, err.Error(), "--patch -")
 	})
 
@@ -2056,7 +2057,7 @@ func TestDiffSourceFromFlags(t *testing.T) {
 	t.Run("two sources are refused rather than ranked", func(t *testing.T) {
 		_, err := diffSourceFromFlags(&flaggen.DiffFlags{Rev: "main...topic", Patch: "-"})
 		require.Error(t, err)
-		assert.IsType(t, errUsage{}, err)
+		assert.Equal(t, exit.Usage, exit.Code(err))
 		assert.Contains(t, err.Error(), "only one may be given")
 	})
 }
@@ -2070,7 +2071,7 @@ func TestDiffThreadRefusesWhatAnswersForTheWholeChangeset(t *testing.T) {
 			err := diffCmd(t.Context(), t.TempDir(), []string{"--thread", "c1", other})
 
 			require.Error(t, err)
-			assert.IsType(t, errUsage{}, err)
+			assert.Equal(t, exit.Usage, exit.Code(err))
 			assert.Contains(t, err.Error(), "--thread narrows the review to one thread")
 		})
 	}

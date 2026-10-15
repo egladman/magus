@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 
@@ -125,18 +126,18 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// a value magus could not read means this job would gate less than the caller asked
 	// for while still exiting 0.
 	if shardEnvErr != nil {
-		return usagef("magus run: %v", shardEnvErr)
+		return exit.Usagef("magus run: %v", shardEnvErr)
 	}
 	if saved != nil {
 		switch {
 		case rf.Detach:
-			return usagef("magus run: a plan on --stdin runs here; it does not apply to --detach")
+			return exit.Usagef("magus run: a plan on --stdin runs here; it does not apply to --detach")
 		case rf.Graph:
-			return usagef("magus run: a plan on --stdin runs its shards; it does not apply to --graph")
+			return exit.Usagef("magus run: a plan on --stdin runs its shards; it does not apply to --graph")
 		case len(projectArgs) > 0 || parsedTarget.Path != "":
-			return usagef("magus run: the plan on --stdin names the projects; drop the project arguments")
+			return exit.Usagef("magus run: the plan on --stdin names the projects; drop the project arguments")
 		case len(skips.refs) > 0:
-			return usagef("magus run: the plan on --stdin names the projects; --skip does not apply")
+			return exit.Usagef("magus run: the plan on --stdin names the projects; --skip does not apply")
 		}
 		shards, err := selectPlanShards(*saved, targetName, rf.Shard, rf.NShards)
 		if err != nil {
@@ -161,7 +162,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		// Refused rather than ignored: --graph renders from the raw roots, so honoring
 		// the flag there would take a second subtraction, and accepting it silently is
 		// the un-gated skip this flag exists to prevent.
-		return usagef("magus run: --skip applies to the run selection, not --graph")
+		return exit.Usagef("magus run: --skip applies to the run selection, not --graph")
 	}
 	// After the usage checks, so a mistyped flag fails here rather than in a log nobody
 	// is reading; before the timeout, which the detached run applies to itself.
@@ -196,7 +197,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 
 	if rf.Step && !isInteractiveTTY() {
 		slog.ErrorContext(ctx, "--step requires an interactive terminal", attr.Notice(""), attr.Component("magus"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	if rf.Step {
@@ -414,7 +415,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		sink.EmitShardTotal(ctx, rf.Shard, rf.NShards, time.Since(startedAt))
 	}
 	if reportedRunErr(err) {
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	if err != nil {
 		return err
@@ -619,7 +620,7 @@ func runReadsPlan(args []string) bool {
 // planRefusal is an MGS3029 refusal. It exits 2, the misuse status: nothing was attempted.
 type planRefusal struct{ error }
 
-func (planRefusal) ExitCode() int { return exitUsage }
+func (planRefusal) ExitCode() int { return exit.Usage }
 
 func (e planRefusal) Unwrap() error { return e.error }
 

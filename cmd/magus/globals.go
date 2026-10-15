@@ -7,6 +7,7 @@ import (
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 )
 
@@ -135,7 +136,7 @@ func checkOutputSupported(name string, fs *flag.FlagSet) error {
 	if !flagWasSet(fs, "output") && !flagWasSet(fs, "o") {
 		return nil
 	}
-	return usagef("magus %s: -o is not supported by this command", name)
+	return exit.Usagef("magus %s: -o is not supported by this command", name)
 }
 
 // reorderFlagsFirst moves recognized flags (and their values) ahead of positional

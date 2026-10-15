@@ -849,7 +849,7 @@ func TestDescribeMachineHoldersBoundsTheList(t *testing.T) {
 // sees the concrete error and could go on matching the diagnostic code; a run the
 // server executes for an adopted client cannot, because the type does not survive the
 // socket. Without the method the refusal exits 75 alone and 1 under a server, which is
-// the exact split proc.ExitCode exists to close.
+// the exact split exit.Code exists to close.
 func TestMachineRefusalStatesItsExitCode(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
 	g, _ := testGate(t, b)

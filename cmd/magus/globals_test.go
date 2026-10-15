@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -407,7 +408,7 @@ func TestOutputRefusedByCommandsThatRenderNothing(t *testing.T) {
 	err := checkOutputSupported("buzz", parsed("-o", "json"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "magus buzz: -o is not supported by this command")
-	assert.Equal(t, exitUsage, mapExitCode(err), "a flag that could never act is misuse, not a failed run")
+	assert.Equal(t, exit.Usage, mapExitCode(err), "a flag that could never act is misuse, not a failed run")
 
 	require.NoError(t, checkOutputSupported("ls", parsed("-o", "json")), "a verb that consults -o is untouched")
 	require.NoError(t, checkOutputSupported("clean", parsed("-o", "json")), "clean returns a report")

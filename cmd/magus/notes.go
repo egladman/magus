@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	store "github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/review"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -54,9 +55,9 @@ func notesCmd(ctx context.Context, root string, args []string) error {
 		// Named rather than left to the generic unknown-subcommand error, because the
 		// reason it is absent is the whole point of the store and is worth stating at the
 		// moment someone reaches for it.
-		return usagef("magus notes: there is no `put`; a note is written by a person, not a program (run `%s`)", hint.NotesEdit.With("<name>"))
+		return exit.Usagef("magus notes: there is no `put`; a note is written by a person, not a program (run `%s`)", hint.NotesEdit.With("<name>"))
 	default:
-		return usagef("magus notes: unknown subcommand %q (want ls, get, edit, verify, or capture)", args[0])
+		return exit.Usagef("magus notes: unknown subcommand %q (want ls, get, edit, verify, or capture)", args[0])
 	}
 }
 
@@ -834,7 +835,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) > 0 {
-		return usagef("magus notes capture: unexpected argument %q; the thread to capture is the review under way", pos[0])
+		return exit.Usagef("magus notes capture: unexpected argument %q; the thread to capture is the review under way", pos[0])
 	}
 
 	m, err := loadMagus(ctx, root)

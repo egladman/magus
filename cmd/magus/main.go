@@ -62,6 +62,7 @@ import (
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/types"
 )
@@ -721,7 +722,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		if err := applyPreSubDisplayFlags(args, peekedSubArgs, peekedSub); err != nil {
 			// The display flags are what failed to parse, so no display was installed.
 			fmt.Fprintln(os.Stderr, err)
-			return startupResult{cleanup: cleanup}, exitUsage
+			return startupResult{cleanup: cleanup}, exit.Usage
 		}
 		return startupResult{
 			rootCtx: rootCtx,
@@ -913,7 +914,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	cfg = globalCfg
 	stopFlags()
 
-	// exitUsage, not 0. No subcommand is the same category as an unknown one (the
+	// exit.Usage, not 0. No subcommand is the same category as an unknown one (the
 	// invocation was wrong and nothing was attempted), and that path already exits 2
 	// (see dispatchSub's default). Returning 0 made bare `magus` a command that
 	// reports success having done nothing, so `magus $CMD` with an empty CMD is a
@@ -921,14 +922,14 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	//
 	// An EXPLICIT `magus help` / `-h` / `--help` still exits 0: there the usage text
 	// is what was asked for, so printing it IS the work succeeding. That distinction
-	// is the whole of exitUsage's contract in helpers.go (0 did what was asked, 2 was
+	// is the whole of exit.Usage's contract in helpers.go (0 did what was asked, 2 was
 	// asked wrong), and it is why this cannot simply key on "did we print usage".
 	if len(rest) == 0 {
 		if helpRequested {
 			return startupResult{cleanup: cleanup}, 0
 		}
 		usage()
-		return startupResult{cleanup: cleanup}, exitUsage
+		return startupResult{cleanup: cleanup}, exit.Usage
 	}
 
 	rootCtx = withTrace(rootCtx, trace)
@@ -1118,7 +1119,7 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 			interactive.Hint(ctx, fmt.Sprintf("did you mean %q?", suggestion))
 		}
 		unknownSubcommandUsage()
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 }
 
@@ -1432,7 +1433,7 @@ func applyPreSubDisplayFlags(args, subArgs []string, sub string) error {
 	fs.StringVar(&discardConfig, "config", "", "")
 	fs.StringVar(&discardConfig, "c", "", "")
 	if err := fs.Parse(pre); err != nil {
-		return usagef("magus: %v", err)
+		return exit.Usagef("magus: %v", err)
 	}
 	return nil
 }
@@ -1550,48 +1551,16 @@ func rationaleArgs(err error) []any {
 	return nil
 }
 
-// mapExitCode maps a dispatch error to an exit code; errSilent means the caller already printed.
+// mapExitCode maps a dispatch error to an exit code and logs it unless it was already reported.
 func mapExitCode(err error) int {
-	if err == nil {
-		return 0
-	}
-	if errors.Is(err, flag.ErrHelp) {
-		return 0
-	}
-	var silent errSilent
-	if errors.As(err, &silent) {
-		return silent.exitCode
-	}
-	// A misuse of the command line exits 2, not 1: the work was never attempted.
-	var usage errUsage
-	if errors.As(err, &usage) {
-		slog.Error(err.Error(), rationaleArgs(err)...) //nolint:errmsg // the final error line has no verdict beyond the error itself; an attr.Error with an empty message would print a different line and log an empty message to non-display handlers
-		return exitUsage
-	}
-	// os.exit(code) from a magusfile: honor the requested code without an extra
-	// generic error line; the magusfile already logged whatever it wanted to.
-	//
-	// A diagnostic-carrying ExitError stays quiet HERE and logs at the site that
-	// raised it, which is the rule the stall watchdog already follows (watchdog.go)
-	// and the reason it gives: a reader should learn why the run stopped at the moment
-	// it stops, not only in the final error. Logging again here printed MGS3012 twice
-	// and promoted MGS3014, a deliberate non-failure, from Warn to Error.
+	code := exit.Code(err)
+	// os.exit(code) from a magusfile logs nothing more: the magusfile already logged
+	// whatever it wanted to, and a diagnostic-carrying ExitError logs at the site that
+	// raised it, as the stall watchdog does (watchdog.go). Logging again here printed
+	// MGS3012 twice and promoted MGS3014, a deliberate non-failure, from Warn to Error.
 	var exitErr types.ExitError
-	if errors.As(err, &exitErr) {
-		return exitErr.Code
+	if code != exit.OK && !exit.AlreadyReported(err) && !errors.As(err, &exitErr) {
+		slog.Error(err.Error(), rationaleArgs(err)...) //nolint:errmsg // the final error line has no verdict beyond the error itself; an attr.Error with an empty message would print a different line and log an empty message to non-display handlers
 	}
-	slog.Error(err.Error(), rationaleArgs(err)...) //nolint:errmsg // same final error line as the usage branch above
-	// A failure that names its own status keeps it, the same question internal/proc's
-	// server asks of an adopted run. Two say 75 (EX_TEMPFAIL), so a caller can retry a
-	// busy machine and not a broken build: a contended no-wait workspace lock, and a
-	// step the machine's build budget could not seat (MGS3009).
-	//
-	// Checked after the branches above and not before them: a run where real targets
-	// ALSO failed reaches errSilent first and stays 1, which is the more actionable
-	// verdict: a broken build does not become a scheduling problem because a peer
-	// happened to be busy too.
-	if code, ok := proc.ExitCode(err); ok {
-		return code
-	}
-	return 1
+	return code
 }

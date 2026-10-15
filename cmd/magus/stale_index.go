@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -66,14 +67,14 @@ import (
 // WORK could not be completed, because a prerequisite artifact is out of date.
 func reportIndexStaleness(w io.Writer, ans types.KnowledgeAnswer) error {
 	if ans.Reason == types.ReasonIndexStale {
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	notice := staleIndexNotice(ans)
 	if notice == "" {
 		return nil
 	}
 	fmt.Fprint(w, notice)
-	return errSilent{exitCode: 1}
+	return exit.Reported(exit.Failure)
 }
 
 // staleIndexNotice renders the line, or "" when no index under ans is stale. Split from the

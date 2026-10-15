@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/gcpolicy"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
@@ -131,40 +132,6 @@ func TestReportedRunErr(t *testing.T) {
 		"a step failure the cache logged is not printed again")
 }
 
-func TestErrSilentIsAlreadyReported(t *testing.T) {
-	var e error = errSilent{exitCode: 2}
-	assert.Equal(t, "silent exit", e.Error())
-
-	// AlreadyReported is what a forwarded failure needs: across a socket the receiving
-	// process cannot see the concrete type, and "silent exit" is a sentence about magus's
-	// internals rather than about the failure.
-	reported, ok := e.(interface{ AlreadyReported() bool })
-	require.True(t, ok)
-	assert.True(t, reported.AlreadyReported())
-}
-
-// TestCLIErrorsCarryTheirExitCode pins the method the SERVER reads. mapExitCode sees the
-// concrete types and could go on reading the fields; a forwarded run cannot, so without
-// the method `magus run bogus-target` exited 2 alone and 1 under a server.
-func TestCLIErrorsCarryTheirExitCode(t *testing.T) {
-	for _, tc := range []struct {
-		err  error
-		want int
-	}{
-		{errSilent{exitCode: 2}, 2},
-		{errSilent{exitCode: 1}, 1},
-		{usagef("no such target"), exitUsage},
-		{fmt.Errorf("wrapped: %w", errSilent{exitCode: 2}), 2},
-	} {
-		code, ok := proc.ExitCode(tc.err)
-		require.True(t, ok, "%v must state its exit code", tc.err)
-		assert.Equal(t, tc.want, code)
-	}
-
-	_, ok := proc.ExitCode(errors.New("the work failed"))
-	assert.False(t, ok, "an ordinary failure names no code and stays the server's default 1")
-}
-
 // TestMachineBusyRidesTheExitCodeSeam pins that a machine-budget refusal needs no
 // branch of its own in mapExitCode. The local path and the server now ask the error the
 // same question, so the refusal must answer it rather than be recognised by type or by
@@ -174,17 +141,15 @@ func TestMachineBusyRidesTheExitCodeSeam(t *testing.T) {
 	// the same two properties the real one does (machine_test.go pins that it does).
 	busy := machineRefusal{types.DiagnosticErrorf(types.MachineBudgetExhausted, "the machine is full")}
 
-	code, ok := proc.ExitCode(busy)
-	require.True(t, ok, "the server must be able to read the code off a forwarded refusal")
-	assert.Equal(t, cache.ExitCodeMachineBusy, code)
+	assert.Equal(t, cache.ExitCodeMachineBusy, exit.Code(busy), "the server reads the code off a forwarded refusal")
 	assert.Equal(t, cache.ExitCodeMachineBusy, mapExitCode(busy), "and the local path must agree")
 	assert.Equal(t, cache.ExitCodeMachineBusy, mapExitCode(fmt.Errorf("run: %w", busy)),
 		"through every layer between the step and main")
 
 	// A run where real targets ALSO failed is a broken build, not a scheduling problem:
-	// errSilent is matched first and keeps 1, so a peer being busy cannot rewrite the
-	// verdict on work that actually ran.
-	assert.Equal(t, 1, mapExitCode(errors.Join(errSilent{exitCode: 1}, busy)))
+	// a Reported failure is matched first and keeps 1, so a peer being busy cannot
+	// rewrite the verdict on work that actually ran.
+	assert.Equal(t, 1, mapExitCode(errors.Join(exit.Reported(exit.Failure), busy)))
 }
 
 type machineRefusal struct{ error }
@@ -222,9 +187,15 @@ func (lockRefusal) ExitCode() int { return 75 }
 func (e machineRefusal) Unwrap() error { return e.error }
 
 func TestUsagefCarriesTheMisuseMessage(t *testing.T) {
-	err := usagef("magus diff: %d is too many", 3)
+	err := exit.Usagef("magus diff: %d is too many", 3)
 	assert.EqualError(t, err, "magus diff: 3 is too many")
-	assert.IsType(t, errUsage{}, err)
+	assert.Equal(t, exit.Usage, mapExitCode(err))
+}
+
+// reportedExit is what errors.As finds in an exit.Reported failure.
+type reportedExit interface {
+	AlreadyReported() bool
+	ExitCode() int
 }
 
 func TestFlagIsBool(t *testing.T) {
@@ -379,14 +350,14 @@ func TestUnknownEntitySuggestsAndExitsTwo(t *testing.T) {
 		err = unknownEntity("spell", "gol", []string{"go", "typescript"})
 	})
 
-	assert.Equal(t, errSilent{exitCode: 2}, err)
+	assert.Equal(t, exit.Reported(exit.Usage), err)
 	assert.Contains(t, out, `magus describe spell: unknown spell "gol"`)
 	assert.Contains(t, out, `did you mean "go"?`)
 
 	out = noticesFrom(t, func() {
 		err = unknownEntity("spell", "zzzzzzzz", []string{"go"})
 	})
-	assert.Equal(t, errSilent{exitCode: 2}, err)
+	assert.Equal(t, exit.Reported(exit.Usage), err)
 	assert.NotContains(t, out, "did you mean")
 }
 

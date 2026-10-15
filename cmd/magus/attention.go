@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -71,7 +72,7 @@ func attentionList(root string, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return usagef("magus session attention: takes no arguments (got %q); close one request with `"+hint.SessionDispose.With("<id>")+"`", rest[0])
+		return exit.Usagef("magus session attention: takes no arguments (got %q); close one request with `"+hint.SessionDispose.With("<id>")+"`", rest[0])
 	}
 
 	dir, err := sessions.Dir(root)
@@ -86,12 +87,12 @@ func attentionList(root string, args []string) error {
 
 	// -q answers the question instead of printing it, before the output format is even
 	// resolved: the caller asked for no output, so the format it would have used cannot
-	// matter. errSilent carries the status without a message, because an empty queue is
+	// matter. exit.Reported carries the status without a message, because an empty queue is
 	// the GOOD state and printing an error for it would train people to ignore the
 	// command that reports a real block.
 	if global.quiet {
 		if len(requests) == 0 {
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		}
 		return nil
 	}
@@ -196,7 +197,7 @@ func attentionDispose(root string, args []string) error {
 		return err
 	}
 	if len(rest) != 1 {
-		return usagef("magus session dispose: needs exactly one request id (got %d); run `"+hint.SessionAttention.String()+"` to list the open ids", len(rest))
+		return exit.Usagef("magus session dispose: needs exactly one request id (got %d); run `"+hint.SessionAttention.String()+"` to list the open ids", len(rest))
 	}
 
 	// Disposing closes a request that exists to reach a PERSON (docs/doctrine.md,
@@ -207,7 +208,7 @@ func attentionDispose(root string, args []string) error {
 	if !isInteractiveTTY() {
 		slog.ErrorContext(context.Background(), "session dispose records that a person closed this request, so it needs an interactive terminal",
 			attr.Notice(""), attr.Component("magus"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	dir, err := sessions.Dir(root)

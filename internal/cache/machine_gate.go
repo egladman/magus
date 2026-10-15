@@ -244,8 +244,8 @@ func workingDir() string {
 	return dir
 }
 
-// The exit status is per refusal (types.ExitError, and see proc.ExitCode for the server
-// side). EX_TEMPFAIL says "try again"; a declaration that cannot fit and a nested magus
+// The exit status is per refusal (types.ExitError, and see libs/cmdline/exit.Code for the
+// server side). EX_TEMPFAIL says "try again"; a declaration that cannot fit and a nested magus
 // that lost its ancestry both answer the same way forever, so a wrapper retrying on 75
 // would loop on them.
 

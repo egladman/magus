@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -37,9 +38,9 @@ func TestRefsSymbolRefusesANameSeveralDefinitionsCarry(t *testing.T) {
 	var stderr bytes.Buffer
 	_, err := refsSymbol(&stderr, g, "Classify")
 
-	var silent errSilent
+	var silent reportedExit
 	require.ErrorAs(t, err, &silent)
-	assert.Equal(t, exitUsage, silent.exitCode)
+	assert.Equal(t, exit.Usage, silent.ExitCode())
 	assert.Equal(t, `magus refs: "Classify" names 2 symbols defined in this workspace; ask for one by id:
   `+hint.Refs.With("'"+hintID+"'")+`
   `+hint.Refs.With("'"+queueID+"'")+"\n", stderr.String())
@@ -221,13 +222,13 @@ func TestEmitDefinitionsChangedExitsOne(t *testing.T) {
 	got := captureStdout(t, func() {
 		err = emitDefinitions(context.Background(), os.Stdout, output.Options{Format: outputText}, out)
 	})
-	assert.Equal(t, errSilent{exitCode: 1}, err)
+	assert.Equal(t, exit.Reported(exit.Failure), err)
 	assert.Contains(t, got, "a.go:3-5  changed  (edited since indexing; refresh with `")
 
 	got = captureStdout(t, func() {
 		err = emitDefinitions(context.Background(), os.Stdout, output.Options{Format: outputName}, out)
 	})
-	assert.Equal(t, errSilent{exitCode: 1}, err)
+	assert.Equal(t, exit.Reported(exit.Failure), err)
 	assert.Equal(t, "b.go:1-2\n", got)
 }
 
@@ -249,7 +250,7 @@ func TestEmitDefinitionsStaleIndex(t *testing.T) {
 	captureStdout(t, func() {
 		err = emitDefinitions(context.Background(), os.Stdout, output.Options{Format: outputText}, out)
 	})
-	assert.Equal(t, errSilent{exitCode: 1}, err)
+	assert.Equal(t, exit.Reported(exit.Failure), err)
 }
 
 // TestRefsTextPrintsMatchingLines pins the output shape: path:line:text, the one
@@ -282,7 +283,7 @@ func TestRefsTextNoMatchExitsOneAndPrintsNothing(t *testing.T) {
 	out := captureStdout(t, func() {
 		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE_NOT_PRESENT", nil, false, 0, nil)
 	})
-	assert.Equal(t, errSilent{exitCode: 1}, err)
+	assert.Equal(t, exit.Reported(exit.Failure), err)
 	assert.Empty(t, out)
 }
 
@@ -298,7 +299,7 @@ func TestRefsTextUnreadableRootExitsTwo(t *testing.T) {
 	errOut := captureStderr(t, func() {
 		err = refsTextCmd(context.Background(), missing, "NEEDLE", nil, false, 0, nil)
 	})
-	assert.Equal(t, errSilent{exitCode: 2}, err)
+	assert.Equal(t, exit.Reported(exit.Usage), err)
 	assert.Contains(t, errOut, missing)
 }
 
@@ -348,7 +349,7 @@ func TestRefsTextScopeOutsideWorkspaceExitsTwo(t *testing.T) {
 	errOut := captureStderr(t, func() {
 		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", []string{filepath.Join(w.Root(), "..")}, false, 0, nil)
 	})
-	assert.Equal(t, errSilent{exitCode: 2}, err)
+	assert.Equal(t, exit.Reported(exit.Usage), err)
 	assert.Contains(t, errOut, "outside the workspace")
 }
 
@@ -401,7 +402,7 @@ func TestRefsTextExitsTwoOnScanError(t *testing.T) {
 	errOut := captureStderr(t, func() {
 		err = refsTextCmd(context.Background(), w.Root(), "", nil, false, 0, nil)
 	})
-	assert.Equal(t, errSilent{exitCode: 2}, err)
+	assert.Equal(t, exit.Reported(exit.Usage), err)
 	assert.NotEmpty(t, errOut)
 }
 

@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
@@ -42,7 +43,7 @@ func notifyCmd(ctx context.Context, root string, in io.Reader, out io.Writer, ar
 		return err
 	}
 	if len(fset.Args()) != 0 {
-		return usagef("magus session notify: takes no positional arguments (read the event from stdin)")
+		return exit.Usagef("magus session notify: takes no positional arguments (read the event from stdin)")
 	}
 	opts, err := output.Parse(global.output)
 	if err != nil {

@@ -36,6 +36,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -66,11 +67,11 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	// 5 and 0.8 on every run, so a flag overrides the configured gate even when nobody chose it.
 	gates.MinCohort = rf.ConformanceMinCohort
 	if gates.MinCohort < 0 || gates.MinShare < 0 || gates.MinShare > 1 {
-		return usagef("magus diff: --conformance-min-cohort must be at least 1 and --conformance-min-share above 0 and at most 1")
+		return exit.Usagef("magus diff: --conformance-min-cohort must be at least 1 and --conformance-min-share above 0 and at most 1")
 	}
 	rf.Thread = strings.TrimSpace(rf.Thread)
 	if rf.Thread != "" && (rf.Ack || rf.Unread || rf.Impact) {
-		return usagef("magus diff: --thread narrows the review to one thread, so it cannot be combined with --ack, --unread or --impact, which answer for the whole changeset")
+		return exit.Usagef("magus diff: --thread narrows the review to one thread, so it cannot be combined with --ack, --unread or --impact, which answer for the whole changeset")
 	}
 	// EVERY positional is a path that narrows the changeset, whichever source it came from.
 	// The source itself is always a flag (--rev, --patch, or the working tree by default),
@@ -95,14 +96,14 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		// re-emitting a filtered patch is a different feature from reading one. Refused rather
 		// than ignored: silently reading the whole patch after being asked for part of it is
 		// how a reader concludes they have seen a file they have not.
-		return usagef("magus diff: %s is already the changeset somebody chose, so it cannot be narrowed to %s. "+
+		return exit.Usagef("magus diff: %s is already the changeset somebody chose, so it cannot be narrowed to %s. "+
 			"Narrow it before handing it over, or read the working tree or a range instead",
 			src.label, strings.Join(scopePaths, ", "))
 	}
 	if rf.Watch && src.kind != inputWorkingTree {
 		// stdin is consumed once and a patch file is a snapshot someone handed us; re-reading
 		// either on every tree change would re-render identical output forever.
-		return usagef("magus diff: --watch reads the working tree, so it cannot be combined with %s", src.label)
+		return exit.Usagef("magus diff: --watch reads the working tree, so it cannot be combined with %s", src.label)
 	}
 	if rf.Ack && !src.addressable() {
 		// A receipt fingerprints content magus can name, and a patch describes files that may
@@ -111,10 +112,10 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		//
 		// A revision range IS nameable, so it is admitted: its receipts fingerprint the file at
 		// that revision, never the reader's own checkout.
-		return usagef("magus diff: --ack fingerprints content magus can address, so it cannot be combined with %s", src.label)
+		return exit.Usagef("magus diff: --ack fingerprints content magus can address, so it cannot be combined with %s", src.label)
 	}
 	if rf.Ack && rf.Watch {
-		return usagef("magus diff: --ack records once and returns, so it cannot be combined with a live view")
+		return exit.Usagef("magus diff: --ack records once and returns, so it cannot be combined with a live view")
 	}
 	// --reason is optional, deliberately. Requiring a sentence the way spells.allow_shadow does
 	// would not hold here: an allow_shadow entry is written a handful of times in a repository's
@@ -131,7 +132,7 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		// the documented taxonomy separates from a 1 (the changeset could not be read).
 		slog.ErrorContext(ctx, "diff --ack records that a person read this, so it needs an interactive terminal",
 			attr.Notice(""), attr.Component("magus"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -151,7 +152,7 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	if tui && (gates.MinCohort != 0 || gates.MinShare != 0) {
 		// The viewer can join a server's review, which ran with the server's gates, so the
 		// flags could not be honored there.
-		return usagef("magus diff: --conformance-min-cohort and --conformance-min-share apply to the printed report; add --no-tui")
+		return exit.Usagef("magus diff: --conformance-min-cohort and --conformance-min-share apply to the printed report; add --no-tui")
 	}
 	render := func() error { return renderDiff(ctx, m, src, opts, rf, gates, root, tui, rf.Impact, scopePaths) }
 	if rf.Watch {
@@ -200,14 +201,14 @@ func revRangeFromFlag(rev string) (diffInput, error) {
 	base, head, ok := strings.Cut(rev, "...")
 	if !ok {
 		if b, _, two := strings.Cut(rev, ".."); two {
-			return diffInput{}, usagef("magus diff: --rev takes base...head with three dots, got %q. "+
+			return diffInput{}, exit.Usagef("magus diff: --rev takes base...head with three dots, got %q. "+
 				"Three dots is what head added since it diverged; two dots would also count everything "+
 				"%s gained meanwhile, which the branch author did not write", rev, b)
 		}
-		return diffInput{}, usagef("magus diff: --rev takes a range written base...head, got %q", rev)
+		return diffInput{}, exit.Usagef("magus diff: --rev takes a range written base...head, got %q", rev)
 	}
 	if base == "" || head == "" {
-		return diffInput{}, usagef("magus diff: --rev needs both ends, got %q. "+
+		return diffInput{}, exit.Usagef("magus diff: --rev needs both ends, got %q. "+
 			"magus does not fill in a default: which branch you are comparing against is the "+
 			"question, not a detail", rev)
 	}
@@ -232,11 +233,11 @@ func scopeFromArgs(rest []string) ([]string, error) {
 	out := make([]string, 0, len(rest))
 	for _, a := range rest {
 		if a == "-" {
-			return nil, usagef("magus diff: `-` reads a patch on stdin, so it is a source rather than a path. " +
+			return nil, exit.Usagef("magus diff: `-` reads a patch on stdin, so it is a source rather than a path. " +
 				"Write it as `--patch -`, and keep the positionals for the paths you want to narrow to")
 		}
 		if strings.HasPrefix(a, "-") {
-			return nil, usagef("magus diff: %q looks like a flag magus does not have. "+
+			return nil, exit.Usagef("magus diff: %q looks like a flag magus does not have. "+
 				"Positionals are paths that narrow the changeset; the changeset itself is named by "+
 				"--rev, --patch, or the working tree by default", a)
 		}
@@ -255,7 +256,7 @@ func diffSourceFromFlags(rf *flaggen.DiffFlags) (diffInput, error) {
 	patch, rev := strings.TrimSpace(rf.Patch), strings.TrimSpace(rf.Rev)
 	switch {
 	case patch != "" && rev != "":
-		return diffInput{}, usagef("magus diff: --patch and --rev each name a changeset, so only one may be given")
+		return diffInput{}, exit.Usagef("magus diff: --patch and --rev each name a changeset, so only one may be given")
 	case rev != "":
 		return revRangeFromFlag(rev)
 	case patch == "-":
@@ -286,7 +287,7 @@ func gitExternalDiffRefusal(rest []string) error {
 	if len(rest) != 7 || os.Getenv("GIT_DIFF_PATH_TOTAL") == "" {
 		return nil
 	}
-	return usagef("magus diff: git invoked this as an external diff, one file at a time (%q). "+
+	return exit.Usagef("magus diff: git invoked this as an external diff, one file at a time (%q). "+
 		"magus reports on a whole changeset, so it cannot answer per file. "+
 		"Use git's pager instead, which hands over the entire diff at once: "+
 		"`git config pager.diff '"+hint.Diff.With("--patch", "-")+"'` - then plain `git diff` renders through magus, "+
@@ -3143,7 +3144,7 @@ func scopeAck(rev types.Diff, paths []string) (types.Diff, error) {
 	for _, p := range paths {
 		clean := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(p)), "./")
 		if !inChange[clean] {
-			return types.Diff{}, usagef("magus diff --ack: %q is not a changed file in this changeset; `"+hint.Diff.With("-o", "name")+"` lists them", p)
+			return types.Diff{}, exit.Usagef("magus diff --ack: %q is not a changed file in this changeset; `"+hint.Diff.With("-o", "name")+"` lists them", p)
 		}
 		want[clean] = true
 	}

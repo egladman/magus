@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -585,7 +586,7 @@ func TestDecodeSavedPlan(t *testing.T) {
 			_, err := decodeSavedPlan([]byte(tt.input))
 			require.ErrorIs(t, err, types.SavedPlanRefused)
 			assert.ErrorContains(t, err, tt.want)
-			assert.Equal(t, exitUsage, mapExitCode(err))
+			assert.Equal(t, exit.Usage, mapExitCode(err))
 		})
 	}
 }

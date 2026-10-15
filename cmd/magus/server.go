@@ -7,6 +7,7 @@ import (
 	"fmt"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -36,7 +37,7 @@ import (
 func serverCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 {
 		serverUsage()
-		return usagef("magus server: target required (want start, stop, status, or reload)")
+		return exit.Usagef("magus server: target required (want start, stop, status, or reload)")
 	}
 	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		serverUsage()
@@ -67,7 +68,7 @@ func serverCmd(ctx context.Context, root string, args []string) error {
 	case job.NameCheckDrift:
 		return serverCheckDrift(ctx, root, rest)
 	default:
-		return usagef("magus server: unknown target %q (want start, stop, status, or reload)", sub)
+		return exit.Usagef("magus server: unknown target %q (want start, stop, status, or reload)", sub)
 	}
 }
 
@@ -120,7 +121,7 @@ func serverStatus(ctx context.Context, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return usagef("magus server status: takes no arguments (got %q)", rest[0])
+		return exit.Usagef("magus server status: takes no arguments (got %q)", rest[0])
 	}
 
 	report := buildStatusSnapshot(ctx, resolveServerAddr(socket), false)
@@ -133,7 +134,7 @@ func serverStatus(ctx context.Context, args []string) error {
 			return err
 		}
 		if report.Server == nil {
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		}
 		return nil
 	}
@@ -145,7 +146,7 @@ func serverStatus(ctx context.Context, args []string) error {
 		slog.ErrorContext(ctx, "no server is running", attr.Notice(""),
 			attr.Why(strings.TrimSpace(report.PoolError+"\n"+fmt.Sprintf("`%s` still reports this workspace and this host without a server.", hint.Status))),
 			attr.Next(hint.ServerStart.String()))
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	printServerRows(os.Stdout, report.Server, time.Now())
 	printPoolSummary(os.Stdout, report.Pool, "pool")
@@ -633,7 +634,7 @@ func serverStop(ctx context.Context, args []string) error {
 	}
 	if qerr != nil {
 		slog.ErrorContext(ctx, "no server is running at "+addr, attr.Notice(""), attr.Component("magus"))
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	if err := proc.Shutdown(ctx, addr); err != nil {
 		return fmt.Errorf("server stop: %w", err)

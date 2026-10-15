@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -78,9 +79,9 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 		// Named here rather than falling through to the generic unknown-subcommand
 		// message because the caller is usually installed host wiring, not a person,
 		// and "unknown subcommand" does not tell whoever reads that log what to re-run.
-		return usagef("magus session hook is now `%s`, which takes the same flags and stdin. Re-run `%s` to rewrite host wiring that still calls the old path", hint.Shell, hint.AgentHarnessInstall)
+		return exit.Usagef("magus session hook is now `%s`, which takes the same flags and stdin. Re-run `%s` to rewrite host wiring that still calls the old path", hint.Shell, hint.AgentHarnessInstall)
 	default:
-		return usagef("magus session: unknown subcommand %q (want ls, show, hints, load, checkpoint, attention, dispose, or notify); the bare command lists recent sessions, bounded by --limit and --since. Taking a job is `%s`", verb, hint.JobExec)
+		return exit.Usagef("magus session: unknown subcommand %q (want ls, show, hints, load, checkpoint, attention, dispose, or notify); the bare command lists recent sessions, bounded by --limit and --since. Taking a job is `%s`", verb, hint.JobExec)
 	}
 }
 
@@ -128,13 +129,13 @@ func invocationList(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return usagef("magus session: takes no arguments (got %q); use --limit to bound the listing and --since to bound its age", rest[0])
+		return exit.Usagef("magus session: takes no arguments (got %q); use --limit to bound the listing and --since to bound its age", rest[0])
 	}
 	if brief {
 		return sessionBriefCmd(ctx, root)
 	}
 	if limit < 0 {
-		return usagef("magus session: --limit must be zero or more (got %d); 0 lists every invocation", limit)
+		return exit.Usagef("magus session: --limit must be zero or more (got %d); 0 lists every invocation", limit)
 	}
 	cutoff, err := parseSince(since)
 	if err != nil {
@@ -436,7 +437,7 @@ func parseSince(raw string) (time.Time, error) {
 	if ts, err := time.Parse(time.RFC3339, raw); err == nil {
 		return ts, nil
 	}
-	return time.Time{}, usagef("magus session: --since %q is neither a duration nor an RFC3339 timestamp; write a duration back from now (2h, 45m, 168h) or an instant (2006-01-02T15:04:05Z)", raw)
+	return time.Time{}, exit.Usagef("magus session: --since %q is neither a duration nor an RFC3339 timestamp; write a duration back from now (2h, 45m, 168h) or an instant (2006-01-02T15:04:05Z)", raw)
 }
 
 // invocationsInCheckout keeps the invocations that ran in the checkout at root. The store
@@ -591,7 +592,7 @@ func sessionLoad(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return usagef("magus session load: takes no arguments (got %q); the stream arrives on stdin, or name a file with --file", rest[0])
+		return exit.Usagef("magus session load: takes no arguments (got %q); the stream arrives on stdin, or name a file with --file", rest[0])
 	}
 	root = resolveRootOrEmpty(root)
 	if root == "" {
@@ -932,7 +933,7 @@ func sessionShow(root string, args []string) error {
 		return err
 	}
 	if len(rest) != 1 {
-		return usagef("magus session show: needs exactly one session id (got %d); run `"+hint.Session.String()+"` to list them", len(rest))
+		return exit.Usagef("magus session show: needs exactly one session id (got %d); run `"+hint.Session.String()+"` to list them", len(rest))
 	}
 	root = resolveRootOrEmpty(root)
 	if root == "" {

@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/cmdline/exit"
 )
 
 // adoptionReport measures how often agents reached for the knowledge graph versus a raw text
@@ -230,7 +231,7 @@ func agentAdoptionCmd(args []string) error {
 		src = f
 	} else if stdinIsTerminal() {
 		agentAdoptionUsage(os.Stderr)
-		return usagef("magus agent adoption: reads commands from stdin or --commands <file>")
+		return exit.Usagef("magus agent adoption: reads commands from stdin or --commands <file>")
 	}
 
 	var lines []string

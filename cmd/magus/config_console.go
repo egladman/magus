@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -57,7 +58,7 @@ func configConsoleCmd(args []string) error {
 		return nil
 	default:
 		fs.Usage()
-		return usagef("magus config console: unknown subcommand %q (want token)", sub)
+		return exit.Usagef("magus config console: unknown subcommand %q (want token)", sub)
 	}
 }
 
@@ -100,7 +101,7 @@ func configConsoleToken(args []string) error {
 		return nil
 	default:
 		fs.Usage()
-		return usagef("magus config console token: unknown subcommand %q", sub)
+		return exit.Usagef("magus config console token: unknown subcommand %q", sub)
 	}
 }
 

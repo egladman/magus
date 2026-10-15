@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -171,7 +172,7 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 		}
 		if len(files) == 0 {
 			slog.ErrorContext(ctx, fmt.Sprintf("no projects or files match %v", filters), attr.Notice("magus where"))
-			return errSilent{exitCode: 2}
+			return exit.Reported(exit.Usage)
 		}
 		if printAll {
 			matches := make([]whereMatch, 0, len(files))
@@ -192,7 +193,7 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintf(&candidates, "\n  %s", f.Path)
 		}
 		slog.ErrorContext(ctx, "ambiguous file match - candidates:"+candidates.String(), attr.Notice("magus where"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	if printAll {
@@ -218,5 +219,5 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 		fmt.Fprintf(&candidates, "\n  %s", s.P.Path)
 	}
 	slog.ErrorContext(ctx, "ambiguous - candidates:"+candidates.String(), attr.Notice("magus where"))
-	return errSilent{exitCode: 2}
+	return exit.Reported(exit.Usage)
 }

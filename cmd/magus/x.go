@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -65,7 +66,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 	if !isInteractiveTTY() {
 		slog.ErrorContext(ctx, fmt.Sprintf("x requires an interactive terminal; use `%s` instead", hint.Run.With("<target>", "<project>")),
 			attr.Notice(""), attr.Component("magus"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	m, sink, cleanup, err := openXRun(ctx, root)

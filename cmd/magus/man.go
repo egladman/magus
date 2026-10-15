@@ -8,13 +8,14 @@ import (
 
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/generate"
 )
 
 func manCmd(args []string) error {
 	if len(args) == 0 {
 		manUsage()
-		return usagef("magus man: subcommand required (want install)")
+		return exit.Usagef("magus man: subcommand required (want install)")
 	}
 	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		manUsage()
@@ -22,7 +23,7 @@ func manCmd(args []string) error {
 	}
 	if args[0] != "install" {
 		manUsage()
-		return usagef("magus man: unknown subcommand %q (want install)", args[0])
+		return exit.Usagef("magus man: unknown subcommand %q (want install)", args[0])
 	}
 
 	fs := flag.NewFlagSet("man install", flag.ContinueOnError)

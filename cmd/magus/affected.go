@@ -29,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
@@ -41,7 +42,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// is required. Print a clear one-liner plus usage and exit non-zero, never silently.
 	if len(args) == 0 {
 		affectedMissingTargetUsage()
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		affectedUsage()
@@ -115,7 +116,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	}
 	if af.Step && !isInteractiveTTY() {
 		slog.ErrorContext(ctx, "--step requires an interactive terminal", attr.Notice(""), attr.Component("magus"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	if af.Step {
 		ctx = withStepGate(ctx)
@@ -378,7 +379,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return fmt.Errorf("affected %s: timed out after %s", target, af.Timeout)
 	}
 	if reportedRunErr(err) {
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	if err != nil {
 		return err

@@ -12,6 +12,7 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/eventstream"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -60,7 +61,7 @@ func eventsCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return usagef("magus events: unexpected argument %q (this command takes flags only)", rest[0])
+		return exit.Usagef("magus events: unexpected argument %q (this command takes flags only)", rest[0])
 	}
 
 	// The stream IS the format: one event per line, forever, so there is no document to
@@ -72,7 +73,7 @@ func eventsCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if opts.Format != outputText && opts.Format != outputJSONL {
-		return usagef("magus events: -o %s is not supported; the event stream is JSONL only (one event per line) and never closes, so there is no document to render", opts.Format)
+		return exit.Usagef("magus events: -o %s is not supported; the event stream is JSONL only (one event per line) and never closes, so there is no document to render", opts.Format)
 	}
 
 	filter, err := parseStreamFilter(ef.Type)

@@ -29,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/testscript"
@@ -312,7 +313,7 @@ func TestExitCodeOf(t *testing.T) {
 	assert.Equal(t, 0, mapExitCode(nil))
 	assert.Equal(t, 1, mapExitCode(errors.New("go exited 1")))
 	assert.Equal(t, 1, mapExitCode(errors.Join(errors.New("go exited 1"), nil)))
-	assert.Equal(t, exitUsage, mapExitCode(usagef("no such target")))
+	assert.Equal(t, exit.Usage, mapExitCode(exit.Usagef("no such target")))
 
 	// A diagnostic that names no exit code is ordinary work that failed. 75 is carried
 	// by the error's own ExitCode(), never by its diagnostic code, so the two errors

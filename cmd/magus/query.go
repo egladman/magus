@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
@@ -144,35 +145,35 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	// shape-routed positional, so a search term can never collide with a ref id.
 	if qf.Stdin {
 		if len(pos) != 1 || pos[0] != hint.QueryOutput.Leaf() {
-			return usagef("magus query: --stdin applies only to `%s --stdin`, which takes no ref", hint.QueryOutput)
+			return exit.Usagef("magus query: --stdin applies only to `%s --stdin`, which takes no ref", hint.QueryOutput)
 		}
 		if qf.Attempts || qf.Identity || qf.Publish || qf.Open || qf.Print {
 			// A record on stdin is untrusted: printed, never published or handed to a browser.
-			return usagef("magus query output --stdin: --attempts, --identity, --publish, --open and --print act on a stored run; a record on stdin is only printed")
+			return exit.Usagef("magus query output --stdin: --attempts, --identity, --publish, --open and --print act on a stored run; a record on stdin is only printed")
 		}
 		outOpts, oerr := outputOptionsOrDefault()
 		if oerr != nil {
 			return oerr
 		}
 		if outOpts.Format != outputText {
-			return usagef("magus query output --stdin: -o %s is not supported; it prints each record's output, and the records themselves are already the structured form", outOpts.Format)
+			return exit.Usagef("magus query output --stdin: -o %s is not supported; it prints each record's output, and the records themselves are already the structured form", outOpts.Format)
 		}
 		return printOutputRecords(os.Stdin, os.Stdout, noticeLines{ctx: ctx, level: slog.LevelInfo})
 	}
 	if len(pos) >= 1 && pos[0] == hint.QueryOutput.Leaf() {
 		if len(pos) != 2 {
 			slog.ErrorContext(ctx, fmt.Sprintf("expected exactly one ref (e.g. %s)", hint.QueryOutput.With("out1a2b3c")), attr.Notice(hint.QueryOutput.String()))
-			return errSilent{exitCode: 2}
+			return exit.Reported(exit.Usage)
 		}
 		ref := pos[1]
 		if !cache.LooksLikeRef(ref) {
 			if !trail.ValidRef(ref) {
 				msg := fmt.Sprintf("%q is not an output ref (expected out<hex> for a run, or a stored payload such as grd<hex> or mcp<hex>)", ref)
 				slog.ErrorContext(ctx, "", attr.Notice("magus query output"), attr.Error(types.DiagnosticErrorf(types.OutputRefMalformed, "%s", msg)))
-				return errSilent{exitCode: 2}
+				return exit.Reported(exit.Usage)
 			}
 			if qf.Attempts || qf.Identity || qf.Publish || qf.Open || qf.Print {
-				return usagef("magus query output: %s is a stored payload, not a run; --attempts, --identity, --publish, --open and --print apply only to out<hex> refs", ref)
+				return exit.Usagef("magus query output: %s is a stored payload, not a run; --attempts, --identity, --publish, --open and --print apply only to out<hex> refs", ref)
 			}
 			outOpts, oerr := outputOptionsOrDefault()
 			if oerr != nil {
@@ -192,7 +193,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		}
 		if exclusive > 1 {
 			slog.ErrorContext(ctx, "--attempts, --identity, --publish, and --open/--print are distinct actions; pick one", attr.Notice("magus query output"))
-			return errSilent{exitCode: 2}
+			return exit.Reported(exit.Usage)
 		}
 		return queryOutputRef(ctx, root, ref, outputRefOpts{open: qf.Open, printURL: qf.Print, viewerBase: qf.URL, attempts: qf.Attempts, identity: qf.Identity, publish: qf.Publish, out: outOpts})
 	}
@@ -202,13 +203,13 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		if len(pos) != 2 {
 			slog.ErrorContext(ctx, fmt.Sprintf("expected exactly one invocation id (e.g. %s)", hint.QueryInvocation.With("invmsm3vcou1")),
 				attr.Notice(hint.QueryInvocation.String()))
-			return errSilent{exitCode: 2}
+			return exit.Reported(exit.Usage)
 		}
 		inv := pos[1]
 		if !cache.LooksLikeInvocationID(inv) {
 			slog.ErrorContext(ctx, fmt.Sprintf("%q is not an invocation id (expected inv<id>, e.g. invmsm3vcou1); a run prints one as `inv:` in %s",
 				inv, hint.QueryOutput.With("<ref> --identity")), attr.Notice("magus query invocation"))
-			return errSilent{exitCode: 2}
+			return exit.Reported(exit.Usage)
 		}
 		outOpts, oerr := outputOptionsOrDefault()
 		if oerr != nil {
@@ -222,17 +223,17 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	if len(pos) == 1 && cache.LooksLikeInvocationID(pos[0]) {
 		slog.ErrorContext(ctx, fmt.Sprintf("%q is an invocation id, not a graph term. Read it with: %s",
 			pos[0], hint.QueryInvocation.With(pos[0])), attr.Notice("magus query"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	if qf.Open || qf.Print || qf.Attempts || qf.Identity || qf.Publish {
 		// --open/--print/--attempts/--identity only apply to `query output <ref>`. Set on a graph
 		// search, they were a mistake; stop rather than silently ignore them.
 		slog.ErrorContext(ctx, fmt.Sprintf("--open/--print/--attempts/--identity/--publish apply only to `%s <ref>`. To open the knowledge graph in a browser, use `%s`.", hint.QueryOutput, hint.GraphExport.With("--open")), attr.Notice("magus query"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	if len(pos) == 0 && qf.Kind == "" {
 		slog.ErrorContext(ctx, "requires search terms", attr.Notice("magus query"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -340,7 +341,7 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	switch o.out.Format {
 	case outputText, outputJSON, outputJSONL, outputYAML:
 	default:
-		return usagef("magus query output: -o %s is not supported; a captured log has no fields to render, so json, jsonl and yaml (the record around the bytes) are the only structured forms", o.out.Format)
+		return exit.Usagef("magus query output: -o %s is not supported; a captured log has no fields to render, so json, jsonl and yaml (the record around the bytes) are the only structured forms", o.out.Format)
 	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
@@ -360,7 +361,7 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 				// the command that just failed.
 				msg := fmt.Sprintf("no stored output for ref %q to publish; it may have aged out of the cache, or the ref is mistyped", ref)
 				slog.ErrorContext(ctx, "", attr.Notice("magus query output"), attr.Error(types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg)))
-				return errSilent{exitCode: 2}
+				return exit.Reported(exit.Usage)
 			}
 			return fmt.Errorf("magus query output: publish %s: %w", ref, perr)
 		}
@@ -457,7 +458,7 @@ func queryTrailPayload(ctx context.Context, root, ref string, out output.Options
 	switch out.Format {
 	case outputText, outputJSON, outputYAML:
 	default:
-		return usagef("magus query output: -o %s is not supported; a stored payload has no fields to render, so json and yaml are the only structured forms", out.Format)
+		return exit.Usagef("magus query output: -o %s is not supported; a stored payload has no fields to render, so json and yaml are the only structured forms", out.Format)
 	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
@@ -467,7 +468,7 @@ func queryTrailPayload(ctx context.Context, root, ref string, out output.Options
 	if errors.Is(err, fs.ErrNotExist) {
 		msg := err.Error() + "; the activity trail may have rotated it out, or the ref is mistyped"
 		slog.ErrorContext(ctx, "", attr.Notice("magus query output"), attr.Error(types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg)))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	if err != nil {
 		return fmt.Errorf("magus query output: read %s: %w", ref, err)
@@ -553,7 +554,7 @@ func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, ou
 			// Aged out is the ordinary case, not a typo, so say which it might be. The cap is
 			// the server's RotateLogs job; a missing log is indistinguishable from a bad id.
 			slog.ErrorContext(ctx, fmt.Sprintf("no run log for %q; it may have aged out of the cache, or the id is mistyped", inv), attr.Notice("magus query invocation"))
-			return errSilent{exitCode: 2}
+			return exit.Reported(exit.Usage)
 		}
 		return fmt.Errorf("magus query invocation: read run log for %s: %w", inv, err)
 	}
@@ -757,7 +758,7 @@ func reportRefLookupError(ctx context.Context, m *magus.Magus, ref string, err e
 	switch {
 	case errors.As(err, &amb):
 		slog.ErrorContext(ctx, "", attr.Notice("magus query"), attr.Error(types.DiagnosticErrorf(types.OutputRefAmbiguous, "%s", amb.Error())))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	case errors.Is(err, fs.ErrNotExist):
 		// Name the stores consulted when the lookup knows them: a foreign ref that was
 		// never published reads exactly like a mistyped one otherwise. Render the message
@@ -769,7 +770,7 @@ func reportRefLookupError(ctx context.Context, m *magus.Magus, ref string, err e
 		}
 		slog.ErrorContext(ctx, "", attr.Notice("magus query"), attr.Error(types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg)))
 		printIdentifyRefSuggestion(ctx, m, ref)
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	default:
 		return fmt.Errorf("magus query: look up output ref %q: %w", ref, err)
 	}
@@ -837,7 +838,7 @@ func openOutputInViewer(ctx context.Context, desc magus.OutputDescriptor, events
 	if err := openBrowser(openURL); err != nil {
 		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus query"), attr.Error(err),
 			attr.Why("Re-run with --print to get the URL."))
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	return nil
 }
@@ -861,7 +862,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 	}
 	if len(pos) == 0 {
 		slog.ErrorContext(ctx, "requires a node ID or name", attr.Notice("magus explain"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -941,7 +942,7 @@ func pathCmd(ctx context.Context, root string, args []string) error {
 	}
 	if len(pos) < 2 {
 		slog.ErrorContext(ctx, "requires two node IDs or names", attr.Notice("magus path"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -960,7 +961,7 @@ func pathCmd(ctx context.Context, root string, args []string) error {
 	out, ok := g.Path(pos[0], pos[1])
 	if !ok {
 		slog.ErrorContext(ctx, fmt.Sprintf("could not resolve %q or %q to a node", pos[0], pos[1]), attr.Notice("magus path"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	switch opts.Format {

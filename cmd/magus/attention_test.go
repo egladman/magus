@@ -499,9 +499,9 @@ func TestAttentionQuietAnswersWithTheExitStatus(t *testing.T) {
 	global.quiet = true
 	out := captureStdout(t, func() {
 		err := sessionCmd(context.Background(), root, []string{"attention"})
-		var silent errSilent
+		var silent reportedExit
 		require.ErrorAs(t, err, &silent)
-		assert.Equal(t, 1, silent.exitCode, "nothing is open")
+		assert.Equal(t, 1, silent.ExitCode(), "nothing is open")
 	})
 	assert.Empty(t, out, "-q prints nothing")
 
@@ -571,9 +571,9 @@ func TestAttentionDisposeRefusesWithoutATerminal(t *testing.T) {
 		err = sessionCmd(context.Background(), root, []string{"dispose", id})
 	})
 
-	var silent errSilent
+	var silent reportedExit
 	require.ErrorAs(t, err, &silent, "the flags are fine and the caller is not who this is for, the same 2 --ack uses")
-	assert.Equal(t, 2, silent.exitCode)
+	assert.Equal(t, 2, silent.ExitCode())
 	assert.Contains(t, errText, "interactive terminal")
 	assert.Len(t, openRequestIDs(t, root), 1, "a refused dispose closes nothing")
 }

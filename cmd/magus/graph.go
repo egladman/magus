@@ -33,6 +33,7 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
@@ -80,7 +81,7 @@ func graphCmd(ctx context.Context, root string, args []string) error {
 			interactive.Hint(ctx, fmt.Sprintf("did you mean %q?", sug))
 		}
 		graphErrorUsage()
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 }
 
@@ -851,17 +852,17 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 		if serve {
 			slog.ErrorContext(ctx, "--targets and --serve cannot be used together.", attr.Notice("magus graph export --open"),
 				attr.Why("Target graphs are small; they always use the URL fragment."))
-			return errSilent{exitCode: 2}
+			return exit.Reported(exit.Usage)
 		}
 		if globalScope {
 			slog.ErrorContext(ctx, "--targets and --global cannot be used together.", attr.Notice("magus graph export --open"),
 				attr.Why("--targets scopes to this workspace's target graph; use a positional argument to scope to one project."))
-			return errSilent{exitCode: 2}
+			return exit.Reported(exit.Usage)
 		}
 		if refresh {
 			slog.ErrorContext(ctx, "--targets and --refresh cannot be used together.", attr.Notice("magus graph export --open"),
 				attr.Why("--targets reads the target graph directly from the magusfile; there is no knowledge store to refresh."))
-			return errSilent{exitCode: 2}
+			return exit.Reported(exit.Usage)
 		}
 		return graphOpenTargets(ctx, root, base, printOnly, pos)
 	}
@@ -925,7 +926,7 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 	if err := openBrowser(openURL); err != nil {
 		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
 			attr.Why("Re-run with --print to get the URL, or open it yourself."))
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	return nil
 }
@@ -961,7 +962,7 @@ func graphOpenTargets(ctx context.Context, root, base string, printOnly bool, ar
 			slices.Sort(paths)
 			slog.ErrorContext(ctx, fmt.Sprintf("unknown project %q", scope), attr.Notice("magus graph export --open --targets"),
 				attr.Why("valid projects:\n  "+strings.Join(paths, "\n  ")))
-			return errSilent{exitCode: 2}
+			return exit.Reported(exit.Usage)
 		}
 		out.Projects = filtered
 	}
@@ -986,7 +987,7 @@ func graphOpenTargets(ctx context.Context, root, base string, printOnly bool, ar
 	if err := openBrowser(openURL); err != nil {
 		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
 			attr.Why("Re-run with --print to get the URL, or open it yourself."))
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	return nil
 }
@@ -1192,18 +1193,18 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 		if err := probeLiveBridge(pctx, hostPort); err != nil {
 			slog.ErrorContext(ctx, "the console is not reachable.", attr.Notice("magus graph export --open --follow --print"),
 				attr.Why("start it: "+hint.ServerStart.String()))
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		}
 	} else if err := ensureConsoleServer(ctx, hostPort, root); err != nil {
 		slog.ErrorContext(ctx, "", attr.Notice("magus graph export --open --follow"), attr.Error(err),
 			attr.Why("start it yourself to see the server's own output: "+hint.ServerStart.String()))
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 
 	code, err := mintConsoleLinkCode()
 	if err != nil {
 		slog.ErrorContext(ctx, "could not mint a sign-in code for the link", attr.Notice("magus graph export --open --follow"), attr.Error(err))
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 
 	linkOpts := console.LinkOpts{Host: hostPort, App: "graph", Code: code}
@@ -1222,7 +1223,7 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 	if err := openBrowser(openURL); err != nil {
 		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
 			attr.Why("Re-run with --print to get the URL, or open it yourself."))
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	return nil
 }

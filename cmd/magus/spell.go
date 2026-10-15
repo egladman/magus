@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -46,7 +47,7 @@ func spellCmd(ctx context.Context, root string, args []string) error {
 	case "lock":
 		return spellLock(ctx, root, args[1:])
 	default:
-		return usagef("magus spell: unknown subcommand %q (want build, push, pull, ls or lock)", args[0])
+		return exit.Usagef("magus spell: unknown subcommand %q (want build, push, pull, ls or lock)", args[0])
 	}
 }
 
@@ -96,7 +97,7 @@ func spellBuild(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) != 1 {
-		return usagef("magus spell build: want <dir>, got %d argument(s)", len(pos))
+		return exit.Usagef("magus spell build: want <dir>, got %d argument(s)", len(pos))
 	}
 	opts, err := output.Parse(global.output)
 	if err != nil {
@@ -216,7 +217,7 @@ func spellPush(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) != 2 {
-		return usagef("magus spell push: want <dir>|magus/spell/<name> <registry>/<repository>:<tag>, got %d argument(s)", len(pos))
+		return exit.Usagef("magus spell push: want <dir>|magus/spell/<name> <registry>/<repository>:<tag>, got %d argument(s)", len(pos))
 	}
 	opts, err := output.Parse(global.output)
 	if err != nil {
@@ -227,13 +228,13 @@ func spellPush(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if dest.Tag == "" || dest.Digest != "" {
-		return usagef("magus spell push: %s must name a tag and no digest", pos[1])
+		return exit.Usagef("magus spell push: %s must name a tag and no digest", pos[1])
 	}
 	var content oci.Content
 	var res spellBuildResult
 	if name, ok := strings.CutPrefix(pos[0], spells.ModulePrefix); ok {
 		if source != "" {
-			return usagef("magus spell push %s: --source does not apply; a spell magus ships records %s", pos[0], remotespell.ShippedProvenance(name).Source)
+			return exit.Usagef("magus spell push %s: --source does not apply; a spell magus ships records %s", pos[0], remotespell.ShippedProvenance(name).Source)
 		}
 		content, res, err = buildShippedSpell(name)
 	} else {
@@ -308,7 +309,7 @@ func spellPull(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) < 1 || len(pos) > 2 {
-		return usagef("magus spell pull: want <reference> [<dir>], got %d argument(s)", len(pos))
+		return exit.Usagef("magus spell pull: want <reference> [<dir>], got %d argument(s)", len(pos))
 	}
 	opts, err := output.Parse(global.output)
 	if err != nil {
@@ -316,7 +317,7 @@ func spellPull(ctx context.Context, root string, args []string) error {
 	}
 	if name, ok := strings.CutPrefix(pos[0], spells.ModulePrefix); ok {
 		if len(pos) != 2 {
-			return usagef("magus spell pull %s: want the <dir> to write the copy into", pos[0])
+			return exit.Usagef("magus spell pull %s: want the <dir> to write the copy into", pos[0])
 		}
 		res, next, err := ejectSpell(root, name, pos[1])
 		if err != nil {
@@ -408,7 +409,7 @@ func pullReference(root, arg string) (oci.Reference, error) {
 	}
 	decl := cfg.Imports[arg]
 	if decl.Tag == "" {
-		return oci.Reference{}, usagef("magus spell pull: %s names no tag or digest, and magus.yaml declares no remote spell by that path", arg)
+		return oci.Reference{}, exit.Usagef("magus spell pull: %s names no tag or digest, and magus.yaml declares no remote spell by that path", arg)
 	}
 	lock, err := remotespell.ReadLock(wsRoot)
 	if err != nil {
@@ -475,7 +476,7 @@ func spellLock(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) != 0 {
-		return usagef("magus spell lock: takes no arguments, got %d", len(pos))
+		return exit.Usagef("magus spell lock: takes no arguments, got %d", len(pos))
 	}
 	opts, err := output.Parse(global.output)
 	if err != nil {
@@ -610,7 +611,7 @@ func spellLs(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) != 1 {
-		return usagef("magus spell ls: want <registry>/<repository> or %s, got %d argument(s)", shippedSpellsPath, len(pos))
+		return exit.Usagef("magus spell ls: want <registry>/<repository> or %s, got %d argument(s)", shippedSpellsPath, len(pos))
 	}
 	opts, err := output.Parse(global.output)
 	if err != nil {

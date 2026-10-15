@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -188,7 +189,7 @@ func runProbes(ctx context.Context, socket string, mcp config.MCP, kinds []probe
 	if renderProbeResults(ctx, os.Stdout, results) {
 		return nil
 	}
-	return errSilent{exitCode: 1}
+	return exit.Reported(exit.Failure)
 }
 
 // renderProbeResults writes each result ("ok: <reason>" to stdout, the reason as an error

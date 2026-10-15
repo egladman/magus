@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/langservice"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/cmdline/exit"
 )
 
 // lspCmd implements `magus buzz lsp`: a stdio Language Server that exposes the
@@ -128,7 +129,7 @@ func (s *lspServer) serve(in io.Reader, out io.Writer) error {
 			if s.shutdown {
 				return nil
 			}
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		}
 		s.handle(req)
 	}

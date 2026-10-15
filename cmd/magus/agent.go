@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -50,7 +51,7 @@ func agentCmd(ctx context.Context, root string, args []string) error {
 		agentUsage(os.Stderr)
 		return nil
 	default:
-		return usagef("magus agent: unknown subcommand %q (want install, harness, starter, or adoption)", args[0])
+		return exit.Usagef("magus agent: unknown subcommand %q (want install, harness, starter, or adoption)", args[0])
 	}
 }
 

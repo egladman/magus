@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -62,7 +63,7 @@ func mcpCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return usagef("magus mcp: takes no arguments (got %q)", rest[0])
+		return exit.Usagef("magus mcp: takes no arguments (got %q)", rest[0])
 	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {

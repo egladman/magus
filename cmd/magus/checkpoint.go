@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -40,7 +41,7 @@ func checkpointCmd(ctx context.Context, root string, in io.Reader, out io.Writer
 		return err
 	}
 	if len(fset.Args()) != 0 {
-		return usagef("magus session checkpoint: takes no positional arguments (pass --note, or pipe a host's hook envelope in)")
+		return exit.Usagef("magus session checkpoint: takes no positional arguments (pass --note, or pipe a host's hook envelope in)")
 	}
 	opts, err := output.Parse(global.output)
 	if err != nil {

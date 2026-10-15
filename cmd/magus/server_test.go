@@ -64,9 +64,9 @@ func TestServerStopNoServerExitsNonzero(t *testing.T) {
 	err := serverStop(context.Background(), []string{"--socket", addr})
 	require.Error(t, err, "stop against a dead socket must report failure")
 
-	var silent errSilent
+	var silent reportedExit
 	require.ErrorAs(t, err, &silent)
-	assert.NotZero(t, silent.exitCode, "stopping nothing must exit non-zero")
+	assert.NotZero(t, silent.ExitCode(), "stopping nothing must exit non-zero")
 }
 
 // TestServerStopStalePools drives --pools against a live per-process pool whose

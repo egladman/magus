@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
@@ -62,10 +63,10 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		} else {
 			slog.ErrorContext(ctx, "requires a symbol ID or name", attr.Notice("magus refs"))
 		}
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	if rf.Rename != "" && (rf.Text || rf.Occurrences || rf.Definition || rf.Source) {
-		return usagef("magus refs: --rename takes none of --text, --occurrences, --definition, --source")
+		return exit.Usagef("magus refs: --rename takes none of --text, --occurrences, --definition, --source")
 	}
 
 	if rf.Text {
@@ -204,7 +205,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		// here, unlike the unresolved branch above: the symbol resolved and its empty
 		// reference list is a real, verified answer, not a request magus could not carry out.
 		if out.Answer.Verdict == types.VerdictUnknown {
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		}
 		return nil
 	}
@@ -294,7 +295,7 @@ func refuseAmbiguous(w io.Writer, ref string, named []string) error {
 		// hand to the shell.
 		fmt.Fprintf(w, "  %s\n", hint.Refs.With("'"+strings.ReplaceAll(id, "'", `'\''`)+"'"))
 	}
-	return errSilent{exitCode: exitUsage}
+	return exit.Reported(exit.Usage)
 }
 
 // refsResult is what one `magus refs <symbol>` lookup found, built the same way whether a
@@ -372,14 +373,14 @@ func refsTextCmd(ctx context.Context, root, pattern string, scopeArgs []string, 
 	searchRoot := resolveRootOrEmpty(root)
 	if searchRoot == "" {
 		slog.ErrorContext(ctx, "cannot resolve a workspace root to search", attr.Notice("magus refs --text"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	scopes, err := resolveSearchScopes(searchRoot, scopeArgs)
 	if err != nil {
 		// Exit 2, never 1: a scope magus could not resolve is a search that never ran,
 		// and reporting it as "no match" would answer a question nobody asked.
 		slog.ErrorContext(ctx, "", attr.Notice("magus refs --text"), attr.Error(err))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	// A root that cannot be listed at all (missing, not a directory, permission
 	// denied) is a search that never ran, and must not read as "ran and found
@@ -388,13 +389,13 @@ func refsTextCmd(ctx context.Context, root, pattern string, scopeArgs []string, 
 	// the walk never had anything to do in the first place.
 	if _, err := os.ReadDir(searchRoot); err != nil {
 		slog.ErrorContext(ctx, "cannot search "+searchRoot, attr.Notice("magus refs --text"), attr.Error(err))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	matches, _, skipped, generated, classified, err := textScan(ctx, searchRoot, pattern, scopes, noGenerated, classify)
 	if err != nil {
 		slog.ErrorContext(ctx, "", attr.Notice("magus refs --text"), attr.Error(err))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	// --limit is what `| head` was reaching for, without the two things head costs: the
@@ -429,7 +430,7 @@ func refsTextCmd(ctx context.Context, root, pattern string, scopeArgs []string, 
 	}
 
 	if len(matches) == 0 {
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	return nil
 }
@@ -448,7 +449,7 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 		// an empty list here would read as "nowhere", which is the one answer it has no
 		// basis for.
 		slog.ErrorContext(ctx, "cannot read the symbol indexes", attr.Notice("magus refs"))
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	read := *occurrences
 	files := read.Files
@@ -498,7 +499,7 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 		// record, and the exit status matches the two arms below.
 		if out.VerifiedCount < out.OccurrenceCount {
 			slog.ErrorContext(ctx, strings.TrimSuffix(unverifiedNotice(out), "\n"), attr.Notice(""))
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		}
 		return nil
 	case outputName:
@@ -524,7 +525,7 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 		if out.VerifiedCount < out.OccurrenceCount {
 			slog.ErrorContext(ctx, fmt.Sprintf("%d of %d site(s) did not verify and were not listed; refresh with `%s`",
 				out.OccurrenceCount-out.VerifiedCount, out.OccurrenceCount, hint.GraphBuild), attr.Notice("magus refs"))
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		}
 		// Deliberately NOT exitForVerdict here. The coverage verdict is `unknown` whenever any
 		// project declares no index, which in a polyglot workspace is the steady state (a
@@ -543,7 +544,7 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 		fmt.Println("no occurrences found")
 		printVerdict(os.Stdout, out.Answer, "")
 		if out.Answer.Verdict == types.VerdictUnknown {
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		}
 		return nil
 	}
@@ -574,7 +575,7 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 		// in some languages.
 		fmt.Print(unverifiedNotice(out))
 		printVerdict(os.Stdout, out.Answer, "")
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	printVerdict(os.Stdout, out.Answer, "")
 	return nil
@@ -726,7 +727,7 @@ func emitDefinitions(ctx context.Context, w io.Writer, opts output.Options, out 
 	}
 	staleErr := func() error {
 		if stale > 0 {
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		}
 		return nil
 	}
@@ -780,7 +781,7 @@ func emitDefinitions(ctx context.Context, w io.Writer, opts output.Options, out 
 		fmt.Fprintln(w, "no definition in this workspace")
 		printVerdict(w, out.Answer, "")
 		if out.Answer.Verdict == types.VerdictUnknown {
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		}
 		return nil
 	}
@@ -840,7 +841,7 @@ func refsRenameCmd(ctx context.Context, root string, opts output.Options, g *kno
 			reasons.WriteString("\n  " + edit.FormatRefusal(r))
 		}
 		slog.ErrorContext(ctx, "rename refused, nothing written"+reasons.String(), attr.Notice("magus refs"))
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 
 	id, err := edit.ResolveRenameSymbol(ref, g.Resolve(ref, 0), func(id string) bool {

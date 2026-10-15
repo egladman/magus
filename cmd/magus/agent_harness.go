@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
@@ -25,7 +26,7 @@ import (
 func agentHarnessCmd(ctx context.Context, rootOverride string, args []string) error {
 	if len(args) == 0 {
 		agentHarnessUsage(os.Stderr)
-		return usagef("magus agent harness: a subcommand is required")
+		return exit.Usagef("magus agent harness: a subcommand is required")
 	}
 	switch args[0] {
 	case "install":
@@ -36,7 +37,7 @@ func agentHarnessCmd(ctx context.Context, rootOverride string, args []string) er
 		agentHarnessUsage(os.Stdout)
 		return nil
 	default:
-		return usagef("magus agent harness: unknown subcommand %q (want install or verify; `magus describe harness` prints the host config to merge)", args[0])
+		return exit.Usagef("magus agent harness: unknown subcommand %q (want install or verify; `magus describe harness` prints the host config to merge)", args[0])
 	}
 }
 
@@ -49,7 +50,7 @@ func agentHarnessInstallCmd(ctx context.Context, rootOverride string, args []str
 		return err
 	}
 	if len(fset.Args()) != 0 {
-		return usagef("magus agent harness install: positional arguments are not accepted")
+		return exit.Usagef("magus agent harness install: positional arguments are not accepted")
 	}
 	root := resolveRootOrEmpty(rootOverride)
 	if root == "" {
@@ -172,7 +173,7 @@ func describeHarness(ctx context.Context, rootOverride string, args []string) er
 		return err
 	}
 	if len(pos) > 1 {
-		return usagef("magus describe harness: takes at most one harness id")
+		return exit.Usagef("magus describe harness: takes at most one harness id")
 	}
 	root := resolveRootOrEmpty(rootOverride)
 	if root == "" {
@@ -281,7 +282,7 @@ func agentHarnessVerifyCmd(ctx context.Context, rootOverride string, args []stri
 		return err
 	}
 	if len(fset.Args()) != 0 {
-		return usagef("magus agent harness verify: positional arguments are not accepted")
+		return exit.Usagef("magus agent harness verify: positional arguments are not accepted")
 	}
 	root := resolveRootOrEmpty(rootOverride)
 	if root == "" {
@@ -339,7 +340,7 @@ func resolveHarnessIDs(ctx context.Context, rootOverride, id string) ([]string, 
 		return []string{id}, ctx, nil
 	}
 	if len(wired) == 0 {
-		return nil, ctx, usagef("name a harness id, or wire one or more hosts with magus\\harness.provider(<spell>) in the root magusfile")
+		return nil, ctx, exit.Usagef("name a harness id, or wire one or more hosts with magus\\harness.provider(<spell>) in the root magusfile")
 	}
 	return wired, ctx, nil
 }

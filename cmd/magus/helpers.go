@@ -315,67 +315,10 @@ func listTargets(scope string, targets []types.Target, source string) {
 	}
 }
 
-type errSilent struct{ exitCode int }
-
-func (errSilent) Error() string { return "silent exit" }
-
-// AlreadyReported says the failure has already been explained to the user, so no caller should
-// print this error's text. mapExitCode has always honored that locally; the method states
-// it for the ADOPTED path too, where the error crosses a socket and the process that
-// receives it cannot see this type. Without it a forwarded failure reports itself as
-// "silent exit", which is a sentence about magus's internals and not about the failure.
-func (errSilent) AlreadyReported() bool { return true }
-
-// ExitCode states the process status this failure carries, for the ADOPTED path.
-// mapExitCode reads the field directly; the server holds the error as a plain `error`
-// and cannot, so without the method every forwarded failure collapsed to 1 and the
-// documented 1-vs-2 split existed only when no server was running.
-func (e errSilent) ExitCode() int { return e.exitCode }
-
-// exitUsage is the exit code for a command-line misuse: a missing or unknown
-// subcommand, a wrong argument count, an unrecognized value. It is deliberately
-// distinct from 1:
-//
-//	0   the command did what was asked (an explicit -h/--help included)
-//	1   the command was invoked correctly and the WORK failed
-//	2   the invocation itself was wrong; nothing was attempted
-//	75  the machine could not seat the work; the same command succeeds later
-//
-// 2 matches Go's own flag package (flag.ExitOnError) and the long-standing Unix
-// convention, and it is already what magus returns when a request cannot be carried
-// out as stated (an unresolvable `path` node, an ambiguous `where`, an `x` with no
-// terminal). Before this was unified, the same "you forgot the subcommand" situation
-// exited 0 from `config`, `self` and `merge-driver`, 1 from `man` and `completion`,
-// and 2 from `self <unknown>`, so nothing scripting magus could branch on it.
-//
-// 75 is EX_TEMPFAIL from sysexits.h, borrowed the same way. Two failures carry it: a
-// contended no-wait project lock (lockContendedExit) and a step the machine's build
-// budget could not seat (cache.ExitCodeMachineBusy, MGS3009). Neither is named here:
-// each error states its own code and mapExitCode reads it through proc.ExitCode, which
-// is what lets the server report the same status for a run it executed on a client's
-// behalf. A caller that cannot tell either from 1 reads a busy machine as a broken
-// build: CI retries nothing, and an agent debugs a target that never ran.
-const exitUsage = 2
-
-// errUsage marks a command-line misuse so it exits exitUsage rather than the generic
-// 1. Wrap the message a user needs to fix their invocation; the usage text itself is
-// printed separately by the command, as it always was.
-type errUsage struct{ msg string }
-
-func (e errUsage) Error() string { return e.msg }
-
-// ExitCode carries exitUsage across the server boundary; see errSilent.ExitCode.
-func (errUsage) ExitCode() int { return exitUsage }
-
-// usagef builds an errUsage with a formatted message.
-func usagef(format string, a ...any) error {
-	return errUsage{msg: fmt.Sprintf(format, a...)}
-}
-
 // reportedRunErr reports whether err was already surfaced to the user, per project,
 // by the cache's pretty handler as a "[xx] <project> (error): ..." line — i.e. a
 // spell/run failure during a fan-out. When true the top-level handler should exit
-// non-zero via errSilent rather than reprinting the same text as a "[error] ..." line.
+// non-zero via exit.Reported rather than reprinting the same text as a "[error] ..." line.
 func reportedRunErr(err error) bool {
 	var se *types.SpellErrors
 	var logged cache.ReportedError

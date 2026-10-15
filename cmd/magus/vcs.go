@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/settle"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -45,7 +46,7 @@ import (
 func vcsCmd(ctx context.Context, root string, rc runConfig, args []string) error {
 	if len(args) == 0 {
 		vcsUsage(os.Stderr)
-		return usagef("magus vcs: a subcommand is required (try: add, resolve, checkpoint)")
+		return exit.Usagef("magus vcs: a subcommand is required (try: add, resolve, checkpoint)")
 	}
 	verb, rest := splitVCSVerb(args)
 	switch verb {
@@ -61,7 +62,7 @@ func vcsCmd(ctx context.Context, root string, rc runConfig, args []string) error
 		vcsUsage(os.Stderr)
 		return nil
 	default:
-		return usagef("magus vcs: unknown subcommand %q (want add, resolve, checkpoint, or merge-driver)", verb)
+		return exit.Usagef("magus vcs: unknown subcommand %q (want add, resolve, checkpoint, or merge-driver)", verb)
 	}
 }
 
@@ -104,16 +105,16 @@ func mergeDriverCmd(ctx context.Context, root string, args []string) error {
 		// git only ever calls this with all five placeholders, so a bare invocation is
 		// a human typing it. Exiting 0 said "merge resolved" for a run that did nothing,
 		// and disagreed with the 1-argument case, which already errored.
-		return usagef("magus vcs merge-driver: expected 5 arguments (ancestor result other markerSize path), got 0")
+		return exit.Usagef("magus vcs merge-driver: expected 5 arguments (ancestor result other markerSize path), got 0")
 	}
 	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		return mergeDriverUsage()
 	}
 	if len(args) < 5 {
-		return usagef("magus vcs merge-driver: expected 5 arguments (ancestor result other markerSize path), got %d", len(args))
+		return exit.Usagef("magus vcs merge-driver: expected 5 arguments (ancestor result other markerSize path), got %d", len(args))
 	}
 	if len(args) > 6 {
-		return usagef("magus vcs merge-driver: expected at most 6 arguments (ancestor result other markerSize path output), got %d", len(args))
+		return exit.Usagef("magus vcs merge-driver: expected at most 6 arguments (ancestor result other markerSize path output), got %d", len(args))
 	}
 	f := settle.Files{Base: args[0], Ours: args[1], Theirs: args[2], Output: args[1], MarkerSize: args[3]}
 	if len(args) == 6 {
@@ -238,11 +239,11 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 	// resolve mutates every conflicted path in the workspace. Widening
 	// `magus vcs resolve one/file.go` from one path to all of them would cost a tree.
 	if len(pos) > 0 && rf.Hook == "" {
-		return usagef("vcs resolve: takes no paths; it settles every conflicted path in the workspace (got %q)", pos[0])
+		return exit.Usagef("vcs resolve: takes no paths; it settles every conflicted path in the workspace (got %q)", pos[0])
 	}
 	if rf.Hook != "" {
 		if rf.Against != "" {
-			return usagef("vcs resolve: --hook is git's call, and --against is not one it makes")
+			return exit.Usagef("vcs resolve: --hook is git's call, and --against is not one it makes")
 		}
 		return vcsResolveHook(ctx, root, rc, rf.Hook, pos)
 	}
@@ -826,7 +827,7 @@ func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string,
 	}
 	slog.InfoContext(ctx, out.Notice(hook, settle.FoldCommand(ctx, m)), attr.Notice(""))
 	if hook == vcs.HookPreMergeCommit && len(out.Staged) > 0 {
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	return nil
 }
@@ -929,7 +930,7 @@ func settleFailed(ctx context.Context, hook string, op vcs.HookOperation, out se
 		slog.ErrorContext(ctx, fmt.Sprintf("HEAD carries stale generated output; regenerate with `%s`, then `git commit --amend --no-edit`", regenerate),
 			attr.Notice(""), attr.Component("magus"))
 	}
-	return errSilent{exitCode: 1}
+	return exit.Reported(exit.Failure)
 }
 
 // resolveVCS returns the active VCS resolution for the workspace.
@@ -987,7 +988,7 @@ func vcsCheckpointCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) > 0 {
-		return usagef("vcs checkpoint: takes no arguments; it reports the whole workspace's working state (got %q)", pos[0])
+		return exit.Usagef("vcs checkpoint: takes no arguments; it reports the whole workspace's working state (got %q)", pos[0])
 	}
 
 	ws, err := inspectWorkspace(ctx, root)
@@ -1110,7 +1111,7 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	// Before the workspace loads: a refusal about the flags must not need a resolvable
 	// tree, and must not land after anything is staged.
 	if err := ward.RequireReason(untrackedOverride, af.Untracked, af.Reason); err != nil {
-		return usagef("%s", err)
+		return exit.Usagef("%s", err)
 	}
 
 	ws, err := inspectWorkspace(ctx, root)

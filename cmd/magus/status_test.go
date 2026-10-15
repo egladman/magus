@@ -22,6 +22,7 @@ import (
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
@@ -192,7 +193,7 @@ func TestPrintStatusCompactTruncatesLongLabel(t *testing.T) {
 }
 
 // TestStartupNoSubcommandExitsUsage locks the shape of startup(): with no
-// subcommand it prints usage and returns exitUsage WITHOUT dispatching. This is the
+// subcommand it prints usage and returns exit.Usage WITHOUT dispatching. This is the
 // cheapest assertion that exercises the full pre-dispatch path without a workspace
 // fixture, so it doubles as a guard against the refactor accidentally calling
 // os.Exit directly.
@@ -216,7 +217,7 @@ func TestStartupNoSubcommandExitsUsage(t *testing.T) {
 	if res.cleanup != nil {
 		t.Cleanup(res.cleanup)
 	}
-	require.Equal(t, exitUsage, code, "startup(nil) exit code")
+	require.Equal(t, exit.Usage, code, "startup(nil) exit code")
 	assert.Empty(t, res.sub, "startup(nil) sub should be empty (no dispatch)")
 
 	// An explicit global help flag lands in the SAME no-subcommand branch and must
@@ -230,7 +231,7 @@ func TestStartupNoSubcommandExitsUsage(t *testing.T) {
 			if res.cleanup != nil {
 				t.Cleanup(res.cleanup)
 			}
-			assert.Equal(t, 0, code, "an explicit %s exits 0, not exitUsage", flagName)
+			assert.Equal(t, 0, code, "an explicit %s exits 0, not exit.Usage", flagName)
 		})
 	}
 }
@@ -652,9 +653,9 @@ func TestRunProbesMCPOnly(t *testing.T) {
 	t.Run("unreachable-exits-1", func(t *testing.T) {
 		err := runProbes(ctx, "", mcpUnreachable(), []probeKind{probeMCP}, "")
 		require.Error(t, err)
-		var silent errSilent
+		var silent reportedExit
 		require.ErrorAs(t, err, &silent)
-		assert.Equal(t, 1, silent.exitCode)
+		assert.Equal(t, 1, silent.ExitCode())
 	})
 }
 
