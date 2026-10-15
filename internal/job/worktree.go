@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
@@ -110,22 +111,15 @@ func (s *Store) DiscardWorktree(ctx context.Context, wt types.JobWorktree) error
 	return drv.RemoveCheckout(ctx, wt.Source, wt.Root)
 }
 
-// placeBinary copies bin into dir beside its final name, then renames it over that name:
-// on darwin a later exec of an executable rewritten in place is killed.
+// placeBinary copies bin into dir by temp and rename, never in place: on darwin a later
+// exec of an executable rewritten in place is killed.
 func placeBinary(bin, dir string) (string, error) {
 	body, err := os.ReadFile(bin)
 	if err != nil {
 		return "", err
 	}
 	dst := filepath.Join(dir, binaryName)
-	tmp := dst + ".fork"
-	if err := os.WriteFile(tmp, body, 0o755); err != nil {
-		return "", err
-	}
-	if err := os.Rename(tmp, dst); err != nil {
-		return "", errors.Join(err, os.Remove(tmp))
-	}
-	return dst, nil
+	return dst, file.WriteFileAtomic(dst, body, 0o755)
 }
 
 // RecordWorktree records wt as the checkout job id owns.
