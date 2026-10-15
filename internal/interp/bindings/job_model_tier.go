@@ -132,8 +132,7 @@ func modelTierCallSite(ctx context.Context, member, declares string) (*workspace
 	}
 	reg := workspace.WorkspaceRegistryFromContext(ctx)
 	if reg == nil {
-		return nil, types.DiagnosticErrorf(types.MagusfileOnlyMember,
-			"%s: only callable from a magusfile, not from a spell or a `magus buzz` script - it declares into the workspace magus is loading, and neither has one", member)
+		return nil, magusfileOnlyError(member)
 	}
 	return reg, nil
 }

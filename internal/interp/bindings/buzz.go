@@ -293,9 +293,14 @@ func dropMagusMethods(entries []types.ModuleEntry, names []string) []types.Modul
 // call, raising MGS1022 with the member's name.
 func magusfileOnly(obs buzz.DirectObserver, member string) vm.Value {
 	return directVal(obs, member, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return vm.Null, types.DiagnosticErrorf(types.MagusfileOnlyMember,
-			"%s: only callable from a magusfile, not from a spell or a `magus buzz` script - it declares into the workspace magus is loading, and neither has one to declare into", member)
+		return vm.Null, magusfileOnlyError(member)
 	})
+}
+
+// magusfileOnlyError is MGS1022 for member, called where no magusfile is loading.
+func magusfileOnlyError(member string) error {
+	return types.DiagnosticErrorf(types.MagusfileOnlyMember,
+		"%s: only callable from a magusfile, not from a spell or a `magus buzz` script - it declares into the workspace magus is loading, and neither has one", member)
 }
 
 // directVal builds a magus.* host callable timed under name via obs (from
