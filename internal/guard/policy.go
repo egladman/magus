@@ -1,14 +1,13 @@
 package guard
 
 import (
+	"bytes"
 	"cmp"
 	"context"
-	"os"
 	"path/filepath"
 	"slices"
 	"time"
 
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 )
@@ -33,8 +32,12 @@ const (
 )
 
 // policyMarkerFile holds the last recorded rule set, so a hook call learns whether the
-// policy moved from one small read rather than by scanning the trail.
-const policyMarkerFile = "guard-policy.json"
+// policy moved from one small read rather than by scanning the trail. It is a JSON Lines
+// file whose last line is the marker.
+const policyMarkerFile = "guard-policy.jsonl"
+
+// oldPolicyMarkerFile is the JSON document an older magus kept the marker in.
+const oldPolicyMarkerFile = "guard-policy.json"
 
 // PolicySource is one file a workspace guard rule can come from, named by the ContentID of
 // its working-tree bytes and of its approved bytes. Approved is "" when the approved
@@ -71,6 +74,12 @@ type policyMarker struct {
 	// Files is PolicyState.Files, kept so a call whose own load ran out of time still knows
 	// which files the guard loads.
 	Files []string `json:"files,omitempty"`
+}
+
+// policyMarkerLog is the marker's file: a line for each change of the rule set, the last one
+// being the marker. The file is the guard's own state, private to its owner.
+func policyMarkerLog(path string) jsonl[policyMarker] {
+	return jsonl[policyMarker]{path: path, perm: 0o600, key: func(policyMarker) string { return "" }}
 }
 
 // policyEvent is the guard_policy blob: refs and ids, never a source body.
@@ -180,26 +189,27 @@ func recordedRule(cacheDir string, seam functionSeam) bool {
 }
 
 func readPolicyMarker(path string) (policyMarker, bool) {
-	body, err := os.ReadFile(path)
-	if err != nil {
+	refuseOldJSON(filepath.Dir(path), oldPolicyMarkerFile)
+	held, err := policyMarkerLog(path).load()
+	if err != nil || len(held) == 0 {
 		return policyMarker{}, false
 	}
-	var m policyMarker
-	if json.Unmarshal(body, &m) != nil {
-		return policyMarker{}, false
-	}
-	return m, true
+	return held[0], true
 }
 
-// writePolicyMarker replaces the marker whole, so a racing hook reads the old record or
-// the new one and never half of each. Losing the race costs a duplicate event, not a
-// missed one.
+// writePolicyMarker appends the marker when it differs from the last one, so a racing hook
+// reads the old record or the new one and never half of each. Losing the race costs a
+// duplicate event, not a missed one.
 func writePolicyMarker(path string, m policyMarker) {
-	body, err := json.Marshal(m)
-	if err != nil {
-		return
-	}
-	_ = file.ReplaceFile(path, body, 0o600)
+	_ = policyMarkerLog(path).update(context.Background(), func(held []policyMarker) []policyMarker {
+		// By encoding: a marker read back has nil where the one written had an empty list.
+		if old, err := json.Marshal(held); len(held) == 1 && err == nil {
+			if next, err := json.Marshal([]policyMarker{m}); err == nil && bytes.Equal(old, next) {
+				return nil
+			}
+		}
+		return []policyMarker{m}
+	})
 }
 
 // isGuardSource reports whether path is a file the guard's own policy load reads: the

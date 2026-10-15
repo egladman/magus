@@ -2,13 +2,16 @@ package guard
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/types"
 )
 
@@ -89,4 +92,37 @@ func TestRememberSettingsRoundTrips(t *testing.T) {
 	assert.Equal(t, settings, recallSettings(dir))
 	rememberSettings(dir, nil)
 	assert.Nil(t, recallSettings(dir), "the defaults are recorded as none")
+}
+
+// The settings are appended as a line per rule that changed, so a judgment that applies the
+// same settings again writes nothing, and a rule no longer set ends with a removal.
+func TestRememberedSettingsAreAppendedPerRule(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, settingsFile)
+	busy := builtin.Setting{Decision: builtin.Advise}
+	deny := builtin.Setting{Decision: builtin.Deny, Lines: 200, Markers: []string{"TODO", "a\tb"}, Profile: types.GuardProfileStrict}
+	rememberSettings(dir, map[string]builtin.Setting{"read-navigation": deny, "busy-wait": busy})
+	rememberSettings(dir, map[string]builtin.Setting{"read-navigation": deny, "busy-wait": busy})
+
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, 2, strings.Count(string(b), "\n"), "an unchanged set is not written again")
+	got := recallSettings(dir)
+	assert.Equal(t, deny, got["read-navigation"])
+	assert.Equal(t, busy, got["busy-wait"])
+
+	rememberSettings(dir, map[string]builtin.Setting{"busy-wait": busy})
+	b, err = os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(b), `{"rule":"read-navigation","removed":true}`)
+	assert.Equal(t, map[string]builtin.Setting{"busy-wait": busy}, recallSettings(dir))
+}
+
+// A JSON memo an older magus left is not read as a second format: the guard grades by the
+// defaults and says, once per call, which file to move aside.
+func TestOldSettingsJSONIsNotRead(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, oldSettingsFile), []byte(`{"busy-wait":{"decision":"deny"}}`), 0o644))
+
+	assert.Nil(t, recallSettings(dir))
 }

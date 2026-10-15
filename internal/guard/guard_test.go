@@ -29,7 +29,6 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
@@ -1127,94 +1126,40 @@ func BenchmarkWithJobStoreRows(b *testing.B) {
 		_, err := store.Update(b.Context(), row.ID, func(cur *types.Job) { *cur = row })
 		require.NoError(b, err)
 	}
-	path, err := store.Path()
-	require.NoError(b, err)
-	old := time.Now().Add(-time.Hour)
-	require.NoError(b, os.Chtimes(path, old, old))
 	ctx := b.Context()
-	b.Run("read=list", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			_, _ = store.List()
-		}
-	})
-	b.Run("read=memo", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			withJobStoreRows(ctx, at)
-		}
-	})
+	b.ReportAllocs()
+	for b.Loop() {
+		withJobStoreRows(ctx, at)
+	}
 }
 
-// A store edited between two calls in one process is read again, however recent the
-// memo, and a memo is only ever the answer for the file it was taken from.
-func TestJobStoreRowsMemo(t *testing.T) {
+// Every call reads the store as it is: a row written between two calls is in the second.
+func TestJobStoreRowsAreReadFreshEachCall(t *testing.T) {
 	testkit.Isolate(t)
 	root, cacheDir := t.TempDir(), t.TempDir()
 	at := location{cacheDir: cacheDir, workspace: root, dir: root}
 	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
-	path, err := store.Path()
-	require.NoError(t, err)
-	memoPath := filepath.Join(filepath.Dir(path), jobRowsMemoFile)
-
 	put := func(row types.Job) {
 		t.Helper()
 		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 		require.NoError(t, err)
 	}
-	backdate := func() {
-		t.Helper()
-		old := time.Now().Add(-time.Hour)
-		require.NoError(t, os.Chtimes(path, old, old))
-	}
-	rowsOf := func() []types.Job {
+	rowsOf := func() []string {
 		t.Helper()
 		snap, ok := job.SnapshotFromContext(withJobStoreRows(t.Context(), at))
 		require.True(t, ok)
 		require.NoError(t, snap.Err)
-		return snap.Rows
-	}
-	ids := func(rows []types.Job) []string {
-		var out []string
-		for _, r := range rows {
-			out = append(out, r.ID)
+		var ids []string
+		for _, r := range snap.Rows {
+			ids = append(ids, r.ID)
 		}
-		return out
-	}
-	// plant replaces the memo's rows, keeping the stamp, so a read that used the memo is
-	// visible in what it returns.
-	plant := func(when time.Time, rows ...types.Job) {
-		t.Helper()
-		raw, err := os.ReadFile(memoPath)
-		require.NoError(t, err)
-		var memo jobRowsMemo
-		require.NoError(t, json.Unmarshal(raw, &memo))
-		memo.Rows, memo.AtNS = rows, when.UnixNano()
-		raw, err = json.Marshal(memo)
-		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(memoPath, raw, 0o644))
+		return ids
 	}
 
-	put(types.Job{ID: "a", State: types.StateDeclared, Parent: "", WritePaths: []string{"x.go"}, Model: "sonnet"})
-	fresh := rowsOf()
-	assert.NoFileExists(t, memoPath, "a store written this second is not memoized")
-
-	backdate()
-	first := rowsOf()
-	assert.Equal(t, fresh, first)
-	require.FileExists(t, memoPath)
-	assert.Equal(t, first, rowsOf(), "the memo returns the rows the store did")
-
-	plant(time.Now(), types.Job{ID: "memo-only"})
-	assert.Equal(t, []string{"memo-only"}, ids(rowsOf()), "an unchanged store answers from the memo")
-
+	put(types.Job{ID: "a", State: types.StateDeclared, WritePaths: []string{"x.go"}, Model: "sonnet"})
+	assert.Equal(t, []string{"a"}, rowsOf())
 	put(types.Job{ID: "b", State: types.StateDeclared})
-	assert.Equal(t, []string{"a", "b"}, ids(rowsOf()), "an edited store is read again")
-
-	backdate()
-	rowsOf()
-	plant(time.Now().Add(-time.Minute), types.Job{ID: "memo-only"})
-	assert.Equal(t, []string{"a", "b"}, ids(rowsOf()), "a memo past its TTL is not trusted")
+	assert.Equal(t, []string{"a", "b"}, rowsOf())
 }
 
 // recoverableRules are the compiled rules that refused before they advised by default.

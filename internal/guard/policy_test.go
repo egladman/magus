@@ -27,6 +27,33 @@ func TestPolicyMarkerIsOwnerOnly(t *testing.T) {
 	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
 }
 
+// The marker is a JSON Lines file whose last line is the marker; a marker that did not change
+// is not appended again.
+func TestPolicyMarkerIsAppendedAsJSONLines(t *testing.T) {
+	path := filepath.Join(t.TempDir(), policyMarkerFile)
+	first := policyMarker{Digest: "d1", ShellRules: 3, SpawnRule: true, Pending: true, Files: []string{"/w/magusfile.buzz"}}
+	second := policyMarker{Digest: "d2", ShellRules: 3, SpawnRule: true, Files: []string{"/w/magusfile.buzz", "/w/rules/a b.buzz"}}
+	writePolicyMarker(path, first)
+	writePolicyMarker(path, first)
+	writePolicyMarker(path, second)
+
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, `{"digest":"d1","shell_rules":3,"spawn_rule":true,"pending":true,"files":["/w/magusfile.buzz"]}`+"\n"+
+		`{"digest":"d2","shell_rules":3,"spawn_rule":true,"pending":false,"files":["/w/magusfile.buzz","/w/rules/a b.buzz"]}`+"\n", string(body))
+	got, ok := readPolicyMarker(path)
+	require.True(t, ok)
+	assert.Equal(t, second, got)
+}
+
+func TestPolicyMarkerThatDoesNotParseIsNotARecord(t *testing.T) {
+	path := filepath.Join(t.TempDir(), policyMarkerFile)
+	require.NoError(t, os.WriteFile(path, []byte("digest\td1\n"), 0o600))
+
+	_, ok := readPolicyMarker(path)
+	assert.False(t, ok)
+}
+
 // sourcesAt builds the lazy approved-id callback a hook hands RecordPolicy, counting how
 // often it runs: it costs a process per file, so steady state must not call it.
 func sourcesAt(calls *int, pairs ...PolicySource) func(context.Context) []PolicySource {

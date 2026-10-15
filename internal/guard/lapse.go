@@ -3,11 +3,12 @@ package guard
 import (
 	"bytes"
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -56,12 +57,33 @@ func lapsedRules(ctx context.Context, base Dependencies, log *phaseLog, req Requ
 	return ShellVerdict{}
 }
 
-// settingsFile holds the compiled-rule settings the last judgment in a cache dir applied,
-// for one that lapses before it loads its own.
-const settingsFile = "guard-settings.json"
+// settingsFile holds the compiled-rule settings the last judgment in a cache dir applied, for
+// one that lapses before it loads its own. It is JSON Lines: a line per rule whose setting
+// changed, the last line for a rule being its setting.
+const settingsFile = "guard-settings.jsonl"
 
-// rememberSettings records settings as the cache dir's last applied ones, writing only when
-// they changed. A failure costs a lapse its settings, never a verdict.
+// oldSettingsFile is the JSON document an older magus kept the settings in.
+const oldSettingsFile = "guard-settings.json"
+
+// settingLine is one line of settingsFile: a rule's setting, or the rule's removal.
+type settingLine struct {
+	Rule    string           `json:"rule"`
+	Removed bool             `json:"removed,omitempty"`
+	Setting *builtin.Setting `json:"setting,omitempty"`
+}
+
+func settingsLog(cacheDir string) jsonl[settingLine] {
+	return jsonl[settingLine]{
+		path: filepath.Join(cacheDir, settingsFile),
+		perm: 0o644,
+		key:  func(l settingLine) string { return l.Rule },
+		live: func(l settingLine) bool { return !l.Removed && l.Setting != nil },
+	}
+}
+
+// rememberSettings records settings as the cache dir's last applied ones, appending a line
+// for each rule whose setting changed and for each rule no longer set, and nothing when none
+// did. A failure costs a lapse its settings, never a verdict.
 //
 // A cache dir that does not exist yet is left uncreated: the job store keys a checkout's
 // binding on the dir's path, which resolves through a symlink only once the dir exists, so
@@ -73,30 +95,56 @@ func rememberSettings(cacheDir string, settings map[string]builtin.Setting) {
 	if info, err := os.Stat(cacheDir); err != nil || !info.IsDir() {
 		return
 	}
-	raw, err := json.Marshal(settings)
-	if err != nil {
-		return
-	}
-	path := filepath.Join(cacheDir, settingsFile)
-	if old, err := os.ReadFile(path); err == nil && bytes.Equal(old, raw) {
-		return
-	}
-	_ = file.WriteFileAtomic(path, raw, 0o644)
+	_ = settingsLog(cacheDir).update(context.Background(), func(stored []settingLine) []settingLine {
+		held := make(map[string]settingLine, len(stored))
+		for _, l := range stored {
+			held[l.Rule] = l
+		}
+		var add []settingLine
+		for _, rule := range slices.Sorted(maps.Keys(settings)) {
+			setting := settings[rule]
+			old, ok := held[rule]
+			if ok && sameEncoding(*old.Setting, setting) {
+				continue
+			}
+			add = append(add, settingLine{Rule: rule, Setting: &setting})
+		}
+		for _, l := range stored {
+			if _, kept := settings[l.Rule]; !kept {
+				add = append(add, settingLine{Rule: l.Rule, Removed: true})
+			}
+		}
+		return add
+	})
+}
+
+// sameEncoding reports whether a and b encode alike, which is the sameness a setting read back
+// from the file can have: an empty list of markers reads back as none.
+func sameEncoding(a, b builtin.Setting) bool {
+	x, errA := json.Marshal(a)
+	y, errB := json.Marshal(b)
+	return errA == nil && errB == nil && bytes.Equal(x, y)
 }
 
 // recallSettings is what rememberSettings last recorded in cacheDir, nil for the defaults
-// when nothing readable was.
+// when nothing readable was. A file that cannot be read is reported and read as none, so the
+// rules grade by their defaults.
 func recallSettings(cacheDir string) map[string]builtin.Setting {
 	if cacheDir == "" {
 		return nil
 	}
-	raw, err := os.ReadFile(filepath.Join(cacheDir, settingsFile))
+	refuseOldJSON(cacheDir, oldSettingsFile)
+	held, err := settingsLog(cacheDir).load()
 	if err != nil {
+		reportGuardMemo(err)
 		return nil
 	}
-	var settings map[string]builtin.Setting
-	if json.Unmarshal(raw, &settings) != nil || len(settings) == 0 {
+	if len(held) == 0 {
 		return nil
+	}
+	settings := make(map[string]builtin.Setting, len(held))
+	for _, l := range held {
+		settings[l.Rule] = *l.Setting
 	}
 	return settings
 }
