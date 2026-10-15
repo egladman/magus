@@ -111,6 +111,9 @@ func (m *Magus) IdentifyRef(ctx context.Context, ref string) ([]types.RefMatch, 
 			continue
 		}
 		for _, target := range projectTargets(p) {
+			// A write grant the step does not read leaves its key alone, so both charm sets
+			// can mint one key; it is one match.
+			keyed := map[string]bool{}
 			for _, charms := range variants {
 				key, _, err := m.computeTargetKey(ctx, p.Path, target, charms, reuse)
 				if err != nil {
@@ -119,6 +122,10 @@ func (m *Magus) IdentifyRef(ctx context.Context, ref string) ([]types.RefMatch, 
 					}
 					continue
 				}
+				if keyed[key] {
+					continue
+				}
+				keyed[key] = true
 				if strings.HasPrefix(cache.PortableRef(key), ref) {
 					matches = append(matches, types.RefMatch{
 						Project: p.Path,

@@ -95,9 +95,10 @@ func TestIdentifyRef_ShortenedPrefixMatches(t *testing.T) {
 // workspace's configured default charms and a ref minted bare (as CI's
 // --no-default-charms run would mint it) must BOTH resolve once the workspace has
 // default_charms configured, since a pasted CI ref is exactly the case this method
-// exists for.
+// exists for. The default is cd rather than rw: a write grant keys only a step that reads
+// it, and this fixture's build does not.
 func TestIdentifyRef_CharmVariants(t *testing.T) {
-	defaultCharms := []string{"rw"}
+	defaultCharms := []string{types.CharmCD}
 	m := newIdentityWorkspace(t, defaultCharms...)
 	ctx := context.Background()
 
@@ -110,12 +111,24 @@ func TestIdentifyRef_CharmVariants(t *testing.T) {
 	matchesDefault, err := m.IdentifyRef(ctx, cache.PortableRef(keyDefault))
 	require.NoError(t, err, "IdentifyRef (default-charm ref)")
 	require.Len(t, matchesDefault, 1, "IdentifyRef: expected exactly one match for the default-charm ref")
-	assert.Equal(t, types.RefMatch{Project: ".", Target: "build", Charms: []string{"rw"}}, matchesDefault[0])
+	assert.Equal(t, types.RefMatch{Project: ".", Target: "build", Charms: defaultCharms}, matchesDefault[0])
 
 	matchesBare, err := m.IdentifyRef(ctx, cache.PortableRef(keyBare))
 	require.NoError(t, err, "IdentifyRef (bare ref)")
 	require.Len(t, matchesBare, 1, "IdentifyRef: expected exactly one match for the bare (CI) ref")
 	assert.Equal(t, types.RefMatch{Project: ".", Target: "build", Charms: nil}, matchesBare[0])
+}
+
+// TestIdentifyRef_UnreadWriteGrantMatchesOnce: under default_charms: [rw] a target that
+// never reads rw mints one key with and without it, and that key names the target once.
+func TestIdentifyRef_UnreadWriteGrantMatchesOnce(t *testing.T) {
+	m := newIdentityWorkspace(t, types.CharmReadWrite)
+	key, _, err := m.ComputeTargetKey(t.Context(), ".", "build", nil)
+	require.NoError(t, err, "ComputeTargetKey")
+
+	matches, err := m.IdentifyRef(t.Context(), cache.PortableRef(key))
+	require.NoError(t, err, "IdentifyRef")
+	assert.Len(t, matches, 1)
 }
 
 // TestIdentifyRef_InvalidRefShape guards the input-validation path: a string that
