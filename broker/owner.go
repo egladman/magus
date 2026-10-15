@@ -386,7 +386,7 @@ func validationScope(dir, lease string) (tree string, maxValidations int, err er
 		return "", 0, err
 	}
 	if cfg.Jobs.MaxValidations < 0 {
-		return "", 0, fmt.Errorf("jobs.max_validations is %d in %s; it counts runs, so it is 0 (no cap) or more",
+		return "", 0, fmt.Errorf("jobs.max_validations is %d in %s: it counts runs, so it is 0 (no cap) or more",
 			cfg.Jobs.MaxValidations, filepath.Join(root, config.Filename))
 	}
 	if root == "" {

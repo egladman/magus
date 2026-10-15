@@ -424,7 +424,7 @@ func TestSpawnNamesModelNamesTheHostEntryToAdd(t *testing.T) {
 
 	assert.Equal(t, decisionDeny, v.Decision)
 	assert.Equal(t, string(denyRuleSpawnNamesModel), v.Rule)
-	assert.Contains(t, v.Reason, "maps no model for harness claude-code; its hosts are other-host")
+	assert.Contains(t, v.Reason, "maps no model for harness claude-code: its hosts are other-host")
 	assert.Contains(t, v.Reason, "add a claude-code entry to the hosts magus\\job.modelTiers declares")
 }
 

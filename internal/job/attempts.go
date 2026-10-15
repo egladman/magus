@@ -51,7 +51,7 @@ func refuseAttempt(id string, prev, row types.Job) error {
 	if row.MaxAttempts == 0 || used < row.MaxAttempts {
 		return nil
 	}
-	err := fmt.Errorf("%w: %s used %d of its %d attempt(s); fork it with a record raising max_attempts (`%s`), or the root does the job itself",
+	err := fmt.Errorf("%w: %s used %d of its %d attempt(s): fork it with a record raising max_attempts (`%s`), or the root does the job itself",
 		ErrMaxAttempts, id, used, row.MaxAttempts, hint.JobFork.With("--stdin"))
 	return types.NonRetryable(err, types.RetryAfterPerson, "a person raises max_attempts or does the job")
 }

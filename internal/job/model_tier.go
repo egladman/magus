@@ -136,7 +136,7 @@ func resolveModelTier(ctx context.Context, set *types.ModelTierSet, matrix func(
 	}
 	tier, host, ok, err := declaredModelTier(set, row.Model)
 	if err != nil {
-		return types.JobModelTier{}, fmt.Errorf("job: %s: %w", row.ID, err)
+		return types.JobModelTier{}, fmt.Errorf("%s: %w", row.ID, err)
 	}
 	switch {
 	case ok && host == "":

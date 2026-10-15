@@ -1115,7 +1115,7 @@ func (r Declaration) Validate() error {
 	}{{"write_paths", r.WritePaths}, {"deny_paths", r.DenyPaths}, {"read_paths", r.ReadPaths}} {
 		for i, p := range field.paths {
 			if why := pathOutsideWorkspace(p); why != "" {
-				return fmt.Errorf("%w: %s[%d] %q %s, so it matches no workspace path and bounds nothing; name it relative to the workspace root",
+				return fmt.Errorf("%w: %s[%d] %q %s, so it matches no workspace path and bounds nothing: name it relative to the workspace root",
 					errInvalidJob, field.name, i, p, why)
 			}
 		}

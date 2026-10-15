@@ -62,7 +62,7 @@ func (s *Store) DeclaredCheckpoint(ctx context.Context, rows []types.Job, id, to
 	} else if digest != "" {
 		live, err := s.CheckoutToken(ctx)
 		if err != nil {
-			return "", fmt.Errorf("job: checkpoint %q carries a digest, and this checkout's tree could not be read to check it: %w", token, err)
+			return "", fmt.Errorf("checkpoint %q carries a digest, and this checkout's tree could not be read to check it: %w", token, err)
 		}
 		if _, liveDigest := types.ParseCheckpointToken(live); liveDigest != digest {
 			return "", fmt.Errorf("job: checkpoint %q is HEAD with the digest %q, and this checkout's tree reads %q, `%s` prints the one this tree is on",

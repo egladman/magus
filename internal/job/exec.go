@@ -56,7 +56,7 @@ func (heldError) Unwrap() error { return ErrHeldElsewhere }
 func (s *Store) Exec(ctx context.Context, id string) (types.Job, error) {
 	base, err := s.CheckoutToken(ctx)
 	if err != nil {
-		return types.Job{}, fmt.Errorf("job: the checkout at %s reports no revision, so there is no base to record for %s,"+
+		return types.Job{}, fmt.Errorf("the checkout at %s reports no revision, so there is no base to record for %s,"+
 			" `%s` run there says why: %w", s.root, id, hint.VCSCheckpoint.With("-o name"), err)
 	}
 	// Resolved before the lock, since resolving runs the VCS; the row is read again under it.

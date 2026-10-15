@@ -278,7 +278,7 @@ func TestReadConformRatchetIsStrict(t *testing.T) {
 		},
 		"trailing data": {
 			in:   "{\"schema\": 1}\n{}",
-			want: "line 2: trailing data after the ratchet",
+			want: "line 2: after the ratchet: trailing data",
 		},
 		"schema of the wrong type": {
 			in:    `{"schema": "1"}`,

@@ -375,7 +375,7 @@ func ReadConformRatchet(data []byte) (ConformRatchet, error) {
 		return ConformRatchet{}, err
 	}
 	if err := dec.End(); err != nil {
-		return ConformRatchet{}, fmt.Errorf("line %d: %w after the ratchet", conformErrorLine(data, err, 0), err)
+		return ConformRatchet{}, fmt.Errorf("line %d: after the ratchet: %w", conformErrorLine(data, err, 0), err)
 	}
 	if r.Schema != 1 {
 		if schemaLine == 0 {

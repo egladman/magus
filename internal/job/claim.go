@@ -197,7 +197,7 @@ func claimDrivers(ctx context.Context, root string, paths []string) (types.VCSDr
 	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
 	switch {
 	case err != nil:
-		return nil, nil, fmt.Errorf("no version control answered here (%w)", err)
+		return nil, nil, fmt.Errorf("no version control answered here: %w", err)
 	case res.Source == types.VCSSourceDisabled || res.VCS == nil:
 		return nil, nil, errVCSDisabled
 	}

@@ -106,7 +106,7 @@ func NarrowConfigHold(ctx context.Context, store *Store, id, file string, touche
 	}
 	driver, drivers, err := claimDrivers(ctx, store.root, []string{file})
 	if err != nil {
-		return types.Job{}, fmt.Errorf("job: no claim on %s can be graded, so its hold stays whole: %w", file, err)
+		return types.Job{}, fmt.Errorf("no claim on %s can be graded, so its hold stays whole: %w", file, err)
 	}
 	var all []string
 	if drivers[file] != "" {

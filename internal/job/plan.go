@@ -647,7 +647,7 @@ func PlaceDerivedClaims(ctx context.Context, store *Store, derived []string) ([]
 	case errors.Is(err, errVCSDisabled):
 		return nil, nil
 	case err != nil:
-		return nil, fmt.Errorf("job: the claims derived from symbol goals cannot be placed: %w", err)
+		return nil, fmt.Errorf("the claims derived from symbol goals cannot be placed: %w", err)
 	}
 	var kept, refused []string
 	for _, claim := range derived {
@@ -672,7 +672,7 @@ func PlaceDerivedClaims(ctx context.Context, store *Store, derived []string) ([]
 	}
 	if len(refused) > 0 {
 		return nil, types.DiagnosticErrorf(types.WritePathClaimUngradable,
-			"job: a claim derived from a symbol goal must name exactly one declaration: %s. Claim the declaration in write_paths instead, or fix what is named",
+			"a claim derived from a symbol goal must name exactly one declaration: %s. Claim the declaration in write_paths instead, or fix what is named",
 			strings.Join(refused, "; "))
 	}
 	return kept, nil

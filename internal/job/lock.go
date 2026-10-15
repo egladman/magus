@@ -27,7 +27,7 @@ func (s *Store) locked(ctx context.Context, fn func() error) error {
 		return err
 	}
 	if holder := readLockHolder(path, time.Now()); holder != "" {
-		return fmt.Errorf("job: %w; the holder is %s", err, holder)
+		return fmt.Errorf("job: the holder is %s: %w", holder, err)
 	}
 	return fmt.Errorf("job: %w", err)
 }

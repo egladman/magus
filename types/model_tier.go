@@ -247,7 +247,7 @@ func (s *ModelTierSet) Alias(host HarnessKey, t ModelTier) (string, error) {
 	}
 	aliases, ok := s.hosts[host]
 	if !ok {
-		return "", fmt.Errorf("enum %s at %s maps no model for harness %s; its hosts are %s", s.enum, s.site, host.ID, s.hostIDs())
+		return "", fmt.Errorf("enum %s at %s maps no model for harness %s: its hosts are %s", s.enum, s.site, host.ID, s.hostIDs())
 	}
 	return aliases[t.rank], nil
 }

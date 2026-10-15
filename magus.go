@@ -375,7 +375,7 @@ func refuseHumanOnlyInGate(projects []*types.Project, lookup func(path string) *
 				what = fmt.Sprintf("project %q declares its `%s` human_only", p.Path, gate)
 			}
 			errs = append(errs, fmt.Errorf(
-				"magus: %s, so no agent could pass the gate a push needs; take it out of the gate and run `%s` as its own CI step",
+				"magus: %s, so no agent could pass the gate a push needs: take it out of the gate and run `%s` as its own CI step",
 				what, hint.Run.With(v.Target, v.Project.Path)))
 			return types.ErrSkipChain
 		})

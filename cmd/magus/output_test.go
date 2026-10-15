@@ -111,7 +111,7 @@ func TestWriteTemplateMissingFieldListsRecordFields(t *testing.T) {
 		v    any
 		want string
 	}{
-		{"object lists its sorted fields", record, "this record's top-level fields are count, target, workspace; "},
+		{"object lists its sorted fields", record, "this record's top-level fields are count, target, workspace: "},
 		{"a list has no fields to offer", []string{"a"}, ""},
 	}
 	for _, tc := range cases {
