@@ -249,15 +249,15 @@ func joinStartedChild(ctx context.Context, at location, facts hint.Gate, who hoo
 		join(matched[0])
 		return "", ""
 	case len(matched) > 1:
-		return fmt.Sprintf("magus workspace: %d waiting spawns name job %s, so this worker's first call cannot pick its own; title each spawn for its own job.",
+		return fmt.Sprintf("magus workspace: %d waiting spawns name job %s; title each spawn for its own job.",
 			len(matched), claim), ""
 	}
-	return "", fmt.Sprintf("magus workspace: none of the %d waiting spawn(s) names this caller, so it runs under no lease; a worker binds with `%s`.",
+	return "", fmt.Sprintf("magus workspace: none of the %d waiting spawn(s) names this caller; it runs under no lease until it binds with `%s`.",
 		len(titled), hint.JobExec.With("<job>"))
 }
 
 // hostSpawnTitle is the spawn title the host filed for child beside the session transcript:
-// Claude Code writes <session>/subagents/agent-<id>.meta.json when the child starts, before
+// the host writes <session>/subagents/agent-<id>.meta.json when the child starts, before
 // its first call, with the spawn's description. ok is false for a host that files none.
 func hostSpawnTitle(transcript, child string) (title string, ok bool) {
 	if transcript == "" || child == "" || child != filepath.Base(child) || child == "." || child == ".." {
