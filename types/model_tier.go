@@ -375,8 +375,9 @@ type ModelTierRecord struct {
 // the host reported; Site is the file:line of the declaration or matrix that chose the
 // tier; Ended is Unix milliseconds. Attempt numbers the attempt that ended, from 1, and
 // Retry is what must change before another attempt could help, empty when repeating may.
-// Tokens and CostUSD are what a host reported the job used, nil when none did: no host
-// reports them yet, and an unreported figure is unknown, not zero.
+// Tokens and CostUSD are the context the holder's calls read and its cache-read price, a
+// floor; nil when a call reported no context size or the price would be a guess, since an
+// unreported figure is unknown, not zero.
 //
 // Parent and ParentAttempt name the attempt of the parent the job was forked under, so
 // siblings of one fan-out group together and a re-forked parent's children do not join

@@ -20,8 +20,8 @@ import (
 // newJobOutcome is row's terminal record, kept in the history file after the row expires.
 // ended is Unix milliseconds.
 //
-// The row carries no token count or cost, so those stay unknown until a host reports them
-// onto it. ChecksRun counts the runs the row kept evidence of: its own check's and one per
+// The row carries no token count or cost; [Store.endedOutcome] prices them from the
+// holder's trail. ChecksRun counts the runs the row kept evidence of: its own check's and one per
 // goal. Retry classifies the attempt from the row alone: an outcome is recorded under the
 // store's lock, where the trail's denials are not read.
 func newJobOutcome(row types.Job, ended int64) types.JobOutcome {
@@ -268,8 +268,24 @@ func (s *Store) endedOutcome(ctx context.Context, h heldOutcome, ended int64) ty
 			out.Projects = projects
 		}
 	}
-	out.Work = attemptWork(h.trail, h.row.ID, attemptStart(h.row))
+	work, calls := attemptWork(h.trail, h.row.ID, attemptStart(h.row))
+	out.Work = work
+	out.Tokens, out.CostUSD = s.priceAttempt(work, calls)
 	return out
+}
+
+// priceAttempt is the context an attempt's calls read and its cache-read price, both nil
+// when unknown: no model table, a call that reported no context size, or a price
+// [model.Table.PriceContext] would have to guess.
+func (s *Store) priceAttempt(work *types.JobWork, calls []types.AgentFacts) (*int64, *float64) {
+	if s.prices == nil || work == nil || work.ContextTokens == nil {
+		return nil, nil
+	}
+	floor, why := s.prices().PriceContext(calls)
+	if why != "" {
+		return nil, nil
+	}
+	return &floor.Tokens, &floor.USD
 }
 
 // attemptStart is when row's live attempt began, unix seconds: when the last prior attempt

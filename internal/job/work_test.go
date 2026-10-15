@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -30,7 +31,8 @@ func TestAttemptWorkFoldsTheHoldersCallsUpToAndAfterItsFirstWrite(t *testing.T) 
 	call(t, base, "a", "file.write", 30_000, "pass")
 	call(t, base, "a", "file.write", 50_000, "pass")
 
-	got := attemptWork(base, "a", since)
+	got, calls := attemptWork(base, "a", since)
+	assert.Len(t, calls, 4, "one fact per call of this holder")
 
 	require.NotNil(t, got)
 	require.NotNil(t, got.SetupMs)
@@ -54,7 +56,7 @@ func TestAttemptWorkLeavesTheContextUnknownWhenACallReportedNone(t *testing.T) {
 	call(t, base, "a", "file.read", 0, "pass")
 	call(t, base, "a", "file.write", 30_000, "pass")
 
-	got := attemptWork(base, "a", since)
+	got, _ := attemptWork(base, "a", since)
 
 	require.NotNil(t, got)
 	assert.Equal(t, 2, got.Calls)
@@ -70,7 +72,7 @@ func TestAttemptWorkOfAHolderThatNeverWroteHasNoSetupFigures(t *testing.T) {
 	base := t.TempDir()
 	call(t, base, "a", "file.read", 10_000, "pass")
 
-	got := attemptWork(base, "a", time.Now().Unix()-1)
+	got, _ := attemptWork(base, "a", time.Now().Unix()-1)
 
 	require.NotNil(t, got)
 	assert.Equal(t, 1, got.SetupCalls)
@@ -88,12 +90,45 @@ func TestAttemptWorkIsUnknownWithoutAnObservedCall(t *testing.T) {
 
 	base := t.TempDir()
 	call(t, base, "other", "file.write", 10_000, "pass")
-	assert.Nil(t, attemptWork(base, "a", time.Now().Unix()-1), "no call of this lease")
-	assert.Nil(t, attemptWork(t.TempDir(), "a", 0), "an empty trail")
-	assert.Nil(t, attemptWork("", "a", 0), "no trail placed")
+	work := func(base string, since int64) *types.JobWork {
+		w, _ := attemptWork(base, "a", since)
+		return w
+	}
+	assert.Nil(t, work(base, time.Now().Unix()-1), "no call of this lease")
+	assert.Nil(t, work(t.TempDir(), 0), "an empty trail")
+	assert.Nil(t, work("", 0), "no trail placed")
 
 	call(t, base, "a", "file.write", 10_000, "pass")
-	assert.Nil(t, attemptWork(base, "a", time.Now().Unix()+60), "calls before the attempt began are not its")
+	assert.Nil(t, work(base, time.Now().Unix()+60), "calls before the attempt began are not its")
+}
+
+// The outcome's tokens and cost are the cache-read floor the session cost report prices
+// too, and unknown rather than zero when a call reported no context or a model is unpriced.
+func TestPriceAttemptIsTheContextFloorOrUnknown(t *testing.T) {
+	t.Parallel()
+
+	table := model.InEffect([]types.ModelPricing{{ID: "m", CacheRead: 1}}, nil)
+	s := &Store{prices: func() model.Table { return table }}
+	metered := func(tokens int64, id string) types.AgentFacts {
+		return types.AgentFacts{ContextTokens: tokens, ContextModel: id, Billing: types.AgentBillingMetered}
+	}
+	known := &types.JobWork{ContextTokens: ptr(int64(3_000_000))}
+
+	tokens, cost := s.priceAttempt(known, []types.AgentFacts{metered(1_000_000, "m"), metered(1_000_000, "m"), metered(2_000_000, "m")})
+	assert.Equal(t, ptr(int64(3_000_000)), tokens, "a repeated context is one model call")
+	assert.Equal(t, ptr(3.0), cost)
+
+	tokens, cost = s.priceAttempt(known, []types.AgentFacts{metered(1_000_000, "unpriced")})
+	assert.Nil(t, tokens, "a model the table does not know")
+	assert.Nil(t, cost)
+
+	tokens, cost = s.priceAttempt(&types.JobWork{}, []types.AgentFacts{metered(1_000_000, "m")})
+	assert.Nil(t, tokens, "a call that reported no context")
+	assert.Nil(t, cost)
+
+	tokens, cost = (&Store{}).priceAttempt(known, []types.AgentFacts{metered(1_000_000, "m")})
+	assert.Nil(t, tokens, "no model table")
+	assert.Nil(t, cost)
 }
 
 func ptr[T any](v T) *T { return &v }

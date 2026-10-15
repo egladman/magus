@@ -328,44 +328,22 @@ func tallyShadow(main []trail.SessionCall) []shadowTally {
 	return out
 }
 
-// estimateDollars prices the main thread's context at the cache-read rate, and returns the
-// reason instead when it would be a guess: billing that is not metered on every call, or
-// a model the table does not know. Consecutive calls reporting the same context are one
-// model call that ran several tools, so they are priced once.
+// estimateDollars prices the main thread's context through [model.Table.PriceContext], the
+// arithmetic a job's recorded outcome is priced by too, and returns its reason instead when
+// the price would be a guess.
 func estimateDollars(main []trail.SessionCall, table model.Table) (*dollarEstimate, string) {
-	var samples []trail.SessionCall
-	for _, call := range main {
-		if call.ContextTokens > 0 {
-			samples = append(samples, call)
-		}
+	facts := make([]types.AgentFacts, len(main))
+	for i, call := range main {
+		facts[i] = call.AgentFacts
 	}
-	if len(samples) == 0 {
+	if !slices.ContainsFunc(facts, func(f types.AgentFacts) bool { return f.ContextTokens > 0 }) {
 		return nil, "no main-thread call reported a context size"
 	}
-	for _, call := range samples {
-		switch call.Billing {
-		case types.AgentBillingMetered:
-		case "":
-			return nil, "billing is unknown: set agents.billing in magus.yaml"
-		default:
-			return nil, fmt.Sprintf("billing is %s, which has no per-token price", call.Billing)
-		}
+	floor, why := table.PriceContext(facts)
+	if why != "" {
+		return nil, why
 	}
-	est := &dollarEstimate{Billing: types.AgentBillingMetered}
-	var prev trail.SessionCall
-	for i, call := range samples {
-		pricing, ok := table.Lookup(call.ContextModel)
-		if !ok || pricing.CacheRead == 0 {
-			return nil, fmt.Sprintf("model %q is not in the model table: add it under agents.models in magus.yaml", call.ContextModel)
-		}
-		if i > 0 && call.ContextTokens == prev.ContextTokens && call.ContextModel == prev.ContextModel {
-			continue
-		}
-		prev = call
-		est.Calls++
-		est.FloorUSD += float64(call.ContextTokens) / 1e6 * float64(pricing.CacheRead) * pricing.PriceMultiplier(call.ContextTokens)
-	}
-	return est, ""
+	return &dollarEstimate{Billing: types.AgentBillingMetered, Calls: floor.Calls, FloorUSD: floor.USD}, ""
 }
 
 func renderCost(w io.Writer, c *sessionCost) {

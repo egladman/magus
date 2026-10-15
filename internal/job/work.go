@@ -18,36 +18,40 @@ const workReadWindow = 20_000
 const writeTool = "file.write"
 
 // attemptWork folds the guard's observations of lease's holder since since (unix seconds)
-// out of the trail at base. Nil is unknown: no trail to read, one that no longer reaches
-// back to since, or no call recorded under lease, which is a holder the guard never saw
-// rather than an idle one. It reads the trail [trail.LeaseDenials] reads, whose test of how far the
-// retained trail reaches is the one this profile is known by.
-func attemptWork(base, lease string, since int64) *types.JobWork {
+// out of the trail at base, with the cost facts the host reported beside each call, in
+// order. Nil is unknown: no trail to read, one that no longer reaches back to since, or no
+// call recorded under lease, which is a holder the guard never saw rather than an idle
+// one. It reads the trail [trail.LeaseDenials] reads, whose test of how far the retained
+// trail reaches is the one this profile is known by.
+func attemptWork(base, lease string, since int64) (*types.JobWork, []types.AgentFacts) {
 	if base == "" {
-		return nil
+		return nil, nil
 	}
 	denials, known, err := trail.LeaseDenials(base, lease, since, math.MaxInt)
 	if err != nil || !known {
-		return nil
+		return nil, nil
 	}
 	events, err := trail.ReadRecent(base, workReadWindow)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	from := since * 1000
 	if len(events) == workReadWindow && events[len(events)-1].Ts > from {
-		return nil
+		return nil, nil
 	}
 	slices.Reverse(events)
 
 	work := types.JobWork{Denials: len(denials)}
 	var sum, peak, setup int64
+	var facts []types.AgentFacts
 	everyReported := true
 	for _, e := range events {
 		if e.Kind != trail.KindAgentCommand || e.Lease != lease || e.Ts < from {
 			continue
 		}
-		tokens, reported := callContext(base, e)
+		f, reported := callFacts(base, e)
+		facts = append(facts, f)
+		tokens := f.ContextTokens
 		everyReported = everyReported && reported
 		sum += tokens
 		peak = max(peak, tokens)
@@ -72,27 +76,27 @@ func attemptWork(base, lease string, since int64) *types.JobWork {
 		work.Writes++
 	}
 	if work.Calls == 0 {
-		return nil
+		return nil, nil
 	}
 	if everyReported {
 		work.ContextTokens, work.PeakTokens = &sum, &peak
 	}
-	return &work
+	return &work, facts
 }
 
-// callContext is the context size the host reported beside one call, from the call's
-// request record; false when it reported none or the record rotated away.
-func callContext(base string, e trail.Event) (int64, bool) {
+// callFacts is the cost facts the host reported beside one call, from the call's request
+// record; false when it reported no context size or the record rotated away.
+func callFacts(base string, e trail.Event) (types.AgentFacts, bool) {
 	if e.RequestRef == "" {
-		return 0, false
+		return types.AgentFacts{}, false
 	}
 	raw, err := trail.ReadBlob(base, e.RequestRef)
 	if err != nil {
-		return 0, false
+		return types.AgentFacts{}, false
 	}
 	var facts types.AgentFacts
 	if json.Unmarshal(raw, &facts) != nil || facts.ContextTokens <= 0 {
-		return 0, false
+		return types.AgentFacts{}, false
 	}
-	return facts.ContextTokens, true
+	return facts, true
 }

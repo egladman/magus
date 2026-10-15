@@ -20,6 +20,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/broker"
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/guard"
@@ -188,6 +189,11 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 	}
 	loc := job.Location{CacheDir: cacheDir, Root: root, Outputs: outputsIn, DryRun: o.DryRun,
 		TrailBase: func(checkoutRoot string) (string, error) { return magus.ResolveCacheDir(checkoutRoot, cliOptions()...) }}
+	if root != "" {
+		// Read once, and only when a job ends with a priceable trail, since it loads the
+		// workspace's harness spells.
+		loc.Prices = sync.OnceValue(func() model.Table { return sessionModelTable(root) })
+	}
 	if o.ModelTiers && root != "" {
 		m, err := loadMagus(ctx, root)
 		if err != nil {
