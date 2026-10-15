@@ -11,10 +11,12 @@ import (
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -136,7 +138,7 @@ func findStaleIndexes(ctx context.Context, ws graphWorkspace) []types.KnowledgeS
 		// hold (unchanged sources and index files, see magus.RecordedStaleIndexes), and
 		// opens the workspace to judge afresh otherwise, as every read did before.
 		if !w.Opened() {
-			if stale, ok := magus.RecordedStaleIndexes(ctx, w, globalCfg); ok {
+			if stale, ok := workspacegraph.RecordedStaleIndexes(ctx, w, globalCfg); ok {
 				return stale
 			}
 		}
@@ -221,7 +223,7 @@ func unverifiedNotice(out types.KnowledgeOccurrencesOutput) string {
 // knowledgeStoreDir is the checkout at root's knowledge store: where graph builds take
 // their lock and `job run sync-graph` records its last request, beside the guard index.
 func knowledgeStoreDir(root string) (string, error) {
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	if err != nil {
 		return "", err
 	}

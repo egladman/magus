@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -60,7 +61,7 @@ func TestCLIMintsAreAudited(t *testing.T) {
 	code, codeRec, err := mintToken(auth.MintRequest{Grant: types.GrantViewer, TTL: time.Hour}, true)
 	require.NoError(t, err)
 
-	base, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	base, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 	events, err := trail.ReadRecent(base, 10)
 	require.NoError(t, err)

@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -247,7 +248,7 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 	brief.GuardWiring = relativeTo(root, doctor.HookConfigs(ctx, root, workspaceHarnessNames(ws)...))
 	brief.Rules = ruleLocations(ctx, root, workspaceHarnessNames(ws)...)
 	brief.PromptCache = promptCacheForCheckout(root, time.Now())
-	if base, err := rootmagus.ResolveCacheDir(root, rootmagus.WithLoadedConfig(globalCfg)); err == nil {
+	if base, err := rootmagus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg)); err == nil {
 		if feedback, err := trail.RecentGuardFeedback(base, "", briefFeedbackEvents); err == nil {
 			for _, item := range feedback {
 				if item.NeedsReview() {

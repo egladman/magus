@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -282,7 +283,7 @@ func mintToken(req auth.MintRequest, code bool) (string, auth.Token, error) {
 // says on stderr when there is no workspace to record it in.
 func auditMint(action string, rec trail.MintRecord) {
 	if root := resolveRootOrEmpty(""); root != "" {
-		if base, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg)); err == nil {
+		if base, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg)); err == nil {
 			trail.AppendMint(context.Background(), base, action, rec)
 			return
 		}

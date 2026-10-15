@@ -14,10 +14,12 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -310,7 +312,7 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 			return inspectWorkspace(ctx, rootOverride)
 		}
 		return magus.Inspect(ctx, root,
-			magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
+			workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))
 	}
 	// An unresolvable path leaves the trail row without one; the version still records.
 	binary, _ := runningBinaryPath()
@@ -362,7 +364,7 @@ func guardHumanOnlyRecord(rootOverride string, inspect func(context.Context, str
 			}
 			return asMagus(ws)
 		})
-		return magus.RecordedHumanOnly(ctx, lw, globalCfg)
+		return workspacegraph.RecordedHumanOnly(ctx, lw, globalCfg)
 	}
 }
 
@@ -449,7 +451,7 @@ func guardCacheDir(rootOverride string) func(root string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return magus.ResolveCacheDir(found, magus.WithLoadedConfig(globalCfg))
+		return magus.ResolveCacheDir(found, workspace.WithLoadedConfig(globalCfg))
 	}
 }
 
@@ -516,7 +518,7 @@ func newGuardLookups(rootOverride string) guardLookups {
 		if err != nil {
 			return nil
 		}
-		cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+		cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 		if err != nil {
 			return nil
 		}

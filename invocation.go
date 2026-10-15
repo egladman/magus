@@ -28,7 +28,7 @@ import (
 // It is best-effort: if the log cannot be opened, the id is still stamped on ctx and the
 // lifecycle events still reach any extra handlers, so a run never fails on capture. The
 // command/lineage is what the viewer surfaces; see magus.viewer.v1.Invocation.
-func (m *Magus) BeginInvocation(ctx context.Context, cmd journal.Command, magusVersion string, extra ...slog.Handler) (context.Context, func(error)) {
+func (m *Magus) BeginInvocation(ctx context.Context, cmd Command, magusVersion string, extra ...slog.Handler) (context.Context, func(error)) {
 	// Reuse an id already threaded onto ctx (the server mints it in proc.service.run so the
 	// adopted call's pool entry can carry its inv and deep-link to this run's live log);
 	// otherwise mint a fresh one: the plain CLI path.
@@ -41,7 +41,7 @@ func (m *Magus) BeginInvocation(ctx context.Context, cmd journal.Command, magusV
 	// attributable to it and a descendant can recognize them as its own ancestor's.
 	ctx = types.AppendInvocationAncestor(ctx, os.Getpid(), id)
 
-	started := journal.Event{Kind: journal.KindStarted, Command: &cmd, MagusVersion: magusVersion}
+	started := journal.Event{Kind: journal.KindStarted, Command: &journal.Command{Arguments: cmd.Arguments, Cwd: cmd.Cwd, Trigger: cmd.Trigger}, MagusVersion: magusVersion}
 	finish := func(ctx context.Context, runErr error) {
 		status := journal.StatusPass
 		if runErr != nil {

@@ -28,7 +28,7 @@ func TestBeginInvocationWritesLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	workspace := m.(*Magus)
 
-	ctx, finish := workspace.BeginInvocation(context.Background(), journal.Command{
+	ctx, finish := workspace.BeginInvocation(context.Background(), Command{
 		Arguments: []string{"test"},
 		Cwd:       root,
 		Trigger:   journal.TriggerRun,
@@ -147,7 +147,7 @@ func covInspect(t *testing.T) *Magus {
 // events BeginInvocation brackets the run with.
 func TestInvocationRoundTripsThroughTheJournal(t *testing.T) {
 	m := covInspect(t)
-	cmd := journal.Command{Arguments: []string{"run", "build", "api"}, Cwd: m.Root(), Trigger: journal.TriggerRun}
+	cmd := Command{Arguments: []string{"run", "build", "api"}, Cwd: m.Root(), Trigger: journal.TriggerRun}
 
 	ctx, finish := m.BeginInvocation(context.Background(), cmd, "v0.cov")
 	id := journal.InvocationIDFromContext(ctx)
@@ -198,7 +198,7 @@ func TestBeginInvocationReusesAnIDFromTheContext(t *testing.T) {
 	preset := journal.NewInvocationID()
 
 	ctx, finish := m.BeginInvocation(journal.WithInvocationID(context.Background(), preset),
-		journal.Command{Arguments: []string{"run"}, Trigger: journal.TriggerDirect}, "v0.cov")
+		Command{Arguments: []string{"run"}, Trigger: journal.TriggerDirect}, "v0.cov")
 	assert.Equal(t, preset, journal.InvocationIDFromContext(ctx))
 	finish(nil)
 

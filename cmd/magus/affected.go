@@ -350,7 +350,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// `magus session` would show a repository where only `magus run` ever happened,
 	// and CI runs through this path.
 	captureHandlers = withInvocationJournal(ctx, captureHandlers, m.Root(), "affected", args)
-	invCtx, endInvocation := m.BeginInvocation(ctx, journal.Command{
+	invCtx, endInvocation := m.BeginInvocation(ctx, magus.Command{
 		Arguments: append([]string{"affected"}, args...), Cwd: cwd, Trigger: trigger,
 	}, version, captureHandlers...)
 	defer func() { endInvocation(err) }()

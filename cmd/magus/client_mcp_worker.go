@@ -58,7 +58,7 @@ func clientWorkspace(ctx context.Context, errOut io.Writer) (context.Context, er
 	if err != nil {
 		return ctx, err
 	}
-	ctx = types.WithWorkspace(ctx, m)
+	ctx = types.WithWorkspace(ctx, internalsOf(m))
 	sandboxed, err := m.ApplySandbox(ctx)
 	if err != nil {
 		return ctx, err

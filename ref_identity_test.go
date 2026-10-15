@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -36,7 +37,7 @@ func newIdentityWorkspace(t *testing.T, defaultCharms ...string) *Magus {
 	reg.RegisterProject(".", WithSpell(spellName))
 	opts := []Option{WithWorkspaceRegistry(reg)}
 	if len(defaultCharms) > 0 {
-		opts = append(opts, WithLoadedConfig(config.Config{DefaultCharms: defaultCharms}))
+		opts = append(opts, workspace.WithLoadedConfig(config.Config{DefaultCharms: defaultCharms}))
 	}
 	m, err := Open(context.Background(), root, opts...)
 	require.NoError(t, err, "Open")
@@ -290,7 +291,7 @@ func newIdentitySweepWorkspace(b *testing.B, nProjects, targetsPerProject, files
 		reg.RegisterProject(projPath, WithSpell(spellName))
 	}
 
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(config.Config{DefaultCharms: defaultCharms}))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(config.Config{DefaultCharms: defaultCharms}))
 	require.NoError(b, err, "Open")
 	b.Cleanup(func() { _ = m.Close() })
 	return m

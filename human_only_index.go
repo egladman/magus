@@ -8,14 +8,14 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// RecordedHumanOnly answers, for a lazy workspace that has not been opened, what it
+// recordedHumanOnly answers, for a lazy workspace that has not been opened, what it
 // declares human_only, from what the knowledge store recorded at its last evaluated sync:
 // valid while the domain fast stamp matches, which costs the tree walk and a few stats and
 // never a magusfile parse. false means the caller must open the workspace to learn it; it
 // never guesses, so a store that is missing, never recorded the targets, or was synced
 // from sources that have since moved sends the caller to the workspace. It never opens lw
 // and writes nothing.
-func RecordedHumanOnly(ctx context.Context, lw *LazyWorkspace, cfg config.Config) (types.HumanOnlyIndex, bool) {
+func recordedHumanOnly(ctx context.Context, lw *LazyWorkspace, cfg config.Config) (types.HumanOnlyIndex, bool) {
 	store, fastDomain := recordedDomainStamp(ctx, lw, cfg)
 	return store.HumanOnly(fastDomain)
 }

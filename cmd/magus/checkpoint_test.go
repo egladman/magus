@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,7 +29,7 @@ func TestCheckoutLeaseAnswersWhatTheCheckpointClaimedFromTheEnvironment(t *testi
 	} {
 		t.Run(name, func(t *testing.T) {
 			root := attentionTestRoot(t)
-			cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+			cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 			require.NoError(t, err)
 			if tc.bound != "" {
 				bindCheckout(t, cacheDir, tc.bound)

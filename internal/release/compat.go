@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -89,7 +90,7 @@ func CheckCompat(ctx context.Context, repoRoot, baseTag string) (CompatReport, e
 	cfg.Cache.Dir = filepath.Join(scratch, "cache")
 	cfg.Server.Enabled = false
 	cfg.Broker = types.BrokerOff
-	ws, err := magus.Inspect(ctx, tree, magus.WithLoadedConfig(cfg), magus.WithoutWorkspaceProviders())
+	ws, err := magus.Inspect(ctx, tree, workspace.WithLoadedConfig(cfg), magus.WithoutWorkspaceProviders())
 	if c, ok := ws.(io.Closer); ok {
 		_ = c.Close()
 	}

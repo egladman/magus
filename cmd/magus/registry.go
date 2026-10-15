@@ -66,10 +66,10 @@ func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observ
 	// them; only if none was supplied do we build a per-workspace collector.
 	metricsOpt := magus.WithMetricsCollection()
 	if tel != nil {
-		metricsOpt = magus.WithProvider(tel)
+		metricsOpt = workspace.WithTelemetryProvider(tel)
 	}
 	opts := []magus.Option{
-		magus.WithLoadedConfig(cfg),
+		workspace.WithLoadedConfig(cfg),
 		// The version lets a load failure that looks like a stale server say so.
 		magus.WithVersion(version),
 		workspace.WithLimiter(lim),

@@ -198,7 +198,7 @@ func TestCleanCacheKeepsTrackedOutputs(t *testing.T) {
 			t.Cleanup(func() { _ = m.Close() })
 
 			require.NoError(t, m.Run(t.Context(), []types.Target{{Path: ".", Name: "generate"}}))
-			_, err = m.LastRecordedRun(t.Context(), ".", "generate")
+			_, err = m.internals().LastRecordedRun(t.Context(), ".", "generate")
 			require.NoError(t, err, "the run must leave cache state for clean to drop")
 
 			cleaned, err := m.CleanOutputs(t.Context(), m.All(), false)
@@ -216,7 +216,7 @@ func TestCleanCacheKeepsTrackedOutputs(t *testing.T) {
 
 			assert.Empty(t, checkout.Git("status", "--porcelain"), "clean must leave the tree as committed")
 
-			_, err = m.LastRecordedRun(t.Context(), ".", "generate")
+			_, err = m.internals().LastRecordedRun(t.Context(), ".", "generate")
 			assert.ErrorIs(t, err, fs.ErrNotExist, "clean --cache must drop the manifests")
 			var blobs []string
 			_ = filepath.WalkDir(filepath.Join(m.CacheDir(), "cas"), func(path string, d fs.DirEntry, err error) error {

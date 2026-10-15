@@ -88,7 +88,7 @@ func (m *Magus) orderSkip(ctx context.Context, touched []string, freshErr error,
 	var built map[string]time.Time
 	listed := true
 	if freshErr == nil && indexed && len(capable) > 0 {
-		built, listed = SymbolIndexTimes(ctx, m, m.Root(), m.cfg)
+		built, listed = workspaceSymbolIndexTimes(ctx, m, m.Root(), m.cfg)
 	}
 	return indexGap(freshErr, indexed, capable, built, listed, func(path string) string {
 		return types.NewProjectRef(path, filepath.Join(m.ws.Root, filepath.FromSlash(path))).Display()

@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/settle"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -1399,7 +1400,7 @@ func stagePaths(ctx context.Context, root string, driver types.VCSDriver, paths 
 // checkout. Two holders sharing a checkout share its dirty tree, and staging the other's
 // uncommitted sources would land them under this caller's commit.
 func heldForOtherLeases(ctx context.Context, root string, paths []string) (map[string]string, error) {
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	if err != nil {
 		return nil, fmt.Errorf("vcs add: resolve the cache dir to read which leases share this checkout: %w", err)
 	}

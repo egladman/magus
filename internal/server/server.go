@@ -46,10 +46,12 @@ import (
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1/graphv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1/insightv1alpha1connect"
@@ -315,7 +317,7 @@ func (s *Server) Serve(ctx context.Context) error {
 				Workspace: svc,
 				Root:      diffRoot,
 				CacheDir:  opts.Magus.CacheDir(),
-				Telemetry: opts.Magus.Telemetry(),
+				Telemetry: internalsOf(opts.Magus).Telemetry(),
 			}
 			diffReviewH := diffhandler.NewReviewHandler(diffOpts, log)
 			diffLookupH := diffhandler.NewReviewLookupHandler(svc, log)
@@ -337,7 +339,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// The attention queue: blocks agents raised that are waiting on a person. Read off
 			// the per-repository session store, which is keyed on repo identity rather than the
 			// checkout, so the console lists what `magus session attention` lists from any worktree.
-			attentionH := attentionhandler.NewHandler(opts.Magus.Root(), opts.Version, log, opts.Magus.Telemetry())
+			attentionH := attentionhandler.NewHandler(opts.Magus.Root(), opts.Version, log, internalsOf(opts.Magus).Telemetry())
 
 			// Every /api/v1 route is mounted on its own, behind the Need apiNeeds names for it,
 			// with rebind + CORS + header-only bearer auth. CORS sits outside the bearer guard so
@@ -567,7 +569,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// Audits READS (WithAuditReads) for the same reason memory does, sharpened by the
 			// private store: this is the only door that serves notes nothing else attributes.
 			notesAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), trail.KindNotes, trailrpc.WithAuditReads()))
-			notesPath, notesHandler := notesv1alpha1connect.NewNotesServiceHandler(noteshandler.NewService(opts.Magus, opts.Config), notesAudit, connectReadMax)
+			notesPath, notesHandler := notesv1alpha1connect.NewNotesServiceHandler(noteshandler.NewService(internalsOf(opts.Magus), opts.Config), notesAudit, connectReadMax)
 			f.service(notesPath, notesHandler)
 			bridgeLog.InfoContext(ctx, "notes service mounted", slog.String("path", notesPath))
 
@@ -582,7 +584,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// either: unlike notes and memory, nothing here is attributable to a person, and the
 			// same facts are already served unaudited over /api/v1/graph. The two doors onto that
 			// one body of data hold the same need, console=read.
-			graphPath, graphServiceHandler := graphv1alpha1connect.NewGraphServiceHandler(graphhandler.NewService(opts.Magus), connectReadMax)
+			graphPath, graphServiceHandler := graphv1alpha1connect.NewGraphServiceHandler(graphhandler.NewService(internalsOf(opts.Magus)), connectReadMax)
 			f.service(graphPath, graphServiceHandler)
 			bridgeLog.InfoContext(ctx, "graph service mounted", slog.String("path", graphPath))
 
@@ -879,20 +881,32 @@ func (s *Server) serveUnloaded(ctx context.Context) error {
 	return s.run(ctx, log, f)
 }
 
+// magusInternals is an opened *magus.Magus as workspace.View shows it to magus's own
+// packages: with the knowledge graph and the observability provider, which the public
+// type does not carry.
+type magusInternals interface {
+	types.WorkspaceRepository
+	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
+	SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool)
+	Telemetry() observability.Provider
+}
+
+func internalsOf(m *magus.Magus) magusInternals { return workspace.View(m).(magusInternals) }
+
 // diagramWorkspace is the workspace plus the import graph the diagrams read.
 type diagramWorkspace struct{ *magus.Magus }
 
 // SymbolIndex reads the manifest's shard fingerprints instead of merging the shards into a
 // graph. The graph is built first so the manifest on disk is current.
 func (w diagramWorkspace) SymbolIndex(ctx context.Context) (types.SymbolIndexDigest, error) {
-	if _, err := w.KnowledgeGraph(ctx, types.GraphRequest{}); err != nil {
+	if _, err := internalsOf(w.Magus).KnowledgeGraph(ctx, types.GraphRequest{}); err != nil {
 		return types.SymbolIndexDigest{}, err
 	}
 	return knowledge.NewStore(w.CacheDir(), true, 0, nil, nil).SymbolIndexDigest()
 }
 
 func (w diagramWorkspace) ImportGraph(ctx context.Context) (types.ImportGraph, error) {
-	kg, err := w.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
+	kg, err := internalsOf(w.Magus).KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return types.ImportGraph{}, err
 	}

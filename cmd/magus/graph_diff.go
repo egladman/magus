@@ -11,10 +11,12 @@ import (
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/render/md"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -335,11 +337,11 @@ func baseGraphFromRev(ctx context.Context, root, rev string) (types.KnowledgeGra
 	// or gradle there would fail and take the whole diff with it. A project only a
 	// provider knows about therefore reads as added rather than unchanged, which is
 	// the honest answer for a base magus cannot resolve.
-	ws, err := magus.Inspect(ctx, tmp, magus.WithLoadedConfig(cfg), magus.WithoutWorkspaceProviders())
+	ws, err := magus.Inspect(ctx, tmp, workspace.WithLoadedConfig(cfg), magus.WithoutWorkspaceProviders())
 	if err != nil {
 		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: inspect revision %q tree: %w", rev, err)
 	}
-	g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), cfg, false, slog.Default())
+	g, err := workspacegraph.Build(ctx, ws, ws.Root(), cfg, false, slog.Default())
 	if err != nil {
 		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: build graph for revision %q: %w", rev, err)
 	}

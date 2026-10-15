@@ -65,7 +65,7 @@ func (m *Magus) AssessChange(ctx context.Context, target string, o AssessOptions
 		return string(b), err
 	}
 	change, unclaimed := m.unboundedPaths(res)
-	classifier := m.ChangeClassifier(at, working)
+	classifier := m.changeClassifier(at, working)
 	classifier.Role = func(context.Context, []string) (map[string]string, error) {
 		roles := make(map[string]string, len(entries))
 		for _, e := range entries {

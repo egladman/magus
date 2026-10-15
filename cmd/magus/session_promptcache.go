@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 )
 
 // promptCacheForCheckout resolves the prompt-cache clock from the newest guard
@@ -22,7 +23,7 @@ import (
 // wired, or a tree nobody has run an agent against. Nothing is printed then, because
 // the alternative is a clock counting up from an activity magus never saw.
 func promptCacheForCheckout(root string, now time.Time) sessions.PromptCacheClock {
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	if err != nil {
 		return sessions.PromptCacheClock{}
 	}

@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
@@ -208,7 +209,7 @@ func TestRunReturnsUndeclaredSourceModified(t *testing.T) {
 	reg.RegisterProject(".", WithSpell(spellName))
 	cfg := config.Defaults()
 	cfg.HistoryPath = filepath.Join(root, "history.json")
-	m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(cfg))
+	m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -689,7 +690,7 @@ func TestMissingBuzzIndexerFailsOnlyItsOwnIndex(t *testing.T) {
 		Freshness: types.SymbolIndexNotBuilt, Detail: symbols.MissingIndexerHint("buzz", "scip-buzz"),
 	}, status["buzz"])
 
-	gaps, ok := SymbolGaps(ctx, m, root, m.cfg, nil)
+	gaps, ok := workspaceSymbolGaps(ctx, m, root, m.cfg, nil)
 	require.True(t, ok)
 	assert.Equal(t, []types.KnowledgeSymbolGap{{
 		Project: types.NewProjectRef(".", m.Get(".").Dir), Language: "buzz",

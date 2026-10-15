@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -198,7 +199,7 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, origin
 	// guards against.
 	var tel observability.Provider
 	if opts.Magus != nil {
-		tel = opts.Magus.Telemetry()
+		tel = workspace.View(opts.Magus).(telemetrySource).Telemetry()
 	}
 	if opts.Magus == nil && opts.Unavailable != nil {
 		unavailable := func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {

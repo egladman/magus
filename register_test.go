@@ -437,7 +437,7 @@ func TestWorkspaceRegistryRidesTheContext(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	ctx := WithWorkspaceRegistryContext(context.Background(), reg)
-	assert.Same(t, reg, WorkspaceRegistryFromContext(ctx))
+	assert.Same(t, reg.r, WorkspaceRegistryFromContext(ctx).r)
 }
 
 // TestWithoutWorkspaceProvidersLeavesMagusfileProjectsAlone: the option suppresses

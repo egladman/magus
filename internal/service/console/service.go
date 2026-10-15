@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -78,7 +79,7 @@ func WithStatusSnapshotFn(fn func(ctx context.Context) types.StatusSnapshot) Opt
 	return func(s *Service) { s.statusSnapshotFn = fn }
 }
 
-// WithKnowledgeGraphFn replaces Magus.KnowledgeGraph. Tests pass an in-memory graph.
+// WithKnowledgeGraphFn replaces the workspace knowledge graph. Tests pass an in-memory graph.
 func WithKnowledgeGraphFn(fn func(ctx context.Context, withSymbols bool) (*knowledge.Graph, error)) Option {
 	return func(s *Service) { s.knowledgeGraphFn = fn }
 }
@@ -357,10 +358,14 @@ func (s *Service) knowledgeGraph(ctx context.Context, withSymbols bool) (*knowle
 	if s.knowledgeGraphFn != nil {
 		return s.knowledgeGraphFn(ctx, withSymbols)
 	}
+	// The graph is one of the methods workspace.View adds to an opened *magus.Magus.
+	g := workspace.View(s.magus).(interface {
+		KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
+	})
 	if withSymbols {
-		return s.magus.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
+		return g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	}
-	return s.magus.KnowledgeGraph(ctx, types.GraphRequest{})
+	return g.KnowledgeGraph(ctx, types.GraphRequest{})
 }
 
 // TargetGraph returns the describe-graph view (targets flavor). The error return

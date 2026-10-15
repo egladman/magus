@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -500,7 +501,7 @@ func observeSymbolDelta(ctx context.Context, root string, row types.Job, seen jo
 	var g *knowledge.Graph
 	if filepath.Clean(tree) == filepath.Clean(root) {
 		g = graph.load(ctx)
-	} else if ws, err := magus.Inspect(ctx, tree, magus.WithLoadedConfig(globalCfg), magus.WithVersion(version)); err == nil &&
+	} else if ws, err := magus.Inspect(ctx, tree, workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version)); err == nil &&
 		(graph.rebuild || len(findStaleIndexes(ctx, ws)) == 0) {
 		g, _ = loadRefsGraph(ctx, ws, globalCfg, false, "")
 	}

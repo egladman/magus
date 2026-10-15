@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -66,7 +67,7 @@ type nextGate struct {
 
 // newNextGate resolves the gate for a command running against root.
 func newNextGate(root string) nextGate {
-	dir, err := magus.ResolveCacheDir(resolveRootOrEmpty(root), magus.WithLoadedConfig(globalCfg))
+	dir, err := magus.ResolveCacheDir(resolveRootOrEmpty(root), workspace.WithLoadedConfig(globalCfg))
 	if err != nil {
 		return nextGate{role: hint.RoleUnbound}
 	}

@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/spells"
 	"io/fs"
 	"log/slog"
@@ -24,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/render"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -211,7 +213,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 		// only route to a project whose targets live in its own index.
 		var routing *types.KnowledgeRouting
 		if len(pos) == 0 {
-			g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), globalCfg, false, nil)
+			g, err := workspacegraph.Build(ctx, ws, ws.Root(), globalCfg, false, nil)
 			if err != nil {
 				return fmt.Errorf("build knowledge graph for the routing index: %w", err)
 			}
@@ -839,7 +841,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 			if !matches {
 				mismatched = true
 			}
-		} else if rec, rerr := m.LastRecordedRun(ctx, e.Project, e.Target); !errors.Is(rerr, types.ErrNoCache) {
+		} else if rec, rerr := internalsOf(m).LastRecordedRun(ctx, e.Project, e.Target); !errors.Is(rerr, types.ErrNoCache) {
 			// With no peer named, the peer is this machine's own last run of the target.
 			// It never gates the exit code the way --against does: a differing key here
 			// is the NORMAL state after any edit, and failing on it would break every
@@ -1491,7 +1493,7 @@ func describeWorkspacesOutput(ctx context.Context, root string) ([]types.Workspa
 		if err != nil {
 			return nil, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
 		}
-		w, err := magus.Inspect(ctx, wsRoot, magus.WithLoadedConfig(cfg))
+		w, err := magus.Inspect(ctx, wsRoot, workspace.WithLoadedConfig(cfg))
 		if err != nil {
 			return nil, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
 		}

@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/queue"
 	qtypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/txtar"
@@ -483,7 +484,7 @@ func execRepoFixture(t *testing.T, rows ...types.Job) (repo *testkit.Repo, cache
 
 func seedJobStore(t *testing.T, root string, rows ...types.Job) (string, string) {
 	t.Helper()
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
 	for _, row := range rows {
@@ -1294,7 +1295,7 @@ func TestJobForkRefusesACheckTheGuardDeniesItsWorker(t *testing.T) {
 	assert.Contains(t, err.Error(), "a worker does not build magus")
 	assert.Contains(t, err.Error(), "`go::go-vet .`")
 
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
 	rows, err := store.List()
@@ -1445,7 +1446,7 @@ func TestJobForkIsNotRefusedByADenyThatHoldsForEveryCommand(t *testing.T) {
 	assert.NotContains(t, verdict.NotGraded, "rebuild it")
 
 	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."}))
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
 	require.NoError(t, err)

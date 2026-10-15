@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/server"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -161,7 +162,7 @@ func publishServerTrailBase() {
 		slog.Warn("no workspace root; background jobs and scheduled maintenance will not be recorded", attr.Error(err))
 		return
 	}
-	base, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	base, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	if err != nil {
 		slog.Warn("cache dir unresolvable; background jobs and scheduled maintenance will not be recorded", attr.Error(err))
 		return
@@ -198,7 +199,7 @@ func startBridge(ctx context.Context, cancel context.CancelFunc, tel observabili
 	// collector so the endpoint is still non-empty; one-shot CLI runs leave metrics off.
 	opts := []magus.Option{magus.WithMetricsCollection()}
 	if tel != nil {
-		opts[0] = magus.WithProvider(tel)
+		opts[0] = workspace.WithTelemetryProvider(tel)
 	}
 	if serverRegistry != nil && serverRegistry.broker != nil && globalCfg.Broker.Resolved() != types.BrokerOff {
 		opts = append(opts, magus.WithBroker(serverRegistry.broker))

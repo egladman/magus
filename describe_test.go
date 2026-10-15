@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -271,7 +272,7 @@ func TestListCharms_InverseIndex(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	ws := newWorkspaceCustom(t, WithWorkspaceRegistry(reg), WithLoadedConfig(config.Config{DefaultCharms: []string{"write"}}))
+	ws := newWorkspaceCustom(t, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(config.Config{DefaultCharms: []string{"write"}}))
 
 	charms, err := ws.ListCharms(context.Background())
 	require.NoError(t, err, "ListCharms")

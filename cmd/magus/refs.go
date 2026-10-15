@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/edit"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
@@ -344,7 +345,7 @@ func lookupRefs(ctx context.Context, ws types.WorkspaceRepository, cfg config.Co
 	res := refsResult{Found: true, Out: out, coverage: cov}
 	if read.Occurrences {
 		key := strings.TrimPrefix(out.Symbol, types.KindSymbol+":")
-		if occ, probed := magus.SymbolOccurrences(ctx, ws, ws.Root(), cfg, slog.Default(), key); probed {
+		if occ, probed := workspacegraph.SymbolOccurrences(ctx, ws, ws.Root(), cfg, slog.Default(), key); probed {
 			occ.Unreadable = knowledge.NarrowGaps(occ.Unreadable, language)
 			res.Occurrences = &occ
 		}
@@ -594,7 +595,7 @@ func symbolIndexTimes(ctx context.Context, root string) indexedAtFunc {
 	if err != nil {
 		return nil
 	}
-	times, ok := magus.SymbolIndexTimes(ctx, ws, ws.Root(), globalCfg)
+	times, ok := workspacegraph.SymbolIndexTimes(ctx, ws, ws.Root(), globalCfg)
 	if !ok {
 		return nil
 	}
@@ -859,7 +860,7 @@ func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *know
 		return err
 	}
 	key := strings.TrimPrefix(id, types.KindSymbol+":")
-	read, probed := magus.SymbolOccurrences(ctx, ws, ws.Root(), globalCfg, slog.Default(), key)
+	read, probed := workspacegraph.SymbolOccurrences(ctx, ws, ws.Root(), globalCfg, slog.Default(), key)
 	if !probed {
 		return refuse(append(blind, types.EditRefusal{Reason: "cannot read the symbol indexes"})...)
 	}

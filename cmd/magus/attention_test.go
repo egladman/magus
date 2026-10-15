@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -230,7 +231,7 @@ func TestFileAttentionStoresTheLease(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			root := attentionTestRoot(t)
 			if tc.bound != "" {
-				cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+				cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 				require.NoError(t, err)
 				bindCheckout(t, cacheDir, tc.bound)
 			}

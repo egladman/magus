@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -365,7 +366,7 @@ func openGraphReadFixture(tb testing.TB, root string) graphReadFixture {
 	globalCfg = cfg
 
 	ctx := context.Background()
-	local, err := magus.Open(ctx, root, magus.WithLoadedConfig(cfg))
+	local, err := magus.Open(ctx, root, workspace.WithLoadedConfig(cfg))
 	require.NoError(tb, err)
 	tb.Cleanup(func() { _ = local.Close() })
 
@@ -514,7 +515,7 @@ func TestServerGraphReadsSeeAnEditTheWatcherIgnores(t *testing.T) {
 	stopWatch, err := e.m.WatchKnowledgeGraph(ctx)
 	require.NoError(t, err)
 	t.Cleanup(stopWatch)
-	_, err = e.m.KnowledgeGraph(ctx, types.GraphRequest{})
+	_, err = internalsOf(e.m).KnowledgeGraph(ctx, types.GraphRequest{})
 	require.NoError(t, err, "warm the watched graph before the edit")
 	f.reg.release(e)
 
@@ -664,7 +665,7 @@ func TestQueryInvocationTextResultLinesCarryProjectTargetAndRef(t *testing.T) {
 	m := newQueryTestWorkspace(t)
 	ctx := withMagus(context.Background(), m)
 
-	runCtx, finish := m.BeginInvocation(ctx, journal.Command{Arguments: []string{"run", "lint"}, Trigger: journal.TriggerRun}, "v0.test")
+	runCtx, finish := m.BeginInvocation(ctx, magus.Command{Arguments: []string{"run", "lint"}, Trigger: journal.TriggerRun}, "v0.test")
 	id := journal.InvocationIDFromContext(runCtx)
 	journal.Emit(runCtx, journal.Event{Kind: journal.KindResult, Status: journal.StatusFail, Project: "api", Target: "lint", Ref: "out9bddb214656e", Text: "exit status 1\nsecond line"})
 	journal.Emit(runCtx, journal.Event{Kind: journal.KindResult, Status: journal.StatusPass, Project: "web", Target: "build", Ref: "out0123456789ab"})

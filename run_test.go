@@ -1843,7 +1843,7 @@ func TestRun_RetryOnVolatileIsPerTargetNotPerRun(t *testing.T) {
 	// so the Wilson score plays no part and the only thing under test is the gate.
 	cfg := config.Defaults()
 	cfg.HistoryPath = filepath.Join(root, "history.json")
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(cfg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1910,7 +1910,7 @@ func TestRun_RetryIsAudibleOffCI(t *testing.T) {
 	)
 	cfg := config.Defaults()
 	cfg.HistoryPath = filepath.Join(root, "history.json")
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(cfg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1947,7 +1947,7 @@ func TestRun_NonRetryableFailureRecordsNotRetried(t *testing.T) {
 	)
 	cfg := config.Defaults()
 	cfg.HistoryPath = filepath.Join(root, "history.json")
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(cfg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -2010,7 +2010,7 @@ func TestRun_MemoryClaimFollowsTheRunsShape(t *testing.T) {
 	reg.RegisterProject(".", WithSpell(spellName), WithTarget("work", workspace.MemoryMB(64)))
 	cfg := config.Defaults()
 	cfg.HistoryPath = historyPath
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(cfg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 

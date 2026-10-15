@@ -17,7 +17,9 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/gcpolicy"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/settle"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
@@ -169,7 +171,7 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 		magusOpened.root = root
 		stop := t.phase("magus.open")
 		defer relaxGC()()
-		opts := []magus.Option{magus.WithLoadedConfig(globalCfg), magus.WithVersion(version)}
+		opts := []magus.Option{workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version)}
 		if lim := bootstrapLimiterFrom(ctx); lim != nil {
 			opts = append(opts, workspace.WithLimiter(lim))
 		}
@@ -285,7 +287,7 @@ func inspectWorkspace(ctx context.Context, rootOverride string) (types.Workspace
 		stop := t.phase("workspace.inspect")
 		defer relaxGC()()
 		inspectValue, inspectErr = magus.Inspect(ctx, root,
-			magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
+			workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))
 		stop()
 	})
 	if err := inspectOpened.check("inspectWorkspace", rootOverride); err != nil {
@@ -425,3 +427,18 @@ func (s *stringList) Set(v string) error {
 	*s = append(*s, v)
 	return nil
 }
+
+// magusInternals is what workspace.View adds to an opened *magus.Magus for magus's own
+// packages: the methods whose signatures name internal types, which the public API leaves
+// off.
+type magusInternals interface {
+	types.WorkspaceRepository
+	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
+	LastRecordedRun(ctx context.Context, projectPath, target string) (cache.RecordedRun, error)
+	Telemetry() observability.Provider
+}
+
+// internalsOf is m as workspace.View shows it to magus's own packages. It is also what a
+// context carries as the workspace (types.WithWorkspace), so std and the Buzz bindings
+// find the methods they assert for.
+func internalsOf(m *magus.Magus) magusInternals { return workspace.View(m).(magusInternals) }

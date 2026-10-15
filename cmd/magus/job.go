@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -181,7 +182,7 @@ type jobOpen struct {
 // read as one that declared nothing; a root of "" is no workspace at all, and assigns
 // nothing.
 func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	if err != nil {
 		return nil, err
 	}
@@ -1396,7 +1397,7 @@ func jobExecCommand(ctx context.Context, root string, pos []string, timeout time
 	spawn := trail.SpawnFromEnv()
 	lease := spawn.Lease
 	if root != "" {
-		if cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg)); err == nil {
+		if cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg)); err == nil {
 			lease, _ = job.ActingLease(cacheDir, spawn.Lease)
 		}
 	}
@@ -1819,7 +1820,7 @@ func jobWatch(ctx context.Context, root string, args []string) error {
 	if !slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == id }) {
 		return fmt.Errorf("magus job watch: there is no job %q (run `%s` to see them)", id, hint.LsJobs)
 	}
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	if err != nil {
 		return err
 	}
@@ -1951,7 +1952,7 @@ func storedAttempts(root string) job.AttemptResolver {
 		if strings.TrimSpace(ref) == "" {
 			return types.JobAttempt{}, nil
 		}
-		dir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+		dir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 		if err != nil {
 			return types.JobAttempt{}, err
 		}

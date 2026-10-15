@@ -137,7 +137,7 @@ type Magus struct {
 	probeCacheOnce sync.Once
 	probeCache     *cache.Cache
 
-	wsReg *WorkspaceRegistry
+	wsReg *workspace.WorkspaceRegistry
 	// loadReads is what every project's load read beyond its sources: the environment
 	// variables and files a top level consulted. The knowledge store folds them into the
 	// stamp that stands for "this evaluation still holds" (see knowledgeFastStamps), so a
@@ -171,7 +171,7 @@ type Magus struct {
 	hostMemBytes int64
 
 	tel            observability.Provider
-	injectedTel    observability.Provider // shared provider supplied via WithProvider; adopted verbatim in Open
+	injectedTel    observability.Provider // shared provider supplied via workspace.WithTelemetryProvider; adopted verbatim in Open
 	metricsCollect bool                   // server: build an always-on local metrics collector for the dashboard
 	// broker is this workspace's broker client, nil when the policy is off. ownsBroker is
 	// set when Open made it, and Close then hangs it up.
@@ -181,6 +181,44 @@ type Magus struct {
 	brokerPolicy  types.BrokerPolicy // WithBrokerPolicy's override; empty keeps the config's
 	skipProviders bool               // open without running wired workspace providers (see WithoutWorkspaceProviders)
 }
+
+func init() { workspace.SetView(viewOf) }
+
+// viewOf is workspace.View's answer: a *Magus as its internals, any other workspace
+// unchanged.
+func viewOf(ws types.WorkspaceRepository) types.WorkspaceRepository {
+	if m, ok := ws.(*Magus); ok {
+		return m.internals()
+	}
+	return ws
+}
+
+// internals is a *Magus as magus's own packages see it: the same workspace, with the
+// methods whose signatures name internal types and so stay off the public API. Root puts
+// it, never a bare *Magus, on a context (types.WithWorkspace), where std, the Buzz
+// bindings and the spell import resolvers recover them by assertion; a caller holding a
+// *Magus gets it from workspace.View.
+type internals struct{ *Magus }
+
+func (m *Magus) internals() internals { return internals{m} }
+
+// KnowledgeGraph returns the workspace knowledge graph req asks for. See
+// Magus.knowledgeGraph.
+func (w internals) KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
+	return w.knowledgeGraph(ctx, req)
+}
+
+// JobLimits is the magus.yaml jobs section, which every door that forks a job enforces.
+func (w internals) JobLimits() config.Jobs { return w.cfg.Jobs }
+
+// SpellImports returns the spells magus.yaml declares, as this workspace's load resolved
+// them.
+func (w internals) SpellImports() *remotespell.Imports { return w.spellImports }
+
+// Telemetry returns this workspace's observability provider: nil on an Inspect workspace,
+// which builds none, and the shared instance when Open was given one
+// (workspace.WithTelemetryProvider).
+func (w internals) Telemetry() observability.Provider { return w.tel }
 
 // FindRoot walks up from dir, or the cwd when dir is empty, to the workspace root. The
 // nearest magus.yaml wins; with none, the root is the outermost contiguous directory
@@ -272,7 +310,7 @@ func (m *Magus) load(ctx context.Context) error {
 	// resolver (and magusSearchPaths) can read the workspace root. Without this the
 	// root is only present on the run path (Magus.Run), so preload-time resolution
 	// (describe, affected, ls) could not walk spell imports up to the root.
-	ctx = types.WithWorkspace(ctx, m)
+	ctx = types.WithWorkspace(ctx, m.internals())
 	ctx = m.withRecordedOutput(ctx)
 	ctx, sealProbes := interp.WithImportProbes(ctx)
 	defer sealProbes()
@@ -358,15 +396,6 @@ func refuseHumanOnlyInGate(projects []*types.Project, lookup func(path string) *
 	}
 	return errors.Join(errs...)
 }
-
-// SpellImports returns the spells magus.yaml declares, as this workspace's load resolved
-// them. The import resolvers reach it through the workspace on the context.
-func (m *Magus) SpellImports() *remotespell.Imports { return m.spellImports }
-
-// EvaluationReads returns what this workspace's load read beyond its sources (see
-// loadReads): the inputs, with the tree, the binary and the configuration, that decide
-// whether an evaluation still holds. Empty before preloadMagusfiles ran.
-func (m *Magus) EvaluationReads() readlog.Reads { return m.loadReads.Reads() }
 
 // spellRegistryClient is the client a remote spell pull uses for host: authenticated
 // by its spells.registries entry when there is one, anonymous otherwise. It runs before
@@ -462,7 +491,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if o.Registry != nil {
 		m.wsReg = o.Registry
 	} else {
-		m.wsReg = NewWorkspaceRegistry()
+		m.wsReg = workspace.NewWorkspaceRegistry()
 	}
 	m.resolver = secret.New(secret.WithTimeouts(secret.Timeouts{
 		Interactive: m.cfg.Secret.Interactive,
@@ -750,7 +779,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	cfgOpts = append(cfgOpts, cache.WithCollapse(collapseOnSuccess(m.cfg.Log)))
 	// Build the telemetry provider before the cache so a wired remote backend can
 	// be instrumented as it is attached. When the caller injected a shared provider
-	// (WithProvider), adopt it verbatim and skip construction: the server shares ONE
+	// (workspace.WithTelemetryProvider), adopt it verbatim and skip construction: the server shares ONE
 	// provider across its bridge Magus and every per-workspace registry Magus, so a
 	// build routed to any workspace feeds the same instruments the dashboard reads,
 	// and workspace eviction never discards the accumulated counters. Otherwise build
@@ -861,12 +890,12 @@ func (m *Magus) SetGraphObserver(o types.Observer) {
 
 func (m *Magus) VCSOptions() types.VCSOptions { return m.ws.VCSOptions }
 
-// ChangeClassifier is the workspace's change risk classifier (internal/risk), the classes
+// changeClassifier is the workspace's change risk classifier (internal/risk), the classes
 // AssessChange tiers and merge auto-resolution settles by: describe-file roles,
 // the effective gate_low_risk prose globs, and the comment syntax the projects' spells
 // declare. at reads a file at the revision a delta is measured from and working its
 // changed content; with either nil, a comment-only edit classifies as code.
-func (m *Magus) ChangeClassifier(at func(ctx context.Context, rev, path string) (string, error), working func(path string) (string, error)) risk.Classifier {
+func (m *Magus) changeClassifier(at func(ctx context.Context, rev, path string) (string, error), working func(path string) (string, error)) risk.Classifier {
 	var resolved []*spells.Spell
 	for _, p := range m.All() {
 		resolved = append(resolved, p.ResolvedSpells...)
@@ -892,19 +921,22 @@ func (m *Magus) ChangeClassifier(at func(ctx context.Context, rev, path string) 
 
 // AutoResolvable reports whether a conflicted path a three-way merge settled may be
 // settled without a person: the edit from base, the merge base's content, to merged is
-// low risk by ChangeClassifier (generated, prose, comment-only), or path is code a
+// low risk by the change classifier (generated, prose, comment-only), or path is code a
 // project's merge_low_risk claims. verdict is the classifier's line for the path,
 // `<path>: <class> (<why>)`, either way.
 func (m *Magus) AutoResolvable(ctx context.Context, path string, base, merged []byte) (verdict string, ok bool) {
-	v, ok := m.ChangeClassifier(nil, nil).Merge(ctx, path, string(base), string(merged), risk.MergeScopes(m.All()))
+	v, ok := m.changeClassifier(nil, nil).Merge(ctx, path, string(base), string(merged), risk.MergeScopes(m.All()))
 	return v.Line(), ok
 }
 
-// ClassifyEdit is ChangeClassifier's class of one path's edit from old to cur, and why. A
-// nil side is the path absent there, so adding or deleting a file is never comment-only.
-// The merge queue carries an approval over an edit by this class.
-func (m *Magus) ClassifyEdit(ctx context.Context, path string, old, cur []byte) risk.Classified {
-	return m.ChangeClassifier(nil, nil).Edit(ctx, path, old, cur)
+// ClassifyEdit is the change classifier's class of one path's edit from old to cur, and
+// why. class is one of "generated", "prose", "comment-only" and "code", the words the
+// per-path verdict lines print. A nil side is the path absent there, so adding or
+// deleting a file is never comment-only. The merge queue carries an approval over an edit
+// by this class.
+func (m *Magus) ClassifyEdit(ctx context.Context, path string, old, cur []byte) (class, why string) {
+	c := m.changeClassifier(nil, nil).Edit(ctx, path, old, cur)
+	return c.Class.String(), c.Why
 }
 
 // AutoResolve settles a conflicted path the way the merge queue does: MergeThreeWay settles
@@ -957,9 +989,6 @@ func (m *Magus) AutoResolveGlobs() []string {
 // whole configuration, and a broad getter is how a command ends up branching on settings that
 // were never meant to reach it.
 func (m *Magus) DiffTUIEnabled() bool { return m.cfg.Diff.TuiEnabled() }
-
-// JobLimits is the magus.yaml jobs section, which every door that forks a job enforces.
-func (m *Magus) JobLimits() config.Jobs { return m.cfg.Jobs }
 
 // WorkingDiff returns the working tree's uncommitted changes as the backend's own unified
 // diff, scoped to paths when non-empty and repository-wide otherwise. Empty when the tree
@@ -1329,7 +1358,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 	}
 	freshErr := m.freshenSymbolIndexes(ctx, touched)
 	out.Uncovered = uncoveredProjects(out.Files, m.symbolCapableIn(touched))
-	graph, gerr := m.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
+	graph, gerr := m.knowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	// indexed is the real question, and it is NOT "did a graph load". A graph loads fine with
 	// no symbol shards in it, so gating on a non-nil graph reports every file's reach as a
 	// measured zero on exactly the workspaces that have no index, which is the collapse the
@@ -1848,12 +1877,6 @@ func (m *Magus) projectOwner() func(path string) string {
 	}
 }
 
-// Telemetry returns this workspace's observability provider (nil on an Inspect workspace,
-// which builds no cache and no provider). When several Magus instances were opened with a
-// shared provider via [WithProvider] this returns that same instance, so metrics recorded
-// through one are visible through another's [Magus.MetricsCollector].
-func (m *Magus) Telemetry() observability.Provider { return m.tel }
-
 func (m *Magus) Where(dir string) (*types.Project, bool) {
 	return project.Where(m.ws, dir)
 }
@@ -2007,7 +2030,7 @@ func (s poolSlots) Yield(ctx context.Context, fn func(context.Context) error) er
 
 // Close releases workspace resources (VM pools, the sessions the guard's function
 // rules run on, telemetry); cache and limiter are caller-owned. A provider built by Open is shut down here so its spans/metrics
-// flush rather than being lost on exit. An injected provider (WithProvider) is
+// flush rather than being lost on exit. An injected provider (workspace.WithTelemetryProvider) is
 // left running: it is shared across every workspace the server holds (and the
 // bridge Magus), so one workspace's eviction must not stop telemetry for the
 // rest; the server itself owns and shuts down that provider.

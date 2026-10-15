@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -297,7 +298,7 @@ func declaresRoutingIndex(ctx context.Context, dir string) bool {
 	if err != nil || root != abs {
 		return false
 	}
-	ws, err := magus.Inspect(ctx, root, magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
+	ws, err := magus.Inspect(ctx, root, workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))
 	if err != nil {
 		return false
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/edit"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/readlog"
@@ -52,7 +53,7 @@ func TestBuildGlobalKnowledgeGraph(t *testing.T) {
 	wsA, err := Inspect(ctx, rootA)
 	require.NoError(t, err)
 
-	g, err := BuildGlobalKnowledgeGraph(ctx, wsA, config.Config{Knowledge: config.Knowledge{Workspaces: []string{rootB}}}, false, slog.Default())
+	g, err := buildGlobalKnowledgeGraph(ctx, wsA, config.Config{Knowledge: config.Knowledge{Workspaces: []string{rootB}}}, false, slog.Default())
 	require.NoError(t, err)
 	out := g.Output()
 
@@ -82,7 +83,7 @@ func TestBuildGlobalKnowledgeGraphSkipsUnreachable(t *testing.T) {
 	// A registered workspace that does not exist is skipped, not fatal: the global
 	// graph degrades to what it can reach rather than failing the whole query.
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
-	g, err := BuildGlobalKnowledgeGraph(ctx, wsA, config.Config{Knowledge: config.Knowledge{Workspaces: []string{missing}}}, false, slog.Default())
+	g, err := buildGlobalKnowledgeGraph(ctx, wsA, config.Config{Knowledge: config.Knowledge{Workspaces: []string{missing}}}, false, slog.Default())
 	require.NoError(t, err)
 	assert.Positive(t, g.Output().NodeCount, "current workspace still present despite the missing registered one")
 }
@@ -204,7 +205,7 @@ func TestSymbolGapsLogsWhenTheProbeCannotRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	gaps, ok := SymbolGaps(ctx, nil, root, config.Config{}, log)
+	gaps, ok := workspaceSymbolGaps(ctx, nil, root, config.Config{}, log)
 	assert.Nil(t, gaps)
 	assert.False(t, ok, "a probe that could not run must not read as \"no gaps\"")
 	assert.Contains(t, buf.String(), "cancelled", "the underlying error must be surfaced, not swallowed")
@@ -501,7 +502,7 @@ func TestBuildKnowledgeGraphChurnIsStableAcrossBuilds(t *testing.T) {
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
 
 	churn := func() map[string]string {
-		g, err := BuildKnowledgeGraph(ctx, ws, root, cfg, false, slog.Default())
+		g, err := buildKnowledgeGraph(ctx, ws, root, cfg, false, slog.Default())
 		require.NoError(t, err)
 		got := map[string]string{}
 		for _, n := range g.Output().Nodes {
@@ -736,7 +737,7 @@ const unreachableRegistry = "127.0.0.1:1"
 // it would have if the registry were never mentioned.
 func TestPublishedShardsTreatEveryFailureAsAMiss(t *testing.T) {
 	ref := oci.Reference{Registry: unreachableRegistry, Repository: "team/graph", Tag: "latest"}
-	p := PublishedShards(&oci.Client{HTTP: &http.Client{Timeout: time.Second}}, ref, "application/vnd.magus.test.v1+json", slog.New(slog.DiscardHandler))
+	p := workspacegraph.PublishedShards(&oci.Client{HTTP: &http.Client{Timeout: time.Second}}, ref, "application/vnd.magus.test.v1+json", slog.New(slog.DiscardHandler))
 
 	rc, err := p.GetShard(t.Context(), "fp-anything")
 	assert.Nil(t, rc)
@@ -751,7 +752,7 @@ func TestPublishedShardsTreatEveryFailureAsAMiss(t *testing.T) {
 // TestPublishedShardsRefuseToWrite pins the honest half of the read-only adapter: a
 // registry has no per-blob append, so reporting a successful write would be a lie.
 func TestPublishedShardsRefuseToWrite(t *testing.T) {
-	p := PublishedShards(&oci.Client{}, oci.Reference{Registry: unreachableRegistry, Repository: "team/graph", Tag: "latest"}, "", slog.New(slog.DiscardHandler))
+	p := workspacegraph.PublishedShards(&oci.Client{}, oci.Reference{Registry: unreachableRegistry, Repository: "team/graph", Tag: "latest"}, "", slog.New(slog.DiscardHandler))
 	err := p.PutShard(t.Context(), "fp-anything", bytes.NewReader([]byte("{}")))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "graph push")
@@ -1060,9 +1061,9 @@ func TestSymbolReadIgnoresSessionStoreAppends(t *testing.T) {
 	require.NoError(t, os.WriteFile(events, []byte("{}\n"), 0o644))
 	read := func() {
 		t.Helper()
-		g, err := BuildKnowledgeGraph(ctx, ws, root, cfg, false, log)
+		g, err := buildKnowledgeGraph(ctx, ws, root, cfg, false, log)
 		require.NoError(t, err)
-		require.NoError(t, MergeWorkspaceSymbols(ctx, ws, root, cfg, g, log))
+		require.NoError(t, mergeWorkspaceSymbols(ctx, ws, root, cfg, g, log))
 	}
 	manifest := filepath.Join(root, ".magus", "knowledge", "manifest.json")
 	read()
@@ -1090,14 +1091,14 @@ func TestQueryKnowledgeGraphEqualsTheMergedQuery(t *testing.T) {
 	log := slog.New(slog.DiscardHandler)
 
 	for _, input := range []string{"Foo", "Foo kind=symbol", "kind=symbol", "kind=file", "absentname kind=symbol"} {
-		g, err := BuildKnowledgeGraph(ctx, ws, root, cfg, false, log)
+		g, err := buildKnowledgeGraph(ctx, ws, root, cfg, false, log)
 		require.NoError(t, err)
-		require.NoError(t, MergeWorkspaceSymbols(ctx, ws, root, cfg, g, log))
+		require.NoError(t, mergeWorkspaceSymbols(ctx, ws, root, cfg, g, log))
 		require.True(t, g.HasSymbols(), "the fixture's index is ingested")
 		want, err := json.Marshal(g.Query(input, 0))
 		require.NoError(t, err)
 
-		out, ranked, err := QueryKnowledgeGraph(ctx, ws, root, cfg, false, input, 0, log)
+		out, ranked, err := queryKnowledgeGraph(ctx, ws, root, cfg, false, input, 0, log)
 		require.NoError(t, err)
 		got, err := json.Marshal(out)
 		require.NoError(t, err)
@@ -1120,7 +1121,7 @@ func TestBuildKnowledgeGraphAnswersFromTheStore(t *testing.T) {
 	require.NoError(t, err)
 	build := func() string {
 		t.Helper()
-		g, err := BuildKnowledgeGraph(ctx, ws, root, config.Config{}, false, slog.New(slog.DiscardHandler))
+		g, err := buildKnowledgeGraph(ctx, ws, root, config.Config{}, false, slog.New(slog.DiscardHandler))
 		require.NoError(t, err)
 		b, err := json.Marshal(g.Output())
 		require.NoError(t, err)
@@ -1254,7 +1255,7 @@ func TestRecordedStaleIndexesAnswerWhileTheirEvidenceHolds(t *testing.T) {
 		opens++
 		return nil, errors.New("a fast read must not open the workspace")
 	})
-	stale, ok := RecordedStaleIndexes(ctx, lw, cfg)
+	stale, ok := recordedStaleIndexes(ctx, lw, cfg)
 	require.True(t, ok, "the recorded verdicts hold: sources and index files are as they were")
 	assert.Equal(t, []types.KnowledgeStaleIndex{{Project: "pkg/a", Language: "go", Op: "scip"}}, stale,
 		"the index, with the language that says which of a project's indexes it is")
@@ -1262,12 +1263,12 @@ func TestRecordedStaleIndexesAnswerWhileTheirEvidenceHolds(t *testing.T) {
 
 	// The judged index was rebuilt: the verdict is no longer evidence.
 	require.NoError(t, os.WriteFile(index, []byte("scip, rebuilt"), 0o644))
-	_, ok = RecordedStaleIndexes(ctx, lw, cfg)
+	_, ok = recordedStaleIndexes(ctx, lw, cfg)
 	assert.False(t, ok, "a changed index file sends the read back to the workspace")
 	require.NoError(t, os.Chtimes(index, settled, settled))
 	require.NoError(t, os.WriteFile(index, []byte("scip"), 0o644))
 	require.NoError(t, os.Chtimes(index, settled, settled))
-	_, ok = RecordedStaleIndexes(ctx, lw, cfg)
+	_, ok = recordedStaleIndexes(ctx, lw, cfg)
 	require.True(t, ok, "restored, the verdict holds again")
 
 	// The sources moved: the domain fast stamp no longer matches, so nothing recorded is
@@ -1280,7 +1281,7 @@ func TestRecordedStaleIndexesAnswerWhileTheirEvidenceHolds(t *testing.T) {
 		opens++
 		return nil, errors.New("a fast read must not open the workspace")
 	})
-	_, ok = RecordedStaleIndexes(ctx, next, cfg)
+	_, ok = recordedStaleIndexes(ctx, next, cfg)
 	assert.False(t, ok, "changed sources send the read back to the workspace")
 	assert.Equal(t, 0, opens, "RecordedStaleIndexes itself never opens; the caller decides")
 }
@@ -1375,18 +1376,18 @@ func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = ws.Close() })
 	log := slog.New(slog.DiscardHandler)
-	gaps, ok := SymbolGaps(ctx, ws, root, cfg, log)
+	gaps, ok := workspaceSymbolGaps(ctx, ws, root, cfg, log)
 	require.True(t, ok)
 	assert.Empty(t, gaps, "both indexes are declared and both are built")
 
-	g, err := BuildKnowledgeGraph(ctx, ws, root, cfg, false, log)
+	g, err := buildKnowledgeGraph(ctx, ws, root, cfg, false, log)
 	require.NoError(t, err)
 	domainHasFunction := false
 	for _, n := range g.Output().Nodes {
 		domainHasFunction = domainHasFunction || n.ID == "function:hack/ci/pull-requests.buzz:parsePull"
 	}
 	require.True(t, domainHasFunction, "the committed domain graph keeps @buzz function nodes whatever the cache holds")
-	require.NoError(t, MergeWorkspaceSymbols(ctx, ws, root, cfg, g, log))
+	require.NoError(t, mergeWorkspaceSymbols(ctx, ws, root, cfg, g, log))
 
 	parsePullID := ""
 	for _, n := range g.Output().Nodes {
@@ -1414,7 +1415,7 @@ func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 	require.NotEmpty(t, goRefs.Defs)
 	assert.Equal(t, "main.go", goRefs.Defs[0].File)
 
-	read, ok := SymbolOccurrences(ctx, ws, root, cfg, log, strings.TrimPrefix(parsePullID, types.KindSymbol+":"))
+	read, ok := workspaceSymbolOccurrences(ctx, ws, root, cfg, log, strings.TrimPrefix(parsePullID, types.KindSymbol+":"))
 	require.True(t, ok)
 	require.Empty(t, read.Unreadable)
 	for _, refused := range []string{"fun", "final"} {

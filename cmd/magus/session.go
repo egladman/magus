@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -615,7 +616,7 @@ func sessionLoad(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	cacheDir, _ := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	cacheDir, _ := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	joinServedNext(summary.Events, summary.commands, hint.ReadServedNext(cacheDir))
 	result, err := sessions.LoadEvents(ctx, dir, summary.Events, sessions.InvocationStart{
 		Origin:    localOrigin(types.EntryPointCLI),
@@ -972,7 +973,7 @@ func sessionShow(root string, args []string) error {
 // session read never needs.
 func sessionModelTable(root string) model.Table {
 	rows := harnessModelRows(context.Background(), root, func(ctx context.Context) (types.WorkspaceRepository, error) {
-		return magus.Inspect(ctx, root, magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
+		return magus.Inspect(ctx, root, workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))
 	})
 	return model.InEffect(rows(), globalCfg.Agents.ModelOverrides())
 }
@@ -980,7 +981,7 @@ func sessionModelTable(root string) model.Table {
 // sessionTrailHere folds this checkout's trail for the session, or nil when it holds
 // nothing: no cache dir, no trail, or a session that ran elsewhere all read the same.
 func sessionTrailHere(root, session string) *trail.SessionTrail {
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	if err != nil {
 		return nil
 	}

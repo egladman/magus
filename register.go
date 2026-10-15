@@ -5,8 +5,6 @@ import (
 	"fmt"
 
 	"github.com/egladman/magus/broker"
-	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -21,34 +19,11 @@ func WithConfigFile(path string) Option {
 	return func(o *workspace.Load) { o.ConfigPath = path }
 }
 
-// WithLoadedConfig injects an already-parsed configuration, bypassing the
-// default magus.yaml discovery. Env-var and flag overrides should be applied
-// before calling this.
-func WithLoadedConfig(cfg config.Config) Option {
-	return workspace.WithLoadedConfig(cfg)
-}
-
 // WithMetricsCollection builds an always-on in-process metrics collector for this workspace
 // (OTel instruments record even with telemetry export off), so the server can derive the
 // /dashboard's metrics via [Magus.MetricsCollector]. The CLI leaves it off.
 func WithMetricsCollection() Option {
 	return workspace.WithMetricsCollection()
-}
-
-// WithProvider injects an already-constructed observability provider so several Magus
-// instances (a server's bridge Magus plus each per-workspace registry Magus) share ONE set
-// of OTel instruments and one metrics collector. The provider is owned by the server
-// process, not any single workspace, so workspace eviction never discards accumulated
-// metrics. It supersedes [WithMetricsCollection]: Open adopts the injected provider instead
-// of constructing its own.
-//
-// Keeps the shorter public name even though the internal option it wraps was renamed to
-// WithTelemetryProvider (disambiguating it from [WithoutWorkspaceProviders] and
-// internal/workspace's workspace-provider family): cmd/magus/mcp.go also calls this
-// exported symbol, so renaming it here is a separate, wider change than this package's own
-// internal cleanup.
-func WithProvider(p observability.Provider) Option {
-	return workspace.WithTelemetryProvider(p)
 }
 
 // WithVersion supplies the running build's version so Open and Inspect can check it
@@ -80,34 +55,55 @@ func WithBrokerPolicy(p types.BrokerPolicy) Option {
 // WithoutWorkspaceProviders opens the workspace without running its wired workspace
 // providers (magus\workspace.provider), leaving only the magusfile-declared projects.
 // For a caller inspecting a tree that is not a working checkout: an exported revision
-// has no installed toolchain for a provider to shell out to. Unrelated to [WithProvider],
-// which injects an observability provider.
+// has no installed toolchain for a provider to shell out to.
 func WithoutWorkspaceProviders() Option {
 	return workspace.WithoutWorkspaceProviders()
 }
 
 // WorkspaceRegistry holds project-option overrides and target policies for a single Open.
-type WorkspaceRegistry = workspace.WorkspaceRegistry
+// Fill one with RegisterProject, then hand it to Open or Inspect with
+// [WithWorkspaceRegistry]. It is not safe for concurrent use while being filled.
+type WorkspaceRegistry struct{ r *workspace.WorkspaceRegistry }
 
 // NewWorkspaceRegistry returns an empty WorkspaceRegistry.
-func NewWorkspaceRegistry() *WorkspaceRegistry { return workspace.NewWorkspaceRegistry() }
+func NewWorkspaceRegistry() *WorkspaceRegistry {
+	return &WorkspaceRegistry{r: workspace.NewWorkspaceRegistry()}
+}
+
+// RegisterProject applies opts to the project at path when the workspace opens. A path
+// the workspace does not discover fails the Open.
+func (reg *WorkspaceRegistry) RegisterProject(path string, opts ...ProjectOption) {
+	reg.r.RegisterProject(path, opts...)
+}
+
+// AddProvider wires the named workspace-provider spell, as magus\workspace.provider does
+// from a magusfile: Open runs it to add the projects it reports.
+func (reg *WorkspaceRegistry) AddProvider(spellName string) { reg.r.AddProvider(spellName) }
+
+// AddHarness wires the named harness spell, as magus\harness.provider does from a
+// magusfile.
+func (reg *WorkspaceRegistry) AddHarness(spellName string) { reg.r.AddHarness(spellName) }
 
 // WithWorkspaceRegistry injects a pre-built WorkspaceRegistry, replacing the default one.
 func WithWorkspaceRegistry(reg *WorkspaceRegistry) Option {
-	return func(o *workspace.Load) { o.Registry = reg }
+	return func(o *workspace.Load) { o.Registry = reg.r }
 }
 
 // WithWorkspaceRegistryContext installs reg in ctx so interpreters can retrieve it.
 func WithWorkspaceRegistryContext(ctx context.Context, reg *WorkspaceRegistry) context.Context {
-	return workspace.ContextWithRegistry(ctx, reg)
+	return workspace.ContextWithRegistry(ctx, reg.r)
 }
 
 // WorkspaceRegistryFromContext returns the WorkspaceRegistry from ctx, or nil.
 func WorkspaceRegistryFromContext(ctx context.Context) *WorkspaceRegistry {
-	return workspace.WorkspaceRegistryFromContext(ctx)
+	r := workspace.WorkspaceRegistryFromContext(ctx)
+	if r == nil {
+		return nil
+	}
+	return &WorkspaceRegistry{r: r}
 }
 
-func installWorkspaceRegistry(ctx context.Context, reg *WorkspaceRegistry) context.Context {
+func installWorkspaceRegistry(ctx context.Context, reg *workspace.WorkspaceRegistry) context.Context {
 	return workspace.ContextWithRegistry(ctx, reg)
 }
 

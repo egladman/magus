@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/url"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/journal"
@@ -30,6 +31,7 @@ import (
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -1032,7 +1034,7 @@ func searchGraph(ctx context.Context, ws graphWorkspace, cfg config.Config, read
 		if refresh {
 			seedFromPublishedGraph(ctx, ws)
 		}
-		out, g, err = magus.QueryKnowledgeGraph(ctx, ws, ws.Root(), cfg, refresh, read.Input, read.Budget, slog.Default())
+		out, g, err = workspacegraph.Query(ctx, ws, ws.Root(), cfg, refresh, read.Input, read.Budget, slog.Default())
 		stop()
 		if err != nil {
 			return queryResult{}, err
@@ -1200,7 +1202,7 @@ func serveGraphRead(ctx context.Context, m *magus.Magus, cfg config.Config, verb
 	// m was opened under the configuration its root had then. The cache directory is the
 	// setting m itself reads from that copy, so one moved since means a workspace the
 	// server must reopen before it answers for it.
-	if dir, err := magus.ResolveCacheDir(m.Root(), magus.WithLoadedConfig(cfg)); err != nil || dir != m.CacheDir() {
+	if dir, err := magus.ResolveCacheDir(m.Root(), workspace.WithLoadedConfig(cfg)); err != nil || dir != m.CacheDir() {
 		return nil, fmt.Errorf("%w: the workspace was opened under an older configuration", proc.ErrNotAdoptable)
 	}
 	for _, name := range m.SymbolFreshnessEnv() {

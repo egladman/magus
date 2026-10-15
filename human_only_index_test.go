@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -47,7 +48,7 @@ func syncedHumanOnlyWorkspace(tb testing.TB) *testkit.Workspace {
 	ctx := context.Background()
 	ws, err := Inspect(ctx, w.Root())
 	require.NoError(tb, err)
-	_, err = BuildKnowledgeGraph(ctx, ws, w.Root(), config.Config{}, false, slog.New(slog.DiscardHandler))
+	_, err = workspacegraph.Build(ctx, ws, w.Root(), config.Config{}, false, slog.New(slog.DiscardHandler))
 	require.NoError(tb, err)
 	return w
 }
@@ -72,7 +73,7 @@ func TestRecordedHumanOnlyAnswersOnlyWhileTheSourcesHold(t *testing.T) {
 	cfg := config.Config{}
 	opens := 0
 
-	got, ok := RecordedHumanOnly(ctx, unopenable(root, &opens), cfg)
+	got, ok := workspacegraph.RecordedHumanOnly(ctx, unopenable(root, &opens), cfg)
 	require.True(t, ok, "the sync recorded the targets and nothing has moved since")
 	assert.Equal(t, types.HumanOnlyIndex{
 		Projects: []string{"."},
@@ -85,10 +86,10 @@ func TestRecordedHumanOnlyAnswersOnlyWhileTheSourcesHold(t *testing.T) {
 	}, got, "the record is what the evaluation declares")
 
 	w.Magusfile(humanOnlyMagusfile + "\nexport fun extra(ctx: magus\\Context, args: [str]) > void {}\n")
-	_, ok = RecordedHumanOnly(ctx, unopenable(root, &opens), cfg)
+	_, ok = workspacegraph.RecordedHumanOnly(ctx, unopenable(root, &opens), cfg)
 	assert.False(t, ok, "an edited magusfile moves the domain fast stamp: a stale record is never an answer")
 
-	_, ok = RecordedHumanOnly(ctx, unopenable(t.TempDir(), &opens), cfg)
+	_, ok = workspacegraph.RecordedHumanOnly(ctx, unopenable(t.TempDir(), &opens), cfg)
 	assert.False(t, ok, "a workspace with no store has nothing recorded")
 	assert.Zero(t, opens, "RecordedHumanOnly never opens; the caller decides")
 }
@@ -111,7 +112,7 @@ func TestRecordedHumanOnlyIgnoresAManifestThatNeverRecordedIt(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, b, 0o644))
 
 	opens := 0
-	_, ok := RecordedHumanOnly(ctx, unopenable(w.Root(), &opens), config.Config{})
+	_, ok := workspacegraph.RecordedHumanOnly(ctx, unopenable(w.Root(), &opens), config.Config{})
 	assert.False(t, ok)
 	assert.Zero(t, opens)
 }
@@ -125,7 +126,7 @@ func BenchmarkHumanOnlyRead(b *testing.B) {
 	b.Run("recorded", func(b *testing.B) {
 		opens := 0
 		for b.Loop() {
-			if _, ok := RecordedHumanOnly(ctx, unopenable(root, &opens), config.Config{}); !ok {
+			if _, ok := workspacegraph.RecordedHumanOnly(ctx, unopenable(root, &opens), config.Config{}); !ok {
 				b.Fatal("the record went stale under the benchmark")
 			}
 		}

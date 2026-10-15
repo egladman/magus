@@ -9,6 +9,7 @@ import (
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/types"
@@ -52,7 +53,7 @@ func measureSymbolCoverage(ctx context.Context, ws graphWorkspace, cfg config.Co
 	if !knowledge.CouldMatchLazyLayer(input) {
 		return cov
 	}
-	cov.Gaps, cov.Probed = magus.SymbolGaps(ctx, ws, ws.Root(), cfg, slog.Default())
+	cov.Gaps, cov.Probed = workspacegraph.SymbolGaps(ctx, ws, ws.Root(), cfg, slog.Default())
 	cov.Stale = findStaleIndexes(ctx, ws)
 	return cov
 }

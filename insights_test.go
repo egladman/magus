@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -171,7 +172,7 @@ func TestConformLensWithoutAnIndexIsUnknownAndMisconfigurationIsAnError(t *testi
 	reg.RegisterProject(".")
 
 	open := func(cfg config.Config) *Magus {
-		ws, err := Inspect(t.Context(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(cfg))
+		ws, err := Inspect(t.Context(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg))
 		require.NoError(t, err)
 		return ws.(*Magus)
 	}

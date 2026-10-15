@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interactive"
@@ -260,7 +261,7 @@ func loadBuiltGraph(ctx context.Context, root string, by maintenance.GraphBuildH
 	var gaps []types.KnowledgeSymbolGap
 	probed := false
 	if ws, err := inspectWorkspace(ctx, root); err == nil {
-		gaps, probed = magus.SymbolGaps(ctx, ws, ws.Root(), globalCfg, slog.Default())
+		gaps, probed = workspacegraph.SymbolGaps(ctx, ws, ws.Root(), globalCfg, slog.Default())
 	}
 	if len(gaps) > 0 {
 		left = append(left, types.DescribeGaps(gaps))
@@ -656,7 +657,7 @@ func loadWorkspaceGraph(ctx context.Context, ws graphWorkspace, cfg config.Confi
 		if err != nil {
 			return nil, err
 		}
-		return magus.BuildGlobalKnowledgeGraph(ctx, full, cfg, refresh, slog.Default())
+		return workspacegraph.BuildGlobal(ctx, full, cfg, refresh, slog.Default())
 	}
 	if refresh {
 		// Before paying to rebuild, take the published copy if this workspace names one.
@@ -665,12 +666,12 @@ func loadWorkspaceGraph(ctx context.Context, ws graphWorkspace, cfg config.Confi
 		// through the VCS refresh hook's sync-graph job.
 		seedFromPublishedGraph(ctx, ws)
 	}
-	g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), cfg, refresh, slog.Default())
+	g, err := workspacegraph.Build(ctx, ws, ws.Root(), cfg, refresh, slog.Default())
 	if err != nil {
 		return nil, err
 	}
 	if includeSymbols {
-		if err := magus.MergeWorkspaceSymbols(ctx, ws, ws.Root(), cfg, g, slog.Default()); err != nil {
+		if err := workspacegraph.MergeSymbols(ctx, ws, ws.Root(), cfg, g, slog.Default()); err != nil {
 			return nil, err
 		}
 	}
@@ -690,11 +691,11 @@ func loadKnowledgeGraphForRefs(ctx context.Context, root string, refresh bool, r
 }
 
 func loadRefsGraph(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, refresh bool, ref string) (*knowledge.Graph, error) {
-	g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), cfg, refresh, slog.Default())
+	g, err := workspacegraph.Build(ctx, ws, ws.Root(), cfg, refresh, slog.Default())
 	if err != nil {
 		return nil, err
 	}
-	if err := magus.MergeWorkspaceSymbolsForRef(ctx, ws, ws.Root(), cfg, g, ref, slog.Default()); err != nil {
+	if err := workspacegraph.MergeSymbolsForRef(ctx, ws, ws.Root(), cfg, g, ref, slog.Default()); err != nil {
 		return nil, err
 	}
 	return g, nil

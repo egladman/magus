@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -178,7 +179,7 @@ func TestWithInvocationJournalRanksTheBindingOverTheClaim(t *testing.T) {
 	testkit.Isolate(t)
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/claimed")
 	root := t.TempDir()
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Dir(job.MarkerPath(cacheDir)), 0o755))

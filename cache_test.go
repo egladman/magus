@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -23,21 +24,21 @@ func TestCacheOperationsWithoutOpenCache(t *testing.T) {
 	root := w.Root()
 	m, err := Inspect(context.Background(), root)
 	require.NoError(t, err)
-	workspace := m.(*Magus)
+	inspected := m.(*Magus)
 
-	tier, mode := workspace.CacheDescription()
+	tier, mode := inspected.CacheDescription()
 	assert.Empty(t, tier+mode, "an Inspect workspace has no cache to describe")
-	_, _, err = workspace.PruneCache(context.Background(), time.Now(), false)
+	_, _, err = inspected.PruneCache(context.Background(), time.Now(), false)
 	assert.ErrorIs(t, err, types.ErrNoCache)
-	assert.ErrorIs(t, workspace.PruneRemoteCache(context.Background(), time.Hour, 1, false), types.ErrNoCache)
-	assert.ErrorIs(t, workspace.ExportCache(context.Background(), &strings.Builder{}), types.ErrNoCache)
-	assert.ErrorIs(t, workspace.ImportCache(context.Background(), strings.NewReader("")), types.ErrNoCache)
-	_, err = workspace.TailLog(".", "")
+	assert.ErrorIs(t, inspected.PruneRemoteCache(context.Background(), time.Hour, 1, false), types.ErrNoCache)
+	assert.ErrorIs(t, inspected.ExportCache(context.Background(), &strings.Builder{}), types.ErrNoCache)
+	assert.ErrorIs(t, inspected.ImportCache(context.Background(), strings.NewReader("")), types.ErrNoCache)
+	_, err = inspected.TailLog(".", "")
 	assert.ErrorIs(t, err, types.ErrNoCache)
 
-	stats := workspace.CacheStats()
-	collector, enabled := workspace.MetricsCollector()
-	metrics, err := workspace.MetricsSnapshot(context.Background())
+	stats := inspected.CacheStats()
+	collector, enabled := inspected.MetricsCollector()
+	metrics, err := inspected.MetricsSnapshot(context.Background())
 	require.NoError(t, err)
 	assert.Nil(t, collector)
 	assert.False(t, enabled)
@@ -50,8 +51,8 @@ func TestCacheOperationsWithoutOpenCache(t *testing.T) {
 	}{
 		Stats:     CacheStats{},
 		Metrics:   nil,
-		CacheDir:  workspace.CacheDir(),
-		Workspace: workspace.Root(),
+		CacheDir:  inspected.CacheDir(),
+		Workspace: inspected.Root(),
 	}, struct {
 		Stats     CacheStats
 		DiskBytes int64
@@ -60,10 +61,10 @@ func TestCacheOperationsWithoutOpenCache(t *testing.T) {
 		Workspace string
 	}{
 		Stats:     stats,
-		DiskBytes: workspace.CacheDiskBytes(),
+		DiskBytes: inspected.CacheDiskBytes(),
 		Metrics:   metrics,
-		CacheDir:  workspace.CacheDir(),
-		Workspace: workspace.Root(),
+		CacheDir:  inspected.CacheDir(),
+		Workspace: inspected.Root(),
 	})
 }
 
@@ -74,7 +75,7 @@ func TestResolveCacheDir_DoesNotNeedWorkspaceLoad(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(root, ".magus"), got)
 
-	got, err = ResolveCacheDir(root, WithLoadedConfig(config.Config{Cache: config.Cache{Dir: "cache"}}))
+	got, err = ResolveCacheDir(root, workspace.WithLoadedConfig(config.Config{Cache: config.Cache{Dir: "cache"}}))
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(root, "cache"), got)
 }
@@ -185,10 +186,10 @@ func TestListAndGetArtifactWithoutACache(t *testing.T) {
 	require.NoError(t, err)
 	m := ws.(*Magus)
 
-	_, err = m.ListArtifacts(context.Background(), "api", "api/gen/x.go")
+	_, err = m.internals().ListArtifacts(context.Background(), "api", "api/gen/x.go")
 	assert.ErrorIs(t, err, types.ErrNoCache)
 
-	assert.ErrorIs(t, m.GetArtifact(context.Background(), cache.ArtifactVersion{}, filepath.Join(root, "dst")),
+	assert.ErrorIs(t, m.internals().GetArtifact(context.Background(), cache.ArtifactVersion{}, filepath.Join(root, "dst")),
 		types.ErrNoCache)
 
 	_, err = m.PublishOutput(context.Background(), "outdeadbe")

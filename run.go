@@ -2071,7 +2071,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// invocation id itself (internal/journal imports it for redaction, so that would be
 	// a cycle), so the id is threaded from here, where both are already in scope.
 	ctx = secret.ContextWithInvocationID(ctx, journal.InvocationIDFromContext(ctx))
-	ctx = types.WithWorkspace(ctx, m)
+	ctx = types.WithWorkspace(ctx, m.internals())
 	// Seeded with the projects this run SELECTED, then marked further by the dispatcher
 	// as cross-project dependencies run. Selection alone was not enough: `magus run
 	// build .` selects only the root, so a nested project reached through a dependency

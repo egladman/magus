@@ -389,7 +389,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	captureHandlers = withInvocationJournal(ctx, captureHandlers, m.Root(), "run", args)
 	refs := &resultRefs{}
 	captureHandlers = append(captureHandlers, refs)
-	invCtx, endInvocation := m.BeginInvocation(ctx, journal.Command{
+	invCtx, endInvocation := m.BeginInvocation(ctx, magus.Command{
 		Arguments: append([]string{"run"}, args...), Cwd: cwd, Trigger: trigger,
 	}, version, captureHandlers...)
 	defer func() { endInvocation(err) }()

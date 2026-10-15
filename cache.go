@@ -483,7 +483,8 @@ func (m *Magus) OutputKeyInputs(ctx context.Context, ref string) ([]string, erro
 // live key against to explain why a run here would MISS. Wraps fs.ErrNotExist when
 // nothing is recorded for that target; [types.ErrNoCache] on an Inspect workspace; the
 // context's error when ctx is already done.
-func (m *Magus) LastRecordedRun(ctx context.Context, projectPath, target string) (cache.RecordedRun, error) {
+func (w internals) LastRecordedRun(ctx context.Context, projectPath, target string) (cache.RecordedRun, error) {
+	m := w.Magus
 	if m.cache == nil {
 		return cache.RecordedRun{}, types.ErrNoCache
 	}
@@ -530,7 +531,8 @@ func (m *Magus) TailLog(projectPath, target string) (logPath string, err error) 
 //
 // Returns types.ErrNoCache on an Inspect workspace: "no versions" and "no store to
 // look in" are different answers.
-func (m *Magus) ListArtifacts(ctx context.Context, projectPath, wsPath string) ([]cache.ArtifactVersion, error) {
+func (w internals) ListArtifacts(ctx context.Context, projectPath, wsPath string) ([]cache.ArtifactVersion, error) {
+	m := w.Magus
 	if m.cache == nil {
 		return nil, types.ErrNoCache
 	}
@@ -539,7 +541,8 @@ func (m *Magus) ListArtifacts(ctx context.Context, projectPath, wsPath string) (
 
 // GetArtifact writes a cached version to dst, cloning from the store when
 // the filesystem supports reflink.
-func (m *Magus) GetArtifact(ctx context.Context, v cache.ArtifactVersion, dst string) error {
+func (w internals) GetArtifact(ctx context.Context, v cache.ArtifactVersion, dst string) error {
+	m := w.Magus
 	if m.cache == nil {
 		return types.ErrNoCache
 	}

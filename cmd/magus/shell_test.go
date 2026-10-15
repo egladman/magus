@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -1098,7 +1099,7 @@ func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
 	global = globalFlags{}
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(""), 0o644))
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 	worker := narrowLease()
 	worker.Parent = "harness"
@@ -1668,7 +1669,7 @@ func TestLoadApprovedSpawnRuleSurvivesABrokenWorkingTree(t *testing.T) {
 // in the guard index of the workspace it loaded, not the cwd's.
 func TestGuardIndexAnswersFromTheLoadedRoot(t *testing.T) {
 	loaded := rootElsewhere(t)
-	cacheDir, err := magus.ResolveCacheDir(loaded, magus.WithLoadedConfig(globalCfg))
+	cacheDir, err := magus.ResolveCacheDir(loaded, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 	g := knowledge.NewGraph()
 	g.Merge([]types.KnowledgeNode{

@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/project/impact"
@@ -723,7 +724,7 @@ func TestInspectWiresVCSOptionsFromConfig(t *testing.T) {
 	disabled := false
 	cfg.VCS.Enabled = &disabled
 
-	ws, err := Inspect(context.Background(), root, WithLoadedConfig(cfg))
+	ws, err := Inspect(context.Background(), root, workspace.WithLoadedConfig(cfg))
 	require.NoError(t, err, "Inspect")
 
 	got := ws.VCSOptions()
@@ -814,7 +815,7 @@ func TestOpenRefusesARequiredRemoteWriteWithNoBackend(t *testing.T) {
 	required := true
 	cfg.Cache.Remote.Write.Enabled = &required
 
-	m, err := Open(t.Context(), root, WithLoadedConfig(cfg))
+	m, err := Open(t.Context(), root, workspace.WithLoadedConfig(cfg))
 	if m != nil {
 		_ = m.Close()
 	}
@@ -857,21 +858,21 @@ func TestSharedProviderVisibleAcrossMagus(t *testing.T) {
 		return w.Root()
 	}
 
-	mBuild, err := Open(ctx, mkWS(), WithProvider(tel))
+	mBuild, err := Open(ctx, mkWS(), workspace.WithTelemetryProvider(tel))
 	require.NoError(t, err)
 	defer func() { _ = mBuild.Close() }()
 
-	mBridge, err := Open(ctx, mkWS(), WithProvider(tel))
+	mBridge, err := Open(ctx, mkWS(), workspace.WithTelemetryProvider(tel))
 	require.NoError(t, err)
 	defer func() { _ = mBridge.Close() }()
 
 	// Both workspaces adopted the SAME provider instance rather than building their own.
-	assert.True(t, tel == mBuild.Telemetry(), "build workspace did not adopt the injected provider")
-	assert.True(t, tel == mBridge.Telemetry(), "bridge workspace did not adopt the injected provider")
+	assert.True(t, tel == mBuild.tel, "build workspace did not adopt the injected provider")
+	assert.True(t, tel == mBridge.tel, "bridge workspace did not adopt the injected provider")
 
 	// Record a target run through the "build" workspace's provider (as a per-workspace
 	// registry build would)...
-	mBuild.Telemetry().RecordTargetRun(ctx, 0.5,
+	mBuild.tel.RecordTargetRun(ctx, 0.5,
 		observability.Attr{Key: "magus.target", Value: "build"},
 		observability.Attr{Key: "outcome", Value: string(observability.OutcomeOK)},
 	)
