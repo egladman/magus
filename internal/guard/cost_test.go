@@ -203,7 +203,7 @@ func TestReadTranscriptReadsEachLineOnce(t *testing.T) {
 	var st costState
 	got := st.readTranscript(path)
 	assert.Equal(t, []toolResult{{tool: "Bash", class: types.DelegableSearch, chars: len(big)}}, got)
-	assert.Equal(t, costState{Tokens: 200100, Model: "claude-opus-5-5", Transcript: path, Offset: fileSize(t, path)}, st,
+	assert.Equal(t, costState{Tokens: 200100, Model: "claude-opus-5-5", Transcript: path, Offset: fileSize(t, path), Pending: map[string]pendingCall{}}, st,
 		"a subagent's line in the main transcript is not the main thread's")
 
 	assert.Empty(t, st.readTranscript(path), "nothing new")
@@ -213,7 +213,7 @@ func TestReadTranscriptReadsEachLineOnce(t *testing.T) {
 	)
 	got = st.readTranscript(path)
 	assert.Equal(t, []toolResult{{tool: "Read", class: types.DelegableRead, chars: len("package a")}}, got)
-	assert.Equal(t, costState{Tokens: 250001, Model: "claude-opus-5-5", Transcript: path, Offset: fileSize(t, path)}, st,
+	assert.Equal(t, costState{Tokens: 250001, Model: "claude-opus-5-5", Transcript: path, Offset: fileSize(t, path), Pending: map[string]pendingCall{}}, st,
 		"a line naming no model keeps the last one named")
 }
 
@@ -229,7 +229,7 @@ func TestReadTranscriptReadsARollout(t *testing.T) {
 	var st costState
 	got := st.readTranscript(path)
 	assert.Equal(t, []toolResult{{tool: "exec", class: types.DelegableDiff, chars: len("diff --git a/x b/x")}}, got)
-	assert.Equal(t, costState{Tokens: 120000, Window: 272000, Transcript: path, Offset: fileSize(t, path)}, st)
+	assert.Equal(t, costState{Tokens: 120000, Window: 272000, Transcript: path, Offset: fileSize(t, path), Pending: map[string]pendingCall{}}, st)
 }
 
 // fileSize is path's length in bytes, the offset a transcript read wholly leaves.
@@ -632,6 +632,7 @@ func TestCommandRequestCarriesTheThread(t *testing.T) {
 		Role:     types.AgentRoleRoot,
 		Thread:   types.AgentThreadMain, ThreadFrom: types.ThreadInferred, // inferred until the host names a subagent
 		Window:    &types.ContextWindow{Tokens: 300_000, Window: 1_000_000, Model: "claude-sonnet-5-5", Source: types.ContextFromTranscript},
+		Dir:       at.workspace,
 		Workspace: at.workspace,
 	}, req)
 
@@ -642,6 +643,7 @@ func TestCommandRequestCarriesTheThread(t *testing.T) {
 		Commands: req.Commands,
 		Role:     types.AgentRoleRoot,
 		Thread:   types.AgentThreadSub, ThreadFrom: types.ThreadReported,
+		Dir:       at.workspace,
 		Workspace: at.workspace, // and no Window: no usage was reported for the subagent
 	}, req)
 }
