@@ -841,7 +841,10 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("magus notes capture: %w", err)
 	}
-	sess, fromServer := captureSession(ctx, m)
+	sess, fromServer, err := captureSession(ctx, m)
+	if err != nil {
+		return fmt.Errorf("magus notes capture: %w", err)
+	}
 	// The colleagues' half. Read separately and never required: a review with no forge behind
 	// it is the ordinary case, and the local conversation is worth keeping on its own.
 	comments, partial := reviewComments(ctx, m)
@@ -1038,12 +1041,13 @@ func captureName(sess *types.DiffReview) string {
 // unsent human ones, which is what a person writing alone in `magus diff` produces, so the
 // absence of a server is a smaller transcript rather than no transcript. The caller says which
 // one it got; see notesCapture's output.
-func captureSession(ctx context.Context, m *magus.Magus) (*types.DiffReview, bool) {
+func captureSession(ctx context.Context, m *magus.Magus) (*types.DiffReview, bool, error) {
 	if sess := serverDiffReview(ctx); sess != nil {
-		return sess, true
+		return sess, true, nil
 	}
 	patch, _ := m.WorkingDiff(ctx, nil)
-	return storedDiffReview(m.CacheDir(), patch), false
+	sess, err := storedDiffReview(m.CacheDir(), patch)
+	return sess, false, err
 }
 
 // storedDiffReview rebuilds what a capture needs from the files the store persists.
@@ -1052,12 +1056,16 @@ func captureSession(ctx context.Context, m *magus.Magus) (*types.DiffReview, boo
 // so the note this capture names is the one either path would have named for this tree. No
 // patch leaves it EMPTY rather than digesting the empty string, which would name every such
 // capture the same note and make the second one collide with the first.
-func storedDiffReview(cacheDir, patch string) *types.DiffReview {
-	sess := &types.DiffReview{Comments: changeset.NewStore(cacheDir).LoadDrafts()}
+func storedDiffReview(cacheDir, patch string) (*types.DiffReview, error) {
+	drafts, err := changeset.NewStore(cacheDir).LoadDrafts()
+	if err != nil {
+		return nil, err
+	}
+	sess := &types.DiffReview{Comments: drafts}
 	if patch != "" {
 		sess.AsOf = changeset.PatchDigest(patch)
 	}
-	return sess
+	return sess, nil
 }
 
 // serverDiffReview reads the running server's review session, or nil when there is no server,
@@ -1166,10 +1174,16 @@ func localReviewComments(ctx context.Context, from types.ReviewOrigin, cacheDir 
 	comments, err := bindings.ReviewComments(ctx, at)
 	// The watermark is PERSISTED, so the new-comment mark survives without the server that
 	// normally applies it. Reading it here never moves it, for the reason the handler gives.
-	watermark := types.DiffReview{SeenComments: changeset.NewStore(cacheDir).LoadSeenComments()}
+	// An unreadable watermark marks nothing new rather than everything, and its error rides
+	// with the forge's.
+	seen, seenErr := changeset.NewStore(cacheDir).LoadSeenComments()
+	err = errors.Join(err, seenErr)
+	watermark := types.DiffReview{SeenComments: seen}
 	fresh := make(map[string]struct{})
 	for _, id := range watermark.UnseenComments(comments) {
-		fresh[id] = struct{}{}
+		if seenErr == nil {
+			fresh[id] = struct{}{}
+		}
 	}
 	for i := range comments {
 		if _, ok := fresh[comments[i].ID]; ok {

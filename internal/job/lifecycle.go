@@ -1303,14 +1303,14 @@ func (s *Store) readLandingProbes() probeLog {
 	if s.err != nil || s.path == "" {
 		return probeLog{}
 	}
-	read, err := readLines(filepath.Join(filepath.Dir(s.path), landingProbesFile))
+	read, err := file.ReadLines(filepath.Join(filepath.Dir(s.path), landingProbesFile))
 	if err != nil {
 		return probeLog{}
 	}
-	log := probeLog{probes: map[string]landingProbe{}, lines: len(read.lines), partial: read.partial}
-	for _, line := range read.lines {
+	log := probeLog{probes: map[string]landingProbe{}, lines: len(read.Lines), partial: read.Partial}
+	for _, line := range read.Lines {
 		var p landingProbeLine
-		if json.Unmarshal(line.text, &p) == nil && p.ID != "" {
+		if json.Unmarshal(line.Text, &p) == nil && p.ID != "" {
 			log.probes[p.ID] = landingProbe{At: p.At, Updated: p.Updated}
 		}
 	}
@@ -1319,7 +1319,7 @@ func (s *Store) readLandingProbes() probeLog {
 
 // writeLandingProbes records next against log, the history it was decided from: the
 // entries that changed are appended, and the file is rewritten to next alone when next
-// drops an entry or the log has grown past [compactAt].
+// drops an entry or the log is [file.CompactDue].
 func (s *Store) writeLandingProbes(log probeLog, next map[string]landingProbe) {
 	if s.err != nil || s.path == "" {
 		return
@@ -1343,11 +1343,11 @@ func (s *Store) writeLandingProbes(log probeLog, next map[string]landingProbe) {
 		}
 	}
 	path := filepath.Join(filepath.Dir(s.path), landingProbesFile)
-	if !dropped && !log.partial && log.lines+len(changed) <= compactAt(len(next)) {
-		_ = appendLines(path, changed)
+	if !dropped && !log.partial && !file.CompactDue(log.lines+len(changed), len(next)) {
+		_ = file.AppendLines(path, changed, 0o644)
 		return
 	}
-	_ = rewriteLines(path, all)
+	_ = file.RewriteLines(path, all, 0o644)
 }
 
 // landedOnBase reports why row's work is on the base branch, or "" when that is not

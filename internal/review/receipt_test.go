@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/types"
 )
 
@@ -138,8 +139,8 @@ func TestReceiptsAreAppendedAsJSONLines(t *testing.T) {
 	assert.Equal(t, "d3", s["other.go"].Digest)
 }
 
-// Re-acking one path over and over cannot grow the file without bound: past 64 lines and four
-// times the receipts, it is rewritten to the last line for each path.
+// Re-acking one path over and over cannot grow the file without bound: once it is
+// file.CompactDue, it is rewritten to the last line for each path.
 func TestReceiptsCompactPastTheirBound(t *testing.T) {
 	dir := t.TempDir()
 	for i := range 100 {
@@ -148,7 +149,7 @@ func TestReceiptsCompactPastTheirBound(t *testing.T) {
 
 	b, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(receiptFile)))
 	require.NoError(t, err)
-	assert.LessOrEqual(t, bytes.Count(b, []byte("\n")), compactMinLines+1)
+	assert.False(t, file.CompactDue(bytes.Count(b, []byte("\n")), 1))
 	s, err := Load(dir)
 	require.NoError(t, err)
 	assert.True(t, s.Covers("a.go", "99"))
@@ -158,7 +159,7 @@ func TestReceiptsCompactPastTheirBound(t *testing.T) {
 // would report every file it covered as unread.
 func TestOldReceiptsJSONIsNamedNotRead(t *testing.T) {
 	dir := t.TempDir()
-	old := filepath.Join(dir, filepath.FromSlash(legacyReceiptFile))
+	old := filepath.Join(dir, filepath.FromSlash(oldReceiptFile))
 	require.NoError(t, os.MkdirAll(filepath.Dir(old), 0o755))
 	require.NoError(t, os.WriteFile(old, []byte(`[{"path":"a.go","digest":"d"}]`), 0o600))
 

@@ -126,7 +126,7 @@ func stallLevel(rec stallRecord, rule string, s builtin.Setting) int {
 func observeStall(ctx context.Context, at location, who hookAttribution, lease string, verdict types.GuardJudgment) {
 	gate := stallGate(at.cacheDir, lease)
 	rec := readStall(gate)
-	s := recallSettings(at.cacheDir)[string(denyRuleStall)]
+	s := recalledSettings(at.cacheDir)[string(denyRuleStall)]
 	switch verdict.Decision {
 	case decisionDeny:
 		level := stallLevel(rec, verdict.Rule, s)

@@ -1092,9 +1092,18 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	// in-memory session map is empty by construction: reading it was a gate that could never
 	// open, and the job was a guaranteed no-op until this was fixed.
 	store := changeset.NewStore(m.CacheDir())
-	seen := store.LoadSeenComments()
-	drafts := store.LoadDrafts()
-	reading := store.LoadReading()
+	seen, err := store.LoadSeenComments()
+	if err != nil {
+		return fmt.Errorf("server %s: %w", job.NameCheckReview, err)
+	}
+	drafts, err := store.LoadDrafts()
+	if err != nil {
+		return fmt.Errorf("server %s: %w", job.NameCheckReview, err)
+	}
+	reading, err := store.LoadReading()
+	if err != nil {
+		return fmt.Errorf("server %s: %w", job.NameCheckReview, err)
+	}
 	if reading.Expired(time.Now()) {
 		// A forgotten tab is not a reader. Ignored from here on, and cleared so the gate below
 		// stops treating it as the reason to ask the forge.

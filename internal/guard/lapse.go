@@ -3,12 +3,14 @@ package guard
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -24,7 +26,7 @@ import (
 // They are graded by the settings the judgment loaded when it got that far, else by the
 // ones the last judgment in this cache dir applied, else by the defaults.
 func lapsedRules(ctx context.Context, base Dependencies, log *phaseLog, req Request, env hookRequest, who hookAttribution, input string, isPath bool, cacheDir string) ShellVerdict {
-	deps := Dependencies{CacheDir: base.CacheDir, Spells: base.Spells, Builtins: recallSettings(cacheDir)}
+	deps := Dependencies{CacheDir: base.CacheDir, Spells: base.Spells, Builtins: recalledSettings(cacheDir)}
 	if loaded, ok := log.settled(); ok {
 		deps.Builtins, deps.ShellRules, deps.ShellDialect = loaded.Builtins, loaded.ShellRules, loaded.ShellDialect
 		if loaded.Spells != nil {
@@ -72,12 +74,12 @@ type settingLine struct {
 	Setting *builtin.Setting `json:"setting,omitempty"`
 }
 
-func settingsLog(cacheDir string) jsonl[settingLine] {
-	return jsonl[settingLine]{
-		path: filepath.Join(cacheDir, settingsFile),
-		perm: 0o644,
-		key:  func(l settingLine) string { return l.Rule },
-		live: func(l settingLine) bool { return !l.Removed && l.Setting != nil },
+func settingsLog(cacheDir string) file.JSONL[settingLine] {
+	return file.JSONL[settingLine]{
+		Path: filepath.Join(cacheDir, settingsFile),
+		Key:  func(l settingLine) string { return l.Rule },
+		Live: func(l settingLine) bool { return !l.Removed && l.Setting != nil },
+		Old:  filepath.Join(cacheDir, oldSettingsFile),
 	}
 }
 
@@ -95,7 +97,7 @@ func rememberSettings(cacheDir string, settings map[string]builtin.Setting) {
 	if info, err := os.Stat(cacheDir); err != nil || !info.IsDir() {
 		return
 	}
-	_ = settingsLog(cacheDir).update(context.Background(), func(stored []settingLine) []settingLine {
+	_ = settingsLog(cacheDir).Update(context.Background(), func(stored []settingLine) []settingLine {
 		held := make(map[string]settingLine, len(stored))
 		for _, l := range stored {
 			held[l.Rule] = l
@@ -127,24 +129,29 @@ func sameEncoding(a, b builtin.Setting) bool {
 }
 
 // recallSettings is what rememberSettings last recorded in cacheDir, nil for the defaults
-// when nothing readable was. A file that cannot be read is reported and read as none, so the
-// rules grade by their defaults.
-func recallSettings(cacheDir string) map[string]builtin.Setting {
+// when nothing was. A file that cannot be read, or an older magus's guard-settings.json beside
+// it, is an error.
+func recallSettings(cacheDir string) (map[string]builtin.Setting, error) {
 	if cacheDir == "" {
-		return nil
+		return nil, nil
 	}
-	refuseOldJSON(cacheDir, oldSettingsFile)
-	held, err := settingsLog(cacheDir).load()
-	if err != nil {
-		reportGuardMemo(err)
-		return nil
-	}
-	if len(held) == 0 {
-		return nil
+	held, err := settingsLog(cacheDir).Load()
+	if err != nil || len(held) == 0 {
+		return nil, err
 	}
 	settings := make(map[string]builtin.Setting, len(held))
 	for _, l := range held {
 		settings[l.Rule] = *l.Setting
+	}
+	return settings, nil
+}
+
+// recalledSettings is recallSettings for a caller that grades by the defaults when the record
+// cannot be read, and logs that it did.
+func recalledSettings(cacheDir string) map[string]builtin.Setting {
+	settings, err := recallSettings(cacheDir)
+	if err != nil {
+		reportGuardMemo(fmt.Errorf("grading by the default settings: %w", err))
 	}
 	return settings
 }

@@ -2,6 +2,7 @@ package job
 
 import (
 	"cmp"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -20,7 +21,6 @@ import (
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -303,26 +303,26 @@ const recordSweepEvery = 10 * time.Minute
 // processes. Only the last line is read.
 const recordsSweptFile = "records-swept.jsonl"
 
-// recordsSweptKept is how many passes the log holds before a pass rewrites it to its own
-// line alone.
-const recordsSweptKept = 16
-
 type recordsPass struct {
 	At   int64    `json:"at"`
 	Rows []string `json:"rows"`
 }
 
+// recordsSweptLog keys every pass alike, so the last one is the log's one entry.
+func (s *Store) recordsSweptLog() file.JSONL[recordsPass] {
+	return file.JSONL[recordsPass]{Path: filepath.Join(filepath.Dir(s.path), recordsSweptFile),
+		Key: func(recordsPass) string { return "" }}
+}
+
 // recordsSwept reports whether a pass within recordSweepEvery of now saw only rows that
-// are still in rows. A history that cannot be read reads as no pass.
+// are still in rows. A history that cannot be read reads as no pass, which costs one early
+// pass.
 func (s *Store) recordsSwept(now int64, rows []types.Job) bool {
-	read, err := readLines(filepath.Join(filepath.Dir(s.path), recordsSweptFile))
-	if err != nil || len(read.lines) == 0 {
+	passes, err := s.recordsSweptLog().Load()
+	if err != nil || len(passes) == 0 {
 		return false
 	}
-	var last recordsPass
-	if json.Unmarshal(read.lines[len(read.lines)-1].text, &last) != nil {
-		return false
-	}
+	last := passes[0]
 	if since := now - last.At; since < 0 || since >= int64(recordSweepEvery/time.Second) {
 		return false
 	}
@@ -338,16 +338,7 @@ func (s *Store) writeRecordsSwept(now int64, rows []types.Job) {
 	for i, r := range rows {
 		pass.Rows[i] = r.ID
 	}
-	line, err := json.Marshal(pass)
-	if err != nil {
-		return
-	}
-	path := filepath.Join(filepath.Dir(s.path), recordsSweptFile)
-	if read, err := readLines(path); err == nil && !read.partial && len(read.lines) < recordsSweptKept {
-		_ = appendLines(path, [][]byte{line})
-		return
-	}
-	_ = rewriteLines(path, [][]byte{line})
+	_ = s.recordsSweptLog().Update(context.Background(), func([]recordsPass) []recordsPass { return []recordsPass{pass} })
 }
 
 // dropRecord removes the record at path if it still holds b.

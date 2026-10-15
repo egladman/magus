@@ -114,7 +114,9 @@ func TestSetOutlineHoldsOneOutlinePerThreadInMemory(t *testing.T) {
 		{Thread: "c2", Topics: []string{"three"}},
 	}, other.Outlines)
 	assert.Equal(t, other.Outlines, s.Get("/w").Outlines)
-	assert.Empty(t, NewStore(dir).LoadDrafts(), "an outline is never persisted")
+	drafts, err := NewStore(dir).LoadDrafts()
+	assert.NoError(t, err)
+	assert.Empty(t, drafts, "an outline is never persisted")
 }
 
 func TestSetOutlineRefusesWhatNormalizeOutlineRefuses(t *testing.T) {

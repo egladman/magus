@@ -56,7 +56,7 @@ func TestReadingMarksTheReviewAndPrintsTheForgeCommand(t *testing.T) {
 
 	var got readingResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
-	mark := store.LoadReading()
+	mark := loadReading(t, store)
 	assert.Equal(t, changeset.ReadingMark{Review: "482", Repo: "acme/acme", Since: got.Since}, mark)
 	assert.Equal(t, readingResponse{
 		Reading: true,
@@ -75,7 +75,15 @@ func TestReadingOffClearsTheMark(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	assert.JSONEq(t, `{"reading":false}`, w.Body.String())
-	assert.False(t, store.LoadReading().Active())
+	assert.False(t, loadReading(t, store).Active())
+}
+
+// loadReading is the store's mark, failing the test when it cannot be read.
+func loadReading(t *testing.T, store *changeset.Store) changeset.ReadingMark {
+	t.Helper()
+	m, err := store.LoadReading()
+	require.NoError(t, err)
+	return m
 }
 
 // Only GitHub's shape is known, so any other forge gets the mark and no command rather than a
@@ -91,7 +99,7 @@ func TestReadingOnAnotherForgeMarksWithoutACommand(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
 	assert.True(t, got.Reading)
 	assert.Empty(t, got.Command)
-	assert.True(t, store.LoadReading().Active())
+	assert.True(t, loadReading(t, store).Active())
 }
 
 // A review that has landed has nothing left to hold, and recording the mark would make the next
@@ -103,7 +111,7 @@ func TestReadingAMergedReviewIsRefused(t *testing.T) {
 	w := post(t, h, `{"op":"reading","on":true}`)
 
 	assert.Equal(t, http.StatusConflict, w.Code, w.Body.String())
-	assert.False(t, store.LoadReading().Active())
+	assert.False(t, loadReading(t, store).Active())
 }
 
 func TestReadingWithNoReviewIsAnError(t *testing.T) {

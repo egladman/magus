@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -235,15 +234,10 @@ const (
 // as one JSON document. Reading past it would show an empty plan while the rows sit beside
 // it, and the guard reads an empty plan as nothing leased.
 func (s *Store) refuseDocument() error {
-	old := filepath.Join(filepath.Dir(s.path), documentFileName)
-	if _, err := os.Stat(old); errors.Is(err, fs.ErrNotExist) {
-		return nil
-	} else if err != nil {
-		return fmt.Errorf("job: %w", err)
+	if err := file.RefuseOld(filepath.Join(filepath.Dir(s.path), documentFileName)); err != nil {
+		return fmt.Errorf("job: %w; this magus keeps the plan in %s and starts it empty, so declare the jobs again", err, s.path)
 	}
-	return fmt.Errorf("job: %s is a plan an older magus wrote as one JSON document, which this magus does not read;"+
-		" it keeps the plan in %s, one row per line. Move the old file aside to start an empty plan"+
-		" (`mv %s %s.old`), then declare the jobs again", old, s.path, old, old)
+	return nil
 }
 
 // Path is the JSON Lines file this Store reads and writes, for a reader that has to name
@@ -274,14 +268,6 @@ type jobsLog struct {
 	lines   int
 	partial bool
 }
-
-// compactAt is how many lines a ledger of rows rows may hold before a write rewrites it to
-// one line per row. Every read decodes every line, so the bound keeps a read within twice
-// the rows plus the slack, while a row heartbeating alone rewrites the file at most once
-// per compactSlack beats.
-func compactAt(rows int) int { return 2*rows + compactSlack }
-
-const compactSlack = 64
 
 // tailWait is how long a reader waits for an append it caught mid-write to finish before
 // it reports the file's last line as one no writer finished.
@@ -874,7 +860,7 @@ func (s *Store) archive(f jobsFile) error {
 		return err
 	}
 	name := "jobs-" + time.Now().UTC().Format("20060102T150405Z") + ".jsonl"
-	return rewriteLines(filepath.Join(filepath.Dir(s.path), name), lines)
+	return file.RewriteLines(filepath.Join(filepath.Dir(s.path), name), lines, 0o644)
 }
 
 // releases carries the row's recorded releases forward and adds the paths this write
@@ -1067,7 +1053,7 @@ func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
 // write records f against log, the file it was read from: the lines of the rows that
 // changed are appended, and the file is rewritten to one line per row instead when a row
 // was dropped, the header changed, the file ended in a line no writer finished, or the
-// appended lines would take it past [compactAt].
+// appended lines would make it [file.CompactDue].
 func (s *Store) write(f jobsFile, log jobsLog) error {
 	f.Version = max(f.Version, types.JobSchemaVersion)
 	lines, err := encodeJobs(f)
@@ -1091,8 +1077,8 @@ func (s *Store) write(f jobsFile, log jobsLog) error {
 	if len(changed) == 0 && !dropped && sameHeader && !log.partial {
 		return nil
 	}
-	if !dropped && sameHeader && !log.partial && log.lines+len(changed) <= compactAt(len(f.Jobs)) {
-		return appendLines(s.path, changed)
+	if !dropped && sameHeader && !log.partial && !file.CompactDue(log.lines+len(changed), len(f.Jobs)) {
+		return file.AppendLines(s.path, changed, 0o644)
 	}
 	if log.partial {
 		out := s.notices
@@ -1101,7 +1087,7 @@ func (s *Store) write(f jobsFile, log jobsLog) error {
 		}
 		fmt.Fprintf(out, "job: %s ended in a line no writer finished; the rewrite dropped it\n", s.path)
 	}
-	return rewriteLines(s.path, lines)
+	return file.RewriteLines(s.path, lines, 0o644)
 }
 
 // pruneFootprints removes the footprint cache of every checkpoint revision no live row in
@@ -1159,13 +1145,13 @@ func (s *Store) readFile(wait bool) (jobsFile, jobsLog, error) {
 		return jobsFile{}, jobsLog{}, err
 	}
 	deadline := time.Now().Add(tailWait)
-	var read jsonLines
+	var read file.Lines
 	for {
 		var err error
-		if read, err = readLines(s.path); err != nil {
+		if read, err = file.ReadLines(s.path); err != nil {
 			return jobsFile{}, jobsLog{}, fmt.Errorf("job: %w", err)
 		}
-		if !read.partial || !wait {
+		if !read.Partial || !wait {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -1174,22 +1160,22 @@ func (s *Store) readFile(wait bool) (jobsFile, jobsLog, error) {
 		time.Sleep(time.Millisecond)
 	}
 	var f jobsFile
-	log := jobsLog{rows: make(map[string][]byte, len(read.lines)), lines: len(read.lines), partial: read.partial}
+	log := jobsLog{rows: make(map[string][]byte, len(read.Lines)), lines: len(read.Lines), partial: read.Partial}
 	at := map[string]int{}
-	for _, line := range read.lines {
+	for _, line := range read.Lines {
 		var row types.Job
-		if err := json.Unmarshal(line.text, &row); err != nil {
-			return jobsFile{}, jobsLog{}, fmt.Errorf("job: %s line %d: %w", s.path, line.n, err)
+		if err := json.Unmarshal(line.Text, &row); err != nil {
+			return jobsFile{}, jobsLog{}, fmt.Errorf("job: %s:%d: %w", s.path, line.N, err)
 		}
 		if row.ID == "" {
 			var header jobsFile
-			if err := json.Unmarshal(line.text, &header); err != nil {
-				return jobsFile{}, jobsLog{}, fmt.Errorf("job: %s line %d: %w", s.path, line.n, err)
+			if err := json.Unmarshal(line.Text, &header); err != nil {
+				return jobsFile{}, jobsLog{}, fmt.Errorf("job: %s:%d: %w", s.path, line.N, err)
 			}
-			f.Schema, f.Retained, log.header = header.Schema, header.Retained, line.text
+			f.Schema, f.Retained, log.header = header.Schema, header.Retained, line.Text
 			continue
 		}
-		log.rows[row.ID] = line.text
+		log.rows[row.ID] = line.Text
 		if i, ok := at[row.ID]; ok {
 			f.Jobs[i] = row
 			continue

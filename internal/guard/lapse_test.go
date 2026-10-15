@@ -86,12 +86,20 @@ func TestLapseNeverDegradesADestructiveVerbOrAPush(t *testing.T) {
 // A judgment that answers in time records the settings it applied, and a lapse reads them.
 func TestRememberSettingsRoundTrips(t *testing.T) {
 	dir := t.TempDir()
-	assert.Nil(t, recallSettings(dir))
+	assert.Nil(t, recalled(t, dir))
 	settings := strict(Dependencies{}).Builtins
 	rememberSettings(dir, settings)
-	assert.Equal(t, settings, recallSettings(dir))
+	assert.Equal(t, settings, recalled(t, dir))
 	rememberSettings(dir, nil)
-	assert.Nil(t, recallSettings(dir), "the defaults are recorded as none")
+	assert.Nil(t, recalled(t, dir), "the defaults are recorded as none")
+}
+
+// recalled is recallSettings, failing the test when the record cannot be read.
+func recalled(t *testing.T, dir string) map[string]builtin.Setting {
+	t.Helper()
+	settings, err := recallSettings(dir)
+	require.NoError(t, err)
+	return settings
 }
 
 // The settings are appended as a line per rule that changed, so a judgment that applies the
@@ -107,7 +115,7 @@ func TestRememberedSettingsAreAppendedPerRule(t *testing.T) {
 	b, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, 2, strings.Count(string(b), "\n"), "an unchanged set is not written again")
-	got := recallSettings(dir)
+	got := recalled(t, dir)
 	assert.Equal(t, deny, got["read-navigation"])
 	assert.Equal(t, busy, got["busy-wait"])
 
@@ -115,14 +123,18 @@ func TestRememberedSettingsAreAppendedPerRule(t *testing.T) {
 	b, err = os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Contains(t, string(b), `{"rule":"read-navigation","removed":true}`)
-	assert.Equal(t, map[string]builtin.Setting{"busy-wait": busy}, recallSettings(dir))
+	assert.Equal(t, map[string]builtin.Setting{"busy-wait": busy}, recalled(t, dir))
 }
 
-// A JSON memo an older magus left is not read as a second format: the guard grades by the
-// defaults and says, once per call, which file to move aside.
+// A JSON memo an older magus left is not read as a second format: recalling the settings fails
+// naming the file to move aside, and a lapse grades by the defaults.
 func TestOldSettingsJSONIsNotRead(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, oldSettingsFile), []byte(`{"busy-wait":{"decision":"deny"}}`), 0o644))
+	old := filepath.Join(dir, oldSettingsFile)
+	require.NoError(t, os.WriteFile(old, []byte(`{"busy-wait":{"decision":"deny"}}`), 0o644))
 
-	assert.Nil(t, recallSettings(dir))
+	settings, err := recallSettings(dir)
+	require.ErrorContains(t, err, "mv "+old+" "+old+".old")
+	assert.Nil(t, settings)
+	assert.Nil(t, recalledSettings(dir))
 }

@@ -995,7 +995,9 @@ func TestTerminalSeenMarkingReachesTheStoreTheConsoleWrites(t *testing.T) {
 
 	// Read back through a SECOND store, because the watermark has to survive the process: one
 	// that lived in memory marks the whole conversation new again the next morning.
-	assert.Equal(t, []string{"t1", "t2"}, changeset.NewStore(cache).LoadSeenComments())
+	seen, err := changeset.NewStore(cache).LoadSeenComments()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"t1", "t2"}, seen)
 }
 
 func TestCompatUntil(t *testing.T) {

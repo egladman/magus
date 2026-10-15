@@ -37,11 +37,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/types"
 )
 
@@ -57,14 +57,16 @@ const digestLen = 16
 // package exists to refuse.
 const receiptFile = "review/receipts.jsonl"
 
-// legacyReceiptFile is the single JSON document an older magus kept the receipts in.
-const legacyReceiptFile = "review/receipts.json"
+// oldReceiptFile is the single JSON document an older magus kept the receipts in. It is
+// neither read nor skipped: a skipped one would report every file it covered as unread.
+const oldReceiptFile = "review/receipts.json"
 
-func receiptLog(cacheDir string) jsonl[Receipt] {
-	return jsonl[Receipt]{
-		path: filepath.Join(cacheDir, filepath.FromSlash(receiptFile)),
-		perm: 0o600,
-		key:  func(r Receipt) string { return r.Path },
+func receiptLog(cacheDir string) file.JSONL[Receipt] {
+	return file.JSONL[Receipt]{
+		Path: filepath.Join(cacheDir, filepath.FromSlash(receiptFile)),
+		Perm: 0o600,
+		Key:  func(r Receipt) string { return r.Path },
+		Old:  filepath.Join(cacheDir, filepath.FromSlash(oldReceiptFile)),
 	}
 }
 
@@ -112,10 +114,7 @@ type Store map[string]Receipt
 // Load reads the store. A missing file is an empty store, not an error: nobody having
 // acknowledged anything yet is the starting state.
 func Load(cacheDir string) (Store, error) {
-	if err := refuseLegacy(cacheDir); err != nil {
-		return nil, err
-	}
-	list, err := receiptLog(cacheDir).load()
+	list, err := receiptLog(cacheDir).Load()
 	if err != nil {
 		return nil, err
 	}
@@ -124,16 +123,6 @@ func Load(cacheDir string) (Store, error) {
 		out[r.Path] = r
 	}
 	return out, nil
-}
-
-// refuseLegacy is an error naming the JSON document an older magus kept the receipts in. It
-// is neither read nor skipped: a skipped one would report every file it covered as unread.
-func refuseLegacy(cacheDir string) error {
-	old := filepath.Join(cacheDir, filepath.FromSlash(legacyReceiptFile))
-	if _, err := os.Lstat(old); err != nil {
-		return nil
-	}
-	return fmt.Errorf("%s is the JSON document of an older magus and is no longer read; move it aside with `mv %s %s.old`", old, old, old)
 }
 
 // Covers reports whether the store holds a receipt for this path AT this content.
@@ -157,10 +146,7 @@ func (s Store) Covers(path, digest string) bool {
 // serializes the read of an earlier reason with its replacement and the compaction; a dropped
 // receipt would read as a file nobody read.
 func Record(cacheDir string, add []Receipt) error {
-	if err := refuseLegacy(cacheDir); err != nil {
-		return err
-	}
-	return receiptLog(cacheDir).update(context.Background(), func(stored []Receipt) []Receipt {
+	return receiptLog(cacheDir).Update(context.Background(), func(stored []Receipt) []Receipt {
 		cur := make(Store, len(stored))
 		for _, r := range stored {
 			cur[r.Path] = r

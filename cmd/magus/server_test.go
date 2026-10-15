@@ -452,7 +452,7 @@ func TestCheckReviewReportsAMergeUnderAReaderWithNothingSaid(t *testing.T) {
 	assert.Equal(t, "acme/acme: 0", merged[0].Preview)
 	require.Len(t, rec.secs, 1, "one merge under a reader is one observation")
 	assert.InDelta(t, 90.0, rec.secs[0], 5.0, "the duration is the time from the mark to the merge")
-	assert.False(t, changeset.NewStore(m.CacheDir()).LoadReading().Active(), "reported once: the mark is cleared")
+	assert.False(t, storedReading(t, changeset.NewStore(m.CacheDir())).Active(), "reported once: the mark is cleared")
 
 	// The next tick finds nothing to report, and counts nothing.
 	require.NoError(t, serverCheckReview(ctx, m.Root(), nil))
@@ -472,7 +472,7 @@ func TestCheckReviewIgnoresAMarkForAnotherReview(t *testing.T) {
 
 	assert.Empty(t, mergedReviewEvents(t, m.CacheDir()), "nothing was said and the mark is not this review's")
 	assert.Empty(t, rec.secs)
-	assert.True(t, changeset.NewStore(m.CacheDir()).LoadReading().Active(), "another review's mark is not this job's to clear")
+	assert.True(t, storedReading(t, changeset.NewStore(m.CacheDir())).Active(), "another review's mark is not this job's to clear")
 }
 
 // The job reads the mark, then waits on the forge. A mark the reader set on another review in the
@@ -493,7 +493,7 @@ func TestCheckReviewKeepsAMarkSetWhileItWasAskingTheForge(t *testing.T) {
 	require.NoError(t, serverCheckReview(ctx, m.Root(), nil))
 
 	assert.Len(t, mergedReviewEvents(t, m.CacheDir()), 1, "the merge under the old mark is reported")
-	assert.Equal(t, "7", store.LoadReading().Review, "the mark set in between is not deleted")
+	assert.Equal(t, "7", storedReading(t, store).Review, "the mark set in between is not deleted")
 	assert.Empty(t, rec.secs, "the mark was not this job's to clear, so it is not counted")
 }
 
@@ -510,7 +510,7 @@ func TestCheckReviewIgnoresAndClearsAnExpiredMark(t *testing.T) {
 
 	assert.Empty(t, mergedReviewEvents(t, m.CacheDir()), "an expired mark is not a reader")
 	assert.Empty(t, rec.secs)
-	assert.False(t, store.LoadReading().Active(), "the expired mark is cleared")
+	assert.False(t, storedReading(t, store).Active(), "the expired mark is cleared")
 }
 
 // A review closed without merging will never merge, so the mark that was waiting on it goes.
@@ -523,9 +523,17 @@ func TestCheckReviewClearsTheMarkOfAReviewClosedUnmerged(t *testing.T) {
 
 	require.NoError(t, serverCheckReview(ctx, m.Root(), nil))
 
-	assert.False(t, store.LoadReading().Active(), "nothing is left to wait for")
+	assert.False(t, storedReading(t, store).Active(), "nothing is left to wait for")
 	assert.Empty(t, mergedReviewEvents(t, m.CacheDir()))
 	assert.Empty(t, rec.secs)
+}
+
+// storedReading is the store's mark, failing the test when it cannot be read.
+func storedReading(t *testing.T, store *changeset.Store) changeset.ReadingMark {
+	t.Helper()
+	m, err := store.LoadReading()
+	require.NoError(t, err)
+	return m
 }
 
 // shutdownRecorder counts Shutdown calls on an otherwise real provider.

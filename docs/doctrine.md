@@ -143,7 +143,8 @@ The conventions:
   neither is a `name<TAB>value` pair or a file per entry holding a document.
 - **The last line for a key wins.** A change appends a line for the entry's
   key and a reader keeps the last one it finds. Compaction rewrites the file
-  to one line per key through a rename and never edits a line in place. A
+  to one line per key through a rename and never edits a line in place, once
+  the file holds more than twice as many lines as keys, plus 64. A
   store a person edits by hand, which nothing compacts, refuses a repeated key
   instead (the conformance ratchet, `hack/policy/conformance.jsonl`).
 - **Atomic write via rename.** A rewrite goes to a temporary file in the same
@@ -170,11 +171,12 @@ between you and the evidence of what broke it, and one document holding every
 entry turns one corrupt write into a lost store; a corrupt line costs the
 line.
 
-The mechanism is two helpers and no gate. `file.WriteFileAtomic` gives every
-rewrite its rename and `internal/json` gives every line its strict decoder;
-nothing refuses a new JSON document, so the rule holds in review alone. The
-stores that do not follow it yet, as found on 2026-10-14, are the exceptions
-being converted:
+The mechanism is three helpers and no gate. `file.JSONL` gives a keyed store
+its append, its last-line read, its compaction and its lock;
+`file.WriteFileAtomic` gives every rewrite its rename; and `internal/json`
+gives every line its strict decoder. Nothing refuses a new JSON document, so
+the rule holds in review alone. The stores that do not follow it yet, as
+found on 2026-10-14, are the exceptions:
 
 - **Runtime history** is one compact JSON document (`history/v1.json`) shared
   by every workspace on the host, megabytes long and rewritten after every

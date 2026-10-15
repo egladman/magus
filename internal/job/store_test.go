@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
@@ -706,7 +707,7 @@ func TestStoreUpdateAppendsTheRowsNextLine(t *testing.T) {
 	assert.Equal(t, "moved", rows[0].Criteria)
 }
 
-// The file is rewritten to one line per row once superseded lines pass compactAt.
+// The file is rewritten to one line per row once superseded lines make it file.CompactDue.
 func TestStoreCompactsPastTheBound(t *testing.T) {
 	t.Parallel()
 
@@ -714,19 +715,20 @@ func TestStoreCompactsPastTheBound(t *testing.T) {
 	seed(t, s, lease("a"))
 	path, err := s.Path()
 	require.NoError(t, err)
-	for i := range compactAt(1) {
+	bound := 2 + file.CompactSlack
+	for i := range bound {
 		_, err := s.Update(t.Context(), "a", func(u *types.Job) { u.Criteria = fmt.Sprint(i) })
 		require.NoError(t, err)
-		assert.LessOrEqual(t, len(storedLines(t, path)), compactAt(1))
+		assert.False(t, file.CompactDue(len(storedLines(t, path)), 1))
 	}
 	lines := storedLines(t, path)
-	assert.Less(t, len(lines), compactAt(1), "the bound was crossed and the file rewritten")
+	assert.Less(t, len(lines), bound, "the bound was crossed and the file rewritten")
 	assert.NotContains(t, lines[0], "id", "a rewrite puts the header first")
 
 	rows, err := s.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, fmt.Sprint(compactAt(1)-1), rows[0].Criteria)
+	assert.Equal(t, fmt.Sprint(bound-1), rows[0].Criteria)
 }
 
 // A delete drops the row's every line by rewriting the file.
@@ -790,7 +792,7 @@ func TestStoreRefusesTheOneDocumentPlan(t *testing.T) {
 	_, err = s.List()
 	require.ErrorContains(t, err, "mv "+old+" "+old+".old")
 	_, err = s.Update(t.Context(), "a", func(*types.Job) {})
-	require.ErrorContains(t, err, "one JSON document", "a write is refused too")
+	require.ErrorContains(t, err, "mv "+old+" "+old+".old", "a write is refused too")
 	assert.NoFileExists(t, path)
 
 	require.NoError(t, os.Rename(old, old+".old"))
@@ -936,7 +938,7 @@ func TestStoreReportsAnUnreadableFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("{not json\n"), 0o644))
 
 	_, err = s.List()
-	assert.ErrorContains(t, err, path+" line 1", "a corrupt job store is reported, never silently read as empty")
+	assert.ErrorContains(t, err, path+":1: ", "a corrupt job store is reported, never silently read as empty")
 }
 
 func TestRecordUnattributedWrite(t *testing.T) {
@@ -1243,9 +1245,13 @@ func BenchmarkStoreAtRealSize(b *testing.B) {
 	for _, tc := range []struct {
 		name   string
 		retain time.Duration
+		// due fills the file with superseded lines up to the bound file.CompactDue sets, the
+		// most a read ever decodes.
+		due bool
 	}{
-		{"as-written", 0},
-		{"retained", config.Defaults().Jobs.Retain},
+		{"as-written", 0, false},
+		{"due", 0, true},
+		{"retained", config.Defaults().Jobs.Retain, false},
 	} {
 		s := NewStore(Location{StateBase: b.TempDir(), CacheDir: b.TempDir(), Root: b.TempDir(), Actor: &Actor{}})
 		s.retain = &tc.retain
@@ -1259,6 +1265,23 @@ func BenchmarkStoreAtRealSize(b *testing.B) {
 		// interval does on a store that has grown this large.
 		if err := s.update(b.Context(), func(f *jobsFile) error { f.Jobs, f.Retained = rows, 1; return nil }); err != nil {
 			b.Fatal(err)
+		}
+		if tc.due {
+			path, err := s.Path()
+			if err != nil {
+				b.Fatal(err)
+			}
+			var superseded [][]byte
+			for len(rows)+1+len(superseded) < 2*len(rows)+file.CompactSlack {
+				line, err := json.Marshal(rows[len(superseded)%len(rows)])
+				if err != nil {
+					b.Fatal(err)
+				}
+				superseded = append(superseded, line)
+			}
+			if err := file.AppendLines(path, superseded, 0o644); err != nil {
+				b.Fatal(err)
+			}
 		}
 
 		b.Run(tc.name+"/list", func(b *testing.B) {

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/types"
 )
 
@@ -108,8 +109,9 @@ func TestProgressSavesDoNotDependOnAFixedTempName(t *testing.T) {
 
 	assert.ElementsMatch(t, []string{"d1"}, NewStore(dir).Attach("/w", "working", types.Diff{}, "").Viewed,
 		"progress was lost because the save wanted one fixed temp path")
-	assert.ElementsMatch(t, []string{"t1"}, NewStore(dir).LoadSeenComments(),
-		"the watermark was lost because the save wanted one fixed temp path")
+	seen, err := NewStore(dir).LoadSeenComments()
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"t1"}, seen, "the watermark was lost because the save wanted one fixed temp path")
 }
 
 // Two Stores over one state dir (the server and a check-review job) each attach before
@@ -124,7 +126,9 @@ func TestSessionSeenWatermarkNeverRegresses(t *testing.T) {
 	a.MarkCommentsSeen("/w", []string{"t1"})
 	b.MarkCommentsSeen("/w", []string{"t2"})
 
-	assert.Equal(t, []string{"t1", "t2"}, NewStore(dir).LoadSeenComments())
+	seen, err := NewStore(dir).LoadSeenComments()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"t1", "t2"}, seen)
 }
 
 func TestUnreadableViewedFileIsIgnoredRatherThanFatal(t *testing.T) {
@@ -158,8 +162,8 @@ func TestViewedAndSeenAreAppendedAsJSONLines(t *testing.T) {
 	assert.Equal(t, []string{"t1", "t2"}, restored.SeenComments)
 }
 
-// Compaction is the one rewrite: past 64 lines and four times the live entries, the file is
-// rewritten to its last line per key, by rename.
+// Compaction is the one rewrite: once the file is file.CompactDue, it is rewritten to its last
+// line per key, by rename, and an ended key leaves it.
 func TestAnAppendOnlyFileCompactsPastItsBound(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir)
@@ -172,24 +176,26 @@ func TestAnAppendOnlyFileCompactsPastItsBound(t *testing.T) {
 
 	b, err := os.ReadFile(filepath.Join(dir, "review", "viewed.jsonl"))
 	require.NoError(t, err)
-	assert.LessOrEqual(t, strings.Count(string(b), "\n"), compactMinLines+1, "the toggles were folded away")
+	assert.False(t, file.CompactDue(strings.Count(string(b), "\n"), 1), "the toggles were folded away")
 	assert.Equal(t, []string{"d2"}, NewStore(dir).Attach("/w", "working", types.Diff{}, "").Viewed)
 }
 
 // An old JSON file is not read as a second format and not skipped without a word: the error
 // names the file and how to move it aside.
 func TestOldJSONStateIsNamedNotRead(t *testing.T) {
-	for _, name := range []string{"viewed.json", "drafts.json", "seen-threads.json", "reading.json"} {
+	load := map[string]func(*Store) error{
+		"viewed.json":       func(s *Store) error { _, err := s.LoadViewed(); return err },
+		"drafts.json":       func(s *Store) error { _, err := s.LoadDrafts(); return err },
+		"seen-threads.json": func(s *Store) error { _, err := s.LoadSeenComments(); return err },
+		"reading.json":      func(s *Store) error { _, err := s.LoadReading(); return err },
+	}
+	for name, load := range load {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
 			old := filepath.Join(dir, "review", name)
 			require.NoError(t, mkdirAllWrite(old, `["x"]`))
 
-			err := NewStore(dir).legacyJSON(name)
-
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), old)
-			assert.Contains(t, err.Error(), "mv "+old+" "+old+".old")
+			require.ErrorContains(t, load(NewStore(dir)), "mv "+old+" "+old+".old")
 			got := NewStore(dir).Attach("/w", "working", types.Diff{}, "")
 			assert.Empty(t, got.Viewed)
 			assert.Empty(t, got.SeenComments)
@@ -241,7 +247,9 @@ func TestADraftRoundTripsThroughItsFile(t *testing.T) {
 	}
 	s.saveDrafts([]types.DiffComment{want})
 
-	assert.Equal(t, []types.DiffComment{want}, NewStore(dir).LoadDrafts())
+	got, err := NewStore(dir).LoadDrafts()
+	require.NoError(t, err)
+	assert.Equal(t, []types.DiffComment{want}, got)
 }
 
 // The server stamps the author from the transport. A body that claims otherwise is ignored,

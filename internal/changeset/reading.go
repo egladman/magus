@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/types"
 )
 
@@ -63,9 +64,10 @@ func (s *Store) readingPath() string {
 
 // readingLog is the mark's file: each line is a mark, the last one is the mark, and a line
 // without a review (what clearing appends) is no mark.
-func (s *Store) readingLog() jsonl[ReadingMark] {
-	return jsonl[ReadingMark]{path: s.readingPath(), perm: 0o644,
-		key: func(ReadingMark) string { return "" }, live: ReadingMark.Active}
+func (s *Store) readingLog() file.JSONL[ReadingMark] {
+	path := s.readingPath()
+	return file.JSONL[ReadingMark]{Path: path, Old: oldFile(path, "reading.json"),
+		Key: func(ReadingMark) string { return "" }, Live: ReadingMark.Active}
 }
 
 // errNoReadingDir is [ErrNoStateDir] with the consequence spelled out. Every other persisted mark
@@ -87,7 +89,7 @@ func (s *Store) SetReading(ctx context.Context, at types.ReviewTarget, now time.
 		return ReadingMark{}, errNoReadingDir()
 	}
 	var out ReadingMark
-	err := s.readingLog().update(ctx, func(stored []ReadingMark) []ReadingMark {
+	err := s.readingLog().Update(ctx, func(stored []ReadingMark) []ReadingMark {
 		if len(stored) == 1 && stored[0].Matches(at) && !stored[0].Expired(now) {
 			out = stored[0]
 			return nil
@@ -119,7 +121,7 @@ func (s *Store) clearReading(ctx context.Context, want func(ReadingMark) bool) (
 		return false, errNoReadingDir()
 	}
 	cleared := false
-	err := s.readingLog().update(ctx, func(stored []ReadingMark) []ReadingMark {
+	err := s.readingLog().Update(ctx, func(stored []ReadingMark) []ReadingMark {
 		if len(stored) == 0 || !want(stored[0]) {
 			return nil
 		}
@@ -130,25 +132,16 @@ func (s *Store) clearReading(ctx context.Context, want func(ReadingMark) bool) (
 }
 
 // LoadReading reads the mark WITHOUT a session, for the same reason [Store.LoadSeenComments]
-// exists: the check-review job runs in its own process. An unreadable file reads as no mark (the
-// zero mark, which is not [ReadingMark.Active]), so a corrupt one cannot stop the job from
-// reporting a merge on the evidence it does have.
-func (s *Store) LoadReading() ReadingMark {
-	path := s.readingPath()
-	if path == "" {
-		return ReadingMark{}
+// exists: the check-review job runs in its own process. No mark is the zero mark, which is not
+// [ReadingMark.Active]. A file that cannot be read, or an older magus's reading.json beside it,
+// is an error.
+func (s *Store) LoadReading() (ReadingMark, error) {
+	if s.readingPath() == "" {
+		return ReadingMark{}, nil
 	}
-	ctx := context.Background()
-	if err := s.legacyJSON("reading.json"); err != nil {
-		reportStateFailure(ctx, "reading mark", err)
+	held, err := s.readingLog().Load()
+	if err != nil || len(held) == 0 {
+		return ReadingMark{}, err
 	}
-	held, err := s.readingLog().load()
-	if err != nil {
-		reportStateFailure(ctx, "reading mark", err)
-		return ReadingMark{}
-	}
-	if len(held) == 0 {
-		return ReadingMark{}
-	}
-	return held[0]
+	return held[0], nil
 }

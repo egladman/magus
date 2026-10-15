@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
 )
 
@@ -68,8 +71,8 @@ type policyMarker struct {
 	Digest      string `json:"digest"`
 	ShellRules  int    `json:"shell_rules"`
 	SpawnRule   bool   `json:"spawn_rule"`
-	CommandRule bool   `json:"command_rule,omitempty"`
-	WriteRule   bool   `json:"write_rule,omitempty"`
+	CommandRule bool   `json:"command_rule,omitzero"`
+	WriteRule   bool   `json:"write_rule,omitzero"`
 	Pending     bool   `json:"pending"`
 	// Files is PolicyState.Files, kept so a call whose own load ran out of time still knows
 	// which files the guard loads.
@@ -78,8 +81,9 @@ type policyMarker struct {
 
 // policyMarkerLog is the marker's file: a line for each change of the rule set, the last one
 // being the marker. The file is the guard's own state, private to its owner.
-func policyMarkerLog(path string) jsonl[policyMarker] {
-	return jsonl[policyMarker]{path: path, perm: 0o600, key: func(policyMarker) string { return "" }}
+func policyMarkerLog(path string) file.JSONL[policyMarker] {
+	return file.JSONL[policyMarker]{Path: path, Perm: 0o600, Key: func(policyMarker) string { return "" },
+		Old: filepath.Join(filepath.Dir(path), oldPolicyMarkerFile)}
 }
 
 // policyEvent is the guard_policy blob: refs and ids, never a source body.
@@ -188,20 +192,30 @@ func recordedRule(cacheDir string, seam functionSeam) bool {
 	return m.SpawnRule
 }
 
+// readPolicyMarker is the last marker at path, false when there is none. A marker that cannot
+// be read is logged and read as none.
 func readPolicyMarker(path string) (policyMarker, bool) {
-	refuseOldJSON(filepath.Dir(path), oldPolicyMarkerFile)
-	held, err := policyMarkerLog(path).load()
-	if err != nil || len(held) == 0 {
+	held, err := policyMarkerLog(path).Load()
+	if err != nil {
+		reportGuardMemo(err)
+	}
+	if len(held) == 0 {
 		return policyMarker{}, false
 	}
 	return held[0], true
+}
+
+// reportGuardMemo logs a memo that could not be read or written. The guard goes on without
+// it, so the log is how a person learns it was not used.
+func reportGuardMemo(err error) {
+	slog.With(attr.Component("magus")).ErrorContext(context.Background(), "guard memo", attr.Error(err))
 }
 
 // writePolicyMarker appends the marker when it differs from the last one, so a racing hook
 // reads the old record or the new one and never half of each. Losing the race costs a
 // duplicate event, not a missed one.
 func writePolicyMarker(path string, m policyMarker) {
-	_ = policyMarkerLog(path).update(context.Background(), func(held []policyMarker) []policyMarker {
+	_ = policyMarkerLog(path).Update(context.Background(), func(held []policyMarker) []policyMarker {
 		// By encoding: a marker read back has nil where the one written had an empty list.
 		if old, err := json.Marshal(held); len(held) == 1 && err == nil {
 			if next, err := json.Marshal([]policyMarker{m}); err == nil && bytes.Equal(old, next) {

@@ -13,6 +13,14 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+// loadReading is the store's mark, failing the test when it cannot be read.
+func loadReading(t *testing.T, s *Store) ReadingMark {
+	t.Helper()
+	m, err := s.LoadReading()
+	require.NoError(t, err)
+	return m
+}
+
 func TestReadingMarkSetLoadClear(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -20,17 +28,17 @@ func TestReadingMarkSetLoadClear(t *testing.T) {
 	at := types.ReviewTarget{ID: "42", Repo: "o/r"}
 	start := time.UnixMilli(1_000_000)
 
-	assert.False(t, s.LoadReading().Active(), "a store nobody marked reads as not reading")
+	assert.False(t, loadReading(t, s).Active(), "a store nobody marked reads as not reading")
 
 	got, err := s.SetReading(ctx, at, start)
 	require.NoError(t, err)
 	assert.Equal(t, ReadingMark{Review: "42", Repo: "o/r", Since: 1_000_000}, got)
 
 	// A second process (the check-review job) sees the same mark through its own Store.
-	assert.Equal(t, got, NewStore(dir).LoadReading())
+	assert.Equal(t, got, loadReading(t, NewStore(dir)))
 
 	require.NoError(t, s.ClearReading(ctx))
-	assert.False(t, NewStore(dir).LoadReading().Active())
+	assert.False(t, loadReading(t, NewStore(dir)).Active())
 	require.NoError(t, s.ClearReading(ctx), "clearing an unmarked review is not a mistake")
 }
 
@@ -116,7 +124,7 @@ func TestClearReadingIfLeavesAMarkThatChangedSinceItWasRead(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.False(t, cleared)
-	assert.Equal(t, replaced, s.LoadReading(), "the newer mark survives")
+	assert.Equal(t, replaced, loadReading(t, s), "the newer mark survives")
 }
 
 func TestClearReadingIfClearsTheMarkItWasGiven(t *testing.T) {
@@ -128,7 +136,7 @@ func TestClearReadingIfClearsTheMarkItWasGiven(t *testing.T) {
 	cleared, err := s.ClearReadingIf(ctx, read)
 	require.NoError(t, err)
 	assert.True(t, cleared)
-	assert.False(t, s.LoadReading().Active())
+	assert.False(t, loadReading(t, s).Active())
 
 	cleared, err = s.ClearReadingIf(ctx, read)
 	require.NoError(t, err)
@@ -144,15 +152,19 @@ func TestReadingMarkWithoutAStateDirIsAnError(t *testing.T) {
 	_, err := s.SetReading(ctx, types.ReviewTarget{ID: "42"}, time.Now())
 	require.ErrorIs(t, err, ErrNoStateDir)
 	require.ErrorIs(t, s.ClearReading(ctx), ErrNoStateDir)
-	assert.False(t, s.LoadReading().Active())
+	assert.False(t, loadReading(t, s).Active())
 }
 
-func TestReadingMarkCorruptFileReadsAsNoMark(t *testing.T) {
+// A corrupt mark is an error, not no mark: the job deciding whether to ask the forge must not
+// take "unknown" for "nobody is reading".
+func TestReadingMarkCorruptFileIsAnError(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "review"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "review", "reading.jsonl"), []byte("not json\n"), 0o644))
+	path := filepath.Join(dir, "review", "reading.jsonl")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte("not json\n"), 0o644))
 
-	assert.False(t, NewStore(dir).LoadReading().Active())
+	_, err := NewStore(dir).LoadReading()
+	require.ErrorContains(t, err, path+":1: ")
 }
 
 // The mark is what a person finds with cat while a merge goes unreported: a line is appended
@@ -172,7 +184,7 @@ func TestReadingMarkIsAppendedAsJSONLines(t *testing.T) {
 	b, err = os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, `{"review":"42","repo":"acme/web","since":1700000000000}`+"\n"+`{"review":"","since":0}`+"\n", string(b))
-	assert.False(t, NewStore(dir).LoadReading().Active())
+	assert.False(t, loadReading(t, NewStore(dir)).Active())
 }
 
 func TestReadingMarkOfAnOlderMagusIsNamedNotRead(t *testing.T) {
@@ -181,9 +193,8 @@ func TestReadingMarkOfAnOlderMagusIsNamedNotRead(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(old), 0o755))
 	require.NoError(t, os.WriteFile(old, []byte(`{"review":"42","since":1}`), 0o644))
 
-	err := NewStore(dir).legacyJSON("reading.json")
+	m, err := NewStore(dir).LoadReading()
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), old)
-	assert.False(t, NewStore(dir).LoadReading().Active(), "the JSON is not read as a second format")
+	require.ErrorContains(t, err, "mv "+old+" "+old+".old")
+	assert.False(t, m.Active(), "the JSON is not read as a second format")
 }
