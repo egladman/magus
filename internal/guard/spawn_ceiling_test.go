@@ -124,15 +124,16 @@ func TestSpawnAboveParentTierNeedsASessionModelAndADeclaration(t *testing.T) {
 	assert.NotEqual(t, string(denyRuleSpawnAboveParentTier), judgeSpawnBy(ctx, t, deps, "", "opus").Rule, "tiers turned off")
 }
 
-// A tier is an exact alias of the declaration. A model id that only contains one, or a
-// model no tier maps, has an unknown tier: the rule advises and names why, never guessing.
+// A tier is an exact alias of the declaration or the exact id of a harness row naming one.
+// A model id that only contains an alias, or a model no row names, has an unknown tier: the
+// rule advises and names the row to add, never guessing.
 func TestSpawnAboveParentTierAdvisesAnUnknownTier(t *testing.T) {
 	tests := []struct {
-		name, session, spawn, why string
+		name, session, spawn, why, add string
 	}{
-		{"spawn model id", "sonnet", "claude-opus-5-5", "this spawn's model, claude-opus-5-5 is no exact alias, so its model tier is unknown"},
-		{"session model id", "claude-sonnet-5-5", "opus", "this session's model, claude-sonnet-5-5 is no exact alias"},
-		{"both", "claude-sonnet-5-5", "gpt-5", "this spawn's model, gpt-5 and this session's model, claude-sonnet-5-5 are no exact aliases"},
+		{"spawn model id", "sonnet", "claude-opus-5-5", "this spawn's model, claude-opus-5-5 is in no harness_models row", "add a row for claude-opus-5-5"},
+		{"session model id", "claude-sonnet-5-5", "opus", "this session's model, claude-sonnet-5-5 is in no harness_models row", "add a row for claude-sonnet-5-5"},
+		{"both", "claude-sonnet-5-5", "gpt-5", "this spawn's model, gpt-5 and this session's model, claude-sonnet-5-5 are in no harness_models row", "add a row for gpt-5 and claude-sonnet-5-5"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -141,12 +142,31 @@ func TestSpawnAboveParentTierAdvisesAnUnknownTier(t *testing.T) {
 			assert.Equal(t, decisionAdvise, v.Decision)
 			assert.Equal(t, string(denyRuleSpawnAboveParentTier), v.Rule)
 			assert.Contains(t, v.Context, tt.why)
+			assert.Contains(t, v.Context, tt.add+` with its "tier" to the claude-code harness spell's harness_models`)
 			assert.Contains(t, v.Context, "the declaration at hack/tiers.buzz:3 maps haiku, sonnet, opus for claude-code")
 		})
 	}
 }
 
+// A session's full model id resolves by the harness row naming its tier, exactly, beside the
+// aliases a declaration maps for spawns.
+func TestSpawnAboveParentTierReadsTheHarnessRowsTier(t *testing.T) {
+	ctx, deps, _ := ceilingFixture(t, "claude-sonnet-5-5", true)
+	deps.ModelRows = func() []types.ModelPricing {
+		return []types.ModelPricing{{ID: "claude-sonnet-5-5", Tier: "standard"}, {ID: "claude-opus-5-5", Tier: "principal"}}
+	}
+
+	v := judgeSpawnBy(ctx, t, deps, "", "opus")
+	assert.Equal(t, decisionDeny, v.Decision)
+	assert.Equal(t, string(denyRuleSpawnAboveParentTier), v.Rule)
+	assert.Contains(t, v.Reason, "above this session's model, claude-sonnet-5-5, model tier standard (rank 1)")
+
+	v = judgeSpawnBy(ctx, t, deps, "", "claude-sonnet-5-5-20261001")
+	assert.Equal(t, decisionAdvise, v.Decision, "a dated spelling is another id until a row names it")
+	assert.Contains(t, v.Context, "add a row for claude-sonnet-5-5-20261001")
+}
+
 // A host the declaration does not map names no tier, and the advice says so.
 func TestSpawnAboveParentTierNamesAnUnmappedHost(t *testing.T) {
-	assert.Contains(t, declaredAliases(testModelTiers(t, "codex"), types.HarnessKey{ID: "claude-code"}), "maps no model for harness claude-code; its hosts are codex")
+	assert.Contains(t, declaredAliases(testModelTiers(t, "codex"), types.HarnessKey{ID: "claude-code"}), "maps no model for harness claude-code: its hosts are codex")
 }

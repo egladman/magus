@@ -97,7 +97,7 @@ func callerContext(at location, who hookAttribution, thread types.AgentThread, f
 		return nil
 	}
 	if c.Window == 0 {
-		if row, ok := resolveModel(c.Model, at.modelTable()); ok {
+		if row, ok := at.modelTable().Lookup(c.Model); ok {
 			c.Window = row.Window
 		}
 	}
@@ -149,30 +149,6 @@ func (at location) modelTable() model.Table {
 		harness = at.models()
 	}
 	return model.InEffect(harness, accountAt(at.workspace).overrides)
-}
-
-// resolveModel finds id's row: by Table.Lookup, else as an alias a host takes in place of
-// an id, one dash-separated word of a row's id with no version in it, which names the
-// first such row.
-func resolveModel(id string, t model.Table) (types.ModelPricing, bool) {
-	if id == "" {
-		return types.ModelPricing{}, false
-	}
-	if row, ok := t.Lookup(id); ok {
-		return row, true
-	}
-	alias := strings.ToLower(strings.TrimSpace(id))
-	if strings.ContainsAny(alias, "0123456789-.") {
-		return types.ModelPricing{}, false
-	}
-	for _, row := range t.Rows() {
-		for _, word := range strings.Split(row.ID, "-") {
-			if word == alias {
-				return row, true
-			}
-		}
-	}
-	return types.ModelPricing{}, false
 }
 
 // costState is what magus keeps about a session's main thread for the cost rules. It is
@@ -1158,7 +1134,7 @@ func contextWindow(st costState, at location) int64 {
 	if st.Window > 0 {
 		return st.Window
 	}
-	if row, ok := resolveModel(st.Model, at.modelTable()); ok {
+	if row, ok := at.modelTable().Lookup(st.Model); ok {
 		return row.Window
 	}
 	return 0

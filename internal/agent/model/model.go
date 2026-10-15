@@ -53,64 +53,18 @@ func overlay(base, o types.ModelPricing) types.ModelPricing {
 	return base
 }
 
-// Lookup returns the row for model id as a host reports it. A row matches an id that
-// contains its ID as a whole version: a provider prefix (us.anthropic.), a date
-// (-20260401), a context suffix ([1m]) or a revision (@20251101, -v1:0) around it still
-// match, while opus-5 does not match opus-5-5. Of several matching rows the
-// longest ID wins. False when no row matches, which a caller reads as "no facts", never
-// as a zero-sized or free model.
+// Lookup returns the row whose ID is model id exactly, ignoring case. A provider prefix
+// (us.anthropic.), a date (-20260401) or a context suffix ([1m]) makes another id, which
+// matches no row until one names it: a model is never inferred from a name. False when no
+// row matches, which a caller reads as "no facts", never as a zero-sized or free model.
 func (t Table) Lookup(id string) (types.ModelPricing, bool) {
 	id = strings.ToLower(id)
-	var best types.ModelPricing
-	found := false
-	for _, r := range t.rows {
-		if matches(id, r.ID) && (!found || len(r.ID) > len(best.ID)) {
-			best, found = r, true
-		}
+	i := slices.IndexFunc(t.rows, func(r types.ModelPricing) bool { return r.ID == id })
+	if i < 0 {
+		return types.ModelPricing{}, false
 	}
-	return best, found
+	return t.rows[i], true
 }
-
-func matches(id, row string) bool {
-	if row == "" {
-		return false
-	}
-	for start := 0; ; {
-		i := strings.Index(id[start:], row)
-		if i < 0 {
-			return false
-		}
-		i += start
-		if (i == 0 || !alnum(id[i-1])) && versionEnds(id[i+len(row):]) {
-			return true
-		}
-		start = i + 1
-	}
-}
-
-// versionEnds reports whether rest, the text after a matched row ID, ends the version
-// rather than continuing it: -5 or .5 or 5 would make it another model, an eight-digit
-// date would not.
-func versionEnds(rest string) bool {
-	if rest == "" {
-		return true
-	}
-	if digit(rest[0]) || rest[0] == '.' {
-		return false
-	}
-	if rest[0] != '-' {
-		return true
-	}
-	n := 0
-	for n < len(rest)-1 && digit(rest[1+n]) {
-		n++
-	}
-	return n == 0 || n >= 8
-}
-
-func digit(c byte) bool { return c >= '0' && c <= '9' }
-
-func alnum(c byte) bool { return digit(c) || (c >= 'a' && c <= 'z') }
 
 // Rows returns the table's rows in declaration order. The slice is the caller's.
 func (t Table) Rows() []types.ModelPricing {

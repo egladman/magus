@@ -25,40 +25,22 @@ func TestZeroTableHasNoFacts(t *testing.T) {
 	assert.Empty(t, InEffect(nil, nil).Rows())
 }
 
-func TestModelLookupMatchesHostSpellings(t *testing.T) {
+// A row matches its own id and no other: every spelling a host adds around it is another
+// model until a row names it.
+func TestModelLookupMatchesTheExactID(t *testing.T) {
 	table := fixtureTable()
-	for _, id := range []string{
-		"claude-opus-5-5",
-		"CLAUDE-OPUS-5-5",
-		"claude-opus-5-5-20260401",
-		"claude-opus-5-5[1m]",
-		"us.anthropic.claude-opus-5-5-v1:0",
-		"anthropic/claude-opus-5-5",
-		"claude-opus-5-5@20260401",
-	} {
+	for _, id := range []string{"claude-opus-5-5", "CLAUDE-OPUS-5-5"} {
 		f, ok := table.Lookup(id)
 		require.True(t, ok, id)
-		assert.Equal(t, "claude-opus-5-5", f.ID, id)
+		assert.Equal(t, fixtureRows[0], f, id)
 	}
-	for _, id := range []string{"", "claude-opus-5", "claude-opus-5-55", "claude-opus-5-5.1", "xclaude-opus-5-5", "gpt-5", "opus"} {
+	for _, id := range []string{
+		"", "claude-opus-5-5-20260401", "claude-opus-5-5[1m]", "us.anthropic.claude-opus-5-5-v1:0",
+		"anthropic/claude-opus-5-5", "claude-opus-5", "claude-opus-5-55", "gpt-5", "opus",
+	} {
 		_, ok := table.Lookup(id)
 		assert.False(t, ok, id)
 	}
-}
-
-// The longest matching row wins, so a row for a model family never shadows one for a
-// release inside it.
-func TestModelLookupPrefersLongestRow(t *testing.T) {
-	table := InEffect([]types.ModelPricing{
-		{ID: "claude-opus-5", Window: 500_000},
-		{ID: "claude-opus-5-5", Window: 1_000_000},
-	}, nil)
-	f, ok := table.Lookup("claude-opus-5-5-20260401")
-	require.True(t, ok)
-	assert.Equal(t, "claude-opus-5-5", f.ID)
-	f, ok = table.Lookup("claude-opus-5-20250101")
-	require.True(t, ok)
-	assert.Equal(t, "claude-opus-5", f.ID)
 }
 
 func TestInEffectOverlaysAndAdds(t *testing.T) {

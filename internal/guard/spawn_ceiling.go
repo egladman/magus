@@ -2,6 +2,7 @@ package guard
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/guard/builtin"
@@ -14,10 +15,11 @@ import (
 const denyRuleSpawnAboveParentTier denyRuleName = "spawn-above-parent-tier"
 
 // gradeSpawnCeiling judges a spawn by spawn-above-parent-tier. Both models resolve to tiers
-// by an exact alias of the spawning host in the workspace's declaration and compare by rank.
-// A spawn naming no model runs on its spawner's, and a spawner with no reported model is not
-// judged. A model that is no exact alias has an unknown tier, never one inferred from its id,
-// and the rule advises naming why.
+// by an exact alias of the spawning host in the workspace's declaration, or by the exact id
+// of a harness_models row that names a tier, and compare by rank. A spawn naming no model
+// runs on its spawner's, and a spawner with no reported model is not judged. Any other model
+// has an unknown tier, never one inferred from its name, and the rule advises naming the row
+// to add.
 //
 // The spawner's model is proven when its host reported it: a main thread's from its
 // transcript once the host has reported the thread, a subagent's from the model its own
@@ -45,33 +47,43 @@ func gradeSpawnCeiling(deps Dependencies, verdict types.GuardJudgment, env hookR
 		from = types.ThreadReported
 	}
 	gate := hint.NewGate(at.cacheDir, who.callerKey())
-	child, childKnown := set.Resolve(host, env.DeclaredModel)
-	parent, parentKnown := set.Resolve(host, spawner.model)
+	var rows []types.ModelPricing
+	if at.models != nil {
+		rows = at.models()
+	}
+	child, childKnown := modelTierOf(set, host, env.DeclaredModel, rows)
+	parent, parentKnown := modelTierOf(set, host, spawner.model, rows)
 	if !childKnown || !parentKnown {
-		var unknown []string
+		var unknown, missing []string
 		if !childKnown {
 			unknown = append(unknown, "this spawn's model, "+env.DeclaredModel)
+			missing = append(missing, env.DeclaredModel)
 		}
 		if !parentKnown {
 			unknown = append(unknown, spawner.says+", "+spawner.model)
+			missing = append(missing, spawner.model)
 		}
-		why := "is no exact alias, so its model tier is unknown"
+		why := "is in no harness_models row and no alias the declaration maps, so its model tier is unknown"
 		if len(unknown) == 2 {
-			why = "are no exact aliases, so their model tiers are unknown"
+			why = "are in no harness_models row and no alias the declaration maps, so their model tiers are unknown"
 		}
 		return applyFindings(gate, verdict, []costFinding{{
 			rule: denyRuleSpawnAboveParentTier,
 			key:  hint.MarkerKind(denyRuleSpawnAboveParentTier) + "-unknown",
 			say: fmt.Sprintf("magus workspace: this spawn's tier ceiling is not judged: %s %s (%s). "+
-				"A tier is read from an exact alias, never inferred from a model id.",
-				strings.Join(unknown, " and "), why, declaredAliases(set, host)),
+				"A tier is read from an exact id, never inferred from a name: add a row for %s with its \"tier\" to the %s harness spell's harness_models, or map it in the declaration at %s.",
+				strings.Join(unknown, " and "), why, declaredAliases(set, host), strings.Join(missing, " and "), host.ID, set.Site()),
 		}}, from)
 	}
 	if child.Within(parent) == nil {
 		return verdict
 	}
-	// Resolve found the host mapped, so Alias cannot fail here.
-	alias, _ := set.Alias(host, parent)
+	// A parent resolved through a harness row runs on a host the declaration does not map,
+	// so the way down is named by that row's id.
+	alias, err := set.Alias(host, parent)
+	if err != nil {
+		alias = spawner.model
+	}
 	return applyFindings(gate, verdict, []costFinding{{
 		rule: denyRuleSpawnAboveParentTier,
 		deny: s.Decision == builtin.Deny,
@@ -80,6 +92,20 @@ func gradeSpawnCeiling(deps Dependencies, verdict types.GuardJudgment, env hookR
 			"a child never outranks its parent, so spawn it on %s or a lower tier, or a person forks the higher-tier row and runs it from a session at that tier.",
 			env.DeclaredModel, child.Name(), child.Rank(), spawner.says, spawner.model, parent.Name(), parent.Rank(), alias),
 	}}, from)
+}
+
+// modelTierOf is model's tier: the case the declaration maps model to for host, else the
+// tier the harness_models row whose id is exactly model names. False for any other model.
+func modelTierOf(set *types.ModelTierSet, host types.HarnessKey, model string, rows []types.ModelPricing) (types.ModelTier, bool) {
+	if t, ok := set.Resolve(host, model); ok {
+		return t, true
+	}
+	i := slices.IndexFunc(rows, func(r types.ModelPricing) bool { return r.Tier != "" && r.ID == model })
+	if i < 0 {
+		return types.ModelTier{}, false
+	}
+	t, err := set.Parse(rows[i].Tier)
+	return t, err == nil
 }
 
 // declaredAliases says which aliases set maps for host, cheapest first, or why it maps none.

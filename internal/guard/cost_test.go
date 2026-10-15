@@ -203,10 +203,8 @@ func TestReadTranscriptReadsEachLineOnce(t *testing.T) {
 	var st costState
 	got := st.readTranscript(path)
 	assert.Equal(t, []toolResult{{tool: "Bash", class: types.DelegableSearch, chars: len(big)}}, got)
-	wantState := st
-	wantState.Tokens, wantState.Model = 200100, "claude-opus-5-5"
-	assert.Equal(t, wantState, st, "a subagent's line in the main transcript is not the main thread's")
-	assert.Empty(t, st.Pending)
+	assert.Equal(t, costState{Tokens: 200100, Model: "claude-opus-5-5", Transcript: path, Offset: fileSize(t, path)}, st,
+		"a subagent's line in the main transcript is not the main thread's")
 
 	assert.Empty(t, st.readTranscript(path), "nothing new")
 	appendLines(t, path,
@@ -215,9 +213,8 @@ func TestReadTranscriptReadsEachLineOnce(t *testing.T) {
 	)
 	got = st.readTranscript(path)
 	assert.Equal(t, []toolResult{{tool: "Read", class: types.DelegableRead, chars: len("package a")}}, got)
-	wantState = st
-	wantState.Tokens, wantState.Model = 250001, "claude-opus-5-5"
-	assert.Equal(t, wantState, st, "a line naming no model keeps the last one named")
+	assert.Equal(t, costState{Tokens: 250001, Model: "claude-opus-5-5", Transcript: path, Offset: fileSize(t, path)}, st,
+		"a line naming no model keeps the last one named")
 }
 
 // A rollout reports its window beside the usage, and its calls as function call items.
@@ -232,9 +229,15 @@ func TestReadTranscriptReadsARollout(t *testing.T) {
 	var st costState
 	got := st.readTranscript(path)
 	assert.Equal(t, []toolResult{{tool: "exec", class: types.DelegableDiff, chars: len("diff --git a/x b/x")}}, got)
-	wantState := st
-	wantState.Tokens, wantState.Window = 120000, 272000
-	assert.Equal(t, wantState, st)
+	assert.Equal(t, costState{Tokens: 120000, Window: 272000, Transcript: path, Offset: fileSize(t, path)}, st)
+}
+
+// fileSize is path's length in bytes, the offset a transcript read wholly leaves.
+func fileSize(t *testing.T, path string) int64 {
+	t.Helper()
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	return info.Size()
 }
 
 // fixtureModelRows stand in for the rows a harness spell publishes; no table is built into
@@ -291,19 +294,18 @@ func TestModelTableReadsEachRequestsOwnRows(t *testing.T) {
 	assert.False(t, ok, "a request supplying no rows knows no model, whatever an earlier one supplied")
 }
 
-func TestResolveModelTakesAnAlias(t *testing.T) {
+// A model resolves to a row by its exact id: an alias or a provider spelling is no row's
+// id, so the cost rules know nothing about it rather than a guess.
+func TestModelRowsResolveByExactID(t *testing.T) {
 	t.Parallel()
 	table := fixtureModelTable()
-	row, ok := resolveModel("opus", table)
+	row, ok := table.Lookup("claude-opus-5-5")
 	require.True(t, ok)
 	assert.Equal(t, "claude-opus-5-5", row.ID)
-	row, ok = resolveModel("us.anthropic.claude-sonnet-5-5-20261001", table)
-	require.True(t, ok)
-	assert.Equal(t, "claude-sonnet-5-5", row.ID)
-	_, ok = resolveModel("gpt-9", table)
-	assert.False(t, ok)
-	_, ok = resolveModel("", table)
-	assert.False(t, ok)
+	for _, id := range []string{"opus", "us.anthropic.claude-sonnet-5-5-20261001", "gpt-9", ""} {
+		_, ok = table.Lookup(id)
+		assert.False(t, ok, id)
+	}
 }
 
 // The producer: a judged main-thread call files its thread, context and billing on the
@@ -331,10 +333,11 @@ func TestObserveCallRecordsAJudgedCallOnce(t *testing.T) {
 	assert.Empty(t, calls, "and counts nothing")
 
 	got := observeCall(ctx, at, "rg -n Judge .", who, hookToolCommand, "", types.GuardJudgment{Decision: decisionPass})
-	wantFacts := got
-	wantFacts.Thread, wantFacts.ThreadFrom, wantFacts.DelegableClass = types.AgentThreadMain, types.ThreadReported, types.DelegableSearch
-	wantFacts.ContextTokens, wantFacts.ContextModel = 100000, "claude-opus-5-5"
-	assert.Equal(t, wantFacts, got)
+	assert.Equal(t, types.AgentFacts{
+		Thread: types.AgentThreadMain, ThreadFrom: types.ThreadReported, DelegableClass: types.DelegableSearch,
+		ContextTokens: 100000, ContextModel: "claude-opus-5-5",
+		Shadow: got.Shadow, // one verdict per profile, counted below
+	}, got)
 	assert.Nil(t, got.ResultChars, "a call's own result is not known before it runs")
 	assert.Len(t, got.Shadow, len(types.GuardProfile("").Values()))
 	window := callerContext(at, who, types.AgentThreadMain, hint.NewGate(cache, who.factsKey()))
@@ -458,10 +461,10 @@ func TestForkConfirmedOnlyAfterTheStoreShowsTheRow(t *testing.T) {
 	rows["old"] = types.Job{ID: "old", State: types.StateRunning, Created: judged.Unix() - 60}
 	rows["a1"] = types.Job{ID: "a1", State: types.StateDeclared, Created: judged.Unix()}
 	confirmForks(&st, live, judged.Add(2*time.Second))
-	wantState := st
-	wantState.Orchestrates, wantState.Forked = types.OrchestrationProven, []string{"a1"}
-	wantState.Forks = map[string]int64{"old": judged.UnixNano()} // a row created before the fork was not this fork's
-	assert.Equal(t, wantState, st)
+	assert.Equal(t, costState{
+		Orchestrates: types.OrchestrationProven, Forked: []string{"a1"},
+		Forks: map[string]int64{"old": judged.UnixNano()}, // a row created before the fork was not this fork's
+	}, st)
 
 	confirmForks(&st, live, judged.Add(forkConfirmWindow+time.Second))
 	assert.Nil(t, st.Forks, "an unconfirmed fork is dropped after the window")
@@ -623,15 +626,22 @@ func TestCommandRequestCarriesTheThread(t *testing.T) {
 	writeCostState(facts, costState{Tokens: 300_000, Model: "claude-sonnet-5-5"})
 
 	req := commandRequest(ctx, commandRuleInput{command: "git diff"}, who, at, facts)
-	wantReq := req
-	wantReq.Thread, wantReq.ThreadFrom = types.AgentThreadMain, types.ThreadInferred // inferred until the host names a subagent
-	wantReq.Window = &types.ContextWindow{Tokens: 300_000, Window: 1_000_000, Model: "claude-sonnet-5-5", Source: types.ContextFromTranscript}
-	assert.Equal(t, wantReq, req)
+	assert.Equal(t, types.CommandRequest{
+		Host: "claude-code", Session: "s", Command: "git diff",
+		Commands: req.Commands, // the parsed line, which the command rule tests pin
+		Role:     types.AgentRoleRoot,
+		Thread:   types.AgentThreadMain, ThreadFrom: types.ThreadInferred, // inferred until the host names a subagent
+		Window:    &types.ContextWindow{Tokens: 300_000, Window: 1_000_000, Model: "claude-sonnet-5-5", Source: types.ContextFromTranscript},
+		Workspace: at.workspace,
+	}, req)
 
 	who.Agent = "a1"
 	req = commandRequest(ctx, commandRuleInput{command: "git diff"}, who, at, facts)
-	wantReq = req
-	wantReq.Thread, wantReq.ThreadFrom = types.AgentThreadSub, types.ThreadReported
-	assert.Equal(t, wantReq, req)
-	assert.Nil(t, req.Window, "no usage was reported for the subagent")
+	assert.Equal(t, types.CommandRequest{
+		Host: "claude-code", Session: "s", Command: "git diff", Agent: "a1",
+		Commands: req.Commands,
+		Role:     types.AgentRoleRoot,
+		Thread:   types.AgentThreadSub, ThreadFrom: types.ThreadReported,
+		Workspace: at.workspace, // and no Window: no usage was reported for the subagent
+	}, req)
 }

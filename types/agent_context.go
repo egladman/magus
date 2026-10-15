@@ -298,9 +298,11 @@ type PriceStep struct {
 
 // ModelPricing is one model's row in the table magus prices agent context against.
 type ModelPricing struct {
-	// ID is the model id the row matches, and every id that extends it with a date,
-	// a provider prefix or a context suffix.
+	// ID is the model id the row matches, exactly: a provider prefix, a date or a context
+	// suffix makes another id, which needs a row of its own.
 	ID string
+	// Tier is the model-tier case this exact id runs, "" for none.
+	Tier string
 	// Window is the context window in tokens.
 	Window int64
 	// Input, CacheWrite5m, CacheWrite1h, CacheRead and Output are the standard prices.
