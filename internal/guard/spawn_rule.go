@@ -137,6 +137,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	}))
 	if verdict.Decision != decisionDeny {
 		verdict = gradeMainSpawn(deps, verdict, env, who, at, actingLease, titled)
+		verdict = gradeSpawnCeiling(deps, verdict, env, who, at, actingLease)
 		if verdict.Decision != decisionPass && decided == "" {
 			decided = decidedByBuiltin
 		}

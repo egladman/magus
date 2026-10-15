@@ -38,6 +38,7 @@ func TestDefaults(t *testing.T) {
 		"background-unbounded": Deny,
 
 		"orchestrator-groundwork": Deny,
+		"spawn-above-parent-tier": Deny,
 
 		"root-context-budget":    Off,
 		"root-heavy-command":     Off,

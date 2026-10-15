@@ -58,6 +58,7 @@ const (
 	rootRepeat             = "root-repeat"
 	spawnNamesModel        = "spawn-names-model"
 	spawnAboveModelTier    = "spawn-above-model-tier"
+	spawnAboveParentTier   = "spawn-above-parent-tier"
 	stall                  = "stall"
 )
 
@@ -209,6 +210,7 @@ var defaults = map[string]Decision{
 	"push-ungated":          Deny,
 	"shared-stash":          Deny,
 	"spawn-duplicate":       Deny,
+	spawnAboveParentTier:    Deny,
 	"stale-binary":          Deny,
 	"token-state":           Deny,
 	"vcs-off-switch":        Deny,

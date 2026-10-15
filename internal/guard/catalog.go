@@ -938,6 +938,15 @@ var ruleDocSpawnAboveModelTier = adviseDoc(types.RuleDoc{ //nolint:unused // rea
 		"It never refuses: work can outgrow its row, and the remedy is re-forking the row at the tier it needs so the choice is recorded, which only the root can judge.",
 }, false)
 
+var ruleDocSpawnAboveParentTier = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+	Name:    string(denyRuleSpawnAboveParentTier),
+	Catches: "a subagent spawned on a model whose tier ranks above its spawner's",
+	Why: "A child never outranks the work that handed it out: the root session runs on the model the person picked, and every agent below it stays at that tier or lower. " +
+		"Both models resolve to tiers through the spawning host's aliases in the workspace's model-tier declaration, a transcript's model id by one of its dash-separated words, and compare by rank, never by name or price. A spawn naming no model, or a model no tier maps, is never judged. " +
+		"The spawner's model is proven when its host reported it: a main thread's from its transcript once the host has reported the thread, a subagent's from the model its spawn named. Proven, the spawn is refused; a subagent spawned on no model is taken to run on the session's, which is inferred and advised once. " +
+		"`magus job fork` holds a child row to its parent's tier the same way. The way up is a person's: they fork the higher-tier row and run it from a session at that tier. Set to advise, proof is advised too.",
+})
+
 var ruleDocModelTierContextCap = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
 	Name:    string(advisoryModelTierContextCap),
 	Catches: "a leased worker writing past the context its job's model tier caps",
