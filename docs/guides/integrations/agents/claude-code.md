@@ -107,7 +107,7 @@ claude-code` prints it, in the place it lands in `.claude/settings.json`:
         "hooks": [{
           "type": "command",
           "timeout": 10,
-          "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --reports-skills --foreground-default-ms 120000 --foreground-max-ms 600000"
+          "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --reports-skills --foreground-default-ms 120000 --foreground-max-ms 600000 --tool-rows .claude/magus/tools"
         }]
       }
     ]
@@ -124,6 +124,10 @@ capability with one tool name per line, and the catch-all entry names that direc
 passes before any rule loads; a tool whose input has none of those shapes and that no row
 lists is named by the unjudged-tool rule rather than run unseen. See
 [Every tool reaches the guard](guard.md#every-tool-reaches-the-guard).
+
+The catch-all replaced the per-tool entries, among them the `Edit|Write|NotebookEdit`
+entry that ran `magus-path.buzz`. A `.claude/settings.json` merged before that still
+carries them, and `magus describe harness claude-code` lists each as one to retire.
 
 This repository's own `.claude/settings.json` holds exactly what the spell prints,
 merged with the command `magus describe harness` prints beside it. The scripts are

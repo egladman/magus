@@ -154,7 +154,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus guard: checking the call"
           }
         ]
@@ -166,7 +166,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus: recording the subagent"
           }
         ]
@@ -186,7 +186,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus: joining the subagent to its spawn"
           }
         ]
@@ -197,7 +197,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus: recording the subagent's context"
           }
         ]
@@ -209,7 +209,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus guard: checking approval"
           }
         ]
@@ -243,7 +243,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus: noting the request"
           }
         ]
@@ -258,6 +258,11 @@ host and any flags after `--`. It needs neither jq nor a POSIX shell. The harnes
 descriptor only merges those opaque fragments into `.codex/hooks.json`; Magus does
 not inject a codec. Copy `docs/guides/integrations/agents/codex-hooks.json` from the
 repository, or merge what `magus describe harness codex` prints.
+
+Each entry names `.codex/magus/tools` with `--tool-rows`. `magus agent harness install`
+writes the spell's tool rows there, and a tool the rows list as touching nothing passes
+before any rule loads. [Every tool reaches the guard](guard.md#every-tool-reaches-the-guard)
+has the rest.
 
 The two `PreToolUse` entries used to carry `__MAGUS_NO_ADVISE=1`, which rendered
 every advisory as nothing. That rested on a claim OpenAI's current hooks

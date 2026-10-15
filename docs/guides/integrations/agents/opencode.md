@@ -51,7 +51,9 @@ versions apart from your magus binary; see
 
 The spell is skills-only (empty config path): `magus describe harness` prints no
 hook config for OpenCode, and verify does not invent a stamp JSON for Magus to check.
-The guard is the TypeScript plugin, not managed hook fragments. To adapt without
+The guard is the TypeScript plugin, not managed hook fragments. The plugin sends
+every tool it does not restate to magus whole, with `--tool-rows .opencode/magus/tools`,
+the directory the install fills with the spell's tool rows. To adapt without
 Magus source edits, fork the spell and change only the import path; see
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md).
 
@@ -174,6 +176,10 @@ import type { Plugin } from "@opencode-ai/plugin";
 
 /** The verdict schema this plugin understands; a bump means re-read the docs. */
 const SUPPORTED_SCHEMA = 1;
+
+// The tool rows directory the opencode harness spell declares and `magus agent harness
+// install` writes; magus reads what each OpenCode tool does from it.
+const TOOL_ROWS = ["--tool-rows", ".opencode/magus/tools"] as const;
 
 /**
  * magus's guard verdict. A discriminated union on `decision`, so the compiler
@@ -458,7 +464,7 @@ export const MagusGuard: Plugin = async (ctx) => {
         const at = list.indexOf(flag);
         return at === -1 ? [...list] : [...list.slice(0, at), ...list.slice(at + 2)];
       };
-      const withoutName = ["--agent-name", "--session", "--agent"]
+      const withoutName = ["--agent-name", "--session", "--agent", "--tool-rows"]
         .reduce((list, flag) => withoutValued(list, flag), [...args])
         .filter((arg) => arg !== "--renders-ask");
       stdout = await runOnce(withoutName, input);
@@ -495,7 +501,15 @@ export const MagusGuard: Plugin = async (ctx) => {
 
   // --renders-ask: apply never lets an ask through unasked (it passes one to OpenCode's own
   // prompt or throws), so this plugin may receive one. Without it magus answers with a deny.
-  const shellArgs = ["shell", "--agent-name", "opencode", "--renders-ask", "-o", "json"];
+  const shellArgs = [
+    "shell",
+    "--agent-name",
+    "opencode",
+    "--renders-ask",
+    ...TOOL_ROWS,
+    "-o",
+    "json",
+  ];
 
   // A session's parent, null for a root. Filled by session.created, which fires before the
   // session's first call; a session first met any other way is asked of the SDK once, and
@@ -666,7 +680,16 @@ export const MagusGuard: Plugin = async (ctx) => {
         // plugin working if a future tool spells it differently.
         const path = argString(output.args, ["filePath", "file_path", "path"]);
         if (path === "") return;
-        const args = ["shell", "--path", "--agent-name", "opencode", "--renders-ask", "-o", "json"];
+        const args = [
+          "shell",
+          "--path",
+          "--agent-name",
+          "opencode",
+          "--renders-ask",
+          ...TOOL_ROWS,
+          "-o",
+          "json",
+        ];
         remember(input.callID, apply(await judge(inThread(args, who), path), false));
         return;
       }
@@ -693,7 +716,20 @@ export const MagusGuard: Plugin = async (ctx) => {
       if (mcp !== null) {
         const body = envelope("PreToolUse", who, `mcp__magus__${mcp}`, output.args);
         remember(input.callID, apply(await judge(shellArgs, body), false), true);
+        return;
       }
+
+      // Every other tool goes to magus whole, under its own name: magus passes a tool its
+      // known-tool table calls inert, judges a read as the line it stands for, and names a
+      // call no rule can read (unjudged-tool) rather than letting it run unseen. OpenCode
+      // spells a file filePath; magus reads file_path.
+      const filePath = argString(output.args, ["filePath"]);
+      const args =
+        filePath === ""
+          ? output.args
+          : { ...(output.args as Record<string, unknown>), file_path: filePath };
+      const body = envelope("PreToolUse", who, input.tool, args);
+      remember(input.callID, apply(await judge(shellArgs, body), false));
     },
 
     config: async (config) => {

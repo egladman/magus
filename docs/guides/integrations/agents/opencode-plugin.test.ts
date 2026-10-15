@@ -511,7 +511,10 @@ test("an ask on a human-only run reaches OpenCode's prompt when the config asks 
 });
 
 test("an ask on a run no human-only prompt matches refuses", async () => {
-  for (const command of ["magus run --no-cache agent-bench-run .", "magus affected agent-bench-run"]) {
+  for (const command of [
+    "magus run --no-cache agent-bench-run .",
+    "magus affected agent-bench-run",
+  ]) {
     stubBun(() => humanOnlyAsk);
     const h = await hooks();
     await h.config(humanOnlyPrompt);
@@ -909,7 +912,10 @@ test("the reply check is off by default: with the variable unset or empty nothin
       const prompts: Array<{ id: string; text: string }> = [];
       const h = await hooks({ messages: { root: turn("Done.") }, prompts });
       await h.event(idle("root"));
-      assert.ok(!calls.some((call) => call.argv[0] === "buzz"), `judged with the variable ${value === undefined ? "unset" : "empty"}`);
+      assert.ok(
+        !calls.some((call) => call.argv[0] === "buzz"),
+        `judged with the variable ${value === undefined ? "unset" : "empty"}`,
+      );
       assert.deepEqual(prompts, []);
     }
   } finally {

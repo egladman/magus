@@ -113,7 +113,11 @@ function stubBunWithRealChild(bin: string): SpawnCall[] {
       //
       // No BAGGAGE: a worker running these tests under its own lease would hand the child
       // a lease the empty job store never declared, and every case would be refused for it.
-      env: { ...withoutBaggage(process.env), XDG_STATE_HOME: stateHome, MAGUS_CACHE_DIR: cacheHome },
+      env: {
+        ...withoutBaggage(process.env),
+        XDG_STATE_HOME: stateHome,
+        MAGUS_CACHE_DIR: cacheHome,
+      },
     });
     child.stdin.end(opts.stdin ?? new Uint8Array());
 

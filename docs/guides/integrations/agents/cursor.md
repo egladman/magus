@@ -49,6 +49,10 @@ Cursor has no skill tool: an agent loads a skill by reading its `SKILL.md`. That
 it is, which magus records as the load. So the entry passes `--reports-skills`, and
 the rules that require a skill load hold here as they do on Claude Code.
 
+It also passes `--tool-rows .cursor/magus/tools`, the directory
+`magus agent harness install` fills with the spell's tool rows. A tool the rows list as
+touching nothing passes before any rule loads.
+
 An `advise` verdict reaches the model here too, on `postToolUse` rather than at
 the moment the call is gated; that guidance being in `AGENTS.md` as well is the
 same belt-and-braces every host gets, not a substitute for it.
@@ -133,7 +137,7 @@ magus agent harness verify --id cursor
 ```
 
 That prints opaque fragments naming
-`magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --reports-skills`.
+`magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools`.
 The script takes the host's name from that argument and nowhere else, and refuses a call
 without it ([MGS3024](../../../reference/codes/sandbox/MGS3024.md)). It needs neither a
 POSIX shell nor `jq`. A portable install copies the script to `.cursor/hooks/cursor-hook.buzz`
@@ -143,20 +147,20 @@ and points every event at that copy, name included:
 {
   "version": 1,
   "hooks": {
-    "sessionStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
-    "beforeShellExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
-    "beforeMCPExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "failClosed": true, "timeout": 10 }],
-    "preToolUse": [{ "matcher": "*", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
+    "sessionStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools", "timeout": 10 }],
+    "beforeShellExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools", "timeout": 10 }],
+    "beforeMCPExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools", "failClosed": true, "timeout": 10 }],
+    "preToolUse": [{ "matcher": "*", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools", "timeout": 10 }],
     "postToolUse": [
-      { "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch|MCP:.*", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }
+      { "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch|MCP:.*", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools", "timeout": 10 }
     ],
     "postToolUseFailure": [
-      { "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch|MCP:.*", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }
+      { "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch|MCP:.*", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools", "timeout": 10 }
     ],
-    "preCompact": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
-    "subagentStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
-    "sessionEnd": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
-    "beforeSubmitPrompt": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }]
+    "preCompact": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools", "timeout": 10 }],
+    "subagentStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools", "timeout": 10 }],
+    "sessionEnd": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools", "timeout": 10 }],
+    "beforeSubmitPrompt": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools", "timeout": 10 }]
   }
 }
 ```
@@ -258,6 +262,10 @@ script also accepts `file_path`.
 // spawn by, so a workspace spawn rule can deny it. subagentStart records the same spawn
 // again from the child's side where Cursor fires it; cursor-agent never has.
 //
+// preToolUse matches every tool. A call none of the above restates, carrying no file path,
+// goes to `magus shell` whole, as the envelope it reads: magus passes a tool its known-tool
+// table calls inert, and names one no rule can read (unjudged-tool).
+//
 // beforeSubmitPrompt hands the person's message to `magus shell --message`, which records
 // the topics it raises and judges nothing; the reply only says to go on.
 //
@@ -306,6 +314,8 @@ final UNNAMED = "[MGS3024] this hook was not given --agent-name, so nothing was 
 
 final AGENT_NAME = "--agent-name";
 final REPORTS_SKILLS = "--reports-skills";
+// The tool rows directory the harness spell declares, forwarded to every judgment.
+final TOOL_ROWS = "--tool-rows";
 
 // How Cursor names an MCP call on preToolUse and postToolUse.
 final MCP_TOOL_PREFIX = "MCP:";
@@ -335,6 +345,8 @@ object Scope {
     session: str,
     transcript: str,
     reportsSkills: bool,
+    // toolRows is the tool rows directory the entry declares, "" for none.
+    toolRows: str,
 }
 
 fun firstField(node: any?, keys: [str]) > str {
@@ -370,15 +382,20 @@ fun warn(message: str) > void {
 object Entry {
     agent: str,
     reportsSkills: bool,
+    toolRows: str,
 }
 
 fun readArgs(args: [str]) > Entry {
-    final parsed = flags\parse(args, switches: [REPORTS_SKILLS], valued: [AGENT_NAME]) catch null;
-    if (parsed == null) { return Entry{ agent = "", reportsSkills = false }; }
+    final parsed = flags\parse(args, switches: [REPORTS_SKILLS], valued: [AGENT_NAME, TOOL_ROWS]) catch null;
+    if (parsed == null) { return Entry{ agent = "", reportsSkills = false, toolRows = "" }; }
     foreach (word in parsed!.unknown) {
         warn("unsupported argument {word}; this call was judged WITHOUT it");
     }
-    return Entry{ agent = parsed!.values[AGENT_NAME] ?? "", reportsSkills = parsed!.values[REPORTS_SKILLS] != null };
+    return Entry{
+        agent = parsed!.values[AGENT_NAME] ?? "",
+        reportsSkills = parsed!.values[REPORTS_SKILLS] != null,
+        toolRows = parsed!.values[TOOL_ROWS] ?? "",
+    };
 }
 
 fun unavailableNotice(text: str) > str {
@@ -618,6 +635,10 @@ fun shellArgs(scope: Scope, asPath: bool, ask: bool) > [str] {
     if (asPath) { extra.append("--path"); }
     if (ask) { extra.append("--renders-ask"); }
     if (scope.reportsSkills) { extra.append(REPORTS_SKILLS); }
+    if (scope.toolRows != "") {
+        extra.append(TOOL_ROWS);
+        extra.append(scope.toolRows);
+    }
     foreach (word in ["-o", "json", AGENT_NAME, scope.agent, "--transport", "buzz", "--session", scope.session, "--transcript", scope.transcript]) {
         extra.append(word);
     }
@@ -945,8 +966,14 @@ fun gateTool(scope: Scope, event: any?) > str {
     }
     final search = searchCommand(event);
     if (search != "") { return gateCall(scope, event: event, payload: search, asPath: false, family: "failed-search"); }
-    if (path == "") { return ALLOW; }
-    return gateCall(scope, event: event, payload: path, asPath: true, family: "failed-path");
+    if (path != "") { return gateCall(scope, event: event, payload: path, asPath: true, family: "failed-path"); }
+    // beforeMCPExecution judges an MCP call, with the server name this event lacks.
+    if (tool.startsWith(MCP_TOOL_PREFIX)) { return ALLOW; }
+    // Every other call goes to magus whole: it passes a tool its table knows touches
+    // nothing, and names one no rule can read rather than letting it run unseen.
+    final input = hook\dig(event, dotPath: "tool_input") ?? {<str: any>};
+    final call = envelope(scope, event: event, tool: tool, input: input);
+    return gateCall(scope, event: event, payload: call, asPath: false, family: "failed-call");
 }
 
 fun dispatch(event: any?, eventName: str, scope: Scope) > str {
@@ -1014,6 +1041,7 @@ fun main(args: [str]) > void {
         session = readSession(event),
         transcript = hook\field(event, dotPath: "transcript_path"),
         reportsSkills = entry.reportsSkills,
+        toolRows = entry.toolRows,
     };
     io\stdout.write(dispatch(event, eventName: eventName, scope: scope)) catch void;
 }
