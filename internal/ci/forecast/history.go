@@ -26,7 +26,12 @@
 //	              site(string: the file:line of the declaration that chose it),
 //	              write_files, checks_run, rework_rounds, widenings(int), state(enum),
 //	              usage_tokens(int64), usage_cost_usd(float64), both absent when no host
-//	              reported them, duration_ms, ended(int64)
+//	              reported them, duration_ms, ended(int64), attempt(int), retry(enum),
+//	              parent(string: a job id), parent_attempt, unattributed(int),
+//	              projects([]string: workspace-relative project paths), work(JobWork)
+//	JobWork:      calls, writes, setup_calls, denials(int), setup_context, setup_ms,
+//	              setup_tokens, context_tokens, peak_tokens(int64): counts and context
+//	              sizes the guard observed, never the calls themselves
 //
 // DO NOT add: source code, file contents, env vars, secrets, tokens, PR numbers,
 // author identity, error messages, or stdout/stderr captures. Any new field must
@@ -75,7 +80,8 @@ import (
 // v5 adds Runs, the per-branch log of end-to-end run outcomes.
 // v6 adds Outcome.Charms and Outcome.ArgsHash, the shape of the run an outcome records.
 // v7 adds Jobs, the log of terminal job outcomes the model-tier lens reads.
-const HistoryVersion = 7
+// v8 adds each job outcome's parent, projects and work profile, which the grouping lens reads.
+const HistoryVersion = 8
 
 // SampleWindow is the rolling window for duration percentiles (100 runs ≈ 5 CI days).
 const SampleWindow = 100
@@ -677,15 +683,23 @@ func (h *History) Merge(other *History) {
 		}
 	}
 	if len(other.Jobs) > 0 {
-		seen := make(map[types.JobOutcome]struct{}, len(h.Jobs))
+		// One attempt of one job ends once, so these three name an outcome; the struct
+		// itself holds slices and pointers and cannot be a key.
+		type outcomeKey struct {
+			job     string
+			ended   int64
+			attempt int
+		}
+		key := func(o types.JobOutcome) outcomeKey { return outcomeKey{o.Job, o.Ended, o.Attempt} }
+		seen := make(map[outcomeKey]struct{}, len(h.Jobs))
 		for _, o := range h.Jobs {
-			seen[o] = struct{}{}
+			seen[key(o)] = struct{}{}
 		}
 		for _, o := range other.Jobs {
-			if _, dup := seen[o]; dup {
+			if _, dup := seen[key(o)]; dup {
 				continue
 			}
-			seen[o] = struct{}{}
+			seen[key(o)] = struct{}{}
 			h.Jobs = append(h.Jobs, o)
 		}
 		slices.SortStableFunc(h.Jobs, func(a, b types.JobOutcome) int { return cmp.Compare(a.Ended, b.Ended) })

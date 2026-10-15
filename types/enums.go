@@ -156,6 +156,18 @@ func (v JobKind) Values() []string { return jobKinds.Strings() }
 func (v JobKind) Valid() bool      { return jobKinds.Valid(v) }
 func (v JobKind) String() string   { return enum.String(v) }
 
+var groupingShapes = enum.Set[GroupingShape]{GroupingChained, GroupingSplit, GroupingSolo}
+
+func (v GroupingShape) Values() []string { return groupingShapes.Strings() }
+func (v GroupingShape) Valid() bool      { return groupingShapes.Valid(v) }
+func (v GroupingShape) String() string   { return enum.String(v) }
+
+var groupingVerdicts = enum.Set[GroupingVerdict]{GroupingMeasured, GroupingUnknown}
+
+func (v GroupingVerdict) Values() []string { return groupingVerdicts.Strings() }
+func (v GroupingVerdict) Valid() bool      { return groupingVerdicts.Valid(v) }
+func (v GroupingVerdict) String() string   { return enum.String(v) }
+
 var modelTierSources = enum.Set[ModelTierSource]{ModelTierSourceRow, ModelTierSourceMatrix, ModelTierSourceDefault}
 
 func (v ModelTierSource) Values() []string { return modelTierSources.Strings() }

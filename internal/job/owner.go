@@ -81,7 +81,7 @@ func (s *Store) EndSession(ctx context.Context, c Caller) (types.Job, bool, erro
 			types.EndReasonSessionEnded, c.Host, b.Job)
 		f.Jobs[i].Updated = now
 		ended = f.Jobs[i].Clone()
-		return outcomes.hold(s, ended)
+		return outcomes.hold(s, f.Jobs, ended)
 	})
 	if err != nil {
 		return types.Job{}, false, err

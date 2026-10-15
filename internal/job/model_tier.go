@@ -192,11 +192,7 @@ func resolveModelTier(ctx context.Context, set *types.ModelTierSet, matrix func(
 func (s *Store) assignModelTier(ctx context.Context, row types.Job, plan []types.Job) (types.JobModelTier, error) {
 	req := newModelTierRequest(row, plan, s.modelTiers, nil)
 	if s.modelTierMatrix != nil && s.owners != nil && row.Model == "" && len(row.WritePaths) > 0 {
-		files := make([]string, len(row.WritePaths))
-		for i, p := range row.WritePaths {
-			files[i], _ = types.SplitClaim(p)
-		}
-		projects, err := s.owners(ctx, files)
+		projects, err := s.writeProjects(ctx, row)
 		if err != nil {
 			return types.JobModelTier{}, fmt.Errorf("job: finding the projects %s writes in: %w", row.ID, err)
 		}
@@ -211,6 +207,16 @@ func (s *Store) assignModelTier(ctx context.Context, row types.Job, plan []types
 		return types.JobModelTier{}, err
 	}
 	return assigned, nil
+}
+
+// writeProjects is the projects row's write paths fall in, through Location.Owners, which
+// the caller has checked is set.
+func (s *Store) writeProjects(ctx context.Context, row types.Job) ([]string, error) {
+	files := make([]string, len(row.WritePaths))
+	for i, p := range row.WritePaths {
+		files[i], _ = types.SplitClaim(p)
+	}
+	return s.owners(ctx, files)
 }
 
 // refuseAboveParent refuses row's tier when it ranks above the tier row's parent in plan

@@ -377,6 +377,13 @@ type ModelTierRecord struct {
 // Retry is what must change before another attempt could help, empty when repeating may.
 // Tokens and CostUSD are what a host reported the job used, nil when none did: no host
 // reports them yet, and an unreported figure is unknown, not zero.
+//
+// Parent and ParentAttempt name the attempt of the parent the job was forked under, so
+// siblings of one fan-out group together and a re-forked parent's children do not join
+// them. Projects are the projects the write paths reach, nil when the job had none or
+// they could not be resolved. Unattributed counts writes into the job's paths from
+// outside it. Work is nil when the holder's trail could not be read back to the attempt's
+// start or holds no call of it: unknown, never an idle holder.
 type JobOutcome struct {
 	Job          string          `json:"job"                     yaml:"job"`
 	ModelTier    string          `json:"model_tier,omitempty"    yaml:"model_tier,omitempty"`
@@ -397,6 +404,12 @@ type JobOutcome struct {
 	Widenings    int             `json:"widenings,omitempty"     yaml:"widenings,omitempty"`
 	Attempt      int             `json:"attempt,omitzero"        yaml:"attempt,omitempty"`
 	Retry        RetryChange     `json:"retry,omitempty"         yaml:"retry,omitempty"`
+	Parent       string          `json:"parent,omitempty"        yaml:"parent,omitempty"`
+	// ParentAttempt is 0 when the parent row was gone by the time the job ended.
+	ParentAttempt int      `json:"parent_attempt,omitzero" yaml:"parent_attempt,omitempty"`
+	Projects      []string `json:"projects,omitempty"      yaml:"projects,omitempty"`
+	Unattributed  int      `json:"unattributed,omitzero"   yaml:"unattributed,omitempty"`
+	Work          *JobWork `json:"work,omitzero"           yaml:"work,omitempty"`
 }
 
 // JobModelTier is the tier recorded on a job row when it was assigned: the case name and

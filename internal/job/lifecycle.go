@@ -974,7 +974,7 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 		}
 		for _, e := range dead {
 			i := slices.IndexFunc(cur.Jobs, func(r types.Job) bool { return r.ID == e.id })
-			if err := ended.hold(s, cur.Jobs[i]); err != nil {
+			if err := ended.hold(s, cur.Jobs, cur.Jobs[i]); err != nil {
 				return err
 			}
 		}
@@ -1077,7 +1077,7 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions) ([]Ending, error) 
 			cur.Jobs[i].State = types.StateNoReturn
 			cur.Jobs[i].EndReason = e.Reason
 			cur.Jobs[i].Updated = w.now
-			if err := ended.hold(s, cur.Jobs[i]); err != nil {
+			if err := ended.hold(s, cur.Jobs, cur.Jobs[i]); err != nil {
 				return err
 			}
 		}

@@ -48,6 +48,17 @@ func TestHistorySchemaLockIsStructural(t *testing.T) {
 			"duration_ms": true, "ended": true, "rework_rounds": true, "widenings": true,
 			// The attempt's number and the RetryChange case naming what must change first.
 			"attempt": true, "retry": true,
+			// The parent's job id and attempt number, a count, and workspace-relative
+			// project paths, the same kind of path Projects keys on.
+			"parent": true, "parent_attempt": true, "unattributed": true, "projects": true,
+			"work": true,
+		},
+		reflect.TypeOf(types.JobWork{}): {
+			// Counts of the holder's calls and the context sizes its host reported: numbers
+			// about the calls, never a command, path or reply.
+			"calls": true, "writes": true, "setup_calls": true, "setup_context": true,
+			"setup_ms": true, "setup_tokens": true, "context_tokens": true, "peak_tokens": true,
+			"denials": true,
 		},
 		reflect.TypeOf(Constants{}): {"setup_p50_ms": true, "alpha_ms": true},
 		reflect.TypeOf(Run{}): {
@@ -999,6 +1010,37 @@ func TestJobOutcomesAreCappedAndMergeAsAUnion(t *testing.T) {
 	var got History
 	require.NoError(t, got.Load(t.Context(), path))
 	assert.Equal(t, want[:1], got.Jobs)
+}
+
+// TestJobOutcomeWithWorkSurvivesARoundTripAndMergesOnce pins the v8 fields: a work profile
+// and projects read back as written, an absent profile reads back nil rather than an empty
+// one, and an outcome read from disk merges with its in-memory copy once even though its
+// pointers are new.
+func TestJobOutcomeWithWorkSurvivesARoundTripAndMergesOnce(t *testing.T) {
+	t.Parallel()
+
+	tokens := int64(41_000)
+	worked := types.JobOutcome{
+		Job: "w", Ended: 5, Attempt: 1, State: types.StatePass, Parent: "root", ParentAttempt: 2,
+		Projects: []string{"internal/job", "types"}, Unattributed: 1,
+		Work: &types.JobWork{Calls: 9, Writes: 2, SetupCalls: 6, SetupTokens: &tokens, Denials: 1},
+	}
+	unknown := types.JobOutcome{Job: "u", Ended: 6, Attempt: 1, State: types.StateFail}
+
+	path := filepath.Join(t.TempDir(), "history.json")
+	require.NoError(t, UpdateHistory(t.Context(), path, func(h *History) error {
+		h.RecordJob(worked)
+		h.RecordJob(unknown)
+		return nil
+	}))
+	var got History
+	require.NoError(t, got.Load(t.Context(), path))
+	assert.Equal(t, []types.JobOutcome{worked, unknown}, got.Jobs)
+	assert.Nil(t, got.Jobs[1].Work, "no profile is unknown, not an idle holder")
+
+	mem := History{Jobs: []types.JobOutcome{worked}}
+	mem.Merge(&got)
+	assert.Equal(t, []types.JobOutcome{worked, unknown}, mem.Jobs, "one attempt's outcome is kept once")
 }
 
 // TestFoldTargetHistoriesCombinesEverySpellServingATarget pins the fold both remaining

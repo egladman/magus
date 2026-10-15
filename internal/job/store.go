@@ -716,7 +716,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			f.Jobs = append(f.Jobs, row)
 		}
 		if i >= 0 && !prev.State.Terminal() && row.State.Terminal() {
-			if err := ended.hold(s, row); err != nil {
+			if err := ended.hold(s, f.Jobs, row); err != nil {
 				return err
 			}
 		}
@@ -753,11 +753,7 @@ func (s *Store) endedAttemptDenials(id string) ([]types.JobDenial, bool) {
 	if err != nil {
 		return nil, false
 	}
-	since := row.Created
-	if n := len(row.Prior); n > 0 {
-		since = row.Prior[n-1].Ended
-	}
-	denials, known, err := trail.LeaseDenials(base, id, since, maxDenialsRead)
+	denials, known, err := trail.LeaseDenials(base, id, attemptStart(row), maxDenialsRead)
 	if err != nil {
 		return nil, false
 	}

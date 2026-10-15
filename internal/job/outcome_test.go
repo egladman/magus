@@ -418,3 +418,48 @@ func TestStoreRecordsAnOutcomeWhenTheHoldingSessionEnds(t *testing.T) {
 	wantJob.Job, wantJob.State = "w", types.StateNoReturn
 	assert.Equal(t, wantJob, jobs[0])
 }
+
+// The outcome carries what the grouping lens reads: the attempt its parent was on, the
+// projects Owners resolves, and the holder's work folded from its checkout's trail.
+func TestStoreRecordsTheParentAttemptProjectsAndWork(t *testing.T) {
+	t.Parallel()
+
+	s, history := outcomeStore(t, tierSet(t), nil, false)
+	s.owners = func(context.Context, []string) ([]string, error) { return []string{"internal/job", "types"}, nil }
+	parent := lease("root")
+	parent.Model = ""
+	seed(t, s, parent)
+	child := lease("w")
+	child.Model, child.Parent = "", "root"
+	running := endWith(t, s, child, types.StateRunning)
+	call(t, s.cacheDir, "w", "file.read", 10_000, "pass")
+	call(t, s.cacheDir, "w", "file.write", 30_000, "pass")
+
+	endWith(t, s, running, types.StateFail)
+
+	jobs := recordedJobs(t, history)
+	require.Len(t, jobs, 1)
+	got := jobs[0]
+	assert.Equal(t, "root", got.Parent)
+	assert.Equal(t, 1, got.ParentAttempt)
+	assert.Equal(t, []string{"internal/job", "types"}, got.Projects)
+	require.NotNil(t, got.Work)
+	assert.Equal(t, 2, got.Work.Calls)
+	assert.Equal(t, 1, got.Work.SetupCalls)
+	assert.Equal(t, ptr(int64(30_000)), got.Work.SetupTokens)
+}
+
+// A holder the guard never saw records no work profile: unknown, never an idle holder.
+func TestStoreRecordsNoWorkForAHolderWithNoObservedCall(t *testing.T) {
+	t.Parallel()
+
+	s, history := outcomeStore(t, tierSet(t), nil, false)
+	row := lease("a")
+	row.Model = ""
+	endWith(t, s, endWith(t, s, row, types.StateRunning), types.StatePass)
+
+	jobs := recordedJobs(t, history)
+	require.Len(t, jobs, 1)
+	assert.Nil(t, jobs[0].Work)
+	assert.Nil(t, jobs[0].Projects, "no Owners resolves them")
+}

@@ -37,6 +37,8 @@ func newJobOutcome(row types.Job, ended int64) types.JobOutcome {
 		Widenings:    row.Widenings,
 		Attempt:      max(row.Attempts, 1),
 		Retry:        foldAttempt(row, nil, false, ended/1000).Retry.Change,
+		Parent:       row.Parent,
+		Unattributed: len(row.Unattributed),
 	}
 	if row.Attempt != nil {
 		out.ChecksRun++
@@ -187,15 +189,26 @@ func (s *Store) historyPath() (string, error) {
 // recorded together. Every door that ends a row (a write, the sweep, Prune, EndSession)
 // holds them here, so an outcome is recorded the same way whoever ended the job.
 type endings struct {
-	path string
-	rows []types.Job
+	path  string
+	store *Store
+	held  []ending
 }
 
-// hold keeps row's outcome, row having just ended. The history file is resolved here,
-// inside the write, so a config that does not read fails the write rather than losing the
-// outcome after it. A dry run writes nothing, a store with no checkout has no workspace to
-// name, and a row that ran at no tier has nothing the lens could rank, so none holds one.
-func (e *endings) hold(s *Store, row types.Job) error {
+// ending is one held row and what the write knew of it that the row does not carry: the
+// attempt its parent was on, and the trail its holder's calls were recorded in, empty when
+// that cannot be placed.
+type ending struct {
+	row           types.Job
+	parentAttempt int
+	trail         string
+}
+
+// hold keeps row's outcome, row having just ended, plan being the rows the write holds.
+// The history file is resolved here, inside the write, so a config that does not read
+// fails the write rather than losing the outcome after it. A dry run writes nothing, a
+// store with no checkout has no workspace to name, and a row that ran at no tier has
+// nothing the lens could rank, so none holds one.
+func (e *endings) hold(s *Store, plan []types.Job, row types.Job) error {
 	if s.dryRun || s.root == "" || row.ModelTier == nil {
 		return nil
 	}
@@ -206,30 +219,66 @@ func (e *endings) hold(s *Store, row types.Job) error {
 		}
 		e.path = path
 	}
-	e.rows = append(e.rows, row.Clone())
+	held := ending{row: row.Clone()}
+	if i := slices.IndexFunc(plan, func(r types.Job) bool { return r.ID == row.Parent }); row.Parent != "" && i >= 0 {
+		held.parentAttempt = max(plan[i].Attempts, 1)
+	}
+	// A trail that cannot be placed leaves the work profile unknown; it fails nothing.
+	held.trail, _ = s.holderTrail(row.CheckoutRoot)
+	e.store = s
+	e.held = append(e.held, held)
 	return nil
 }
 
 // record appends the held outcomes to the history file through [forecast.UpdateHistory],
 // which rewrites the file under its cross-process lock without erasing what another
 // workspace recorded meanwhile. ended is Unix milliseconds.
+//
+// It runs after the store's lock is released, since folding each holder's trail and
+// resolving its projects read outside the job file, and before the trail rotates the
+// attempt away.
 func (e endings) record(ctx context.Context, ended int64) error {
-	if len(e.rows) == 0 {
+	if len(e.held) == 0 {
 		return nil
 	}
-	ids := make([]string, len(e.rows))
-	for i, row := range e.rows {
-		ids[i] = row.ID
+	ids := make([]string, len(e.held))
+	outcomes := make([]types.JobOutcome, len(e.held))
+	for i, h := range e.held {
+		ids[i] = h.row.ID
+		outcomes[i] = e.store.endedOutcome(ctx, h, ended)
 	}
 	if err := forecast.UpdateHistory(ctx, e.path, func(h *forecast.History) error {
-		for _, row := range e.rows {
-			h.RecordJob(newJobOutcome(row, ended))
+		for _, o := range outcomes {
+			h.RecordJob(o)
 		}
 		return nil
 	}); err != nil {
 		return fmt.Errorf("job: record the outcome of %s: %w", strings.Join(ids, ", "), err)
 	}
 	return nil
+}
+
+// endedOutcome is h's outcome with what only the workspace and the trail can add. Projects
+// that do not resolve stay nil, which the grouping lens counts as unclassified.
+func (s *Store) endedOutcome(ctx context.Context, h ending, ended int64) types.JobOutcome {
+	out := newJobOutcome(h.row, ended)
+	out.ParentAttempt = h.parentAttempt
+	if s.owners != nil && len(h.row.WritePaths) > 0 {
+		if projects, err := s.writeProjects(ctx, h.row); err == nil {
+			out.Projects = projects
+		}
+	}
+	out.Work = attemptWork(h.trail, h.row.ID, attemptStart(h.row))
+	return out
+}
+
+// attemptStart is when row's live attempt began, unix seconds: when the last prior attempt
+// ended, else when the row was created.
+func attemptStart(row types.Job) int64 {
+	if n := len(row.Prior); n > 0 {
+		return row.Prior[n-1].Ended
+	}
+	return row.Created
 }
 
 // assignModelTierWithHistory is [Store.assignModelTier] with the recorded outcomes in the
@@ -251,21 +300,30 @@ func (s *Store) assignModelTierWithHistory(ctx context.Context, row types.Job, p
 	return withHistory.assignModelTier(ctx, row, plan)
 }
 
-// tierHistory is the model-tier records of the outcomes the workspace's history file holds,
-// none for a store with no checkout.
+// tierHistory is the model-tier records of the outcomes the workspace's history file holds.
 func (s *Store) tierHistory(ctx context.Context) ([]types.ModelTierRecord, error) {
+	outcomes, err := s.jobHistory(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return ModelTierRecords(outcomes, s.modelTiers), nil
+}
+
+// jobHistory is the outcomes the workspace's history file holds, none for a store with no
+// checkout or a workspace with no history file.
+func (s *Store) jobHistory(ctx context.Context) ([]types.JobOutcome, error) {
 	if s.root == "" {
 		return nil, nil
 	}
 	path, err := s.historyPath()
-	if err != nil {
+	if err != nil || path == "" {
 		return nil, err
 	}
 	var h forecast.History
 	if err := h.Load(ctx, path); err != nil {
 		return nil, fmt.Errorf("job: %w", err)
 	}
-	return ModelTierRecords(h.Jobs, s.modelTiers), nil
+	return h.Jobs, nil
 }
 
 // RecordRework counts one more rework round on job id: its holder handed back and was sent
