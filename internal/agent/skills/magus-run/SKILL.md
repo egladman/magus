@@ -85,9 +85,8 @@ still walks up from your cwd. Pass `--root` when you mean elsewhere.{{end}}
    - Verify in place; never `git stash`/`reset` first{{if .Full}} (data-loss-prone and pointless: the tree is
      already what you want to verify){{else}}. It destroys a concurrent agent's untracked
      work, and the tree is already what you want to verify{{end}}.
-3. Reach for an individual target only to iterate on a failure `ci` named,
-   narrowed as "When a target fails" below says; `ci` afterwards
-   proves the change. `{{cmd "describe targets"}}` lists every target (`-o name` for
+3. Reach for an individual target only to iterate on a failure `ci` named.
+   Narrow it as "When a target fails" below says; `ci` afterwards proves the change. `{{cmd "describe targets"}}` lists every target (`-o name` for
    bare names){{if .Full}} and classifies each as canonical, spell,
    or custom; `{{tool "client"}}` (`{{buzz "describe.target"}}`) is the MCP equivalent{{end}}. Ask the
    workspace; do not read `MAGUS.md`{{if .Full}}: that file is a generated index

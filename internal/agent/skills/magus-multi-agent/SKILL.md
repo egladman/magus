@@ -60,7 +60,7 @@ ask whether each unit is big enough to be worth a worker.{{end}}
   or `grouping history` in `{{cmd "describe job"}} <job>`) and weigh each measured shape
   against the others{{if .Full}}: chained, split and solo each report the load before a
   first write and the context, wall time and collisions per group{{end}}. It reports
-  and never decides{{if .Full}}; a standing grouping rule is a person's to write{{end}}.
+  and never decides{{if .Full}}; a person writes any standing grouping policy{{end}}.
 - Where the lens answers unknown, apply these defaults and say in the plan that you
   did. Merge small disjoint units inside one project. Spawn only when more than one
   independent unit survives the merge. Fill idle root time from that pool, never by
@@ -151,8 +151,8 @@ Assign the check from the pipeline the workspace composed, not from convention.
 `{{cmd "describe target"}} ci <project>` names what `ci` chains and in what order.
 
 - A job gets the narrowest check that covers its edits: the target from that
-  decomposition, scoped to its own tests with the test runner's filter after `--`
-  where it has one. Never the full suite.
+  decomposition. Scope it to the job's own tests with the runner's filter after `--`
+  where one exists. Never the full suite.
 - The integrator re-runs the described order, and `{{cmd "affected"}} ci` re-proves the
   whole composition.{{if .Full}} A worker hand-sequencing lint, format, and test is re-deriving an
   order the magusfile already owns, and the step it forgets fails silently by
@@ -320,7 +320,7 @@ cannot see. Measured 2026-09-17: three workers
 shared a checkout, one saved the root magusfile mid-edit, and all three were
 stopped for the duration by a file only one of them had ever opened{{end}}.
 When `{{cmd "job fork"}}` refuses one, the answer is a separate worktree, not a narrower
-boundary.
+boundary: fork with `--checkout <dir>` outside the workspace, never by hand.
 
 Fork records what it could prove in `write_proof` (`alone`, `disjoint` or
 `overlapping`), and `{{cmd "ls jobs"}}` prints it. An overlap is recorded, not refused:
@@ -489,8 +489,8 @@ The root never builds. The integrator is a role, never a check: spawned `<parent
    empty section means nobody could measure it, not that nothing was found.
 7. Validate once per wave, not once per fix:
    - After a failed full run, read it (`{{cmd "query output"}} <ref>`). Rerun only the
-     failing tests with the test runner's own filter after `--` until green (`{{skill "run"}}`
-     lists one per runner), then run the full suite once.
+     failing tests, with the runner's filter after `--`, until green; `{{skill "run"}}`
+     lists one per runner. Then run the full suite once.
    - Name a test that fails for an outside reason once, and do not rerun it.
    - A failing set that repeats unchanged stops the wave and goes to the person.
 8. Run `{{cmd "affected"}} ci` once, at the end, and evaluate the top-level acceptance criteria.

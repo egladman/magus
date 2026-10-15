@@ -408,7 +408,10 @@ import (
 //
 // 136: magus-run and magus-multi-agent teach the fix loop: rerun only the failing tests
 // after a failed full run, one full run per wave, one affected ci at the end.
-const SkillVersion = 136
+//
+// 137: magus-multi-agent forks a worker's worktree with job fork --checkout; it and
+// magus-run split their over-long fix-loop sentences.
+const SkillVersion = 137
 
 const skillLicense = "GPL-3.0-or-later"
 
