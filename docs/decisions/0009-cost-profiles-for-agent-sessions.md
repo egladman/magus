@@ -105,17 +105,18 @@ advice costs one line.
 
 ### The rules and their levels
 
-_Done._ Six rules join the compiled defaults, each disableable by name and each firing
+_Done._ Seven rules join the compiled defaults, each disableable by name and each firing
 once per session per threshold:
 
-| rule                   | light                            | standard                                                       | strict                                                                        |
-| ---------------------- | -------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| root-context-budget    | advise once at half the window   | advise at 250k metered, 400k quota, 300k unknown               | advise at 150k, 250k or 200k; deny delegable commands from 300k, 450k or 350k |
-| root-heavy-command     | off                              | advise after 8 delegable calls since a spawn                   | advise at 5, deny from 8                                                      |
-| root-result-cap        | advise once above 40k characters | 20k, once per tool class                                       | 10k, once per tool class                                                      |
-| root-repeat            | off                              | advise on the second identical read or command                 | deny the third                                                                |
-| spawn-names-model      | off                              | advise on a spawn naming no model                              | deny a spawn naming none, or one not at its job row's model tier              |
-| spawn-above-model-tier | off                              | advise on a spawn whose model tier ranks above its job row's   | the same; never deny                                                          |
+| rule                    | light                                                   | standard                                                     | strict                                                                        |
+| ----------------------- | ------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| root-context-budget     | advise once at half the window                          | advise at 250k metered, 400k quota, 300k unknown             | advise at 150k, 250k or 200k; deny delegable commands from 300k, 450k or 350k |
+| root-heavy-command      | off                                                     | advise after 8 delegable calls since a spawn                 | advise at 5, deny from 8                                                      |
+| root-result-cap         | advise once above 40k characters                        | 20k, once per tool class                                     | 10k, once per tool class                                                      |
+| root-repeat             | off                                                     | advise on the second identical read or command               | deny the third                                                                |
+| spawn-names-model       | off                                                     | advise on a spawn naming no model                            | deny a spawn naming none, or one not at its job row's model tier              |
+| spawn-above-model-tier  | off                                                     | advise on a spawn whose model tier ranks above its job row's | the same; never deny                                                          |
+| spawn-above-parent-tier | deny a spawn whose model tier ranks above its spawner's | the same                                                     | the same                                                                      |
 
 The delegable commands are recursive search, `cat` and `sed -n` of source, a whole-file host
 read, `git diff` and `git log -p` without `--stat` or `--name-only`, non-gate `magus run`
@@ -136,6 +137,12 @@ and compare ranks, never model names or prices.
   `hosts` entry to add.
 - `spawn-above-model-tier` advises on a spawn whose tier ranks above its row's, and never
   denies: work can outgrow its row, and the remedy is a re-fork that records why.
+- `spawn-above-parent-tier` refuses a spawn whose tier ranks above its spawner's: a child
+  never outranks its parent. The spawner's model is the one its host reported, and an
+  inferred one only advises. A model that is no exact alias, such as a transcript's full
+  id, has an unknown tier; magus never infers one and advises naming why. The way up is a
+  person forking the higher-tier row, and `magus job fork` holds a child row to its
+  parent's tier the same way.
 - `model-tier-context-cap` advises a leased worker whose reported context passes its tier's
   `maxContext` bound, and set to deny refuses the worker's writes, as a passed deadline does.
   It advises at every level by default; the shipped declaration caps only economy.
