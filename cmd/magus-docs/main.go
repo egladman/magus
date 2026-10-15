@@ -162,7 +162,7 @@ func typeMarkdown(t std.TypeTag) string {
 	return "`" + name + "`"
 }
 
-// methodSourceLink renders a " - [source](...)" suffix linking a method to the file
+// methodSourceLink renders a `" - [source](...)"` suffix linking a method to the file
 // holding its Impl on GitHub, or "" when unresolvable. It names the file and no
 // line, so moving the function never changes the page. It rides
 // the Signature line, not the heading: a link in the heading would fold into the

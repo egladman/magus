@@ -8,8 +8,8 @@
 - **`magus\conform()`** answers the lens: per row the distribution, the enforced value and
   where it came from, a tighter value to commit when the live percentile has fallen, and the
   items past the value. An index it cannot vouch for answers `unknown`, never a pass.
-- **`magus doctor` checks `conform-ratchet`:** a committed value the lens can tighten, and a
-  known entry that no longer violates, each named at its line. It edits nothing.
+- **`magus doctor` checks `conform-ratchet`**, naming at its line a committed value the
+  lens can tighten and a known entry that no longer violates. It edits nothing.
 - **This repository fails lint on `file-lines`, `clone-tokens`, `export-scope` and
   `dep-fanout`** past the ratchet (`hack/lint/code-stays-within-the-conform-ratchet.buzz`),
   and on a known entry that no longer violates. Every other metric is printed as advice.
