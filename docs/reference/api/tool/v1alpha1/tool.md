@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, toolservice]
 
 ToolService serves the toolchain view. Read-only: nothing here installs, selects, or moves a version. ListTools reaches the network through the lifecycle provider; the server memoizes that answer, and Lifecycle names what it read.
 
-Package `magus.tool.v1alpha1`, defined in `proto/magus/tool/v1alpha1/tool.proto`. Source: [tool.proto:146](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L146). Part of the [daemon API](../../index.md).
+Package `magus.tool.v1alpha1`, defined in `proto/magus/tool/v1alpha1/tool.proto`. Source: [tool.proto](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto). Part of the [daemon API](../../index.md).
 
 ## Methods
 
@@ -19,7 +19,7 @@ ListTools returns every project's tools with their windows and verdicts.
 
 The name does not match the repeated field (projects), which AIP-132 would have it do. Left deliberately: this returns a two-level view, projects each carrying their tools, because a tool version is a per-project fact and the dashboard renders it grouped that way. Flattening to `repeated Tool` to satisfy the rule would make every Tool carry its own project path and lose the grouping; renaming this ListProjects would leave the toolchain service with no RPC that mentions a tool. AIP-132 governs a collection of one resource, and this is not one.
 
-`POST /magus.tool.v1alpha1.ToolService/ListTools`: unary. Source: [tool.proto:156](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L156).
+`POST /magus.tool.v1alpha1.ToolService/ListTools`: unary. Source: [tool.proto](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto).
 
 Takes [ListToolsRequest](#listtoolsrequest), returns [ListToolsResponse](#listtoolsresponse).
 
@@ -29,7 +29,7 @@ Takes [ListToolsRequest](#listtoolsrequest), returns [ListToolsResponse](#listto
 
 Lifecycle says where every Tool's cycle, eol and support came from.
 
-Source: [tool.proto:57](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L57).
+Source: [tool.proto](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto).
 
 | Field        | Type                              | # | Description                                                                                                                                     |
 | ------------ | --------------------------------- | - | ----------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -44,7 +44,7 @@ Used by: [ListTools (response)](tool.md#listtools).
 
 ### ListToolsRequest
 
-Source: [tool.proto:159](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L159).
+Source: [tool.proto](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto).
 
 | Field    | Type   | # | Description                                                                                                                                                                                                                                           |
 | -------- | ------ | - | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -54,7 +54,7 @@ Used by: [ListTools (request)](tool.md#listtools).
 
 ### ListToolsResponse
 
-Source: [tool.proto:166](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L166).
+Source: [tool.proto](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto).
 
 | Field       | Type                         | # | Description |
 | ----------- | ---------------------------- | - | ----------- |
@@ -67,7 +67,7 @@ Used by: [ListTools (response)](tool.md#listtools).
 
 Project groups the tools one project drives, since a window is declared per project and the same binary can be held to different bounds in different projects.
 
-Source: [tool.proto:137](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L137).
+Source: [tool.proto](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto).
 
 | Field   | Type                   | # | Description                          |
 | ------- | ---------------------- | - | ------------------------------------ |
@@ -81,7 +81,7 @@ Used by: [ListTools (response)](tool.md#listtools).
 
 Tool is one binary a spell drives, as this workspace currently sees it.
 
-Source: [tool.proto:80](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L80).
+Source: [tool.proto](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto).
 
 | Field               | Type                            | #  | Description                                                                                                                                                                                                                                                        |
 | ------------------- | ------------------------------- | -- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -113,7 +113,7 @@ VersionBounds is a version window: an inclusive floor and an exclusive ceiling, 
 
 below is the first version REJECTED, not the last accepted, so a UI must not render it as "max": below "25" accepts 24.19.0 and rejects 25.0.0.
 
-Source: [tool.proto:74](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L74).
+Source: [tool.proto](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto).
 
 | Field   | Type   | # | Description |
 | ------- | ------ | - | ----------- |
@@ -128,7 +128,7 @@ Used by: [ListTools (response)](tool.md#listtools).
 
 LifecycleState is where the end-of-life data came from. Mirrors the types.Lifecycle* states `magus describe tools -o json` prints.
 
-Source: [tool.proto:47](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L47).
+Source: [tool.proto](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto).
 
 | Value                         | # | Description                                             |
 | ----------------------------- | - | ------------------------------------------------------- |
@@ -145,7 +145,7 @@ Used by: [ListTools (response)](tool.md#listtools).
 
 Support is where the installed version's release cycle stands. Mirrors spells.Support.
 
-Source: [tool.proto:34](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L34).
+Source: [tool.proto](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto).
 
 | Value                 | # | Description                                                                                                                                                                                              |
 | --------------------- | - | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -161,7 +161,7 @@ Used by: [ListTools (response)](tool.md#listtools).
 
 Verdict is how a probed version sits in its window. Mirrors spells.Verdict.
 
-Source: [tool.proto:22](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L22).
+Source: [tool.proto](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto).
 
 | Value                 | # | Description                                                                                                                                                                                                                                       |
 | --------------------- | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

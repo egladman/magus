@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, notesservice]
 
 NotesService lists the workspace's notes and reads one in full.
 
-Package `magus.notes.v1alpha1`, defined in `proto/magus/notes/v1alpha1/notes.proto`. Source: [notes.proto:32](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L32). Part of the [daemon API](../../index.md).
+Package `magus.notes.v1alpha1`, defined in `proto/magus/notes/v1alpha1/notes.proto`. Source: [notes.proto](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto). Part of the [daemon API](../../index.md).
 
 ## Methods
 
@@ -17,7 +17,7 @@ Package `magus.notes.v1alpha1`, defined in `proto/magus/notes/v1alpha1/notes.pro
 
 ListNotes returns every note in both declared stores, each with its anchors already resolved. Paginated by contract so growth never forces a breaking change, though the store returns all notes today (bounded by the store's own scan cap).
 
-`POST /magus.notes.v1alpha1.NotesService/ListNotes`: unary. Source: [notes.proto:36](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L36).
+`POST /magus.notes.v1alpha1.NotesService/ListNotes`: unary. Source: [notes.proto](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto).
 
 Takes [ListNotesRequest](#listnotesrequest), returns [ListNotesResponse](#listnotesresponse).
 
@@ -25,7 +25,7 @@ Takes [ListNotesRequest](#listnotesrequest), returns [ListNotesResponse](#listno
 
 GetNote returns one note by scope and name, including its body.
 
-`POST /magus.notes.v1alpha1.NotesService/GetNote`: unary. Source: [notes.proto:38](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L38).
+`POST /magus.notes.v1alpha1.NotesService/GetNote`: unary. Source: [notes.proto](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto).
 
 Takes [GetNoteRequest](#getnoterequest), returns [Note](#note).
 
@@ -35,7 +35,7 @@ Takes [GetNoteRequest](#getnoterequest), returns [Note](#note).
 
 Anchor is one typed attachment from a note to a graph entity, with the result of checking it. degrades\_to names the coarser anchor a dangling one falls back to - the demotion is reported rather than guessed, because nothing here searches for a renamed symbol: a low-confidence match is worse than an admitted failure.
 
-Source: [notes.proto:105](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L105).
+Source: [notes.proto](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto).
 
 | Field     | Type                          | # | Description                                                                                                                                                                                                                |
 | --------- | ----------------------------- | - | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -49,7 +49,7 @@ Used by: [GetNote (response)](notes.md#getnote), [ListNotes (response)](notes.md
 
 ### GetNoteRequest
 
-Source: [notes.proto:213](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L213).
+Source: [notes.proto](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto).
 
 | Field  | Type   | # | Description                                                                                                                                                                                                                                                                                                                                                                      |
 | ------ | ------ | - | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -59,7 +59,7 @@ Used by: [GetNote (request)](notes.md#getnote).
 
 ### ListNotesRequest
 
-Source: [notes.proto:195](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L195).
+Source: [notes.proto](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto).
 
 | Field        | Type   | # | Description                                                                                                                                                                                              |
 | ------------ | ------ | - | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -70,7 +70,7 @@ Used by: [ListNotes (request)](notes.md#listnotes).
 
 ### ListNotesResponse
 
-Source: [notes.proto:205](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L205).
+Source: [notes.proto](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto).
 
 | Field             | Type                                 | # | Description                                                                                                                                                      |
 | ----------------- | ------------------------------------ | - | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -86,7 +86,7 @@ Note is one human-authored entry.
 
 There is no author field, and its absence is deliberate rather than an omission: a self-attested author is forgeable by whatever wrote the file, and authorship already comes from git via the @vcs shard for the shared store. A client that wants to show who wrote a shared note should read the graph, not this field, because this field would be a claim the file makes about itself.
 
-Source: [notes.proto:126](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L126).
+Source: [notes.proto](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto).
 
 | Field         | Type                       | #  | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ------------- | -------------------------- | -- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -108,7 +108,7 @@ Used by: [GetNote (response)](notes.md#getnote), [ListNotes (response)](notes.md
 
 Source is the provenance of prose a note did not originate.
 
-Source: [notes.proto:160](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L160).
+Source: [notes.proto](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto).
 
 | Field      | Type      | # | Description                                                                                                                                                                                                                                                                                                                      |
 | ---------- | --------- | - | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -123,7 +123,7 @@ Used by: [GetNote (response)](notes.md#getnote), [ListNotes (response)](notes.md
 
 StoreStatus reports one store's availability, so a client can tell "declared but empty" from "not declared at all" from "declared and broken" - three states that must not collapse into an empty list.
 
-Source: [notes.proto:181](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L181).
+Source: [notes.proto](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto).
 
 | Field        | Type            | # | Description                                                                                                                                              |
 | ------------ | --------------- | - | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -141,7 +141,7 @@ Used by: [ListNotes (response)](notes.md#listnotes).
 
 AnchorKind is the closed set of things a note may attach to. Deliberately absent: any kind carrying a POSITION - a node id is checkable, so its breakage is reportable, while a line number changes on the next edit above it with nothing to detect.
 
-Source: [notes.proto:55](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L55).
+Source: [notes.proto](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto).
 
 | Value                     | # | Description |
 | ------------------------- | - | ----------- |
@@ -160,7 +160,7 @@ AnchorStatus is what checking one anchor against the workspace found.
 
 DRIFTED is the case an existence check cannot catch and a reader cannot see: the anchored code still exists and quietly stopped meaning what the note says. BODY\_CHANGED is that same check graded one step finer - the content moved, the DECLARATION did not - and it is a far weaker signal: measured across 1,496 repositories, an edit that leaves the signature alone is 39-105x less likely to come with a prose update than one that changes it, which is why an undifferentiated content hash reports drift that mostly is not there. Surface it, never gate on it. UNVERIFIED is a real, distinct answer and must never be rendered as "fine" - it means no fingerprint was recorded (the note predates fingerprinting, or was never re-read) or none could be computed here, and reporting drift from missing data is the false positive that trains a reader to ignore every flag.
 
-Source: [notes.proto:76](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L76).
+Source: [notes.proto](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto).
 
 | Value                        | # | Description |
 | ---------------------------- | - | ----------- |
@@ -177,7 +177,7 @@ Used by: [GetNote (response)](notes.md#getnote), [ListNotes (response)](notes.md
 
 Scope is which store a note lives in, and it is the axis a reader must never have to guess: the two mean different things about who can see the note.
 
-Source: [notes.proto:43](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L43).
+Source: [notes.proto](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto).
 
 | Value               | # | Description                                                                                                        |
 | ------------------- | - | ------------------------------------------------------------------------------------------------------------------ |
@@ -193,7 +193,7 @@ Staleness is whether the prose was outrun by the thing it describes.
 
 The signal is NOT calendar age: prose about a subsystem nobody has touched is current, and decaying it by age is how a signal earns the right to be ignored. What is measured is DIVERGENCE between two commit dates. UNMEASURED is not "fresh" - it is the honest answer when VCS history is unavailable, when the prose has no history, or when there is no subject to compare against. Every private note is UNMEASURED today, because staleness is keyed by workspace-relative path and a private note's source is absolute.
 
-Source: [notes.proto:93](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L93).
+Source: [notes.proto](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto).
 
 | Value                   | # | Description |
 | ----------------------- | - | ----------- |

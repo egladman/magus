@@ -3,7 +3,7 @@ title: magus-diagram
 generated_from: internal/agent/skills/magus-diagram/SKILL.md
 description: "Write, check and view an architecture figure with magus/figure, the embedded Buzz module."
 tags: [agents, skills, magus-diagram]
-skill_full_bytes: 8189
+skill_full_bytes: 8186
 skill_short_bytes: 6715
 ---
 
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `131` |
 | `knowledge-schema-version` | `21` |
-| `skill-content` | `82147101094d` |
+| `skill-content` | `6e26976eb04c` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -366,7 +366,7 @@ A figure nobody registers is checked by nothing.
   it is `docs/site/diagrams/all.buzz`: one import plus one entry.
 - `magus run diagrams-generate docs` lays every figure out from the symbol index.
   It writes the light, dark and page SVGs, each with a JSON receipt: the
-  stamp, the claim counts, the findings, and the index digest it was drawn at.
+  figure id, the stamp, the claim counts and the findings; no index digest.
 - A docs page embeds a figure by id with `<!--diagram:<id>-->`.
 
 Source code can point back at a figure with a `magus:diagram <id>` comment beside the
