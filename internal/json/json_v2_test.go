@@ -128,6 +128,9 @@ func TestNoDirectEncodingJSONImport(t *testing.T) {
 		"libs/proofread/cmd/proofread/":      true,
 		"libs/proofread/internal/calibrate/": true,
 		"libs/proofread/":                    true,
+		// libs/cmdline is its own module too; output encodes through the Codec its caller
+		// passes and uses encoding/json only to indent and as its tests' codec.
+		"libs/cmdline/output/": true,
 	}
 	importers, err := encodingJSONImporters(root, allowed)
 	require.NoError(t, err)

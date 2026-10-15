@@ -83,12 +83,12 @@ func TestParseConfigFlagsDerivesEveryScalarKind(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, want := range []FlagDef{
-		{Flag: "state-dir", FlagShort: "s", EnvVar: "MAGUS_STATE_DIR", Kind: "string", GoPath: "cfg.StateDir", YamlPath: "state_dir", Usage: "MAGUS_STATE_DIR: Where state lives."},
+		{Flag: "state-dir", FlagShort: "s", EnvVar: "MAGUS_STATE_DIR", Kind: "string", GoPath: "cfg.StateDir", YamlPath: "state_dir", Usage: "MAGUS_STATE_DIR: Where state lives.", Doc: "Where state lives"},
 		{Flag: "retries", EnvVar: "MAGUS_RETRIES", Kind: "int", GoPath: "cfg.Retries", YamlPath: "retries", Usage: "MAGUS_RETRIES"},
 		{Flag: "ratio", EnvVar: "MAGUS_RATIO", Kind: "float64", GoPath: "cfg.Ratio", YamlPath: "ratio", Usage: "MAGUS_RATIO"},
 		{Flag: "verbose", EnvVar: "MAGUS_VERBOSE", Kind: "bool", GoPath: "cfg.Verbose", YamlPath: "verbose", Usage: "MAGUS_VERBOSE"},
 		{Flag: "timeout", EnvVar: "MAGUS_TIMEOUT", Kind: "duration", GoPath: "cfg.Timeout", YamlPath: "timeout", Usage: "MAGUS_TIMEOUT"},
-		{Flag: "cache-dir", EnvVar: "MAGUS_CACHE_DIR", Kind: "string", GoPath: "cfg.Cache.Dir", YamlPath: "cache.dir", Usage: "MAGUS_CACHE_DIR: Directory holding cached artifacts."},
+		{Flag: "cache-dir", EnvVar: "MAGUS_CACHE_DIR", Kind: "string", GoPath: "cfg.Cache.Dir", YamlPath: "cache.dir", Usage: "MAGUS_CACHE_DIR: Directory holding cached artifacts.", Doc: "Directory holding cached artifacts"},
 		{Flag: "cache", EnvVar: "MAGUS_CACHE", Kind: "string", GoPath: "cfg.Cache.Mode", YamlPath: "cache.mode", Usage: "MAGUS_CACHE"},
 	} {
 		got, ok := defByYamlPath(defs, want.YamlPath)
