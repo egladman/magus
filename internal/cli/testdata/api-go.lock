@@ -1037,7 +1037,6 @@ github.com/egladman/magus/types.DiffAPI.Removed field int "json:\"removed\"   ya
 github.com/egladman/magus/types.DiffAPI.Signature field int "json:\"signature\" yaml:\"signature\""
 github.com/egladman/magus/types.DiffAPI.Stage field ReleaseStage "json:\"stage\" yaml:\"stage\""
 github.com/egladman/magus/types.DiffAuthor type string
-github.com/egladman/magus/types.DiffAuthor.UnmarshalText method(ptr) func(b []byte) error
 github.com/egladman/magus/types.DiffAuthorAgent const DiffAuthor = "agent"
 github.com/egladman/magus/types.DiffAuthorUnattributed const DiffAuthor = "unattributed"
 github.com/egladman/magus/types.DiffBoundaryPackage const untyped string = "package"

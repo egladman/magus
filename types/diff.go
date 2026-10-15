@@ -611,23 +611,6 @@ const (
 	DiffAuthorAgent DiffAuthor = "agent"
 )
 
-// UnmarshalText reads an author, including the name the review route's writes had before
-// they were called unattributed.
-//
-// compat(until: no draft file under the diff session store still carries "author":"human"):
-// review drafts persist across a server restart and loadDrafts restores every one, but
-// publishing, deleting and the console's draft list each take only unattributed drafts. A
-// draft restored as "human" would sit in the session unpublishable and unlisted. Observing
-// that it is safe to drop means finding none left: grep -l '"author":"human"' over the drafts.
-func (a *DiffAuthor) UnmarshalText(b []byte) error {
-	if string(b) == "human" {
-		*a = DiffAuthorUnattributed
-		return nil
-	}
-	*a = DiffAuthor(b)
-	return nil
-}
-
 // DiffCursor is where a client is looking: a file and, within it, a hunk.
 //
 // The human's cursor is the one that matters and the one an agent READS. An agent has no
