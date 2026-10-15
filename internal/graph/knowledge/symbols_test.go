@@ -149,7 +149,7 @@ func TestRefProvenanceRoundTrip(t *testing.T) {
 
 func TestGraphRefs(t *testing.T) {
 	syms := []types.KnowledgeSymbol{{
-		Key: "example.com/foo Bar#", Label: "Bar", Source: "pkg/foo/foo.go:11",
+		Key: "example.com/foo Bar#", Label: "Bar", Source: "pkg/foo/foo.go:11", Signature: "type Bar struct",
 		Defs: []string{"pkg/foo/foo.go"},
 		Refs: []types.KnowledgeSymbolRef{
 			{Path: "pkg/b/b.go", Count: 1, Lines: []int{3}},
@@ -175,6 +175,7 @@ func TestGraphRefs(t *testing.T) {
 			{File: "pkg/a/a.go", Count: 2, Lines: []int{5, 8}},
 			{File: "pkg/b/b.go", Count: 1, Lines: []int{3}},
 		},
+		Signature: new("type Bar struct"),
 	}, out)
 }
 

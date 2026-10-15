@@ -839,6 +839,7 @@ export object RefsResult {
     refCount: int = 0,
     defs: [RefSite] = [],
     refs: [RefSite] = [],
+    signature: str? = null,
     answer: KnowledgeAnswer = KnowledgeAnswer{},
 }
 

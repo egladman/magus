@@ -688,6 +688,9 @@ func (g *Graph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
 		Symbol:        id,
 		Label:         n.Label,
 	}
+	if sig := n.Attrs[AttrSignature]; sig != "" {
+		out.Signature = &sig
+	}
 	// The definition's line lives on the symbol node's Source ("path:line"); the
 	// defines edge provenance carries only the path. Surface the line on the def site
 	// so an agent can jump straight to the definition and edit it without reading the

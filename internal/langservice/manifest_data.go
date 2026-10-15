@@ -115,6 +115,7 @@ var modules = []Module{
 			{Name: "external", Doc: "external is an actor the figure draws but no directory holds. look defaults to", Sig: "figure\\external(name, [sub], [tag], [link], [look]) -> Actor"},
 			{Name: "of", Doc: "of starts an empty figure. direction defaults to Direction.across; generated marks a", Sig: "figure\\of(id, [title], [eyebrow], [desc], [direction], [generated]) -> mut Figure"},
 			{Name: "draw", Doc: "draw lays f out and paints it with theme. anchorHref is a URL template: {path} takes a", Sig: "figure\\draw(f, theme, [anchorHref]) -> str"},
+			{Name: "nodeFact", Doc: "nodeFact is the line a figure's stamp records for n. A box anchoring a symbol records the", Sig: "figure\\nodeFact(n) -> str"},
 		},
 	},
 	{

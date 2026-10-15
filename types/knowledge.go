@@ -1201,6 +1201,10 @@ type KnowledgeRefsOutput struct {
 	RefCount      int                `json:"ref_count"      yaml:"ref_count"`
 	Defs          []KnowledgeRefSite `json:"defs,omitempty" yaml:"defs,omitempty"`
 	Refs          []KnowledgeRefSite `json:"refs,omitempty" yaml:"refs,omitempty"`
+	// Signature is the definition's signature as its indexer rendered it, the attribute
+	// `magus diff` classifies a signature change by. Nil is unknown: the symbol did not
+	// resolve, or its indexer renders no signature.
+	Signature *string `json:"signature,omitempty" yaml:"signature,omitempty"`
 	// Answer says whether an empty Refs list is a verified absence or a blind spot. A
 	// named field rather than an embedded struct: the template renderer skips anonymous
 	// fields, so `-o template` with no body would not list it, and yaml would nest what

@@ -860,6 +860,11 @@ func ObjectKnowledgeRefsOutput(v types.KnowledgeRefsOutput, enums ffi.EnumCases)
 		itemsRefs[indexRefs] = ObjectKnowledgeRefSite(v.Refs[indexRefs])
 	}
 	out.MapSet("refs", vm.ListValue(itemsRefs))
+	optSignature := vm.Null
+	if v.Signature != nil {
+		optSignature = vm.StrValue((*v.Signature))
+	}
+	out.MapSet("signature", optSignature)
 	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer, enums))
 	return out
 }

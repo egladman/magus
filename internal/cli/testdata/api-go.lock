@@ -2893,6 +2893,7 @@ github.com/egladman/magus/types.KnowledgeRefsOutput.Label field string "json:\"l
 github.com/egladman/magus/types.KnowledgeRefsOutput.RefCount field int "json:\"ref_count\"      yaml:\"ref_count\""
 github.com/egladman/magus/types.KnowledgeRefsOutput.Refs field []KnowledgeRefSite "json:\"refs,omitempty\" yaml:\"refs,omitempty\""
 github.com/egladman/magus/types.KnowledgeRefsOutput.SchemaVersion field int "json:\"schema_version\" yaml:\"schema_version\""
+github.com/egladman/magus/types.KnowledgeRefsOutput.Signature field *string "json:\"signature,omitempty\" yaml:\"signature,omitempty\""
 github.com/egladman/magus/types.KnowledgeRefsOutput.Symbol field string "json:\"symbol\"         yaml:\"symbol\""
 github.com/egladman/magus/types.KnowledgeRelation func(id RelationID) (KnowledgeRelationDefinition, bool)
 github.com/egladman/magus/types.KnowledgeRelationAllows func(id RelationID, sourceKind string, targetKind string) bool
