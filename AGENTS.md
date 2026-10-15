@@ -100,8 +100,11 @@ saying it, delete it here.
   reports them.
 - No silent defaults: a fallback says that it fell back, and an absent capability fails
   loudly rather than answering empty (`docs/doctrine.md`).
-- Local state is plain files: one file per independent entry, one row per line,
-  written by rename, never a JSON document
+- Local state is JSON Lines: one append-only `.jsonl` file per store, one JSON
+  object per entry per line, the last line per key wins, compaction by rename.
+  Encoding lives on the entry type (`MarshalJSON`, `UnmarshalJSON`), never in
+  a reader that splits lines. Never one rewritten JSON document, TSV or
+  `name<TAB>value`
   ([doctrine](docs/doctrine.md#everything-is-a-file)).
 - Before fixing behavior that looks wrong, find the test that pins it.
 - The docs site is classless Pico: semantic HTML, few custom classes, no inline
