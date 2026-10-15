@@ -67,10 +67,10 @@ func (t Table) Lookup(id string) (types.ModelPricing, bool) {
 	return t.rows[i], true
 }
 
-// ContextFloor is the cache-read price of a thread's reported context: a floor, since it
+// contextFloor is the cache-read price of a thread's reported context: a floor, since it
 // leaves out cache writes, uncached input, output and every subagent. Calls counts the
 // model calls priced and Tokens the context they read.
-type ContextFloor struct {
+type contextFloor struct {
 	Calls  int
 	Tokens int64
 	USD    float64
@@ -81,7 +81,7 @@ type ContextFloor struct {
 // call to price, billing that is not metered on every call, or a model the table does not
 // know. Consecutive calls reporting the same context are one model call that ran several
 // tools, so they are priced once.
-func (t Table) PriceContext(calls []types.AgentFacts) (ContextFloor, string) {
+func (t Table) PriceContext(calls []types.AgentFacts) (contextFloor, string) {
 	var samples []types.AgentFacts
 	for _, call := range calls {
 		if call.ContextTokens > 0 {
@@ -89,23 +89,23 @@ func (t Table) PriceContext(calls []types.AgentFacts) (ContextFloor, string) {
 		}
 	}
 	if len(samples) == 0 {
-		return ContextFloor{}, "no call reported a context size"
+		return contextFloor{}, "no call reported a context size"
 	}
 	for _, call := range samples {
 		switch call.Billing {
 		case types.AgentBillingMetered:
 		case "":
-			return ContextFloor{}, "billing is unknown: set agents.billing in magus.yaml"
+			return contextFloor{}, "billing is unknown: set agents.billing in magus.yaml"
 		default:
-			return ContextFloor{}, fmt.Sprintf("billing is %s, which has no per-token price", call.Billing)
+			return contextFloor{}, fmt.Sprintf("billing is %s, which has no per-token price", call.Billing)
 		}
 	}
-	var floor ContextFloor
+	var floor contextFloor
 	var prev types.AgentFacts
 	for i, call := range samples {
 		pricing, ok := t.Lookup(call.ContextModel)
 		if !ok || pricing.CacheRead == 0 {
-			return ContextFloor{}, fmt.Sprintf("model %q is not in the model table: add it under agents.models in magus.yaml", call.ContextModel)
+			return contextFloor{}, fmt.Sprintf("model %q is not in the model table: add it under agents.models in magus.yaml", call.ContextModel)
 		}
 		if i > 0 && call.ContextTokens == prev.ContextTokens && call.ContextModel == prev.ContextModel {
 			continue

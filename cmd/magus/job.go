@@ -192,7 +192,11 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 	if root != "" {
 		// Read once, and only when a job ends with a priceable trail, since it loads the
 		// workspace's harness spells.
-		loc.Prices = sync.OnceValue(func() model.Table { return sessionModelTable(root) })
+		table := sync.OnceValue(func() model.Table { return sessionModelTable(root) })
+		loc.PriceContext = func(calls []types.AgentFacts) (int64, float64, bool) {
+			floor, why := table().PriceContext(calls)
+			return floor.Tokens, floor.USD, why == ""
+		}
 	}
 	if o.ModelTiers && root != "" {
 		m, err := loadMagus(ctx, root)

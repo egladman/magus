@@ -30,7 +30,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
@@ -114,8 +113,8 @@ type Store struct {
 	modelTiers      *types.ModelTierSet
 	modelTierMatrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error)
 	owners          func(context.Context, []string) ([]string, error)
-	// prices is Location.Prices.
-	prices func() model.Table
+	// priceContext is Location.PriceContext.
+	priceContext func(calls []types.AgentFacts) (tokens int64, usd float64, ok bool)
 }
 
 // Location is where a Store lives: the repository whose rows these are, the state base
@@ -179,10 +178,10 @@ type Location struct {
 	// reports as a job's projects. It is asked only to fill a matrix's request, so a Store
 	// with no matrix never calls it; nil leaves the request's WriteProjects empty.
 	Owners func(ctx context.Context, files []string) ([]string, error)
-	// Prices is the model table a job's recorded outcome prices its holder's context
-	// against when the job ends, through [model.Table.PriceContext]. Nil leaves every
-	// outcome's tokens and cost unknown.
-	Prices func() model.Table
+	// PriceContext prices a job's holder's context when the job ends, as the model
+	// table's PriceContext does: the tokens and dollars, and false when the price would be
+	// a guess. Nil leaves every outcome's tokens and cost unknown.
+	PriceContext func(calls []types.AgentFacts) (tokens int64, usd float64, ok bool)
 }
 
 // NewStore returns the ledger for loc's repository. The file itself is created by the
@@ -198,7 +197,7 @@ type Location struct {
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
 	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()),
-		modelTiers: loc.ModelTiers, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners, prices: loc.Prices}
+		modelTiers: loc.ModelTiers, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners, priceContext: loc.PriceContext}
 	s.path, s.err = jobsPath(loc)
 	return s
 }

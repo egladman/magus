@@ -275,17 +275,17 @@ func (s *Store) endedOutcome(ctx context.Context, h heldOutcome, ended int64) ty
 }
 
 // priceAttempt is the context an attempt's calls read and its cache-read price, both nil
-// when unknown: no model table, a call that reported no context size, or a price
-// [model.Table.PriceContext] would have to guess.
+// when unknown: no model table, a call that reported no context size, or a price the
+// table would have to guess.
 func (s *Store) priceAttempt(work *types.JobWork, calls []types.AgentFacts) (*int64, *float64) {
-	if s.prices == nil || work == nil || work.ContextTokens == nil {
+	if s.priceContext == nil || work == nil || work.ContextTokens == nil {
 		return nil, nil
 	}
-	floor, why := s.prices().PriceContext(calls)
-	if why != "" {
+	tokens, usd, ok := s.priceContext(calls)
+	if !ok {
 		return nil, nil
 	}
-	return &floor.Tokens, &floor.USD
+	return &tokens, &usd
 }
 
 // attemptStart is when row's live attempt began, unix seconds: when the last prior attempt
