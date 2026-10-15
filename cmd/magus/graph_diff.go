@@ -337,7 +337,7 @@ func baseGraphFromRev(ctx context.Context, root, rev string) (types.KnowledgeGra
 	// or gradle there would fail and take the whole diff with it. A project only a
 	// provider knows about therefore reads as added rather than unchanged, which is
 	// the honest answer for a base magus cannot resolve.
-	ws, err := magus.Inspect(ctx, tmp, workspace.WithLoadedConfig(cfg), magus.WithoutWorkspaceProviders())
+	ws, err := magus.Inspect(ctx, tmp, append(processOptions(), workspace.WithLoadedConfig(cfg), magus.WithoutWorkspaceProviders())...)
 	if err != nil {
 		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: inspect revision %q tree: %w", rev, err)
 	}

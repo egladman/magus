@@ -97,7 +97,7 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	if len(types.InvocationAncestorsFromContext(ctx)) == 0 {
 		ctx = types.WithInvocationAncestors(ctx, procrun.AncestorsFromEnv())
 	}
-	lopts := []lockerOption{withReportWriter(rw)}
+	lopts := []lockerOption{withReportWriter(rw), writingTo(m.noticeWriter()), withCommandLine(m.commandLine)}
 	if gate {
 		lopts = append(lopts, asGate())
 	}
@@ -263,8 +263,8 @@ type projectLocker struct {
 	// gate marks this invocation the whole ci target. Only a gate supersedes, and only a
 	// gate is superseded.
 	gate bool
-	// out is where the lock's decision lines go: os.Stderr in every real run, a buffer
-	// under test so it can read the exact bytes a user sees. The lines are written
+	// out is where the lock's decision lines go: the workspace's WithStderr writer in a
+	// run, a buffer under test so it can read the exact bytes a user sees. The lines are written
 	// straight to the stream, never through the console, which is why -s/--silent
 	// cannot suppress any of them: a decision made without explanation is the failure
 	// they exist to prevent.
@@ -277,6 +277,8 @@ type projectLocker struct {
 	// stdio is the invocation's own standard streams, set only when it runs in this
 	// process. See pipe.Stdio.
 	stdio *pipe.Stdio
+	// commandLine is what the owner and wait records name as this process's command.
+	commandLine []string
 }
 
 // lockPollEvery paces the two acquires that wait on another process's flock, which has no
@@ -306,8 +308,13 @@ func withReportWriter(w *report.Writer) lockerOption {
 	return func(l *projectLocker) { l.rw = w }
 }
 
-// writingTo redirects the lock's decision lines, for a test that reads them.
+// writingTo sends the lock's decision lines to w.
 func writingTo(w io.Writer) lockerOption { return func(l *projectLocker) { l.out = w } }
+
+// withCommandLine is the command line the locker's records name as this process's.
+func withCommandLine(args []string) lockerOption {
+	return func(l *projectLocker) { l.commandLine = args }
+}
 
 // newProjectLocker returns a projectLocker whose lock files live under
 // <cacheDir>/locks/<workspace>, mirroring the workspace project tree.
@@ -323,7 +330,7 @@ func newProjectLocker(cacheDir, workspaceRoot string, opts ...lockerOption) *pro
 		dir:     workspace.LocksDir(cacheDir, workspaceRoot),
 		root:    resolvedRoot(workspaceRoot),
 		started: time.Now(),
-		out:     os.Stderr,
+		out:     io.Discard,
 	}
 	for _, o := range opts {
 		o(l)
@@ -694,6 +701,7 @@ func (l *projectLocker) recordOwner(ctx context.Context, projectPath string) {
 //	gate	true
 //	pid	41221
 func (l *projectLocker) selfRecord(ctx context.Context, started time.Time) processRecord {
+	// The working directory is the process's, as the pid is: what the record identifies.
 	dir, _ := os.Getwd()
 	// This invocation's OWN id, never the ancestry's last element. Those look the same for
 	// a run (BeginInvocation appends its id there), and differ for every lock-taker that
@@ -702,7 +710,7 @@ func (l *projectLocker) selfRecord(ctx context.Context, started time.Time) proce
 	// sibling nested run refuse a lock the parent does not hold.
 	return processRecord{
 		PID:     os.Getpid(),
-		Command: strings.Join(os.Args, " "),
+		Command: strings.Join(l.commandLine, " "),
 		Dir:     dir,
 		Started: started,
 		Inv:     journal.InvocationIDFromContext(ctx),

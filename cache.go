@@ -175,6 +175,8 @@ func (m *Magus) spellCaches(ctx context.Context) ([]declaredCaches, error) {
 		if err != nil {
 			return nil, err
 		}
+		// The process environment, never the workspace's (WithEnv): the spell's processes
+		// inherit it, so it locates the caches they write.
 		located := sandbox.CacheDirs(*sb, os.Environ(), home)
 		d := declaredCaches{key: cache.NewSpellCacheKey(name, tools, locks)}
 		for _, c := range sb.Caches {

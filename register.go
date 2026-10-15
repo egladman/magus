@@ -3,6 +3,8 @@ package magus
 import (
 	"context"
 	"fmt"
+	"io"
+	"slices"
 
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/workspace"
@@ -24,6 +26,30 @@ func WithConfigFile(path string) Option {
 // /dashboard's metrics via [Magus.MetricsCollector]. The CLI leaves it off.
 func WithMetricsCollection() Option {
 	return workspace.WithMetricsCollection()
+}
+
+// WithEnv hands the workspace env, KEY=VALUE pairs as os.Environ returns them, as the
+// environment it reads: the MAGUS_* overrides of its configuration, the remote cache
+// signing key and the cache tool-version mode come from it. Without it the workspace reads
+// no environment, and magus.yaml alone configures it. The processes a run starts inherit
+// this process's environment either way.
+func WithEnv(env []string) Option {
+	env = slices.Clone(env)
+	return func(o *workspace.Load) { o.Env = env }
+}
+
+// WithStderr sends the workspace's notices (lock decisions, a run's text report when no
+// sink is given) and, under -o jsonl, its records to w. Without it they are discarded.
+func WithStderr(w io.Writer) Option {
+	return func(o *workspace.Load) { o.Stderr = w }
+}
+
+// WithCommandLine is the command line the workspace records as this process's: in the
+// owner record of a project lock it takes, and as its identity to the broker. Without it
+// the records hold an empty command line.
+func WithCommandLine(args []string) Option {
+	args = slices.Clone(args)
+	return func(o *workspace.Load) { o.CommandLine = args }
 }
 
 // WithVersion supplies the running build's version so Open and Inspect can check it

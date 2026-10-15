@@ -342,7 +342,7 @@ func pickTerminal(w io.Writer) terminal {
 
 // textSink is the sink a run reports through when its caller passed none.
 func (m *Magus) textSink() *Sink {
-	return sinkOver(textEncoder{term: pickTerminal(os.Stderr), level: m.cfg.Log.SlogLevel()})
+	return sinkOver(textEncoder{term: pickTerminal(m.noticeWriter()), level: m.cfg.Log.SlogLevel()})
 }
 
 // plainTerminal writes uncolored lines to w.

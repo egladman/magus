@@ -91,7 +91,7 @@ func eventsCmd(ctx context.Context, root string, args []string) error {
 	if abs, err := filepath.Abs(workspace); err == nil {
 		workspace = abs
 	}
-	cacheDir, err := magus.ResolveCacheDir(workspace)
+	cacheDir, err := magus.ResolveCacheDir(workspace, processOptions()...)
 	if err != nil {
 		return err
 	}

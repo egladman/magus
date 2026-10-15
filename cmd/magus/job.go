@@ -187,7 +187,7 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 		return nil, err
 	}
 	loc := job.Location{CacheDir: cacheDir, Root: root, Outputs: outputsIn, Grader: newCheckGrader(), DryRun: o.DryRun,
-		TrailBase: func(checkoutRoot string) (string, error) { return magus.ResolveCacheDir(checkoutRoot) }}
+		TrailBase: func(checkoutRoot string) (string, error) { return magus.ResolveCacheDir(checkoutRoot, processOptions()...) }}
 	if o.ModelTiers && root != "" {
 		m, err := loadMagus(ctx, root)
 		if err != nil {
@@ -314,7 +314,7 @@ func outputsIn(root string) job.AttemptResolver {
 		if strings.TrimSpace(ref) == "" {
 			return types.JobAttempt{}, nil
 		}
-		dir, err := magus.ResolveCacheDir(root)
+		dir, err := magus.ResolveCacheDir(root, processOptions()...)
 		if err != nil {
 			return types.JobAttempt{}, err
 		}

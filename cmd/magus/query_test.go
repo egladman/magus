@@ -585,7 +585,7 @@ func TestAskServerFallsBackWhenTheServerDeclines(t *testing.T) {
 // timings include the index freshness check, so build the graph first: a stale index
 // pays a tool-version probe on every read.
 func BenchmarkServerGraphReads(b *testing.B) {
-	root, err := magus.FindRoot(".")
+	root, err := workspace.FindRoot(".")
 	require.NoError(b, err)
 	f := openGraphReadFixture(b, root)
 	for _, name := range []string{"searchVerdict", "SetReadCacheLimit", "QueryKnowledgeGraph", "ensureAdj"} {

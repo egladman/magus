@@ -62,19 +62,19 @@ func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observ
 	}
 	// Warm server workspaces record OTel metrics so the /dashboard can read live
 	// cache/pool/target numbers as OTLP. Every workspace shares the server's single
-	// provider (WithProvider), so counts survive eviction and the bridge Magus reads
+	// provider (workspace.WithTelemetryProvider), so counts survive eviction and the bridge Magus reads
 	// them; only if none was supplied do we build a per-workspace collector.
 	metricsOpt := magus.WithMetricsCollection()
 	if tel != nil {
 		metricsOpt = workspace.WithTelemetryProvider(tel)
 	}
-	opts := []magus.Option{
+	opts := append(processOptions(),
 		workspace.WithLoadedConfig(cfg),
 		// The version lets a load failure that looks like a stale server say so.
 		magus.WithVersion(version),
 		workspace.WithLimiter(lim),
 		metricsOpt,
-	}
+	)
 	// Every workspace the server opens shares ONE broker client, so the server holds one
 	// broker connection however many workspaces it serves. A workspace whose own broker
 	// setting is off gets none, since Open refuses a client it would not use. A registry
@@ -466,7 +466,7 @@ func recordJobActivity(ctx context.Context, args []string, dur time.Duration, er
 	}
 	root := proc.RootFromContext(ctx)
 	if root == "" {
-		resolved, ferr := magus.FindRoot(proc.CwdFromContext(ctx))
+		resolved, ferr := workspace.FindRoot(proc.CwdFromContext(ctx))
 		if ferr != nil {
 			return
 		}

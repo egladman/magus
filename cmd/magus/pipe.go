@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/report"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -299,7 +299,7 @@ func settlePipeline(ctx context.Context, args []string) error {
 	if !ok {
 		return nil
 	}
-	root, err := magus.FindRoot(extractRootFlag(args))
+	root, err := workspace.FindRoot(extractRootFlag(args))
 	if err != nil {
 		return nil //nolint:nilerr // no workspace, so no stage left a record to read
 	}
@@ -331,7 +331,7 @@ func awaitPipeline(ctx context.Context, root string) error {
 	if _, adopted := magusFromContext(ctx); adopted {
 		return nil
 	}
-	ws, err := magus.FindRoot(root)
+	ws, err := workspace.FindRoot(root)
 	if err != nil {
 		return nil //nolint:nilerr // no workspace, so no stage left a record to read
 	}
@@ -341,7 +341,7 @@ func awaitPipeline(ctx context.Context, root string) error {
 // recordPipeExit leaves code for the magus stage reading this process's stdout. See
 // pipe.RecordExit.
 func recordPipeExit(args []string, code int, interrupted func() (syscall.Signal, bool)) {
-	root, err := magus.FindRoot(extractRootFlag(args))
+	root, err := workspace.FindRoot(extractRootFlag(args))
 	if err != nil {
 		return
 	}

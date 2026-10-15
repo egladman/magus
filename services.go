@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
@@ -43,7 +42,7 @@ func (m *Magus) wireBroker() ([]cache.Option, error) {
 		return nil, nil
 	}
 	if m.broker == nil {
-		m.broker = broker.NewClient(broker.DefaultAddr(), broker.WithIdentity(os.Args, m.version))
+		m.broker = broker.NewClient(broker.DefaultAddr(), broker.WithIdentity(m.commandLine, m.version))
 		m.ownsBroker = true
 	}
 	opts := []cache.Option{cache.WithMachineAdmission(m.broker)}

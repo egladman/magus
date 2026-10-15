@@ -16,6 +16,8 @@
 package workspace
 
 import (
+	"io"
+
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
@@ -49,6 +51,14 @@ type Load struct {
 	// SkipWorkspaceProviders opens the workspace without running its wired workspace
 	// providers, so it holds only the magusfile-declared projects.
 	SkipWorkspaceProviders bool
+	// Env is the environment the workspace reads, KEY=VALUE pairs; nil reads none.
+	Env []string
+	// Stderr receives the workspace's notices and, under -o jsonl, its records; nil
+	// discards them.
+	Stderr io.Writer
+	// CommandLine is what the workspace records as this process's command line; nil
+	// records an empty one.
+	CommandLine []string
 }
 
 // Option configures Open or Inspect.

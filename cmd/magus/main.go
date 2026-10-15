@@ -59,6 +59,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -731,7 +732,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	}
 
 	stopEarlyRoot := trace.phase("startup.find_root_early")
-	earlyRoot, _ := magus.FindRoot(extractRootFlag(args))
+	earlyRoot, _ := workspace.FindRoot(extractRootFlag(args))
 	stopEarlyRoot()
 
 	stopCfgLoad := trace.phase("startup.config_load")

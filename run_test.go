@@ -1718,7 +1718,6 @@ func TestProbeToolsDoesNotGateOnADeclaredConstant(t *testing.T) {
 // the version gate. Pinned because it is not obvious from either name, and because a gate
 // that can be disabled by a cache knob should at least be disabled on purpose.
 func TestProbeToolsOffAlsoDisablesTheWindowGate(t *testing.T) {
-	t.Setenv("MAGUS_CACHE_TOOL_VERSION", "off")
 	calls := 0
 	sp := probedSpell("typescript", "node", spells.VersionKey{}, func(string) (string, error) { return "v26.5.0", nil }, &calls)
 	p := &types.Project{
@@ -1728,7 +1727,7 @@ func TestProbeToolsOffAlsoDisablesTheWindowGate(t *testing.T) {
 	}
 
 	full := map[string]string{}
-	got, err := (&Magus{}).probeTools(t.Context(), []*types.Project{p}, full)
+	got, err := (&Magus{getenv: envGetter([]string{"MAGUS_CACHE_TOOL_VERSION=off"})}).probeTools(t.Context(), []*types.Project{p}, full)
 	require.NoError(t, err)
 	assert.Nil(t, got)
 	assert.Equal(t, 0, calls)
@@ -1738,7 +1737,6 @@ func TestProbeToolsOffAlsoDisablesTheWindowGate(t *testing.T) {
 // mode=workspace probes once at the root instead of per project dir. The gate still keys
 // by project path, so a per-project window is enforced against the root's reading.
 func TestProbeToolsWorkspaceModeProbesTheRootDir(t *testing.T) {
-	t.Setenv("MAGUS_CACHE_TOOL_VERSION", "workspace")
 	var seen []string
 	calls := 0
 	sp := probedSpell("typescript", "node", spells.VersionKey{}, func(dir string) (string, error) {
@@ -1751,7 +1749,7 @@ func TestProbeToolsWorkspaceModeProbesTheRootDir(t *testing.T) {
 		ResolvedSpells: []*spells.Spell{sp},
 	}
 
-	m := &Magus{ws: &types.Workspace{Root: "/tmp/root"}}
+	m := &Magus{ws: &types.Workspace{Root: "/tmp/root"}, getenv: envGetter([]string{"MAGUS_CACHE_TOOL_VERSION=workspace"})}
 	full := map[string]string{}
 	_, err := m.probeTools(t.Context(), []*types.Project{p}, full)
 	require.NoError(t, err)

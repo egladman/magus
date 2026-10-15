@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"errors"
+	"os"
 	"slices"
 	"sync"
 
@@ -63,7 +64,7 @@ func OpenWorkspace(ctx context.Context, root, target string, opts ...WorkspaceOp
 	if o.regenerate == "" {
 		return nil, errors.New("workspace needs the target the queue's regeneration runs")
 	}
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithEnv(os.Environ()), magus.WithStderr(os.Stderr), magus.WithCommandLine(os.Args))
 	if err != nil {
 		return nil, err
 	}

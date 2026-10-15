@@ -1074,3 +1074,14 @@ func TestAnUnansweredSupersedeRecordsItsRefusal(t *testing.T) {
 		t.Errorf("lock output = %q, a structured run says it as a record only", out.String())
 	}
 }
+
+// TestSelfRecordNamesOnlyTheGivenCommandLine: an owner record names the command line the
+// workspace was given (WithCommandLine), and none without one, never os.Args.
+func TestSelfRecordNamesOnlyTheGivenCommandLine(t *testing.T) {
+	ctx := context.Background()
+	given := newProjectLocker(t.TempDir(), testWorkspaceRoot, withCommandLine([]string{"magus", "run", "build", "api"}))
+	assert.Equal(t, "magus run build api", given.selfRecord(ctx, time.Now()).Command)
+
+	bare := newProjectLocker(t.TempDir(), testWorkspaceRoot)
+	assert.Empty(t, bare.selfRecord(ctx, time.Now()).Command)
+}

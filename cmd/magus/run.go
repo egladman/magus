@@ -545,7 +545,7 @@ func resolveTargets(ctx context.Context, ws types.WorkspaceRepository, t types.T
 		}
 	default:
 		// cwd-scope: run only the project containing the caller's cwd, when it is inside
-		// one. Keyed on the explicit cwd (not ws.ExpandCwd, which reads os.Getwd).
+		// one. Keyed on the explicit cwd, never this process's working directory.
 		if sel.cwd != "" {
 			if p, ok := ws.Where(sel.cwd); ok {
 				targets, source = []types.Target{{Path: p.Path, Name: t.Name}}, "cwd"

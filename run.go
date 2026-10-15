@@ -1076,9 +1076,10 @@ func anyRetryOnVolatile(projects []*types.Project, target string) bool {
 	return false
 }
 
-// toolVersionMode resolves the cache tool-version policy from MAGUS_CACHE_TOOL_VERSION.
-func toolVersionMode() string {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("MAGUS_CACHE_TOOL_VERSION"))) {
+// toolVersionMode resolves the cache tool-version policy from v, the value of
+// MAGUS_CACHE_TOOL_VERSION.
+func toolVersionMode(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "off":
 		return "off"
 	case "workspace":
@@ -1249,7 +1250,7 @@ type toolProbe struct {
 }
 
 func (m *Magus) newToolProber() *toolProber {
-	return &toolProber{m: m, mode: toolVersionMode(), memo: map[string]*toolProbe{}}
+	return &toolProber{m: m, mode: toolVersionMode(m.env("MAGUS_CACHE_TOOL_VERSION")), memo: map[string]*toolProbe{}}
 }
 
 func (tp *toolProber) dir(p *types.Project) string {

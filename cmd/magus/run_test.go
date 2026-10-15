@@ -67,12 +67,6 @@ func (w *resolveWS) ExpandPath(t types.Target) ([]types.Target, error) {
 	return nil, types.ErrUnknownProject
 }
 
-// ExpandCwd must never be reached by resolveTargets anymore: resolution keys on the
-// explicit cwd via Where, not on the server's os.Getwd. Panic to prove the fix holds.
-func (w *resolveWS) ExpandCwd(types.Target) ([]types.Target, bool, error) {
-	panic("resolveTargets must not call ExpandCwd (it reads os.Getwd); use the explicit cwd")
-}
-
 func (w *resolveWS) Get(string) *types.Project { panic("not used") }
 func (w *resolveWS) Graph() (*types.Graph, error) {
 	panic("not used")

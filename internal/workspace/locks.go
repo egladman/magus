@@ -3,26 +3,20 @@ package workspace
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"os"
 	"path/filepath"
 
 	"github.com/egladman/magus/internal/config"
 )
 
-// CacheDir resolves the workspace cache directory: config Cache.Dir, then
-// MAGUS_CACHE_DIR, then <root>/.magus (relative values join to root).
+// CacheDir resolves the workspace cache directory: cfg's Cache.Dir, which MAGUS_CACHE_DIR
+// sets when the environment is overlaid on cfg, then <root>/.magus. A relative dir joins
+// to root.
 func CacheDir(root string, cfg config.Config) string {
 	if cfg.Cache.Dir != "" {
 		if filepath.IsAbs(cfg.Cache.Dir) {
 			return filepath.Clean(cfg.Cache.Dir)
 		}
 		return filepath.Join(root, cfg.Cache.Dir)
-	}
-	if override := os.Getenv("MAGUS_CACHE_DIR"); override != "" {
-		if filepath.IsAbs(override) {
-			return filepath.Clean(override)
-		}
-		return filepath.Join(root, override)
 	}
 	return filepath.Join(root, ".magus")
 }

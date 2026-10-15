@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -159,7 +160,7 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 			root := proc.RootFromContext(hctx)
 			if root == "" {
 				cwd := proc.CwdFromContext(hctx)
-				r, rerr := magus.FindRoot(cwd)
+				r, rerr := workspace.FindRoot(cwd)
 				if rerr != nil {
 					return fmt.Errorf("locate workspace root from %s: %w", cwd, rerr)
 				}

@@ -312,7 +312,7 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 			return inspectWorkspace(ctx, rootOverride)
 		}
 		return magus.Inspect(ctx, root,
-			workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))
+			append(processOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
 	}
 	// An unresolvable path leaves the trail row without one; the version still records.
 	binary, _ := runningBinaryPath()
@@ -351,7 +351,7 @@ func guardHumanOnlyRecord(rootOverride string, inspect func(context.Context, str
 	return func(ctx context.Context, root string) (types.HumanOnlyIndex, bool) {
 		ask := root
 		if root == "" {
-			found, err := magus.FindRoot(rootOverride)
+			found, err := workspace.FindRoot(rootOverride)
 			if err != nil {
 				return types.HumanOnlyIndex{}, false
 			}
@@ -403,7 +403,7 @@ func harnessModelRows(ctx context.Context, root string, inspect func(context.Con
 // guardModelRows is harnessModelRows for the workspace found from rootOverride, opened as
 // the guard's other rules open it, so one load serves them all. nil outside a workspace.
 func guardModelRows(ctx context.Context, rootOverride string) func() []types.ModelPricing {
-	root, err := magus.FindRoot(rootOverride)
+	root, err := workspace.FindRoot(rootOverride)
 	if err != nil {
 		return nil
 	}
@@ -418,7 +418,7 @@ func guardModelRows(ctx context.Context, rootOverride string) func() []types.Mod
 // registrations and what they reach, so it holds neither a magus\job.modelTiers call nor
 // the harness spells whose aliases map each tier to a model.
 func guardModelTiers(ctx context.Context, rootOverride string) func() *types.ModelTierSet {
-	if _, err := magus.FindRoot(rootOverride); err != nil {
+	if _, err := workspace.FindRoot(rootOverride); err != nil {
 		return nil
 	}
 	return workspaceModelTiers(ctx, func(ctx context.Context) (types.WorkspaceRepository, error) {
@@ -445,9 +445,9 @@ func workspaceModelTiers(ctx context.Context, inspect func(context.Context) (typ
 func guardCacheDir(rootOverride string) func(root string) (string, error) {
 	return func(root string) (string, error) {
 		if root != "" {
-			return magus.ResolveCacheDir(root)
+			return magus.ResolveCacheDir(root, processOptions()...)
 		}
-		found, err := magus.FindRoot(rootOverride)
+		found, err := workspace.FindRoot(rootOverride)
 		if err != nil {
 			return "", err
 		}

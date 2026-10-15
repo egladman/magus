@@ -12,10 +12,10 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -353,7 +353,7 @@ func resolveRootOrEmpty(root string) string {
 	if root != "" {
 		return root
 	}
-	resolved, err := magus.FindRoot("")
+	resolved, err := workspace.FindRoot("")
 	if err != nil {
 		return ""
 	}

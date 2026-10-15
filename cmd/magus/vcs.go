@@ -165,7 +165,7 @@ func mergeDriverRelPath(root, pathArg string) (string, error) {
 	if !filepath.IsAbs(pathArg) {
 		return filepath.ToSlash(pathArg), nil
 	}
-	wsRoot, err := magus.FindRoot(root)
+	wsRoot, err := workspace.FindRoot(root)
 	if err != nil {
 		return "", fmt.Errorf("merge-driver: find workspace root: %w", err)
 	}
@@ -788,7 +788,7 @@ func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string,
 	// A hook runs in the repository's top level, where the workspace root is too; the
 	// merge driver relies on the same. Read git's state before loading anything, since
 	// most commits are not merge-shaped and load nothing.
-	wsRoot, err := magus.FindRoot(root)
+	wsRoot, err := workspace.FindRoot(root)
 	if err != nil {
 		return settleFailed(ctx, hook, vcs.HookOperation{}, settle.Outcome{}, err)
 	}

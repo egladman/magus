@@ -1493,7 +1493,7 @@ func describeWorkspacesOutput(ctx context.Context, root string) ([]types.Workspa
 		if err != nil {
 			return nil, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
 		}
-		w, err := magus.Inspect(ctx, wsRoot, workspace.WithLoadedConfig(cfg))
+		w, err := magus.Inspect(ctx, wsRoot, append(processOptions(), workspace.WithLoadedConfig(cfg))...)
 		if err != nil {
 			return nil, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
 		}

@@ -1113,7 +1113,7 @@ func openForRead(ctx context.Context, root string) (graphWorkspace, error) {
 	if m, ok := loadedMagus(); ok {
 		return m, nil
 	}
-	wsRoot, err := magus.FindRoot(root)
+	wsRoot, err := workspace.FindRoot(root)
 	if err != nil {
 		return nil, err
 	}

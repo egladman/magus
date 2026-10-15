@@ -13,8 +13,8 @@ import (
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -149,7 +149,7 @@ func (i servedInfo) skewLine() string {
 func servesAny(root string, roots []string) bool {
 	want := canonicalPath(root)
 	for _, r := range roots {
-		ws, err := magus.FindRoot(r)
+		ws, err := workspace.FindRoot(r)
 		if err != nil {
 			ws = r
 		}

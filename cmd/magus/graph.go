@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -630,7 +631,7 @@ func inspectForRead(_ context.Context, root string) (graphWorkspace, error) {
 	if m, ok := loadedMagus(); ok {
 		return m, nil
 	}
-	wsRoot, err := magus.FindRoot(root)
+	wsRoot, err := workspace.FindRoot(root)
 	if err != nil {
 		return nil, err
 	}

@@ -897,7 +897,7 @@ func TestTheBoxKeysNoStep(t *testing.T) {
 		lines []string
 	}
 	keyAll := func() []keyed {
-		w, err := magus.Open(t.Context(), root)
+		w, err := magus.Open(t.Context(), root, magus.WithEnv(os.Environ()))
 		require.NoError(t, err)
 		defer func() { _ = w.Close() }()
 		var out []keyed

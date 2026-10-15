@@ -501,7 +501,7 @@ func observeSymbolDelta(ctx context.Context, root string, row types.Job, seen jo
 	var g *knowledge.Graph
 	if filepath.Clean(tree) == filepath.Clean(root) {
 		g = graph.load(ctx)
-	} else if ws, err := magus.Inspect(ctx, tree, workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version)); err == nil &&
+	} else if ws, err := magus.Inspect(ctx, tree, append(processOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...); err == nil &&
 		(graph.rebuild || len(findStaleIndexes(ctx, ws)) == 0) {
 		g, _ = loadRefsGraph(ctx, ws, globalCfg, false, "")
 	}

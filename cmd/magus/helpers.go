@@ -131,7 +131,7 @@ func (o openedRoot) check(singleton, override string) error {
 	if override == o.override || o.root == "" {
 		return nil
 	}
-	root, err := magus.FindRoot(override)
+	root, err := workspace.FindRoot(override)
 	if err != nil {
 		return err
 	}
@@ -163,7 +163,7 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 	magusOnce.Do(func() {
 		magusOpened.override = rootOverride
 		defer t.phase("magus.find_root")()
-		root, err := magus.FindRoot(rootOverride)
+		root, err := workspace.FindRoot(rootOverride)
 		if err != nil {
 			magusErr = err
 			return
@@ -171,7 +171,7 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 		magusOpened.root = root
 		stop := t.phase("magus.open")
 		defer relaxGC()()
-		opts := []magus.Option{workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version)}
+		opts := append(processOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))
 		if lim := bootstrapLimiterFrom(ctx); lim != nil {
 			opts = append(opts, workspace.WithLimiter(lim))
 		}
@@ -274,7 +274,7 @@ func inspectWorkspace(ctx context.Context, rootOverride string) (types.Workspace
 			return
 		}
 		defer t.phase("workspace.find_root")()
-		root, err := magus.FindRoot(rootOverride)
+		root, err := workspace.FindRoot(rootOverride)
 		if err != nil {
 			inspectErr = err
 			return
@@ -287,7 +287,7 @@ func inspectWorkspace(ctx context.Context, rootOverride string) (types.Workspace
 		stop := t.phase("workspace.inspect")
 		defer relaxGC()()
 		inspectValue, inspectErr = magus.Inspect(ctx, root,
-			workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))
+			append(processOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
 		stop()
 	})
 	if err := inspectOpened.check("inspectWorkspace", rootOverride); err != nil {
@@ -426,6 +426,12 @@ func (s *stringList) String() string { return strings.Join(*s, ", ") }
 func (s *stringList) Set(v string) error {
 	*s = append(*s, v)
 	return nil
+}
+
+// processOptions hands a workspace this process's environment, stderr and command line,
+// which a workspace the library opens reads none of unless given.
+func processOptions() []magus.Option {
+	return []magus.Option{magus.WithEnv(os.Environ()), magus.WithStderr(os.Stderr), magus.WithCommandLine(os.Args)}
 }
 
 // magusInternals is what workspace.View adds to an opened *magus.Magus for magus's own

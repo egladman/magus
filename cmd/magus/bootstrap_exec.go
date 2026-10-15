@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/workspace"
 )
 
 // bootstrapExecSentinelVar marks a process that already replaced itself with a
@@ -95,7 +95,7 @@ func bootstrapExecDecision(argv []string, self string) (target string, ok bool) 
 	return resolveBootstrapExecTarget(start, self)
 }
 
-// resolveBootstrapExecTarget finds the workspace root above start with magus.FindRoot,
+// resolveBootstrapExecTarget finds the workspace root above start with workspace.FindRoot,
 // the definition every other entry point uses, and resolves the ./magus beside it.
 //
 // The marker is magus.yaml, not the nearest magusfile.buzz: console/, docs/, libs/* and
@@ -110,7 +110,7 @@ func bootstrapExecDecision(argv []string, self string) (target string, ok bool) 
 // Returns ok=false when no root exists, it has no usable ./magus, or that binary
 // resolves to self.
 func resolveBootstrapExecTarget(start, self string) (target string, ok bool) {
-	dir, err := magus.FindRoot(start)
+	dir, err := workspace.FindRoot(start)
 	if err != nil {
 		return "", false
 	}

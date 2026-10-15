@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -180,6 +181,50 @@ type Magus struct {
 	ownsBroker    bool
 	brokerPolicy  types.BrokerPolicy // WithBrokerPolicy's override; empty keeps the config's
 	skipProviders bool               // open without running wired workspace providers (see WithoutWorkspaceProviders)
+
+	// environ is the environment WithEnv gave, and getenv reads it; both are empty
+	// without one.
+	environ []string
+	getenv  func(string) string
+	// stderr is where WithStderr sends notices; io.Discard without one.
+	stderr io.Writer
+	// commandLine is WithCommandLine's; empty without one.
+	commandLine []string
+}
+
+// env reads key from the environment WithEnv gave, "" for a key unset there or with no
+// environment given.
+func (m *Magus) env(key string) string {
+	if m.getenv == nil {
+		return ""
+	}
+	return m.getenv(key)
+}
+
+// processOptions are the WithEnv, WithStderr and WithCommandLine this workspace was opened
+// with, for a workspace it opens on its own behalf.
+func (m *Magus) processOptions() []Option {
+	return []Option{WithEnv(m.environ), WithStderr(m.noticeWriter()), WithCommandLine(m.commandLine)}
+}
+
+// noticeWriter is where WithStderr sends this workspace's notices, io.Discard without one.
+func (m *Magus) noticeWriter() io.Writer {
+	if m.stderr == nil {
+		return io.Discard
+	}
+	return m.stderr
+}
+
+// envGetter is a getenv over env, KEY=VALUE pairs as os.Environ returns them. A key set
+// twice reads its last value, as the process environment does.
+func envGetter(env []string) func(string) string {
+	vals := make(map[string]string, len(env))
+	for _, kv := range env {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			vals[k] = v
+		}
+	}
+	return func(k string) string { return vals[k] }
 }
 
 func init() { workspace.SetView(viewOf) }
@@ -220,11 +265,17 @@ func (w internals) SpellImports() *remotespell.Imports { return w.spellImports }
 // (workspace.WithTelemetryProvider).
 func (w internals) Telemetry() observability.Provider { return w.tel }
 
-// FindRoot walks up from dir, or the cwd when dir is empty, to the workspace root. The
-// nearest magus.yaml wins; with none, the root is the outermost contiguous directory
-// holding a project marker (magusfiles/, magusfile.buzz or go.mod). With neither, the
-// error carries [types.NoWorkspaceRoot].
-func FindRoot(dir string) (string, error) { return workspace.FindRoot(dir) }
+// FindRoot walks up from dir to the workspace root. The nearest magus.yaml wins; with
+// none, the root is the outermost contiguous directory holding a project marker
+// (magusfiles/, magusfile.buzz or go.mod). With neither, the error carries
+// [types.NoWorkspaceRoot]. An empty dir is an error: a library has no working directory
+// to fall back to, so pass the directory to start from (os.Getwd's, if that is meant).
+func FindRoot(dir string) (string, error) {
+	if dir == "" {
+		return "", errors.New("magus: FindRoot needs a directory to start from; pass one, such as the result of os.Getwd")
+	}
+	return workspace.FindRoot(dir)
+}
 
 // Inspect discovers the workspace without opening the cache (for introspection commands).
 func Inspect(ctx context.Context, root string, opts ...Option) (types.WorkspaceRepository, error) {
@@ -473,9 +524,12 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// caller of vcs.Resolve(..., m.ws.VCSOptions); without it the keys parsed and
 	// validated but never reached a resolution.
 	ws.VCSOptions = types.VCSOptions{Enabled: cfg.VCS.Enabled, Name: cfg.VCS.Name, BaseRef: cfg.VCS.BaseRef}
-	m := &Magus{ws: ws, cfg: cfg, version: vo.Version}
+	m := &Magus{ws: ws, cfg: cfg, version: vo.Version, environ: vo.Env, getenv: envGetter(vo.Env), stderr: io.Discard, commandLine: vo.CommandLine}
+	if vo.Stderr != nil {
+		m.stderr = vo.Stderr
+	}
 	if isJSONLLog(cfg.Log) {
-		m.records = secret.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(os.Stderr), cfg.Log.SlogLevel()))
+		m.records = secret.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(m.stderr), cfg.Log.SlogLevel()))
 	}
 	var o workspace.Load
 	for _, fn := range opts {
@@ -508,6 +562,7 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 	if o.Preloaded != nil {
 		return *o.Preloaded, nil
 	}
+	getenv := envGetter(o.Env)
 	path := o.ConfigPath
 	if path == "" {
 		path = filepath.Join(root, "magus.yaml")
@@ -518,7 +573,7 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 		// does: MAGUS_BROKER=off must hold for it as for any other. Not validated: the
 		// zero Config under it is not one Validate accepts, and it never was.
 		var zero config.Config
-		if err := configgen.ApplyEnv(&zero, os.Getenv); err != nil {
+		if err := configgen.ApplyEnv(&zero, getenv); err != nil {
 			return config.Config{}, fmt.Errorf("invalid configuration from the environment: %w", err)
 		}
 		return zero, nil
@@ -527,7 +582,7 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 		return config.Config{}, err
 	}
 	// LoadFile validated the yaml; the environment overwrites those fields after it.
-	if err := errors.Join(configgen.ApplyEnv(&cfg, os.Getenv), config.Validate(cfg)); err != nil {
+	if err := errors.Join(configgen.ApplyEnv(&cfg, getenv), config.Validate(cfg)); err != nil {
 		return config.Config{}, fmt.Errorf("invalid configuration from the environment: %w", err)
 	}
 	return cfg, nil
@@ -707,12 +762,12 @@ var insecureRemoteOverride = ward.Override{
 }
 
 // remoteCacheSigningOpts turns the declared trust set (base64 public keys) plus the
-// signing-key env var into cache options. A wired remote backend must declare a non-empty
+// signing key (signingSeedB64, read from signingKeyEnv; empty for none) into cache options. A wired remote backend must declare a non-empty
 // trust set, so a shared cache never comes up unverified. The exception is insecure, the
 // explicit opt-out that accepts and produces unsigned artifacts (no trust set, no signing
 // key) for trusted single-repo CI or backend validation. That opt-out has to say why; see
 // [ward.RequireReason].
-func remoteCacheSigningOpts(trustedB64 []string, insecure bool, insecureReason string) ([]cache.Option, error) {
+func remoteCacheSigningOpts(trustedB64 []string, insecure bool, insecureReason, signingSeedB64 string) ([]cache.Option, error) {
 	if insecure {
 		if err := ward.RequireReason(insecureRemoteOverride, true, insecureReason); err != nil {
 			return nil, fmt.Errorf("magus: %w", err)
@@ -735,8 +790,8 @@ func remoteCacheSigningOpts(trustedB64 []string, insecure bool, insecureReason s
 	}
 	opts := []cache.Option{cache.WithTrustedKeys(pubkeys)}
 
-	if seedB64 := os.Getenv(signingKeyEnv); seedB64 != "" {
-		seed, err := base64.StdEncoding.DecodeString(seedB64)
+	if signingSeedB64 != "" {
+		seed, err := base64.StdEncoding.DecodeString(signingSeedB64)
 		if err != nil {
 			return nil, fmt.Errorf("magus: %s is not valid base64: %w", signingKeyEnv, err)
 		}
@@ -813,7 +868,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// REQUIRES a trust set (cache.remote.trusted_keys in magus.yaml), enforced at load on
 	// every machine so the misconfiguration can't silently go live.
 	if name := m.wsReg.RemoteBackend(); name != "" {
-		trusted, sErr := remoteCacheSigningOpts(m.cfg.Cache.Remote.TrustedKeys, m.cfg.Cache.Remote.Insecure, m.cfg.Cache.Remote.InsecureReason)
+		trusted, sErr := remoteCacheSigningOpts(m.cfg.Cache.Remote.TrustedKeys, m.cfg.Cache.Remote.Insecure, m.cfg.Cache.Remote.InsecureReason, m.env(signingKeyEnv))
 		if sErr != nil {
 			shutdownTel()
 			return nil, sErr
@@ -2152,19 +2207,6 @@ func (m *Magus) suggestProjectPath(path string) string {
 		candidates = append(candidates, p.Path)
 	}
 	return hint.Nearest(path, candidates)
-}
-
-// ExpandCwd resolves t for the project containing cwd; found=false when cwd is not inside any project.
-func (m *Magus) ExpandCwd(t types.Target) (targets []types.Target, found bool, err error) {
-	cwd, cwdErr := os.Getwd()
-	if cwdErr != nil {
-		return nil, false, fmt.Errorf("magus: getwd: %w", cwdErr)
-	}
-	p, ok := m.Where(cwd)
-	if !ok {
-		return nil, false, nil
-	}
-	return []types.Target{{Path: p.Path, Name: t.Name}}, true, nil
 }
 
 // ExpandAffected resolves targets for VCS-affected projects; falls back to all

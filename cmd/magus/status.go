@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -146,7 +147,7 @@ func status(ctx context.Context, args []string) error {
 // awaitBudget is `status --wait`. The gate goes up before anything slow, since the run
 // reading the pipe looks for it once, on its way to its locks.
 func awaitBudget(ctx context.Context, rootOverride string) error {
-	if root, err := magus.FindRoot(rootOverride); err == nil {
+	if root, err := workspace.FindRoot(rootOverride); err == nil {
 		pipe.Gate(root, globalCfg)
 	}
 	start := time.Now()

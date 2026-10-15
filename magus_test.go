@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -741,16 +742,16 @@ func b64Pub(t *testing.T) (pub string, seed string) {
 // TestRemoteCacheRequiresTrustSet is the paranoid root: a wired remote backend
 // with no declared trust set must be a hard error, not a silent unverified cache.
 func TestRemoteCacheRequiresTrustSet(t *testing.T) {
-	_, err := remoteCacheSigningOpts(nil, false, "")
+	_, err := remoteCacheSigningOpts(nil, false, "", "")
 	assert.Error(t, err, "empty trust set was accepted; a remote cache must require trusted_keys")
-	_, err = remoteCacheSigningOpts([]string{}, false, "")
+	_, err = remoteCacheSigningOpts([]string{}, false, "", "")
 	assert.Error(t, err, "empty trust-set slice was accepted")
 }
 
 // TestRemoteCacheInsecureSkipsTrustSet: the explicit opt-out accepts a wired
 // backend with no trust set and no signing key, yielding the insecure option.
 func TestRemoteCacheInsecureSkipsTrustSet(t *testing.T) {
-	opts, err := remoteCacheSigningOpts(nil, true, "single-repo CI cache; nothing outside this repo can write it")
+	opts, err := remoteCacheSigningOpts(nil, true, "single-repo CI cache; nothing outside this repo can write it", "")
 	require.NoError(t, err, "insecure mode rejected empty trust set")
 	assert.Len(t, opts, 1, "insecure: want 1 opt (WithInsecureRemote)")
 }
@@ -760,46 +761,35 @@ func TestRemoteCacheInsecureSkipsTrustSet(t *testing.T) {
 // satisfies it, because an existing config it breaks has to be repairable from the
 // message alone.
 func TestRemoteCacheInsecureNeedsAReason(t *testing.T) {
-	_, err := remoteCacheSigningOpts(nil, true, "")
+	_, err := remoteCacheSigningOpts(nil, true, "", "")
 	require.Error(t, err, "a bare cache.remote.insecure switched off signature verification with nothing recorded")
 	assert.Contains(t, err.Error(), "cache.remote.insecure_reason", "the refusal must name the exact key that satisfies it")
 
-	_, err = remoteCacheSigningOpts(nil, true, "   ")
+	_, err = remoteCacheSigningOpts(nil, true, "   ", "")
 	assert.Error(t, err, "whitespace is not prose")
 }
 
 // TestRemoteCacheTrustSetDecodes: a valid trust set yields verification options;
-// adding a signing-key env var yields a signing option too.
+// adding a signing key yields a signing option too.
 func TestRemoteCacheTrustSetDecodes(t *testing.T) {
 	pub, seed := b64Pub(t)
 
-	// The verify-only half below asserts the ABSENCE of a signing key, so it must
-	// not inherit one. ci.yaml exports MAGUS_CACHE_SIGNING_KEY with the real secret
-	// on a push to main, which turns "want 1 opt" into 2. t.Setenv has no unset
-	// form, so restore by hand.
-	if prev, ok := os.LookupEnv(signingKeyEnv); ok {
-		require.NoError(t, os.Unsetenv(signingKeyEnv))
-		t.Cleanup(func() { _ = os.Setenv(signingKeyEnv, prev) })
-	}
-
-	opts, err := remoteCacheSigningOpts([]string{pub}, false, "")
+	opts, err := remoteCacheSigningOpts([]string{pub}, false, "", "")
 	require.NoError(t, err, "valid trust set rejected")
 	assert.Len(t, opts, 1, "verify-only: want 1 opt (trusted keys only)")
 
-	t.Setenv(signingKeyEnv, seed)
-	opts, err = remoteCacheSigningOpts([]string{pub}, false, "")
+	opts, err = remoteCacheSigningOpts([]string{pub}, false, "", seed)
 	require.NoError(t, err, "valid trust set + signing key rejected")
 	assert.Len(t, opts, 2, "signing: want 2 opts (trusted keys + signing key)")
 }
 
 // TestRemoteCacheRejectsMalformedKeys: bad base64 in either the trust set or the
-// signing-key env var is a clear configuration error, not a silent fallback.
+// signing key is a clear configuration error, not a silent fallback.
 func TestRemoteCacheRejectsMalformedKeys(t *testing.T) {
-	_, err := remoteCacheSigningOpts([]string{"not!base64!"}, false, "")
+	_, err := remoteCacheSigningOpts([]string{"not!base64!"}, false, "", "")
 	assert.Error(t, err, "malformed trusted key was accepted")
 	pub, _ := b64Pub(t)
-	t.Setenv(signingKeyEnv, "not!base64!")
-	_, err = remoteCacheSigningOpts([]string{pub}, false, "")
+	_, err = remoteCacheSigningOpts([]string{pub}, false, "", "not!base64!")
 	assert.Error(t, err, "malformed signing key was accepted")
 }
 
@@ -1371,10 +1361,54 @@ func TestApplyEnvSandboxModeIsAFloor(t *testing.T) {
 func TestLoadConfigValidatesTheEnvironment(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Write("magus.yaml", "concurrency_profile: balanced\n")
-	t.Setenv("MAGUS_CONCURRENCY_PROFILE", "turbo")
 
-	_, err := loadConfig(w.Root())
+	_, err := loadConfig(w.Root(), WithEnv([]string{"MAGUS_CONCURRENCY_PROFILE=turbo"}))
 	require.ErrorContains(t, err, `MAGUS_CONCURRENCY_PROFILE: unknown concurrency profile "turbo"`)
+}
+
+// TestLoadConfigReadsOnlyTheEnvironmentItIsGiven: a library workspace given no
+// environment is configured by its magus.yaml alone, whatever the process environment
+// says, and one given an environment reads that and not the process's.
+func TestLoadConfigReadsOnlyTheEnvironmentItIsGiven(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Write("magus.yaml", "concurrency: 3\n")
+	t.Setenv("MAGUS_CONCURRENCY", "5")
+
+	cfg, err := loadConfig(w.Root())
+	require.NoError(t, err)
+	assert.Equal(t, 3, cfg.Concurrency, "no WithEnv: the process environment is not read")
+
+	cfg, err = loadConfig(w.Root(), WithEnv([]string{"MAGUS_CONCURRENCY=7"}))
+	require.NoError(t, err)
+	assert.Equal(t, 7, cfg.Concurrency, "WithEnv: the given environment overrides magus.yaml")
+}
+
+// TestWorkspaceProcessOptionsDefaultToNothing: without WithStderr notices are
+// discarded and without WithCommandLine no command line is recorded; with them, the
+// workspace keeps what it was given.
+func TestWorkspaceProcessOptionsDefaultToNothing(t *testing.T) {
+	root := writeWorkspace(t, map[string]string{"magusfile.buzz": ""})
+	ws, err := Inspect(t.Context(), root)
+	require.NoError(t, err)
+	bare := ws.(*Magus)
+	assert.Equal(t, io.Discard, bare.noticeWriter())
+	assert.Empty(t, bare.commandLine)
+	assert.Empty(t, bare.env("PATH"), "no WithEnv: no environment variable reads as set")
+
+	var notices bytes.Buffer
+	ws, err = Inspect(t.Context(), root,
+		WithStderr(&notices), WithCommandLine([]string{"magus", "run", "x"}), WithEnv([]string{"A=1", "A=2"}))
+	require.NoError(t, err)
+	given := ws.(*Magus)
+	assert.Same(t, &notices, given.noticeWriter())
+	assert.Equal(t, []string{"magus", "run", "x"}, given.commandLine)
+	assert.Equal(t, "2", given.env("A"), "a key set twice reads its last value, as os.Getenv does")
+}
+
+// TestFindRootRefusesAnEmptyDir: the library has no working directory to fall back to.
+func TestFindRootRefusesAnEmptyDir(t *testing.T) {
+	_, err := FindRoot("")
+	require.ErrorContains(t, err, "needs a directory")
 }
 
 // yaml reaches the same door as env and flags, so a misspelled profile stops the load.

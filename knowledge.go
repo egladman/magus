@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
+	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/deps"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -90,6 +91,13 @@ func buildGlobalKnowledgeGraph(ctx context.Context, ws types.WorkspaceRepository
 	}
 	knowledge.UnionInto(merged, knowledge.Qualified(cur, workspaceName(root)))
 
+	// A registered workspace is opened with what the current one was given: its
+	// environment, its stderr and its command line.
+	var opts []Option
+	getenv := envGetter(nil)
+	if m := magusBehind(ctx, ws); m != nil {
+		opts, getenv = m.processOptions(), m.env
+	}
 	seen := map[string]bool{cleanRoot(root): true}
 	for _, wr := range cfg.Knowledge.Workspaces {
 		abs := cleanRoot(wr)
@@ -97,7 +105,7 @@ func buildGlobalKnowledgeGraph(ctx context.Context, ws types.WorkspaceRepository
 			continue // skip blanks and the current workspace re-listed
 		}
 		seen[abs] = true
-		g, err := buildRegisteredWorkspace(ctx, abs, refresh, log)
+		g, err := buildRegisteredWorkspace(ctx, abs, getenv, opts, refresh, log)
 		if err != nil {
 			log.With(attr.Component("magus")).WarnContext(ctx, "skipping registered workspace in global graph", slog.String("workspace", wr), attr.Error(err))
 			continue
@@ -112,12 +120,15 @@ func buildGlobalKnowledgeGraph(ctx context.Context, ws types.WorkspaceRepository
 
 // buildRegisteredWorkspace opens a registered workspace read-only, loads its own
 // config (its cache dir, immutability, etc.), and builds its graph cache-first.
-func buildRegisteredWorkspace(ctx context.Context, root string, refresh bool, log *slog.Logger) (*knowledge.Graph, error) {
+func buildRegisteredWorkspace(ctx context.Context, root string, getenv func(string) string, opts []Option, refresh bool, log *slog.Logger) (*knowledge.Graph, error) {
 	wcfg, err := config.LoadWithRoot("", root)
 	if err != nil {
 		return nil, err
 	}
-	wsRepo, err := Inspect(ctx, root)
+	if err := configgen.ApplyEnv(&wcfg, getenv); err != nil {
+		return nil, fmt.Errorf("invalid configuration from the environment: %w", err)
+	}
+	wsRepo, err := Inspect(ctx, root, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -721,6 +732,8 @@ func foldEvaluationReads(h *knowledge.InputHash, reads readlog.Reads, known bool
 	for _, p := range reads.Files {
 		h.Path(p)
 	}
+	// The process environment, never the workspace's (WithEnv): a magusfile reads it
+	// through internal/proc/environ, so it is what the evaluation saw.
 	for _, name := range reads.Env {
 		if v, ok := os.LookupEnv(name); ok {
 			h.String("env:" + name + "=" + v)

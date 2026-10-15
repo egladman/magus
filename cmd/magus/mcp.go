@@ -157,7 +157,7 @@ func serveMCPStdio(ctx context.Context, m *magus.Magus, in io.Reader, wire io.Wr
 // that will not resolve leaves the base empty, and every writer already treats an empty
 // base as "drop the record, best-effort".
 func publishServerTrailBase() {
-	root, err := magus.FindRoot("")
+	root, err := workspace.FindRoot("")
 	if err != nil {
 		slog.Warn("no workspace root; background jobs and scheduled maintenance will not be recorded", attr.Error(err))
 		return
@@ -206,7 +206,7 @@ func startBridge(ctx context.Context, cancel context.CancelFunc, tel observabili
 	}
 	m, err := loadMagus(ctx, "", opts...)
 	if err != nil {
-		root, rerr := magus.FindRoot("")
+		root, rerr := workspace.FindRoot("")
 		if !mcpOn || rerr != nil || serverRegistry == nil {
 			slog.Warn("workspace unavailable; no MCP, console or watch for it", attr.Error(err))
 			return
