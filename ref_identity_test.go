@@ -145,7 +145,7 @@ func TestIdentifyRef_NoCachePropagatesError(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "inspect")
 	require.NoError(t, m.load(context.Background()), "load")
 

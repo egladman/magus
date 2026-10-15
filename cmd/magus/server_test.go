@@ -342,7 +342,7 @@ func checkReviewWorkspaceIn(t *testing.T, state string, threads func() (any, err
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
 	root := w.Root()
-	m, err := magus.Open(context.Background(), root, opts...)
+	m, err := magus.Open(context.Background(), root, append(opts, magus.WithSpawnRule(magus.TierCeiling))...)
 	require.NoError(t, err, "fixture workspace must open")
 
 	name := register.Spell(t, "fake-job-review",

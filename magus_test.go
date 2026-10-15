@@ -193,7 +193,7 @@ func TestForEachSpell_NoBudgetUnchanged(t *testing.T) {
 func TestCacheOps_InspectReturnErrNoCache(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
-	m, err := inspect(context.Background(), root)
+	m, err := inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	_, _, err = m.PruneCache(context.Background(), time.Now(), true)
 	assert.ErrorIs(t, err, types.ErrNoCache, "PruneCache on Inspect")
@@ -234,7 +234,7 @@ func TestClose_Idempotent(t *testing.T) {
 func TestWithObserverRidesTheRun(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
-	m, err := inspect(context.Background(), root)
+	m, err := inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
 	var builds int
@@ -262,7 +262,7 @@ func TestWithObserverRidesTheRun(t *testing.T) {
 func TestStepFor_RootProject(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
-	m, err := inspect(context.Background(), root)
+	m, err := inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	p := &types.Project{
 		Path:    ".",
@@ -289,7 +289,7 @@ func TestStepFor_RootProject(t *testing.T) {
 func TestStepFor_NoSpellsHasNoIgnoreDirs(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
-	m, err := inspect(context.Background(), root)
+	m, err := inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	p := &types.Project{Path: ".", Sources: types.MustParseGlobs("**/*.go")}
 	assert.Empty(t, m.baseStep(p).IgnoreDirs, "no resolved spells: Step.IgnoreDirs must be empty")
@@ -302,7 +302,7 @@ func TestStepFor_NoSpellsHasNoIgnoreDirs(t *testing.T) {
 func TestStepFor_UnionsSpellIgnoreDirs(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
-	m, err := inspect(context.Background(), root)
+	m, err := inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	p := &types.Project{
 		Path:    ".",
@@ -319,7 +319,7 @@ func TestStepFor_UnionsSpellIgnoreDirs(t *testing.T) {
 func TestStepFor_NestedProject(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "api/magusfile.buzz")
-	m, err := inspect(context.Background(), root)
+	m, err := inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	p := &types.Project{
 		Path:    "api",
