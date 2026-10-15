@@ -91,7 +91,7 @@ func worktreeRemoveDenial(r removal) ShellVerdict {
 			"A removal passes when the worktree is a linked worktree of this repository other than your own, clean, " +
 			"taken by no live job, every change its unpublished commits made reads the same in your checkout's HEAD, " +
 			"and it is unlocked or locked over a worker your session spawned for a job that finished, which git removes only with -f -f. " +
-			"A checkout a job's fork made and locked is magus's to remove: `" + hint.JobPrune.String() + "` once its job ended, `" + hint.JobExit.String() + " <job>` before. " +
+			"A checkout a job's fork made and locked is magus's to remove: `" + hint.JobWait.String() + " <job>` once its job ended, `" + hint.JobExit.String() + " <job>` before. " +
 			"An unlock is judged the same, but for the lock. --force changes nothing here but that lock.",
 		Rule: denyRule{Name: denyRuleWorktreeRemove},
 	}
@@ -222,8 +222,8 @@ func judgeWorktreeRemove(ctx context.Context, deps Dependencies, at location, ca
 			"a job's worktree is removable once its grade is filed")
 	case forked != nil && len(r.failed) == 1 && forked.State.Terminal():
 		r.lead = "job " + forked.ID + " ended, and magus removes the checkout its fork made, keeping it if it holds work."
-		r.next = hint.NextForDenyRemedy(string(denyRuleWorktreeRemove), hint.JobPrune.Argv(),
-			"prune unlocks and removes the checkout of every ended job once it holds no work")
+		r.next = hint.NextForDenyRemedy(string(denyRuleWorktreeRemove), hint.JobWait.Argv(forked.ID),
+			"wait unlocks and removes the checkout of every ended job once it holds no work")
 	case forked != nil && len(r.failed) == 1:
 		r.lead = "job " + forked.ID + " owns " + r.target + "; ending it removes the checkout its fork made, keeping it if it holds work."
 		r.next = hint.NextForDenyRemedy(string(denyRuleWorktreeRemove), hint.JobExit.Argv(forked.ID),

@@ -147,7 +147,7 @@ func TestEndWorktreesKeepsTheCheckoutTheCallRunsInAndSaysSo(t *testing.T) {
 	changed, err := inside.EndWorktrees(ctx)
 	require.NoError(t, err)
 	require.Len(t, changed, 1)
-	assert.Contains(t, changed[0].Worktree.Kept, "this call runs in it; `magus job prune` from another checkout removes it")
+	assert.Contains(t, changed[0].Worktree.Kept, "this call runs in it; `magus job wait w1` from another checkout removes it")
 	assert.DirExists(t, row.Worktree.Root)
 
 	changed, err = s.EndWorktrees(ctx)

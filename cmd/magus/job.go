@@ -1795,7 +1795,9 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	}
 	status, err := job.Wait(ctx, store, pos[0], result, storedAttempts(root), jobObserver(root, newJobGraph(root, true)), evidence)
 	if err != nil {
-		return usagef("magus job wait: %s", err)
+		// An ended job that filed nothing still owns its checkout, and its waiter is the one
+		// caller left to remove it.
+		return errors.Join(usagef("magus job wait: %s", err), endWorktrees(ctx, os.Stdout, store))
 	}
 	if rows, err := store.List(); err == nil {
 		status.Entries = job.Entries(rows, status.Job)

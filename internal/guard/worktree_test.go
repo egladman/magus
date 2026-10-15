@@ -328,7 +328,7 @@ func TestWorktreeRemoveHoldsAJobsCheckoutToItsRoot(t *testing.T) {
 		v := r.judgeWith(root, r.main, line, row)
 		assertRemovalDenied(t, v, "job w1's fork made and locked")
 		require.Len(t, v.Next, 1, "%q", line)
-		assert.Equal(t, hint.JobPrune.Argv(), v.Next[0].Argv, "an ended job's checkout goes through prune: %q", line)
+		assert.Equal(t, hint.JobWait.Argv("w1"), v.Next[0].Argv, "an ended job's checkout goes through its waiter: %q", line)
 	}
 	declared := row
 	declared.State, declared.CheckoutRoot = types.StateDeclared, ""

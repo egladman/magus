@@ -189,7 +189,7 @@ func (s *Store) EndWorktrees(ctx context.Context) ([]types.Job, error) {
 		}
 		var kept string
 		if here != "" && within(here, wt.Root) {
-			kept = "this call runs in it; `" + hint.JobPrune.String() + "` from another checkout removes it"
+			kept = "this call runs in it; `" + hint.JobWait.With(row.ID) + "` from another checkout removes it"
 		} else {
 			kept = removeWorktree(ctx, *wt)
 		}
