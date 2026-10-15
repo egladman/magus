@@ -9,8 +9,8 @@ edit{{end}}.
 
 `{{cmd "affected"}} <target> --plan` partitions VALIDATION: which targets to run, grouped
 for runner balance. It is neither an edit assignment nor a proof of write isolation.
-So it can veto a fan-out and never license one. One shard means keep the work local.
-Several mean the testing parallelizes, and the editing is still your question.
+So it can veto a fan-out and never license one. One shard means keep the work local.{{if .Full}}
+Several mean the testing parallelizes, and the editing is still your question.{{end}}
 
 Before any edits exist, the shard plan is empty and proves nothing. Finding the
 candidate paths IS the partitioning work, done with the graph{{if .Full}}, not by intuition{{end}}:
@@ -102,7 +102,7 @@ invented at each call site is how one concept ends up with five spellings
 {{- if .Full}}, and how a plan that says "collapse two state types into one" ships
 a third: each site made a locally sensible choice and nobody owned the set{{end}}.
 
-Then make the declaration gradeable, so the names are a contract, not a suggestion:
+Then make the declaration gradeable{{if .Full}}, so the names are a contract, not a suggestion{{end}}:
 
 - `symbol` + `present` for each new exported name.
 - `symbol` + `absent` for the name a second copy would predictably take beside a
@@ -163,8 +163,8 @@ tree, after every unit lands{{if .Full}}, which is what stops seven fanned-out w
 each running the whole pipeline concurrently on one machine{{end}}.
 
 Decide each job's validation PLANE with its target. Some worker environments cannot
-execute magus at all. Examples are an isolated tree with no usable binary, or a guard
-routing raw tools to targets it cannot run. Such a worker cannot validate what it
+execute magus at all{{if .Full}}. Examples are an isolated tree with no usable binary, or a guard
+routing raw tools to targets it cannot run{{end}}. Such a worker cannot validate what it
 writes. Mark that job's check ROOT-DEFERRED when you fork it:
 
 - the worker writes the tests, stops at the static checks its environment does run,
@@ -181,8 +181,8 @@ definitive end without capping depth:
 - **Every level narrows.** A child's scope is a strict subset of its parent's. A
   worker that would hand on its whole job does the work instead.
 - **Every job carries acceptance criteria down.** A child inherits its parent's
-  criteria plus its own. A job nobody can evaluate cannot end; that, not the nesting,
-  makes depth dangerous.
+  criteria plus its own.{{if .Full}} A job nobody can evaluate cannot end; that, not the nesting,
+  makes depth dangerous.{{end}}
 - **A retry is `{{cmd "job fork"}} <same id>`, never a new id.** The next holder reads the previous
   attempt in `{{cmd "describe job"}}`, never a transcript. One marked not retryable names
   what changes first (`{{cmd "job apply"}}` to widen, a config edit, or you). Make it, or
@@ -193,9 +193,9 @@ definitive end without capping depth:
   the other's criteria, and re-forking the failing one satisfies every instruction above
   while alternating forever. The budget is what ends it{{end}}.
 - **Whatever the parent does not hand out, the parent still owns.** A strict subset
-  leaks by construction. Split "no caller of X remains" into per-project jobs, and
+  leaks by construction.{{if .Full}} Split "no caller of X remains" into per-project jobs, and
   the callers in no project belong to nobody. Every job passes and the goal is
-  unmet. Carry a remainder row at each level and close it explicitly.
+  unmet.{{end}} Carry a remainder row at each level and close it explicitly.
 
 START EVERY SPAWN AT THE ECONOMY TIER, and SAY which model you picked. Move a job up
 only for work the table below assigns higher. The fit still runs both ways: an
@@ -220,8 +220,8 @@ is a starting point and not a ceiling.{{end}}
 
 Tiers are the workspace's: a magusfile enum (`magus\job.modelTiers`, shipped as economy,
 standard, principal) maps each to every harness's model alias. `--model` takes a tier or a
-model. The row records tier, rank, source (row, matrix, default) and why, and the guard
-compares a spawn's tier by rank. magus never picks a model live: re-fork to change a tier.
+model.{{if .Full}} The row records tier, rank, source (row, matrix, default) and why, and the guard
+compares a spawn's tier by rank.{{end}} magus never picks a model live: re-fork to change a tier.
 
 | Shipped tier | Assign |
 |---|---|
@@ -234,8 +234,8 @@ is a separate axis: evidence gathering, scouting, and review get read-only tools
 where the host offers them. Never downgrade the root integration pass or final
 release gate.
 
-To prove something, brute-force it at economy. Many economy workers finish about as
-fast as one principal worker, for far fewer tokens:
+To prove something, brute-force it at economy{{if .Full}}. Many economy workers finish about as
+fast as one principal worker, for far fewer tokens{{end}}:
 
 - Fork one read-only job per claim, input, or variant, and run them all at once.
   Give each a script check, so `{{cmd "job wait"}}` can pass it.
@@ -244,13 +244,13 @@ fast as one principal worker, for far fewer tokens:
 - The principal tier only reconciles the claims where workers disagree.
 
 Keep economy jobs short-lived. The brief points at evidence (paths, output refs, the
-row) and carries no transcript. A worker resends its whole context every turn, and some
-providers raise a tier's price past a prompt size. Where the brief names that size, the
+row) and carries no transcript.{{if .Full}} A worker resends its whole context every turn, and some
+providers raise a tier's price past a prompt size.{{end}} Where the brief names that size, the
 worker reports and stops before passing it.
 
 Nesting is allowed when the host supports it, but it creates no new budget and no
 private ownership map. A child reports its proposed descendants to its parent before it
-spawns them. The store carries each with its parent, model, criteria and write paths.
+spawns them.{{if .Full}} The store carries each with its parent, model, criteria and write paths.{{end}}
 
 Descendants inherit the ancestor's deny paths and may subdivide only its write paths. A
 cap the user sets applies to the whole tree, not once per parent.
@@ -417,8 +417,8 @@ magus job exit <job> --stdin <<'EOF'
 EOF
 ```
 
-A typed result makes verification mechanical. Keep unresolved risks mandatory, so a
-mis-scoped worker can say so instead of widening silently.
+{{if .Full}}A typed result makes verification mechanical. {{end}}Keep unresolved risks mandatory{{if .Full}}, so a
+mis-scoped worker can say so instead of widening silently{{end}}.
 
 A worker writes only its own row and the children it forks. Every other store write
 is the orchestrator's; a refused worker reports it as an unresolved risk and stops.
