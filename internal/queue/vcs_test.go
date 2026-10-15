@@ -15,10 +15,10 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/queue/types"
-	"github.com/egladman/magus/internal/queue/types/gen/mocks"
+	"github.com/egladman/magus/internal/queue/types/gen/queuetest"
 	magustypes "github.com/egladman/magus/types"
-	magusmocks "github.com/egladman/magus/types/gen/mocks"
 )
 
 // base is the plan's base commit.
@@ -99,20 +99,20 @@ func (d *draw) n(k int) int {
 
 // doubles are the mocks one step under test talks to.
 type doubles struct {
-	vcs      *magusmocks.MockVCSDriver
-	provider *mocks.MockProvider
-	facts    *mocks.MockBuildFacts
-	gate     *mocks.MockGate
-	src      *mocks.MockVerdictSource
+	vcs      *typestest.MockVCSDriver
+	provider *queuetest.MockProvider
+	facts    *queuetest.MockBuildFacts
+	gate     *queuetest.MockGate
+	src      *queuetest.MockVerdictSource
 }
 
 func newDoubles(t *testing.T) doubles {
 	return doubles{
-		vcs:      magusmocks.NewMockVCSDriver(t),
-		provider: mocks.NewMockProvider(t),
-		facts:    mocks.NewMockBuildFacts(t),
-		gate:     mocks.NewMockGate(t),
-		src:      mocks.NewMockVerdictSource(t),
+		vcs:      typestest.NewMockVCSDriver(t),
+		provider: queuetest.NewMockProvider(t),
+		facts:    queuetest.NewMockBuildFacts(t),
+		gate:     queuetest.NewMockGate(t),
+		src:      queuetest.NewMockVerdictSource(t),
 	}
 }
 

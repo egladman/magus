@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/queue/types"
-	"github.com/egladman/magus/internal/queue/types/gen/mocks"
+	"github.com/egladman/magus/internal/queue/types/gen/queuetest"
 	magustypes "github.com/egladman/magus/types"
 )
 
@@ -27,7 +27,7 @@ import (
 type run struct {
 	t       *testing.T
 	srv     *httptest.Server
-	lister  *mocks.MockArtifactLister
+	lister  *queuetest.MockArtifactLister
 	mu      sync.Mutex
 	zips    map[string][]byte
 	failZip map[string]bool
@@ -43,7 +43,7 @@ const (
 var trusted = types.RunOrigin{Repo: "acme/widgets", HeadRepo: "acme/widgets", HeadBranch: "main", Event: "push", BranchEvent: true, Definition: workflow}
 
 func newRun(t *testing.T) *run {
-	r := &run{t: t, lister: mocks.NewMockArtifactLister(t), zips: map[string][]byte{}, failZip: map[string]bool{}}
+	r := &run{t: t, lister: queuetest.NewMockArtifactLister(t), zips: map[string][]byte{}, failZip: map[string]bool{}}
 	r.srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		r.mu.Lock()
 		defer r.mu.Unlock()
@@ -211,7 +211,7 @@ func TestArtifactFollowerStopsWhenTheListingFails(t *testing.T) {
 
 // An empty Path would unpack artifacts into the working directory.
 func TestArtifactFollowerRefusesAMissingRequiredField(t *testing.T) {
-	lister := mocks.NewMockArtifactLister(t)
+	lister := queuetest.NewMockArtifactLister(t)
 	for name, f := range map[string]*ArtifactFollower{
 		"lister":     {Source: "1", Path: t.TempDir(), Branch: "main", Definition: workflow},
 		"source":     {Lister: lister, Path: t.TempDir(), Branch: "main", Definition: workflow},
@@ -334,7 +334,7 @@ func TestArtifactFollowerKeepsTheListingsHeadersFromAnotherHostAndOffHTTPS(t *te
 		http.Redirect(w, req, strings.Replace(storage.URL, "127.0.0.1", "localhost", 1)+"/blob", http.StatusFound)
 	}))
 	t.Cleanup(api.Close)
-	lister := mocks.NewMockArtifactLister(t)
+	lister := queuetest.NewMockArtifactLister(t)
 	lister.EXPECT().ListArtifacts(mock.Anything, "r").Return(types.ArtifactListing{Run: trusted, Complete: true,
 		Headers: map[string]string{"Authorization": "Bearer tok", "Private-Token": "tok"},
 		Artifacts: []types.Artifact{{Name: VerdictArtifactPrefix + "1", URL: api.URL + "/zip"},

@@ -12,7 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
-	"github.com/egladman/magus/std/gen/mocks"
+	"github.com/egladman/magus/std/gen/stdtest"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -481,9 +481,9 @@ type visits struct {
 
 // recordVisits is a Callback that records each (path, isDir) FsWalk visits and answers
 // stop, which ends the walk when true.
-func recordVisits(t *testing.T, stop bool) (*mocks.MockCallback, *visits) {
+func recordVisits(t *testing.T, stop bool) (*stdtest.MockCallback, *visits) {
 	v := &visits{}
-	cb := mocks.NewMockCallback(t)
+	cb := stdtest.NewMockCallback(t)
 	cb.EXPECT().Call(mock.Anything, mock.Anything, mock.Anything).RunAndReturn(
 		func(_ context.Context, args ...any) ([]any, error) {
 			path, _ := args[0].(string)
@@ -571,7 +571,7 @@ func TestFsWalkStopsEarly(t *testing.T) {
 
 func TestFsWalkPropagatesACallbackFailure(t *testing.T) {
 	boom := errors.New("callback failed")
-	cb := mocks.NewMockCallback(t)
+	cb := stdtest.NewMockCallback(t)
 	cb.EXPECT().Call(mock.Anything, mock.Anything, mock.Anything).Return(nil, boom).Once()
 	err := FsWalk(context.Background(), t.TempDir(), cb)
 	assert.ErrorIs(t, err, boom)
@@ -579,6 +579,6 @@ func TestFsWalkPropagatesACallbackFailure(t *testing.T) {
 
 func TestFsWalkOnAMissingRoot(t *testing.T) {
 	// No expectation: the callback must not be called.
-	err := FsWalk(context.Background(), filepath.Join(t.TempDir(), "absent"), mocks.NewMockCallback(t))
+	err := FsWalk(context.Background(), filepath.Join(t.TempDir(), "absent"), stdtest.NewMockCallback(t))
 	assert.Error(t, err, "walking a root that does not exist raises rather than visiting nothing")
 }

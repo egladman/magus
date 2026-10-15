@@ -8,10 +8,10 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -37,7 +37,7 @@ func benchWorkspace(t *testing.T) Dependencies {
 		TargetPolicies: map[string]types.Target{"grade": {HumanOnly: true, HumanOnlyReason: "spends model tokens per case"}},
 	}
 	projects := []*types.Project{root, evals}
-	ws := mocks.NewMockWorkspaceRepository(t)
+	ws := typestest.NewMockWorkspaceRepository(t)
 	ws.EXPECT().All().Return(projects).Maybe()
 	ws.EXPECT().Get(mock.Anything).RunAndReturn(func(path string) *types.Project {
 		for _, p := range projects {

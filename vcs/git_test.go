@@ -20,10 +20,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/stamp"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -2670,7 +2670,7 @@ func TestGitRefReadsAnEditedPackedRefs(t *testing.T) {
 // Asking whether a backend installs a merge driver reads nothing and writes nothing.
 func TestInstallsMergeDriverAsksWithoutEnsuring(t *testing.T) {
 	// Only the read is expected, so any EnsureMergeDriver call, which may write, fails the test.
-	probe := mocks.NewMockVCSDriver(t)
+	probe := typestest.NewMockVCSDriver(t)
 	probe.EXPECT().MergeDriverCommand(mock.Anything, "").Return("", context.Canceled).Once()
 	assert.True(t, installsMergeDriver(probe))
 	assert.True(t, installsMergeDriver(gitVCS{}), "git registers a merge driver")

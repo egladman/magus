@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/internal/service"
-	"github.com/egladman/magus/internal/service/gen/mocks"
+	"github.com/egladman/magus/internal/service/gen/servicetest"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
@@ -92,7 +92,7 @@ func TestRunCommandScopesAChildToItsProjectsSpells(t *testing.T) {
 // service reached via magus.needs.
 func TestRunCommandSupervisesServiceDependency(t *testing.T) {
 	// The mock starts the service without forking a process: one start is the supervision.
-	rr := mocks.NewMockRunner(t)
+	rr := servicetest.NewMockRunner(t)
 	rr.EXPECT().Start(mock.Anything, mock.Anything).Return(struct{}{}, nil).Once()
 	rr.EXPECT().Stop(mock.Anything, mock.Anything).Maybe()
 	sess := service.NewSession(service.New(rr, 0), nil, nil)
@@ -107,7 +107,7 @@ func TestRunCommandSupervisesServiceDependency(t *testing.T) {
 // handed to the supervisor.
 func TestRunCommandForegroundsDirectService(t *testing.T) {
 	// No expectations: a directly-run service must foreground, so any Start fails the test.
-	rr := mocks.NewMockRunner(t)
+	rr := servicetest.NewMockRunner(t)
 	sess := service.NewSession(service.New(rr, 0), nil, nil)
 	// Session present but supervision NOT active: this is a directly-run service.
 	ctx := service.WithSession(context.Background(), sess)

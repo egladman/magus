@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
-	"github.com/egladman/magus/std/gen/mocks"
+	"github.com/egladman/magus/std/gen/stdtest"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -594,8 +594,8 @@ func TestOsExecDefaultsToNotQuiet(t *testing.T) {
 
 // failThenAnswer is a Callback that fails its first failures calls and then answers once
 // with ret. A call past those fails the test.
-func failThenAnswer(t *testing.T, failures int, ret ...any) *mocks.MockCallback {
-	cb := mocks.NewMockCallback(t)
+func failThenAnswer(t *testing.T, failures int, ret ...any) *stdtest.MockCallback {
+	cb := stdtest.NewMockCallback(t)
 	if failures > 0 {
 		cb.EXPECT().Call(mock.Anything).Return(nil, errors.New("attempt failed")).Times(failures)
 	}
@@ -630,7 +630,7 @@ func TestOsRetryWithNoReturnValue(t *testing.T) {
 
 func TestOsRetryExhaustsAndReportsTheLastError(t *testing.T) {
 	boom := errors.New("still broken")
-	cb := mocks.NewMockCallback(t)
+	cb := stdtest.NewMockCallback(t)
 	cb.EXPECT().Call(mock.Anything).Return(nil, boom).Times(3)
 
 	_, err := OsRetry(context.Background(), 3, cb, covFastRetry)
@@ -680,7 +680,7 @@ func TestOsRetryRefusesAMisconfiguredBackoff(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// A mock with no expectations fails the test if fn is called.
-			_, err := OsRetry(context.Background(), 2, mocks.NewMockCallback(t), tc.opts)
+			_, err := OsRetry(context.Background(), 2, stdtest.NewMockCallback(t), tc.opts)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), `os\retry: `+tc.key)
 		})
@@ -692,7 +692,7 @@ func TestOsRetryRefusesAMisconfiguredBackoff(t *testing.T) {
 // exhaustion count.
 func TestOsRetryStopsOnANonRetryableError(t *testing.T) {
 	boom := types.NonRetryable(errors.New("hook is not a command"), types.RetryAfterConfig, "edit the hook")
-	cb := mocks.NewMockCallback(t)
+	cb := stdtest.NewMockCallback(t)
 	cb.EXPECT().Call(mock.Anything).Return(nil, boom).Once()
 
 	_, err := OsRetry(context.Background(), 5, cb, covFastRetry)
@@ -707,7 +707,7 @@ func TestOsRetryHonorsCancellationDuringBackoff(t *testing.T) {
 	cancel()
 
 	// Once: the cancellation must land in the first backoff.
-	cb := mocks.NewMockCallback(t)
+	cb := stdtest.NewMockCallback(t)
 	cb.EXPECT().Call(mock.Anything).Return(nil, errors.New("attempt failed")).Once()
 	_, err := OsRetry(ctx, 3, cb, map[string]any{"backoff_ms": 60000.0})
 	assert.ErrorIs(t, err, context.Canceled)

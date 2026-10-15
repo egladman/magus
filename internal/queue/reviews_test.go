@@ -11,14 +11,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/queue/types"
-	"github.com/egladman/magus/internal/queue/types/gen/mocks"
+	"github.com/egladman/magus/internal/queue/types/gen/queuetest"
 	magustypes "github.com/egladman/magus/types"
 )
 
 // reviewing is a provider that reads reviews and dismisses them: each read answers the
 // next of reads, the last one repeating, and each dismissal is kept as "<id>: <message>".
 type reviewing struct {
-	*mocks.MockProvider
+	*queuetest.MockProvider
 	reads     []types.Reviews
 	nreads    int
 	dismissed []string

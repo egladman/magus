@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -219,7 +219,7 @@ func TestChangedSinceReadsRegionsForTheChangedPathsOnly(t *testing.T) {
 		{File: types.FileChange{Path: "a.go"}, Side: types.RegionNew, Lines: [2]int{4, 9}, Declaration: "func X() {", Driver: "golang"},
 		{File: types.FileChange{Path: "b.md"}, Side: types.RegionOld, Lines: [2]int{2, 2}},
 	}
-	driver := mocks.NewMockVCSDriver(t)
+	driver := typestest.NewMockVCSDriver(t)
 	driver.EXPECT().ChangedFiles(mock.Anything, "/repo", "abc1234").Return([]string{"a.go", "b.md"}, nil)
 	driver.EXPECT().Regions(mock.Anything, "/repo", "abc1234", []types.FileChange{{Path: "a.go"}, {Path: "b.md"}}).Return(regions, nil)
 
@@ -236,7 +236,7 @@ func TestChangedSinceReadsRegionsForTheChangedPathsOnly(t *testing.T) {
 func TestChangedSinceLeavesRegionsUnknownWhenTheVCSDeclines(t *testing.T) {
 	t.Parallel()
 
-	driver := mocks.NewMockVCSDriver(t)
+	driver := typestest.NewMockVCSDriver(t)
 	driver.EXPECT().ChangedFiles(mock.Anything, "/repo", "abc1234").Return([]string{"a.go"}, nil)
 	driver.EXPECT().Regions(mock.Anything, "/repo", "abc1234", []types.FileChange{{Path: "a.go"}}).
 		Return(nil, &types.VCSUnsupportedError{VCS: "git", Capability: types.CapRegionReporter})
@@ -253,7 +253,7 @@ func TestChangedSinceSaysWhyRegionsAreUnknown(t *testing.T) {
 	t.Parallel()
 
 	t.Run("no checkpoint", func(t *testing.T) {
-		seen := changedSince(t.Context(), mocks.NewMockVCSDriver(t), "", "/repo", "")
+		seen := changedSince(t.Context(), typestest.NewMockVCSDriver(t), "", "/repo", "")
 		assert.Equal(t, Observed{RegionsReason: "the job was declared without a checkpoint, so there is no revision to diff against"}, seen)
 	})
 	t.Run("no vcs", func(t *testing.T) {
@@ -261,13 +261,13 @@ func TestChangedSinceSaysWhyRegionsAreUnknown(t *testing.T) {
 		assert.Equal(t, Observed{ChangedFrom: "abc1234", RegionsReason: "version control is disabled here"}, seen)
 	})
 	t.Run("diff unreadable", func(t *testing.T) {
-		driver := mocks.NewMockVCSDriver(t)
+		driver := typestest.NewMockVCSDriver(t)
 		driver.EXPECT().ChangedFiles(mock.Anything, "/repo", "abc1234").Return(nil, errors.New("bad revision"))
 		seen := changedSince(t.Context(), driver, "", "/repo", "abc1234")
 		assert.Equal(t, Observed{ChangedFrom: "abc1234", RegionsReason: "the diff since abc1234 could not be read: bad revision"}, seen)
 	})
 	t.Run("regions unreadable", func(t *testing.T) {
-		driver := mocks.NewMockVCSDriver(t)
+		driver := typestest.NewMockVCSDriver(t)
 		driver.EXPECT().ChangedFiles(mock.Anything, "/repo", "abc1234").Return([]string{"a.go"}, nil)
 		driver.EXPECT().Regions(mock.Anything, "/repo", "abc1234", []types.FileChange{{Path: "a.go"}}).Return(nil, errors.New("exit 128"))
 		seen := changedSince(t.Context(), driver, "", "/repo", "abc1234")
@@ -283,7 +283,7 @@ func TestChangedSinceSaysWhyRegionsAreUnknown(t *testing.T) {
 func TestChangedSinceDoesNotAskForRegionsWhenNothingChanged(t *testing.T) {
 	t.Parallel()
 
-	driver := mocks.NewMockVCSDriver(t)
+	driver := typestest.NewMockVCSDriver(t)
 	driver.EXPECT().ChangedFiles(mock.Anything, "/repo", "abc1234").Return(nil, nil)
 
 	seen := changedSince(t.Context(), driver, "", "/repo", "abc1234")
@@ -347,7 +347,7 @@ func TestDiffBaseFallsBackToTheReportedBase(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			driver := mocks.NewMockVCSDriver(t)
+			driver := typestest.NewMockVCSDriver(t)
 			driver.EXPECT().FindCommit(mock.Anything, "/repo", "").Return(types.Commit{ID: "head1"}, tc.head)
 			if tc.head == nil {
 				driver.EXPECT().MergeBase(mock.Anything, "/repo", "head1", "abc1234").Return("", false, tc.mergeBase)
@@ -423,13 +423,13 @@ func TestVerifyGatesReportsTheSymbolDeltaAndGradesNothingOnIt(t *testing.T) {
 // other.
 type overlapFixture struct {
 	root, other string
-	driver      *mocks.MockVCSDriver
+	driver      *typestest.MockVCSDriver
 	rows        []types.Job
 }
 
 func newOverlapFixture(t *testing.T) overlapFixture {
 	t.Helper()
-	f := overlapFixture{root: t.TempDir(), other: t.TempDir(), driver: mocks.NewMockVCSDriver(t)}
+	f := overlapFixture{root: t.TempDir(), other: t.TempDir(), driver: typestest.NewMockVCSDriver(t)}
 	f.rows = []types.Job{
 		{ID: "a", Checkpoint: "reva", WritePaths: []string{"api"}, State: types.StateRunning, CheckoutRoot: f.root},
 		{ID: "b", Checkpoint: "revb+digest", WritePaths: []string{"api/x.go"}, State: types.StateRunning, CheckoutRoot: f.other},

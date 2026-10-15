@@ -9,12 +9,12 @@ import (
 
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -621,7 +621,7 @@ func TestSpawnRuleHasNoDefault(t *testing.T) {
 // a nil one, or one magus.yaml's vcs.name contradicts, fails the open.
 func TestWithVCSDriverIsTheWorkspacesVCS(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
-	driver := mocks.NewMockVCSDriver(t)
+	driver := typestest.NewMockVCSDriver(t)
 	driver.EXPECT().Name().Return("fossil").Maybe()
 
 	ws, err := Inspect(t.Context(), root, WithVCSDriver(driver), WithSpawnRule(TierCeiling))

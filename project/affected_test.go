@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/graph/dependency"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/gen/mocks"
 )
 
 // newAffectedWorkspace lays down a workspace with three projects in
@@ -334,10 +334,10 @@ func TestVCSRootPrefix(t *testing.T) {
 
 // buildOnceObserver expects exactly one build; a second, from a request that should not
 // reach it, fails the test.
-func buildOnceObserver(t *testing.T) *mocks.MockObserver {
+func buildOnceObserver(t *testing.T) *typestest.MockObserver {
 	t.Helper()
 	isBuild := func(e types.GraphEvent) bool { return e.Op == types.GraphOpBuild }
-	obs := mocks.NewMockObserver(t)
+	obs := typestest.NewMockObserver(t)
 	obs.EXPECT().Observe(mock.MatchedBy(isBuild)).Return().Once()
 	obs.EXPECT().Observe(mock.MatchedBy(func(e types.GraphEvent) bool { return !isBuild(e) })).Return().Maybe()
 	return obs

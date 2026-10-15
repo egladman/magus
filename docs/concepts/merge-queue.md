@@ -1208,7 +1208,8 @@ interface, and no Go API outside the module is promised. Its contract lives in
 standard library and magus's `types`: the documents (`Changes`, `Plan`, `Verdict`), the
 codes, `Provider`, `ArtifactLister`, `Gate`, `BuildFacts`, `VerdictSource`, and the
 version control each step gets. Its generated testify mocks are in
-`internal/queue/types/gen/mocks`; magus's `types/gen/mocks.MockVCSDriver` stands in for
+`internal/queue/types/gen/queuetest`; magus's `typestest.MockVCSDriver`, from
+`internal/gen/typestest`, stands in for
 the version control. The root package, `queue`, holds the three steps (`Planner`,
 `Validator`, `Applier`, each built with its required dependencies by its constructor and
 run with `Run`), the pure decisions they share (stack detection, partitioning, approval

@@ -189,9 +189,9 @@ exported `register.go` functions call `internal/spell` on the caller's behalf{{e
 Test at the narrowest seam the code allows. Move to a real workspace only for what a
 fake cannot tell you.
 
-- Unit tests take the narrowest role (`types.WorkspaceReader` and so on). Fake it with a
-  mock from `types/gen/mocks`, or embed the interface in a struct and override the one
-  method the test calls.
+- Unit tests take the narrowest role (`types.WorkspaceReader` and so on). Fake it by
+  embedding the interface in a struct and overriding the one method the test calls. A
+  test that asserts on the call generates its own mock: magus's `types` mocks are internal.
 - Integration tests use `testkit.NewWorkspace(t)` (from `libs/testkit`) with
   `magus.Inspect`. Inspect opens no cache.
 - Call `testkit.Main(m)` from `TestMain`, or `testkit.Isolate(t)` in a serial test. The

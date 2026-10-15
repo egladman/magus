@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/gen/mocks"
 )
 
 func TestParseReadCalls(t *testing.T) {
@@ -270,7 +270,7 @@ func TestReadNavigationStaysSilent(t *testing.T) {
 func TestReadNavigationSkipsGeneratedOutput(t *testing.T) {
 	t.Parallel()
 	root := readFixture(t)
-	ws := mocks.NewMockWorkspaceRepository(t)
+	ws := typestest.NewMockWorkspaceRepository(t)
 	ws.EXPECT().ClassifyFiles(mock.Anything, []string{"internal/store/store.go"}).
 		Return([]types.FileEntry{{Path: "internal/store/store.go", Role: "output"}}, nil)
 	deps := readDeps(root)

@@ -23,7 +23,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/observability"
-	"github.com/egladman/magus/internal/observability/gen/mocks"
+	"github.com/egladman/magus/internal/observability/gen/observabilitytest"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
@@ -311,7 +311,7 @@ func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 	// TimeCall hands the provider the ctx a target body runs under, so the policy that ctx
 	// carries is captured from each RecordBuzzExec.
 	var policies []*sandbox.Policy
-	rec := mocks.NewMockProvider(t)
+	rec := observabilitytest.NewMockProvider(t)
 	rec.EXPECT().Enabled().Return(true).Maybe()
 	rec.EXPECT().RecordBuzzJITRun(mock.Anything).Maybe()
 	rec.EXPECT().RecordBuzzExec(mock.Anything, mock.Anything).

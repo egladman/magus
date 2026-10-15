@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
@@ -32,7 +33,6 @@ import (
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -238,7 +238,7 @@ func TestWithObserverRidesTheRun(t *testing.T) {
 	require.NoError(t, err)
 
 	var builds int
-	obs := mocks.NewMockObserver(t)
+	obs := typestest.NewMockObserver(t)
 	obs.EXPECT().Observe(mock.Anything).Run(func(e types.GraphEvent) {
 		if e.Op == types.GraphOpBuild {
 			builds++
@@ -1442,7 +1442,7 @@ func TestTargetLabel(t *testing.T) {
 func TestReviewOriginReadsRefWithoutMetadata(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	d := mocks.NewMockVCSDriver(t)
+	d := typestest.NewMockVCSDriver(t)
 	d.EXPECT().Ref(mock.Anything, root).Return("feat/x", nil).Once()
 	d.EXPECT().RemoteURL(mock.Anything, root, "").Return("https://example.com/o/r.git", nil).Once()
 	m := &Magus{ws: &types.Workspace{Root: root}}
@@ -1456,7 +1456,7 @@ func TestReviewOriginReadsRefWithoutMetadata(t *testing.T) {
 func TestReviewOriginRefErrorLeavesBranchEmpty(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	d := mocks.NewMockVCSDriver(t)
+	d := typestest.NewMockVCSDriver(t)
 	d.EXPECT().Ref(mock.Anything, root).Return("", errors.New("unborn branch")).Once()
 	d.EXPECT().RemoteURL(mock.Anything, root, "").Return("", errors.New("no remote")).Once()
 	m := &Magus{ws: &types.Workspace{Root: root}}
@@ -1468,7 +1468,7 @@ func TestReviewOriginRefErrorLeavesBranchEmpty(t *testing.T) {
 func TestLastPassedBaseReadsRefWithoutMetadata(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	d := mocks.NewMockVCSDriver(t)
+	d := typestest.NewMockVCSDriver(t)
 	d.EXPECT().Ref(mock.Anything, root).Return("feat/x", nil).Once()
 	d.EXPECT().ParentRef().Return("HEAD~1").Once()
 	m := &Magus{ws: &types.Workspace{Root: root}}
@@ -1487,7 +1487,7 @@ func TestLastPassedBaseRefErrorKeepsItsText(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	cause := errors.New("unborn branch")
-	d := mocks.NewMockVCSDriver(t)
+	d := typestest.NewMockVCSDriver(t)
 	d.EXPECT().Ref(mock.Anything, root).Return("", cause).Once()
 	m := &Magus{ws: &types.Workspace{Root: root}}
 	m.cfg.CI.RecordRuns = true

@@ -67,6 +67,5 @@ export fun workspaceLoadFigure() > figure\Figure !> any {
             why: "the closed string sets every package checks values against; no part of the project model")
         .except([magus\dir("internal/cache/reflink"), magus\dir("internal/cache/remotetest")],
             why: "copying files in and out of the store, and a fake remote cache for tests; the key is computed in internal/cache")
-        .except([magus\dir("project/impact/gen/mocks"), magus\dir("types/gen/mocks")],
-            why: "generated test mocks");
+        .except([magus\dir("project/impact/gen/impacttest")], why: "generated test mocks");
 }

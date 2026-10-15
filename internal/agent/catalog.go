@@ -400,7 +400,9 @@ import (
 //
 // 133: magus-sdk describes the SDK as it stands: a deterministic substrate around an agent
 // loop, never a runtime or a model router.
-const SkillVersion = 133
+//
+// 134: magus-sdk fakes a types role by embedding it; the types mocks are internal now.
+const SkillVersion = 134
 
 const skillLicense = "GPL-3.0-or-later"
 

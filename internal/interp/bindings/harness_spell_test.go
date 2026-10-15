@@ -7,11 +7,11 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -101,7 +101,7 @@ func tiersMapping(t *testing.T, hosts map[types.HarnessKey][]string) *types.Mode
 
 func tieredContext(t *testing.T, set *types.ModelTierSet) context.Context {
 	t.Helper()
-	ws := mocks.NewMockWorkspaceRepository(t)
+	ws := typestest.NewMockWorkspaceRepository(t)
 	ws.EXPECT().All().Return(nil).Maybe()
 	return types.WithWorkspace(context.Background(), tieredWorkspace{WorkspaceRepository: ws, set: set})
 }
@@ -183,7 +183,7 @@ func TestHarnessPromptsAskBeforeAHumanOnlyRun(t *testing.T) {
 	for _, id := range []string{"codex", "opencode"} {
 		loadShippedHarness(t, id)
 	}
-	ws := mocks.NewMockWorkspaceRepository(t)
+	ws := typestest.NewMockWorkspaceRepository(t)
 	ws.EXPECT().All().Return([]*types.Project{{Path: ".", TargetPolicies: map[string]types.Target{
 		"agent-bench-run": {HumanOnly: true, HumanOnlyReason: "launches paid sessions"},
 		"lint":            {Slots: 2},

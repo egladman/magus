@@ -4,9 +4,9 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -60,7 +60,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 `)
 	m, err := magus.Open(t.Context(), ws.Root(), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
-	resolver := mocks.NewMockConflictResolver(t)
+	resolver := typestest.NewMockConflictResolver(t)
 	resolver.EXPECT().IgnoredPaths(mock.Anything, mock.Anything, mock.Anything).Return(map[string]bool{}, nil)
 
 	plan, err := PlanConflicts(t.Context(), m, resolver, []types.Conflict{

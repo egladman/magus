@@ -288,23 +288,10 @@ Test at the narrowest seam your code allows, and move to a real workspace only
 for what a fake cannot tell you.
 
 **Unit tests: fake the role.** A function that takes `types.WorkspaceReader`
-needs a test double with six methods, not a workspace. `types/gen/mocks`
-publishes a mockery mock for each role interface, which suits a test that
-asserts on the call itself (which method, with what arguments, how often).
+needs a test double with six methods, not a workspace. Embed the interface and
+override the method your code calls. Any other method panics on the nil embedded
+value, which tells you the code under test reached for more than you thought.
 Here `countProjects` is your function, taking a `types.WorkspaceReader`:
-
-```go
-func TestCountProjects(t *testing.T) {
-    r := mocks.NewMockWorkspaceReader(t)
-    r.EXPECT().All().Return([]*types.Project{{Path: "api"}, {Path: "web"}})
-
-    assert.Equal(t, 2, countProjects(r))
-}
-```
-
-When a test only needs one method to return something, embed the interface and
-override that method. Any other method panics on the nil embedded value, which
-tells you the code under test reached for more than you thought:
 
 ```go
 type twoProjects struct{ types.WorkspaceReader }
@@ -312,7 +299,15 @@ type twoProjects struct{ types.WorkspaceReader }
 func (twoProjects) All() []*types.Project {
     return []*types.Project{{Path: "api"}, {Path: "web"}}
 }
+
+func TestCountProjects(t *testing.T) {
+    assert.Equal(t, 2, countProjects(twoProjects{}))
+}
 ```
+
+A test that asserts on the call itself (which method, with what arguments, how
+often) wants a generated mock: run mockery over the role interface in your own
+module. The mocks magus generates for `types` are internal to it.
 
 **Integration tests: a real workspace.** `testkit.NewWorkspace(t)` returns a
 temporary directory you fill with `Write`, `WriteTree` and `Magusfile`, and

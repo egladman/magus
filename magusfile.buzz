@@ -858,7 +858,8 @@ export fun spells_generate(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Regenerates the testify mocks (mockery, driven by .mockery.yaml): into the interface's
-// gen/mocks when other packages import the mock, beside it in mocks_test.go otherwise.
+// gen/<pkg>test when other packages import the mock (types' into internal/gen/typestest),
+// beside it in mocks_test.go otherwise.
 export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
     // mockery type-checks packages that import the bindings and config gen packages.
     ctx.needs(types_generate, spells_generate, job_generate, langservice_generate,
@@ -868,7 +869,7 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
         "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json",
         "internal/interp/bindings/gen/*.go", "internal/config/gen/*.go");
-    ctx.writesFiles("**/gen/mocks/*.go", "**/mocks_test.go");
+    ctx.writesFiles("**/gen/*test/*.go", "**/mocks_test.go");
     proc\exec("go", ["tool", "mockery"]);
     // mockery emits no interface assertions, so a stale mock would still compile.
     mockassert\write(mockassert\files(fs\readFile(".mockery.yaml")));

@@ -3,8 +3,8 @@ title: magus-sdk
 generated_from: internal/agent/skills/magus-sdk/SKILL.md
 description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them."
 tags: [agents, skills, magus-sdk]
-skill_full_bytes: 13951
-skill_short_bytes: 10947
+skill_full_bytes: 14013
+skill_short_bytes: 11009
 ---
 
 # magus-sdk
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `133` |
+| `agent-skill-version` | `134` |
 | `knowledge-schema-version` | `21` |
-| `skill-content` | `9e162692581b` |
+| `skill-content` | `556fa547ef21` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -216,9 +216,9 @@ Built-in spells (`go`, `ts`, `rust`, ...) are reachable this way.
 Test at the narrowest seam the code allows. Move to a real workspace only for what a
 fake cannot tell you.
 
-- Unit tests take the narrowest role (`types.WorkspaceReader` and so on). Fake it with a
-  mock from `types/gen/mocks`, or embed the interface in a struct and override the one
-  method the test calls.
+- Unit tests take the narrowest role (`types.WorkspaceReader` and so on). Fake it by
+  embedding the interface in a struct and overriding the one method the test calls. A
+  test that asserts on the call generates its own mock: magus's `types` mocks are internal.
 - Integration tests use `testkit.NewWorkspace(t)` (from `libs/testkit`) with
   `magus.Inspect`. Inspect opens no cache.
 - Call `testkit.Main(m)` from `TestMain`, or `testkit.Isolate(t)` in a serial test. The
@@ -463,9 +463,9 @@ exported `register.go` functions call `internal/spell` on the caller's behalf.
 Test at the narrowest seam the code allows. Move to a real workspace only for what a
 fake cannot tell you.
 
-- Unit tests take the narrowest role (`types.WorkspaceReader` and so on). Fake it with a
-  mock from `types/gen/mocks`, or embed the interface in a struct and override the one
-  method the test calls.
+- Unit tests take the narrowest role (`types.WorkspaceReader` and so on). Fake it by
+  embedding the interface in a struct and overriding the one method the test calls. A
+  test that asserts on the call generates its own mock: magus's `types` mocks are internal.
 - Integration tests use `testkit.NewWorkspace(t)` (from `libs/testkit`) with
   `magus.Inspect`. Inspect opens no cache.
 - Call `testkit.Main(m)` from `TestMain`, or `testkit.Isolate(t)` in a serial test. The

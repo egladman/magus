@@ -19,7 +19,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/mcpclient"
 	"github.com/egladman/magus/internal/observability"
-	"github.com/egladman/magus/internal/observability/gen/mocks"
+	"github.com/egladman/magus/internal/observability/gen/observabilitytest"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
@@ -63,10 +63,10 @@ func fixtureMagus(t *testing.T) *magus.Magus {
 // mcpCallTelemetry expects exactly one RecordMCPCall and captures it: the request size
 // and the wall-clock time vary, so the call is asserted on after wrap returns. wrap
 // touches no other Provider method, and the mock fails the test if it does.
-func mcpCallTelemetry(t *testing.T) (*mocks.MockProvider, *[]observability.MCPCall) {
+func mcpCallTelemetry(t *testing.T) (*observabilitytest.MockProvider, *[]observability.MCPCall) {
 	t.Helper()
 	var calls []observability.MCPCall
-	tel := mocks.NewMockProvider(t)
+	tel := observabilitytest.NewMockProvider(t)
 	tel.EXPECT().RecordMCPCall(mock.Anything, mock.Anything).
 		Run(func(_ context.Context, c observability.MCPCall) { calls = append(calls, c) }).
 		Once()

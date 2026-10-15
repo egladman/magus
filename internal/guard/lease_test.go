@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -21,7 +22,6 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -459,7 +459,7 @@ func figuresLease() types.Job {
 // target the cases run declares an output among its write paths.
 func figuresWorkspace(t *testing.T) Dependencies {
 	t.Helper()
-	ws := mocks.NewMockWorkspaceRepository(t)
+	ws := typestest.NewMockWorkspaceRepository(t)
 	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return([]types.FileEntry{{
 		Path: "docs/gen/figures/flow.svg", Project: "docs", Role: "output",
 		Claims: []types.FileClaim{{Project: "docs", Target: "figures-generate", Role: "output", Glob: "gen/figures/*.svg"}},
@@ -484,7 +484,7 @@ func testCheckLease() types.Job {
 // and needs proofread-build in libs/conventions; go-build in the root declares ./magus.
 func composingWorkspace(t *testing.T) Dependencies {
 	t.Helper()
-	ws := mocks.NewMockWorkspaceRepository(t)
+	ws := typestest.NewMockWorkspaceRepository(t)
 	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{Projects: []types.TargetGraphProject{
 		{Path: ".", Nodes: []types.TargetGraphNode{
 			{Name: "test", Dependencies: []string{"format"},

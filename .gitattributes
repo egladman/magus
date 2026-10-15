@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-228-gf4cc5c397 (commit f4cc5c39737ecd53704ffeb9361283fdccbb2de0, 2026-10-13T22:34:34-04:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-618-g1649b27e2-dirty (commit 1649b27e21599ae0f359b96ea94af66d21f60289, 2026-10-15T01:16:43-04:00)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -8,7 +8,7 @@
 *.buzz diff=buzz
 *.yaml diff=yaml
 *.yml diff=yaml
-**/gen/mocks/*.go merge=magus linguist-generated
+**/gen/*test/*.go merge=magus linguist-generated
 **/mocks_test.go merge=magus linguist-generated
 .agents/skills/magus-architecture-review*/** merge=magus linguist-generated
 .agents/skills/magus-buzz-lang*/** merge=magus linguist-generated

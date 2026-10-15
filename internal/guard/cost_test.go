@@ -17,7 +17,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
-	"github.com/egladman/magus/internal/observability/gen/mocks"
+	"github.com/egladman/magus/internal/observability/gen/observabilitytest"
 	"github.com/egladman/magus/types"
 )
 
@@ -322,7 +322,7 @@ func TestObserveCallRecordsAJudgedCallOnce(t *testing.T) {
 	hostGate(cache, who.Host).MarkFired(hostAgentsKind)
 
 	var calls []observability.AgentCall
-	rec := mocks.NewMockProvider(t)
+	rec := observabilitytest.NewMockProvider(t)
 	rec.EXPECT().RecordAgentCall(mock.Anything, mock.Anything).Run(func(_ context.Context, c observability.AgentCall) {
 		calls = append(calls, c)
 	}).Return()

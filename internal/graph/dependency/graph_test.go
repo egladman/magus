@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/gen/mocks"
 )
 
 // build constructs a Graph from a simple spec: each entry is
@@ -87,7 +87,7 @@ func TestBuildDupEdgeOK(t *testing.T) {
 // ErrCycle when cycle detection trips.
 func TestObserverSeesFailedBuildOnCycle(t *testing.T) {
 	t.Parallel()
-	obs := mocks.NewMockObserver(t)
+	obs := typestest.NewMockObserver(t)
 	obs.EXPECT().Observe(mock.MatchedBy(func(e types.GraphEvent) bool {
 		return e.Op == types.GraphOpBuild && errors.Is(e.Err, ErrCycle)
 	})).Return().Once()
@@ -193,7 +193,7 @@ func TestNCCDEmpty(t *testing.T) {
 // fires the observer (regression guard).
 func TestNCCDEmptyEmitsEvent(t *testing.T) {
 	t.Parallel()
-	obs := mocks.NewMockObserver(t)
+	obs := typestest.NewMockObserver(t)
 	obs.EXPECT().Observe(mock.MatchedBy(func(e types.GraphEvent) bool { return e.Op == types.GraphOpBuild })).Return().Once()
 	obs.EXPECT().Observe(mock.MatchedBy(func(e types.GraphEvent) bool { return e.Op == "nccd" })).Return().Once()
 

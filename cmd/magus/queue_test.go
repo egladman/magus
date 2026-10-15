@@ -25,12 +25,12 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/libs/testkit"
 	magustypes "github.com/egladman/magus/types"
-	magusmocks "github.com/egladman/magus/types/gen/mocks"
 )
 
 var queueBase = strings.Repeat("b", 40)
@@ -71,14 +71,14 @@ export fun list_artifacts(io: {str: any}) > any {
 type queueFixture struct {
 	*testkit.Workspace
 	root     string
-	vcs      *magusmocks.MockVCSDriver
+	vcs      *typestest.MockVCSDriver
 	provider string
 }
 
 func newQueueFixture(t *testing.T, changes, run string) *queueFixture {
 	t.Helper()
 	w := testkit.NewWorkspace(t)
-	f := &queueFixture{Workspace: w, root: w.Root(), vcs: magusmocks.NewMockVCSDriver(t)}
+	f := &queueFixture{Workspace: w, root: w.Root(), vcs: typestest.NewMockVCSDriver(t)}
 	opened := queueOpenVCS
 	queueOpenVCS = func(_ context.Context, root, name, remote string) (magustypes.VCSDriver, error) {
 		assert.Equal(t, f.root, root)

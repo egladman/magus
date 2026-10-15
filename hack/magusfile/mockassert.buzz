@@ -14,29 +14,56 @@ export object AssertFile {
     body: str,
 }
 
-// isInternal reports a package no consumer can import. Its mocks serve only this repo's
-// tests, which fail at the use site, so they need no assertion.
-fun isInternal(pkgPath: str) > bool {
-    return pkgPath.indexOf("/internal/") != null or pkgPath.endsWith("/internal");
+// isInternal reports a module-relative path no consumer can import: a package, or a
+// directory of doubles, under internal/. Doubles there serve only this repo's tests, which
+// fail at the use site, so they need no assertion.
+fun isInternal(rel: str) > bool {
+    return rel == "internal" or rel.startsWith("internal/") or rel.indexOf("/internal/") != null
+        or rel.endsWith("/internal");
 }
 
-// mocksDir mirrors .mockery.yaml's dir template, "{{.InterfaceDir}}/gen/mocks". The
-// module root is the one case the template's path arithmetic leaves empty.
-fun mocksDir(pkgPath: str) > str !> any {
+// relDir is pkgPath's directory relative to the module root, "" for the root itself.
+fun relDir(pkgPath: str) > str !> any {
     if (pkgPath == MODULE) {
-        return "gen/mocks";
+        return "";
     }
     if (pkgPath.startsWith(MODULE + "/")) {
-        return pkgPath.sub(MODULE.len() + 1) + "/gen/mocks";
+        return pkgPath.sub(MODULE.len() + 1);
     }
     throw "package \"{pkgPath}\" is outside {MODULE}; this generator only knows this module";
 }
 
+// clause is the package clause mockery's SrcPackageName renders for a package of this
+// module: its last path element, and magus for the module root.
+fun clause(pkgPath: str) > str !> any {
+    final rel = relDir(pkgPath);
+    if (rel == "") {
+        return "magus";
+    }
+    final parts = rel.split("/");
+    return parts[parts.len() - 1];
+}
+
+// expand renders one of .mockery.yaml's dir or pkgname templates for pkgPath. It knows the
+// two variables the config uses, InterfaceDir and SrcPackageName, and raises on any other:
+// the config then changed in a way this generator was not written for.
+export fun expand(template: str, pkgPath: str) > str !> any {
+    final rel = relDir(pkgPath);
+    var rendered = template.replace("\{\{.InterfaceDir}}", with: rel);
+    if (rel == "" and rendered.startsWith("/")) {
+        rendered = rendered.sub(1, len: rendered.len() - 1);
+    }
+    rendered = rendered.replace("\{\{.SrcPackageName}}", with: clause(pkgPath));
+    if (rendered.indexOf("\{\{") != null) {
+        throw "the mockery template \"{template}\" uses a variable this generator does not render";
+    }
+    return rendered;
+}
+
 // render is one package's assertion file, already in gofmt's layout: the var block's
-// type column is padded to its widest entry. The import takes a fixed alias because a
-// package name is not derivable from its path (project/impact is package impact, the
-// module root package magus).
-export fun render(pkgPath: str, interfaces: [str]) > str {
+// type column is padded to its widest entry. The import takes a fixed alias because the
+// doubles' own package is pkg, never the mocked package's name.
+export fun render(pkgPath: str, pkg: str, interfaces: [str]) > str {
     var width = 0;
     foreach (name in interfaces) {
         if (name.len() > width) { width = name.len(); }
@@ -50,37 +77,46 @@ export fun render(pkgPath: str, interfaces: [str]) > str {
         + "// Each line fails to compile when a mock stops satisfying the interface it was\n"
         + "// generated from, which mockery's own output does not check. Regenerate with\n"
         + "// `magus run generate` after changing .mockery.yaml or an interface.\n\n"
-        + "package mocks\n\n"
+        + "package {pkg}\n\n"
         + "import iface \"{pkgPath}\"\n\n"
         + "var (\n"
         + lines.join("")
         + ")\n";
 }
 
-// files derives, from .mockery.yaml's text, the assertion file each published mocked
-// package gets, interfaces sorted by byte so the output is stable. Raises on a config
-// declaring no packages, which means its schema moved rather than that nothing is
-// mocked, and on a package outside this module.
+// files derives, from .mockery.yaml's text, the assertion file each published package of
+// doubles gets, interfaces sorted by byte so the output is stable. A package's directory
+// and clause are its own `config` dir and pkgname when it sets them, else the top-level
+// templates, so the file lands beside what mockery wrote. Raises on a config declaring no
+// packages, which means its schema moved rather than that nothing is mocked, and on a
+// package outside this module.
 //
 // mockery's testify template emits no `var _ Iface = (*Mock)(nil)`, so a stale mock still
 // compiles and fails only at a use site, and a published mock has none here: the first
 // build to break would be a consumer's. A file beside mockery's output rather than a
 // forked template, which a mockery upgrade would silently keep rendering stale.
 export fun files(config: str) > [AssertFile] !> any {
-    final packages = serialize\Boxed.init(yaml\parse(config)).q(["packages"]).mapValue();
+    final root = serialize\Boxed.init(yaml\parse(config));
+    final packages = root.q(["packages"]).mapValue();
     if (packages.size() == 0) {
         throw "the mockery config declares no packages";
     }
+    final dirTemplate = root.q(["dir"]).stringValue();
+    final pkgTemplate = root.q(["pkgname"]).stringValue();
     final assertions = mut [<AssertFile>];
     foreach (pkgPath in sort\strings(packages.keys())) {
-        if (isInternal(pkgPath)) { continue; }
-        final names = sort\strings(packages[pkgPath]!.q(["interfaces"]).mapValue().keys());
+        final pkg = packages[pkgPath]!;
+        final names = sort\strings(pkg.q(["interfaces"]).mapValue().keys());
         if (names.len() == 0) { continue; }
+        final dir = expand(pkg.q(["config", "dir"]).string() ?? dirTemplate, pkgPath: pkgPath);
+        if (isInternal(relDir(pkgPath)) or isInternal(dir)) { continue; }
         assertions.append(AssertFile{
-            // A test file, so importing the mocks never imports the mocked package: the
+            // A test file, so importing the doubles never imports the mocked package: the
             // package's own tests can use them, and the check still compiles in go vet.
-            path = mocksDir(pkgPath) + "/assert_test.go",
-            body = render(pkgPath, interfaces: names),
+            path = dir + "/assert_test.go",
+            body = render(pkgPath,
+                pkg: expand(pkg.q(["config", "pkgname"]).string() ?? pkgTemplate, pkgPath: pkgPath),
+                interfaces: names),
         });
     }
     return assertions;
@@ -102,24 +138,27 @@ test "the var block pads the type column the way gofmt does" {
         + "// generated from, which mockery's own output does not check. Regenerate with\n"
         + "// `magus run generate` after changing .mockery.yaml or an interface.\n"
         + "\n"
-        + "package mocks\n"
+        + "package impacttest\n"
         + "\n"
-        + "import iface \"github.com/egladman/magus/types\"\n"
+        + "import iface \"github.com/egladman/magus/project/impact\"\n"
         + "\n"
         + "var (\n"
-        + "\t_ iface.Inspector  = (*MockInspector)(nil)\n"
-        + "\t_ iface.Repository = (*MockRepository)(nil)\n"
+        + "\t_ iface.Inspector   = (*MockInspector)(nil)\n"
+        + "\t_ iface.SymbolStore = (*MockSymbolStore)(nil)\n"
         + ")\n";
-    std\assert(render("github.com/egladman/magus/types", interfaces: ["Inspector", "Repository"]) == want,
+    std\assert(render("github.com/egladman/magus/project/impact", pkg: "impacttest", interfaces: ["Inspector", "SymbolStore"]) == want,
         message: "render");
 }
 
-test "only published packages that mock something get a file" {
-    final got = files(`packages:
+test "only published packages that mock something get a file, where mockery writes it" {
+    final got = files(`dir: "\{\{.InterfaceDir}}/gen/\{\{.SrcPackageName}}test"
+pkgname: "\{\{.SrcPackageName}}test"
+packages:
   github.com/egladman/magus/types:
+    config:
+      dir: internal/gen/typestest
     interfaces:
       Repository:
-      Inspector:
   github.com/egladman/magus:
     interfaces:
       Server:
@@ -129,16 +168,28 @@ test "only published packages that mock something get a file" {
   github.com/egladman/magus/internalize:
     interfaces:
       Thing:
+  github.com/egladman/magus/project/impact:
+    interfaces:
+      SymbolStore:
+      Inspector:
+  github.com/egladman/magus/spells:
+    config:
+      dir: "\{\{.InterfaceDir}}/gen/drivertest"
+      pkgname: drivertest
+    interfaces:
+      Driver:
   github.com/egladman/magus/empty:
     interfaces:
 `);
-    std\assert(got.len() == 3, message: "the root, internalize and types; internal and empty skipped");
-    std\assert(got[0].path == "gen/mocks/assert_test.go", message: "the module root writes under gen/mocks");
-    std\assert(got[0].body.indexOf("\t_ iface.Server = (*MockServer)(nil)\n") != null, message: "root body");
-    std\assert(got[1].path == "internalize/gen/mocks/assert_test.go", message: "a name containing internal is not internal");
-    std\assert(got[2].path == "types/gen/mocks/assert_test.go", message: "a nested package");
-    std\assert(got[2].body == render("github.com/egladman/magus/types", interfaces: ["Inspector", "Repository"]),
+    std\assert(got.len() == 4, message: "the root, internalize, impact and spells; internal doubles and empty skipped");
+    std\assert(got[0].path == "gen/magustest/assert_test.go", message: "the module root writes under gen/magustest");
+    std\assert(got[0].body.indexOf("package magustest\n") != null, message: "root clause");
+    std\assert(got[1].path == "internalize/gen/internalizetest/assert_test.go", message: "a name containing internal is not internal");
+    std\assert(got[2].path == "project/impact/gen/impacttest/assert_test.go", message: "a nested package");
+    std\assert(got[2].body == render("github.com/egladman/magus/project/impact", pkg: "impacttest", interfaces: ["Inspector", "SymbolStore"]),
         message: "interfaces sorted by byte");
+    std\assert(got[3].path == "spells/gen/drivertest/assert_test.go", message: "a package's own dir");
+    std\assert(got[3].body.indexOf("package drivertest\n") != null, message: "a package's own clause");
 }
 
 fun refusal(config: str) > str {
@@ -151,8 +202,11 @@ fun refusal(config: str) > str {
 }
 
 test "a broken config is refused" {
+    final templates = "dir: \"\{\{.InterfaceDir}}/gen/x\"\npkgname: x\n";
     std\assert(refusal("packages:\n").indexOf("declares no packages") != null, message: "no packages");
     std\assert(refusal("packages: [\n") != "", message: "unparsable yaml");
-    std\assert(refusal("packages:\n  example.com/elsewhere:\n    interfaces:\n      Thing:\n").indexOf("example.com/elsewhere") != null,
+    std\assert(refusal(templates + "packages:\n  example.com/elsewhere:\n    interfaces:\n      Thing:\n").indexOf("example.com/elsewhere") != null,
         message: "a package outside the module");
+    std\assert(refusal("dir: \"\{\{.InterfaceName}}\"\npkgname: x\npackages:\n  github.com/egladman/magus/spells:\n    interfaces:\n      Driver:\n").indexOf("does not render") != null,
+        message: "a template variable it cannot render");
 }
