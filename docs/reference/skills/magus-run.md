@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 13734
-skill_short_bytes: 8222
+skill_full_bytes: 14550
+skill_short_bytes: 9006
 ---
 
 # magus-run
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `135` |
+| `agent-skill-version` | `136` |
 | `knowledge-schema-version` | `21` |
-| `skill-content` | `05d3e596e093` |
+| `skill-content` | `c32b72ec4e22` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -110,8 +110,8 @@ still walks up from your cwd. Pass `--root` when you mean elsewhere.
      pass. A check wired to the wrong path passes the same way.
    - Verify in place; never `git stash`/`reset` first. It destroys a concurrent agent's untracked
      work, and the tree is already what you want to verify.
-3. Reach for an individual target only to iterate on a failure `ci` named.
-   Rerunning one failing target is cheaper while you fix it; `ci` afterwards
+3. Reach for an individual target only to iterate on a failure `ci` named,
+   narrowed as "When a target fails" below says; `ci` afterwards
    proves the change. `magus describe targets` lists every target (`-o name` for
    bare names). Ask the
    workspace; do not read `MAGUS.md`.
@@ -132,6 +132,7 @@ still walks up from your cwd. Pass `--root` when you mean elsewhere.
 magus run ci web                  # verify one project: the composed pipeline, in order
 magus affected ci                 # the final gate: everything the diff reaches
 magus run test web                # iterate on the one failing target ci named
+magus run test web -- -k 'name'   # rerun only the failing tests (pytest filter shown)
 magus affected test               # only projects affected by the VCS diff
 ```
 
@@ -209,6 +210,21 @@ Each target's result line mints an output reference id (`out1a2b3c`).
    they ran.
 3. `magus doctor` validates the workspace itself (config, cache, tool availability,
    cycles).
+
+Fix a failed full run by narrowing, not by repeating it:
+
+1. Read the failure from its ref and list the failing tests.
+2. Rerun only those with the test runner's own filter, passed after `--`, until they
+   pass: `magus run test <project> -- <filter>`. Examples by runner:
+   - Go (go test): `-- -run 'TestA|TestB'`
+   - pytest: `-- -k 'name'`
+   - Jest or Vitest: `-- -t 'name'`
+   - cargo test: `-- name`
+3. Run the full target ONCE more. A full run after a failed full run, with nothing
+   narrowed between them, reports nothing new.
+
+A test known to fail for an outside reason is named once and left out of every rerun.
+Run generators before the full test run, so a drift test does not fail for nothing.
 
 ## When another magus process holds the project
 
@@ -330,8 +346,8 @@ VCS.
      pass. A check wired to the wrong path passes the same way.
    - Verify in place; never `git stash`/`reset` first (data-loss-prone and pointless: the tree is
      already what you want to verify).
-3. Reach for an individual target only to iterate on a failure `ci` named.
-   Rerunning one failing target is cheaper while you fix it; `ci` afterwards
+3. Reach for an individual target only to iterate on a failure `ci` named,
+   narrowed as "When a target fails" below says; `ci` afterwards
    proves the change. `magus describe targets` lists every target (`-o name` for
    bare names) and classifies each as canonical, spell,
    or custom; `client` (`magus\describe.target`) is the MCP equivalent. Ask the
@@ -356,6 +372,7 @@ VCS.
 magus run ci web                  # verify one project: the composed pipeline, in order
 magus affected ci                 # the final gate: everything the diff reaches
 magus run test web                # iterate on the one failing target ci named
+magus run test web -- -k 'name'   # rerun only the failing tests (pytest filter shown)
 magus affected test               # only projects affected by the VCS diff
 ```
 
@@ -486,6 +503,21 @@ Each target's result line mints an output reference id (`out1a2b3c`).
 3. `magus doctor` validates the workspace itself (config, cache, tool availability,
    cycles) when failures look environmental rather than caused by
    your change.
+
+Fix a failed full run by narrowing, not by repeating it:
+
+1. Read the failure from its ref and list the failing tests.
+2. Rerun only those with the test runner's own filter, passed after `--`, until they
+   pass: `magus run test <project> -- <filter>`. Examples by runner:
+   - Go (go test): `-- -run 'TestA|TestB'`
+   - pytest: `-- -k 'name'`
+   - Jest or Vitest: `-- -t 'name'`
+   - cargo test: `-- name`
+3. Run the full target ONCE more. A full run after a failed full run, with nothing
+   narrowed between them, reports nothing new and costs the whole suite again.
+
+A test known to fail for an outside reason is named once and left out of every rerun.
+Run generators before the full test run, so a drift test does not fail for nothing.
 
 ## When another magus process holds the project
 
