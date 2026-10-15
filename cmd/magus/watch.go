@@ -11,7 +11,6 @@ import (
 	"strings"
 	"syscall"
 
-	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/types"

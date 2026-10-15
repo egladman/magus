@@ -2,11 +2,8 @@ github.com/egladman/magus.Advisory func(reason string) TargetOption
 github.com/egladman/magus.AssessOptions type struct
 github.com/egladman/magus.AssessOptions.Base field string
 github.com/egladman/magus.AssessOptions.ChangedPaths field []string
-github.com/egladman/magus.AwaitReaderProof func(out *os.File, proves func(argv []string) bool, limit time.Duration)
 github.com/egladman/magus.BaseLastPassed const untyped string = "last-passed"
 github.com/egladman/magus.BindingOption type = github.com/egladman/magus/internal/workspace.BindingOption
-github.com/egladman/magus.BuildGlobalKnowledgeGraph func(ctx context.Context, ws github.com/egladman/magus/types.WorkspaceRepository, cfg github.com/egladman/magus/internal/config.Config, refresh bool, log *log/slog.Logger) (*github.com/egladman/magus/internal/graph/knowledge.Graph, error)
-github.com/egladman/magus.BuildKnowledgeGraph func(ctx context.Context, ws github.com/egladman/magus/types.Inspector, root string, cfg github.com/egladman/magus/internal/config.Config, refresh bool, log *log/slog.Logger) (*github.com/egladman/magus/internal/graph/knowledge.Graph, error)
 github.com/egladman/magus.CacheKeyVersion const untyped int = 7
 github.com/egladman/magus.CacheStats type struct
 github.com/egladman/magus.CacheStats.Error field int
@@ -49,7 +46,6 @@ github.com/egladman/magus.FormatName const Format = "name"
 github.com/egladman/magus.FormatTemplate const Format = "template"
 github.com/egladman/magus.FormatText const Format = "text"
 github.com/egladman/magus.FormatYAML const Format = "yaml"
-github.com/egladman/magus.GatePipe func(root string, cfg github.com/egladman/magus/internal/config.Config)
 github.com/egladman/magus.HumanOnly func(reason string) TargetOption
 github.com/egladman/magus.IgnoreGlob func(pattern string) github.com/egladman/magus/types.IgnorePattern
 github.com/egladman/magus.IgnoreLiteral func(pattern string) github.com/egladman/magus/types.IgnorePattern
@@ -89,15 +85,14 @@ github.com/egladman/magus.Magus.AssessChange method(ptr) func(ctx context.Contex
 github.com/egladman/magus.Magus.AutoResolvable method(ptr) func(ctx context.Context, path string, base []byte, merged []byte) (verdict string, ok bool)
 github.com/egladman/magus.Magus.AutoResolve method(ptr) func(ctx context.Context, path string, base []byte, ours []byte, theirs []byte) (merged []byte, report string, ok bool)
 github.com/egladman/magus.Magus.AutoResolveGlobs method(ptr) func() []string
-github.com/egladman/magus.Magus.BeginInvocation method(ptr) func(ctx context.Context, cmd github.com/egladman/magus/internal/journal.Command, magusVersion string, extra ...log/slog.Handler) (context.Context, func(error))
+github.com/egladman/magus.Magus.BeginInvocation method(ptr) func(ctx context.Context, cmd Command, magusVersion string, extra ...log/slog.Handler) (context.Context, func(error))
 github.com/egladman/magus.Magus.BranchChanges method(ptr) func(ctx context.Context, limit int) ([]github.com/egladman/magus/types.BranchChange, error)
 github.com/egladman/magus.Magus.CacheDescription method(ptr) func() (tier string, mode string)
 github.com/egladman/magus.Magus.CacheDir method(ptr) func() string
 github.com/egladman/magus.Magus.CacheDiskBytes method(ptr) func() int64
 github.com/egladman/magus.Magus.CacheStats method(ptr) func() CacheStats
 github.com/egladman/magus.Magus.CarvedOutputs method(ptr) func(ctx context.Context) ([]string, error)
-github.com/egladman/magus.Magus.ChangeClassifier method(ptr) func(at func(ctx context.Context, rev string, path string) (string, error), working func(path string) (string, error)) github.com/egladman/magus/internal/risk.Classifier
-github.com/egladman/magus.Magus.ClassifyEdit method(ptr) func(ctx context.Context, path string, old []byte, cur []byte) github.com/egladman/magus/internal/risk.Classified
+github.com/egladman/magus.Magus.ClassifyEdit method(ptr) func(ctx context.Context, path string, old []byte, cur []byte) (class string, why string)
 github.com/egladman/magus.Magus.ClassifyFiles method(ptr) func(ctx context.Context, paths []string) ([]github.com/egladman/magus/types.FileEntry, error)
 github.com/egladman/magus.Magus.CleanCache method(ptr) func(ctx context.Context, projects ...*github.com/egladman/magus/types.Project) error
 github.com/egladman/magus.Magus.CleanOutputs method(ptr) func(ctx context.Context, projects []*github.com/egladman/magus/types.Project, dryRun bool) (CleanedOutputs, error)
@@ -115,17 +110,14 @@ github.com/egladman/magus.Magus.DiffWith method(ptr) func(ctx context.Context, p
 github.com/egladman/magus.Magus.Duplication method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.DuplicationOutput, error)
 github.com/egladman/magus.Magus.EvaluateProjects method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.EvaluatedProjectsOutput, error)
 github.com/egladman/magus.Magus.EvaluateTarget method(ptr) func(ctx context.Context, t github.com/egladman/magus/types.Target) ([]github.com/egladman/magus/types.EvaluatedTarget, error)
-github.com/egladman/magus.Magus.EvaluationReads method(ptr) func() github.com/egladman/magus/internal/readlog.Reads
 github.com/egladman/magus.Magus.ExpandAffected method(ptr) func(ctx context.Context, target string, baseRef string) (targets []github.com/egladman/magus/types.Target, source string, fellBack bool, err error)
 github.com/egladman/magus.Magus.ExpandAffectedSet method(ptr) func(ctx context.Context, target string, baseRef string) (targets []github.com/egladman/magus/types.Target, source string, fellBack bool, res *github.com/egladman/magus/types.AffectedResult, err error)
-github.com/egladman/magus.Magus.ExpandCwd method(ptr) func(t github.com/egladman/magus/types.Target) (targets []github.com/egladman/magus/types.Target, found bool, err error)
 github.com/egladman/magus.Magus.ExpandPath method(ptr) func(t github.com/egladman/magus/types.Target) ([]github.com/egladman/magus/types.Target, error)
 github.com/egladman/magus.Magus.ExportCache method(ptr) func(ctx context.Context, w io.Writer) error
 github.com/egladman/magus.Magus.FileAt method(ptr) func(ctx context.Context, rev string, path string) (string, error)
 github.com/egladman/magus.Magus.FindOutputProducer method(ptr) func(absPath string) *github.com/egladman/magus/types.Project
 github.com/egladman/magus.Magus.FreshenSymbolIndexes method(ptr) func(ctx context.Context) error
 github.com/egladman/magus.Magus.Get method(ptr) func(path string) *github.com/egladman/magus/types.Project
-github.com/egladman/magus.Magus.GetArtifact method(ptr) func(ctx context.Context, v github.com/egladman/magus/internal/cache.ArtifactVersion, dst string) error
 github.com/egladman/magus.Magus.Graph method(ptr) func() (*github.com/egladman/magus/types.Graph, error)
 github.com/egladman/magus.Magus.Harnesses method(ptr) func() []string
 github.com/egladman/magus.Magus.HeldLocks method(ptr) func() []github.com/egladman/magus/types.StatusLock
@@ -134,15 +126,11 @@ github.com/egladman/magus.Magus.IdentifyRef method(ptr) func(ctx context.Context
 github.com/egladman/magus.Magus.ImportCache method(ptr) func(ctx context.Context, r io.Reader) error
 github.com/egladman/magus.Magus.InvocationByID method(ptr) func(inv string) (Invocation, error)
 github.com/egladman/magus.Magus.InvocationEventsByID method(ptr) func(inv string) (Invocation, []Event, error)
-github.com/egladman/magus.Magus.JobLimits method(ptr) func() github.com/egladman/magus/internal/config.Jobs
 github.com/egladman/magus.Magus.JudgeCommand method(ptr) func(ctx context.Context, session string, dir string, command string) (github.com/egladman/magus/types.GuardJudgment, error)
 github.com/egladman/magus.Magus.JudgeWrite method(ptr) func(ctx context.Context, session string, dir string, path string) (github.com/egladman/magus/types.GuardJudgment, error)
-github.com/egladman/magus.Magus.KnowledgeGraph method(ptr) func(ctx context.Context, req github.com/egladman/magus/types.GraphRequest) (*github.com/egladman/magus/internal/graph/knowledge.Graph, error)
 github.com/egladman/magus.Magus.KnowledgeGraphHealthy method(ptr) func() (watching bool, valid bool)
-github.com/egladman/magus.Magus.LastRecordedRun method(ptr) func(ctx context.Context, projectPath string, target string) (github.com/egladman/magus/internal/cache.RecordedRun, error)
 github.com/egladman/magus.Magus.LifecycleProvider method(ptr) func() string
 github.com/egladman/magus.Magus.Lifecycles method(ptr) func(ctx context.Context, installed ...github.com/egladman/magus/types.ToolRow) (github.com/egladman/magus/types.LifecycleStatus, []github.com/egladman/magus/spells.Lifecycle, error)
-github.com/egladman/magus.Magus.ListArtifacts method(ptr) func(ctx context.Context, projectPath string, wsPath string) ([]github.com/egladman/magus/internal/cache.ArtifactVersion, error)
 github.com/egladman/magus.Magus.ListCharms method(ptr) func(ctx context.Context) ([]github.com/egladman/magus/types.CharmEntry, error)
 github.com/egladman/magus.Magus.ListProjects method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.ProjectsOutput, error)
 github.com/egladman/magus.Magus.ListTargets method(ptr) func(ctx context.Context) ([]github.com/egladman/magus/types.TargetEntry, error)
@@ -183,12 +171,6 @@ github.com/egladman/magus.Magus.RunGate method(ptr) func(ctx context.Context, re
 github.com/egladman/magus.Magus.SandboxMode method(ptr) func() github.com/egladman/magus/types.SandboxMode
 github.com/egladman/magus.Magus.SaveSpellCaches method(ptr) func(ctx context.Context) ([]SpellCache, error)
 github.com/egladman/magus.Magus.SecretProvider method(ptr) func() string
-github.com/egladman/magus.Magus.Serve method(ptr) func(ctx context.Context) error
-github.com/egladman/magus.Magus.ServiceSession method(ptr) func() *github.com/egladman/magus/internal/service.Session
-github.com/egladman/magus.Magus.SetGraphObserver method(ptr) func(o github.com/egladman/magus/types.Observer)
-github.com/egladman/magus.Magus.SetServer method(ptr) func(s Server)
-github.com/egladman/magus.Magus.SpellImports method(ptr) func() *github.com/egladman/magus/internal/spell/remote.Imports
-github.com/egladman/magus.Magus.Stream method(ptr) func(ctx context.Context, r io.Reader, target string, errFn func(error), opts ...StreamOption) error
 github.com/egladman/magus.Magus.SymbolFreshnessEnv method(ptr) func() []string
 github.com/egladman/magus.Magus.SymbolGaps method(ptr) func(ctx context.Context) ([]github.com/egladman/magus/types.KnowledgeSymbolGap, bool)
 github.com/egladman/magus.Magus.SymbolIndexStatus method(ptr) func(ctx context.Context) []github.com/egladman/magus/types.SymbolIndexStatus
@@ -197,7 +179,6 @@ github.com/egladman/magus.Magus.SymbolOccurrences method(ptr) func(ctx context.C
 github.com/egladman/magus.Magus.SymbolsOccurrences method(ptr) func(ctx context.Context, keys []string) (map[string]SymbolOccurrenceRead, bool)
 github.com/egladman/magus.Magus.TailLog method(ptr) func(projectPath string, target string) (logPath string, err error)
 github.com/egladman/magus.Magus.TargetGraph method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.TargetGraphOutput, error)
-github.com/egladman/magus.Magus.Telemetry method(ptr) func() github.com/egladman/magus/internal/observability.Provider
 github.com/egladman/magus.Magus.Tools method(ptr) func(ctx context.Context, projects ...string) (github.com/egladman/magus/types.ToolReport, error)
 github.com/egladman/magus.Magus.Trend method(ptr) func(ctx context.Context, opts github.com/egladman/magus/types.InsightOptions) (github.com/egladman/magus/types.TrendOutput, error)
 github.com/egladman/magus.Magus.Unreferenced method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.UnreferencedOutput, error)
@@ -211,8 +192,6 @@ github.com/egladman/magus.Magus.Workspace method(ptr) func(ctx context.Context, 
 github.com/egladman/magus.Magus.WriteGuardIndex method(ptr) func(ctx context.Context) error
 github.com/egladman/magus.MaybeLaunchSandbox func()
 github.com/egladman/magus.MergeMarkers func(base []byte, ours []byte, theirs []byte, markerSize int) ([]byte, bool)
-github.com/egladman/magus.MergeWorkspaceSymbols func(ctx context.Context, ws github.com/egladman/magus/types.Inspector, root string, cfg github.com/egladman/magus/internal/config.Config, g *github.com/egladman/magus/internal/graph/knowledge.Graph, log *log/slog.Logger) error
-github.com/egladman/magus.MergeWorkspaceSymbolsForRef func(ctx context.Context, ws github.com/egladman/magus/types.Inspector, root string, cfg github.com/egladman/magus/internal/config.Config, g *github.com/egladman/magus/internal/graph/knowledge.Graph, ref string, log *log/slog.Logger) error
 github.com/egladman/magus.MetricsCollector type struct
 github.com/egladman/magus.MetricsCollector.Collect method(ptr) func(ctx context.Context) (go.opentelemetry.io/otel/sdk/metric/metricdata.ResourceMetrics, error)
 github.com/egladman/magus.NewLazyWorkspace func(root string, open func(context.Context) (*Magus, error)) *LazyWorkspace
@@ -228,31 +207,11 @@ github.com/egladman/magus.PlanOptions.ChangedPaths field []string
 github.com/egladman/magus.PlanOptions.HistoryPath field string
 github.com/egladman/magus.PlanOptions.MaxShards field int
 github.com/egladman/magus.PlanOptions.RunnerPoolBudget field int
-github.com/egladman/magus.ProcessStdio type struct
-github.com/egladman/magus.ProcessStdio.AwaitUpstream method(ptr) func(ctx context.Context, root string, cfg github.com/egladman/magus/internal/config.Config) error
-github.com/egladman/magus.ProcessStdio.ProveUpstream method(ptr) func(ctx context.Context)
-github.com/egladman/magus.ProcessStdio.Records method(ptr) func() (*github.com/egladman/magus/internal/report.Reader, int)
-github.com/egladman/magus.ProcessStdio.SettlePipeline method(ptr) func(ctx context.Context, root string, cfg github.com/egladman/magus/internal/config.Config) error
-github.com/egladman/magus.ProcessStdio.Stdin field *os.File
-github.com/egladman/magus.ProcessStdio.Stdout field *os.File
-github.com/egladman/magus.ProcessStdio.TakesLocks field func(argv []string) bool
-github.com/egladman/magus.ProcessStdio.WritesRecords field func(argv []string) bool
 github.com/egladman/magus.ProjectOption type = github.com/egladman/magus/internal/workspace.ProjectOption
-github.com/egladman/magus.PublishedShards func(c *github.com/egladman/magus/internal/oci.Client, ref github.com/egladman/magus/internal/oci.Reference, artifactType string, log *log/slog.Logger) github.com/egladman/magus/internal/graph/knowledge.RemoteShards
-github.com/egladman/magus.QueryKnowledgeGraph func(ctx context.Context, ws github.com/egladman/magus/types.Inspector, root string, cfg github.com/egladman/magus/internal/config.Config, refresh bool, input string, budget int, log *log/slog.Logger) (github.com/egladman/magus/types.KnowledgeQueryOutput, *github.com/egladman/magus/internal/graph/knowledge.Graph, error)
-github.com/egladman/magus.ReadByMagus func(ctx context.Context, out *os.File) bool
 github.com/egladman/magus.ReadOutputRecords func(r io.Reader, each func(github.com/egladman/magus/types.StoredOutput) error) error
-github.com/egladman/magus.ReadRecords func(stdin *os.File) (*github.com/egladman/magus/internal/report.Reader, error)
-github.com/egladman/magus.ReaderArgv func(ctx context.Context, out *os.File) (argv []string, ok bool)
-github.com/egladman/magus.RecordPipeExit func(root string, cfg github.com/egladman/magus/internal/config.Config, status int, signal string)
-github.com/egladman/magus.RecordUpstream func(ctx context.Context, in *os.File, writes func(argv []string) bool) (pid int, ok bool)
-github.com/egladman/magus.RecordedHumanOnly func(ctx context.Context, lw *LazyWorkspace, cfg github.com/egladman/magus/internal/config.Config) (github.com/egladman/magus/types.HumanOnlyIndex, bool)
-github.com/egladman/magus.RecordedStaleIndexes func(ctx context.Context, lw *LazyWorkspace, cfg github.com/egladman/magus/internal/config.Config) ([]github.com/egladman/magus/types.KnowledgeStaleIndex, bool)
 github.com/egladman/magus.ResolveCacheDir func(root string, opts ...Option) (string, error)
 github.com/egladman/magus.RetryOnVolatile func(reason string) TargetOption
 github.com/egladman/magus.RunOption type func(*run)
-github.com/egladman/magus.Server type interface
-github.com/egladman/magus.Server.Serve imethod func(ctx context.Context) error
 github.com/egladman/magus.ShortRevision func(id string) string
 github.com/egladman/magus.Sink type struct
 github.com/egladman/magus.Sink.Close method(ptr) func() error
@@ -267,6 +226,7 @@ github.com/egladman/magus.Sink.EmitShardTotal method(ptr) func(ctx context.Conte
 github.com/egladman/magus.Sink.GraphObserver method(ptr) func() github.com/egladman/magus/types.Observer
 github.com/egladman/magus.Sink.RecordValues method(ptr) func(target string, returns github.com/egladman/magus/types.Returns)
 github.com/egladman/magus.SinkOption type func(*sinkOptions)
+github.com/egladman/magus.SpawnRule type func(parent github.com/egladman/magus/types.ModelTier, child github.com/egladman/magus/types.ModelTier) error
 github.com/egladman/magus.SpellCache type struct
 github.com/egladman/magus.SpellCache.Bytes field int64
 github.com/egladman/magus.SpellCache.Dirs field []string
@@ -279,42 +239,36 @@ github.com/egladman/magus.SpellCache.Refused field []string
 github.com/egladman/magus.SpellCache.Skipped field int
 github.com/egladman/magus.SpellCache.Spell field string
 github.com/egladman/magus.SpellCache.Transferred field int64
-github.com/egladman/magus.StreamAllSentinel const untyped string = "\x00ALL"
-github.com/egladman/magus.StreamOption type func(*streamOpts)
-github.com/egladman/magus.SymbolGaps func(ctx context.Context, ws github.com/egladman/magus/types.Inspector, root string, cfg github.com/egladman/magus/internal/config.Config, log *log/slog.Logger) (gaps []github.com/egladman/magus/types.KnowledgeSymbolGap, ok bool)
-github.com/egladman/magus.SymbolIndexTimes func(ctx context.Context, ws github.com/egladman/magus/types.Inspector, root string, cfg github.com/egladman/magus/internal/config.Config) (times map[string]time.Time, ok bool)
 github.com/egladman/magus.SymbolIndexedAt func(cacheDir string, projectAbsDir string) (time.Time, bool)
-github.com/egladman/magus.SymbolOccurrenceRead type struct
+github.com/egladman/magus.SymbolOccurrenceRead type = github.com/egladman/magus/internal/graph/workspacegraph.SymbolOccurrenceRead
 github.com/egladman/magus.SymbolOccurrenceRead.Files field []github.com/egladman/magus/types.SymbolOccurrenceFile
 github.com/egladman/magus.SymbolOccurrenceRead.Names field []string
 github.com/egladman/magus.SymbolOccurrenceRead.Unreadable field []github.com/egladman/magus/types.KnowledgeSymbolGap
-github.com/egladman/magus.SymbolOccurrences func(ctx context.Context, ws github.com/egladman/magus/types.Inspector, root string, cfg github.com/egladman/magus/internal/config.Config, log *log/slog.Logger, key string) (read SymbolOccurrenceRead, ok bool)
-github.com/egladman/magus.SymbolsOccurrences func(ctx context.Context, ws github.com/egladman/magus/types.Inspector, root string, cfg github.com/egladman/magus/internal/config.Config, log *log/slog.Logger, keys []string) (reads map[string]SymbolOccurrenceRead, ok bool)
 github.com/egladman/magus.TargetHandler type func(context.Context, *github.com/egladman/magus/types.Project) error
 github.com/egladman/magus.TargetLabel func(targets []github.com/egladman/magus/types.Target, source string) string
 github.com/egladman/magus.TargetOption type = github.com/egladman/magus/internal/workspace.TargetOption
-github.com/egladman/magus.UsePublishedShards func(ws github.com/egladman/magus/types.Inspector, r github.com/egladman/magus/internal/graph/knowledge.RemoteShards)
+github.com/egladman/magus.TierCeiling func(parent github.com/egladman/magus/types.ModelTier, child github.com/egladman/magus/types.ModelTier) error
 github.com/egladman/magus.WithBaseRef func(ref string) RunOption
 github.com/egladman/magus.WithBroker func(b *github.com/egladman/magus/broker.Client) Option
 github.com/egladman/magus.WithBrokerPolicy func(p github.com/egladman/magus/types.BrokerPolicy) Option
 github.com/egladman/magus.WithCharms func(charms ...string) RunOption
+github.com/egladman/magus.WithCommandLine func(args []string) Option
 github.com/egladman/magus.WithComposeRoots func(paths ...string) ComposeOption
 github.com/egladman/magus.WithComposeSpell func(name string) ComposeOption
 github.com/egladman/magus.WithConfigFile func(path string) Option
 github.com/egladman/magus.WithDependsOn func(paths ...string) ProjectOption
 github.com/egladman/magus.WithDryRun func() RunOption
+github.com/egladman/magus.WithEnv func(env []string) Option
 github.com/egladman/magus.WithExtraArgs func(args []string) RunOption
 github.com/egladman/magus.WithGate func() RunOption
-github.com/egladman/magus.WithGraphHistory func(h *github.com/egladman/magus/internal/ci/forecast.History, target string) ComposeOption
+github.com/egladman/magus.WithGraphHistory func(h interface{PredictDuration(project string, target string, tags []string) time.Duration}, target string) ComposeOption
 github.com/egladman/magus.WithGraphInput func(g *github.com/egladman/magus/types.Graph) ComposeOption
 github.com/egladman/magus.WithLimiter func(l *Limiter) Option
-github.com/egladman/magus.WithLoadedConfig func(cfg github.com/egladman/magus/internal/config.Config) Option
 github.com/egladman/magus.WithMetricsCollection func() Option
 github.com/egladman/magus.WithNoCache func() RunOption
 github.com/egladman/magus.WithNoVolatilityRetry func() RunOption
+github.com/egladman/magus.WithObserver func(o github.com/egladman/magus/types.Observer) RunOption
 github.com/egladman/magus.WithOutputs func(paths ...string) ProjectOption
-github.com/egladman/magus.WithProcessStdio func(s ProcessStdio) RunOption
-github.com/egladman/magus.WithProvider func(p github.com/egladman/magus/internal/observability.Provider) Option
 github.com/egladman/magus.WithRace func() RunOption
 github.com/egladman/magus.WithRaceReplay func() RunOption
 github.com/egladman/magus.WithSession func(session string) RunOption
@@ -322,15 +276,14 @@ github.com/egladman/magus.WithSink func(s *Sink) RunOption
 github.com/egladman/magus.WithSinkFilter func(terms []string) SinkOption
 github.com/egladman/magus.WithSinkLevel func(level log/slog.Level) SinkOption
 github.com/egladman/magus.WithSinkRecords func(w io.Writer) SinkOption
+github.com/egladman/magus.WithSpawnRule func(rule SpawnRule) Option
 github.com/egladman/magus.WithSpell func(name string, opts ...BindingOption) ProjectOption
 github.com/egladman/magus.WithSpellFilter func(name string) RunOption
+github.com/egladman/magus.WithStderr func(w io.Writer) Option
 github.com/egladman/magus.WithStep func() RunOption
-github.com/egladman/magus.WithStreamDryRun func() StreamOption
-github.com/egladman/magus.WithStreamExtraArgs func(args []string) StreamOption
-github.com/egladman/magus.WithStreamNull func() StreamOption
-github.com/egladman/magus.WithStreamSink func(s *Sink) StreamOption
 github.com/egladman/magus.WithTarget func(name string, opts ...TargetOption) ProjectOption
 github.com/egladman/magus.WithUpstream func() ComposeOption
+github.com/egladman/magus.WithVCSDriver func(d github.com/egladman/magus/types.VCSDriver) Option
 github.com/egladman/magus.WithVersion func(v string) Option
 github.com/egladman/magus.WithWatchIgnore func(patterns ...github.com/egladman/magus/types.IgnorePattern) ProjectOption
 github.com/egladman/magus.WithWorkspaceRegistry func(reg *WorkspaceRegistry) Option
@@ -338,37 +291,10 @@ github.com/egladman/magus.WithWorkspaceRegistryContext func(ctx context.Context,
 github.com/egladman/magus.WithWrite func() RunOption
 github.com/egladman/magus.WithoutWorkspaceProviders func() Option
 github.com/egladman/magus.WorkspaceLoadFailure func(root string, err error) *github.com/egladman/magus/types.WorkspaceFailure
-github.com/egladman/magus.WorkspaceRegistry type = github.com/egladman/magus/internal/workspace.WorkspaceRegistry
+github.com/egladman/magus.WorkspaceRegistry type struct
 github.com/egladman/magus.WorkspaceRegistry.AddHarness method(ptr) func(spellName string)
 github.com/egladman/magus.WorkspaceRegistry.AddProvider method(ptr) func(spellName string)
-github.com/egladman/magus.WorkspaceRegistry.AddShellRule method(ptr) func(rule github.com/egladman/magus/internal/workspace.ShellRule)
-github.com/egladman/magus.WorkspaceRegistry.Apply method(ptr) func(w github.com/egladman/magus/types.WorkspaceRepository) error
-github.com/egladman/magus.WorkspaceRegistry.Builtins method(ptr) func() map[string]github.com/egladman/magus/internal/guard/builtin.Setting
-github.com/egladman/magus.WorkspaceRegistry.Close method(ptr) func() error
-github.com/egladman/magus.WorkspaceRegistry.CommandRule method(ptr) func() github.com/egladman/magus/internal/workspace.CommandRule
-github.com/egladman/magus.WorkspaceRegistry.Harnesses method(ptr) func() []string
-github.com/egladman/magus.WorkspaceRegistry.Keep method(ptr) func(release func())
-github.com/egladman/magus.WorkspaceRegistry.LifecycleProvider method(ptr) func() string
-github.com/egladman/magus.WorkspaceRegistry.ModelTierMatrix method(ptr) func() github.com/egladman/magus/types.ModelTierMatrix
-github.com/egladman/magus.WorkspaceRegistry.ModelTiers method(ptr) func(ctx context.Context) *github.com/egladman/magus/types.ModelTierSet
-github.com/egladman/magus.WorkspaceRegistry.Profile method(ptr) func() github.com/egladman/magus/types.GuardProfile
-github.com/egladman/magus.WorkspaceRegistry.ProjectPaths method(ptr) func() []string
-github.com/egladman/magus.WorkspaceRegistry.Providers method(ptr) func() []string
-github.com/egladman/magus.WorkspaceRegistry.RegisterProject method(ptr) func(path string, opts ...github.com/egladman/magus/internal/workspace.ProjectOption)
-github.com/egladman/magus.WorkspaceRegistry.RemoteBackend method(ptr) func() string
-github.com/egladman/magus.WorkspaceRegistry.SetBuiltins method(ptr) func(declared map[string]github.com/egladman/magus/internal/guard/builtin.Setting)
-github.com/egladman/magus.WorkspaceRegistry.SetCommandRule method(ptr) func(rule github.com/egladman/magus/internal/workspace.CommandRule)
-github.com/egladman/magus.WorkspaceRegistry.SetDefaultModelTiers method(ptr) func(build func() (*github.com/egladman/magus/types.ModelTierSet, error))
-github.com/egladman/magus.WorkspaceRegistry.SetLifecycleProvider method(ptr) func(spellName string) error
-github.com/egladman/magus.WorkspaceRegistry.SetModelTierMatrix method(ptr) func(m github.com/egladman/magus/types.ModelTierMatrix)
-github.com/egladman/magus.WorkspaceRegistry.SetModelTiers method(ptr) func(set *github.com/egladman/magus/types.ModelTierSet)
-github.com/egladman/magus.WorkspaceRegistry.SetProfile method(ptr) func(p github.com/egladman/magus/types.GuardProfile)
-github.com/egladman/magus.WorkspaceRegistry.SetRemoteBackend method(ptr) func(spellName string)
-github.com/egladman/magus.WorkspaceRegistry.SetSpawnRule method(ptr) func(rule github.com/egladman/magus/internal/workspace.SpawnRule)
-github.com/egladman/magus.WorkspaceRegistry.SetWriteRule method(ptr) func(rule github.com/egladman/magus/internal/workspace.WriteRule)
-github.com/egladman/magus.WorkspaceRegistry.ShellRules method(ptr) func() []github.com/egladman/magus/internal/workspace.ShellRule
-github.com/egladman/magus.WorkspaceRegistry.SpawnRule method(ptr) func() github.com/egladman/magus/internal/workspace.SpawnRule
-github.com/egladman/magus.WorkspaceRegistry.WriteRule method(ptr) func() github.com/egladman/magus/internal/workspace.WriteRule
+github.com/egladman/magus.WorkspaceRegistry.RegisterProject method(ptr) func(path string, opts ...ProjectOption)
 github.com/egladman/magus.WorkspaceRegistryFromContext func(ctx context.Context) *WorkspaceRegistry
 github.com/egladman/magus/libs/testkit.CaptureStderr func(tb TB, fn func()) string
 github.com/egladman/magus/libs/testkit.CaptureStdout func(tb TB, fn func()) string
@@ -3982,7 +3908,6 @@ github.com/egladman/magus/types.TargetEntry.Projects field []string "json:\"proj
 github.com/egladman/magus/types.TargetEntry.Spells field []string "json:\"spells,omitempty\"   yaml:\"spells,omitempty\""
 github.com/egladman/magus/types.TargetExpander type interface
 github.com/egladman/magus/types.TargetExpander.ExpandAffected imethod func(ctx context.Context, target string, baseRef string) (targets []Target, source string, fellBack bool, err error)
-github.com/egladman/magus/types.TargetExpander.ExpandCwd imethod func(t Target) (targets []Target, found bool, err error)
 github.com/egladman/magus/types.TargetExpander.ExpandPath imethod func(t Target) ([]Target, error)
 github.com/egladman/magus/types.TargetGraphDefinition const untyped string = "The target dependency graph is the ctx.needs DAG of a project's magusfile: each node is a target (an exported function), each edge a dependency it composes. It is extracted statically from the magusfile source, so it shows every edge - including both arms of a runtime branch - and flags any dependency cycle (which the run path rejects during dispatch)."
 github.com/egladman/magus/types.TargetGraphNode type struct
@@ -4337,6 +4262,7 @@ github.com/egladman/magus/types.VCSMeta.Ref field string
 github.com/egladman/magus/types.VCSMeta.Short field string
 github.com/egladman/magus/types.VCSOptions type struct
 github.com/egladman/magus/types.VCSOptions.BaseRef field string
+github.com/egladman/magus/types.VCSOptions.Driver field VCSDriver "json:\"-\" yaml:\"-\""
 github.com/egladman/magus/types.VCSOptions.Enabled field *bool
 github.com/egladman/magus/types.VCSOptions.Name field string
 github.com/egladman/magus/types.VCSResolution type struct
@@ -5367,7 +5293,6 @@ github.com/egladman/magus/types/gen/mocks.MockTargetExpander.AssertNumberOfCalls
 github.com/egladman/magus/types/gen/mocks.MockTargetExpander.Called method(ptr) func(arguments ...interface{}) github.com/stretchr/testify/mock.Arguments
 github.com/egladman/magus/types/gen/mocks.MockTargetExpander.EXPECT method(ptr) func() *MockTargetExpander_Expecter
 github.com/egladman/magus/types/gen/mocks.MockTargetExpander.ExpandAffected method(ptr) func(ctx context.Context, target string, baseRef string) ([]github.com/egladman/magus/types.Target, string, bool, error)
-github.com/egladman/magus/types/gen/mocks.MockTargetExpander.ExpandCwd method(ptr) func(t github.com/egladman/magus/types.Target) ([]github.com/egladman/magus/types.Target, bool, error)
 github.com/egladman/magus/types/gen/mocks.MockTargetExpander.ExpandPath method(ptr) func(t github.com/egladman/magus/types.Target) ([]github.com/egladman/magus/types.Target, error)
 github.com/egladman/magus/types/gen/mocks.MockTargetExpander.IsMethodCallable method(ptr) func(t github.com/stretchr/testify/mock.TestingT, methodName string, arguments ...interface{}) bool
 github.com/egladman/magus/types/gen/mocks.MockTargetExpander.MethodCalled method(ptr) func(methodName string, arguments ...interface{}) github.com/stretchr/testify/mock.Arguments
@@ -5391,21 +5316,6 @@ github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandAffected_Call
 github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandAffected_Call.Twice method func() *github.com/stretchr/testify/mock.Call
 github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandAffected_Call.Unset method func() *github.com/stretchr/testify/mock.Call
 github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandAffected_Call.WaitUntil method func(w <-chan time.Time) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandCwd_Call type struct
-github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandCwd_Call.After method func(d time.Duration) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandCwd_Call.Call embedded *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandCwd_Call.Maybe method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandCwd_Call.NotBefore method func(calls ...*github.com/stretchr/testify/mock.Call) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandCwd_Call.On method func(methodName string, arguments ...interface{}) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandCwd_Call.Once method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandCwd_Call.Panic method func(msg string) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandCwd_Call.Return method(ptr) func(targets []github.com/egladman/magus/types.Target, found bool, err error) *MockTargetExpander_ExpandCwd_Call
-github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandCwd_Call.Run method(ptr) func(run func(t github.com/egladman/magus/types.Target)) *MockTargetExpander_ExpandCwd_Call
-github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandCwd_Call.RunAndReturn method(ptr) func(run func(t github.com/egladman/magus/types.Target) ([]github.com/egladman/magus/types.Target, bool, error)) *MockTargetExpander_ExpandCwd_Call
-github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandCwd_Call.Times method func(i int) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandCwd_Call.Twice method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandCwd_Call.Unset method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandCwd_Call.WaitUntil method func(w <-chan time.Time) *github.com/stretchr/testify/mock.Call
 github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandPath_Call type struct
 github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandPath_Call.After method func(d time.Duration) *github.com/stretchr/testify/mock.Call
 github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandPath_Call.Call embedded *github.com/stretchr/testify/mock.Call
@@ -5423,7 +5333,6 @@ github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandPath_Call.Uns
 github.com/egladman/magus/types/gen/mocks.MockTargetExpander_ExpandPath_Call.WaitUntil method func(w <-chan time.Time) *github.com/stretchr/testify/mock.Call
 github.com/egladman/magus/types/gen/mocks.MockTargetExpander_Expecter type struct
 github.com/egladman/magus/types/gen/mocks.MockTargetExpander_Expecter.ExpandAffected method(ptr) func(ctx interface{}, target interface{}, baseRef interface{}) *MockTargetExpander_ExpandAffected_Call
-github.com/egladman/magus/types/gen/mocks.MockTargetExpander_Expecter.ExpandCwd method(ptr) func(t interface{}) *MockTargetExpander_ExpandCwd_Call
 github.com/egladman/magus/types/gen/mocks.MockTargetExpander_Expecter.ExpandPath method(ptr) func(t interface{}) *MockTargetExpander_ExpandPath_Call
 github.com/egladman/magus/types/gen/mocks.MockTrackedFileReporter type struct
 github.com/egladman/magus/types/gen/mocks.MockTrackedFileReporter.AssertCalled method(ptr) func(t github.com/stretchr/testify/mock.TestingT, methodName string, arguments ...interface{}) bool
@@ -6861,7 +6770,6 @@ github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository.EXPECT method(
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository.EvaluateProjects method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.EvaluatedProjectsOutput, error)
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository.EvaluateTarget method(ptr) func(ctx context.Context, t github.com/egladman/magus/types.Target) ([]github.com/egladman/magus/types.EvaluatedTarget, error)
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository.ExpandAffected method(ptr) func(ctx context.Context, target string, baseRef string) ([]github.com/egladman/magus/types.Target, string, bool, error)
-github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository.ExpandCwd method(ptr) func(t github.com/egladman/magus/types.Target) ([]github.com/egladman/magus/types.Target, bool, error)
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository.ExpandPath method(ptr) func(t github.com/egladman/magus/types.Target) ([]github.com/egladman/magus/types.Target, error)
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository.Get method(ptr) func(path string) *github.com/egladman/magus/types.Project
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository.Graph method(ptr) func() (*github.com/egladman/magus/types.Graph, error)
@@ -6985,21 +6893,6 @@ github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandAffected
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandAffected_Call.Twice method func() *github.com/stretchr/testify/mock.Call
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandAffected_Call.Unset method func() *github.com/stretchr/testify/mock.Call
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandAffected_Call.WaitUntil method func(w <-chan time.Time) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandCwd_Call type struct
-github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandCwd_Call.After method func(d time.Duration) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandCwd_Call.Call embedded *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandCwd_Call.Maybe method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandCwd_Call.NotBefore method func(calls ...*github.com/stretchr/testify/mock.Call) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandCwd_Call.On method func(methodName string, arguments ...interface{}) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandCwd_Call.Once method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandCwd_Call.Panic method func(msg string) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandCwd_Call.Return method(ptr) func(targets []github.com/egladman/magus/types.Target, found bool, err error) *MockWorkspaceRepository_ExpandCwd_Call
-github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandCwd_Call.Run method(ptr) func(run func(t github.com/egladman/magus/types.Target)) *MockWorkspaceRepository_ExpandCwd_Call
-github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandCwd_Call.RunAndReturn method(ptr) func(run func(t github.com/egladman/magus/types.Target) ([]github.com/egladman/magus/types.Target, bool, error)) *MockWorkspaceRepository_ExpandCwd_Call
-github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandCwd_Call.Times method func(i int) *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandCwd_Call.Twice method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandCwd_Call.Unset method func() *github.com/stretchr/testify/mock.Call
-github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandCwd_Call.WaitUntil method func(w <-chan time.Time) *github.com/stretchr/testify/mock.Call
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandPath_Call type struct
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandPath_Call.After method func(d time.Duration) *github.com/stretchr/testify/mock.Call
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_ExpandPath_Call.Call embedded *github.com/stretchr/testify/mock.Call
@@ -7023,7 +6916,6 @@ github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_Expecter.Class
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_Expecter.EvaluateProjects method(ptr) func(ctx interface{}) *MockWorkspaceRepository_EvaluateProjects_Call
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_Expecter.EvaluateTarget method(ptr) func(ctx interface{}, t interface{}) *MockWorkspaceRepository_EvaluateTarget_Call
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_Expecter.ExpandAffected method(ptr) func(ctx interface{}, target interface{}, baseRef interface{}) *MockWorkspaceRepository_ExpandAffected_Call
-github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_Expecter.ExpandCwd method(ptr) func(t interface{}) *MockWorkspaceRepository_ExpandCwd_Call
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_Expecter.ExpandPath method(ptr) func(t interface{}) *MockWorkspaceRepository_ExpandPath_Call
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_Expecter.Get method(ptr) func(path interface{}) *MockWorkspaceRepository_Get_Call
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_Expecter.Graph method(ptr) func() *MockWorkspaceRepository_Graph_Call

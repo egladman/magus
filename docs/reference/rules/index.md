@@ -124,17 +124,18 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [stage-all](stage-all.md)                               | a whole-tree `git add` (-A, -u, ., --all, --update), which sweeps in regenerated output            |
 | [stage-classify](stage-classify.md)                     | staging without classifying, when generated and source differ                                      |
 | [symbol-search](symbol-search.md)                       | a text search of the tree for a symbol, a declaration or a diagnostic code the graph answers       |
-| [throwaway-copy](throwaway-copy.md)                     | a run inside a temp or scratchpad copy, which leaves the real tree unverified                      |
-| [timed-magus](timed-magus.md)                           | `time` around a silent magus run, which already reports its own durations                          |
-| [unknown-env](unknown-env.md)                           | a retired or misspelled MAGUS_* variable handed to a command                                       |
-| [unleased-write](unleased-write.md)                     | a write magus cannot attribute while a fleet is running                                            |
-| [workspace-command-failed](workspace-command-failed.md) | a command the workspace's rule could not judge, so only the built-in rules graded it               |
-| [workspace-spawn-failed](workspace-spawn-failed.md)     | a spawn the workspace's rule could not judge, so only the built-in rules graded it                 |
-| [root-context-budget](root-context-budget.md)           | a session's main thread whose context has grown past its level's size                              |
 | [root-heavy-command](root-heavy-command.md)             | a main thread running delegable commands one after another without spawning                        |
+| [workspace-write-failed](workspace-write-failed.md)     | a file write the workspace's rule could not judge, so only the built-in rules graded it            |
+| [workspace-spawn-failed](workspace-spawn-failed.md)     | a spawn the workspace's rule could not judge, so only the built-in rules graded it                 |
+| [unleased-write](unleased-write.md)                     | a write magus cannot attribute while a fleet is running                                            |
+| [throwaway-copy](throwaway-copy.md)                     | a run inside a temp or scratchpad copy, which leaves the real tree unverified                      |
+| [root-context-budget](root-context-budget.md)           | a session's main thread whose context has grown past its level's size                              |
+| [workspace-command-failed](workspace-command-failed.md) | a command the workspace's rule could not judge, so only the built-in rules graded it               |
+| [timed-magus](timed-magus.md)                           | `time` around a silent magus run, which already reports its own durations                          |
+| [unjudged-tool](unjudged-tool.md)                       | a tool call whose input carries nothing any rule reads, from a tool the guard does not know        |
+| [unknown-env](unknown-env.md)                           | a retired or misspelled MAGUS_* variable handed to a command                                       |
 | [root-repeat](root-repeat.md)                           | a main thread running the same delegable command again with no write since                         |
 | [root-result-cap](root-result-cap.md)                   | one tool result too large for a main thread's context, said on its next call                       |
 | [spawn-above-model-tier](spawn-above-model-tier.md)     | a subagent spawned on a model whose tier ranks above the tier its job was forked at                |
 | [spawn-names-model](spawn-names-model.md)               | a main thread spawning a subagent without naming the model it runs on                              |
-| [workspace-write-failed](workspace-write-failed.md)     | a file write the workspace's rule could not judge, so only the built-in rules graded it            |
 | [stall](stall.md)                                       | a leased worker refused by something only the root can clear                                       |

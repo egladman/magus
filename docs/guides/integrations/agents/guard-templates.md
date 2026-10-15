@@ -122,7 +122,7 @@ over its offset and limit, a limit over 300 counting as whole), so the read rule
 judge a `Read` exactly as they judge the `cat` it replaces.
 
 ```buzz
-// magus guard hook: judges ONE shell command an agent is about to run.
+// magus guard hook: judges ONE tool call an agent is about to make, whatever the tool.
 //
 // It needs neither jq nor a POSIX shell, so the file runs unchanged on Windows.
 //
@@ -133,9 +133,10 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // reads no workspace member starts in about 10ms, where opening one costs
 // roughly 700ms on every tool call.
 //
-// Contract: reads the host's event as JSON on stdin, selects its command, then
-// feeds the command to `magus shell`. It writes the host's response on stdout
-// and exits 0 either way.
+// Contract: reads the host's event as JSON on stdin and feeds the whole event to
+// `magus shell`, which judges the call by its tool's name and the shape of its
+// input: a command line, a file read or write, a search, a spawn. It writes the
+// host's response on stdout and exits 0 either way.
 //
 // A hook command is an ARGV, not a shell line: the host splits it and runs the
 // program itself, so a `NAME=value` prefix only means anything where something
@@ -168,9 +169,12 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 //
 // Override any of the variables below:
 //
-//   HOST_EVENT_PATH  dot-path to the command inside your host's event
-//   HOST_TOOL_PATH   dot-path to the tool name, which decides whether the whole envelope
-//                    is forwarded rather than one field selected out of it
+//   HOST_EVENT_PATH  dot-path to the command inside your host's event, for a host whose
+//                    envelope magus does not read: that one string is forwarded instead
+//                    of the whole event. Unset, the whole event goes, which is what lets
+//                    magus judge every tool and not only a shell
+//   HOST_TOOL_PATH   dot-path to the tool name, which keeps an MCP call whole even where
+//                    HOST_EVENT_PATH selects
 //   HOST_SESSION_PATH  dot-path to the session id inside your host's event
 //   HOST_AGENT_PATH  dot-path to the subagent id inside your host's event, so a
 //                    subagent's command is graded under the job it was spawned for
@@ -251,10 +255,13 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=mcp deny=model advise=model pass=none ask=model
-// The mcp rows are real: an mcp__magus__* PreToolUse call carries no tool_input.command,
-// so this file forwards the whole event instead (see hook\wholeEvent), and the same hookSpecificOutput
-// reply it already renders for the command input carries a deny or an advise on this one too.
-// No rule prompts for an MCP call, so Codex's mcp ask is the deny that names the terminal.
+// magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=2 host=codex input=path deny=model advise=model pass=none ask=model
+// The mcp and path rows are real: every host wires this file to every tool, so an
+// mcp__magus__* call and a file write reach it as whole events (see hook\wholeEvent), and
+// the same hookSpecificOutput reply it renders for a command carries a deny or an advise on
+// those too. No Codex rule prompts for an MCP call or a write, so there the ask is the deny
+// that names the terminal.
 
 import "std";
 import "flags";
@@ -477,8 +484,8 @@ fun foregroundFlags(args: [str]) > [str] {
 }
 
 // callFlags is what a shell command's tool input asked of the host: to run it in the
-// background, and how long to wait on it. Read off the event because this file forwards
-// the command alone. JSON numbers parse as double.
+// background, and how long to wait on it. The whole event carries both too; these say it
+// where HOST_EVENT_PATH forwards the command alone. JSON numbers parse as double.
 fun callFlags(event: any?) > [str] {
     final facts = mut [<str>];
     if (hook\dig(event, dotPath: "tool_input.run_in_background") == true) {
@@ -598,27 +605,6 @@ fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
         + "Rebuild or update THAT binary to restore the guard.";
 }
 
-// A read tool's limit past this reads the whole file, as the read rule counts it.
-final WHOLE_READ_LIMIT = 300;
-
-// readCommand is the shell line a host's Read stands for, "" for any other tool: `cat` of
-// the file, or a sed range over its offset and limit. The read rules then judge it as the
-// command it replaces, the way Cursor's hook already restates its Read.
-fun readCommand(event: any?, tool: str) > str {
-    if (tool != "Read") { return ""; }
-    final input = hook\dig(event, dotPath: "tool_input");
-    var file = hook\field(input, dotPath: "file_path");
-    if (file == "") { file = hook\field(input, dotPath: "path"); }
-    if (file == "") { return ""; }
-    final word = "'" + file.replace("'", with: "'\\''") + "'";
-    final limit = std\parseInt(hook\field(input, dotPath: "limit")) ?? 0;
-    var first = std\parseInt(hook\field(input, dotPath: "offset")) ?? 1;
-    if (first < 1) { first = 1; }
-    if (limit > 0 and limit <= WHOLE_READ_LIMIT) { return "sed -n {first},{first + limit - 1}p {word}"; }
-    if (first > 1) { return "sed -n {first},$p {word}"; }
-    return "cat {word}";
-}
-
 fun contextReply(eventName: str, text: str) > str {
     final encoded = json\stringify(text) catch `""`;
     var reply = CONTEXT_REPLY.replace(CONTEXT_SLOT, with: encoded);
@@ -696,7 +682,8 @@ fun main(args: [str]) > void {
         return;
     }
 
-    final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "tool_input.command");
+    // Empty unless the host names a field: the whole event goes, and magus reads the tool.
+    final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "");
     final sessionPath = hook\envOr("HOST_SESSION_PATH", fallback: "session_id");
     final agentPath = hook\envOr("HOST_AGENT_PATH", fallback: "agent_id");
     final transcriptPath = hook\envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
@@ -706,25 +693,28 @@ fun main(args: [str]) > void {
     // otherwise, and gets that field judged as a shell command.
     final toolPath = hook\envOr("HOST_TOOL_PATH", fallback: "tool_name");
     final rawEvent = hook\wholeEvent(event, dotPath: eventPath, toolPath: toolPath);
+    // A shell command line, which alone has a Codex prompt rule, a background mode and a
+    // timeout: a string at the command field of a call that is not over MCP.
+    final commandPath = hook\envOr("HOST_EVENT_PATH", fallback: "tool_input.command");
+    final shellCall = !hook\wholeEvent(event, dotPath: commandPath, toolPath: toolPath);
 
     // Read BEFORE the availability check below, because the notices that check prints
     // are held to one firing per session and the session id is what keys them.
     final session = hook\field(event, dotPath: sessionPath);
-    // Forwarded because this file selects one field out of the envelope: without it a
-    // subagent's command reaches magus looking like its parent's.
+    // Forwarded for a host whose HOST_EVENT_PATH selects one field out of the envelope:
+    // without it a subagent's command reaches magus looking like its parent's.
     final agent = hook\field(event, dotPath: agentPath);
     final transcript = hook\field(event, dotPath: transcriptPath);
     final eventName = hook\field(event, dotPath: "hook_event_name");
     final toolName = hook\field(event, dotPath: toolPath);
 
     var promptRule: str? = null;
-    if (!rawEvent) { promptRule = codexPromptRule(hook\field(event, dotPath: eventPath)); }
+    if (shellCall) { promptRule = codexPromptRule(hook\field(event, dotPath: commandPath)); }
 
     // Codex is the host the entry names, never one the event's shape suggests: see
     // AGENT_NAME_FLAG. An entry that names no host gets MGS3024 from magus, whatever arm
     // is assembled here.
     final codex = agentName == "codex";
-    final read = readCommand(event, tool: toolName);
 
     var response = env\get("HOST_RESPONSE") catch "";
     var capabilities = mut [<str>];
@@ -762,9 +752,7 @@ fun main(args: [str]) > void {
     }
 
     var payload = raw!;
-    if (read != "") {
-        payload = read + "\n";
-    } else if (!rawEvent) {
+    if (!rawEvent) {
         payload = hook\rawField(event, dotPath: eventPath) + "\n";
     }
     final guard = Guard{ bin = bin, payload = payload, flags = shellFlags(args), response = response, dir = cwd };
@@ -795,8 +783,9 @@ fun main(args: [str]) > void {
     }
     foreach (flag in capabilities) { attributed.append(flag); }
     final newest = mut [<str>];
-    // Only a shell command the host runs has a background or a timeout to report.
-    if (!rawEvent and read == "") {
+    // Only a shell command the host runs has a background or a timeout to report. The
+    // whole event carries the call's own two as well; the host's limits only argv does.
+    if (shellCall) {
         foreach (word in callFlags(event)) { newest.append(word); }
         foreach (word in foregroundFlags(args)) { newest.append(word); }
     }
@@ -846,8 +835,10 @@ wasteful, not destructive.
 ```buzz
 // magus guard hook: judges ONE file path an agent is about to write.
 //
-// Companion to magus-command.buzz, wired to your host's file-editing tool
-// rather than its shell tool. It needs neither jq nor a POSIX shell.
+// Companion to magus-command.buzz, for a host config that wires its file-editing tool
+// apart from the rest. The shipped harnesses do not: they wire magus-command.buzz to every
+// tool, and it judges a write by the shape of the whole event. It needs neither jq nor a
+// POSIX shell.
 //
 // Run it as `magus buzz -s magus-path.buzz`; see magus-command.buzz for why `-s` is
 // load-bearing. It imports no magus Buzz module
@@ -909,7 +900,6 @@ wasteful, not destructive.
 // renders as a deny.
 // magus-guard-template: 28
 // magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=2 host=codex input=path deny=model advise=model pass=none ask=model
 
 import "io";
 import "flags";
@@ -1021,7 +1011,8 @@ fun readEntryArgs(args: [str]) > EntryArgs {
 fun main(args: [str]) > void {
     final entry = readEntryArgs(args);
     final agentName = entry.agentName;
-    final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
+    // Empty unless the host names a field: the whole event goes, content included.
+    final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "");
     final sessionPath = hook\envOr("HOST_SESSION_PATH", fallback: "session_id");
     final agentPath = hook\envOr("HOST_AGENT_PATH", fallback: "agent_id");
     final transcriptPath = hook\envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");

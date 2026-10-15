@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 
-	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
