@@ -467,6 +467,20 @@ github.com/egladman/magus/types.AgentThread.Values method func() []string
 github.com/egladman/magus/types.AgentThreadMain const AgentThread = "main"
 github.com/egladman/magus/types.AgentThreadSub const AgentThread = "sub"
 github.com/egladman/magus/types.AgentThreadUnknown const AgentThread = "unknown"
+github.com/egladman/magus/types.AliasClash type struct
+github.com/egladman/magus/types.AliasClash.Both field int "json:\"both\"      yaml:\"both\""
+github.com/egladman/magus/types.AliasClash.Dir field string "json:\"dir\"       yaml:\"dir\""
+github.com/egladman/magus/types.AliasClash.Importers field int "json:\"importers\" yaml:\"importers\""
+github.com/egladman/magus/types.AliasClash.Name field string "json:\"name\"      yaml:\"name\""
+github.com/egladman/magus/types.AliasClash.Ours field bool "json:\"ours\"      yaml:\"ours\""
+github.com/egladman/magus/types.AliasFacts type struct
+github.com/egladman/magus/types.AliasFacts.Aliased field int "json:\"aliased\"   yaml:\"aliased\""
+github.com/egladman/magus/types.AliasFacts.Aliases field map[string]int "json:\"aliases\"   yaml:\"aliases\""
+github.com/egladman/magus/types.AliasFacts.Clashes field []AliasClash "json:\"clashes\"   yaml:\"clashes\""
+github.com/egladman/magus/types.AliasFacts.Dir field string "json:\"dir\"       yaml:\"dir\""
+github.com/egladman/magus/types.AliasFacts.Importers field int "json:\"importers\" yaml:\"importers\""
+github.com/egladman/magus/types.AliasFacts.Name field string "json:\"name\"      yaml:\"name\""
+github.com/egladman/magus/types.AliasFacts.Needed field int "json:\"needed\"    yaml:\"needed\""
 github.com/egladman/magus/types.AllDiagnosticCodes func() []DiagnosticCode
 github.com/egladman/magus/types.AllSymbols var SymbolScope
 github.com/egladman/magus/types.AllowlistUnresolved const DiagnosticCode = "MGS2004"
@@ -530,6 +544,7 @@ github.com/egladman/magus/types.BranchChange.Paths field []string "json:\"paths\
 github.com/egladman/magus/types.BranchChange.Ref field string "json:\"ref\""
 github.com/egladman/magus/types.BranchChangeReporter type interface
 github.com/egladman/magus/types.BranchChangeReporter.BranchChanges imethod func(ctx context.Context, dir string, base string, limit int) ([]BranchChange, error)
+github.com/egladman/magus/types.BranchIdents func(lines [][]byte, start int, end int, language string) []string
 github.com/egladman/magus/types.BrokerBestEffort const BrokerPolicy = "best-effort"
 github.com/egladman/magus/types.BrokerOff const BrokerPolicy = "off"
 github.com/egladman/magus/types.BrokerPolicy type string
@@ -665,7 +680,9 @@ github.com/egladman/magus/types.Check.Message field string "json:\"message,omite
 github.com/egladman/magus/types.Check.Name field string "json:\"name\" yaml:\"name\""
 github.com/egladman/magus/types.Check.Status field CheckStatus "json:\"status\" yaml:\"status\""
 github.com/egladman/magus/types.CheckAdvice const CheckStatus = "advice"
+github.com/egladman/magus/types.CheckCallSequence const untyped string = "call-sequence"
 github.com/egladman/magus/types.CheckFail const CheckStatus = "fail"
+github.com/egladman/magus/types.CheckImportAlias const untyped string = "import-alias"
 github.com/egladman/magus/types.CheckLayer func(dir string, name string) error
 github.com/egladman/magus/types.CheckNameCollision const untyped string = "name-collision"
 github.com/egladman/magus/types.CheckNamingAffix const untyped string = "naming-affix"
@@ -675,6 +692,8 @@ github.com/egladman/magus/types.CheckPackageName const untyped string = "package
 github.com/egladman/magus/types.CheckPackageTests const untyped string = "package-tests"
 github.com/egladman/magus/types.CheckParamOrder const untyped string = "param-order"
 github.com/egladman/magus/types.CheckRenameLeftover const untyped string = "rename-leftover"
+github.com/egladman/magus/types.CheckSharedLoop const untyped string = "shared-loop"
+github.com/egladman/magus/types.CheckSiblingSprawl const untyped string = "sibling-sprawl"
 github.com/egladman/magus/types.CheckStatus type string
 github.com/egladman/magus/types.CheckStatus.String method func() string
 github.com/egladman/magus/types.CheckStatus.Valid method func() bool
@@ -825,6 +844,9 @@ github.com/egladman/magus/types.ConflictResolver.IgnoredPaths imethod func(ctx c
 github.com/egladman/magus/types.ConflictResolver.KeepIncoming imethod func(ctx context.Context, root string, paths []string) error
 github.com/egladman/magus/types.ConflictResolver.MarkResolved imethod func(ctx context.Context, root string, paths []string) error
 github.com/egladman/magus/types.ConflictResolver.RemoveConflicts imethod func(ctx context.Context, root string, paths []string) error
+github.com/egladman/magus/types.ConformAliasShare const ConformMetric = "alias-share"
+github.com/egladman/magus/types.ConformCallSequence const ConformMetric = "call-sequence"
+github.com/egladman/magus/types.ConformCallerSpread const ConformMetric = "caller-spread"
 github.com/egladman/magus/types.ConformCloneTokens const ConformMetric = "clone-tokens"
 github.com/egladman/magus/types.ConformDefinition const untyped string = "Conform measures how big and how coupled the workspace's code is, one row per metric and population: file lines, function lines, methods per type, top-level declarations per file, workspace imports per package, token count of bodies that share a shape, and exported symbols nothing outside their package uses. Each row gives the live percentiles, the value a check enforces (the committed ratchet value, else the configured anchor) and where that value came from, and the files, symbols or clone groups past it that no known entry accepts. Propose is the live percentile when it has fallen at least the configured step below the enforced value on a large enough sample, and never otherwise: nothing here enforces a live percentile, since a threshold that follows the code loosens as the code grows. The lens proposes; a person commits the value to the ratchet record the row names, and nothing here edits it. Generated and excluded files belong to no population, and excluded counts the files the configured exclusions hid. An index that is missing or stale answers unknown, never a pass."
 github.com/egladman/magus/types.ConformDepFanout const ConformMetric = "dep-fanout"
@@ -855,11 +877,14 @@ github.com/egladman/magus/types.ConformKnown.Metric field ConformMetric "json:\"
 github.com/egladman/magus/types.ConformKnown.Reason field string "json:\"reason\" yaml:\"reason\""
 github.com/egladman/magus/types.ConformLimit type struct
 github.com/egladman/magus/types.ConformLimit.Anchor field int
+github.com/egladman/magus/types.ConformLimit.MinSubject field int
 github.com/egladman/magus/types.ConformLimit.Percentile field float64
 github.com/egladman/magus/types.ConformMetric type string
 github.com/egladman/magus/types.ConformMetric.String method func() string
 github.com/egladman/magus/types.ConformMetric.Valid method func() bool
 github.com/egladman/magus/types.ConformMetric.Values method func() []string
+github.com/egladman/magus/types.ConformModeKnobs const ConformMetric = "mode-knobs"
+github.com/egladman/magus/types.ConformNameClash const ConformMetric = "name-clash"
 github.com/egladman/magus/types.ConformOptions type struct
 github.com/egladman/magus/types.ConformOptions.Effective method func(k ConformKey) (value int, src ConformSource)
 github.com/egladman/magus/types.ConformOptions.Exclude field []string
@@ -906,6 +931,8 @@ github.com/egladman/magus/types.ConformRow.Propose field int "json:\"propose\"  
 github.com/egladman/magus/types.ConformRow.Source field ConformSource "json:\"source\"     yaml:\"source\""
 github.com/egladman/magus/types.ConformRow.Value field int "json:\"value\"      yaml:\"value\""
 github.com/egladman/magus/types.ConformRow.Violations field []ConformItem "json:\"violations\" yaml:\"violations\""
+github.com/egladman/magus/types.ConformSharedBody const ConformMetric = "shared-body"
+github.com/egladman/magus/types.ConformSharedReach const ConformMetric = "shared-reach"
 github.com/egladman/magus/types.ConformSource type string
 github.com/egladman/magus/types.ConformSource.String method func() string
 github.com/egladman/magus/types.ConformSource.Valid method func() bool
@@ -1923,6 +1950,10 @@ github.com/egladman/magus/types.ImpactSymbol.FileCount field int "json:\"file_co
 github.com/egladman/magus/types.ImpactSymbol.Label field string "json:\"label,omitempty\" yaml:\"label,omitempty\""
 github.com/egladman/magus/types.ImpactSymbol.RefCount field int "json:\"ref_count\"  yaml:\"ref_count\""
 github.com/egladman/magus/types.ImpactSymbol.Symbol field string "json:\"symbol\"     yaml:\"symbol\""
+github.com/egladman/magus/types.ImportAlias func(lines [][]byte, line int, language string) string
+github.com/egladman/magus/types.ImportAliasReport type struct
+github.com/egladman/magus/types.ImportAliasReport.Indexed field bool "json:\"indexed\"  yaml:\"indexed\""
+github.com/egladman/magus/types.ImportAliasReport.Packages field []AliasFacts "json:\"packages\" yaml:\"packages\""
 github.com/egladman/magus/types.ImportGraph type struct
 github.com/egladman/magus/types.ImportGraph.Indexed field bool "json:\"indexed\""
 github.com/egladman/magus/types.ImportGraph.Languages field map[string]string "json:\"languages\""
@@ -2546,7 +2577,7 @@ github.com/egladman/magus/types.KnowledgeRoutingProject type struct
 github.com/egladman/magus/types.KnowledgeRoutingProject.KeyTargets field []string "json:\"key_targets,omitempty\" yaml:\"key_targets,omitempty\""
 github.com/egladman/magus/types.KnowledgeRoutingProject.Path field string "json:\"path\"                  yaml:\"path\""
 github.com/egladman/magus/types.KnowledgeRoutingProject.TargetCount field int "json:\"target_count\"          yaml:\"target_count\""
-github.com/egladman/magus/types.KnowledgeSchemaVersion const untyped int = 19
+github.com/egladman/magus/types.KnowledgeSchemaVersion const untyped int = 21
 github.com/egladman/magus/types.KnowledgeStaleIndex type struct
 github.com/egladman/magus/types.KnowledgeStaleIndex.CouldHold method func(language string) bool
 github.com/egladman/magus/types.KnowledgeStaleIndex.Describe method func() string
@@ -2568,6 +2599,7 @@ github.com/egladman/magus/types.KnowledgeSymbol type struct
 github.com/egladman/magus/types.KnowledgeSymbol.BodyDigest field string
 github.com/egladman/magus/types.KnowledgeSymbol.BodyShape field string
 github.com/egladman/magus/types.KnowledgeSymbol.BodyTokens field int
+github.com/egladman/magus/types.KnowledgeSymbol.BranchIdents field []string
 github.com/egladman/magus/types.KnowledgeSymbol.Calls field []KnowledgeSymbolCall
 github.com/egladman/magus/types.KnowledgeSymbol.DefEndLine field int
 github.com/egladman/magus/types.KnowledgeSymbol.Definitions field []KnowledgeSymbolDefinition
@@ -2579,6 +2611,7 @@ github.com/egladman/magus/types.KnowledgeSymbol.Label field string
 github.com/egladman/magus/types.KnowledgeSymbol.Language field string
 github.com/egladman/magus/types.KnowledgeSymbol.Moniker field string
 github.com/egladman/magus/types.KnowledgeSymbol.Namespace field string
+github.com/egladman/magus/types.KnowledgeSymbol.PackageName field string
 github.com/egladman/magus/types.KnowledgeSymbol.Refs field []KnowledgeSymbolRef
 github.com/egladman/magus/types.KnowledgeSymbol.Signature field string
 github.com/egladman/magus/types.KnowledgeSymbol.Source field string
@@ -2601,6 +2634,7 @@ github.com/egladman/magus/types.KnowledgeSymbolGap.Language field string "json:\
 github.com/egladman/magus/types.KnowledgeSymbolGap.Project field ProjectRef "json:\"project\"            yaml:\"project\""
 github.com/egladman/magus/types.KnowledgeSymbolGap.State field SymbolIndexFreshness "json:\"state\"              yaml:\"state\""
 github.com/egladman/magus/types.KnowledgeSymbolRef type struct
+github.com/egladman/magus/types.KnowledgeSymbolRef.Alias field string
 github.com/egladman/magus/types.KnowledgeSymbolRef.Count field int
 github.com/egladman/magus/types.KnowledgeSymbolRef.Lines field []int
 github.com/egladman/magus/types.KnowledgeSymbolRef.Path field string
