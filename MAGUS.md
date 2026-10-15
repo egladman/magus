@@ -41,7 +41,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph (schema v19). Query it instead of grepping:
+This workspace has a knowledge graph (schema v21). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind=spell, project=pkg/foo, relation=uses, free text, kind!=op

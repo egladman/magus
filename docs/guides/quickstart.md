@@ -94,15 +94,15 @@ Add `--dry-run` to any of these to print the exact commands without running them
 magus has output flags, so you never need to pipe its output through `grep`,
 `head`, or `awk`. Every one of these works on every command:
 
-| flag                         | does                                                                          |
-| ---------------------------- | ----------------------------------------------------------------------------- |
-| `-s` / `--silent`            | a pass prints only its output ref; a failure adds a bounded tail              |
-| `-q` / `--quiet`             | drops progress, keeps errors and the failing project's full output            |
-| `-o json` / `yaml` / `jsonl` | machine-readable, `schema_version`-stamped                                    |
-| `-o name`                    | bare identifiers, one per line                                                |
-| `-o template=<go-template>`  | project exactly the fields you want                                           |
-| `-v` / `-vv` / `-vvv`        | more log verbosity                                                            |
-| `--tee <file>`               | mirror structured output to a file                                            |
+| flag                         | does                                                               |
+| ---------------------------- | ------------------------------------------------------------------ |
+| `-s` / `--silent`            | a pass prints only its output ref; a failure adds a bounded tail   |
+| `-q` / `--quiet`             | drops progress, keeps errors and the failing project's full output |
+| `-o json` / `yaml` / `jsonl` | machine-readable, `schema_version`-stamped                         |
+| `-o name`                    | bare identifiers, one per line                                     |
+| `-o template=<go-template>`  | project exactly the fields you want                                |
+| `-v` / `-vv` / `-vvv`        | more log verbosity                                                 |
+| `--tee <file>`               | mirror structured output to a file                                 |
 
 When a target fails it mints an output ref (`out1a2b3c`). Fetch the full log with
 `magus query output out1a2b3c` instead of re-running the target to see the error
