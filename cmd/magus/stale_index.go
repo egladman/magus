@@ -135,7 +135,7 @@ func findStaleIndexes(ctx context.Context, ws graphWorkspace) []types.KnowledgeS
 		// Freshness is a cache question (see symbol_stamp.go): it keys the scip step, which
 		// needs the evaluated workspace. A read the stored graph answered without opening
 		// one takes the verdicts the last evaluation recorded while they provably still
-		// hold (unchanged sources and index files, see magus.RecordedStaleIndexes), and
+		// hold (unchanged sources and index files, see workspacegraph.RecordedStaleIndexes), and
 		// opens the workspace to judge afresh otherwise, as every read did before.
 		if !w.Opened() {
 			if stale, ok := workspacegraph.RecordedStaleIndexes(ctx, w, globalCfg); ok {

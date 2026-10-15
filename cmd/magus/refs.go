@@ -585,7 +585,7 @@ type indexedAtFunc func(file string) (time.Time, bool)
 
 // symbolIndexTimes returns an indexedAtFunc over the cached indexes each project declares,
 // or nil when the workspace cannot be read. Files under a knowledge.symbols override check
-// as unverified; see magus.SymbolIndexTimes.
+// as unverified; see workspacegraph.SymbolIndexTimes.
 func symbolIndexTimes(ctx context.Context, root string) indexedAtFunc {
 	ws, err := inspectWorkspace(ctx, root)
 	if err != nil {

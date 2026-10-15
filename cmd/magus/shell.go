@@ -342,7 +342,7 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 
 // guardHumanOnlyRecord answers what the workspace at root, "" for the one found from
 // rootOverride, declares human_only from the knowledge store's record of it (see
-// magus.RecordedHumanOnly). Each call holds a lazy workspace of its own, whose one walk of
+// workspacegraph.RecordedHumanOnly). Each call holds a lazy workspace of its own, whose one walk of
 // the tree is taken now: a daemon grading checks keeps these dependencies for hours, and
 // a walk kept from an earlier call would vouch for a record the tree has since moved past.
 // The record is read without opening the workspace; open is there only because a lazy

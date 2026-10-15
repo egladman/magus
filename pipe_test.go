@@ -197,7 +197,7 @@ func TestAcquireDefersToAPredecessorThatHolds(t *testing.T) {
 		t.Fatalf("took p after %s, before the upstream released it", waited)
 	}
 	got, _ := io.ReadAll(r)
-	sp.wait()
+	sp.Wait()
 	if string(got) != "plan" {
 		t.Fatalf("stdin after the wait = %q, want %q", got, "plan")
 	}
@@ -256,7 +256,7 @@ func TestAcquireDefersBeforeThePredecessorLocks(t *testing.T) {
 		t.Fatalf("took p without waiting for the upstream that had not locked yet")
 	}
 	got, _ := io.ReadAll(r)
-	sp.wait()
+	sp.Wait()
 	if err := up.Wait(); err != nil {
 		t.Fatalf("upstream: %v (it must never be refused by the stage reading it)", err)
 	}
@@ -284,7 +284,7 @@ func TestDeferralDrainsSoTheUpstreamNeverBlocks(t *testing.T) {
 	defer release()
 	got, _ := io.ReadAll(r)
 	if sp != nil {
-		sp.wait()
+		sp.Wait()
 	}
 	if len(got) != n || sha256.Sum256(got) != sha256.Sum256(pattern(n)) {
 		t.Fatalf("relayed %d bytes, want the upstream's %d byte-for-byte", len(got), n)
@@ -305,7 +305,7 @@ func TestDeferralEndsWhenThePredecessorIsKilled(t *testing.T) {
 		t.Fatalf("takeRunLocks after the upstream was killed: %v", err)
 	}
 	got, _ := io.ReadAll(r)
-	sp.wait()
+	sp.Wait()
 	if string(got) != "partial" {
 		t.Fatalf("stdin = %q, want what the upstream wrote before it died", got)
 	}
@@ -352,7 +352,7 @@ func TestDeferralHoldsNothingWhileWaiting(t *testing.T) {
 		if err == nil {
 			rel()
 			_, _ = io.ReadAll(r)
-			sp.wait()
+			sp.Wait()
 		}
 		done <- err
 	}()
@@ -422,7 +422,7 @@ func TestDeferralDecisionLine(t *testing.T) {
 	}
 	release()
 	_, _ = io.ReadAll(r)
-	sp.wait()
+	sp.Wait()
 	want := fmt.Sprintf("magus: waiting for pid %d (", up.Process.Pid)
 	if strings.Count(out.String(), want) != 1 || !strings.Contains(out.String(), "TestHelperPipeStage") {
 		t.Fatalf("decision output = %q, want exactly one line naming pid %d and its command", out.String(), up.Process.Pid)
@@ -445,7 +445,7 @@ func TestDeferralDecisionRecordUnderJSONL(t *testing.T) {
 	}
 	release()
 	_, _ = io.ReadAll(r)
-	sp.wait()
+	sp.Wait()
 	if err := rw.Close(); err != nil {
 		t.Fatalf("close records: %v", err)
 	}
@@ -473,7 +473,7 @@ func TestPipeWaitRecordIsWrittenAndSwept(t *testing.T) {
 		if err == nil {
 			rel()
 			_, _ = io.ReadAll(r)
-			sp.wait()
+			sp.Wait()
 		}
 	}()
 	time.Sleep(250 * time.Millisecond)
@@ -781,7 +781,7 @@ func TestUpstreamThroughANonMagusStage(t *testing.T) {
 		t.Fatalf("did not wait on the magus stage behind cat")
 	}
 	got, _ := io.ReadAll(r2)
-	sp.wait()
+	sp.Wait()
 	if string(got) != "plan" {
 		t.Fatalf("stdin = %q, want plan relayed through cat", got)
 	}
