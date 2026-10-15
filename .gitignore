@@ -57,8 +57,8 @@ console/gen/
 
 # The graph exports (knowledge-graph.json, target-graph.json): GitHub Pages already
 # serves the fresh pair at /magus/console/graph/, rebuilt every deploy, so a committed
-# copy here only ever went stale between deploys. Rooted and single-star so gen/mocks/
-# (tracked Go, its own linguist-generated entry above) is untouched.
+# copy here only ever went stale between deploys. Rooted and single-star so the
+# gen/<pkg>test/ doubles (tracked Go, their own linguist-generated entry) are untouched.
 /gen/*.json
 
 # Coverage intermediates: Go profiles from `magus run test`, Buzz LCOV fragments and the
