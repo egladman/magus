@@ -204,7 +204,9 @@ the `Step`. magus writes these lines, in this order, into one hash:
   (`ctx.hasCharm("rw")`), declares in-place edits (`ctx.modifiesExistingFiles`), or
   drives an op that patches its argv on it. Every other step, a test run say, hashes
   as it would without the grant, so a local run under `default_charms: [rw]` and the
-  read-only `ci` gate share one entry.
+  read-only `ci` gate share one entry. The walk is static, so a body that names the
+  charm through a variable counts as not reading it. A display flag such as `-s`
+  (`--silent`) is no charm and never enters the key.
 - `arg:` lines: one per argument after `--` (`magus run test -- -run
   TestFoo`), in the order given. Unlike charms and env these are never sorted,
   since `-run X` is not `X -run`; a run with different trailing args must not
@@ -897,8 +899,10 @@ clone of it: **`<user cache>/magus/cache/<repo>-<hash>/`**, where the user cache
 `$XDG_CACHE_HOME` (`~/.cache` when unset) and the repository is named the way
 magus's other per-repository stores name it, by its default remote, or by its main
 checkout when it has none. A key holds no absolute path, so a target one worktree
-ran replays in another at the same content. The run header and `magus doctor` name
-the store:
+ran replays in another at the same content. When no user cache directory resolves,
+magus fails and asks for `XDG_CACHE_HOME` or `cache.dir` rather than fall back to the
+checkout, because a store that quietly stopped being shared would rebuild every key in
+every worktree. The run header and `magus doctor` name the store:
 
 ```text
 cache: local (read+write) in /home/me/.cache/magus/cache/api-3f2a9c01b7de
@@ -960,6 +964,20 @@ last referencing manifest is evicted). Out of band, `magus config cache prune`
 evicts entries older than a cutoff. To force a clean rebuild of specific projects,
 `magus clean --cache <project>` drops their entries. The whole store is portable:
 `magus config cache export` / `import` move it as a gzip-tar.
+
+Because every checkout shares the store, collection waits out a **15-minute grace**
+before it removes a blob no manifest names. Another process may hold such a blob: it
+has snapshotted its outputs and not yet written their manifest, or it is replaying an
+entry that an eviction just removed. The grace is the blob's file mtime, so there is
+no lock to go stale when a process dies. A write moves the mtime to now, and so does a
+snapshot that finds the blob already stored and a hit in a local tier that may write,
+which touches every blob the entry names. A read-only local tier touches nothing, since
+it writes nothing to the store.
+
+`magus clean --cache` skips the wait for its own deletions. It removes at once the blobs that
+only the manifests it deleted referenced, since no replay of those entries can still
+succeed. Any other unreferenced blob, one a crashed run left behind say, stays until it
+is older than the grace and a later eviction, prune or clean collects it.
 
 ## Connecting to the remote cache
 
