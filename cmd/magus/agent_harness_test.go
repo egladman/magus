@@ -151,8 +151,10 @@ wired in .claude/settings.json hooks.PreToolUse:
 
 // TestDescribeHarnessMergeCommandLeavesTheFileCurrent runs the printed merge command with
 // this test binary as `magus`, so the `magus buzz` it pipes into is built from this source
-// and never a stale binary found on disk. Afterwards nothing is left to merge, the person's
-// own entries and an integer past 2^53 survive, and a retired entry is gone.
+// and never a stale binary found on disk. The command is copied from the text output the
+// way a person copies it and must match want-merge.sh byte for byte, so an escaped > fails
+// here. Afterwards nothing is left to merge, the person's own entries and an integer past
+// 2^53 survive, a retired entry is gone, and a second run on the current plan changes nothing.
 func TestDescribeHarnessMergeCommandLeavesTheFileCurrent(t *testing.T) {
 	script := filepath.Join(t.TempDir(), "describe_harness_merge.txtar")
 	require.NoError(t, os.WriteFile(script, []byte(describeHarnessMergeTxtar), 0o644))
@@ -167,9 +169,11 @@ func TestDescribeHarnessMergeCommandLeavesTheFileCurrent(t *testing.T) {
 	})
 }
 
-const describeHarnessMergeTxtar = `exec magus describe harness script-host -o 'template={{.merge}}'
-cp stdout merge.sh
-exec sh merge.sh
+const describeHarnessMergeTxtar = `exec sh -c 'magus describe harness script-host | sed -n "s/^  \(magus describe harness .*\)/\1/p" > printed.sh'
+cmp printed.sh want-merge.sh
+exec sh printed.sh
+cmp hooks.json want.json
+exec sh printed.sh
 cmp hooks.json want.json
 exec magus describe harness script-host
 stdout '^script-host harness: current$'
@@ -209,6 +213,8 @@ export fun harness_entries(target: Target, cb: fun(any)) > [any] {
     "after": [{"command": "theirs"}]
   }
 }
+-- want-merge.sh --
+magus describe harness script-host -o json | magus buzz -e 'import "encoding/json"; import "fs"; import "io"; import "merge"; fun main(args: [str]) > void !> str { final plan = json\parse(io\stdin.readAll()); if (plan["files"] == null) { return; } foreach (path, file in plan["files"]) { final dir = fs\dirname(path); if (dir != "" and dir != ".") { fs\mkdirAll(dir); } if (file["content"] != null) { fs\writeFileAtomic(path, content: file["content"]); } else if (file["exists"]) { fs\writeFileAtomic(path, content: merge\json(fs\readFile(path), overlay: json\stringify(file["fragment"]))); } else { fs\writeFileAtomic(path, content: json\stringify(file["fragment"], indent: "  ") + "\n"); } } }'
 -- want.json --
 {
   "hooks": {

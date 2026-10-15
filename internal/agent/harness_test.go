@@ -43,8 +43,8 @@ func registerHarnessSpell(t *testing.T, id, body string) {
 }
 
 // mergeHarness plans id and merges the plan into the files with the semantics of the printed
-// command, standing in for the person who runs it. TestHarnessMergeCommandLeavesTheFileCurrent
-// pins that the command and this agree.
+// command, standing in for the person who runs it. cmd/magus's
+// TestDescribeHarnessMergeCommandLeavesTheFileCurrent runs the command itself.
 func mergeHarness(t *testing.T, root, id string) types.HarnessPlan {
 	t.Helper()
 	plan, err := PlanHarness(context.Background(), root, id)

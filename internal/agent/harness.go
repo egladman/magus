@@ -563,11 +563,12 @@ func mergeFragment(dst, src map[string]any) map[string]any {
 }
 
 // harnessMergeScript reads a `describe harness -o json` plan on stdin and writes every
-// file it names. It merges text with merge\json, so a key outside the fragment keeps the
-// digits of an integer past 2^53. The fragment itself arrives through json\parse, so an
+// file it names; a current plan omits files, so a rerun after the merge writes nothing. It
+// merges text with merge\json, so a key outside the fragment keeps the digits of an integer
+// past 2^53. The fragment itself arrives through json\parse, so an
 // integer that large inside it, a person's own entry in a managed array included, does
 // not. No single quotes: the command wraps this in one POSIX single-quoted word.
-const harnessMergeScript = `import "encoding/json"; import "fs"; import "io"; import "merge"; fun main(args: [str]) > void !> str { final plan = json\parse(io\stdin.readAll()); foreach (path, file in plan["files"]) { final dir = fs\dirname(path); if (dir != "" and dir != ".") { fs\mkdirAll(dir); } if (file["content"] != null) { fs\writeFileAtomic(path, content: file["content"]); } else if (file["exists"]) { fs\writeFileAtomic(path, content: merge\json(fs\readFile(path), overlay: json\stringify(file["fragment"]))); } else { fs\writeFileAtomic(path, content: json\stringify(file["fragment"], indent: "  ") + "\n"); } } }`
+const harnessMergeScript = `import "encoding/json"; import "fs"; import "io"; import "merge"; fun main(args: [str]) > void !> str { final plan = json\parse(io\stdin.readAll()); if (plan["files"] == null) { return; } foreach (path, file in plan["files"]) { final dir = fs\dirname(path); if (dir != "" and dir != ".") { fs\mkdirAll(dir); } if (file["content"] != null) { fs\writeFileAtomic(path, content: file["content"]); } else if (file["exists"]) { fs\writeFileAtomic(path, content: merge\json(fs\readFile(path), overlay: json\stringify(file["fragment"]))); } else { fs\writeFileAtomic(path, content: json\stringify(file["fragment"], indent: "  ") + "\n"); } } }`
 
 // harnessMergeCommand renders the one command a person runs to bring files current.
 // It reads the plan back from `magus describe harness`, so re-running it after a
