@@ -98,12 +98,12 @@ func TestJudgeRefusesABackgroundedWorkerRun(t *testing.T) {
 }
 
 func TestDecodeHookEnvelopeReadsHowTheHostRunsACommand(t *testing.T) {
-	req, ok := decodeTestEnvelope(t,`{"hook_event_name":"PreToolUse","tool_input":{"command":"ls","run_in_background":true,"timeout":300000}}`)
+	req, ok := decodeTestEnvelope(t, `{"hook_event_name":"PreToolUse","tool_input":{"command":"ls","run_in_background":true,"timeout":300000}}`)
 	require.True(t, ok)
 	assert.True(t, req.CallBackground)
 	assert.Equal(t, 5*time.Minute, req.CallTimeout)
 
-	req, ok = decodeTestEnvelope(t,`{"hook_event_name":"PreToolUse","tool_input":{"command":"ls","run_in_background":"yes","timeout":"soon"}}`)
+	req, ok = decodeTestEnvelope(t, `{"hook_event_name":"PreToolUse","tool_input":{"command":"ls","run_in_background":"yes","timeout":"soon"}}`)
 	require.True(t, ok)
 	assert.False(t, req.CallBackground, "only an explicit true")
 	assert.Zero(t, req.CallTimeout, "a timeout that is not a number is none")

@@ -706,7 +706,7 @@ var ruleDocUnjudgedTool = types.RuleDoc{
 	Catches: "a tool call whose input carries nothing any rule reads, from a tool the guard does not know",
 	Why: "Every harness wires every tool to the guard, which judges a call by the shape of its input: a command line, a file path read or written, a search, a spawn's prompt, a skill load. " +
 		"A tool whose input has none of those shapes, and which the host's tool rows do not list, could do whatever a rule exists to stop with no rule seeing it; a tool the rows list as touching nothing (a todo list, a plan, a web lookup) passes. " +
-			"The harness spell declares the rows (harness_tools) and `magus agent harness install` writes them, one file per capability with one tool name per line; with no rows to read, no tool is known and the refusal names that install. " +
+		"The harness spell declares the rows (harness_tools) and `magus agent harness install` writes them, one file per capability with one tool name per line; with no rows to read, no tool is known and the refusal names that install. " +
 		"It advises by default, since the guard cannot know such a tool is harmful; a workspace that wants every call judged sets it to deny. A finished call is never named.",
 }
 
