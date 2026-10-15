@@ -1145,14 +1145,16 @@ type GeneratedPathReporter interface {
 
 // CheckoutProvisioner is the capability to create, list and remove secondary checkouts
 // that share the repository's store: what IsSecondaryCheckout detects (a git linked
-// worktree). It manages only the checkouts it created, and nothing runs a hook while it
-// does. Here dir is the exception to VCSDriver's rule: it names the secondary checkout,
-// an absolute path outside the repository, not a directory inside root.
+// worktree, an hg share, a jj workspace). It manages only the checkouts it created, and
+// nothing runs a hook while it does. Here dir is the exception to VCSDriver's rule: it
+// names the secondary checkout, an absolute path outside the repository, not a directory
+// inside root. Sapling has no secondary checkout and declines.
 //
 // Code run in such a checkout can rewrite the files that tell the VCS where its
-// repository is. So any call on a checkout CreateCheckout made in this process reads the
-// repository through what it recorded at creation, never through those files, and
-// fails with a *CheckoutTamperedError once one of them has changed.
+// repository is. So on git any call on a checkout CreateCheckout made in this process
+// reads the repository through what it recorded at creation, never through those files,
+// and fails with a *CheckoutTamperedError once one of them has changed. hg and jj record
+// nothing: a call in their checkouts reads the store the checkout's own files name.
 type CheckoutProvisioner interface {
 	// CreateCheckout materializes rev at dir, detached from any branch. dir must be
 	// absolute, must not exist, and must lie outside root, symlinks resolved, where
@@ -1167,6 +1169,13 @@ type CheckoutProvisioner interface {
 	// Checkouts lists the checkouts CreateCheckout made, as absolute paths with symlinks
 	// resolved.
 	Checkouts(ctx context.Context, root string) ([]string, error)
+	// StrandedRevisions returns the revisions the checkout at dir has checked out, or
+	// leads to, that removing it would leave nothing naming: none of the repository's
+	// branches or bookmarks, local or remote, no published revision and no revision in
+	// bases reaches them. Each backend answers in its own terms (git refs, hg phases and
+	// bookmarks, jj bookmarks with its empty working-copy commit left out). Empty means
+	// removing the checkout strands no commit.
+	StrandedRevisions(ctx context.Context, dir string, bases ...string) ([]string, error)
 }
 
 // CheckoutTamperedError is a checkout CheckoutProvisioner made no longer holding what

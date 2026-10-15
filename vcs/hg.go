@@ -1163,3 +1163,66 @@ func hgShelfListing(out string) map[string]string {
 func (v hgVCS) CommitPushed(ctx context.Context, dir, id string) (pushed, ok bool, err error) {
 	return hgCommitPushed(ctx, "hg", dir, id)
 }
+
+// CreateCheckout implements types.CheckoutProvisioner with `hg share`, updated to rev. A
+// share records nothing in its source, so the source's .hg keeps the record Checkouts and
+// RemoveCheckout read.
+func (v hgVCS) CreateCheckout(ctx context.Context, root, dir, rev string) error {
+	if err := checkRequiredRevsetRef(rev); err != nil {
+		return err
+	}
+	if err := checkNewCheckout(root, dir); err != nil {
+		return err
+	}
+	if err := hgRun(ctx, "hg", root, []string{"share", "--config", "extensions.share=", "--noupdate", "--", root, dir}); err != nil {
+		return err
+	}
+	if err := hgRun(ctx, "hg", dir, []string{"update", "--clean", "--rev", rev}); err != nil {
+		return errors.Join(err, os.RemoveAll(dir))
+	}
+	return recordMadeCheckout(ctx, hgMetaDir(root), checkoutRecord{Dir: filepath.Clean(dir), Resolved: realPath(dir)})
+}
+
+// RemoveCheckout implements types.CheckoutProvisioner. A share owns nothing in its source,
+// so deleting its directory removes it.
+func (v hgVCS) RemoveCheckout(ctx context.Context, root, dir string) error {
+	if !filepath.IsAbs(dir) {
+		return fmt.Errorf("vcs: checkout %q is not an absolute path", dir)
+	}
+	rec, ok, err := madeCheckoutAt(hgMetaDir(root), dir)
+	switch {
+	case err != nil:
+		return err
+	case !ok:
+		return fmt.Errorf("vcs: %s is not a checkout CreateCheckout made", dir)
+	}
+	if err := os.RemoveAll(rec.Dir); err != nil {
+		return err
+	}
+	return forgetMadeCheckout(ctx, hgMetaDir(root), rec)
+}
+
+// Checkouts implements types.CheckoutProvisioner from the source's record.
+func (v hgVCS) Checkouts(_ context.Context, root string) ([]string, error) {
+	return madeCheckoutDirs(hgMetaDir(root))
+}
+
+// StrandedRevisions implements types.CheckoutProvisioner from Mercurial's phases: a public
+// changeset reached a publishing remote, so only a draft one can be stranded. The shared
+// store keeps every changeset, so stranded here means one nothing names once the share's
+// working copy stops pointing at it.
+func (v hgVCS) StrandedRevisions(ctx context.Context, dir string, bases ...string) ([]string, error) {
+	if err := checkRequiredRevsetRef(bases...); err != nil {
+		return nil, err
+	}
+	reach := "bookmark()"
+	for _, b := range bases {
+		reach += " or " + b
+	}
+	revset := "reverse(::. and draft() and not ::(" + reach + "))"
+	out, err := vcsOutput(ctx, dir, "hg", "log", "-r", revset, "--template", `{node}\n`)
+	if err != nil {
+		return nil, fmt.Errorf("hg log -r %q: %w", revset, err)
+	}
+	return splitLines([]byte(out)), nil
+}

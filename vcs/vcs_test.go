@@ -2029,7 +2029,7 @@ var capabilityMatrix = map[types.VCSCapability]map[string]bool{
 	types.CapTreeReporter:          {"git": true},
 	types.CapTreeMerger:            {"git": true},
 	types.CapGeneratedPathReporter: {"git": true},
-	types.CapCheckoutProvisioner:   {"git": true},
+	types.CapCheckoutProvisioner:   {"git": true, "hg": true, "jj": true},
 	types.CapCheckoutLister:        {"git": true},
 	types.CapCheckoutReporter:      {"git": true},
 	types.CapRevisionFetcher:       {"git": true},
@@ -2118,6 +2118,7 @@ func capabilityProbes(t *testing.T) []capabilityProbe {
 		{types.CapCheckoutProvisioner, "CreateCheckout", func(d types.VCSDriver, dir string) error { return d.CreateCheckout(ctx, dir, "rel", "-x") }},
 		{types.CapCheckoutProvisioner, "RemoveCheckout", func(d types.VCSDriver, dir string) error { return d.RemoveCheckout(ctx, dir, "rel") }},
 		{types.CapCheckoutProvisioner, "Checkouts", func(d types.VCSDriver, dir string) error { return errOf(d.Checkouts(ctx, dir)) }},
+		{types.CapCheckoutProvisioner, "StrandedRevisions", func(d types.VCSDriver, dir string) error { return errOf(d.StrandedRevisions(ctx, dir, "-x")) }},
 		{types.CapCheckoutLister, "OtherCheckouts", func(d types.VCSDriver, dir string) error { return errOf(d.OtherCheckouts(dir)) }},
 		{types.CapCheckoutReporter, "RegisteredCheckouts", func(d types.VCSDriver, dir string) error { return errOf(d.RegisteredCheckouts(ctx, dir)) }},
 		{types.CapCheckoutReporter, "UnpublishedRevisions", func(d types.VCSDriver, dir string) error {

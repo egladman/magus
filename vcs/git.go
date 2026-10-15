@@ -3900,6 +3900,22 @@ func (gitVCS) UnpublishedRevisions(ctx context.Context, dir, rev string, bases .
 	return splitLines([]byte(out)), nil
 }
 
+// StrandedRevisions implements types.CheckoutProvisioner with one `rev-list` from the
+// checkout's HEAD that excludes everything a local branch, a remote-tracking ref or a base
+// reaches. A HEAD on a branch strands nothing; a detached one strands what it alone holds,
+// which gc collects once the worktree no longer names it.
+func (gitVCS) StrandedRevisions(ctx context.Context, dir string, bases ...string) ([]string, error) {
+	if err := checkRequiredRev(bases...); err != nil {
+		return nil, err
+	}
+	args := append([]string{"rev-list", "HEAD", "--not", "--branches", "--remotes"}, bases...)
+	out, err := gitOutput(ctx, dir, gitOpts{}, append(args, "--")...)
+	if err != nil {
+		return nil, fmt.Errorf("git rev-list HEAD: %w", err)
+	}
+	return splitLines([]byte(out)), nil
+}
+
 // UnlandedPaths implements types.LandingReporter with two `diff-tree` reads, which compare
 // trees git already stores; a merge-tree would write the merged tree to answer the same.
 func (v gitVCS) UnlandedPaths(ctx context.Context, dir, rev, into string) ([]string, error) {
