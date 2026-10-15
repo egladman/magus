@@ -22,12 +22,13 @@ magus explain <node>                        # one node's edges and blast radius
 magus affected ci --plan --stdin            # plan PROPOSED paths, before editing
 ```
 
-You do not need to be asked to split work: several disjoint write sets you can name are
-reason enough.
+You do not need to be asked to split work{{if .Full}}. "Split this across agents" is one way in;
+several disjoint write sets you can name is another{{else}}: several disjoint write sets
+you can name are reason enough{{end}}.
 
 Fan-out is not inherently expensive{{if .Full}}. What costs is unbounded fan-out:
 workers that hand work on without a shrinking scope, jobs with no acceptance criteria
-so nobody can say when to stop, and a principal model assigned to mechanical edits{{end}}. Say what a round
+so nobody can say when to stop, and a principal model assigned to mechanical edits. Each of those is a choice made below, not a property of fanning out{{end}}. Say what a round
 costs when the user is deciding, and prefer the smallest fan-out that covers the work.
 
 Fan out only after the collision check below REPORTS the jobs disjoint; looking
@@ -72,8 +73,8 @@ Apply these four in the order they bite:
 Prove it before you plan it. A claim a plan or brief rests on cites the output ref of
 a run that settled it. A guess nobody ran stays out of the plan.
 
-{{if .Full}}The graph improves the loop's partition and collision decisions, and does not
-replace the loop. Run it:
+{{if .Full}}Graph engineering is a natural evolution of loop engineering: the graph improves
+the loop's partition and collision decisions, and does not replace the loop. Run it:
 
 1. State the top-level goal, constraints, and observable acceptance criteria.
 2. Map the affected graph and propose collision-resistant edit jobs.
@@ -88,8 +89,9 @@ never a worker's prose. A worker that ran a filtered subset, or quietly restated
 criteria into something it did pass, reports success either way, and a
 transcript cannot tell you which happened.
 
-No job is complete until its criteria and assigned check pass. The root agent, not a
-worker, decides whether the top-level goal is complete.{{else}}The loop: define, partition, hand out, observe, evaluate, course-correct, integrate.
+An agent may report that its edits are done, but no job is complete until its
+acceptance criteria and assigned check pass. The root agent, not a worker,
+decides whether the top-level goal is complete.{{else}}The loop: define, partition, hand out, observe, evaluate, course-correct, integrate.
 
 - Acceptance evidence is an output ref the root reopens (`{{cmd "query output"}} <ref>`),
   never a worker's prose.
@@ -100,11 +102,8 @@ worker, decides whether the top-level goal is complete.{{else}}The loop: define,
 
 When a change adds a shared API, the ROOT names it before any edit. A shared
 API is a module several call sites use, a type, an event, or an exported
-function. Name:
-
-- the path;
-- every exported name with its signature;
-- the EXISTING symbols it must reuse, not restate.
+function. Name its path, every exported name with its signature, and the EXISTING
+symbols it must reuse, not restate.
 
 Workers implement the names they were handed and never coin a public one. A name
 invented at each call site is how one concept ends up with five spellings
@@ -136,7 +135,8 @@ to more than one definition is graded against one of them, silently.
 
 This applies with zero workers. A solo change across several call sites is a one-job
 tree. Skipping the declaration because nothing is forked is the same failure{{if .Full}} without
-a fork to blame. Write the table in the conversation and check it when the edits land{{end}}.
+a fork to blame. Write the table in the conversation, check it with `{{cmd "refs"}}` when
+the edits land, and only then report the change done{{end}}.
 
 ## Set one topology boundary
 
@@ -175,7 +175,9 @@ writes. Mark that job's check ROOT-DEFERRED when you fork it:
 
 - the worker writes the tests, stops at the static checks its environment does run,
   and says so;
-- the root executes the job's target centrally before verifying.
+- the root executes the job's target centrally before verifying.{{if .Full}} Leaving each worker to discover the wall
+  spends its budget once per worker, and its report reads "done" with nothing executed,
+  which `{{cmd "job wait"}}` refuses to record as a pass.{{end}}
 
 A worker may fork part of its own job. It may not hand it out without shrinking the
 problem{{if .Full}}; that is the shape that does not terminate, and
@@ -213,10 +215,14 @@ that names one.
 - Inheriting the parent's model ON PURPOSE is fine and often right{{if .Full}}. A hard review
   under a cheaper coordinator is exactly the case a weaker-only ordering would forbid{{end}}.
 - Inheriting it BY OMISSION is the failure. A host defaulting to "same as the parent"
-  makes every unnamed spawn the most expensive one, and records no choice.
+  makes every unnamed spawn the most expensive one, and records no choice{{if .Full}}. Measured 2026-09-15: nine
+  workers inherited the root's model, five of them on mechanical work a cheaper model
+  does as well{{end}}.
 
 When the tier is unclear, start at economy. A job that fails its criteria there is
-re-forked one tier up, not retried at the same one.
+re-forked one tier up, not retried at the same one.{{if .Full}} "Only ever spawn something
+weaker" was tried and withdrawn, because same-strength offload is legitimate, so this
+is a starting point and not a ceiling.{{end}}
 
 Tiers are the workspace's: a magusfile enum (`magus\job.modelTiers`, shipped as economy,
 standard, principal) maps each to every harness's model alias. `--model` takes a tier or a
@@ -243,22 +249,17 @@ fast as one principal worker, for far fewer tokens:
 - Each reports its command and output ref{{if .Full}}, so evidence settles the claim and not a worker's reading{{end}}.
 - The principal tier only reconciles the claims where workers disagree.
 
-Keep economy jobs short-lived:
-
-- The brief points at evidence (paths, output refs, the row) and carries no transcript.
-- A worker resends its whole context every turn, and some providers raise a tier's
-  price past a prompt size. Where the brief names that size, the worker reports and
-  stops before passing it.
+Keep economy jobs short-lived. The brief points at evidence (paths, output refs, the
+row) and carries no transcript. A worker resends its whole context every turn, and some
+providers raise a tier's price past a prompt size. Where the brief names that size, the
+worker reports and stops before passing it.
 
 Nesting is allowed when the host supports it, but it creates no new budget and no
-private ownership map.
+private ownership map. A child reports its proposed descendants to its parent before it
+spawns them, and the store carries each with its parent, model, criteria and write paths.
 
-- Before a child spawns descendants, it reports the proposed jobs to its parent.
-- The store then carries those descendants, their parent, model, criteria, and write
-  paths.
-- Descendants inherit the ancestor's deny paths and may subdivide only the ancestor's
-  write paths.
-- A cap the user sets applies to the whole tree, not once per parent.
+Descendants inherit the ancestor's deny paths and may subdivide only its write paths. A
+cap the user sets applies to the whole tree, not once per parent.
 
 Keep one integration owner per landing checkout, the integrator, never the root. A
 child coordinates its descendants but may not accept changes outside its own job or
