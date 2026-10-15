@@ -685,6 +685,9 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 	// resolvable when ComputeTargetKey probes them.
 	t.Setenv("MISE_TRUSTED_CONFIG_PATHS", absRoot)
 	t.Setenv("MISE_SAFE", "1")
+	// The version probe runs go under the moved HOME; go's telemetry sidecar would outlive
+	// it and race the TempDir cleanup (see testkit's goEnv).
+	t.Setenv("TEST_TELEMETRY_DIR", filepath.Join(os.DevNull, "telemetry"))
 	var workflow struct {
 		Jobs map[string]struct {
 			Steps []struct {

@@ -888,6 +888,9 @@ func TestTheBoxKeysNoStep(t *testing.T) {
 	// probe must still resolve tools pinned by this checkout's mise.toml.
 	t.Setenv("MISE_TRUSTED_CONFIG_PATHS", root)
 	t.Setenv("MISE_SAFE", "1")
+	// The version probe runs go under the box's HOME; go's telemetry sidecar would outlive
+	// it and race the TempDir cleanup (see testkit's goEnv).
+	t.Setenv("TEST_TELEMETRY_DIR", filepath.Join(os.DevNull, "telemetry"))
 	t.Setenv("MAGUS_CACHE_DIR", t.TempDir())
 	t.Setenv("MAGUS_CACHE_REMOTE_TRUSTED_KEYS", "")
 	const project = "libs/diagnostics"
