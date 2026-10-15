@@ -419,7 +419,7 @@ func TestAttachConformanceRunsTheThresholdCheck(t *testing.T) {
 	conform.Limits = map[types.ConformKey]types.ConformLimit{
 		{Metric: types.ConformFuncLines, Population: types.ConformPopSource}: {Percentile: 99, Anchor: 8},
 	}
-	conform.RatchetPath, conform.Ratchet = "conform.json", types.ConformRatchet{Schema: 1}
+	conform.RatchetPath, conform.Ratchet = "conformance.jsonl", types.ConformRatchet{Schema: 1}
 	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
 
 	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head,
@@ -433,30 +433,30 @@ func TestAttachConformanceRunsTheThresholdCheck(t *testing.T) {
 	assert.Contains(t, names, "conform-threshold")
 }
 
-const ratchetHead = `{"schema":1,"measured":{"rev":"r","date":"d"},
-"thresholds":[{"metric":"func-lines","population":"source","value":80,"n":40,"percentile":99,"why":"w"}],
-"known":[]}
+const ratchetHead = `{"kind":"schema","schema":1}
+{"kind":"measured","rev":"r","date":"d"}
+{"kind":"threshold","metric":"func-lines","population":"source","value":80,"n":40,"percentile":99,"why":"w"}
 `
 
 func ratchetConform() types.ConformOptions {
 	o := shippedConform()
-	o.RatchetPath = "conform.json"
+	o.RatchetPath = "conformance.jsonl"
 	return o
 }
 
 func readRatchet(text string) func(string) (string, bool) {
-	return func(path string) (string, bool) { return text, path == "conform.json" && text != "" }
+	return func(path string) (string, bool) { return text, path == "conformance.jsonl" && text != "" }
 }
 
 func TestDiffConformReadsTheRatchetAndItsBase(t *testing.T) {
-	loosened := `diff --git a/conform.json b/conform.json
---- a/conform.json
-+++ b/conform.json
+	loosened := `diff --git a/conformance.jsonl b/conformance.jsonl
+--- a/conformance.jsonl
++++ b/conformance.jsonl
 @@ -1,3 +1,3 @@
- {"schema":1,"measured":{"rev":"r","date":"d"},
--"thresholds":[{"metric":"func-lines","population":"source","value":70,"n":40,"percentile":99,"why":"w"}],
-+"thresholds":[{"metric":"func-lines","population":"source","value":80,"n":40,"percentile":99,"why":"w"}],
- "known":[]}
+ {"kind":"schema","schema":1}
+ {"kind":"measured","rev":"r","date":"d"}
+-{"kind":"threshold","metric":"func-lines","population":"source","value":70,"n":40,"percentile":99,"why":"w"}
++{"kind":"threshold","metric":"func-lines","population":"source","value":80,"n":40,"percentile":99,"why":"w"}
 `
 	generated := map[string]bool{"gen/x.go": true}
 	o, base, note, err := diffConform(ratchetConform(), diffConfig{minCohort: 7}, loosened, generated, readRatchet(ratchetHead))
@@ -476,7 +476,7 @@ func TestDiffConformReadsTheRatchetAndItsBase(t *testing.T) {
 	require.NotNil(t, base)
 	assert.Equal(t, 80, base.Thresholds[0].Value, "a patch that leaves the record alone has it as its base")
 
-	added := "diff --git a/conform.json b/conform.json\nnew file mode 100644\n--- /dev/null\n+++ b/conform.json\n@@ -0,0 +1,3 @@\n+" +
+	added := "diff --git a/conformance.jsonl b/conformance.jsonl\nnew file mode 100644\n--- /dev/null\n+++ b/conformance.jsonl\n@@ -0,0 +1,3 @@\n+" +
 		strings.ReplaceAll(strings.TrimSuffix(ratchetHead, "\n"), "\n", "\n+") + "\n"
 	_, base, _, err = diffConform(ratchetConform(), diffConfig{}, added, nil, readRatchet(ratchetHead))
 	require.NoError(t, err)
@@ -485,9 +485,9 @@ func TestDiffConformReadsTheRatchetAndItsBase(t *testing.T) {
 
 func TestDiffConformRefusesAMissingOrInvalidRecord(t *testing.T) {
 	_, _, _, err := diffConform(ratchetConform(), diffConfig{}, "", nil, readRatchet(""))
-	require.ErrorContains(t, err, "conform.json")
+	require.ErrorContains(t, err, "conformance.jsonl")
 
-	_, _, _, err = diffConform(ratchetConform(), diffConfig{}, "", nil, readRatchet(`{"schema":2}`))
+	_, _, _, err = diffConform(ratchetConform(), diffConfig{}, "", nil, readRatchet(`{"kind":"schema","schema":2}`))
 	require.ErrorContains(t, err, "schema 2")
 
 	o, base, note, err := diffConform(shippedConform(), diffConfig{}, "", nil, readRatchet(""))

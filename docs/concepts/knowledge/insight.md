@@ -94,22 +94,25 @@ Each lens is a field on the report:
   edits the record or the configuration, and a committed value looser than its anchor,
   or a record that is missing or malformed, is an error rather than a quiet fallback.
 
-  The record is a plain file of tab-separated rows, one per line, so `grep threshold`
-  and `diff` read it. Blank lines and lines starting with `#` are skipped. The path is
-  workspace-relative, and `hack/policy/conform.tsv` is the usual name.
+  The record is a JSON Lines file, one JSON object per line, so `grep threshold` and
+  `diff` read it. Blank lines are skipped, and JSON has no comments: a `threshold`'s
+  `why` member carries the reason. The path is workspace-relative, and
+  `hack/policy/conformance.jsonl` is the usual name.
 
   ```text
-  schema     1
-  measured   <rev>  <date>
-  threshold  <metric>  <population>  <scope>  <value>  <n>  <percentile>  [<why>]
-  known      <metric>  <reason>  <item>  [<item>...]
+  {"kind":"schema","schema":1}
+  {"kind":"measured","rev":"<rev>","date":"<date>"}
+  {"kind":"threshold","metric":"<metric>","population":"<population>","scope":"<scope>","value":<value>,"n":<n>,"percentile":<percentile>,"why":"<why>"}
+  {"kind":"known","metric":"<metric>","reason":"<reason>","items":["<item>"]}
   ```
 
-  `schema` is required and names the format version, 1. `scope` is `-` when the
-  key has none. A `known` row lists the items it accepts, one per column. An unknown
-  row kind, metric or population, a malformed number, a wrong column count, a repeated
-  row or a key committed twice is an error naming the file and line. A JSON record,
-  the format before this one, is refused the same way; rewrite it as rows.
+  `schema` is required and names the format version, 1. `scope` and `why` are
+  optional, and `scope` is absent when the key has none. A `known` line lists the
+  items it accepts in `items`. An unknown kind, member, metric or population, a
+  repeated member, a value of the wrong type, a missing required member, a repeated
+  line or a key committed twice is an error naming the file and line. The
+  tab-separated and single-document JSON formats before this one are refused the same
+  way; rewrite them as lines.
 
 ## Bounding the scan
 
