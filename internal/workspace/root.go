@@ -91,6 +91,6 @@ func FindRoot(dir string) (string, error) {
 		return contiguous, nil
 	}
 	return "", types.DiagnosticErrorf(types.NoWorkspaceRoot,
-		"magus: could not locate workspace root (no magus.yaml, magusfiles/, magusfile.buzz, or go.mod found); "+
+		"could not locate workspace root (no magus.yaml, magusfiles/, magusfile.buzz, or go.mod found); "+
 			"run `%s` to bootstrap one", hint.Init)
 }

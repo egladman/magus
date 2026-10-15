@@ -161,7 +161,7 @@ var spawnNestedWordRe = regexp.MustCompile(`(?i)\b(?:wait|poll|monitor|watch|bab
 
 func denySpawnWaiter() denial {
 	return denial{
-		Say: "this child's job is waiting, which needs no agent: the host tells a parent when each child ends; to wait on a job, run `" + hint.JobWait.With("<job>") + "`.",
+		Say: "this child only waits, and the host tells a parent when each child ends: to wait on a job, run `" + hint.JobWait.With("<job>") + "`.",
 		Why: "A waiter spends a context and a turn per look on work that announces itself, and when the work fails early it waits on until it times out. " +
 			"A child sent to watch another child duplicates the notice the parent already gets.",
 	}
@@ -193,7 +193,7 @@ func denySpawnDuplicate(row types.Job) denial {
 
 func adviseSpawnNestedWaiter() advice {
 	return advice{
-		Say: "magus workspace: a worker spawning a helper to wait or watch; return to your parent instead, which is told when each worker ends.",
+		Say: "magus workspace: a worker spawning a helper to wait or watch: return to your parent, which is told when each worker ends.",
 		Why: "Waiting belongs to whoever spawned the work: the host tells a parent when its child ends, and a root waits on a job with `" + hint.JobWait.With("<job>") + "`. " +
 			"A helper spawned only to wait stacks a third context on the notice the first two already get.",
 	}

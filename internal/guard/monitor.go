@@ -302,7 +302,7 @@ func gradeWaiter(deps Dependencies, facts hint.Gate, agent string, waiter waiter
 
 const (
 	denyMonitorDuplicate = "a watcher on this subject is already live for you; one per subject is all it takes, and it wakes you when the subject changes."
-	denyMonitorOwnWork   = "this watches work you backgrounded, which the host announces when it ends; drop the watcher and wait for that notice."
+	denyMonitorOwnWork   = "this watches work you backgrounded, which the host announces when it ends: drop the watcher and wait for that notice."
 	denyMonitorWorker    = "a worker's waits are its own runs, and each one's end is announced; drop this endless watch, background the run itself, and wait for its completion notice."
 	// One Why for both arms: they are one rule, and the reason is the same.
 	denyMonitorDuplicateWhy = "Every watcher wakes you when it prints and again when it expires, so two on one subject wake you twice for one event, and a watcher on your own backgrounded command repeats a notice that already comes. " +

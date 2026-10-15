@@ -209,9 +209,9 @@ var guardInputs = []string{"command", "path", "mcp"}
 // 25: cursor-hook.buzz accepts --reports-skills, gates the shell on preToolUse and files
 // each verdict for the event after the call. magus-command.buzz answers PostToolUse and
 // SubagentStop in their own shapes, and magus-rehydrate.buzz answers SubagentStart.
-// proofread-reply.buzz answers opencode. Under a config written for 25, a 24 copy reports
-// --reports-skills as unsupported, so a skill load goes unseen; and answers a Codex
-// PostToolUse in the PreToolUse shape, which the host discards.
+// proofread-reply.buzz answers one more host's replies. Under a config written for 25, a 24
+// copy reports --reports-skills as unsupported, so a skill load goes unseen; and answers
+// another host's PostToolUse in the PreToolUse shape, which that host discards.
 //
 // 26: magus-command.buzz answers Stop and SubagentStop with a block or a system message, so
 // background tasks left running refuse a stop, and cursor-hook.buzz no longer rewrites the

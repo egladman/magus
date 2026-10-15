@@ -136,13 +136,13 @@ func mainFindings(setting func(string) builtin.Setting, st costState, c mainCall
 	s := setting(string(denyRuleRootContextBudget))
 	if at := settingFigure(s, s.Tokens, budgetFigures(c.billing, c.window)); at > 0 && st.Tokens >= int64(at) && !c.free {
 		out = append(out, costFinding{rule: denyRuleRootContextBudget, key: hint.MarkerKind(fmt.Sprintf("%s-%d", denyRuleRootContextBudget, at)),
-			say: fmt.Sprintf("magus workspace: this session's context is %s tokens and every call re-sends all of it; fork a job (`magus job fork`) for the searches, reads, diffs and runs, spawn a worker on it, and keep its report.", kTokens(st.Tokens))})
+			say: fmt.Sprintf("magus workspace: this session's context is %s tokens and every call re-sends it: fork a job (`magus job fork`) and spawn a worker on it.", kTokens(st.Tokens))})
 	}
 	if c.class != "" && c.orchestration == "" {
 		s = setting(string(denyRuleRootHeavyCommand))
 		if at, n := settingFigure(s, s.Calls, heavyFigures), st.Streak+1; at > 0 && n >= at {
 			out = append(out, costFinding{rule: denyRuleRootHeavyCommand, key: hint.MarkerKind(denyRuleRootHeavyCommand),
-				say: fmt.Sprintf("magus workspace: %d searches, reads, diffs or runs in a row since the last spawn; a subagent does this work from a small context and returns only what matters.", n)})
+				say: fmt.Sprintf("magus workspace: %d searches, reads, diffs or runs in a row after the last spawn: a subagent does this work from a small context and returns only what matters.", n)})
 		}
 		s = setting(string(denyRuleRootRepeat))
 		if at, n := settingFigure(s, s.Calls, repeatFigures), st.Repeats[lineDigest(c.line)]+1; at > 0 && n >= at {
@@ -162,7 +162,7 @@ func mainFindings(setting func(string) builtin.Setting, st costState, c mainCall
 				key += hint.MarkerKind("-" + lineDigest(tool))
 			}
 			out = append(out, costFinding{rule: denyRuleRootResultCap, key: key,
-				say: fmt.Sprintf("magus workspace: one %s result put %d characters into this session's context, which every later call re-sends; a subagent reading it returns only what matters.", tool, chars)})
+				say: fmt.Sprintf("magus workspace: one %s result put %d characters into this session's context, which every later call re-sends: a subagent reading it returns only what matters.", tool, chars)})
 		}
 	}
 	return out
@@ -191,8 +191,7 @@ func groundworkFinding(s builtin.Setting, c mainCall) (costFinding, bool) {
 		rule: denyRuleOrchestratorGroundwork,
 		deny: s.Decision == builtin.Deny && c.orchestration == types.OrchestrationProven,
 		key:  hint.MarkerKind(fmt.Sprintf("%s-%s", denyRuleOrchestratorGroundwork, c.work)),
-		say: fmt.Sprintf("magus workspace: this session hands out work, and %s is groundwork; fork a job for it (a read-only scout for a question) and spawn a worker on it.\n", cmp.Or(groundworkWork[c.work], string(c.work))) +
-			"The session that orchestrates plans from the graph and moves jobs; reading and searching source, editing it and running checks belong to the workers it spawns, and cherry-picks, builds, regeneration and commits to the checkout's integrator, a subagent spawned `<parent>/integrate <job>` in that checkout, at any context size.",
+		say:  fmt.Sprintf("magus workspace: this session hands out work, and %s is groundwork: fork a job for it (a read-only scout for a question) and spawn a worker on it.", cmp.Or(groundworkWork[c.work], string(c.work))),
 	}, true
 }
 
@@ -359,8 +358,7 @@ func gradeMainSpawn(deps Dependencies, verdict types.GuardJudgment, env hookRequ
 	case s.Decision == builtin.Off:
 	case env.DeclaredModel == "":
 		findings = append(findings, costFinding{rule: denyRuleSpawnNamesModel, deny: s.Decision == builtin.Deny, key: hint.MarkerKind(denyRuleSpawnNamesModel),
-			say: "magus workspace: this spawn names no model, so the subagent runs on this session's own; name the model the job's work needs.\n" +
-				"A spawn that inherits runs every scout and every search on the costliest model the session uses."})
+			say: "magus workspace: this spawn names no model, so the subagent runs on this session's own: name the model the job's work needs."})
 	case s.Decision == builtin.Deny && bound:
 		if say := forked.refusal(host, env.DeclaredModel); say != "" {
 			findings = append(findings, costFinding{rule: denyRuleSpawnNamesModel, deny: true, key: hint.MarkerKind(denyRuleSpawnNamesModel), say: say})
@@ -457,6 +455,6 @@ func (f forkedTier) rankedAbove(host types.HarnessKey, model string) string {
 	}
 	// Resolve found the host mapped, so Alias cannot fail here.
 	alias, _ := f.set.Alias(host, f.tier)
-	return fmt.Sprintf("magus workspace: this spawn runs %s, model tier %s (rank %d), above job %s's %s; spawn it on %s, or re-fork the row at the tier the work needs so the row records why.",
+	return fmt.Sprintf("magus workspace: this spawn runs %s, model tier %s (rank %d), above job %s's %s: spawn it on %s, or re-fork the row at the tier the work needs.",
 		model, spawned.Name(), spawned.Rank(), f.job, f.line(alias), alias)
 }

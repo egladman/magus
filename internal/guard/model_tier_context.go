@@ -44,7 +44,7 @@ func adviseModelTierContext(ctx context.Context, deps Dependencies, at location,
 		return advice{}
 	}
 	return advice{
-		Say: fmt.Sprintf("magus workspace: lease %s runs at model tier %s, which caps a worker's context at %s tokens, and yours has reached %s; report what you have and stop.",
+		Say: fmt.Sprintf("magus workspace: lease %s runs at model tier %s, which caps a worker's context at %s tokens, and yours has reached %s: report what you have and stop.",
 			me.ID, me.ModelTier.Name, kTokens(limit), kTokens(tokens)),
 		Why: fmt.Sprintf("The bounds of model tier %s (rank %d) in the workspace's model-tier declaration cap its workers' context, since a smaller model past a large context works worse and resends all of it every turn. "+
 			"Whether the rest of the job is re-forked at a higher tier or split smaller is the root's call, and it needs your report to make it.",

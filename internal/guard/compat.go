@@ -69,7 +69,7 @@ func gradeCompatMarker(ctx context.Context, deps Dependencies, at location, who 
 	if !isDryRun(ctx) && !stallGate(at.cacheDir, lease).MarkFired(hint.MarkerKind(denyRuleCompatMarker)) {
 		fileCompatRow(ctx, at, who, lease, shown, added)
 	}
-	say := fmt.Sprintf("magus workspace: this write adds %s to %s; whether code stays for an old caller is the root's to decide, so leave it out and name it in unresolved_risks instead.",
+	say := fmt.Sprintf("magus workspace: this write adds %s to %s: leave it out and name it in unresolved_risks, since the root decides whether code stays for an old caller.",
 		quotedList(added), shown)
 	return writeGrade{Decision: decisionAdvise, Kind: hint.MarkerKind(denyRuleCompatMarker),
 		Key:     hint.MarkerKind(string(denyRuleCompatMarker) + "-" + lineDigest(say)),

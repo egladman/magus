@@ -56,7 +56,7 @@ func overlay(base, o types.ModelPricing) types.ModelPricing {
 // Lookup returns the row for model id as a host reports it. A row matches an id that
 // contains its ID as a whole version: a provider prefix (us.anthropic.), a date
 // (-20260401), a context suffix ([1m]) or a revision (@20251101, -v1:0) around it still
-// match, while claude-opus-5 does not match claude-opus-5-5. Of several matching rows the
+// match, while opus-5 does not match opus-5-5. Of several matching rows the
 // longest ID wins. False when no row matches, which a caller reads as "no facts", never
 // as a zero-sized or free model.
 func (t Table) Lookup(id string) (types.ModelPricing, bool) {

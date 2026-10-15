@@ -96,7 +96,7 @@ func denyRepeatGate(ctx context.Context, deps Dependencies, _, command string) d
 		return denial{}
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `%s` passed on this branch %s ago and nothing changed since, so it can only pass again; gate after your next change.",
+		Say: fmt.Sprintf("magus workspace: `%s` passed on this branch %s ago and nothing changed since: gate after your next change.",
 			types.TargetCI, time.Since(green.At).Round(time.Second)),
 		Why: fmt.Sprintf("The gate has run %d times here in the last %s, and the newest verdict, a pass at %s, covers the tree as it stands: no file that differs from that commit was written after it. "+
 			"A gate over a tree it already passed only repeats the pass. %s.",
@@ -1868,9 +1868,8 @@ func workerVCSDenial(what string, r vcsRefusal, row types.Job, role string) stri
 	case vcsOpInit:
 		return fmt.Sprintf("magus workspace: a worker creates a repository only outside its checkout, %s.\n"+
 			"%s runs `%s`, and lease %s is %s. %s "+
-			"A worker may `%s` in a directory that neither lies in %s nor belongs to a checkout of its repository, with no GIT_DIR, --git-dir or -C pointing back into it, and may run version control inside what it creates on the same line. "+
 			leaseActorClause("create it"),
-			checkout, what, r.op, row.ID, role, r.why, r.op, checkout)
+			checkout, what, r.op, row.ID, role, r.why)
 	case vcsOpLands:
 		return landDenial(what, r.op, row, role, "magus workspace: a worker commits only on its own branch in its own checkout, "+checkout+".", r.why)
 	}

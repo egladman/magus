@@ -1441,7 +1441,7 @@ func reportHeld(ctx context.Context, held map[string]string) {
 	for _, lease := range slices.Sorted(maps.Keys(byLease)) {
 		paths := byLease[lease]
 		slices.Sort(paths)
-		slog.WarnContext(ctx, fmt.Sprintf("vcs add: held back %d path(s) live lease %s writes in this checkout, so its uncommitted work stays out of this stage: %s; name a path to stage it anyway",
+		slog.WarnContext(ctx, fmt.Sprintf("held back %d path(s) live lease %s writes in this checkout: %s; name a path to stage it anyway",
 			len(paths), lease, strings.Join(paths, ", ")), attr.Notice(""), attr.Component("magus"))
 	}
 }

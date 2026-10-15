@@ -37,7 +37,7 @@ func TestModelTierContextCapAdvisesPastTheTiersCap(t *testing.T) {
 
 	got := advise("lease-a")
 
-	assert.Equal(t, "magus workspace: lease lease-a runs at model tier economy, which caps a worker's context at 100k tokens, and yours has reached 120k; report what you have and stop.", got.Say)
+	assert.Equal(t, "magus workspace: lease lease-a runs at model tier economy, which caps a worker's context at 100k tokens, and yours has reached 120k: report what you have and stop.", got.Say)
 	assert.Contains(t, got.Why, "model tier economy (rank 0)")
 	assert.Equal(t, 1, asked, "the cap is kept for the session")
 	assert.Equal(t, advice{}, advise(""), "no lease, no row")

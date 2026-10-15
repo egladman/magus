@@ -36,7 +36,7 @@ const denyRuleBackgroundUnbounded denyRuleName = "background-unbounded"
 const rootBackgroundAge = 30 * time.Minute
 
 // stopEnvelope is a host's stop event: an agent ending its turn. stop_hook_active is the
-// field that marks one, on Claude Code's Stop and SubagentStop and on Codex's.
+// field that marks one, on a Stop or SubagentStop event.
 type stopEnvelope struct {
 	StopHookActive      *bool  `json:"stop_hook_active"`
 	ToolName            string `json:"tool_name"`
@@ -111,9 +111,9 @@ func judgeStop(deps Dependencies, raw string, now time.Time) (types.GuardJudgmen
 }
 
 // sessionEnded reports whether raw ends its caller's agent session: a subagent's stop
-// (Claude Code's and Codex's SubagentStop) or Claude Code's SessionEnd. A root session's
-// Stop ends a turn, not the session. Cursor fires neither under `-p`, and OpenCode's
-// session.idle is a pause, so on those hosts a job ends with its checkout or its deadline.
+// (a SubagentStop) or a SessionEnd. A root session's Stop ends a turn, not the session. A
+// host that fires neither in print mode, or whose idle event is a pause, ends a job with its
+// checkout or its deadline.
 func sessionEnded(raw string) bool {
 	if !strings.HasPrefix(strings.TrimSpace(raw), "{") {
 		return false
@@ -430,12 +430,12 @@ func denyUnboundedBackground(command string, background bool, d Dialect) denial 
 		return denial{}
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `%s` runs in the background with nothing to end it; run it as `magus job exec --timeout <duration> -- <command>`, put `timeout --kill-after=10 <seconds>` in front of it (`gtimeout` where only coreutils from a package manager has it), or run it in the foreground.", program),
+		Say: fmt.Sprintf("magus workspace: `%s` runs in the background unbounded; use `magus job exec --timeout <duration> -- <command>` or `timeout --kill-after=10 <seconds>`.", program),
 		Why: "A backgrounded command outlives the agent that started it: the host stops it only when asked, and an agent that finishes first leaves it running with nobody told. " +
 			"`magus job exec --timeout D -- cmd` runs it in its own process group under the broker, which names its owner (your lease) in `magus status`, stops the whole group at the deadline or when the wrapper dies, and files one attention row when it does. " +
 			"`timeout N` or `gtimeout N` in front of each command that can run long also bounds it; stock macOS ships neither, and Homebrew's coreutils installs `gtimeout`. " +
 			"timeout signals its own process group, so a child that starts its own session (setsid, a daemon) escapes it, and `--foreground` narrows it to the direct child; `--kill-after` sends KILL to a command that ignores TERM. " +
-			"A magus target run is bounded by its target's timeout and passes, and so do builtins that return at once (cd, export, echo). A pipeline is bounded by its first command, since the rest end with its output.",
+			"A magus target run is bounded by its target's timeout and passes, and so do builtins that return at once (cd, export, echo). A pipeline is bounded by its first command, since the rest end with its output. Running the command in the foreground passes too, since the host times a foreground call out.",
 	}
 }
 

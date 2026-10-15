@@ -1083,9 +1083,10 @@ func runsCheck(check *types.LeaseCheck, r targetRun) bool {
 	return slices.Equal(r.projects, []string{project}) || (len(r.projects) == 0 && project == ".")
 }
 
-// instructionFiles are the files an orchestrator reads to orient, by base name, wherever
-// they sit.
-var instructionFiles = []string{"AGENTS.md", "MAGUS.md", "CLAUDE.md", "SKILL.md"}
+// instructionFiles are the files an orchestrator reads to orient, wherever they sit. Each is
+// written as the path a host discovers it at under a directory, so a host's own file is named
+// in a path and a lookup prefixes the base name with "/".
+var instructionFiles = []string{"/AGENTS.md", "/MAGUS.md", "/CLAUDE.md", "/SKILL.md"}
 
 // notesPath reports a path an orchestrator reads or writes as notes rather than as work: an
 // instruction file, or anything outside every checkout of the workspace's repository (a
@@ -1093,7 +1094,7 @@ var instructionFiles = []string{"AGENTS.md", "MAGUS.md", "CLAUDE.md", "SKILL.md"
 // the home directory's, so it is a checkout's only when the home holds one; with the home
 // unknown it is in no checkout. A workspace in no git repository has one checkout, itself.
 func notesPath(p string, at location) bool {
-	if slices.Contains(instructionFiles, filepath.Base(p)) {
+	if slices.Contains(instructionFiles, "/"+filepath.Base(p)) {
 		return true
 	}
 	if p = expandHome(p, userHome()); strings.HasPrefix(p, "~") {

@@ -112,7 +112,7 @@ func judgeBriefPlainCommands(brief briefInput) ShellVerdict {
 	for _, cmd := range briefCommands(brief.text) {
 		if compoundCommand(cmd) {
 			return ShellVerdict{
-				Deny: "this brief, for a worker in its own worktree, teaches `" + elideCommand(cmd) + "`, which that worker's host refuses as too complex; split it into plain commands.",
+				Deny: "this brief teaches `" + elideCommand(cmd) + "`, which a worker in its own worktree is refused as too complex: split it into plain commands.",
 				Why:  why,
 				Rule: denyRule{Name: denyRuleBriefPlainCommands},
 			}
@@ -231,7 +231,7 @@ func briefHumanOnly(ctx context.Context, deps Dependencies, workspace string, ro
 			continue
 		}
 		return ShellVerdict{
-			Deny: fmt.Sprintf("this brief tells job %s's worker to run `%s`, which a person runs [%s]; fix the brief.\nThe line: %q",
+			Deny: fmt.Sprintf("this brief tells job %s's worker to run `%s`, which a person runs [%s]: fix the brief.\nThe line: %q",
 				row.ID, pairs[0].ref(), denyRuleHumanOnly, elideCommand(strings.TrimSpace(r.line))),
 			Why:  "The workspace declares it human_only: " + pairs[0].reason + "\nA leased worker is refused it whoever asks.",
 			Rule: denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleHumanOnly)},

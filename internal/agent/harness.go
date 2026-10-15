@@ -162,7 +162,7 @@ type HarnessVerification struct {
 	// Setting is whether the plain host settings the descriptor keeps are in place,
 	// zero when it keeps none.
 	Setting HarnessCheck `json:"setting,omitzero"`
-	// Plugin is whether each Claude Code plugin the workspace enables through the
+	// Plugin is whether each plugin the workspace enables through the
 	// descriptor's settings is installed for this person, zero when the descriptor enables
 	// none or the workspace has not turned it on. Uncovered names the install command.
 	Plugin HarnessCheck `json:"plugin,omitzero"`
@@ -618,7 +618,7 @@ func verifyEach[T any](root string, items []T, plan func(string, T) (types.Harne
 
 // verifyHarnessPlugins reports whether each plugin a descriptor's settings enable is
 // installed for this person. Enabling a plugin in a workspace's settings installs it for
-// nobody: Claude Code keeps what each person installed under their own config dir, so a
+// nobody: the host keeps what each person installed under their own config dir, so a
 // workspace can read as wired while the plugin never loads. A plugin the workspace has not
 // enabled is not this check's business and leaves the status empty.
 func verifyHarnessPlugins(root string, d HarnessDescriptor, result *HarnessVerification) {
@@ -664,7 +664,7 @@ func pluginMissingReason(d HarnessDescriptor, enabled HarnessSetting, id string)
 			source = repo
 		}
 	}
-	reason := fmt.Sprintf("%s is enabled in %s but not installed for this person (%s lists it nowhere); run once in Claude Code: /plugin install %s --marketplace %s",
+	reason := fmt.Sprintf("%s is enabled in %s but not installed for this person (%s lists it nowhere); run once in the host: /plugin install %s --marketplace %s",
 		id, enabled.Path, filepath.Join(claudeConfigDir(), "plugins", "installed_plugins.json"), name, source)
 	if registered, err := claudeMarketplaceKnown(marketplace); err == nil && !registered {
 		reason += " (marketplace " + marketplace + " is not registered either)"
@@ -679,7 +679,7 @@ func marketplaceRepo(value any) string {
 	return repo
 }
 
-// claudeConfigDir is where Claude Code keeps per-person state: CLAUDE_CONFIG_DIR when set,
+// claudeConfigDir is where the host keeps per-person state: CLAUDE_CONFIG_DIR when set,
 // else ~/.claude.
 func claudeConfigDir() string {
 	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
@@ -692,7 +692,7 @@ func claudeConfigDir() string {
 	return filepath.Join(home, ".claude")
 }
 
-// readClaudePluginStore decodes one JSON file of Claude Code's plugin store. An absent file
+// readClaudePluginStore decodes one JSON file of the host's plugin store. An absent file
 // reads as an empty document: a person who never installed a plugin has none.
 func readClaudePluginStore(name string) (map[string]any, error) {
 	path := filepath.Join(claudeConfigDir(), "plugins", name)
