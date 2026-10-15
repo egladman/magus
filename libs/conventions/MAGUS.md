@@ -11,6 +11,7 @@ Query: `magus query project=libs/conventions`
 | `generate`        | Regenerates MAGUS.md and fails on drift.                                                      |
 | `format`          |                                                                                               |
 | `lint`            | go-vet only: the custom golangci-lint binary is built from this module.                       |
+| `golangci-lint`   | The tree-wide conventions over this module, through .magus/custom-gcl.                        |
 | `build`           | Compiles every analyzer package; the module root holds none.                                  |
 | `proofread-build` | Links proofread, so the pull request guard and the writing checks never wait on the compiler. |
 | `test`            | Runs the suite; the root merges coverage.out into its coverage badge.                         |

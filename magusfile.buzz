@@ -1,6 +1,7 @@
 import "magus";
 import "./hack/magusfile/toolchain-policy" as policy;
 import "./hack/magusfile/drift" as drift;
+import "./hack/magusfile/golangci" as golangci;
 import "./hack/magusfile/harness" as hostconfig;
 // Aliased: a module and a target function cannot share a name.
 import "./hack/magusfile/toolchain" as toolchains;
@@ -2358,6 +2359,15 @@ export fun harness_drift(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
+// golangci-lint over the root module through .magus/custom-gcl, built first; the stock
+// binary the go spell would run cannot read .golangci.yml.
+export fun golangci_lint(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(install_linter);
+    ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/**/*.go", "libs/**/go.mod", "libs/**/go.sum",
+                   "**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum", ".golangci.yml");
+    golangci\run(".", if (ctx.hasCharm("rw")) ["--fix"] else []);
+}
+
 // Formats and builds the linter first, then golangci-lint, go vet, markdownlint,
 // shellcheck, and actionlint. govulncheck lives in `security`. install_linter compiles
 // golangci-lint with the go on PATH, so mise must pin one go for build and analysis.
@@ -2374,24 +2384,12 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
                    "**/*.sh", "**/*.bash", ".shellcheckrc",
                    ".github/workflows/*.yaml",
                    "mise.toml", "magus.yaml");
-    // An in-checkout cache: golangci-lint stores absolute paths, so sibling worktrees
-    // would replay each other's findings.
-    final lintCache = magus\describe.project().workspace + "/.magus/golangci-lint";
-    os\withEnv({"GOLANGCI_LINT_CACHE": lintCache}, fun () > void !> any {
-        proc\exec(".magus/custom-gcl", ["run"]);
-        // golangci-lint stops at a go.mod, so each other module gets its own run of the
-        // tree-wide conventions. hack/lint/testlayout-pairing-has-no-exemptions.buzz
-        // refuses this list without testpair.
-        final root = magus\describe.project().workspace;
-        foreach (mod in fs\glob("libs/**/go.mod")) {
-            final dir = fs\dirname(mod.value);
-            // gopherbuzz's error text follows upstream Buzz, not Go's error-string idiom.
-            final errorStrings = if (fs\basename(dir) != "gopherbuzz") ",errmsg" else "";
-            proc\exec(root + "/.magus/custom-gcl",
-                      ["run", "--config", root + "/.golangci.yml", "--enable-only", "filenames,hostagnostic,stutter,testifylint,testlayout,testpair" + errorStrings],
-                      dir);
-        }
-    });
+    golangci\run(".", []);
+    // golangci-lint stops at a go.mod, so each other module gets its own run of the
+    // tree-wide conventions.
+    foreach (mod in fs\glob("libs/**/go.mod")) {
+        golangci\lintLib(fs\dirname(mod.value), false);
+    }
     go["go-vet"](ctx);
     // Type-checks the playground for wasm, which nothing else in ci does. Stock go, not
     // TinyGo; not ./..., since the server does not build for wasm.

@@ -11,6 +11,7 @@ Query: `magus query project=libs/gopherbuzz`
 | `generate`       | Regenerates MAGUS.md.                                                                     |
 | `format`         |                                                                                           |
 | `lint`           |                                                                                           |
+| `golangci-lint`  | The tree-wide conventions over this module, through .magus/custom-gcl.                    |
 | `build`          |                                                                                           |
 | `test`           | Runs the suite under the default tags, then again under buzz_safe.                        |
 | `buzzbench-test` | Runs the benchmarks/comparison module's tests, which test's ./...                         |

@@ -1,0 +1,51 @@
+// golangci.buzz - runs .magus/custom-gcl, the golangci-lint carrying this repo's own linters.
+// .golangci.yml names those linters, so the stock binary on PATH refuses it with
+// `plugin("...") not found`. Nothing here falls back to the stock binary.
+namespace golangci;
+
+import "fs";
+import "os";
+import "proc";
+import "magus";
+
+// binary is the workspace's custom build; it throws, naming the target that builds it, when absent.
+export fun binary() > str !> any {
+    final path = magus\describe.project().workspace + "/.magus/custom-gcl";
+    if (!fs\exists(path)) {
+        throw "{path} is missing; build it with `magus run install-linter .`. The stock golangci-lint cannot read .golangci.yml";
+    }
+    return path;
+}
+
+// readLibFiles declares what a lib module's run reads. Restated in full because readsFiles
+// replaces the project baseline.
+export fun readLibFiles(ctx: magus\Context) > void !> any {
+    ctx.readsFiles("**/*.go", "go.mod", "go.sum",
+                   "../../.golangci.yml", "../testlayout/.custom-gcl.yml",
+                   "../testlayout/**/*.go", "../testlayout/go.mod", "../testlayout/go.sum",
+                   "../conventions/**/*.go", "../conventions/go.mod", "../conventions/go.sum");
+}
+
+// run executes the custom build with the workspace config. dir is workspace-relative.
+export fun run(dir: str, args: [str]) > void !> any {
+    final root = magus\describe.project().workspace;
+    final bin = binary();
+    // An in-checkout cache: golangci-lint stores absolute paths, so sibling worktrees
+    // would replay each other's findings.
+    os\withEnv({"GOLANGCI_LINT_CACHE": root + "/.magus/golangci-lint"}, fun () > void !> any {
+        proc\exec(bin, ["run", "--config", root + "/.golangci.yml"] + args, root + "/" + dir);
+    });
+}
+
+// lintLib runs the tree-wide conventions over the lib module at dir; a module is a separate
+// golangci-lint root, so the root run never reaches it. gopherbuzz's error text follows
+// upstream Buzz, not Go's error-string idiom, so it skips errmsg. The --enable-only list
+// stays on one line: hack/lint/testlayout-pairing-has-no-exemptions.buzz refuses it without testpair.
+export fun lintLib(dir: str, fix: bool) > void !> any {
+    final errorStrings = if (fs\basename(dir) != "gopherbuzz") ",errmsg" else "";
+    var args = mut ["--enable-only", "filenames,hostagnostic,stutter,testifylint,testlayout,testpair" + errorStrings];
+    if (fix) {
+        args.append("--fix");
+    }
+    run(dir, args);
+}

@@ -12,6 +12,7 @@ Query: `magus query project=libs/scipbuzz`
 | `snapshots-generate` | Rewrites testdata/snapshots/gen from the inputs beside it, through the SCIP bindings' own -update-snapshots flag, so a golden is never edited by hand. |
 | `format`             |                                                                                                                                                        |
 | `lint`               |                                                                                                                                                        |
+| `golangci-lint`      | The tree-wide conventions over this module, through .magus/custom-gcl.                                                                                 |
 | `build`              |                                                                                                                                                        |
 | `test`               | Runs the suite.                                                                                                                                        |
 | `ci`                 | The anchor `magus affected ci` keys off.                                                                                                               |

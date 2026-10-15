@@ -5,6 +5,7 @@ import "magus";
 import "fs";
 import "../../hack/magusfile/drift" as drift;
 import "../../hack/magusfile/index" as index;
+import "../../hack/magusfile/golangci" as golangci;
 import "./proofread" as proofread;
 
 import "magus/spell/go";
@@ -46,6 +47,12 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 }
 // go-vet only: the custom golangci-lint binary is built from this module.
 export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](ctx); }
+// The tree-wide conventions over this module, through .magus/custom-gcl. The root
+// install-linter builds it; this target does not, so a missing binary fails naming it.
+export fun golangci_lint(ctx: magus\Context, args: [str]) > void !> any {
+    golangci\readLibFiles(ctx);
+    golangci\lintLib("libs/conventions", ctx.hasCharm("rw"));
+}
 // Compiles every analyzer package; the module root holds none.
 export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](ctx, {"args": ["./..."]}); }
 // Links proofread, so the pull request guard and the writing checks never wait on the compiler.

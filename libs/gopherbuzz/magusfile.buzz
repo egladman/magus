@@ -1,6 +1,7 @@
 import "magus";
 import "../../hack/magusfile/drift" as drift;
 import "../../hack/magusfile/index" as index;
+import "../../hack/magusfile/golangci" as golangci;
 
 import "magus/spell/go";
 // Imported for dprint only. Listing it in spells would claim **/*.md, which the root lints.
@@ -52,6 +53,12 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     markdown["dprint"](ctx);
 }
 export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](ctx); }
+// The tree-wide conventions over this module, through .magus/custom-gcl. The root
+// install-linter builds it; this target does not, so a missing binary fails naming it.
+export fun golangci_lint(ctx: magus\Context, args: [str]) > void !> any {
+    golangci\readLibFiles(ctx);
+    golangci\lintLib("libs/gopherbuzz", ctx.hasCharm("rw"));
+}
 export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](ctx); }
 // Runs the suite under the default tags, then again under buzz_safe.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {

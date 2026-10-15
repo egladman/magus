@@ -11,6 +11,7 @@ Query: `magus query project=libs/testlayout`
 | `generate`       | Regenerates MAGUS.md and fails on drift.                                |
 | `format`         |                                                                         |
 | `lint`           | go-vet only: the custom golangci-lint binary is built from this module. |
+| `golangci-lint`  | The tree-wide conventions over this module, through .magus/custom-gcl.  |
 | `build`          |                                                                         |
 | `test`           | Runs the suite; the root merges coverage.out into its coverage badge.   |
 | `ci`             | The anchor `magus affected ci` keys off.                                |
