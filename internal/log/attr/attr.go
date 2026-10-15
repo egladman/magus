@@ -19,6 +19,8 @@ const (
 	NextKey = "next"
 	// NoticeKey marks a record as a notice to the person running magus. See [Notice].
 	NoticeKey = "notice"
+	// ResultKey marks a record as the output a command exists to print. See [Result].
+	ResultKey = "result"
 	// HintLabel is the [Notice] label of advice. See [Hint].
 	HintLabel = "hint"
 	// ErrorKey carries the error a record reports. See [Error].
@@ -44,6 +46,11 @@ func Next(cmd string) slog.Attr { return slog.String(NextKey, cmd) }
 // entry. The pretty display prints "label: message" with no level glyph, and colors the
 // label above info. An empty label prints the component instead.
 func Notice(label string) slog.Attr { return slog.String(NoticeKey, label) }
+
+// Result marks a record as the output a command exists to print, such as the ref a silent
+// run names. A quiet display (-q, -s) keeps it as it keeps a hint; the pretty display
+// prints it as a notice does.
+func Result() slog.Attr { return slog.Bool(ResultKey, true) }
 
 // Error attaches the error a record reports. An error is never a record's message: the
 // label names who is speaking and the error names where it failed, so a notice prints

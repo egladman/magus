@@ -418,7 +418,9 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}
 	emitConcurrencyNudge(ctx, sink, m, os.Args[1:])
 	if global.silent && opts.Format == outputText {
-		printRefLine(os.Stderr, refs.list())
+		if line := refLine(refs.list()); line != "" {
+			slog.InfoContext(ctx, line, attr.Notice(""), attr.Result())
+		}
 	}
 
 	sink.RecordValues(targetName, readReturns(targetName))
@@ -463,16 +465,17 @@ func (c *resultRefs) list() []string {
 	return slices.Clone(c.refs)
 }
 
-// printRefLine writes the one line a successful `-s` run prints: every other line of a
-// pass is dropped, and without the ref a caller reruns without -s just to learn it.
-// It mirrors the "ref  <id>" line a default run prints under each target.
-func printRefLine(w io.Writer, refs []string) {
+// refLine is the one line a successful `-s` run prints: every other line of a pass is
+// dropped, and without the ref a caller reruns without -s just to learn it. It mirrors the
+// "ref  <id>" line a default run prints under each target; "" when no target left a ref.
+func refLine(refs []string) string {
 	switch len(refs) {
 	case 0:
+		return ""
 	case 1:
-		fmt.Fprintf(w, "ref  %s\n", refs[0])
+		return "ref  " + refs[0]
 	default:
-		fmt.Fprintf(w, "refs  %s\n", strings.Join(refs, " "))
+		return "refs  " + strings.Join(refs, " ")
 	}
 }
 

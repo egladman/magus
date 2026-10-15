@@ -802,7 +802,7 @@ func TestResultRefsLine(t *testing.T) {
 		{
 			"one result prints its ref",
 			[]journal.Event{{Kind: journal.KindResult, Ref: "out1a2b3c4d5e6f"}},
-			"ref  out1a2b3c4d5e6f\n",
+			"ref  out1a2b3c4d5e6f",
 		},
 		{
 			"several results print one line",
@@ -811,7 +811,7 @@ func TestResultRefsLine(t *testing.T) {
 				{Kind: journal.KindResult, Ref: "out222222222222"},
 				{Kind: journal.KindResult, Ref: "out111111111111"},
 			},
-			"refs  out111111111111 out222222222222\n",
+			"refs  out111111111111 out222222222222",
 		},
 		{
 			"events that are not results or carry no ref are skipped",
@@ -830,10 +830,7 @@ func TestResultRefsLine(t *testing.T) {
 				journal.Emit(ctx, e)
 			}
 
-			var out strings.Builder
-			printRefLine(&out, refs.list())
-
-			assert.Equal(t, tc.wantOut, out.String())
+			assert.Equal(t, tc.wantOut, refLine(refs.list()))
 		})
 	}
 }

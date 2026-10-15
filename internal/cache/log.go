@@ -1026,7 +1026,7 @@ func formatAttrs(r slog.Record, skip ...string) string {
 	var b strings.Builder
 	r.Attrs(func(a slog.Attr) bool {
 		switch a.Key {
-		case attr.ComponentKey, attr.WhyKey, attr.ElapsedKey, attr.NextKey, attr.NoticeKey:
+		case attr.ComponentKey, attr.WhyKey, attr.ElapsedKey, attr.NextKey, attr.NoticeKey, attr.ResultKey:
 			return true
 		}
 		if slices.Contains(skip, a.Key) {
