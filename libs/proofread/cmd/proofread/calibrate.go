@@ -14,6 +14,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/egladman/magus/libs/proofread"
+	"github.com/egladman/magus/libs/proofread/internal/calibrate"
 )
 
 // runCalibrate replays the labeled cases and prints each rule's precision and
@@ -94,12 +95,12 @@ func runCalibrate(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 // rule's gate, exiting 1 when a rule ships a decision its cases do not
 // support.
 func replayCases(dir, format string, gates bool, stdout, stderr io.Writer) int {
-	fsys := proofread.LabeledCases()
+	fsys := calibrate.LabeledCases()
 	if dir != "" {
 		fsys = os.DirFS(dir)
 	}
 
-	cases, err := proofread.LoadCases(fsys)
+	cases, err := calibrate.LoadCases(fsys)
 	if err != nil {
 		return failure(stderr, fmt.Errorf("load the cases: %w", err))
 	}
@@ -108,7 +109,7 @@ func replayCases(dir, format string, gates bool, stdout, stderr io.Writer) int {
 		return failure(stderr, fmt.Errorf("no case files in %s", dirName(dir)))
 	}
 
-	scores := proofread.Calibrate(cases)
+	scores := calibrate.Scores(cases)
 
 	if !gates {
 		if err := writeScores(stdout, format, scores); err != nil {
@@ -118,7 +119,7 @@ func replayCases(dir, format string, gates bool, stdout, stderr io.Writer) int {
 		return exitOK
 	}
 
-	all := proofread.Gates(scores)
+	all := calibrate.Gates(scores)
 	if err := writeGates(stdout, format, all); err != nil {
 		return failure(stderr, err)
 	}
@@ -174,12 +175,12 @@ func splitFields(list string) []string {
 
 // tallySample judges each record of in, one JSON object per line, on all
 // CPUs. A record with no text in fields is skipped.
-func tallySample(in io.Reader, kind proofread.Kind, fields, groupBy []string) ([]proofread.GroupRates, error) {
+func tallySample(in io.Reader, kind proofread.Kind, fields, groupBy []string) ([]calibrate.GroupRates, error) {
 	if len(fields) == 0 {
 		return nil, errors.New("-field names no field")
 	}
 
-	tally := proofread.NewTally(kind)
+	tally := calibrate.NewTally(kind)
 	type job struct{ group, text string }
 
 	jobs := make(chan job, 256)
@@ -272,7 +273,7 @@ func groupName(rec map[string]any, fields []string) string {
 	return strings.Join(parts, "/")
 }
 
-func writeScores(w io.Writer, format string, scores []proofread.Score) error {
+func writeScores(w io.Writer, format string, scores []calibrate.Score) error {
 	if format == "json" {
 		return writeJSON(w, scores)
 	}
@@ -291,7 +292,7 @@ func writeScores(w io.Writer, format string, scores []proofread.Score) error {
 
 // writeGates prints each rule's gate, then, as a table, a count of the rules
 // that fail and the deny conditions no replay measures.
-func writeGates(w io.Writer, format string, gates []proofread.Gate) error {
+func writeGates(w io.Writer, format string, gates []calibrate.Gate) error {
 	if format == "json" {
 		return writeJSON(w, gates)
 	}
@@ -333,7 +334,7 @@ func writeGates(w io.Writer, format string, gates []proofread.Gate) error {
 	return nil
 }
 
-func needs(g proofread.Gate) string {
+func needs(g calibrate.Gate) string {
 	switch {
 	case g.Pass:
 		return "-"
@@ -352,7 +353,7 @@ func percent(p *float64) string {
 	return fmt.Sprintf("%.1f%%", 100**p)
 }
 
-func writeRates(w io.Writer, format string, groups []proofread.GroupRates) error {
+func writeRates(w io.Writer, format string, groups []calibrate.GroupRates) error {
 	if format == "json" {
 		return writeJSON(w, groups)
 	}

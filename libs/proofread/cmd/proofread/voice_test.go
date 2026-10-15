@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/libs/proofread"
+	"github.com/egladman/magus/libs/proofread/internal/calibrate"
 )
 
 // synthReplies are n short replies an invented author wrote.
@@ -267,12 +268,12 @@ func TestVoiceEvalWritesJSONPerKind(t *testing.T) {
 		t.Fatalf("voice eval: code %d stderr %q", code, stderr)
 	}
 
-	var got map[proofread.Kind][]proofread.Separation
+	var got map[proofread.Kind][]calibrate.Separation
 	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
 		t.Fatalf("decode %q: %v", stdout, err)
 	}
 
-	semicolon := proofread.Separation{Feature: "punctuation.semicolon", AUC: 1, OwnerTexts: 5, OtherTexts: 5}
+	semicolon := calibrate.Separation{Feature: "punctuation.semicolon", AUC: 1, OwnerTexts: 5, OtherTexts: 5}
 	if len(got) != 1 || !slices.Contains(got[proofread.KindReviewReply], semicolon) {
 		t.Errorf("separations = %+v, want review-reply alone, holding %+v", got, semicolon)
 	}

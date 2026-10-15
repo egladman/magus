@@ -94,8 +94,8 @@ func TestSyllablesEstimatesAWord(t *testing.T) {
 	}
 
 	for word, want := range cases {
-		if got := Syllables(word); got != want {
-			t.Errorf("Syllables(%q) = %d, want %d", word, got, want)
+		if got := syllables(word); got != want {
+			t.Errorf("syllables(%q) = %d, want %d", word, got, want)
 		}
 	}
 }

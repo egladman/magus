@@ -128,7 +128,7 @@ func measure(paras []paragraph) Metrics {
 			lengths = append(lengths, len(sentence))
 
 			for _, word := range sentence {
-				m.Syllables += Syllables(word)
+				m.Syllables += syllables(word)
 			}
 		}
 	}
@@ -162,13 +162,13 @@ func measure(paras []paragraph) Metrics {
 
 func round2(f float64) float64 { return math.Round(f*100) / 100 }
 
-// Syllables estimates the syllables of an English word without a dictionary:
+// syllables estimates the syllables of an English word without a dictionary:
 // each run of vowels (y included) is one, a final silent e is dropped unless
 // the word ends in a consonant and "le", and every word has at least one. A
 // token holding no letter, a number, counts as one. The estimate is off by
 // one on words like "create" and "naive", which is noise a grade averaged over
 // a text absorbs.
-func Syllables(word string) int {
+func syllables(word string) int {
 	w := strings.ToLower(strings.TrimFunc(word, func(r rune) bool { return !unicode.IsLetter(r) }))
 	if w == "" {
 		return 1

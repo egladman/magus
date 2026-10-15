@@ -1,4 +1,4 @@
-package proofread
+package calibrate
 
 import (
 	"fmt"
@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/egladman/magus/libs/proofread"
 )
 
 func TestLabeledCasesAgreeWithTheRules(t *testing.T) {
@@ -17,7 +19,7 @@ func TestLabeledCasesAgreeWithTheRules(t *testing.T) {
 
 	for _, c := range cases {
 		if !c.Agrees() {
-			t.Errorf("testdata/cases/%s:%d: %s judged as %s is labeled %s, but fires=%v:\n%s",
+			t.Errorf("cases/%s:%d: %s judged as %s is labeled %s, but fires=%v:\n%s",
 				c.File, c.Line, c.Rule, c.Kind, c.Label, c.Fires(), c.Text)
 		}
 	}
@@ -29,7 +31,7 @@ func TestEveryRuleHasAHitAndAPassCase(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	labels := map[Rule]map[Label]bool{}
+	labels := map[proofread.Rule]map[Label]bool{}
 
 	for _, c := range cases {
 		if labels[c.Rule] == nil {
@@ -39,9 +41,9 @@ func TestEveryRuleHasAHitAndAPassCase(t *testing.T) {
 		labels[c.Rule][c.Label] = true
 	}
 
-	for _, r := range Rules() {
+	for _, r := range proofread.Rules() {
 		if !labels[r][LabelHit] || !labels[r][LabelPass] {
-			t.Errorf("testdata/cases/%s.txtar needs a hit and a pass case, has %v", r, labels[r])
+			t.Errorf("cases/%s.txtar needs a hit and a pass case, has %v", r, labels[r])
 		}
 	}
 }
@@ -58,13 +60,13 @@ func TestLoadCasesReadsHeadersLinesAndWholeSections(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sym := Symbol{Name: "Close", Owner: "Pool", Callable: true}
+	sym := proofread.Symbol{Name: "Close", Owner: "Pool", Callable: true}
 	want := []Case{
-		{File: "docstub.txtar", Line: 4, Rule: RuleDocStub, Kind: KindDocComment, Label: LabelHit, Text: "Close closes.", Symbol: sym},
-		{File: "docstub.txtar", Line: 6, Rule: RuleDocStub, Kind: KindDocComment, Label: LabelHit, Text: "Close closes the Pool.", Symbol: sym},
+		{File: "docstub.txtar", Line: 4, Rule: proofread.RuleDocStub, Kind: proofread.KindDocComment, Label: LabelHit, Text: "Close closes.", Symbol: sym},
+		{File: "docstub.txtar", Line: 6, Rule: proofread.RuleDocStub, Kind: proofread.KindDocComment, Label: LabelHit, Text: "Close closes the Pool.", Symbol: sym},
 		{
-			File: "docstub.txtar", Line: 8, Rule: RuleDocStub, Kind: KindDocComment, Label: LabelPass,
-			Text: "Open dials.\n\nIt blocks.", Symbol: Symbol{Name: "Open"},
+			File: "docstub.txtar", Line: 8, Rule: proofread.RuleDocStub, Kind: proofread.KindDocComment, Label: LabelPass,
+			Text: "Open dials.\n\nIt blocks.", Symbol: proofread.Symbol{Name: "Open"},
 		},
 	}
 
@@ -96,7 +98,7 @@ func TestAnInlineCaseIsJudgedAsAnInlineComment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(got) != 2 || got[1].Kind != KindReviewInline || !got[0].Fires() || got[1].Fires() {
+	if len(got) != 2 || got[1].Kind != proofread.KindReviewInline || !got[0].Fires() || got[1].Fires() {
 		t.Errorf("cases = %+v; want the reply to fire and the inline comment not", got)
 	}
 }
@@ -110,7 +112,7 @@ func TestLoadCasesReadsAReviewEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(got) != 1 || got[0].Event != EventApprove {
+	if len(got) != 1 || got[0].Event != proofread.EventApprove {
 		t.Errorf("cases = %+v; want one APPROVE case", got)
 	}
 
@@ -136,7 +138,7 @@ func TestLoadCasesJudgesAChangeDescriptionLineUnderALead(t *testing.T) {
 
 func TestLoadCasesJudgesAFileUnderItsAuthorSections(t *testing.T) {
 	var authored strings.Builder
-	for i := range MinVoiceTexts {
+	for i := range proofread.MinVoiceTexts {
 		fmt.Fprintf(&authored, "I think case %d works. Let's merge it.\n", i)
 	}
 
@@ -155,8 +157,8 @@ func TestLoadCasesJudgesAFileUnderItsAuthorSections(t *testing.T) {
 		t.Fatalf("cases = %+v, want the filler case with no voice and one voice-drift case", got)
 	}
 
-	if v := got[1].Voice; v == nil || v.Kinds[KindReviewReply].Texts != MinVoiceTexts+1 || got[1].Text != "I think it works." {
-		t.Errorf("voice-drift case = %+v, want one judged under a voice of %d replies", got[1], MinVoiceTexts+1)
+	if v := got[1].Voice; v == nil || v.Kinds[proofread.KindReviewReply].Texts != proofread.MinVoiceTexts+1 || got[1].Text != "I think it works." {
+		t.Errorf("voice-drift case = %+v, want one judged under a voice of %d replies", got[1], proofread.MinVoiceTexts+1)
 	}
 }
 
@@ -185,22 +187,22 @@ func TestLoadCasesRefusesAFileItCannotRead(t *testing.T) {
 
 func TestCalibrateTalliesEachLabelAsTheRuleJudgesIt(t *testing.T) {
 	cases := []Case{
-		{Rule: RuleHedge, Kind: KindReference, Label: LabelHit, Text: "It may help."},
-		{Rule: RuleHedge, Kind: KindReference, Label: LabelHit, Text: "It holds."},
-		{Rule: RuleHedge, Kind: KindReference, Label: LabelPass, Text: "It holds."},
-		{Rule: RuleHedge, Kind: KindReference, Label: LabelFalsePositive, Text: "It probably holds."},
-		{Rule: RuleHedge, Kind: KindReference, Label: LabelFalseNegative, Text: "It holds."},
-		{Rule: RuleFiller, Kind: KindReference, Label: LabelPass, Text: "It holds."},
+		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: LabelHit, Text: "It may help."},
+		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: LabelHit, Text: "It holds."},
+		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: LabelPass, Text: "It holds."},
+		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: LabelFalsePositive, Text: "It probably holds."},
+		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: LabelFalseNegative, Text: "It holds."},
+		{Rule: proofread.RuleFiller, Kind: proofread.KindReference, Label: LabelPass, Text: "It holds."},
 	}
 
-	got := Calibrate(cases)
+	got := Scores(cases)
 
 	ptr := func(f float64) *float64 { return &f }
 
 	want := []Score{
-		{Rule: RuleFiller, Cases: 1, TN: 1, HeldOut: 1},
+		{Rule: proofread.RuleFiller, Cases: 1, TN: 1, HeldOut: 1},
 		{
-			Rule: RuleHedge, Cases: 5, TP: 1, FP: 1, FN: 2, TN: 1, Precision: ptr(0.5),
+			Rule: proofread.RuleHedge, Cases: 5, TP: 1, FP: 1, FN: 2, TN: 1, Precision: ptr(0.5),
 			Lower: ptr(wilsonLower(0.5, 2)), Recall: ptr(1.0 / 3), HeldOut: 3, Disagree: 1,
 		},
 	}
@@ -231,10 +233,10 @@ func ratioText(p *float64) string {
 }
 
 func TestTallyCountsFindingsAndTextsPerGroup(t *testing.T) {
-	tally := NewTally(KindReviewReply)
-	tally.Add("User", "Actually, it simply races.")
+	tally := NewTally(proofread.KindReviewReply)
+	tally.Add("User", "Let me delve into the race, then delve into the lock.")
 	tally.Add("User", "The map races.")
-	tally.Add("Bot", "Great question, the key sorts.")
+	tally.Add("Bot", "The key sorts.")
 
 	rates := tally.Rates()
 	if len(rates) != 2 || rates[0].Group != "Bot" || rates[1].Group != "User" || rates[1].Texts != 2 {
@@ -242,22 +244,25 @@ func TestTallyCountsFindingsAndTextsPerGroup(t *testing.T) {
 	}
 
 	for _, r := range rates[1].Rules {
-		if r.Rule == RuleFiller {
-			want := Rate{Rule: RuleFiller, Decision: DecisionDeny, Findings: 2, PerThousand: 1000, Texts: 1, Share: 0.5, DeniedTexts: 1}
+		if r.Rule == proofread.RuleBuzzword {
+			want := Rate{
+				Rule: proofread.RuleBuzzword, Decision: proofread.DecisionDeny, Findings: 2, PerThousand: 1000, Texts: 1,
+				Share: 0.5, DeniedTexts: 1,
+			}
 			if r != want {
-				t.Errorf("filler = %+v, want %+v", r, want)
+				t.Errorf("buzzword = %+v, want %+v", r, want)
 			}
 
 			return
 		}
 	}
 
-	t.Error("no filler rate for review-reply")
+	t.Error("no buzzword rate for review-reply")
 }
 
 func TestTallyLeavesOutRulesOffForTheKind(t *testing.T) {
-	for _, r := range NewTally(KindReviewReply).rules {
-		if r.Rule == RuleDash || r.Rule == RuleHedge {
+	for _, r := range NewTally(proofread.KindReviewReply).rules {
+		if r.Rule == proofread.RuleDash || r.Rule == proofread.RuleHedge {
 			t.Errorf("%s runs on review-reply by default", r.Rule)
 		}
 	}
@@ -305,7 +310,7 @@ func TestHeldOutIsAStableFifth(t *testing.T) {
 
 	for i := range 2000 {
 		c := Case{Text: fmt.Sprintf("The cache key sorts input %d.", i)}
-		if c.HeldOut() != (Case{Text: c.Text, Rule: RuleHedge, Label: LabelHit, Line: i}).HeldOut() {
+		if c.HeldOut() != (Case{Text: c.Text, Rule: proofread.RuleHedge, Label: LabelHit, Line: i}).HeldOut() {
 			t.Fatalf("%q: the split depends on more than the text", c.Text)
 		}
 
@@ -329,24 +334,48 @@ func TestCalibrateScoresTheHeldOutCasesAlone(t *testing.T) {
 	}
 
 	cases := []Case{
-		{Rule: RuleHedge, Kind: KindReference, Label: LabelHit, Text: text(true, "It may help runner %d.")},
-		{Rule: RuleHedge, Kind: KindReference, Label: LabelFalsePositive, Text: text(true, "It probably holds for %d.")},
-		{Rule: RuleHedge, Kind: KindReference, Label: LabelHit, Text: text(false, "It may help runner %d.")},
-		{Rule: RuleHedge, Kind: KindReference, Label: LabelPass, Text: text(true, "Runner %d holds.")},
+		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: LabelHit, Text: text(true, "It may help runner %d.")},
+		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: LabelFalsePositive, Text: text(true, "It probably holds for %d.")},
+		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: LabelHit, Text: text(false, "It may help runner %d.")},
+		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: LabelPass, Text: text(true, "Runner %d holds.")},
 	}
 
-	got := Calibrate(cases)
+	got := Scores(cases)
 	if len(got) != 1 || got[0].HeldOut != 3 || got[0].HeldOutPrecision == nil || *got[0].HeldOutPrecision != 0.5 {
 		t.Errorf("scores: %s", scoreText(got))
 	}
 
-	if none := Calibrate(cases[2:3]); none[0].HeldOut != 0 || none[0].HeldOutPrecision != nil {
+	if none := Scores(cases[2:3]); none[0].HeldOut != 0 || none[0].HeldOutPrecision != nil {
 		t.Errorf("no case held out: %s", scoreText(none))
 	}
 }
 
+// shipping returns a rule whose strictest shipped default is d, so a gate
+// test holds whatever the evidence ceiling caps today.
+func shipping(t *testing.T, d proofread.Decision) proofread.Rule {
+	t.Helper()
+
+	for _, doc := range proofread.Catalog() {
+		strictest := proofread.DecisionOff
+		for _, k := range doc.Kinds {
+			if decisionRank(doc.Decisions[k]) > decisionRank(strictest) {
+				strictest = doc.Decisions[k]
+			}
+		}
+
+		if strictest == d {
+			return doc.Name
+		}
+	}
+
+	t.Fatalf("no rule ships %s", d)
+
+	return ""
+}
+
 func TestGatesHoldTheShippedDefaultAgainstTheEvidence(t *testing.T) {
-	gate := func(rule Rule, tp, fp int) Gate { return Gates([]Score{{Rule: rule, TP: tp, FP: fp}})[0] }
+	gate := func(rule proofread.Rule, tp, fp int) Gate { return Gates([]Score{{Rule: rule, TP: tp, FP: fp}})[0] }
+	deny, advise, off := shipping(t, proofread.DecisionDeny), shipping(t, proofread.DecisionAdvise), shipping(t, proofread.DecisionOff)
 
 	needs := func(g Gate) string {
 		if g.Needs == nil {
@@ -358,18 +387,18 @@ func TestGatesHoldTheShippedDefaultAgainstTheEvidence(t *testing.T) {
 
 	cases := map[string]struct {
 		gate              Gate
-		shipped, supports Decision
+		shipped, supports proofread.Decision
 		pass              bool
 		needs             string
 	}{
-		"deny at 0 of 35":                 {gate(RuleHedge, 35, 0), DecisionDeny, DecisionDeny, true, "0"},
-		"deny at 0 of 10":                 {gate(RuleHedge, 10, 0), DecisionDeny, DecisionOff, false, "25"},
-		"deny at 1 of 10":                 {gate(RuleHedge, 9, 1), DecisionDeny, DecisionOff, false, "unreachable"},
-		"deny with no firing":             {gate(RuleHedge, 0, 0), DecisionDeny, DecisionOff, false, "35"},
-		"deny at 4 of 30 supports advise": {gate(RuleHedge, 26, 4), DecisionDeny, DecisionAdvise, false, "unreachable"},
-		"advise at 4 of 30":               {gate(RuleVerdict, 26, 4), DecisionAdvise, DecisionAdvise, true, "0"},
-		"advise at 0 of 29":               {gate(RuleVerdict, 29, 0), DecisionAdvise, DecisionOff, false, "1"},
-		"house style with no firing":      {gate(RuleDash, 0, 0), DecisionOff, DecisionOff, true, "0"},
+		"deny at 0 of 35":                 {gate(deny, 35, 0), proofread.DecisionDeny, proofread.DecisionDeny, true, "0"},
+		"deny at 0 of 10":                 {gate(deny, 10, 0), proofread.DecisionDeny, proofread.DecisionOff, false, "25"},
+		"deny at 1 of 10":                 {gate(deny, 9, 1), proofread.DecisionDeny, proofread.DecisionOff, false, "unreachable"},
+		"deny with no firing":             {gate(deny, 0, 0), proofread.DecisionDeny, proofread.DecisionOff, false, "35"},
+		"deny at 4 of 30 supports advise": {gate(deny, 26, 4), proofread.DecisionDeny, proofread.DecisionAdvise, false, "unreachable"},
+		"advise at 4 of 30":               {gate(advise, 26, 4), proofread.DecisionAdvise, proofread.DecisionAdvise, true, "0"},
+		"advise at 0 of 29":               {gate(advise, 29, 0), proofread.DecisionAdvise, proofread.DecisionOff, false, "1"},
+		"off with no firing":              {gate(off, 0, 0), proofread.DecisionOff, proofread.DecisionOff, true, "0"},
 	}
 
 	for name, tc := range cases {
@@ -380,14 +409,14 @@ func TestGatesHoldTheShippedDefaultAgainstTheEvidence(t *testing.T) {
 					g.Shipped, g.Supports, g.Pass, needs(g), tc.shipped, tc.supports, tc.pass, tc.needs)
 			}
 
-			if deny := g.Shipped == DecisionDeny; (len(g.Unmeasured) == 2) != deny {
+			if deny := g.Shipped == proofread.DecisionDeny; (len(g.Unmeasured) == 2) != deny {
 				t.Errorf("unmeasured %v on a %s rule", g.Unmeasured, g.Shipped)
 			}
 		})
 	}
 
-	g := gate(RuleHedge, 9, 1)
-	if g.Dimension != DimensionEvidence || g.Firings != 10 || g.Wrong != 1 || *g.Precision != 0.9 ||
+	g := gate(proofread.RuleHedge, 9, 1)
+	if g.Dimension != proofread.DimensionEvidence || g.Firings != 10 || g.Wrong != 1 || *g.Precision != 0.9 ||
 		math.Abs(*g.Lower-wilsonLower(0.9, 10)) > 1e-12 {
 		t.Errorf("gate = %+v", g)
 	}

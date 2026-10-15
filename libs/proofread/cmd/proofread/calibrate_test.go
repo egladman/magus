@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/libs/proofread"
+	"github.com/egladman/magus/libs/proofread/internal/calibrate"
 )
 
 func TestCalibrateReplaysTheCasesItCarries(t *testing.T) {
@@ -19,7 +20,7 @@ func TestCalibrateReplaysTheCasesItCarries(t *testing.T) {
 		t.Fatalf("exit %d: %s", code, stderr.String())
 	}
 
-	var scores []proofread.Score
+	var scores []calibrate.Score
 	if err := json.Unmarshal(stdout.Bytes(), &scores); err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +63,7 @@ func TestCalibrateGatesTheCasesItCarries(t *testing.T) {
 		t.Fatalf("exit %d, want 1 while a rule ships past its cases: %s", code, stderr.String())
 	}
 
-	var gates []proofread.Gate
+	var gates []calibrate.Gate
 	if err := json.Unmarshal(stdout.Bytes(), &gates); err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +180,7 @@ func TestCalibrateRatesASampleByGroup(t *testing.T) {
 		t.Fatalf("exit %d: %s", code, stderr.String())
 	}
 
-	var groups []proofread.GroupRates
+	var groups []calibrate.GroupRates
 	if err := json.Unmarshal(stdout.Bytes(), &groups); err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-package proofread
+package calibrate
 
 import (
 	"encoding/json"
@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+
+	"github.com/egladman/magus/libs/proofread"
 )
 
 func TestWilsonLower(t *testing.T) {
@@ -103,13 +105,13 @@ func TestNominalAlpha(t *testing.T) {
 // a field that could hold a candidate's text, a label or a note quoting one
 // keeps third-party text out of git only if no record has it.
 func TestRoundRecordsCarryNoText(t *testing.T) {
-	paths, err := filepath.Glob("testdata/rounds/*.json")
+	paths, err := filepath.Glob("../../testdata/rounds/*.json")
 	if err != nil || len(paths) == 0 {
 		t.Fatalf("no round records: %v", err)
 	}
 
 	textKeys := []string{"text", "sentence", "context", "match", "message", "note", "reason", "label", "thread"}
-	known := Rules()
+	known := proofread.Rules()
 
 	for _, p := range paths {
 		data, err := os.ReadFile(p)
@@ -133,7 +135,7 @@ func TestRoundRecordsCarryNoText(t *testing.T) {
 		}
 
 		for name := range rec.Rules {
-			if !slices.Contains(known, Rule(name)) {
+			if !slices.Contains(known, proofread.Rule(name)) {
 				t.Errorf("%s: rule %q is no rule proofread knows", p, name)
 			}
 		}

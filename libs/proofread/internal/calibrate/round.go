@@ -1,4 +1,4 @@
-package proofread
+package calibrate
 
 import (
 	"math"
@@ -11,7 +11,7 @@ import (
 // negative or exceeds n.
 func WilsonLower(correct, n int, z float64) float64 {
 	if correct < 0 || correct > n {
-		panic("proofread: WilsonLower needs 0 <= correct <= n")
+		panic("calibrate: WilsonLower needs 0 <= correct <= n")
 	}
 
 	if n == 0 {

@@ -324,17 +324,18 @@ frozen labeling round.
 
 ### Where things live
 
-| Path                          | Holds                                                                                                   |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `proofread.go`                | the `Rule`, `Kind` and `Decision` types, the check table and the core rules                             |
-| one file per family           | each family's rule constants, checks, texts and judges: `tone.go`, `slop.go`, `review.go`, `density.go` |
-| `catalog.go`                  | the PRF code families, the dimensions and the merge of every family's texts                             |
-| `text.go`                     | the readers: Markdown and plain text into prose lines, and the platform text blanked before any rule    |
-| `evidence.go`                 | `evidenceCeiling`: the strictest decision each rule's labeled evidence supports                         |
-| `calibrate.go`, `round.go`    | the case loader, the precision tally, Wilson and Krippendorff                                           |
-| `testdata/cases/<rule>.txtar` | the labeled cases: regression tests and the tuning set                                                  |
-| `testdata/guideline.md`       | the labeling guideline every round is frozen with                                                       |
-| `testdata/rounds/roundN.json` | one record per labeling round: counts, scores and gates, no text                                        |
+| Path                                    | Holds                                                                                                   |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `proofread.go`                          | the `Rule`, `Kind` and `Decision` types, the check table and the core rules                             |
+| one file per family                     | each family's rule constants, checks, texts and judges: `tone.go`, `slop.go`, `review.go`, `density.go` |
+| `catalog.go`                            | the PRF code families, the dimensions and the merge of every family's texts                             |
+| `text.go`                               | the readers: Markdown and plain text into prose lines, and the platform text blanked before any rule    |
+| `evidence.go`                           | `evidenceCeiling`: the strictest decision each rule's labeled evidence supports                         |
+| `internal/calibrate/`                   | the case loader, the precision tally, Wilson, Krippendorff and the shape separation                     |
+| `internal/calibrate/cases/<rule>.txtar` | the labeled cases: regression tests and the tuning set                                                  |
+| `internal/wordclass/`                   | the word-class tagger the grammar measures read, and its model trained by `proofread train`             |
+| `testdata/guideline.md`                 | the labeling guideline every round is frozen with                                                       |
+| `testdata/rounds/roundN.json`           | one record per labeling round: counts, scores and gates, no text                                        |
 
 ### Add a rule
 
@@ -347,7 +348,7 @@ frozen labeling round.
 2. Write the judge. Read the prose the reader hands you; never re-parse Markdown.
    Leave quoted words, code and platform text alone: they are not the author's.
 3. Add table tests beside the judge, both directions: what fires and what must not.
-4. Add `testdata/cases/<rule>.txtar` with at least one `hit/` and one `pass/` section
+4. Add `internal/calibrate/cases/<rule>.txtar` with at least one `hit/` and one `pass/` section
    (`TestLabeledCasesAgreeWithTheRules` requires both). Write the texts yourself.
 5. Add the rule to `evidenceCeiling` at `DecisionOff`, unless it is a house rule,
    which ships off anyway. No rule ships on before a frozen round measures it.

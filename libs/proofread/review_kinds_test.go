@@ -5,6 +5,16 @@ import (
 	"testing"
 )
 
+func ruleCheck(rule Rule) (check, bool) {
+	for _, c := range checks {
+		if c.rule == rule {
+			return c, true
+		}
+	}
+
+	return check{}, false
+}
+
 func TestReviewKindChecksRunInThisOrder(t *testing.T) {
 	want := []Rule{
 		RuleNoReason, RuleNitLabel, RuleEmptyRequestChanges, RuleApproveBlocker, RuleBareLGTM, RuleDeferralNoLink,

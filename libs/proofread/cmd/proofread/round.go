@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/libs/proofread"
+	"github.com/egladman/magus/libs/proofread/internal/calibrate"
 )
 
 // The files of a round directory. Labelers fill copies of the template as
@@ -1111,7 +1112,7 @@ func (x *seenIndex) holds(f firing) bool {
 func loadExcludes(paths []string) (*seenIndex, []excludeSpec, error) {
 	x := &seenIndex{wholes: map[string]bool{}, sentences: map[string]bool{}}
 
-	cases, err := proofread.LoadCases(proofread.LabeledCases())
+	cases, err := calibrate.LoadCases(calibrate.LabeledCases())
 	if err != nil {
 		return nil, nil, fmt.Errorf("load the cases proofread carries: %w", err)
 	}
@@ -1144,7 +1145,7 @@ func (x *seenIndex) addPath(p string) (excludeSpec, error) {
 	}
 
 	if info.IsDir() {
-		cases, err := proofread.LoadCases(os.DirFS(p))
+		cases, err := calibrate.LoadCases(os.DirFS(p))
 		if err != nil {
 			return spec, fmt.Errorf("exclude %s: %w", p, err)
 		}
@@ -1798,14 +1799,14 @@ func tallyCandidates(cs []candidate, a, b map[string]labelRow, final map[string]
 	}
 
 	t.Precision = rounded(float64(t.Correct) / float64(t.N))
-	t.WilsonLB = rounded(proofread.WilsonLower(t.Correct, t.N, g.Advise.WilsonZ))
+	t.WilsonLB = rounded(calibrate.WilsonLower(t.Correct, t.N, g.Advise.WilsonZ))
 	t.RawAgreement = rounded(float64(t.N-t.Disagreements) / float64(t.N))
 
-	if alpha, ok := proofread.NominalAlpha(units); ok {
+	if alpha, ok := calibrate.NominalAlpha(units); ok {
 		t.Alpha = rounded(alpha)
 	}
 
-	lower := proofread.WilsonLower(t.Correct, t.N, g.Advise.WilsonZ)
+	lower := calibrate.WilsonLower(t.Correct, t.N, g.Advise.WilsonZ)
 	t.PrecisionGate = t.N >= g.Advise.MinFirings && lower >= g.Advise.LowerBound
 	t.AgreementGate = t.Unnoted == 0 && (t.Disagreements*g.Agreement.PerDisagreement <= t.N ||
 		t.Alpha != nil && *t.Alpha >= g.Agreement.Alpha)
@@ -2212,7 +2213,7 @@ func poolRounds(rounds []*poolRound) (*poolRecord, error) {
 
 	for _, pr := range rec.Rules {
 		pr.Precision = rounded(float64(pr.Correct) / float64(pr.N))
-		pr.WilsonLB = rounded(proofread.WilsonLower(pr.Correct, pr.N, z))
+		pr.WilsonLB = rounded(calibrate.WilsonLower(pr.Correct, pr.N, z))
 
 		if len(pr.Rounds) < 2 {
 			pr.Why = fmt.Sprintf("fired in round %d only, and one round never decides a deny", pr.Rounds[0].Round)

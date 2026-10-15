@@ -69,7 +69,7 @@ export fun proofread_build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format);
     // readsFiles replaces the project baseline. proofread.buzz computes the digest, so a
     // change to it must relink: a replayed digest from the old code would deny every call.
-    ctx.readsFiles("**/*.go", "internal/wordclass/gen/model.gz", "testdata/cases/*.txtar", "go.mod", "go.sum",
+    ctx.readsFiles("**/*.go", "internal/wordclass/gen/model.gz", "internal/calibrate/cases/*.txtar", "go.mod", "go.sum",
                    "proofread.buzz");
     // Literal, as magus reads outputs statically: proofread\binary and proofread\inputsFile.
     ctx.writesFiles("gen/proofread", "gen/proofread.inputs");
@@ -82,7 +82,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     // readsFiles replaces the project baseline, so it names the fixtures the tests read
     // as well as the sources.
     ctx.readsFiles("**/*.go", "go.mod", "go.sum", "testdata/**/*", "internal/wordclass/gen/model.gz",
-                   "internal/wordclass/testdata/*");
+                   "internal/wordclass/testdata/*", "internal/calibrate/cases/*.txtar");
     ctx.writesFiles("coverage.out");
     go["go-test"](ctx, {"args": ["-covermode=atomic", "-coverprofile=coverage.out", "./..."] + args});
 }

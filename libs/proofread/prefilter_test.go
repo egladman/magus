@@ -38,7 +38,7 @@ func prefilteredPatterns() []*regexp.Regexp {
 func prefilterTexts(t *testing.T) []string {
 	t.Helper()
 
-	files, err := filepath.Glob("testdata/cases/*.txtar")
+	files, err := filepath.Glob("internal/calibrate/cases/*.txtar")
 	if err != nil {
 		t.Fatal(err)
 	}

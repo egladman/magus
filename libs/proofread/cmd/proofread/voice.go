@@ -16,6 +16,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/egladman/magus/libs/proofread"
+	"github.com/egladman/magus/libs/proofread/internal/calibrate"
 	"github.com/egladman/magus/libs/proofread/internal/xdg"
 )
 
@@ -154,9 +155,9 @@ func runVoiceEval(args []string, stdout, stderr io.Writer) int {
 
 	slices.Sort(kinds)
 
-	seps := make(map[proofread.Kind][]proofread.Separation, len(kinds))
+	seps := make(map[proofread.Kind][]calibrate.Separation, len(kinds))
 	for _, k := range kinds {
-		seps[k] = proofread.Separate(owners[k], others[k])
+		seps[k] = calibrate.Separate(owners[k], others[k])
 	}
 
 	if *format == "json" {
@@ -184,7 +185,7 @@ func runVoiceEval(args []string, stdout, stderr io.Writer) int {
 // separationTable is a header naming kind and its counts, then one aligned
 // line per separation. A pool above 0 counts chunks of at least that many
 // words instead of texts.
-func separationTable(kind proofread.Kind, owner, other, pool int, seps []proofread.Separation) string {
+func separationTable(kind proofread.Kind, owner, other, pool int, seps []calibrate.Separation) string {
 	var b strings.Builder
 
 	unit := "texts"
@@ -201,7 +202,7 @@ func separationTable(kind proofread.Kind, owner, other, pool int, seps []proofre
 	b.WriteString("\n")
 
 	if len(seps) == 0 {
-		fmt.Fprintf(&b, "  no feature measured on %d %s on each side\n", proofread.MinSeparationTexts, unit)
+		fmt.Fprintf(&b, "  no feature measured on %d %s on each side\n", calibrate.MinSeparationTexts, unit)
 
 		return b.String()
 	}

@@ -1,19 +1,21 @@
-package proofread
+package calibrate
 
 import (
 	"cmp"
 	"encoding/json"
 	"math"
 	"slices"
+
+	"github.com/egladman/magus/libs/proofread"
 )
 
 // MinSeparationTexts is the fewest texts on either side that [Separate]
 // scores a feature from.
 const MinSeparationTexts = 5
 
-// Separation is how far one [Shape] feature separates two sets of texts.
+// Separation is how far one [proofread.Shape] feature separates two sets of texts.
 type Separation struct {
-	Feature Feature `json:"feature"`
+	Feature proofread.Feature `json:"feature"`
 	// AUC is the probability that a random owner text measures higher than a
 	// random other text, ties counted half: 1 or 0 separates the sets
 	// completely, 0.5 not at all.
@@ -24,7 +26,7 @@ type Separation struct {
 	OtherTexts int `json:"other"`
 }
 
-// Separate scores every feature of [Shape] by how well it tells the owner's
+// Separate scores every feature of [proofread.Shape] by how well it tells the owner's
 // texts from the other texts, most separating first, then by name.
 //
 // The features come from Shape's JSON encoding, so a field added to Shape is
@@ -35,7 +37,7 @@ type Separation struct {
 // counts toward nothing. A feature measured on fewer than 5 texts on
 // either side is left out. The result is empty, never nil, when no feature is
 // scored.
-func Separate(owner, other []Shape) []Separation {
+func Separate(owner, other []proofread.Shape) []Separation {
 	names := map[string]string{}
 	ownerTexts, otherTexts := flattenShapes(owner, names), flattenShapes(other, names)
 	out := []Separation{}
@@ -46,7 +48,7 @@ func Separate(owner, other []Shape) []Separation {
 			continue
 		}
 
-		out = append(out, Separation{Feature: Feature(name), AUC: auc(ov, xv), OwnerTexts: len(ov), OtherTexts: len(xv)})
+		out = append(out, Separation{Feature: proofread.Feature(name), AUC: auc(ov, xv), OwnerTexts: len(ov), OtherTexts: len(xv)})
 	}
 
 	slices.SortFunc(out, func(a, b Separation) int {
@@ -64,7 +66,7 @@ type flatShape struct {
 
 // flattenShapes flattens each shape that encodes, and records every feature
 // path it finds in names, mapped to the top-level field holding it.
-func flattenShapes(shapes []Shape, names map[string]string) []flatShape {
+func flattenShapes(shapes []proofread.Shape, names map[string]string) []flatShape {
 	out := make([]flatShape, 0, len(shapes))
 
 	for _, s := range shapes {

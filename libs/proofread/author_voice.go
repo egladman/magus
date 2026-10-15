@@ -34,10 +34,6 @@ const MinVoiceWords = 1000
 // its name, a map entry as "<map>.<key>".
 type Feature string
 
-// labelAuthor marks a case file section of an author's own texts. It holds no
-// case: its texts build the [Voice] every case in its file is judged with.
-const labelAuthor Label = "author"
-
 // voiceKinds are the kinds a [Voice] measures.
 var voiceKinds = []Kind{KindChangeDescription, KindReviewReply, KindCommitMessage, KindIssue}
 
