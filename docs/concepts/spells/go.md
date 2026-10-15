@@ -13,8 +13,6 @@ The `go` spell wires the Go toolchain into a magusfile: each op forks a `go` (or
 
 **Version probe (go):** `go version`
 
-**Version probe (golangci-lint):** `golangci-lint --version`
-
 ## Passing arguments to ops
 
 Every op is invoked as `go["<op>"](ctx, opts?)`. The first argument is the target's context, which is what carries the execution environment; the optional options map shapes the command itself:
@@ -350,7 +348,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 
 ## golangci-lint
 
-Invoked directly rather than through `go tool`: golangci-lint generates no code, so it has none of the generator/runtime lockstep that keeps protoc-gen-go pinned in go.mod. `go tool golangci-lint` also required the binary in the module's tool block, and a workspace that had not put it there got "no such tool" - the op could not run at all. On PATH it is pinned by whatever the workspace uses (mise, asdf, a system package), and the spell's version probe records which.
+Invoked directly rather than through `go tool`: golangci-lint generates no code, so it has none of the generator/runtime lockstep that keeps protoc-gen-go pinned in go.mod. `go tool golangci-lint` also required the binary in the module's tool block, and a workspace that had not put it there got "no such tool" - the op could not run at all. On PATH it is pinned by whatever the workspace uses (mise, asdf, a system package), and the spell's observe probe records which.
 
 **Command:** `golangci-lint run ./...`
 

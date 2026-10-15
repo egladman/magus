@@ -463,8 +463,11 @@ func TestBuiltinSpellsDecodeVersionKeyFromEnum(t *testing.T) {
 	require.True(t, ok, "go spell not registered")
 	assert.Equal(t, spells.VersionPatch, goSpell.Tools["go"].Key.UpTo,
 		"`go version` prints the host platform; patch extraction is what sheds it")
-	assert.Equal(t, spells.VersionPatch, goSpell.Tools["golangci-lint"].Key.UpTo,
-		"golangci-lint pads its version line with a commit and a build timestamp")
+	// Only the golangci-lint op reads the linter, so its version keys that op's targets
+	// and leaves go-test's key alone.
+	golangci := goSpell.Tools["golangci-lint"]
+	assert.False(t, golangci.HasProbe(), "a version probe keys every target in the project")
+	assert.True(t, golangci.HasObservationProbe(), "golangci-lint must key the targets that drive it")
 
 	// govulncheck declares nothing on purpose: its verdict comes from the vulnerability
 	// database, whose date is in the probe output and would not survive extraction.
