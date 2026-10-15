@@ -661,9 +661,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			// same session.
 			recordSkillLoad(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.skillsKey()), env.LoadedSkill)
 		}
-		if env.ChildStarted != "" && !req.DryRun {
+		// A foreground spawn returns after its child stopped and a host may send no start for
+		// it, so the child's first call joins it to the spawn too; joinStartedChild leaves a
+		// child it already has a record of alone.
+		if child := cmp.Or(env.ChildStarted, who.Agent); child != "" && !req.DryRun {
 			at := hookLocation(ctx, deps)
-			joinStartedChild(withJobStoreRows(ctx, at), at, hint.NewGate(at.cacheDir, who.factsKey()), who, env.ChildStarted, time.Now())
+			joinStartedChild(withJobStoreRows(ctx, at), at, hint.NewGate(at.cacheDir, who.factsKey()), who, child, time.Now(), env.ChildStarted == "")
 		}
 		if env.NothingToJudge && env.UnjudgedTool == "" {
 			// A host envelope whose tool_input carries no command, path or prompt (a todo

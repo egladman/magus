@@ -353,3 +353,25 @@ func TestAChildsStartJoinsItToTheSpawnBeforeIt(t *testing.T) {
 		"tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: " + target + "\n@@\n-package guard\n+package guard // x\n*** End Patch\n"}})
 	assert.Equal(t, "guard-facts", write.Lease, "the child acts under the job its spawn named")
 }
+
+// A foreground spawn returns only after its child stopped, and the host sends no start for
+// it, so the spawn's registration is all that can bind the child's first call.
+func TestAForegroundChildsFirstCallJoinsItToItsSpawn(t *testing.T) {
+	row := types.Job{ID: "guard-facts", State: types.StateDeclared, WritePaths: []string{"internal/guard/**"}}
+	ctx, root := fleetFixture(t, row)
+	target := filepath.Join(root, "internal", "guard", "guard.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
+	require.NoError(t, os.WriteFile(target, []byte("package guard\n"), 0o644))
+	claude := func(env map[string]any) types.GuardJudgment {
+		env["session_id"], env["cwd"] = "claude-s", root
+		return Judge(ctx, Dependencies{}, Request{Input: hookJSON(t, env), Host: "claude-code"})
+	}
+
+	spawn := claude(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Agent",
+		"tool_input": map[string]any{"prompt": "implement it", "subagent_type": "general-purpose", "run_in_background": false, "description": "orchestrator/impl guard-facts"}})
+	require.NotEqual(t, "deny", spawn.Decision, spawn.Reason)
+
+	write := claude(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Write", "agent_id": "a1b2c3", "agent_type": "general-purpose",
+		"tool_input": map[string]any{"file_path": target, "content": "package guard // x\n"}})
+	assert.Equal(t, "guard-facts", write.Lease, "the child acts under the job its spawn named")
+}

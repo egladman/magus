@@ -162,7 +162,12 @@ func recordPendingSpawn(facts hint.Gate, env hookRequest, spawner string, now ti
 // is answered by a name, and whose child's own calls carry an id, joins the two here.
 // Nothing is joined to a child magus already has a record of, or to a spawn older than
 // pendingSpawnWindow.
-func joinStartedChild(ctx context.Context, at location, facts hint.Gate, who hookAttribution, child string, now time.Time) {
+//
+// A host that sends no start for a foreground child has only the child's first call to join
+// it by, which names no spawn. That join (firstCall) takes only a spawn whose title names a
+// live job, since binding a job is all it is for and a guess that binds nothing could only
+// take a spawn another child is waiting on.
+func joinStartedChild(ctx context.Context, at location, facts hint.Gate, who hookAttribution, child string, now time.Time, firstCall bool) {
 	if _, known := readSpawnedAgent(facts, child); known {
 		return
 	}
@@ -174,12 +179,17 @@ func joinStartedChild(ctx context.Context, at location, facts hint.Gate, who hoo
 		if err != nil || now.Sub(time.Unix(0, nanos)) > pendingSpawnWindow {
 			continue
 		}
-		if facts.MarkFired(kind + pendingSpawnJoined) {
-			continue
-		}
 		body, err := os.ReadFile(hint.MarkerPath(facts.CacheDir(), facts.Session(), kind))
 		var p pendingSpawn
 		if err != nil || json.Unmarshal(body, &p) != nil {
+			continue
+		}
+		if firstCall {
+			if _, titled := spawnTitleJob(ctx, at, p.Record.Description); !titled {
+				continue
+			}
+		}
+		if facts.MarkFired(kind + pendingSpawnJoined) {
 			continue
 		}
 		recordSpawnedAgent(ctx, at, facts, who, hookRequest{
