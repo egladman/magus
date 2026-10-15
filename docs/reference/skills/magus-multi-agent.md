@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 27073
-skill_short_bytes: 21415
+skill_full_bytes: 27069
+skill_short_bytes: 21411
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `129` |
 | `knowledge-schema-version` | `19` |
-| `skill-content` | `8b7c67023575` |
+| `skill-content` | `c2bacdb522d9` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -261,7 +261,7 @@ worker reports and stops before passing it.
 
 Nesting is allowed when the host supports it, but it creates no new budget and no
 private ownership map. A child reports its proposed descendants to its parent before it
-spawns them, and the store carries each with its parent, model, criteria and write paths.
+spawns them. The store carries each with its parent, model, criteria and write paths.
 
 Descendants inherit the ancestor's deny paths and may subdivide only its write paths. A
 cap the user sets applies to the whole tree, not once per parent.
@@ -750,7 +750,7 @@ worker reports and stops before passing it.
 
 Nesting is allowed when the host supports it, but it creates no new budget and no
 private ownership map. A child reports its proposed descendants to its parent before it
-spawns them, and the store carries each with its parent, model, criteria and write paths.
+spawns them. The store carries each with its parent, model, criteria and write paths.
 
 Descendants inherit the ancestor's deny paths and may subdivide only its write paths. A
 cap the user sets applies to the whole tree, not once per parent.

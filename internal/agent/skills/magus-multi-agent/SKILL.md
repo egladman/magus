@@ -256,7 +256,7 @@ worker reports and stops before passing it.
 
 Nesting is allowed when the host supports it, but it creates no new budget and no
 private ownership map. A child reports its proposed descendants to its parent before it
-spawns them, and the store carries each with its parent, model, criteria and write paths.
+spawns them. The store carries each with its parent, model, criteria and write paths.
 
 Descendants inherit the ancestor's deny paths and may subdivide only its write paths. A
 cap the user sets applies to the whole tree, not once per parent.
