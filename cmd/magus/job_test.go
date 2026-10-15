@@ -1067,6 +1067,32 @@ func TestLsJobsReadsTheSnapshot(t *testing.T) {
 	assert.Equal(t, []string{"443", "438", "450", "445", "456", "457", "459", "458"}, ids)
 }
 
+// Ended rows pile up, so the board lists the live ones and counts the rest; --all is the
+// way to ask for every row.
+func TestLsJobsListsLiveRowsAndLeavesEndedOnesToAll(t *testing.T) {
+	root, _ := execFixture(t,
+		leaseRow("fleet", ""),
+		types.Job{ID: "done", State: types.StatePass},
+		types.Job{ID: "lost", State: types.StateNoReturn},
+		types.Job{ID: "handed-in", State: types.StateExited},
+	)
+	withOutput(t, "name")
+	ls := func(args ...string) (ids, notice string) {
+		notice = captureStderr(t, func() {
+			ids = captureStdout(t, func() { require.NoError(t, lsJobs(root, args)) })
+		})
+		return ids, notice
+	}
+
+	ids, notice := ls()
+	assert.ElementsMatch(t, []string{"fleet", "handed-in"}, strings.Fields(ids), "an exited row still holds its lease, so it is live")
+	assert.Contains(t, notice, "2 ended jobs left out; `magus ls jobs --all` lists them")
+
+	ids, notice = ls("--all")
+	assert.ElementsMatch(t, []string{"fleet", "handed-in", "done", "lost"}, strings.Fields(ids))
+	assert.NotContains(t, notice, "ended", "nothing was left out")
+}
+
 func TestDescribeJobPrintsItsChange(t *testing.T) {
 	t.Parallel()
 	list, in := inflightFixture()

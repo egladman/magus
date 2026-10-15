@@ -334,17 +334,20 @@ func attemptIn(cacheDir, ref string) (types.JobAttempt, error) {
 	}
 }
 
-// lsJobs is `magus ls jobs`: every job this repository carries, whoever holds it.
+// lsJobs is `magus ls jobs`: every live job this repository carries, whoever holds it.
 func lsJobs(root string, args []string) error {
 	var all bool
 	rest, err := cmdParse("ls jobs", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&all, "all", false, "List every in-flight change, not only yours")
+		fs.BoolVar(&all, "all", false, "List the jobs that ended and every in-flight change, not only the live jobs and yours")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus ls jobs [--all] [flags]")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Print every job as a tree, each with its state, model, write-path count, what")
+			fmt.Fprintln(os.Stderr, "Print every live job as a tree, each with its state, model, write-path count, what")
 			fmt.Fprintln(os.Stderr, "its fork could prove about its write paths (PROOF) and its check, followed by every")
 			fmt.Fprintln(os.Stderr, "pair that claims the same path.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "A job that ended (pass, fail or no_return) is left out and counted in a notice;")
+			fmt.Fprintln(os.Stderr, "--all lists it too.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "PROOF is what the checkout looked like when the job was forked: alone (nothing")
 			fmt.Fprintln(os.Stderr, "else live was bound there), disjoint, or overlapping.")
@@ -382,6 +385,14 @@ func lsJobs(root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	if !all {
+		var ended int
+		list, ended = withoutEnded(list)
+		if ended > 0 {
+			slog.InfoContext(ctx, fmt.Sprintf("%d ended %s left out; `%s` lists them", ended, plural(ended, "job", "jobs"), hint.LsJobs.With("--all")),
+				attr.Notice("jobs-ended"))
+		}
+	}
 	// Nothing names a caller with no lease and no login, so none of the changes is theirs
 	// and the list is everyone's.
 	all = all || !me.Known()
@@ -407,6 +418,21 @@ func lsJobs(root string, args []string) error {
 		list.Changes = inflightScope(list.Changes, all)
 		return emitFormatted(opts, list)
 	}
+}
+
+// withoutEnded is list less the rows that ended, and how many that was. The reports derived
+// from the rows (overlaps, blocked, stale) name live rows only, so only the read-only
+// section can name an ended one.
+func withoutEnded(list types.JobList) (types.JobList, int) {
+	ended := map[string]bool{}
+	list.Jobs = slices.DeleteFunc(slices.Clone(list.Jobs), func(row types.Job) bool {
+		if row.State.Terminal() {
+			ended[row.ID] = true
+		}
+		return ended[row.ID]
+	})
+	list.ReadOnly = slices.DeleteFunc(slices.Clone(list.ReadOnly), func(r types.JobReadOnly) bool { return ended[r.Job] })
+	return list, len(ended)
 }
 
 // joinInflight joins list to the queue snapshot as the caller sees it: the job it acts
