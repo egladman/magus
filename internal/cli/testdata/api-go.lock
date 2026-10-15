@@ -251,6 +251,7 @@ github.com/egladman/magus.TierCeiling func(parent github.com/egladman/magus/type
 github.com/egladman/magus.WithBaseRef func(ref string) RunOption
 github.com/egladman/magus.WithBroker func(b *github.com/egladman/magus/broker.Client) Option
 github.com/egladman/magus.WithBrokerPolicy func(p github.com/egladman/magus/types.BrokerPolicy) Option
+github.com/egladman/magus.WithCacheBackend func(b github.com/egladman/magus/types.CacheBackend) Option
 github.com/egladman/magus.WithCharms func(charms ...string) RunOption
 github.com/egladman/magus.WithCommandLine func(args []string) Option
 github.com/egladman/magus.WithComposeRoots func(paths ...string) ComposeOption
@@ -497,6 +498,12 @@ github.com/egladman/magus/types.Bundler type interface
 github.com/egladman/magus/types.Bundler.Bundle imethod func(ctx context.Context, root string, file string, r BundleRange) error
 github.com/egladman/magus/types.Bundler.Unbundle imethod func(ctx context.Context, root string, file string) error
 github.com/egladman/magus/types.BuzzObject type map[string]any
+github.com/egladman/magus/types.CacheBackend type interface
+github.com/egladman/magus/types.CacheBackend.Active imethod func(ctx context.Context) bool
+github.com/egladman/magus/types.CacheBackend.GetArtifact imethod func(ctx context.Context, namespace string, key string) (io.ReadCloser, error)
+github.com/egladman/magus/types.CacheBackend.HasArtifact imethod func(ctx context.Context, namespace string, key string) (bool, error)
+github.com/egladman/magus/types.CacheBackend.Name imethod func() string
+github.com/egladman/magus/types.CacheBackend.PutArtifact imethod func(ctx context.Context, namespace string, key string, r io.Reader) error
 github.com/egladman/magus/types.CacheStatus type struct
 github.com/egladman/magus/types.CacheStatus.Dir field string "json:\"dir,omitempty\" yaml:\"dir,omitempty\""
 github.com/egladman/magus/types.CacheStatus.Immutable field bool "json:\"immutable\" yaml:\"immutable\""
@@ -1411,6 +1418,8 @@ github.com/egladman/magus/types.EnvReadWithheld const DiagnosticCode = "MGS2013"
 github.com/egladman/magus/types.EnvStripped const DiagnosticCode = "MGS2003"
 github.com/egladman/magus/types.EnvironmentalDrift const DiagnosticCode = "MGS4005"
 github.com/egladman/magus/types.ErrAffectedFallback var error
+github.com/egladman/magus/types.ErrCacheExists var error
+github.com/egladman/magus/types.ErrCacheMiss var error
 github.com/egladman/magus/types.ErrDiag var error
 github.com/egladman/magus/types.ErrNoCache var error
 github.com/egladman/magus/types.ErrNotFound var error
@@ -2736,6 +2745,7 @@ github.com/egladman/magus/types.ModelPricing.Input field USDPerMTok
 github.com/egladman/magus/types.ModelPricing.LongContext field *PriceStep
 github.com/egladman/magus/types.ModelPricing.Output field USDPerMTok
 github.com/egladman/magus/types.ModelPricing.PriceMultiplier method func(promptTokens int64) float64
+github.com/egladman/magus/types.ModelPricing.Tier field string
 github.com/egladman/magus/types.ModelPricing.Window field int64
 github.com/egladman/magus/types.ModelTier type struct
 github.com/egladman/magus/types.ModelTier.Above method func(u ModelTier) (bool, error)
@@ -4461,6 +4471,106 @@ github.com/egladman/magus/types/gen/mocks.MockAffectedComputer_Affected_Call.Wai
 github.com/egladman/magus/types/gen/mocks.MockAffectedComputer_Expecter type struct
 github.com/egladman/magus/types/gen/mocks.MockAffectedComputer_Expecter.Affected method(ptr) func(ctx interface{}, base interface{}) *MockAffectedComputer_Affected_Call
 github.com/egladman/magus/types/gen/mocks.MockAffectedComputer_Expecter.AffectedFromPaths method(ptr) func(ctx interface{}, paths interface{}) *MockAffectedComputer_AffectedFromPaths_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend type struct
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend.Active method(ptr) func(ctx context.Context) bool
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend.AssertCalled method(ptr) func(t github.com/stretchr/testify/mock.TestingT, methodName string, arguments ...interface{}) bool
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend.AssertExpectations method(ptr) func(t github.com/stretchr/testify/mock.TestingT) bool
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend.AssertNotCalled method(ptr) func(t github.com/stretchr/testify/mock.TestingT, methodName string, arguments ...interface{}) bool
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend.AssertNumberOfCalls method(ptr) func(t github.com/stretchr/testify/mock.TestingT, methodName string, expectedCalls int) bool
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend.Called method(ptr) func(arguments ...interface{}) github.com/stretchr/testify/mock.Arguments
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend.EXPECT method(ptr) func() *MockCacheBackend_Expecter
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend.GetArtifact method(ptr) func(ctx context.Context, namespace string, key string) (io.ReadCloser, error)
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend.HasArtifact method(ptr) func(ctx context.Context, namespace string, key string) (bool, error)
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend.IsMethodCallable method(ptr) func(t github.com/stretchr/testify/mock.TestingT, methodName string, arguments ...interface{}) bool
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend.MethodCalled method(ptr) func(methodName string, arguments ...interface{}) github.com/stretchr/testify/mock.Arguments
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend.Mock embedded github.com/stretchr/testify/mock.Mock
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend.Name method(ptr) func() string
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend.On method(ptr) func(methodName string, arguments ...interface{}) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend.PutArtifact method(ptr) func(ctx context.Context, namespace string, key string, r io.Reader) error
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend.String method(ptr) func() string
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend.Test method(ptr) func(t github.com/stretchr/testify/mock.TestingT)
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend.TestData method(ptr) func() github.com/stretchr/objx.Map
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Active_Call type struct
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Active_Call.After method func(d time.Duration) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Active_Call.Call embedded *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Active_Call.Maybe method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Active_Call.NotBefore method func(calls ...*github.com/stretchr/testify/mock.Call) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Active_Call.On method func(methodName string, arguments ...interface{}) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Active_Call.Once method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Active_Call.Panic method func(msg string) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Active_Call.Return method(ptr) func(b bool) *MockCacheBackend_Active_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Active_Call.Run method(ptr) func(run func(ctx context.Context)) *MockCacheBackend_Active_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Active_Call.RunAndReturn method(ptr) func(run func(ctx context.Context) bool) *MockCacheBackend_Active_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Active_Call.Times method func(i int) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Active_Call.Twice method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Active_Call.Unset method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Active_Call.WaitUntil method func(w <-chan time.Time) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Expecter type struct
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Expecter.Active method(ptr) func(ctx interface{}) *MockCacheBackend_Active_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Expecter.GetArtifact method(ptr) func(ctx interface{}, namespace interface{}, key interface{}) *MockCacheBackend_GetArtifact_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Expecter.HasArtifact method(ptr) func(ctx interface{}, namespace interface{}, key interface{}) *MockCacheBackend_HasArtifact_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Expecter.Name method(ptr) func() *MockCacheBackend_Name_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Expecter.PutArtifact method(ptr) func(ctx interface{}, namespace interface{}, key interface{}, r interface{}) *MockCacheBackend_PutArtifact_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_GetArtifact_Call type struct
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_GetArtifact_Call.After method func(d time.Duration) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_GetArtifact_Call.Call embedded *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_GetArtifact_Call.Maybe method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_GetArtifact_Call.NotBefore method func(calls ...*github.com/stretchr/testify/mock.Call) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_GetArtifact_Call.On method func(methodName string, arguments ...interface{}) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_GetArtifact_Call.Once method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_GetArtifact_Call.Panic method func(msg string) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_GetArtifact_Call.Return method(ptr) func(readCloser io.ReadCloser, err error) *MockCacheBackend_GetArtifact_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_GetArtifact_Call.Run method(ptr) func(run func(ctx context.Context, namespace string, key string)) *MockCacheBackend_GetArtifact_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_GetArtifact_Call.RunAndReturn method(ptr) func(run func(ctx context.Context, namespace string, key string) (io.ReadCloser, error)) *MockCacheBackend_GetArtifact_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_GetArtifact_Call.Times method func(i int) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_GetArtifact_Call.Twice method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_GetArtifact_Call.Unset method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_GetArtifact_Call.WaitUntil method func(w <-chan time.Time) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_HasArtifact_Call type struct
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_HasArtifact_Call.After method func(d time.Duration) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_HasArtifact_Call.Call embedded *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_HasArtifact_Call.Maybe method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_HasArtifact_Call.NotBefore method func(calls ...*github.com/stretchr/testify/mock.Call) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_HasArtifact_Call.On method func(methodName string, arguments ...interface{}) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_HasArtifact_Call.Once method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_HasArtifact_Call.Panic method func(msg string) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_HasArtifact_Call.Return method(ptr) func(b bool, err error) *MockCacheBackend_HasArtifact_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_HasArtifact_Call.Run method(ptr) func(run func(ctx context.Context, namespace string, key string)) *MockCacheBackend_HasArtifact_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_HasArtifact_Call.RunAndReturn method(ptr) func(run func(ctx context.Context, namespace string, key string) (bool, error)) *MockCacheBackend_HasArtifact_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_HasArtifact_Call.Times method func(i int) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_HasArtifact_Call.Twice method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_HasArtifact_Call.Unset method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_HasArtifact_Call.WaitUntil method func(w <-chan time.Time) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Name_Call type struct
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Name_Call.After method func(d time.Duration) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Name_Call.Call embedded *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Name_Call.Maybe method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Name_Call.NotBefore method func(calls ...*github.com/stretchr/testify/mock.Call) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Name_Call.On method func(methodName string, arguments ...interface{}) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Name_Call.Once method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Name_Call.Panic method func(msg string) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Name_Call.Return method(ptr) func(s string) *MockCacheBackend_Name_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Name_Call.Run method(ptr) func(run func()) *MockCacheBackend_Name_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Name_Call.RunAndReturn method(ptr) func(run func() string) *MockCacheBackend_Name_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Name_Call.Times method func(i int) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Name_Call.Twice method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Name_Call.Unset method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_Name_Call.WaitUntil method func(w <-chan time.Time) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_PutArtifact_Call type struct
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_PutArtifact_Call.After method func(d time.Duration) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_PutArtifact_Call.Call embedded *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_PutArtifact_Call.Maybe method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_PutArtifact_Call.NotBefore method func(calls ...*github.com/stretchr/testify/mock.Call) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_PutArtifact_Call.On method func(methodName string, arguments ...interface{}) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_PutArtifact_Call.Once method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_PutArtifact_Call.Panic method func(msg string) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_PutArtifact_Call.Return method(ptr) func(err error) *MockCacheBackend_PutArtifact_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_PutArtifact_Call.Run method(ptr) func(run func(ctx context.Context, namespace string, key string, r io.Reader)) *MockCacheBackend_PutArtifact_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_PutArtifact_Call.RunAndReturn method(ptr) func(run func(ctx context.Context, namespace string, key string, r io.Reader) error) *MockCacheBackend_PutArtifact_Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_PutArtifact_Call.Times method func(i int) *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_PutArtifact_Call.Twice method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_PutArtifact_Call.Unset method func() *github.com/stretchr/testify/mock.Call
+github.com/egladman/magus/types/gen/mocks.MockCacheBackend_PutArtifact_Call.WaitUntil method func(w <-chan time.Time) *github.com/stretchr/testify/mock.Call
 github.com/egladman/magus/types/gen/mocks.MockChurnReporter type struct
 github.com/egladman/magus/types/gen/mocks.MockChurnReporter.AssertCalled method(ptr) func(t github.com/stretchr/testify/mock.TestingT, methodName string, arguments ...interface{}) bool
 github.com/egladman/magus/types/gen/mocks.MockChurnReporter.AssertExpectations method(ptr) func(t github.com/stretchr/testify/mock.TestingT) bool
@@ -7078,6 +7188,7 @@ github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_Workspace_Call
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_Workspace_Call.Unset method func() *github.com/stretchr/testify/mock.Call
 github.com/egladman/magus/types/gen/mocks.MockWorkspaceRepository_Workspace_Call.WaitUntil method func(w <-chan time.Time) *github.com/stretchr/testify/mock.Call
 github.com/egladman/magus/types/gen/mocks.NewMockAffectedComputer func(t interface{Cleanup(func()); github.com/stretchr/testify/mock.TestingT}) *MockAffectedComputer
+github.com/egladman/magus/types/gen/mocks.NewMockCacheBackend func(t interface{Cleanup(func()); github.com/stretchr/testify/mock.TestingT}) *MockCacheBackend
 github.com/egladman/magus/types/gen/mocks.NewMockChurnReporter func(t interface{Cleanup(func()); github.com/stretchr/testify/mock.TestingT}) *MockChurnReporter
 github.com/egladman/magus/types/gen/mocks.NewMockConflictResolver func(t interface{Cleanup(func()); github.com/stretchr/testify/mock.TestingT}) *MockConflictResolver
 github.com/egladman/magus/types/gen/mocks.NewMockDefaultRefReporter func(t interface{Cleanup(func()); github.com/stretchr/testify/mock.TestingT}) *MockDefaultRefReporter

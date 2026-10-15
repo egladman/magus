@@ -10,6 +10,7 @@ import iface "github.com/egladman/magus/types"
 
 var (
 	_ iface.AffectedComputer     = (*MockAffectedComputer)(nil)
+	_ iface.CacheBackend         = (*MockCacheBackend)(nil)
 	_ iface.ChurnReporter        = (*MockChurnReporter)(nil)
 	_ iface.ConflictResolver     = (*MockConflictResolver)(nil)
 	_ iface.DefaultRefReporter   = (*MockDefaultRefReporter)(nil)

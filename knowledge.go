@@ -2086,7 +2086,7 @@ type remoteShardAdapter struct{ ns *cache.RemoteNamespace }
 
 func (a remoteShardAdapter) GetShard(ctx context.Context, key string) (io.ReadCloser, error) {
 	rc, err := a.ns.Get(ctx, key)
-	if errors.Is(err, cache.ErrRemoteMiss) {
+	if errors.Is(err, types.ErrCacheMiss) {
 		return nil, knowledge.ErrShardMiss
 	}
 	return rc, err

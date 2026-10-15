@@ -189,6 +189,9 @@ type Magus struct {
 	commandLine []string
 	// spawnRule is WithSpawnRule's, which Open and Inspect require.
 	spawnRule SpawnRule
+	// cacheBackend is WithCacheBackend's; nil without one, when the magusfile may wire
+	// one instead.
+	cacheBackend types.CacheBackend
 }
 
 // env reads key from the environment WithEnv gave, "" for a key unset there or with no
@@ -543,7 +546,11 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if vo.SpawnRule == nil {
 		return nil, errors.New("magus: no spawn rule: a workspace has no default one, so open it with WithSpawnRule(magus.TierCeiling), the reference rule, or a rule of your own")
 	}
-	m := &Magus{ws: ws, cfg: cfg, version: vo.Version, spawnRule: vo.SpawnRule, environ: vo.Env, getenv: envGetter(vo.Env), stderr: io.Discard, commandLine: vo.CommandLine}
+	if vo.CacheBackendGiven && vo.CacheBackend == nil {
+		return nil, errors.New("magus: WithCacheBackend was given a nil backend; pass a backend, or leave the option out to use the one the magusfile wires")
+	}
+	m := &Magus{ws: ws, cfg: cfg, version: vo.Version, spawnRule: vo.SpawnRule, cacheBackend: vo.CacheBackend,
+		environ: vo.Env, getenv: envGetter(vo.Env), stderr: io.Discard, commandLine: vo.CommandLine}
 	if vo.Stderr != nil {
 		m.stderr = vo.Stderr
 	}
@@ -885,15 +892,24 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// self-gates, so wiring it is harmless locally; InstrumentRemoteBackend is a
 	// no-op wrapper when telemetry is off. A shared cache is a trust boundary, so it
 	// REQUIRES a trust set (cache.remote.trusted_keys in magus.yaml), enforced at load on
-	// every machine so the misconfiguration can't silently go live.
-	if name := m.wsReg.RemoteBackend(); name != "" {
+	// every machine so the misconfiguration can't silently go live. A backend the caller
+	// gave with WithCacheBackend is held to the same trust set.
+	name := m.wsReg.RemoteBackend()
+	if name != "" && m.cacheBackend != nil {
+		shutdownTel()
+		return nil, fmt.Errorf("magus: WithCacheBackend gives the %q backend and the magusfile wires magus.cache.remote(%q); a workspace has one remote cache, so drop one",
+			m.cacheBackend.Name(), name)
+	}
+	if name != "" || m.cacheBackend != nil {
 		trusted, sErr := remoteCacheSigningOpts(m.cfg.Cache.Remote.TrustedKeys, m.cfg.Cache.Remote.Insecure, m.cfg.Cache.Remote.InsecureReason, m.env(signingKeyEnv))
 		if sErr != nil {
 			shutdownTel()
 			return nil, sErr
 		}
 		cfgOpts = append(cfgOpts, trusted...)
-		if opt := remoteBackendOption(ctx, name, tel); opt != nil {
+		if m.cacheBackend != nil {
+			cfgOpts = append(cfgOpts, cache.WithRemoteBackend(observability.InstrumentRemoteBackend(m.cacheBackend, tel)))
+		} else if opt := remoteBackendOption(ctx, name, tel); opt != nil {
 			cfgOpts = append(cfgOpts, opt)
 		}
 	}

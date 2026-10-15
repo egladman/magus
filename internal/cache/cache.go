@@ -1,6 +1,6 @@
 // Package cache implements magus's content-addressed build cache.
 // Layout: cas/ (blobs) + manifests/ + logs/. The store is local; an optional
-// pluggable [RemoteBackend] (see remote.go) lets a miss restore from, and a build
+// pluggable [types.CacheBackend] (see remote.go) lets a miss restore from, and a build
 // publish to, a shared store.
 package cache
 
@@ -56,7 +56,7 @@ type Cache struct {
 	tiers          []tier
 	localWrite     bool
 	remoteWrite    *bool // nil = follow localWrite; set = declared, and required when true
-	backend        RemoteBackend
+	backend        types.CacheBackend
 	remoteDown     *remoteUnavailable // a wired backend that did not start; see WithRemoteUnavailable
 	sizeMB         int
 	maxImportBytes int64 // per-entry cap for Import; 0 uses defaultMaxImportBytes

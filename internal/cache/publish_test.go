@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	runPkg "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -279,7 +280,7 @@ func TestBundleRejectsTamperedOutput(t *testing.T) {
 // findBackendArtifact returns the single stored object in a dir-backed remote whose
 // path contains want ("" for the only object). A run that both pushes its cache
 // artifact and publishes a bundle stores two, under different namespaces.
-func findBackendArtifact(t *testing.T, backend RemoteBackend, want string) string {
+func findBackendArtifact(t *testing.T, backend types.CacheBackend, want string) string {
 	t.Helper()
 	fsb, ok := backend.(*FSRemoteBackend)
 	require.True(t, ok, "expected a dir-backed remote")

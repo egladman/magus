@@ -65,6 +65,10 @@ type Load struct {
 	// SpawnRule decides whether a job may spawn one at a given model tier. Required: a
 	// workspace has no default rule.
 	SpawnRule func(parent, child types.ModelTier) error
+	// CacheBackend, when CacheBackendGiven, is the store behind the remote cache tier in
+	// place of one a magusfile wires.
+	CacheBackend      types.CacheBackend
+	CacheBackendGiven bool
 }
 
 // Option configures Open or Inspect.

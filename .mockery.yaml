@@ -51,6 +51,7 @@ packages:
             pkgname: "{{.SrcPackageName}}"
             filename: mocks_test.go
       VCSDriver:
+      CacheBackend:
       MergeDriverInstaller:
       RefreshHookInstaller:
       RemoteReporter:
@@ -111,7 +112,6 @@ packages:
     config: *own-package
     interfaces:
       Tracer:
-      RemoteBackend:
   github.com/egladman/magus/internal/ci:
     config: *own-package
     interfaces:

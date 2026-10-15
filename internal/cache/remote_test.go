@@ -195,7 +195,7 @@ func (b *staticBackend) Active(context.Context) bool { return true }
 
 func (b *staticBackend) GetArtifact(_ context.Context, project, hash string) (io.ReadCloser, error) {
 	if project != b.project || hash != b.hash {
-		return nil, ErrRemoteMiss
+		return nil, types.ErrCacheMiss
 	}
 	return io.NopCloser(bytes.NewReader(b.entry)), nil
 }
@@ -273,7 +273,7 @@ func learnHash(t *testing.T) (project, hash string) {
 // reports whether it hit and what the output ended up as. The fn writes "built",
 // so a genuine rebuild yields "built" while an accepted poisoned entry would yield
 // the poisoned bytes.
-func runAgainst(t *testing.T, backend RemoteBackend) (hit bool, output string, ran bool) {
+func runAgainst(t *testing.T, backend types.CacheBackend) (hit bool, output string, ran bool) {
 	t.Helper()
 	root := t.TempDir()
 	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
@@ -338,7 +338,7 @@ func genKeypair(t *testing.T) (pub []byte, seed []byte) {
 
 // openSigned opens a fresh cache wired to remote, optionally with a signing seed
 // and/or a trust set.
-func openSigned(t *testing.T, remote RemoteBackend, seed []byte, trusted [][]byte) (root string, c *Cache) {
+func openSigned(t *testing.T, remote types.CacheBackend, seed []byte, trusted [][]byte) (root string, c *Cache) {
 	t.Helper()
 	root = t.TempDir()
 	opts := []Option{WithLocalWrite(true), WithRemoteBackend(remote)}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 )
 
 // A Cache is two tiers under standard two-tier semantics: the local store (L1) and an
@@ -105,10 +106,10 @@ func (t *localTier) store(_ context.Context, s *Step, snap *Manifest) error {
 	return nil
 }
 
-// remoteTier is L2: a RemoteBackend, read through signed artifacts.
+// remoteTier is L2: a [types.CacheBackend], read through signed artifacts.
 type remoteTier struct {
 	c        *Cache
-	backend  RemoteBackend
+	backend  types.CacheBackend
 	write    bool
 	required bool   // declared explicitly, so a failed store fails the step
 	off      string // why writes are off, for the run header; "" when they are on
@@ -170,7 +171,7 @@ func (t *remoteTier) lookup(ctx context.Context, s *Step, hash string) (*entry, 
 	defer func() { httpx.RecorderFrom(ctx).Add(time.Since(start)) }()
 
 	r, err := t.backend.GetArtifact(ctx, s.ProjectPath, hash)
-	if errors.Is(err, ErrRemoteMiss) {
+	if errors.Is(err, types.ErrCacheMiss) {
 		remoteStatsFrom(ctx).miss()
 		t.c.logRemoteMiss(ctx, s, hash)
 		return nil, errTierMiss
@@ -252,7 +253,7 @@ func (t *remoteTier) put(ctx context.Context, s *Step, hash string) error {
 	case exportErr != nil:
 		t.fail(ctx, "store", s, hash, 0, false, exportErr)
 		return exportErr
-	case errors.Is(putErr, ErrRemoteExists):
+	case errors.Is(putErr, types.ErrCacheExists):
 		// Another run stored this key, or is storing it now. Content addressing makes
 		// either one the same entry, so this is neither a failure nor an upload.
 		t.c.log.DebugContext(ctx, "cache.debug", slog.String("msg",
@@ -378,12 +379,12 @@ const (
 	objectPayloadName = "object"
 )
 
-// Get returns the verified object stored under key, or [ErrRemoteMiss]. An object that
+// Get returns the verified object stored under key, or [types.ErrCacheMiss]. An object that
 // fails verification is an error, never a miss: the store answered with something no
 // trusted producer wrote.
 func (n *RemoteNamespace) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	if !n.t.backend.Active(ctx) {
-		return nil, ErrRemoteMiss
+		return nil, types.ErrCacheMiss
 	}
 	r, err := n.t.backend.GetArtifact(ctx, n.ns, key)
 	if err != nil {
@@ -422,7 +423,7 @@ func (n *RemoteNamespace) Put(ctx context.Context, key string, r io.Reader) erro
 	if err := writeSignedPair(n.t.c.signer, &buf, domainObject, objectMetaName, meta, objectPayloadName, payload); err != nil {
 		return err
 	}
-	if err := n.t.backend.PutArtifact(ctx, n.ns, key, &buf); err != nil && !errors.Is(err, ErrRemoteExists) {
+	if err := n.t.backend.PutArtifact(ctx, n.ns, key, &buf); err != nil && !errors.Is(err, types.ErrCacheExists) {
 		return err
 	}
 	return nil

@@ -59,6 +59,14 @@ func WithVCSDriver(d types.VCSDriver) Option {
 	return func(o *workspace.Load) { o.VCSDriver, o.VCSDriverGiven = d, true }
 }
 
+// WithCacheBackend stores the remote cache tier in b, in place of a backend a magusfile
+// wires with magus.cache.remote: a store magus does not ship, or a test double. Open fails
+// on a nil b, and when the magusfile also wires a backend, naming both. b is held to the
+// same trust set as a wired backend (cache.remote.trusted_keys in magus.yaml).
+func WithCacheBackend(b types.CacheBackend) Option {
+	return func(o *workspace.Load) { o.CacheBackend, o.CacheBackendGiven = b, true }
+}
+
 // SpawnRule decides whether a job at model tier parent may spawn one at tier child: nil
 // allows it, and an error refuses it, saying why. A tier is the zero value when none was
 // assigned. TierCeiling is the reference rule.
