@@ -157,9 +157,10 @@ type ToolRows struct {
 	Err          error
 }
 
-// ReadToolRows reads the tool rows directory dir, relative to root unless absolute. A dir of
-// "", a missing or unreadable file and a version other than ToolRowsVersion are each an Err
-// naming the command that writes the directory.
+// ReadToolRows reads the tool rows directory dir, relative to root unless absolute. A
+// capability file that is absent has no rows. A dir of "", a missing version file, an
+// unreadable file and a version other than ToolRowsVersion are each an Err naming the
+// command that writes the directory.
 func ReadToolRows(root, dir string) ToolRows {
 	rows := ToolRows{Dir: dir}
 	if dir == "" {

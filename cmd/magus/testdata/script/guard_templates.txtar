@@ -187,7 +187,7 @@ rm $WORK/home/state
 # An empty command on the shell tool. The tool is one the guard knows, so a call with
 # nothing to run passes rather than being named as a tool no rule could read.
 stdin $WORK/empty-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --tool-rows $WORK/tools
 ! stdout .
 
 # case: command/pass
@@ -1439,6 +1439,10 @@ magus\project({
     "no_language": "fixture workspace: only the read rule's view of a long Go file matters here",
 });
 magus\guard.builtins({"read-navigation": {"decision": "deny", "lines": 120}});
+-- tools/version --
+1
+-- tools/runs --
+Bash
 -- read-ws/tools/version --
 1
 -- read-ws/tools/reads --
