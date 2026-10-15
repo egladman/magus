@@ -263,7 +263,7 @@ func ownedCheckouts(ctx context.Context, deps Dependencies, at location) []strin
 // spawned for row whose binding the call does not carry yet.
 func mayWorkIn(deps Dependencies, rows []types.Job, row types.Job) bool {
 	if deps.lease == "" {
-		return deps.caller.Agent == "" || spawnedFor(deps.facts, rows, deps.caller.Agent, row.ID)
+		return deps.caller.Agent == "" || spawnedAsJob(deps.facts, rows, deps.caller.Agent, row.ID)
 	}
 	if deps.lease == row.ID {
 		return true

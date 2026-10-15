@@ -482,9 +482,9 @@ func spawnedJob(facts hint.Gate, rows []types.Job, job string) bool {
 	return false
 }
 
-// spawnedFor reports whether the spawn record filed under agentID attributed that agent to
+// spawnedAsJob reports whether the spawn record filed under agentID attributed that agent to
 // job, as spawnedJob does for any agent of the session.
-func spawnedFor(facts hint.Gate, rows []types.Job, agentID, job string) bool {
+func spawnedAsJob(facts hint.Gate, rows []types.Job, agentID, job string) bool {
 	rec, ok := readSpawnedRecord(facts, spawnedAgentKind(agentID))
 	if !ok || rec.UntrustedJob != "" {
 		return false
