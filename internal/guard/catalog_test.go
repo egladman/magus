@@ -81,7 +81,7 @@ func TestEveryRuleSiteNamesACataloguedRule(t *testing.T) {
 func assertCatalogued(t *testing.T, catalogued map[string]types.RuleDoc, by, name string) {
 	t.Helper()
 	doc, ok := catalogued[name]
-	if assert.Truef(t, ok, "%s names rule %q, which has no catalog row: declare a ruleDoc var with denyDoc or adviseDoc", by, name) {
+	if assert.Truef(t, ok, "%s names rule %q, which has no catalog row: declare a ruleDoc var and name it in ruleDocRegistry", by, name) {
 		assert.NotEmpty(t, doc.Catches, "%q must say what it fires on", name)
 	}
 	_, ok = builtin.Defaults()[name]
@@ -115,7 +115,7 @@ func TestCatalogMatchesBuiltinDefaults(t *testing.T) {
 // TestRuleDocsAreNamedAfterTheirRule pins the one naming every row follows, so a job
 // claiming `catalog.go#ruleDocLeaseGate` can derive the name from the rule's id:
 // ruleDoc plus the id in PascalCase. It also counts the declarations, which fails a row
-// filed from anywhere but a top-level var.
+// the registry holds that is not a top-level var.
 func TestRuleDocsAreNamedAfterTheirRule(t *testing.T) {
 	t.Parallel()
 
@@ -134,16 +134,14 @@ func TestRuleDocsAreNamedAfterTheirRule(t *testing.T) {
 			if !ok || len(vs.Values) != 1 {
 				continue
 			}
-			call, ok := vs.Values[0].(*ast.CallExpr)
+			lit, ok := vs.Values[0].(*ast.CompositeLit)
 			if !ok {
 				continue
 			}
-			if fn, ok := call.Fun.(*ast.Ident); !ok || (fn.Name != "denyDoc" && fn.Name != "adviseDoc") {
+			if typ, ok := lit.Type.(*ast.SelectorExpr); !ok || typ.Sel.Name != "RuleDoc" {
 				continue
 			}
 			seen++
-			lit, ok := call.Args[0].(*ast.CompositeLit)
-			require.Truef(t, ok, "%s: the first argument is a types.RuleDoc literal", vs.Names[0].Name)
 			var constant string
 			for _, elt := range lit.Elts {
 				kv, ok := elt.(*ast.KeyValueExpr)
