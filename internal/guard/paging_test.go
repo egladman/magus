@@ -44,8 +44,7 @@ func TestReadPagingRefusesTheThirdWindow(t *testing.T) {
 	assert.NotEqual(t, "deny", read("a1", "sed -n 3,20p paged.go").Decision, "a window inside one function is targeted")
 	assert.NotEqual(t, "deny", read("a1", "sed -n 41,80p paged.go").Decision)
 	v := read("a1", "sed -n 81,121p paged.go")
-	require.Equal(t, "deny", v.Decision)
-	assert.Equal(t, string(denyRuleReadPaging), v.Rule)
+	require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleReadPaging)}, decidedBy(v))
 	assert.Contains(t, v.Reason, "paged.go")
 	assert.NotEqual(t, "deny", read("a2", "sed -n 81,121p paged.go").Decision, "each caller's windows are its own")
 }
@@ -59,8 +58,7 @@ func TestReadNavigationRefusesACallerOncePerFile(t *testing.T) {
 		return Judge(ctx, deps, Request{Input: "cat paged.go", Session: "navigation", Agent: agent, Host: "claude-code", Dir: root})
 	}
 	first := read("a1")
-	require.Equal(t, "deny", first.Decision)
-	assert.Equal(t, string(denyRuleReadNavigation), first.Rule)
+	require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleReadNavigation)}, decidedBy(first))
 	assert.NotEqual(t, "deny", read("a1").Decision, "asked again with the map in hand, the whole read passes")
 	assert.Equal(t, "deny", read("a2").Decision, "another caller has not seen the map")
 }

@@ -950,8 +950,10 @@ func TestWaitIntegrationGradesSymbolGoalsAgainstTheCheckoutsGraph(t *testing.T) 
 	require.NoError(t, err)
 	assert.False(t, grade.Verified)
 	require.Len(t, grade.Gates, 2, "the changed goal belongs to the holder's checkout")
-	assert.Equal(t, "shape", grade.Gates[0].ID)
-	assert.Equal(t, []string{"\"Api\" is declared `func Api(n int)`, and this goal expects `func Api()`"}, grade.Gates[0].Violations)
+	wantShape := grade.Gates[0]
+	wantShape.ID = "shape"
+	wantShape.Violations = []string{"\"Api\" is declared `func Api(n int)`, and this goal expects `func Api()`"}
+	assert.Equal(t, wantShape, grade.Gates[0])
 	assert.Equal(t, types.GateStatus{ID: "gone", Verified: true}, grade.Gates[1])
 
 	blind, err := WaitIntegration(t.Context(), s, "w", types.JobResult{Job: "w"}, runs(nil), "/merged", nil)

@@ -29,13 +29,14 @@ func TestAgentsDecodesAndValidates(t *testing.T) {
 `)
 	cfg, err := LoadFile(path, true)
 	require.NoError(t, err)
-	assert.Equal(t, types.AgentBillingMetered, cfg.Agents.Billing)
-	assert.Equal(t, types.GuardProfileStrict, cfg.Agents.Profile)
 	assert.Equal(t, []types.ModelPricing{
 		{ID: "claude-flat-1", Window: 1_000_000, Input: 1},
 		{ID: "claude-next-1", Window: 2_000_000, Input: 3, Output: 15, CacheWrite5m: 3.75,
 			CacheWrite1h: 6, CacheRead: 0.3, LongContext: &types.PriceStep{Above: 200_000, Multiplier: 2}},
 	}, cfg.Agents.ModelOverrides(), "a model with no price_step has no LongContext")
+	agents := cfg.Agents
+	agents.Models = nil
+	assert.Equal(t, Agents{Billing: types.AgentBillingMetered, Profile: types.GuardProfileStrict}, agents)
 }
 
 // Each value the guard could not honor fails the load: an agents section that reads as
@@ -105,8 +106,8 @@ func TestLoadAgentsLayersTiers(t *testing.T) {
 
 	got, err := LoadAgents(root)
 	require.NoError(t, err)
-	assert.Equal(t, types.AgentBillingMetered, got.Billing)
-	assert.Equal(t, types.GuardProfileStrict, got.Profile)
+	got.Models = nil
+	assert.Equal(t, Agents{Billing: types.AgentBillingMetered, Profile: types.GuardProfileStrict}, got)
 
 	writeYAML(t, filepath.Join(home, "magus"), "agents:\n  profile: off\n")
 	writeYAML(t, root, "agents:\n  profile: standard\n")

@@ -412,11 +412,11 @@ func TestVerifyGatesReportsTheSymbolDeltaAndGradesNothingOnIt(t *testing.T) {
 	with := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, delta)
 
 	assert.Equal(t, []int{6, 2}, []int{with.LinesAdded, with.LinesDeleted})
-	assert.Equal(t, []string{"Alpha", "Zeta"}, with.UndeclaredExports)
-	assert.Equal(t, []string{"helper (api/x.go:9)", "old (api/y.go:3)"}, with.LeftUnreferenced)
-	assert.True(t, with.SymbolDeltaKnown)
-	with.UndeclaredExports, with.LeftUnreferenced, with.SymbolDeltaKnown = nil, nil, false
-	assert.Equal(t, without, with, "the delta changes no verdict or violation")
+	wantWith := without
+	wantWith.UndeclaredExports = []string{"Alpha", "Zeta"}
+	wantWith.LeftUnreferenced = []string{"helper (api/x.go:9)", "old (api/y.go:3)"}
+	wantWith.SymbolDeltaKnown = true
+	assert.Equal(t, wantWith, with, "the delta changes no verdict or violation")
 }
 
 // overlapFixture is two checkouts of one repository, job a taken in root and job b in

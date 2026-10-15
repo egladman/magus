@@ -173,9 +173,10 @@ func TestJudgeWithinAnswersAStuckJudgmentByTheDeadline(t *testing.T) {
 			require.Len(t, rows, 1)
 			assert.Equal(t, c.tool, rows[0].Action)
 			require.NotEmpty(t, rows[0].Phases)
-			assert.Equal(t, phaseAnswer, rows[0].Phases[0].Name)
+			wantPhase := rows[0].Phases[0]
+			wantPhase.Name, wantPhase.BudgetMs = phaseAnswer, hookBudget.Milliseconds()
+			assert.Equal(t, wantPhase, rows[0].Phases[0])
 			assert.True(t, rows[0].Phases[0].Lapsed)
-			assert.Equal(t, hookBudget.Milliseconds(), rows[0].Phases[0].BudgetMs)
 
 			entries, err := os.ReadDir(filepath.Join(cacheDir, unfinishedDir))
 			require.NoError(t, err)
@@ -296,8 +297,10 @@ func TestJudgeWithinDegradesAfterConsecutiveLapses(t *testing.T) {
 	assert.Contains(t, degraded.Context, "This one stalled in its load_rules phase")
 	assert.Contains(t, degraded.Context, "`magus server status`")
 	again := lapse()
-	assert.Equal(t, decisionAdvise, again.Decision)
-	assert.Equal(t, "The guard is still not finishing in time (4 judgments in a row), so this command ran unjudged, as the notice before said.", again.Context)
+	wantAgain := again
+	wantAgain.Decision = decisionAdvise
+	wantAgain.Context = "The guard is still not finishing in time (4 judgments in a row), so this command ran unjudged, as the notice before said."
+	assert.Equal(t, wantAgain, again)
 
 	onTime := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) types.GuardJudgment { return types.GuardJudgment{Decision: decisionPass} })
 	assert.Equal(t, decisionPass, onTime.Decision)

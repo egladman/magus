@@ -123,7 +123,8 @@ func TestModelTierFitHasNothingToSayWithoutADeclaration(t *testing.T) {
 
 	got := r.checkModelTierFit(nil)
 
-	assert.Equal(t, types.CheckOK, got.Status)
-	assert.Equal(t, types.EvidenceUnknown, got.Evidence)
+	want := got
+	want.Status, want.Evidence = types.CheckOK, types.EvidenceUnknown
+	assert.Equal(t, want, got)
 	assert.Empty(t, got.Details)
 }

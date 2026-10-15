@@ -190,19 +190,22 @@ func TestApplyFindingsSaysAnInferredRefusalAsAdvice(t *testing.T) {
 	pass := types.GuardJudgment{Decision: decisionPass}
 
 	v := applyFindings(markers, pass, refusal, types.ThreadReported)
-	assert.Equal(t, decisionDeny, v.Decision)
-	assert.Equal(t, "first line.\nwhy.", v.Reason)
+	wantV := v
+	wantV.Decision, wantV.Reason = decisionDeny, "first line.\nwhy."
+	assert.Equal(t, wantV, v)
 
 	v = applyFindings(markers, pass, refusal, types.ThreadInferred)
-	assert.Equal(t, decisionAdvise, v.Decision)
-	assert.Equal(t, "first line.", v.Context, "advice carries the verdict line")
-	assert.Equal(t, string(denyRuleOrchestratorGroundwork), v.Rule)
+	wantV = v
+	wantV.Decision, wantV.Rule = decisionAdvise, string(denyRuleOrchestratorGroundwork)
+	wantV.Context = "first line." // advice carries the verdict line
+	assert.Equal(t, wantV, v)
 	assert.Equal(t, decisionPass, applyFindings(markers, pass, refusal, types.ThreadInferred).Decision, "once a session")
 
 	advised := types.GuardJudgment{Decision: decisionAdvise, Context: "earlier", Rule: "graph-stale"}
 	v = applyFindings(hint.NewGate(t.TempDir(), "s"), advised, []costFinding{{rule: denyRuleRootRepeat, key: "r", say: "again."}}, types.ThreadReported)
-	assert.Equal(t, "earlier\n\nagain.", v.Context)
-	assert.Equal(t, "graph-stale", v.Rule, "added to the advice already there")
+	wantV = v
+	wantV.Context, wantV.Rule = "earlier\n\nagain.", "graph-stale" // added to the advice already there
+	assert.Equal(t, wantV, v)
 }
 
 func TestShadowVerdicts(t *testing.T) {
@@ -293,8 +296,7 @@ func TestOrchestratorGroundworkAfterABoundSpawn(t *testing.T) {
 	require.NotEqual(t, decisionDeny, judgeSpawn(ctx, t, deps, "haiku").Decision)
 
 	v := judge("git show HEAD", "")
-	assert.Equal(t, decisionDeny, v.Decision)
-	assert.Equal(t, string(denyRuleOrchestratorGroundwork), v.Rule)
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleOrchestratorGroundwork)}, decidedBy(v))
 	assert.NotEqual(t, string(denyRuleOrchestratorGroundwork), judge("./magus explain internal/guard", "").Rule)
 	assert.NotEqual(t, string(denyRuleOrchestratorGroundwork), judge("git show HEAD", "a1").Rule, "a subagent's diff is its job")
 }
@@ -320,8 +322,7 @@ func TestGradeMainWrite(t *testing.T) {
 	}
 
 	v := grade(types.OrchestrationProven, "internal/a.go", "", nil)
-	assert.Equal(t, decisionDeny, v.Decision)
-	assert.Equal(t, string(denyRuleOrchestratorGroundwork), v.Rule)
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleOrchestratorGroundwork)}, decidedBy(v))
 
 	v = grade(types.OrchestrationProven, "internal/a.go", "", func(at location) {
 		require.NoError(t, os.WriteFile(filepath.Join(at.workspace, ".git", "CHERRY_PICK_HEAD"), []byte("abc\n"), 0o644))
@@ -353,8 +354,8 @@ func TestMainThreadCommandsAreJudgedByTheCostRules(t *testing.T) {
 	}
 
 	inferred := judge("")
-	assert.Equal(t, decisionAdvise, inferred.Decision, "the host has named no subagent, so the thread is inferred")
-	assert.Equal(t, string(denyRuleRootHeavyCommand), inferred.Rule)
+	assert.Equal(t, types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleRootHeavyCommand)}, decidedBy(inferred),
+		"the host has named no subagent, so the thread is inferred")
 
 	assert.NotEqual(t, decisionDeny, judge("a1").Decision, "a subagent's diff is its job")
 	assert.NotEqual(t, decisionDeny, judge("a1").Decision)
@@ -376,8 +377,7 @@ func TestMainThreadSpawnsAreJudgedByTheSpawnRules(t *testing.T) {
 	hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
 
 	v := judgeSpawn(ctx, t, deps, "")
-	assert.Equal(t, decisionDeny, v.Decision)
-	assert.Equal(t, string(denyRuleSpawnNamesModel), v.Rule)
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnNamesModel)}, decidedBy(v))
 
 	v = judgeSpawn(ctx, t, deps, "opus")
 	assert.NotEqual(t, string(denyRuleSpawnNamesModel), v.Rule, "the row records no model tier")
@@ -399,8 +399,7 @@ func TestSpawnNamesModelComparesModelTierRanks(t *testing.T) {
 	assert.NotEqual(t, string(denyRuleSpawnNamesModel), v.Rule, "haiku is the economy alias")
 
 	v = judgeSpawn(ctx, t, deps, "opus")
-	assert.Equal(t, decisionDeny, v.Decision)
-	assert.Equal(t, string(denyRuleSpawnNamesModel), v.Rule)
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnNamesModel)}, decidedBy(v))
 	assert.Contains(t, v.Reason, `magus workspace: this spawn runs opus, model tier principal (rank 2), and job scout was forked at `+
 		`economy (rank 0) -> haiku, matrix: "two files" at hack/tiers.buzz:12; spawn it on haiku, or re-fork the job at the tier its work needs.`)
 
@@ -422,8 +421,7 @@ func TestSpawnNamesModelNamesTheHostEntryToAdd(t *testing.T) {
 
 	v := judgeSpawn(ctx, t, deps, "haiku")
 
-	assert.Equal(t, decisionDeny, v.Decision)
-	assert.Equal(t, string(denyRuleSpawnNamesModel), v.Rule)
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnNamesModel)}, decidedBy(v))
 	assert.Contains(t, v.Reason, "maps no model for harness claude-code: its hosts are other-host")
 	assert.Contains(t, v.Reason, "add a claude-code entry to the hosts magus\\job.modelTiers declares")
 }
@@ -464,8 +462,7 @@ func TestBudgetTokensPastEveryWindowIsRefused(t *testing.T) {
 	assert.NotEqual(t, string(denyRuleRootContextBudget), judge(false).Rule, "no rows, no window to bound by")
 
 	v := judge(true)
-	assert.Equal(t, decisionDeny, v.Decision)
-	assert.Equal(t, string(denyRuleRootContextBudget), v.Rule)
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleRootContextBudget)}, decidedBy(v))
 	assert.Contains(t, v.Reason, string(types.GuardRuleMisdeclared))
 	assert.Contains(t, v.Reason, `built-in rule "root-context-budget": tokens is 2000000, past the largest context window in the model table (1000000); give 1000000 or less`)
 }

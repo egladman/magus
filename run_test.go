@@ -1972,11 +1972,10 @@ func TestRun_NonRetryableFailureRecordsNotRetried(t *testing.T) {
 		}
 	}
 	require.Len(t, got, 1, "stream:\n%s", stream.String())
-	assert.Equal(t, ".", got[0].Project)
-	assert.Equal(t, spellName+"/refused", got[0].Target)
-	assert.Equal(t, "not_retried", got[0].Status)
-	assert.Equal(t, 1, got[0].Attempts)
-	assert.Equal(t, "non_retryable", got[0].RetryReason)
+	wantCall := got[0]
+	wantCall.Project, wantCall.Target, wantCall.Status = ".", spellName+"/refused", "not_retried"
+	wantCall.Attempts, wantCall.RetryReason = 1, "non_retryable"
+	assert.Equal(t, wantCall, got[0])
 }
 
 // TestRun_MemoryClaimFollowsTheRunsShape pins both ends of shape-sized claims: a run

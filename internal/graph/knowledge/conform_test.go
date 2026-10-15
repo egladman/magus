@@ -159,16 +159,20 @@ func TestConformMeasuresEveryMetricAndPopulation(t *testing.T) {
 	assert.Equal(t, 30, conformRowFor(t, out, types.ConformFileLines, types.ConformPopTest, "").P99)
 
 	funcs := conformRowFor(t, out, types.ConformFuncLines, types.ConformPopSource, "")
-	assert.Equal(t, 8, funcs.N, "F, G, the twins, three methods and Root")
-	assert.Equal(t, []types.ConformItem{
+	wantFuncs := funcs
+	wantFuncs.N = 8 // F, G, the twins, three methods and Root
+	wantFuncs.Violations = []types.ConformItem{
 		{ID: "internal/a/a.go#F", Source: "internal/a/a.go:3", Measure: 10},
 		{ID: "internal/b/b.go#G", Source: "internal/b/b.go:3", Measure: 10},
-	}, funcs.Violations)
+	}
+	assert.Equal(t, wantFuncs, funcs)
 	assert.Equal(t, 26, conformRowFor(t, out, types.ConformFuncLines, types.ConformPopMain, "").P99)
 
 	methods := conformRowFor(t, out, types.ConformTypeMethods, types.ConformPopSource, "")
-	assert.Equal(t, 1, methods.N)
-	assert.Equal(t, 3, methods.P50, "T declares M1, M2 and M3")
+	wantMethods := methods
+	wantMethods.N = 1
+	wantMethods.P50 = 3 // T declares M1, M2 and M3
+	assert.Equal(t, wantMethods, methods)
 
 	assert.Equal(t, 2, conformRowFor(t, out, types.ConformFileSymbols, types.ConformPopSource, "").P99, "a.go: F and T")
 	assert.Equal(t, 2, conformRowFor(t, out, types.ConformFileSymbols, types.ConformPopMain, "").P50, "main and Run")
@@ -181,10 +185,12 @@ func TestConformMeasuresEveryMetricAndPopulation(t *testing.T) {
 		"b importing the generated package counts; what gen imports would not")
 
 	clones := conformRowFor(t, out, types.ConformCloneTokens, types.ConformPopSource, "")
-	assert.Equal(t, 5, clones.N, "main's body counts with source")
-	assert.Equal(t, []types.ConformItem{
+	wantClones := clones
+	wantClones.N = 5 // main's body counts with source
+	wantClones.Violations = []types.ConformItem{
 		{ID: "internal/a/a.go#F, internal/b/b.go#G", Source: "internal/a/a.go:3", Measure: 90},
-	}, clones.Violations)
+	}
+	assert.Equal(t, wantClones, clones)
 	testClones := conformRowFor(t, out, types.ConformCloneTokens, types.ConformPopTest, "")
 	assert.Equal(t, 1, testClones.N)
 	assert.Empty(t, testClones.Violations, "no value is configured for test clones")
@@ -298,10 +304,10 @@ func TestConformProposalRule(t *testing.T) {
 				o.Ratchet = types.ConformRatchet{Schema: 1, Thresholds: []types.ConformThreshold{{ConformKey: key, Value: tc.committed}}}
 			}
 			row := conformRowFor(t, g.Conform(o), types.ConformFileLines, types.ConformPopSource, "")
-			assert.Equal(t, 29, row.Live)
-			assert.Equal(t, tc.propose, row.Propose)
 			assert.Len(t, row.Violations, tc.violating)
-			assert.Equal(t, tc.src, row.Source)
+			wantRow := row
+			wantRow.Live, wantRow.Propose, wantRow.Source = 29, tc.propose, tc.src
+			assert.Equal(t, wantRow, row)
 		})
 	}
 }

@@ -73,22 +73,24 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 
 	got := summarizeCost(tr, fixtureModels())
 
-	assert.Equal(t, &rootContext{Peak: 600_000, P50: 300_000, Samples: 30, Models: []string{"claude-opus-5-5"}}, got.RootContext)
-	assert.Equal(t, &delegableShare{
-		Chars: 2000, Total: 30_000,
-		ByClass: []countedName{{Name: "diff", Count: 1000}, {Name: "search", Count: 1000}},
-	}, got.Delegable)
-	assert.InDelta(t, 2000.0/30_000.0, got.Delegable.Share(), 1e-12)
-	assert.Equal(t, &spawnTally{Total: 2, ByModel: []countedName{{Name: "", Count: 1}, {Name: "claude-sonnet-5-5", Count: 1}}}, got.Spawns,
-		"an undeclared model is stored as itself; the renderer labels it")
-	assert.Equal(t, &advisoryOutcome{Given: 2, Followed: 1, Within: followWithin}, got.Advisories)
-	assert.Equal(t, 1, got.Advisories.Ignored())
-	assert.Equal(t, []shadowTally{
-		{Profile: types.GuardProfileLight, Decisions: map[types.GuardDecision]int{types.GuardAllow: 30}},
-		{Profile: types.GuardProfileStrict, Decisions: map[types.GuardDecision]int{types.GuardDeny: 30}},
-	}, got.Shadow)
-	assert.Nil(t, got.NotMeasured, "every section was measured")
 	require.NotNil(t, got.Dollars)
+	assert.Equal(t, sessionCost{
+		RootContext: &rootContext{Peak: 600_000, P50: 300_000, Samples: 30, Models: []string{"claude-opus-5-5"}},
+		Delegable: &delegableShare{
+			Chars: 2000, Total: 30_000,
+			ByClass: []countedName{{Name: "diff", Count: 1000}, {Name: "search", Count: 1000}},
+		},
+		// An undeclared model is stored as itself; the renderer labels it.
+		Spawns:     &spawnTally{Total: 2, ByModel: []countedName{{Name: "", Count: 1}, {Name: "claude-sonnet-5-5", Count: 1}}},
+		Advisories: &advisoryOutcome{Given: 2, Followed: 1, Within: followWithin},
+		Shadow: []shadowTally{
+			{Profile: types.GuardProfileLight, Decisions: map[types.GuardDecision]int{types.GuardAllow: 30}},
+			{Profile: types.GuardProfileStrict, Decisions: map[types.GuardDecision]int{types.GuardDeny: 30}},
+		},
+		Dollars: got.Dollars, // pinned below
+	}, *got, "every section was measured")
+	assert.InDelta(t, 2000.0/30_000.0, got.Delegable.Share(), 1e-12)
+	assert.Equal(t, 1, got.Advisories.Ignored())
 	assert.Equal(t, 3, got.Dollars.Calls, "100k, the run of 300k, and 600k")
 	assert.InDelta(t, (0.1+0.3+0.6)*0.20, got.Dollars.FloorUSD, 1e-9)
 }
@@ -130,9 +132,12 @@ func TestSummarizeCostReadsTheFactsAHookRecorded(t *testing.T) {
 
 	got := summarizeCost(&tr, fixtureModels())
 
-	assert.Equal(t, &rootContext{Peak: 250_000, P50: 250_000, Samples: 2, Models: []string{"claude-opus-5-5"}}, got.RootContext)
+	// The other sections have their own tests.
+	want := *got
+	want.RootContext = &rootContext{Peak: 250_000, P50: 250_000, Samples: 2, Models: []string{"claude-opus-5-5"}}
+	want.Shadow = []shadowTally{{Profile: types.GuardProfileStrict, Decisions: map[types.GuardDecision]int{types.GuardDeny: 2}}}
+	assert.Equal(t, want, *got)
 	assert.Equal(t, chars(8000), got.Delegable.Chars)
-	assert.Equal(t, []shadowTally{{Profile: types.GuardProfileStrict, Decisions: map[types.GuardDecision]int{types.GuardDeny: 2}}}, got.Shadow)
 	require.NotNil(t, got.Dollars)
 	assert.Equal(t, types.AgentBillingMetered, got.Dollars.Billing)
 }

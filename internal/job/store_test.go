@@ -1060,9 +1060,10 @@ func TestStoreBumpsTheGenerationOnlyForASpecChange(t *testing.T) {
 	s := tmpStore(t, t.TempDir())
 	row := lease("a")
 	created := seed(t, s, row)
-	assert.Equal(t, 1, created.Generation)
-	assert.Equal(t, 1, created.Attempts)
-	assert.Nil(t, created.Requires, "a row carrying only its generation stays writable by an older magus")
+	wantCreated := created
+	wantCreated.Generation, wantCreated.Attempts = 1, 1
+	wantCreated.Requires = nil // a row carrying only its generation stays writable by an older magus
+	assert.Equal(t, wantCreated, created)
 
 	row.State = types.StateRunning
 	row.Deadline = 1 << 40
@@ -1074,13 +1075,17 @@ func TestStoreBumpsTheGenerationOnlyForASpecChange(t *testing.T) {
 
 	row.Generation, row.Attempts = 9, 9
 	forged := seed(t, s, row)
-	assert.Equal(t, 2, forged.Generation, "a caller's generation is replaced by the stored one")
-	assert.Equal(t, 1, forged.Attempts)
+	wantForged := forged
+	wantForged.Generation, wantForged.Attempts = 2, 1 // a caller's generation is replaced by the stored one
+	assert.Equal(t, wantForged, forged)
 
 	row.MaxAttempts = 3
 	capped := seed(t, s, row)
-	assert.Equal(t, 3, capped.Generation, "max_attempts is spec")
-	assert.Equal(t, []string{"job-generations"}, capped.Requires, "an older magus would ignore the cap")
+	wantCapped := capped
+	// max_attempts is spec, and an older magus would ignore the cap.
+	wantCapped.Generation = 3
+	wantCapped.Requires = []string{"job-generations"}
+	assert.Equal(t, wantCapped, capped)
 }
 
 // endAttempt ends row a as failed, its holder having run a failing check, been sent more
@@ -1109,22 +1114,22 @@ func TestStoreForkOfAnEndedRowFoldsTheAttempt(t *testing.T) {
 
 	again := seed(t, s, row)
 
-	assert.Equal(t, types.StateDeclared, again.State)
-	assert.Equal(t, 2, again.Attempts)
-	assert.Equal(t, 1, again.Generation, "a re-fork with an unchanged spec leaves the generation alone")
 	require.Len(t, again.Prior, 1)
 	prior := again.Prior[0]
-	assert.Equal(t, 1, prior.N)
-	assert.Equal(t, types.StateFail, prior.State)
-	assert.Equal(t, 1, prior.ReworkRounds)
-	assert.Equal(t, []string{"the second worktree was not tried"}, prior.UnresolvedRisks)
-	assert.Equal(t, []string{"out1"}, prior.FailingRefs)
+	wantPrior := prior
+	wantPrior.N, wantPrior.State, wantPrior.ReworkRounds = 1, types.StateFail, 1
+	wantPrior.UnresolvedRisks, wantPrior.FailingRefs = []string{"the second worktree was not tried"}, []string{"out1"}
+	assert.Equal(t, wantPrior, prior)
 	assert.True(t, prior.DenialsKnown, "this checkout's trail is empty, so it holds no denial")
 	assert.True(t, prior.Retry.Retryable)
-	assert.Nil(t, again.Result)
-	assert.Nil(t, again.Attempt)
-	assert.Zero(t, again.ReworkRounds, "the next attempt counts its own rework rounds")
-	assert.Equal(t, []string{"job-generations"}, again.Requires, "an older magus would re-fork without folding")
+
+	// A re-fork with an unchanged spec leaves the generation alone, the next attempt counts
+	// its own rework rounds, and an older magus would re-fork without folding.
+	wantAgain := again
+	wantAgain.State, wantAgain.Attempts, wantAgain.Generation = types.StateDeclared, 2, 1
+	wantAgain.Result, wantAgain.Attempt, wantAgain.ReworkRounds = nil, nil, 0
+	wantAgain.Requires = []string{"job-generations"}
+	assert.Equal(t, wantAgain, again)
 
 	for range 3 {
 		endAttempt(t, s)

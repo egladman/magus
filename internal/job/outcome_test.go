@@ -81,8 +81,10 @@ func TestNewJobOutcomeNumbersTheAttemptAndClassifiesIt(t *testing.T) {
 
 	got := newJobOutcome(row, 5_000)
 
-	assert.Equal(t, 2, got.Attempt)
-	assert.Equal(t, types.RetryAfterPerson, got.Retry, "a goal unmet twice needs a person")
+	want := got
+	want.Attempt = 2
+	want.Retry = types.RetryAfterPerson // a goal unmet twice needs a person
+	assert.Equal(t, want, got)
 }
 
 func TestNewJobOutcomeOfARowWithNoTierNamesNone(t *testing.T) {
@@ -137,9 +139,9 @@ func TestModelTierRecordsFoldsEachTierAndKind(t *testing.T) {
 		ChecksPerJob: 8.0 / 3, ForksPerID: 3.0 / 2, ReworkPerJob: 1, WideningsPerJob: 1.0 / 3,
 		MeanCostUSD: 2.5 / 3, MedianTokens: 100, FirstAttempts: 3, FirstPass: 2,
 	}, got[0], "a was forked twice, and the running and untiered outcomes do not count")
-	assert.Equal(t, "economy", got[1].ModelTier)
-	assert.Equal(t, types.JobKindProse, got[1].Kind)
-	assert.Equal(t, 1, got[1].NoReturn)
+	wantProse := got[1]
+	wantProse.ModelTier, wantProse.Kind, wantProse.NoReturn = "economy", types.JobKindProse, 1
+	assert.Equal(t, wantProse, got[1])
 	assert.Zero(t, got[1].PassLower)
 	assert.Equal(t, 2, got[2].Rank, "principal ranks after economy")
 	assert.Equal(t, types.ModelTierRecord{Rank: -1, ModelTier: "retired", Kind: types.JobKindCheck, Jobs: 1, Pass: 1, ChecksPerJob: 0, ForksPerID: 1,
@@ -166,11 +168,10 @@ func TestModelTierRecordsCountsFirstAttemptsAndNotRetryableEndings(t *testing.T)
 	}, tierSet(t))
 
 	require.Len(t, got, 1)
-	assert.Equal(t, 4, got[0].Jobs)
-	assert.Equal(t, 2, got[0].FirstAttempts)
-	assert.Equal(t, 1, got[0].FirstPass)
+	wantFirst := got[0]
+	wantFirst.Jobs, wantFirst.FirstAttempts, wantFirst.FirstPass, wantFirst.NotRetryable = 4, 2, 1, 2
+	assert.Equal(t, wantFirst, got[0])
 	assert.InDelta(t, volatility.WilsonLower(1, 2), got[0].FirstPassLower, 1e-12)
-	assert.Equal(t, 2, got[0].NotRetryable)
 	assert.InDelta(t, 4.0/3, got[0].ForksPerID, 1e-12, "forks per id keeps its meaning")
 }
 
@@ -211,9 +212,9 @@ func TestStoreRecordsAnOutcomeWhenARowEnds(t *testing.T) {
 
 	jobs := recordedJobs(t, history)
 	require.Len(t, jobs, 1)
-	assert.Equal(t, newJobOutcome(ended, jobs[0].Ended), jobs[0])
-	assert.Equal(t, "standard", jobs[0].ModelTier)
-	assert.Equal(t, types.StateFail, jobs[0].State)
+	wantJob := newJobOutcome(ended, jobs[0].Ended)
+	wantJob.ModelTier, wantJob.State = "standard", types.StateFail
+	assert.Equal(t, wantJob, jobs[0])
 	assert.Positive(t, jobs[0].Ended)
 
 	row.Criteria = "reworded after it failed"
@@ -269,8 +270,9 @@ func TestStoreFeedsRecordedOutcomesToTheMatrix(t *testing.T) {
 	seed(t, s, second)
 
 	require.Len(t, matrix.seen.History, 1)
-	assert.Equal(t, "economy", matrix.seen.History[0].ModelTier)
-	assert.Equal(t, 1, matrix.seen.History[0].Pass)
+	wantHistory := matrix.seen.History[0]
+	wantHistory.ModelTier, wantHistory.Pass = "economy", 1
+	assert.Equal(t, wantHistory, matrix.seen.History[0])
 }
 
 func TestStoreCountsAWideningOnlyForATakenRowThatGainsWritePaths(t *testing.T) {
@@ -355,9 +357,9 @@ func TestStoreRecordsAnOutcomeWhenTheSweepEndsARow(t *testing.T) {
 
 	jobs := recordedJobs(t, history)
 	require.Len(t, jobs, 1)
-	assert.Equal(t, types.StateNoReturn, jobs[0].State)
-	assert.Equal(t, "magusfile.buzz:40", jobs[0].Site)
-	assert.Equal(t, now*1000, jobs[0].Ended)
+	wantJob := jobs[0]
+	wantJob.State, wantJob.Site, wantJob.Ended = types.StateNoReturn, "magusfile.buzz:40", now*1000
+	assert.Equal(t, wantJob, jobs[0])
 }
 
 func TestStoreRecordsAnOutcomeWhenPruneEndsARow(t *testing.T) {
@@ -396,6 +398,7 @@ func TestStoreRecordsAnOutcomeWhenTheHoldingSessionEnds(t *testing.T) {
 
 	jobs := recordedJobs(t, history)
 	require.Len(t, jobs, 1)
-	assert.Equal(t, "w", jobs[0].Job)
-	assert.Equal(t, types.StateNoReturn, jobs[0].State)
+	wantJob := jobs[0]
+	wantJob.Job, wantJob.State = "w", types.StateNoReturn
+	assert.Equal(t, wantJob, jobs[0])
 }

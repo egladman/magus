@@ -265,8 +265,9 @@ func TestDecodeHookEnvelopeSkillRead(t *testing.T) {
 
 	t.Run("a read of a SKILL.md", func(t *testing.T) {
 		req := decode(t, `{"file_path":"`+skillPath+`"}`)
-		assert.Equal(t, "magus-multi-agent", req.LoadedSkill)
-		assert.Equal(t, skillPath, req.Value)
+		wantReq := req
+		wantReq.LoadedSkill, wantReq.Value = "magus-multi-agent", skillPath
+		assert.Equal(t, wantReq, req)
 	})
 	t.Run("a bounded read", func(t *testing.T) {
 		assert.Equal(t, "magus-run", decode(t, `{"file_path":"/Users/dev/.agents/skills/magus-run/SKILL.md","offset":1,"limit":40}`).LoadedSkill)

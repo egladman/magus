@@ -179,8 +179,9 @@ func TestConformLensWithoutAnIndexIsUnknownAndMisconfigurationIsAnError(t *testi
 	out, err := open(config.Defaults()).Conform(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, types.ConformDefinition, out.Definition)
-	assert.Equal(t, types.VerdictUnknown, out.Answer.Verdict, "no index means unknown, never a pass")
-	assert.Equal(t, types.ReasonSymbolIndexMissing, out.Answer.Reason)
+	wantAnswer := out.Answer
+	wantAnswer.Verdict, wantAnswer.Reason = types.VerdictUnknown, types.ReasonSymbolIndexMissing
+	assert.Equal(t, wantAnswer, out.Answer, "no index means unknown, never a pass")
 
 	cfg := config.Defaults()
 	cfg.Knowledge.Conform.Ratchet = "hack/policy/conform.json"
@@ -207,9 +208,9 @@ func TestModelTierLensReportsWhatTheJobHistoryHolds(t *testing.T) {
 	got, err := m.ModelTierLens(t.Context())
 	require.NoError(t, err)
 	require.Len(t, got.Rows, 1)
-	assert.Equal(t, "economy", got.Rows[0].ModelTier)
-	assert.Equal(t, -1, got.Rows[0].Rank, "a workspace with no declaration ranks nothing")
-	assert.InDelta(t, 2, got.Rows[0].ChecksPerJob, 0)
+	wantRow := got.Rows[0]
+	wantRow.ModelTier, wantRow.Rank, wantRow.ChecksPerJob = "economy", -1, 2
+	assert.Equal(t, wantRow, got.Rows[0], "a workspace with no declaration ranks nothing")
 }
 
 // TestProjectDisplayName resolves the label the insight lenses attach to a scanned

@@ -104,11 +104,13 @@ func TestDefaults_ConformIsValidAndFlagless(t *testing.T) {
 func TestConformDefaults(t *testing.T) {
 	t.Parallel()
 	c := Defaults().Knowledge.Conform
-	assert.Equal(t, ConformGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5}, c.Gates)
-	assert.Equal(t, 30, c.MinSample)
-	assert.InDelta(t, 0.05, c.Step, 0)
-	assert.Empty(t, c.Ratchet, "the ratchet is opt-in: a workspace names its own record")
-	assert.Empty(t, c.Exclude, "an exclusion names one workspace's layout, so it ships in none")
+	// The ratchet is opt-in and an exclusion names one workspace's layout, so neither ships.
+	assert.Equal(t, ConformConfig{
+		MinSample: 30,
+		Step:      0.05,
+		Gates:     ConformGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
+		Checks:    c.Checks, // pinned below
+	}, c)
 
 	assert.Equal(t, map[types.ConformPopulation]ConformLimitConfig{
 		types.ConformPopSource: {Percentile: 95, Anchor: 2200},
@@ -239,12 +241,15 @@ func TestConformLoadsFromYAML(t *testing.T) {
 	cfg, err := LoadFile(path, true)
 	require.NoError(t, err)
 	c := cfg.Knowledge.Conform
-	assert.Equal(t, "hack/policy/conform.json", c.Ratchet)
-	assert.Equal(t, 10, c.MinSample)
-	assert.InDelta(t, 0.05, c.Step, 0, "keys left out keep their defaults")
-	assert.Equal(t, map[types.ConformMetric]map[types.ConformPopulation]ConformLimitConfig{
-		types.ConformDepFanout: {types.ConformPopSource: {Percentile: 90, Anchor: 20, Scopes: map[string]int{"cmd/tool": 31}}},
-	}, c.Checks, "written checks replace the defaults")
+	assert.Equal(t, ConformConfig{
+		Ratchet:   "hack/policy/conform.json",
+		MinSample: 10,
+		Step:      0.05,
+		Gates:     Defaults().Knowledge.Conform.Gates,
+		Checks: map[types.ConformMetric]map[types.ConformPopulation]ConformLimitConfig{
+			types.ConformDepFanout: {types.ConformPopSource: {Percentile: 90, Anchor: 20, Scopes: map[string]int{"cmd/tool": 31}}},
+		},
+	}, c, "keys left out keep their defaults and written checks replace the defaults")
 
 	scoped := types.ConformKey{Metric: types.ConformDepFanout, Population: types.ConformPopSource, Scope: "cmd/tool"}
 	assert.Equal(t, types.ConformLimit{Percentile: 90, Anchor: 31}, c.Options().Limits[scoped])

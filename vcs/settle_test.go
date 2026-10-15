@@ -350,8 +350,11 @@ func TestSettleHooksStartMagusOnlyToSettle(t *testing.T) {
 	op, ok, err = DeferredSettle(ctx, dir)
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.Equal(t, main, op.base, "where the first batch started")
-	assert.Equal(t, []string{"s1", "s2", "s3", "s4", "s5", "s6"}, op.Changed, "both batches")
+	wantOp := op
+	// The base is where the first batch started, and the changes span both batches.
+	wantOp.base = main
+	wantOp.Changed = []string{"s1", "s2", "s3", "s4", "s5", "s6"}
+	assert.Equal(t, wantOp, op)
 	require.NoError(t, ClearDeferredSettle(ctx, dir))
 	_, ok, err = DeferredSettle(ctx, dir)
 	require.NoError(t, err)

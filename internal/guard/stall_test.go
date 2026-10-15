@@ -59,8 +59,7 @@ func TestStallRoutesAnUnclearableBlockToTheRoot(t *testing.T) {
 	}
 
 	first := write()
-	require.Equal(t, decisionDeny, first.Decision)
-	assert.Equal(t, string(denyRuleLeaseWrite), first.Rule)
+	require.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleLeaseWrite)}, decidedBy(first))
 	assert.Contains(t, first.Reason, hint.JobExit.With("lease-b", "--stdin"))
 	again := write()
 	assert.NotContains(t, again.Reason, hint.JobExit.With("lease-b", "--stdin"), "said once")

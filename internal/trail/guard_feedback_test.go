@@ -117,8 +117,9 @@ func TestLeaseDenialsReadsOneLeasesDenialsOldestFirst(t *testing.T) {
 	assert.True(t, known, "a trail inside the retained window is read whole")
 	require.Len(t, got, 2)
 	assert.Equal(t, []string{"lease-write", "raw-tool"}, []string{got[0].Rule, got[1].Rule})
-	assert.Equal(t, "lease-write says no", got[0].Reason)
-	assert.Equal(t, "shell.command", got[0].Action)
+	wantFirst := got[0]
+	wantFirst.Reason, wantFirst.Action = "lease-write says no", "shell.command"
+	assert.Equal(t, wantFirst, got[0])
 	assert.Positive(t, got[0].Ts)
 
 	newest, _, err := LeaseDenials(base, "wave/a", 0, 1)

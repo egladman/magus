@@ -245,7 +245,11 @@ func TestRefsMemoizesPerSymbolScope(t *testing.T) {
 		_, err := MagusRefs(eval, graphSymbol, nil)
 		require.NoError(t, err)
 	}
-	assert.Equal(t, []types.GraphRequest{{Symbols: types.SymbolsMentioning(graphSymbol)}}, ws.reqs)
+	assert.Equal(t, countingGraphs{
+		builtGraphWorkspace: ws.builtGraphWorkspace,
+		builds:              1,
+		reqs:                []types.GraphRequest{{Symbols: types.SymbolsMentioning(graphSymbol)}},
+	}, *ws)
 
 	_, err := MagusRefs(eval, "symbol:example.com/x Bar#", nil)
 	require.NoError(t, err)
@@ -487,17 +491,20 @@ func TestConformReportsRowsBesideIndexFreshness(t *testing.T) {
 	got, err := MagusConform(types.WithWorkspace(t.Context(), ws))
 	require.NoError(t, err)
 	report := conformReportOf(t, got)
-	assert.Equal(t, types.ConformDefinition, report.Definition)
-	assert.Equal(t, []types.SymbolIndexStatus{stale}, report.Indexes, "the index verdict rides beside the rows")
+	wantReport := report
+	wantReport.Definition = types.ConformDefinition
+	wantReport.Indexes = []types.SymbolIndexStatus{stale} // the index verdict rides beside the rows
+	assert.Equal(t, wantReport, report)
 	assert.True(t, ws.readAfter, "freshness is read after the freshen")
 	lines := types.ConformKey{Metric: types.ConformFileLines, Population: types.ConformPopSource}
 	i := slices.IndexFunc(report.Rows, func(r types.ConformRow) bool { return r.Key == lines })
 	require.GreaterOrEqual(t, i, 0, "rows: %v", report.Rows)
 	row := report.Rows[i]
-	assert.Equal(t, 2, row.N, "a declared output is never counted")
-	assert.Equal(t, 100, row.Value)
-	assert.Equal(t, types.ConformFromAnchor, row.Source)
-	assert.Equal(t, []types.ConformItem{{ID: "internal/a/big.go", Source: "internal/a/big.go:1", Measure: 300}}, row.Violations)
+	wantRow := row
+	wantRow.N = 2 // a declared output is never counted
+	wantRow.Value, wantRow.Source = 100, types.ConformFromAnchor
+	wantRow.Violations = []types.ConformItem{{ID: "internal/a/big.go", Source: "internal/a/big.go:1", Measure: 300}}
+	assert.Equal(t, wantRow, row)
 	assert.Zero(t, row.Propose, "a live percentile above the enforced value is never proposed")
 }
 
@@ -507,8 +514,9 @@ func TestConformWithoutSymbolsIsUnknownNotAPass(t *testing.T) {
 	got, err := MagusConform(types.WithWorkspace(t.Context(), ws))
 	require.NoError(t, err)
 	answer := conformReportOf(t, got).Answer
-	assert.Equal(t, types.VerdictUnknown, answer.Verdict)
-	assert.Equal(t, types.ReasonSymbolIndexMissing, answer.Reason)
+	wantAnswer := answer
+	wantAnswer.Verdict, wantAnswer.Reason = types.VerdictUnknown, types.ReasonSymbolIndexMissing
+	assert.Equal(t, wantAnswer, answer)
 }
 
 func TestConformMisconfigurationIsAnError(t *testing.T) {

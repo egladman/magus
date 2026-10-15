@@ -67,8 +67,7 @@ func TestHeredocWriteMeetsTheWriteRules(t *testing.T) {
 	}
 
 	v := judge("cat > notes.md <<'EOF'\na forbidden word\nEOF")
-	require.Equal(t, "deny", v.Decision, v.Context)
-	assert.Equal(t, string(denyRuleHeredocWrite), v.Rule)
+	require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleHeredocWrite)}, decidedBy(v), v.Context)
 	assert.Contains(t, v.Reason, "that word is not allowed here")
 	require.NotEmpty(t, seen)
 	assert.Equal(t, filepath.Join(root, "notes.md"), seen[0].Path)

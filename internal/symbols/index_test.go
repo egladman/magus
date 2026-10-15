@@ -139,8 +139,10 @@ func TestFingerprintBodiesShapesRenamedCopies(t *testing.T) {
 
 	sum, total, maxFn, buzz, noSpan := syms[0], syms[1], syms[2], syms[3], syms[4]
 	require.NotEmpty(t, sum.BodyShape)
-	assert.Equal(t, sum.BodyShape, total.BodyShape, "renamed copies share a shape")
-	assert.Equal(t, sum.BodyTokens, total.BodyTokens)
+	body := func(s types.KnowledgeSymbol) types.KnowledgeSymbol {
+		return types.KnowledgeSymbol{BodyShape: s.BodyShape, BodyTokens: s.BodyTokens}
+	}
+	assert.Equal(t, body(sum), body(total), "renamed copies share a shape")
 	assert.Positive(t, sum.BodyTokens)
 	assert.NotEqual(t, sum.BodyDigest, total.BodyDigest, "the text differs")
 	assert.NotEqual(t, sum.BodyShape, maxFn.BodyShape, "a different body has a different shape")

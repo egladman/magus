@@ -405,8 +405,10 @@ func TestJobCloneCopiesPriorAttemptsAndRejection(t *testing.T) {
 	first.Rejection.At = 9
 
 	assert.Equal(t, []string{"first", "0"}, first.Prior[0].FailingRefs)
-	assert.Equal(t, []string{"out1", "1"}, second.Prior[0].FailingRefs)
-	assert.Equal(t, []JobDenial{{Rule: "lease-write"}, {Rule: "1"}}, second.Prior[0].Denials)
+	wantPrior := second.Prior[0]
+	wantPrior.FailingRefs = []string{"out1", "1"}
+	wantPrior.Denials = []JobDenial{{Rule: "lease-write"}, {Rule: "1"}}
+	assert.Equal(t, wantPrior, second.Prior[0])
 	assert.Equal(t, []string{"out1", "1"}, second.Rejection.Unmet[0].Violations)
 	assert.Equal(t, Job{ID: "a", Prior: []PriorAttempt{prior()}, Rejection: &JobRejection{Unmet: unmet(), Violations: refs()}}, orig)
 }

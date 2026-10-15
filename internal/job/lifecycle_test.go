@@ -204,9 +204,10 @@ func TestWaitNeverPassesOnEvidenceOfAnEarlierSpec(t *testing.T) {
 
 	described, err := GradeGates(t.Context(), NewStore(loc), result.Job, observeClaim(result))
 	require.NoError(t, err)
-	assert.Equal(t, 1, described.PriorGeneration)
-	assert.Equal(t, 2, described.ObservedGeneration)
-	assert.False(t, described.Verified, "the run of generation 1 no longer grades the check")
+	wantDescribed := described
+	wantDescribed.PriorGeneration, wantDescribed.ObservedGeneration = 1, 2
+	wantDescribed.Verified = false // the run of generation 1 no longer grades the check
+	assert.Equal(t, wantDescribed, described)
 
 	status, err := Wait(t.Context(), NewStore(loc), result.Job, nil, nil, observeClaim(result), nil)
 	require.NoError(t, err)

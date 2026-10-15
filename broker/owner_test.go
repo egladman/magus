@@ -74,10 +74,10 @@ func TestWorkNamesEachRunsOwner(t *testing.T) {
 	r, err := QueryWork(t.Context(), addr)
 	require.NoError(t, err)
 	require.Len(t, r.Running, 1)
-	assert.Equal(t, WorkRun, r.Running[0].Kind)
 	assert.Equal(t, "plan/a", r.Running[0].Owner())
-	assert.Equal(t, 4, r.Running[0].Slots)
-	assert.Equal(t, os.Getpid(), r.Running[0].PID)
+	got := r.Running[0]
+	got.Dir, got.Command, got.Since = "", "", time.Time{}
+	assert.Equal(t, Work{Kind: WorkRun, Lease: "plan/a", PID: os.Getpid(), Slots: 4}, got)
 }
 
 func TestValidationScopeReadsTheWorkspacesCap(t *testing.T) {

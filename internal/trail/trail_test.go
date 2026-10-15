@@ -332,8 +332,9 @@ func TestAppendAgentSpawn_RecordsTheCostFacts(t *testing.T) {
 	require.NoError(t, err)
 	var got agentSpawnRequest
 	require.NoError(t, json.Unmarshal(raw, &got))
-	assert.Equal(t, want, got.AgentFacts)
-	assert.Equal(t, "claude-haiku-5-5", got.DeclaredModel)
+	wantRequest := got
+	wantRequest.AgentFacts, wantRequest.DeclaredModel = want, "claude-haiku-5-5"
+	assert.Equal(t, wantRequest, got)
 }
 
 // TestAppendAgentSpawn_RecordsHandedContext is the lease-audit round trip: the event line

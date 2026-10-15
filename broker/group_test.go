@@ -64,8 +64,9 @@ func TestAHeldCommandStopsAtItsDeadline(t *testing.T) {
 	running, err := c.Work(t.Context())
 	require.NoError(t, err)
 	require.Len(t, running.Running, 1)
-	assert.Equal(t, WorkExec, running.Running[0].Kind)
-	assert.Equal(t, 2, running.Running[0].Slots)
+	got := running.Running[0]
+	got.PID, got.Since, got.Deadline = 0, time.Time{}, time.Time{}
+	assert.Equal(t, Work{Kind: WorkExec, Lease: "plan/a", Dir: root, Command: "sleep 600", Slots: 2}, got)
 
 	awaitExit(t, done, "the group outlived its deadline")
 	assert.Eventually(t, func() bool { return !groupAlive(pgid) }, 5*time.Second, 20*time.Millisecond,

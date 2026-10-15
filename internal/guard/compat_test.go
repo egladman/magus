@@ -77,8 +77,9 @@ func TestCompatMarkerAdvisesAWorkerAndFilesOneRow(t *testing.T) {
 	ctx, root, file := compatFleet(t)
 
 	got := gradeLeasedEdit(ctx, Dependencies{}, "lease-b", file, addsCompat)
-	require.Equal(t, decisionAdvise, got.Decision)
-	assert.Equal(t, hint.MarkerKind(denyRuleCompatMarker), got.Kind)
+	wantGrade := got
+	wantGrade.Decision, wantGrade.Kind = decisionAdvise, hint.MarkerKind(denyRuleCompatMarker)
+	require.Equal(t, wantGrade, got)
 	assert.Contains(t, got.Context, "adds `compat(until:` to cmd/magus/old.go")
 	assert.Contains(t, got.Context, "unresolved_risks")
 	assert.Contains(t, got.Why, "never refused")
@@ -89,8 +90,10 @@ func TestCompatMarkerAdvisesAWorkerAndFilesOneRow(t *testing.T) {
 
 	rows := attentionRows(t, root)
 	require.Len(t, rows, 1, "one row per lease")
-	assert.Equal(t, "lease-b", rows[0].Lease)
-	assert.Equal(t, "job lease-b added `compat(until:` to cmd/magus/old.go. It ran on a model magus has no record of.", rows[0].Message)
+	wantRow := rows[0]
+	wantRow.Lease = "lease-b"
+	wantRow.Message = "job lease-b added `compat(until:` to cmd/magus/old.go. It ran on a model magus has no record of."
+	assert.Equal(t, wantRow, rows[0])
 }
 
 func TestCompatMarkerStaysQuiet(t *testing.T) {

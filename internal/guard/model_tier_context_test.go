@@ -74,7 +74,6 @@ func TestModelTierContextCapRaisedToDenyRefusesWrites(t *testing.T) {
 
 	v := Judge(ctx, deps, Request{Input: filepath.Join(root, "internal/ledger/store.go"), IsPath: true, Session: "s", Host: "test-host", Lease: "lease-a"})
 
-	require.Equal(t, decisionDeny, v.Decision)
-	assert.Equal(t, string(advisoryModelTierContextCap), v.Rule)
+	require.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(advisoryModelTierContextCap)}, decidedBy(v))
 	assert.Contains(t, v.Reason, "lease lease-a runs at model tier economy")
 }

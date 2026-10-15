@@ -103,12 +103,10 @@ func TestNewModelTierRequestCarriesTheRowAndItsParentsRank(t *testing.T) {
 	assert.Equal(t, 2, *req.ParentRank)
 	require.NotNil(t, req.DeclaredRank)
 	assert.Equal(t, 0, *req.DeclaredRank)
-	assert.Equal(t, "economy", req.DeclaredModel)
-	assert.Equal(t, history, req.History)
-	assert.Equal(t, row.Goals, req.Goals)
-	assert.Equal(t, []string{"a.go"}, req.WritePaths)
-	assert.Equal(t, []string{"b"}, req.ReadPaths)
-	assert.Equal(t, []string{"wave/b"}, req.DependsOn)
+	wantReq := req
+	wantReq.DeclaredModel, wantReq.History, wantReq.Goals = "economy", history, row.Goals
+	wantReq.WritePaths, wantReq.ReadPaths, wantReq.DependsOn = []string{"a.go"}, []string{"b"}, []string{"wave/b"}
+	assert.Equal(t, wantReq, req)
 	assert.Empty(t, req.WriteProjects, "a project is a graph fact the store does not hold")
 
 	req.Check.Args[0] = "changed"
@@ -215,9 +213,10 @@ func TestAssignModelTierWithoutAMatrixTakesTheDefault(t *testing.T) {
 	row := types.Job{ID: "a"}
 	got, err := resolveModelTier(t.Context(), set, nil, newModelTierRequest(row, nil, set, nil), row)
 	require.NoError(t, err)
-	assert.Equal(t, types.ModelTierSourceDefault, got.Source)
-	assert.Equal(t, "standard", got.Name)
-	assert.Equal(t, "magusfile.buzz:3", got.Site, "the default record names the declaration")
+	wantTier := got
+	wantTier.Source, wantTier.Name = types.ModelTierSourceDefault, "standard"
+	wantTier.Site = "magusfile.buzz:3" // the default record names the declaration
+	assert.Equal(t, wantTier, got)
 }
 
 func TestAssignModelTierRefusesAnAliasThatNamesTwoTiers(t *testing.T) {
@@ -376,8 +375,9 @@ func TestStoreRecordsTheDefaultForAWorkspaceThatDeclaresNoMatrix(t *testing.T) {
 	stored := seed(t, s, row)
 
 	require.NotNil(t, stored.ModelTier)
-	assert.Equal(t, types.ModelTierSourceDefault, stored.ModelTier.Source)
-	assert.Equal(t, "standard", stored.ModelTier.Name)
+	wantStored := *stored.ModelTier
+	wantStored.Source, wantStored.Name = types.ModelTierSourceDefault, "standard"
+	assert.Equal(t, wantStored, *stored.ModelTier)
 }
 
 func TestStoreReassignsOnlyWhenTheModelChanges(t *testing.T) {
@@ -398,8 +398,9 @@ func TestStoreReassignsOnlyWhenTheModelChanges(t *testing.T) {
 	row.Model = "principal"
 	changed := seed(t, s, row)
 	assert.Equal(t, 1, matrix.calls, "a row that names a tier never reaches the matrix")
-	assert.Equal(t, "principal", changed.ModelTier.Name)
-	assert.Equal(t, types.ModelTierSourceRow, changed.ModelTier.Source)
+	wantChanged := *changed.ModelTier
+	wantChanged.Name, wantChanged.Source = "principal", types.ModelTierSourceRow
+	assert.Equal(t, wantChanged, *changed.ModelTier)
 }
 
 func TestStoreKeepsTheStoredTierAgainstAWholeRowWrite(t *testing.T) {

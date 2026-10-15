@@ -345,8 +345,7 @@ func TestBriefCommandRefusesAHumanOnlyRun(t *testing.T) {
 
 		brief := "JOB ID: " + row.ID + "\nRun the benchmark:\n\n```sh\nmagus run agent-bench-run .\n```\n"
 		v := judgeBriefOffCheck(deps, briefInput{text: brief})
-		assert.Equal(t, denyRuleBriefCommand, v.Rule.Name, src.name)
-		assert.Equal(t, string(denyRuleHumanOnly), v.Rule.Arg, src.name)
+		assert.Equal(t, denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleHumanOnly)}, v.Rule, src.name)
 		assert.Contains(t, v.Deny, "job bench/run's worker to run `.:agent-bench-run`, which a person runs", src.name)
 		assert.Contains(t, v.Why, benchReason, src.name)
 
