@@ -62,8 +62,18 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 	if err != nil {
 		return types.Job{}, err
 	}
-	if !slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == id }) {
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	if i < 0 {
 		return types.Job{}, fmt.Errorf("%w: %q, nothing declared it, so there is nothing to end", ErrUnknownJob, id)
+	}
+	// An ended row is not ended again: a second end would rewrite how the first one ended.
+	if ended := rows[i]; ended.State.Terminal() {
+		reason := ""
+		if ended.EndReason != "" {
+			reason = " (" + ended.EndReason + ")"
+		}
+		return types.Job{}, fmt.Errorf("job: %s already ended %s %s ago%s, so there is nothing to end, `%s` lists it",
+			id, ended.State, updatedAgo(ended), reason, hint.LsJobs.With("--all"))
 	}
 	if result == nil {
 		return store.Update(ctx, id, func(row *types.Job) { row.State = types.StateNoReturn })

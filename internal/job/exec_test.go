@@ -391,6 +391,27 @@ func TestStoreExecTakesAJobDeclaredAgainAfterItEnded(t *testing.T) {
 	assert.Equal(t, types.StateRunning, ben.State)
 }
 
+// Ending a job that already ended says so, and how and when, rather than the refusal a
+// caller bound to a different row gets for writing a row that is not its own.
+func TestExitSaysAnEndedJobAlreadyEnded(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	loc, _, head := twoCheckouts(t)
+	s := NewStore(loc)
+	seed(t, s, types.Job{ID: "u1", Checkpoint: head, State: types.StateDeclared})
+	_, err := s.Exec(ctx, "u1")
+	require.NoError(t, err)
+	_, err = Exit(ctx, s, "u1", nil, nil)
+	require.NoError(t, err)
+
+	_, err = Exit(ctx, s, "u1", nil, nil)
+	require.Error(t, err)
+	for _, want := range []string{"u1", "already ended", string(types.StateNoReturn), "ago", "abandoned by its holder"} {
+		assert.Contains(t, err.Error(), want)
+	}
+}
+
 // A fork records the forking checkout, but nobody has taken the job yet, so a worker in
 // another checkout takes it: the refusal is for a job an exec already holds.
 func TestStoreExecTakesAJobForkedInAnotherCheckout(t *testing.T) {
