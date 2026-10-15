@@ -424,9 +424,9 @@ func (c *conformRow) UnmarshalJSON(data []byte) error {
 //
 // scope and why are optional, and a record names its schema and its measurement at most
 // once. An unknown kind, member, metric or population, a repeated member, a wrongly typed
-// value, a repeated line, and a key committed twice are errors naming their line. The
-// caller prefixes errors with the record's path.
-func ReadConformRatchet(data []byte) (ConformRatchet, error) {
+// value, a repeated line, and a key committed twice are errors naming path:line, path
+// being where data was read from.
+func ReadConformRatchet(path string, data []byte) (ConformRatchet, error) {
 	var r ConformRatchet
 	seen := conformSeen{thresholds: map[ConformKey]int{}}
 	lineAt := map[string]int{}
@@ -437,7 +437,7 @@ func ReadConformRatchet(data []byte) (ConformRatchet, error) {
 			continue
 		}
 		if first, dup := lineAt[text]; dup {
-			return ConformRatchet{}, fmt.Errorf("line %d: same line as line %d", line, first)
+			return ConformRatchet{}, fmt.Errorf("%s:%d: same line as line %d", path, line, first)
 		}
 		lineAt[text] = line
 
@@ -447,11 +447,11 @@ func ReadConformRatchet(data []byte) (ConformRatchet, error) {
 			err = r.add(row, line, &seen)
 		}
 		if err != nil {
-			return ConformRatchet{}, fmt.Errorf("line %d: %w", line, err)
+			return ConformRatchet{}, fmt.Errorf("%s:%d: %w", path, line, err)
 		}
 	}
 	if seen.schema == 0 {
-		return ConformRatchet{}, errors.New(`ratchet has no schema line: want {"kind":"schema","schema":1}`)
+		return ConformRatchet{}, fmt.Errorf(`%s: ratchet has no schema line: want {"kind":"schema","schema":1}`, path)
 	}
 	return r, nil
 }

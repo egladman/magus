@@ -185,9 +185,9 @@ func TestConformLensWithoutAnIndexIsUnknownAndMisconfigurationIsAnError(t *testi
 	assert.Equal(t, wantAnswer, out.Answer, "no index means unknown, never a pass")
 
 	cfg := config.Defaults()
-	cfg.Knowledge.Conform.Ratchet = "hack/policy/conform.json"
+	cfg.Knowledge.Conform.Ratchet = "hack/policy/conformance.jsonl"
 	_, err = open(cfg).Conform(t.Context())
-	assert.ErrorContains(t, err, "hack/policy/conform.json")
+	assert.ErrorContains(t, err, "hack/policy/conformance.jsonl")
 }
 
 // TestModelTierLensReportsWhatTheJobHistoryHolds pins the lens against the history file the

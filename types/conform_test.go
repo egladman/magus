@@ -220,7 +220,7 @@ func conformRecord(lines ...string) []byte {
 func TestReadConformRatchet(t *testing.T) {
 	t.Parallel()
 
-	r, err := ReadConformRatchet(conformRecord(
+	r, err := ReadConformRatchet("r.jsonl", conformRecord(
 		`{"kind":"schema","schema":1}`,
 		`{"kind":"measured","rev":"abc123","date":"2026-10-14"}`,
 		"",
@@ -256,87 +256,87 @@ func TestReadConformRatchetIsStrict(t *testing.T) {
 	for name, tc := range map[string]struct{ in, want string }{
 		"unknown kind": {
 			in:   schema + "\n" + `{"kind":"extra"}`,
-			want: `line 2: kind "extra": want schema, measured, threshold or known`,
+			want: `r.jsonl:2: kind "extra": want schema, measured, threshold or known`,
 		},
 		"no kind": {
 			in:   schema + "\n" + `{"metric":"file-lines"}`,
-			want: "line 2: no kind: want schema, measured, threshold or known",
+			want: "r.jsonl:2: no kind: want schema, measured, threshold or known",
 		},
 		"a tab-separated row, the format before this one": {
 			in:   "schema\t1",
-			want: "line 1: ",
+			want: "r.jsonl:1:",
 		},
 		"a line that is not an object": {
 			in:   schema + "\n[1]",
-			want: "line 2: ",
+			want: "r.jsonl:2:",
 		},
 		"two objects on one line": {
 			in:   schema + schema,
-			want: "line 1: ",
+			want: "r.jsonl:1:",
 		},
 		"unknown member": {
 			in:   schema + "\n" + `{"kind":"threshold","metric":"file-lines","population":"source","value":1,"n":1,"percentile":1,"bogus":1}`,
-			want: `line 2: threshold: unknown field "bogus"`,
+			want: `r.jsonl:2: threshold: unknown field "bogus"`,
 		},
 		"member of another kind": {
 			in:   schema + "\n" + `{"kind":"threshold","metric":"file-lines","population":"source","value":1,"n":1,"percentile":1,"items":[]}`,
-			want: `line 2: threshold: unknown field "items"`,
+			want: `r.jsonl:2: threshold: unknown field "items"`,
 		},
 		"repeated member": {
 			in:   schema + "\n" + `{"kind":"threshold","metric":"file-lines","population":"source","value":1,"value":2,"n":1,"percentile":1}`,
-			want: "line 2: ",
+			want: "r.jsonl:2:",
 		},
 		"unknown metric": {
 			in:   schema + "\n" + `{"kind":"threshold","metric":"lines","population":"source","value":1,"n":1,"percentile":1}`,
-			want: "line 2: threshold: metric lines: want one of [file-lines ",
+			want: "r.jsonl:2: threshold: metric lines: want one of [file-lines ",
 		},
 		"unknown population": {
 			in:   schema + "\n" + `{"kind":"threshold","metric":"file-lines","population":"vendor","value":1,"n":1,"percentile":1}`,
-			want: "line 2: threshold: population vendor: want one of [source main test]",
+			want: "r.jsonl:2: threshold: population vendor: want one of [source main test]",
 		},
 		"value that is not an integer": {
 			in:   schema + "\n" + `{"kind":"threshold","metric":"file-lines","population":"source","value":9.5,"n":1,"percentile":1}`,
-			want: "line 2: threshold: ",
+			want: "r.jsonl:2: threshold: ",
 		},
 		"n that is a string": {
 			in:   schema + "\n" + `{"kind":"threshold","metric":"file-lines","population":"source","value":1,"n":"many","percentile":1}`,
-			want: "line 2: threshold: ",
+			want: "r.jsonl:2: threshold: ",
 		},
 		"threshold missing members": {
 			in:   schema + "\n" + `{"kind":"threshold","metric":"file-lines","population":"source","value":1}`,
-			want: "line 2: threshold: no n, percentile",
+			want: "r.jsonl:2: threshold: no n, percentile",
 		},
 		"key committed twice": {
 			in:   schema + "\n" + threshold + "\n" + `{"kind":"threshold","metric":"file-lines","population":"source","value":900,"n":1130,"percentile":95}`,
-			want: "line 3: threshold file-lines source: committed twice, first at line 2",
+			want: "r.jsonl:3: threshold file-lines source: committed twice, first at line 2",
 		},
 		"line repeated": {
 			in:   schema + "\n" + threshold + "\n" + threshold,
-			want: "line 3: same line as line 2",
+			want: "r.jsonl:3: same line as line 2",
 		},
 		"known missing members": {
 			in:   schema + "\n" + `{"kind":"known","metric":"clone-tokens"}`,
-			want: "line 2: known: no items, reason",
+			want: "r.jsonl:2: known: no items, reason",
 		},
 		"known with an unknown metric": {
 			in:   schema + "\n" + `{"kind":"known","metric":"clones","reason":"twins","items":["a.go#F"]}`,
-			want: "line 2: known: metric clones: want one of [file-lines ",
+			want: "r.jsonl:2: known: metric clones: want one of [file-lines ",
 		},
 		"measured missing members": {
 			in:   schema + "\n" + `{"kind":"measured","rev":"abc123"}`,
-			want: "line 2: measured: no date",
+			want: "r.jsonl:2: measured: no date",
 		},
 		"measured twice": {
 			in:   schema + "\n" + `{"kind":"measured","rev":"a","date":"b"}` + "\n" + `{"kind":"measured","rev":"c","date":"d"}`,
-			want: "line 3: measured: given twice, first at line 2",
+			want: "r.jsonl:3: measured: given twice, first at line 2",
 		},
 		"schema other than 1": {
 			in:   `{"kind":"schema","schema":2}`,
-			want: "line 1: schema: schema 2: want 1",
+			want: "r.jsonl:1: schema: schema 2: want 1",
 		},
 		"schema missing its number": {
 			in:   `{"kind":"schema"}`,
-			want: "line 1: schema: ",
+			want: "r.jsonl:1: schema: ",
 		},
 		"no schema": {
 			in:   threshold,
@@ -349,7 +349,7 @@ func TestReadConformRatchetIsStrict(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			_, err := ReadConformRatchet([]byte(tc.in))
+			_, err := ReadConformRatchet("r.jsonl", []byte(tc.in))
 			require.Error(t, err)
 			assert.ErrorContains(t, err, tc.want)
 		})
@@ -359,6 +359,6 @@ func TestReadConformRatchetIsStrict(t *testing.T) {
 func TestReadConformRatchetRefusesASecondSchema(t *testing.T) {
 	t.Parallel()
 
-	_, err := ReadConformRatchet(conformRecord(`{"kind":"schema","schema":1}`, `{"kind":"schema", "schema":1}`))
-	assert.EqualError(t, err, "line 2: schema: given twice, first at line 1")
+	_, err := ReadConformRatchet("r.jsonl", conformRecord(`{"kind":"schema","schema":1}`, `{"kind":"schema", "schema":1}`))
+	assert.EqualError(t, err, "r.jsonl:2: schema: given twice, first at line 1")
 }

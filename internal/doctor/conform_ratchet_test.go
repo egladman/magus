@@ -185,7 +185,7 @@ func TestCheckConformRatchetNamesALineItCannotRead(t *testing.T) {
 	got := r.checkConformRatchet(nil)
 
 	require.Len(t, got.Details, 2)
-	assert.Contains(t, got.Details[1], `hack/policy/conformance.jsonl: line 2: kind "extra": want schema, measured, threshold or known`)
+	assert.Contains(t, got.Details[1], `hack/policy/conformance.jsonl:2: kind "extra": want schema, measured, threshold or known`)
 }
 
 func TestCheckConformRatchetWithNoRatchetConfiguredIsQuiet(t *testing.T) {

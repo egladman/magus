@@ -337,10 +337,10 @@ func diffConform(o types.ConformOptions, cfg diffConfig, patch string, generated
 	if !existed {
 		return o, nil, "", nil
 	}
-	r, err := types.ReadConformRatchet([]byte(before))
+	r, err := types.ReadConformRatchet(o.RatchetPath, []byte(before))
 	if err != nil {
-		return o, nil, fmt.Sprintf("conform: %s before this change does not parse, so what the change moved in it is not judged: %v",
-			o.RatchetPath, err), nil
+		return o, nil, fmt.Sprintf("conform: the ratchet before this change does not parse, so what the change moved in it is not judged: %v",
+			err), nil
 	}
 	return o, &r, "", nil
 }
@@ -367,8 +367,8 @@ func loadConform(o types.ConformOptions, read func(path string) (string, bool)) 
 	if !ok {
 		return o, "", fmt.Errorf("%s: knowledge.conform.ratchet names it, and the tree has no such file", o.RatchetPath)
 	}
-	if o.Ratchet, err = types.ReadConformRatchet([]byte(head)); err != nil {
-		return o, "", fmt.Errorf("%s: %w", o.RatchetPath, err)
+	if o.Ratchet, err = types.ReadConformRatchet(o.RatchetPath, []byte(head)); err != nil {
+		return o, "", err
 	}
 	if verr := o.Validate(); verr != nil {
 		return o, "", verr

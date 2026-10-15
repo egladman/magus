@@ -106,11 +106,7 @@ func (r *runner) readConformRatchet(path string) (types.ConformRatchet, error) {
 	if err != nil {
 		return types.ConformRatchet{}, err
 	}
-	rec, err := types.ReadConformRatchet(data)
-	if err != nil {
-		return types.ConformRatchet{}, fmt.Errorf("%s: %w", path, err)
-	}
-	return rec, nil
+	return types.ReadConformRatchet(path, data)
 }
 
 // conformProposal is one row's line: what to commit, where, and what is enforced now.
