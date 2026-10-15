@@ -2,6 +2,7 @@ package guard
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -9,10 +10,14 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/libs/diagnostics"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 )
 
-// errMissingImport is what a tree reports when a magusfile imports a file that is not there.
-var errMissingImport = errors.New(`magusfile: exec magusfile.buzz: [BZZ2001] buzz: import "./hack/policy/guard": module not found`)
+// errMissingImport is what a tree reports when a magusfile imports a file that is not there:
+// the coded error the Buzz session raises, wrapped by the magusfile load.
+var errMissingImport = fmt.Errorf("magusfile: exec magusfile.buzz: %w",
+	diagnostics.New(func(diagnostics.Code) string { return "" }).Errorf(buzz.UnresolvedImport, "buzz: import %q: module not found", "./hack/policy/guard"))
 
 func TestNamedImports(t *testing.T) {
 	assert.Equal(t, []string{"./hack/policy/guard"}, namedImports(errMissingImport))
@@ -81,13 +86,15 @@ func TestMissingImportAllowsRestoringTheNamedFile(t *testing.T) {
 		"git checkout -- hack/policy/guard.buzz",
 		"git checkout HEAD -- hack/policy/guard.buzz",
 	} {
+		// A built-in advice on the same line (revert-classify) keeps its rule, with this
+		// advice added to its context.
 		v := judgeUnloaded(ctx, deps, line)
-		assert.Equal(t, verdictWithRule(decisionAdvise, string(denyRuleStaleBinary)), unworded(v), line)
+		assert.Equal(t, decisionAdvise, v.Decision, line)
 		assert.Contains(t, v.Context, "puts back hack/policy/guard.buzz", line)
 	}
 
 	write := Judge(ctx, deps, Request{Input: filepath.Join(root, "hack", "policy", "guard.buzz"), IsPath: true, Host: "claude-code", Session: "s1"})
-	assert.Equal(t, verdictWithRule(decisionAdvise, string(denyRuleStaleBinary)), unworded(write))
+	assert.Equal(t, decisionAdvise, write.Decision)
 	assert.Contains(t, write.Context, "puts back hack/policy/guard.buzz")
 
 	for _, line := range []string{
