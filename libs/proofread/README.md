@@ -18,7 +18,7 @@ to see how a rule earns its default through calibration, read
 
 The magus module never imports `libs/proofread`, which requires only
 `libs/diagnostics` and `golang.org/x/tools`. `cmd/proofread` runs it, and its first
-argument names a kind: `proofread doc-comment` reads the symbols of
+argument names a kind: `proofread doc-comment --stdin` reads the symbols of
 `magus\symbols()` as JSON on stdin, fed by
 `hack/lint/symbol-docs-follow-proofread-rules.buzz`, and a finding points at the
 declaration because an index records no position inside a doc. The page and

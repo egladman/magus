@@ -17,7 +17,7 @@ stdin $WORK/idle.json
 exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name opencode
 stdout '^\{"prompt":'
 stdout 'Send the reply again'
-stdout 'closing-offer \(line 3\): argv agent-reply -format json'
+stdout 'closing-offer \(line 3\): argv agent-reply --stdin -o json'
 stdout 'and 2 more'
 ! stdout '"decision"'
 ! stdout 'hookSpecificOutput'

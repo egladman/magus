@@ -212,7 +212,7 @@ fun judge(dir: str, pairs: [Pair]) > [any] !> any {
     fs\writeFile(listing, content: setText(pairs));
     final table = decisions\writeDecisions([<str>]);
     final run = proc\exec(path\abs("{proofread\home}/{proofread\binary}"),
-        args: ["skill-template", "-decisions", table, "-only", RULES, listing],
+        args: ["skill-template", "--decisions", table, "--only", RULES, listing],
         opts: {"quiet": true, "allow_failure": true}) catch null;
     fs\remove(table) catch void;
     if (run == null or run!.code != 0) {

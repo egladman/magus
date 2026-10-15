@@ -811,12 +811,12 @@ chmod 0755 $WORK/failing-proofread
 
 # The findings go back as Stop context, capped at five with the rest counted, and no
 # decision is printed. The binary comes from the environment, the decisions file is passed
-# through as -decisions, and the reply is judged as agent-reply.
+# through as --decisions, and the reply is judged as agent-reply.
 env __PROOFREAD_BIN=$WORK/fake-proofread
 stdin $WORK/proofread-stop.json
 exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code --decisions $WORK/proofread-decisions.json
 stdout '"hookEventName":"Stop"'
-stdout 'closing-offer \(line 3\): argv agent-reply -format json -decisions'
+stdout 'closing-offer \(line 3\): argv agent-reply --stdin -o json --decisions'
 stdout 'and 2 more'
 ! stdout '"decision"'
 ! stderr .

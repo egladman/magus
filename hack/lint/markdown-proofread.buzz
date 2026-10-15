@@ -175,7 +175,7 @@ fun judge(files: [str], base: str, module: str, kind: str) > [Finding] !> any {
     }
     final bin = path\abs("{module}/{proofread\binary}");
     final table = decisions\writeDecisions(files);
-    final args = mut [kind, "-decisions", table];
+    final args = mut [kind, "--decisions", table];
     foreach (rel in support\sorted(files)) {
         args.append(rel);
     }
