@@ -37,6 +37,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -110,24 +111,9 @@ func cleanRoot(root string) string {
 	return filepath.Clean(root)
 }
 
-// resolveCacheDir resolves the workspace cache directory: config Cache.Dir, then
-// MAGUS_CACHE_DIR, then <root>/.magus (relative values join to root). Open and the
-// knowledge-graph loader share this single implementation.
-func resolveCacheDir(root string, cfg config.Config) string {
-	if cfg.Cache.Dir != "" {
-		if filepath.IsAbs(cfg.Cache.Dir) {
-			return filepath.Clean(cfg.Cache.Dir)
-		}
-		return filepath.Join(root, cfg.Cache.Dir)
-	}
-	if override := os.Getenv("MAGUS_CACHE_DIR"); override != "" {
-		if filepath.IsAbs(override) {
-			return filepath.Clean(override)
-		}
-		return filepath.Join(root, override)
-	}
-	return filepath.Join(root, ".magus")
-}
+// resolveCacheDir is workspace.CacheDir, the one resolution the root, the pipe records
+// and the internal packages share.
+func resolveCacheDir(root string, cfg config.Config) string { return workspace.CacheDir(root, cfg) }
 
 // cacheImmutable reports whether the cache is read-only, matching cache.Open's own
 // cache.write.enabled / MAGUS_CACHE_WRITE_ENABLED check.

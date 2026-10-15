@@ -366,7 +366,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		runOpts = append(runOpts, magus.WithNoCache())
 	}
 	runOpts = append(runOpts, magus.WithSink(sink))
-	runOpts = append(runOpts, processStdioOption(ctx)...)
+	ctx = processStdioContext(ctx)
 	if spellFilter != "" {
 		runOpts = append(runOpts, magus.WithSpellFilter(spellFilter))
 	}

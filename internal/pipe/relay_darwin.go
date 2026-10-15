@@ -1,6 +1,6 @@
 //go:build darwin
 
-package magus
+package pipe
 
 import (
 	"os"
@@ -13,7 +13,7 @@ import (
 // interrupts a pending read. The flag lives on the open file description stdin shares,
 // so restore puts it back for a stdin that is then used as it was.
 //
-// This file and pipe_linux.go carry the same relay; keep the two in step.
+// This file and relay_linux.go carry the same relay; keep the two in step.
 func dupForDrain(stdin *os.File) (*os.File, func() error, error) {
 	fd := int(stdin.Fd())
 	dup, err := unix.FcntlInt(uintptr(fd), unix.F_DUPFD_CLOEXEC, 0)

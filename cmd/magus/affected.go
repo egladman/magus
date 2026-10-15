@@ -322,7 +322,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		runOpts = append(runOpts, magus.WithNoCache())
 	}
 	runOpts = append(runOpts, magus.WithSink(sink))
-	runOpts = append(runOpts, processStdioOption(ctx)...)
+	ctx = processStdioContext(ctx)
 	if len(extraArgs) > 0 {
 		runOpts = append(runOpts, magus.WithExtraArgs(extraArgs))
 	}

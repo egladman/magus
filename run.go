@@ -29,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/pipe"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/race"
 	"github.com/egladman/magus/internal/report"
@@ -68,7 +69,6 @@ type run struct {
 	NoCache           bool     // force a fresh run even on a cache hit; still refreshes the entry (magus run --no-cache)
 	Gate              bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
 	narrowing         *project.OpNarrowing
-	stdio             *ProcessStdio
 	session           string // the host session the guard judges the run for; see WithSession
 }
 
@@ -1840,7 +1840,14 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// no lock and starts before one is taken.
 	prober := m.newToolProber()
 	m.prewarmInstallProbes(ctx, prober, stages)
-	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate, opts.lockReport, opts.stdio)
+	var stdio *pipe.Stdio
+	if s, ok := pipe.StdioFrom(ctx); ok {
+		stdio = &s
+	}
+	// The streams are this invocation's own: a run a target starts in this process reads
+	// none of them, so it neither waits on this pipe's upstream nor publishes to its reader.
+	ctx = pipe.WithStdio(ctx, pipe.Stdio{})
+	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate, opts.lockReport, stdio)
 	if err != nil {
 		return err
 	}

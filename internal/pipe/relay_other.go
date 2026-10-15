@@ -1,6 +1,6 @@
 //go:build !linux && !darwin
 
-package magus
+package pipe
 
 import (
 	"errors"

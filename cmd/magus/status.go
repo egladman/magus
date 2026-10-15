@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )
@@ -146,7 +147,7 @@ func status(ctx context.Context, args []string) error {
 // reading the pipe looks for it once, on its way to its locks.
 func awaitBudget(ctx context.Context, rootOverride string) error {
 	if root, err := magus.FindRoot(rootOverride); err == nil {
-		magus.GatePipe(root, globalCfg)
+		pipe.Gate(root, globalCfg)
 	}
 	start := time.Now()
 	waited := false
@@ -170,7 +171,7 @@ func queryCapacity(ctx context.Context) (types.MachineSnapshot, error) {
 // slot, as does a run this cannot follow: that run reports its own error once it starts.
 func pipedRunClaims(ctx context.Context, rootOverride string) []types.MachineClaim {
 	slot := []types.MachineClaim{{Slots: 1}}
-	argv, ok := magus.ReaderArgv(ctx, os.Stdout)
+	argv, ok := pipe.ReaderArgv(ctx, os.Stdout)
 	if !ok || len(argv) == 0 {
 		return slot
 	}

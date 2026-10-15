@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/report"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 )
@@ -30,7 +31,7 @@ import (
 // exercises the real kernel flock, not an in-process handle.
 func TestSameProjectExclusiveFailsFastThenSucceedsAfterRelease(t *testing.T) {
 	cacheDir := t.TempDir()
-	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
+	lockDir := workspace.LocksDir(cacheDir, testWorkspaceRoot)
 
 	holdMS := 300
 	cmd := helperHold(t, cacheDir, "app", holdMS)
@@ -104,7 +105,7 @@ func TestReleaseFrees(t *testing.T) {
 // killed while holding the lock, and we then acquire it.
 func TestReleasedOnProcessExit(t *testing.T) {
 	cacheDir := t.TempDir()
-	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
+	lockDir := workspace.LocksDir(cacheDir, testWorkspaceRoot)
 
 	// Hold effectively forever; we kill it.
 	cmd := helperHold(t, cacheDir, "svc", 60_000)
@@ -133,7 +134,7 @@ func TestReleasedOnProcessExit(t *testing.T) {
 // *lockContendedError, naming the holder, rather than blocked on.
 func TestContendedAcquireFailsFast(t *testing.T) {
 	cacheDir := t.TempDir()
-	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
+	lockDir := workspace.LocksDir(cacheDir, testWorkspaceRoot)
 
 	cmd := helperHold(t, cacheDir, "p", 5_000)
 	if err := cmd.Start(); err != nil {
@@ -217,7 +218,7 @@ func TestAcquireAllSortedNoDeadlock(t *testing.T) {
 // leaving a partial acquisition in place.
 func TestAcquireAllReleasesOnContention(t *testing.T) {
 	cacheDir := t.TempDir()
-	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
+	lockDir := workspace.LocksDir(cacheDir, testWorkspaceRoot)
 
 	cmd := helperHold(t, cacheDir, "b", 5_000)
 	if err := cmd.Start(); err != nil {
@@ -312,7 +313,7 @@ func TestASiblingOfTheSameRunIsAwaited(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cacheDir := t.TempDir()
-			lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
+			lockDir := workspace.LocksDir(cacheDir, testWorkspaceRoot)
 			cmd := helperHold(t, cacheDir, "libs/shared", 400,
 				"LOCKTEST_ANCESTORS="+tc.holderRoot, "LOCKTEST_INV=inv-sibling-a")
 			if err := cmd.Start(); err != nil {
@@ -350,7 +351,7 @@ func TestASiblingOfTheSameRunIsAwaited(t *testing.T) {
 // the root project maps to <dir>/lock.
 func TestLockPathMirrorsProjectTree(t *testing.T) {
 	l := newProjectLocker("/cache", testWorkspaceRoot)
-	base := filepath.Join("/cache", "locks", workspaceLockKey(testWorkspaceRoot))
+	base := workspace.LocksDir("/cache", testWorkspaceRoot)
 	cases := map[string]string{
 		"":                 filepath.Join(base, "lock"),
 		".":                filepath.Join(base, "lock"),
@@ -546,7 +547,7 @@ func TestReentrantLockRefusedNotAwaited(t *testing.T) {
 // exit 75), never as MGS3007 (that diagnosis is reserved for a run's own ancestor).
 func TestUnrelatedContentionFailsFast(t *testing.T) {
 	cacheDir := t.TempDir()
-	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
+	lockDir := workspace.LocksDir(cacheDir, testWorkspaceRoot)
 
 	// A separate process, so the holder's owner record carries an invocation id this one has
 	// never heard of: the shape of two developers, or two agents, in one workspace.
@@ -995,7 +996,7 @@ func TestAnUnansweredSupersedeFallsBackToRefusing(t *testing.T) {
 	quickSupersede(t, 200*time.Millisecond)
 	out, toOut := captureLockOut()
 	cacheDir := t.TempDir()
-	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
+	lockDir := workspace.LocksDir(cacheDir, testWorkspaceRoot)
 
 	// Another process, since only another process is ever refused. No watch is armed
 	// over it, so nothing reads the request, and it holds well past the supersede bound,
@@ -1039,7 +1040,7 @@ func TestAnUnansweredSupersedeRecordsItsRefusal(t *testing.T) {
 	quickSupersede(t, 200*time.Millisecond)
 	out, toOut := captureLockOut()
 	cacheDir := t.TempDir()
-	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
+	lockDir := workspace.LocksDir(cacheDir, testWorkspaceRoot)
 
 	cmd := helperHold(t, cacheDir, "app", 5_000, "LOCKTEST_GATE=1")
 	if err := cmd.Start(); err != nil {
