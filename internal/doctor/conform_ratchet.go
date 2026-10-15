@@ -118,7 +118,7 @@ func conformProposal(row types.ConformRow, percentile float64, path string, ratc
 	key := conformRowName(row.Key)
 	commit := fmt.Sprintf("commit %d (p%g, n=%d)", row.Propose, percentile, row.N)
 	if row.Source != types.ConformFromRatchet {
-		return fmt.Sprintf("%s: %s, now %d from the configured anchor; add a thresholds entry to %s",
+		return fmt.Sprintf("%s: %s, now %d from the configured anchor; add a threshold row to %s",
 			key, commit, row.Value, conformRatchetName(path))
 	}
 	// A scoped key falls back to its unscoped one, the order ConformOptions.Effective reads.

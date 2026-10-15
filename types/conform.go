@@ -1,15 +1,14 @@
 package types
 
 import (
-	"bytes"
 	"cmp"
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
+	"strconv"
 	"strings"
-
-	"github.com/egladman/magus/internal/json"
 )
 
 // ConformMetric names one measured code distribution. Every metric is a ceiling: a lower
@@ -298,29 +297,30 @@ func compareConformKeys(a, b ConformKey) int {
 }
 
 // ConformRatchet is the committed record of measured thresholds: what a person accepted
-// from a proposal, never something magus writes on its own.
+// from a proposal, never something magus writes on its own. [ReadConformRatchet] gives
+// the file format.
 type ConformRatchet struct {
-	Schema     int                `json:"schema"`
-	Measured   ConformProvenance  `json:"measured"`
-	Thresholds []ConformThreshold `json:"thresholds"`
-	Known      []ConformKnown     `json:"known"`
+	Schema     int
+	Measured   ConformProvenance
+	Thresholds []ConformThreshold
+	Known      []ConformKnown
 }
 
 // ConformProvenance is the revision and date the committed values were measured at.
 type ConformProvenance struct {
-	Rev  string `json:"rev"`
-	Date string `json:"date"`
+	Rev  string
+	Date string
 }
 
 // ConformThreshold is one committed value, with the sample size and percentile it was
 // measured at and why. Line is its 1-based line in the record, for naming file:line.
 type ConformThreshold struct {
 	ConformKey
-	Value      int     `json:"value"`
-	N          int     `json:"n"`
-	Percentile float64 `json:"percentile"`
-	Why        string  `json:"why"`
-	Line       int     `json:"-"`
+	Value      int
+	N          int
+	Percentile float64
+	Why        string
+	Line       int
 }
 
 // ConformKnown is a worklist of items already past a metric's value and accepted for a
@@ -333,102 +333,166 @@ type ConformKnown struct {
 	Line   int           `json:"-"      yaml:"-"      buzz:"-"`
 }
 
-// ReadConformRatchet decodes a committed ratchet record strictly: an unknown field, a
-// duplicate key, trailing data or a schema other than 1 is an error naming its line.
-// Each threshold and known entry carries the line it starts on. The caller prefixes
-// errors with the record's path.
+// conformNoScope is the scope column of a threshold that has none.
+const conformNoScope = "-"
+
+// ReadConformRatchet decodes a committed ratchet record: one row per line, fields
+// separated by tabs, blank lines and lines starting with # skipped. The rows are
+//
+//	schema     1
+//	measured   rev  date
+//	threshold  metric  population  scope  value  n  percentile  [why]
+//	known      metric  reason  item  [item...]
+//
+// scope is - when the key has none, and a record names its schema exactly once. An unknown row kind, metric or population, a malformed number, a wrong
+// column count, a repeated row and a key committed twice are errors naming their line. A
+// JSON document, the format before this one, fails as an unknown row kind. The caller
+// prefixes errors with the record's path.
 func ReadConformRatchet(data []byte) (ConformRatchet, error) {
-	dec := json.NewStrictDecoder(data)
-	if err := dec.Delim('{'); err != nil {
-		return ConformRatchet{}, fmt.Errorf("line %d: ratchet: %w", conformLineAt(data, 0), err)
-	}
 	var r ConformRatchet
-	schemaLine := 0
-	for dec.More() {
-		at := conformLineAt(data, dec.Offset())
-		key, err := dec.Name()
-		if err != nil {
-			return ConformRatchet{}, fmt.Errorf("line %d: %w", at, err)
+	var schemaLine, measuredLine int
+	rowAt := map[string]int{}
+	thresholdAt := map[ConformKey]int{}
+	for i, text := range strings.Split(string(data), "\n") {
+		line := i + 1
+		text = strings.TrimSuffix(text, "\r")
+		if text == "" || text[0] == '#' {
+			continue
 		}
-		switch key {
+		if first, dup := rowAt[text]; dup {
+			return ConformRatchet{}, fmt.Errorf("line %d: same row as line %d", line, first)
+		}
+		rowAt[text] = line
+
+		fields := strings.Split(text, "\t")
+		var err error
+		switch fields[0] {
 		case "schema":
-			schemaLine = at
-			err = dec.Decode(&r.Schema)
+			if schemaLine != 0 {
+				err = fmt.Errorf("schema: given twice, first at line %d", schemaLine)
+				break
+			}
+			schemaLine = line
+			r.Schema, err = readConformSchema(fields)
 		case "measured":
-			err = dec.Decode(&r.Measured)
-		case "thresholds":
-			r.Thresholds, err = conformDecodeList(dec, data, func(t *ConformThreshold, line int) { t.Line = line })
+			if measuredLine != 0 {
+				err = fmt.Errorf("measured: given twice, first at line %d", measuredLine)
+				break
+			}
+			measuredLine = line
+			if err = wantConformColumns(fields, 3, 3); err == nil {
+				r.Measured = ConformProvenance{Rev: fields[1], Date: fields[2]}
+			}
+		case "threshold":
+			var t ConformThreshold
+			if t, err = readConformThreshold(fields); err != nil {
+				break
+			}
+			if first, dup := thresholdAt[t.ConformKey]; dup {
+				err = fmt.Errorf("threshold %s: committed twice, first at line %d", conformKeyName(t.ConformKey), first)
+				break
+			}
+			thresholdAt[t.ConformKey] = line
+			t.Line = line
+			r.Thresholds = append(r.Thresholds, t)
 		case "known":
-			r.Known, err = conformDecodeList(dec, data, func(k *ConformKnown, line int) { k.Line = line })
+			var k ConformKnown
+			if k, err = readConformKnown(fields); err != nil {
+				break
+			}
+			k.Line = line
+			r.Known = append(r.Known, k)
 		default:
-			err = conformLineError{line: at, err: fmt.Errorf("unknown field %q", key)}
+			err = fmt.Errorf("unknown row kind %q: want schema, measured, threshold or known", fields[0])
+			if strings.HasPrefix(fields[0], "{") || strings.HasPrefix(fields[0], "[") {
+				err = fmt.Errorf("%w; a JSON document is not the ratchet format", err)
+			}
 		}
 		if err != nil {
-			var lined conformLineError
-			if errors.As(err, &lined) {
-				return ConformRatchet{}, err
-			}
-			return ConformRatchet{}, fmt.Errorf("line %d: %s: %w", at, key, err)
+			return ConformRatchet{}, fmt.Errorf("line %d: %w", line, err)
 		}
 	}
-	if err := dec.Delim('}'); err != nil {
-		return ConformRatchet{}, err
-	}
-	if err := dec.End(); err != nil {
-		return ConformRatchet{}, fmt.Errorf("line %d: after the ratchet: %w", conformErrorLine(data, err, 0), err)
-	}
-	if r.Schema != 1 {
-		if schemaLine == 0 {
-			return ConformRatchet{}, errors.New("ratchet has no schema: want 1")
-		}
-		return ConformRatchet{}, fmt.Errorf("line %d: schema %d: want 1", schemaLine, r.Schema)
+	if schemaLine == 0 {
+		return ConformRatchet{}, errors.New("ratchet has no schema row: want schema<TAB>1")
 	}
 	return r, nil
 }
 
-// conformLineError is an error that already names its line.
-type conformLineError struct {
-	line int
-	err  error
+func readConformSchema(fields []string) (int, error) {
+	if err := wantConformColumns(fields, 2, 2); err != nil {
+		return 0, err
+	}
+	n, err := conformInt("schema", fields[1])
+	if err != nil {
+		return 0, err
+	}
+	if n != 1 {
+		return 0, fmt.Errorf("schema %d: want 1", n)
+	}
+	return n, nil
 }
 
-func (e conformLineError) Error() string { return fmt.Sprintf("line %d: %v", e.line, e.err) }
-func (e conformLineError) Unwrap() error { return e.err }
-
-func conformDecodeList[T any](dec *json.StrictDecoder, data []byte, setLine func(*T, int)) ([]T, error) {
-	if err := dec.Delim('['); err != nil {
-		return nil, err
+func readConformThreshold(fields []string) (ConformThreshold, error) {
+	if err := wantConformColumns(fields, 7, 8); err != nil {
+		return ConformThreshold{}, err
 	}
-	var out []T
-	for dec.More() {
-		line := conformLineAt(data, dec.Offset())
-		var v T
-		if err := dec.Decode(&v); err != nil {
-			return nil, conformLineError{line: conformErrorLine(data, err, line), err: err}
-		}
-		setLine(&v, line)
-		out = append(out, v)
+	key := ConformKey{Metric: ConformMetric(fields[1]), Population: ConformPopulation(fields[2]), Scope: fields[3]}
+	if key.Scope == conformNoScope {
+		key.Scope = ""
 	}
-	return out, dec.Delim(']')
+	t := ConformThreshold{ConformKey: key}
+	if err := checkConformKey(key); err != nil {
+		return t, fmt.Errorf("threshold %s: %w", conformKeyName(key), err)
+	}
+	var err error
+	if t.Value, err = conformInt("value", fields[4]); err != nil {
+		return t, fmt.Errorf("threshold %s: %w", conformKeyName(key), err)
+	}
+	if t.N, err = conformInt("n", fields[5]); err != nil {
+		return t, fmt.Errorf("threshold %s: %w", conformKeyName(key), err)
+	}
+	if t.Percentile, err = strconv.ParseFloat(fields[6], 64); err != nil || math.IsNaN(t.Percentile) || math.IsInf(t.Percentile, 0) {
+		return t, fmt.Errorf("threshold %s: percentile %q: want a number", conformKeyName(key), fields[6])
+	}
+	if len(fields) == 8 {
+		t.Why = fields[7]
+	}
+	return t, nil
 }
 
-// conformErrorLine is the line a decoder error names, or line when it names none.
-func conformErrorLine(data []byte, err error, line int) int {
-	var strict *json.StrictError
-	if errors.As(err, &strict) {
-		return conformLineAt(data, strict.Offset)
+func readConformKnown(fields []string) (ConformKnown, error) {
+	if err := wantConformColumns(fields, 4, -1); err != nil {
+		return ConformKnown{}, err
 	}
-	return line
+	k := ConformKnown{Metric: ConformMetric(fields[1]), Reason: fields[2], Items: fields[3:]}
+	if err := checkConformMetric(k.Metric); err != nil {
+		return k, fmt.Errorf("known: %w", err)
+	}
+	return k, nil
 }
 
-// conformLineAt is the 1-based line of the first token at or after offset. A decoder's
-// offset sits before the separator and space that precede its next token.
-func conformLineAt(data []byte, offset int64) int {
-	off := int(min(max(offset, 0), int64(len(data))))
-	for off < len(data) && strings.IndexByte(" \t\r\n,:", data[off]) >= 0 {
-		off++
+// wantConformColumns refuses a row of fewer than lo columns or more than hi, the row kind
+// counting as the first. A negative hi is no upper bound.
+func wantConformColumns(fields []string, lo, hi int) error {
+	if len(fields) >= lo && (hi < 0 || len(fields) <= hi) {
+		return nil
 	}
-	return 1 + bytes.Count(data[:off], []byte("\n"))
+	want := fmt.Sprint(lo)
+	switch {
+	case hi < 0:
+		want += " or more"
+	case hi != lo:
+		want += " to " + fmt.Sprint(hi)
+	}
+	return fmt.Errorf("%s: %d columns, want %s", fields[0], len(fields), want)
+}
+
+func conformInt(name, s string) (int, error) {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, fmt.Errorf("%s %q: want an integer", name, s)
+	}
+	return n, nil
 }
 
 // ConformOutput is the conform lens: one row per key, the known items no longer past

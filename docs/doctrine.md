@@ -177,8 +177,6 @@ stores that do not follow it yet, as found on 2026-10-14:
 - **Review state** (`viewed.json`, `drafts.json`, `seen-threads.json`,
   `reading.json`, `receipts.json`) and the guard's memos (`guard-rows.json`,
   `guard-settings.json`, `guard-policy.json`) are single JSON documents.
-- **The conformance ratchet** is a JSON document committed to the workspace.
-  It is policy rather than local state, and a person edits it by hand.
 - **One file per entry, a JSON document inside.** Cache manifests, run
   descriptors, knowledge-graph shards, merge-queue verdicts, the service
   journal and connector records keep the layout and break the line rule.

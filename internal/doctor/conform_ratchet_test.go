@@ -28,15 +28,14 @@ func (c conformWorkspace) Conform(context.Context) (types.ConformOutput, error) 
 
 var _ types.InsightAnalyzer = conformWorkspace{}
 
-const ratchetPath = "hack/policy/conform.json"
+const ratchetPath = "hack/policy/conform.tsv"
 
 // The file-lines threshold sits on line 3 and the known entry on line 5.
-const ratchetRecord = `{"schema": 1, "measured": {"rev": "abc123", "date": "2026-10-14"},
- "thresholds": [
-  {"metric": "file-lines", "population": "source", "value": 2000, "n": 1130, "percentile": 95, "why": "p95 at abc123"}],
- "known": [
-  {"metric": "file-lines", "items": ["old.go"], "reason": "split pending"}]}
-`
+const ratchetRecord = "schema\t1\n" +
+	"measured\tabc123\t2026-10-14\n" +
+	"threshold\tfile-lines\tsource\t-\t2000\t1130\t95\tp95 at abc123\n" +
+	"# accepted for now\n" +
+	"known\tfile-lines\tsplit pending\told.go\n"
 
 var (
 	fileLinesSource = types.ConformKey{Metric: types.ConformFileLines, Population: types.ConformPopSource}
@@ -79,10 +78,10 @@ func TestCheckConformRatchet(t *testing.T) {
 		},
 		{
 			name:     "a lens error is a failure naming the cause",
-			ws:       conformWorkspace{err: errors.New("conform: hack/policy/conform.json:3: file-lines source: committed 3000 is looser than its anchor 2200")},
+			ws:       conformWorkspace{err: errors.New("conform: hack/policy/conform.tsv:3: file-lines source: committed 3000 is looser than its anchor 2200")},
 			status:   types.CheckFail,
 			evidence: types.EvidenceUnknown,
-			details:  []string{"conform: hack/policy/conform.json:3: file-lines source: committed 3000 is looser than its anchor 2200"},
+			details:  []string{"conform: hack/policy/conform.tsv:3: file-lines source: committed 3000 is looser than its anchor 2200"},
 		},
 		{
 			name: "an unknown answer is not a pass",
@@ -100,7 +99,7 @@ func TestCheckConformRatchet(t *testing.T) {
 			}}},
 			status:   types.CheckAdvice,
 			evidence: types.EvidenceMeasured,
-			details:  []string{"file-lines source: commit 938 (p95, n=1130) at hack/policy/conform.json:3, now 992"},
+			details:  []string{"file-lines source: commit 938 (p95, n=1130) at hack/policy/conform.tsv:3, now 992"},
 		},
 		{
 			name: "a ratchet raised past what the code measures is reported as slack on its line",
@@ -109,17 +108,17 @@ func TestCheckConformRatchet(t *testing.T) {
 			}}},
 			status:   types.CheckAdvice,
 			evidence: types.EvidenceMeasured,
-			details:  []string{"file-lines source: commit 900 (p95, n=1130) at hack/policy/conform.json:3, now 2000"},
+			details:  []string{"file-lines source: commit 900 (p95, n=1130) at hack/policy/conform.tsv:3, now 2000"},
 		},
 		{
-			name: "an anchor-source proposal says to add a thresholds entry",
+			name: "an anchor-source proposal says to add a threshold row",
 			ws: conformWorkspace{out: types.ConformOutput{Answer: foundAnswer(), Rows: []types.ConformRow{
 				{Key: funcLinesSource, N: 4000, Live: 60, Value: 92, Propose: 60, Source: types.ConformFromAnchor},
 			}}},
 			status:   types.CheckAdvice,
 			evidence: types.EvidenceMeasured,
 			details: []string{"func-lines source: commit 60 (p99, n=4000), now 92 from the configured anchor; " +
-				"add a thresholds entry to hack/policy/conform.json"},
+				"add a threshold row to hack/policy/conform.tsv"},
 		},
 		{
 			name: "a stale known entry names its line and the items to delete",
@@ -128,7 +127,7 @@ func TestCheckConformRatchet(t *testing.T) {
 			}}},
 			status:   types.CheckAdvice,
 			evidence: types.EvidenceMeasured,
-			details:  []string{"hack/policy/conform.json:5: known file-lines entry no longer violates, delete: old.go, older.go"},
+			details:  []string{"hack/policy/conform.tsv:5: known file-lines entry no longer violates, delete: old.go, older.go"},
 		},
 		{
 			name: "rows with nothing to tighten and no stale entry are quiet",
@@ -173,8 +172,21 @@ func TestCheckConformRatchetKeepsTheFindingWhenTheRecordIsUnreadable(t *testing.
 
 	assert.Equal(t, types.CheckAdvice, got.Status)
 	require.Len(t, got.Details, 2)
-	assert.Equal(t, "file-lines source: commit 938 (p95, n=1130) at hack/policy/conform.json, now 992", got.Details[0])
+	assert.Equal(t, "file-lines source: commit 938 (p95, n=1130) at hack/policy/conform.tsv, now 992", got.Details[0])
 	assert.Contains(t, got.Details[1], "ratchet lines unavailable")
+}
+
+func TestCheckConformRatchetNamesAJSONRecordItCannotRead(t *testing.T) {
+	r := conformRunner(t, conformWorkspace{out: types.ConformOutput{Answer: foundAnswer(), Rows: []types.ConformRow{
+		{Key: fileLinesSource, N: 1130, Live: 938, Value: 992, Propose: 938, Source: types.ConformFromRatchet},
+	}}})
+	require.NoError(t, os.WriteFile(filepath.Join(r.root, ratchetPath), []byte("{\"schema\": 1}\n"), 0o644))
+
+	got := r.checkConformRatchet(nil)
+
+	require.Len(t, got.Details, 2)
+	assert.Contains(t, got.Details[1], "hack/policy/conform.tsv: line 1: unknown row kind")
+	assert.Contains(t, got.Details[1], "a JSON document is not the ratchet format")
 }
 
 func TestCheckConformRatchetWithNoRatchetConfiguredIsQuiet(t *testing.T) {
