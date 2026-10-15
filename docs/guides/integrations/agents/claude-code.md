@@ -234,7 +234,10 @@ still answer. Reads, `git status`, `magus affected --explain` and the fix still 
 so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`,
 and the lines that get a tree left mid-pick back to one a binary can be built from
 (`git cherry-pick`, `git merge`, `git rebase` or `git revert` with `--abort` or
-`--continue`, and `git worktree add`). The denial names the cause and the one likeliest fix; the fallbacks sit behind its `full
+`--continue`, and `git worktree add`). While a magusfile import names a file that is not
+there, putting that file back also runs, with an advisory that says why: `git mv` onto
+it, `git restore` or `git checkout --` of it, or a write to it; the bootstrap the denial
+prints runs for that failure too. The denial names the cause and the one likeliest fix; the fallbacks sit behind its `full
 verdict:` ref. The workspace needs only to show a guard rule in its magusfile for this,
 so a fresh worktree is covered before any policy has loaded in its cache.
 
