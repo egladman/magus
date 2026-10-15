@@ -65,7 +65,7 @@ const (
 // Options configures an update operation. Keys is required; verification fails
 // closed when it is empty.
 type Options struct {
-	// Keys is the ring a signature may come from, normally ReleaseKeys. After the
+	// Keys is the ring a signature may come from, normally ReleaseKeys(). After the
 	// signed index has been read it is narrowed by Keyring.Without(idx.Revoked), so a
 	// key the publisher revoked cannot verify anything fetched afterwards.
 	Keys         Keyring
@@ -78,7 +78,7 @@ type Options struct {
 // a signature must check this first.
 func checkKeys(ring Keyring) error {
 	if len(ring) == 0 {
-		return errors.New("no release key configured: pass selfupdate.ReleaseKeys via Options.Keys (or, if every key was revoked, download the release manually from the release site)")
+		return errors.New("no release key configured: pass selfupdate.ReleaseKeys() via Options.Keys (or, if every key was revoked, download the release manually from the release site)")
 	}
 	for _, key := range ring {
 		if len(key.Pub) != ed25519.PublicKeySize {

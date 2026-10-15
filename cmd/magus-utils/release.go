@@ -458,7 +458,7 @@ func runReleaseIndex(args []string) error {
 	// The index names the key that will sign it, and lists the keys no client may
 	// accept. Both come from the ring this binary embeds, so they cannot disagree with
 	// what a magus built from the same commit trusts.
-	active, err := selfupdate.ReleaseKeys.Active()
+	active, err := selfupdate.ReleaseKeys().Active()
 	if err != nil {
 		return err
 	}
@@ -467,7 +467,7 @@ func runReleaseIndex(args []string) error {
 	} else if _, err := time.Parse(time.RFC3339, expiresAt); err != nil {
 		return fmt.Errorf("-expires %q is not RFC3339: %w", expiresAt, err)
 	}
-	data, err := json.Marshal(buildIndex(manifests, active.ID, expiresAt, selfupdate.ReleaseKeys.RevokedIDs()))
+	data, err := json.Marshal(buildIndex(manifests, active.ID, expiresAt, selfupdate.ReleaseKeys().RevokedIDs()))
 	if err != nil {
 		return fmt.Errorf("marshal index: %w", err)
 	}
@@ -533,7 +533,7 @@ func releaseVerifyKey() (ed25519.PublicKey, error) {
 	if overrideVerifyPubKey != nil {
 		return overrideVerifyPubKey, nil
 	}
-	active, err := selfupdate.ReleaseKeys.Active()
+	active, err := selfupdate.ReleaseKeys().Active()
 	if err != nil {
 		return nil, err
 	}

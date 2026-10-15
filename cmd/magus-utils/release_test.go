@@ -178,7 +178,7 @@ func TestServedIndexIsSignedByTheRing(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(servedIndexDir, "index.json"))
 	require.NoError(t, err)
 
-	signer, err := selfupdate.ReleaseKeys.Verify(data, sig)
+	signer, err := selfupdate.ReleaseKeys().Verify(data, sig)
 	require.NoError(t, err)
 	var served ReleaseIndex
 	require.NoError(t, json.Unmarshal(data, &served))

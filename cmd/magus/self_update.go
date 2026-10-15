@@ -33,7 +33,7 @@ func activeOpts() selfupdate.Options {
 	if overrideKeys != nil {
 		opts.Keys = overrideKeys
 	} else {
-		opts.Keys = selfupdate.ReleaseKeys
+		opts.Keys = selfupdate.ReleaseKeys()
 	}
 	return opts
 }
