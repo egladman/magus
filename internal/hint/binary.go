@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/egladman/magus/types"
@@ -28,16 +29,17 @@ const DefaultBinaryName = "magus"
 // goroutine is printing, and the tests that pin this rule write it.
 var invokedAs atomic.Value // string
 
-// init resolves the spelling from this process's own argv, and it lives here rather
-// than in the CLI's main for an ordering reason: the guard's denial and advisory texts
-// are package-level vars in cmd/magus, so they render during that package's variable
-// initialization, which runs before any function main could call. A setter called from
-// main would come too late for exactly the texts this rule exists for.
-func init() { ResolveBinaryNameFrom(os.Args[0]) }
+// resolveOwn resolves the spelling from this process's own argv on the first
+// BinaryName call. It is lazy rather than a setter in the CLI's main for an ordering
+// reason: the guard's denial and advisory texts are package-level vars in cmd/magus,
+// so they render during that package's variable initialization, which runs before any
+// function main could call. A setter called from main would come too late for exactly
+// the texts this rule exists for.
+var resolveOwn = sync.OnceFunc(func() { ResolveBinaryNameFrom(os.Args[0]) })
 
 // ResolveBinaryNameFrom derives the spelling from how this process was invoked. It
 // assigns nothing when it cannot: exported for the tests that pin the rule, and
-// ordinary callers get it from init above.
+// ordinary callers get it from BinaryName.
 //
 // A binary whose base name is not magus keeps the default. That is what holds every
 // existing rendering steady under `go test` (the test binary is magus.test) and in the
@@ -72,6 +74,7 @@ func ResolveBinaryNameFrom(argv0 string) {
 
 // BinaryName is the spelling rendered commands lead with.
 func BinaryName() string {
+	resolveOwn()
 	if s, ok := invokedAs.Load().(string); ok && s != "" {
 		return s
 	}
