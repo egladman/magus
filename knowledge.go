@@ -47,30 +47,37 @@ import (
 
 func init() {
 	workspacegraph.Register(workspacegraph.Builders{
-		BuildGlobal:        buildGlobalKnowledgeGraph,
-		Build:              buildKnowledgeGraph,
-		MergeSymbols:       mergeWorkspaceSymbols,
-		MergeSymbolsForRef: mergeWorkspaceSymbolsForRef,
-		Query:              queryKnowledgeGraph,
-		SymbolGaps:         workspaceSymbolGaps,
-		SymbolIndexTimes:   workspaceSymbolIndexTimes,
-		SymbolOccurrences:  workspaceSymbolOccurrences,
-		RecordedHumanOnly: func(ctx context.Context, ws types.Inspector, cfg config.Config) (types.HumanOnlyIndex, bool) {
-			lw, ok := ws.(*LazyWorkspace)
-			if !ok {
-				return types.HumanOnlyIndex{}, false
-			}
-			return recordedHumanOnly(ctx, lw, cfg)
-		},
-		RecordedStaleIndexes: func(ctx context.Context, ws types.Inspector, cfg config.Config) ([]types.KnowledgeStaleIndex, bool) {
-			lw, ok := ws.(*LazyWorkspace)
-			if !ok {
-				return nil, false
-			}
-			return recordedStaleIndexes(ctx, lw, cfg)
-		},
-		UsePublishedShards: usePublishedShards,
+		BuildGlobal:          buildGlobalKnowledgeGraph,
+		Build:                buildKnowledgeGraph,
+		MergeSymbols:         mergeWorkspaceSymbols,
+		MergeSymbolsForRef:   mergeWorkspaceSymbolsForRef,
+		Query:                queryKnowledgeGraph,
+		SymbolGaps:           workspaceSymbolGaps,
+		SymbolIndexTimes:     workspaceSymbolIndexTimes,
+		SymbolOccurrences:    workspaceSymbolOccurrences,
+		RecordedHumanOnly:    recordedHumanOnlyOf,
+		RecordedStaleIndexes: recordedStaleIndexesOf,
+		UsePublishedShards:   usePublishedShards,
 	})
+}
+
+// recordedHumanOnlyOf is recordedHumanOnly for a ws that may be no lazy workspace, which
+// has no record to answer from.
+func recordedHumanOnlyOf(ctx context.Context, ws types.Inspector, cfg config.Config) (types.HumanOnlyIndex, bool) {
+	lw, ok := ws.(*LazyWorkspace)
+	if !ok {
+		return types.HumanOnlyIndex{}, false
+	}
+	return recordedHumanOnly(ctx, lw, cfg)
+}
+
+// recordedStaleIndexesOf is recordedStaleIndexes for a ws that may be no lazy workspace.
+func recordedStaleIndexesOf(ctx context.Context, ws types.Inspector, cfg config.Config) ([]types.KnowledgeStaleIndex, bool) {
+	lw, ok := ws.(*LazyWorkspace)
+	if !ok {
+		return nil, false
+	}
+	return recordedStaleIndexes(ctx, lw, cfg)
 }
 
 // buildGlobalKnowledgeGraph unions the current workspace with each registered one
