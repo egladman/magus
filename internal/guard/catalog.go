@@ -942,7 +942,8 @@ var ruleDocSpawnAboveParentTier = denyDoc(types.RuleDoc{ //nolint:unused // read
 	Name:    string(denyRuleSpawnAboveParentTier),
 	Catches: "a subagent spawned on a model whose tier ranks above its spawner's",
 	Why: "A child never outranks the work that handed it out: the root session runs on the model the person picked, and every agent below it stays at that tier or lower. " +
-		"Both models resolve to tiers through the spawning host's aliases in the workspace's model-tier declaration, a transcript's model id by one of its dash-separated words, and compare by rank, never by name or price. A spawn naming no model, or a model no tier maps, is never judged. " +
+		"Both models resolve to tiers by an exact alias of the spawning host in the workspace's model-tier declaration and compare by rank, never by name or price. A spawn naming no model is never judged. " +
+		"A model that is no exact alias, such as the full id a transcript records, has an unknown tier: magus never infers one from the id, and advises once naming the model and the aliases the declaration maps. " +
 		"The spawner's model is proven when its host reported it: a main thread's from its transcript once the host has reported the thread, a subagent's from the model its spawn named. Proven, the spawn is refused; a subagent spawned on no model is taken to run on the session's, which is inferred and advised once. " +
 		"`magus job fork` holds a child row to its parent's tier the same way. The way up is a person's: they fork the higher-tier row and run it from a session at that tier. Set to advise, proof is advised too.",
 })

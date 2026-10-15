@@ -9,7 +9,8 @@
   runs on the model the person picked; a spawn naming a model whose tier ranks above it is
   refused once the host has reported the session's model and thread, and advised when the
   spawner's model is inferred, such as a subagent spawned on no model of its own. It denies
-  by default; set it to advise or off in `magus\guard.builtins`. A model no tier maps is
-  never judged.
+  by default; set it to advise or off in `magus\guard.builtins`. A tier is read from an
+  exact alias only: a model that is none, such as a transcript's full model id, has an
+  unknown tier, and the rule advises naming the model and the aliases your declaration maps.
 - **`ModelTier.Within` reports a tier above its ceiling** as an error naming both tiers,
   for a Go caller holding a child's tier to its parent's.

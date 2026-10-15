@@ -2,7 +2,6 @@ package guard
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/guard/builtin"
@@ -15,8 +14,10 @@ import (
 const denyRuleSpawnAboveParentTier denyRuleName = "spawn-above-parent-tier"
 
 // gradeSpawnCeiling judges a spawn by spawn-above-parent-tier. Both models resolve to tiers
-// through the spawning host's aliases in the workspace's declaration and compare by rank. A
-// spawn naming no model runs on its spawner's, and a model no tier maps is never judged.
+// by an exact alias of the spawning host in the workspace's declaration and compare by rank.
+// A spawn naming no model runs on its spawner's, and a spawner with no reported model is not
+// judged. A model that is no exact alias has an unknown tier, never one inferred from its id,
+// and the rule advises naming why.
 //
 // The spawner's model is proven when its host reported it: a main thread's from its
 // transcript once the host has reported the thread, a subagent's from the model its own
@@ -39,21 +40,39 @@ func gradeSpawnCeiling(deps Dependencies, verdict types.GuardJudgment, env hookR
 		return verdict
 	}
 	host := types.HarnessKey{ID: who.Host}
-	child, ok := modelTier(set, host, env.DeclaredModel)
-	if !ok {
-		return verdict
-	}
-	parent, ok := modelTier(set, host, spawner.model)
-	if !ok || child.Within(parent) == nil {
-		return verdict
-	}
-	// modelTier found the host mapped, so Alias cannot fail here.
-	alias, _ := set.Alias(host, parent)
 	from := types.ThreadInferred
 	if spawner.proven {
 		from = types.ThreadReported
 	}
-	return applyFindings(hint.NewGate(at.cacheDir, who.callerKey()), verdict, []costFinding{{
+	gate := hint.NewGate(at.cacheDir, who.callerKey())
+	child, childKnown := set.Resolve(host, env.DeclaredModel)
+	parent, parentKnown := set.Resolve(host, spawner.model)
+	if !childKnown || !parentKnown {
+		var unknown []string
+		if !childKnown {
+			unknown = append(unknown, "this spawn's model, "+env.DeclaredModel)
+		}
+		if !parentKnown {
+			unknown = append(unknown, spawner.says+", "+spawner.model)
+		}
+		why := "is no exact alias, so its model tier is unknown"
+		if len(unknown) == 2 {
+			why = "are no exact aliases, so their model tiers are unknown"
+		}
+		return applyFindings(gate, verdict, []costFinding{{
+			rule: denyRuleSpawnAboveParentTier,
+			key:  hint.MarkerKind(denyRuleSpawnAboveParentTier) + "-unknown",
+			say: fmt.Sprintf("magus workspace: this spawn's tier ceiling is not judged: %s %s (%s). "+
+				"A tier is read from an exact alias, never inferred from a model id.",
+				strings.Join(unknown, " and "), why, declaredAliases(set, host)),
+		}}, from)
+	}
+	if child.Within(parent) == nil {
+		return verdict
+	}
+	// Resolve found the host mapped, so Alias cannot fail here.
+	alias, _ := set.Alias(host, parent)
+	return applyFindings(gate, verdict, []costFinding{{
 		rule: denyRuleSpawnAboveParentTier,
 		deny: s.Decision == builtin.Deny,
 		key:  hint.MarkerKind(denyRuleSpawnAboveParentTier),
@@ -61,6 +80,19 @@ func gradeSpawnCeiling(deps Dependencies, verdict types.GuardJudgment, env hookR
 			"a child never outranks its parent, so spawn it on %s or a lower tier, or a person forks the higher-tier row and runs it from a session at that tier.",
 			env.DeclaredModel, child.Name(), child.Rank(), spawner.says, spawner.model, parent.Name(), parent.Rank(), alias),
 	}}, from)
+}
+
+// declaredAliases says which aliases set maps for host, cheapest first, or why it maps none.
+func declaredAliases(set *types.ModelTierSet, host types.HarnessKey) string {
+	var aliases []string
+	for _, t := range set.All() {
+		alias, err := set.Alias(host, t)
+		if err != nil {
+			return err.Error()
+		}
+		aliases = append(aliases, alias)
+	}
+	return fmt.Sprintf("the declaration at %s maps %s for %s", set.Site(), strings.Join(aliases, ", "), host.ID)
 }
 
 // spawnedOn is the model a spawner runs on, what it rests on, and how a verdict names it.
@@ -83,29 +115,4 @@ func spawnerModel(at location, who hookAttribution, lease string) spawnedOn {
 	}
 	thread, from := callerThread(at.cacheDir, who, lease)
 	return spawnedOn{model: session, proven: thread == types.AgentThreadMain && from == types.ThreadReported, says: "this session's model"}
-}
-
-// modelTier is the tier host's alias model names in set: the alias itself, else one
-// dash-separated word of a model id, the way a transcript names the model an alias picked
-// (opus in claude-opus-5-5). A word two tiers' aliases match names no one tier.
-func modelTier(set *types.ModelTierSet, host types.HarnessKey, model string) (types.ModelTier, bool) {
-	if t, ok := set.Resolve(host, model); ok {
-		return t, true
-	}
-	words := strings.Split(strings.ToLower(strings.TrimSpace(model)), "-")
-	var found types.ModelTier
-	for _, t := range set.All() {
-		alias, err := set.Alias(host, t)
-		if err != nil {
-			return types.ModelTier{}, false
-		}
-		if !slices.Contains(words, strings.ToLower(alias)) {
-			continue
-		}
-		if !found.IsZero() {
-			return types.ModelTier{}, false
-		}
-		found = t
-	}
-	return found, !found.IsZero()
 }
