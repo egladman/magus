@@ -9,7 +9,7 @@ import (
 
 func TestFigureRegistersAtItsImportPath(t *testing.T) {
 	got, ok := GetSource("figure")
-	require.True(t, ok, "figure registers from std/lib.go's init")
+	require.True(t, ok, "figure is in std/lib.go's sourceBuiltin")
 	assert.Equal(t, "magus/figure", got.ImportPath())
 
 	methods, err := describeSource(got)
@@ -24,7 +24,7 @@ func TestFigureRegistersAtItsImportPath(t *testing.T) {
 
 func TestModelTiersRegistersTheDefaultDeclaration(t *testing.T) {
 	got, ok := GetSource("modeltiers")
-	require.True(t, ok, "modeltiers registers from std/lib.go's init")
+	require.True(t, ok, "modeltiers is in std/lib.go's sourceBuiltin")
 	assert.Equal(t, "magus/modeltiers", got.ImportPath())
 
 	methods, err := describeSource(got)

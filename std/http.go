@@ -24,8 +24,6 @@ import (
 
 //go:generate go run ../cmd/magus-utils bindings -module http -lang buzz -out ../internal/interp/bindings/gen/http.go
 
-func init() { Register(HTTP) }
-
 // optsDoc is the trailing line shared by every method's Doc describing the
 // optional curl-style options map (last argument).
 const optsDoc = " opts (curl-style): fail, fail_with_body, fail_early (bool); " +

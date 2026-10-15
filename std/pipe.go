@@ -25,8 +25,6 @@ import (
 
 //go:generate go run ../cmd/magus-utils bindings -module pipe -lang buzz -out ../internal/interp/bindings/gen/pipe.go
 
-func init() { Register(Pipe) }
-
 // Pipe is the "pipe" host module: a `magus buzz` script as a stage of a shell pipe of
 // magus processes, between a stage that writes records and one that reads them.
 //

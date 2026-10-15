@@ -30,8 +30,6 @@ import (
 
 //go:generate go run ../cmd/magus-utils bindings -module archive -lang buzz -out ../internal/interp/bindings/gen/archive.go
 
-func init() { Register(Archive) }
-
 const archiveDefaultMaxSize int64 = 10 << 30 // 10 GiB
 
 var Archive = Module{

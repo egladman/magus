@@ -28,8 +28,6 @@ import (
 
 //go:generate go run ../cmd/magus-utils bindings -module fs -lang buzz -out ../internal/interp/bindings/gen/fs.go
 
-func init() { Register(Fs) }
-
 // Fs is the "fs" host module: filesystem and path primitives.
 var Fs = Module{
 	Name: "fs",

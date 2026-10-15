@@ -41,8 +41,8 @@ func covResolverCtx(_ context.Context) (string, error) { return "", nil }
 
 func covResolverBare() (string, error) { return "", nil }
 
-// TestValidateModuleAcceptsWellFormedDeclarations covers the shapes Register lets
-// through: a plain method, a variadic one, an Extern with no Impl, a namespace of
+// TestValidateModuleAcceptsWellFormedDeclarations covers the shapes the registry
+// lets through: a plain method, a variadic one, an Extern with no Impl, a namespace of
 // Externs, and both Field Resolver arities.
 func TestValidateModuleAcceptsWellFormedDeclarations(t *testing.T) {
 	tests := []struct {
@@ -91,8 +91,8 @@ func TestValidateModuleAcceptsWellFormedDeclarations(t *testing.T) {
 
 // TestValidateModuleRejectsMismatchedDeclarations walks every rejection
 // validateModule can produce. Each case asserts the message names WHICH member is
-// wrong as well as what is wrong with it: the error surfaces from a package init(),
-// where the member name is the only thing locating the mistake.
+// wrong as well as what is wrong with it: the error surfaces as a panic while the
+// registry builds, where the member name is the only thing locating the mistake.
 func TestValidateModuleRejectsMismatchedDeclarations(t *testing.T) {
 	method := func(m Method) Module { return Module{Name: "covbad", Methods: []Method{m}} }
 	field := func(f Field) Module { return Module{Name: "covbad", Fields: []Field{f}} }
@@ -256,25 +256,21 @@ func TestValidateModuleRejectsMalformedMCPTools(t *testing.T) {
 	})
 }
 
-// TestRegisterPanicsRatherThanStoringABadModule covers both of Register's refusals.
-// Neither case reaches the registry, so this leaves the global module set untouched
-// - which matters, since nothing unregisters.
-func TestRegisterPanicsRatherThanStoringABadModule(t *testing.T) {
+// TestIndexModulesPanicsRatherThanIndexingABadModule covers both of the registry's
+// refusals. It indexes a throwaway list, so the real registry is untouched.
+func TestIndexModulesPanicsRatherThanIndexingABadModule(t *testing.T) {
 	assert.PanicsWithValue(t, `host: duplicate module registration: "uuid"`, func() {
-		Register(Module{Name: "uuid"})
+		indexModules([]Module{{Name: "uuid"}, {Name: "uuid"}})
 	}, "a second module under a live name must not silently replace it")
 
 	assert.Panics(t, func() {
-		Register(Module{Name: "zzz-cov-never-registered", Methods: []Method{{Name: "f"}}})
+		indexModules([]Module{{Name: "zzz-cov-never-registered", Methods: []Method{{Name: "f"}}}})
 	}, "a method with no Impl and no Extern must not reach the registry")
-
-	_, ok := Get("zzz-cov-never-registered")
-	assert.False(t, ok, "the rejected module must not be stored")
 }
 
 func TestGetAndAllReadTheRegistry(t *testing.T) {
 	got, ok := Get("uuid")
-	require.True(t, ok, "uuid registers from its own init")
+	require.True(t, ok, "uuid is in the portable list")
 	assert.Equal(t, "uuid", got.Name)
 
 	_, ok = Get("zzz-cov-no-such-module")

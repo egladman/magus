@@ -22,8 +22,6 @@ import (
 
 //go:generate go run ../cmd/magus-utils bindings -module crypto -lang buzz -out ../internal/interp/bindings/gen/crypto.go
 
-func init() { Register(Crypto) }
-
 // Crypto is the "crypto" host module: content digests for checksum manifests
 // (SHA256SUMS for release assets), Ed25519 signing, and HMAC. Not a general
 // crypto toolkit: there is no encryption. SHA-256/512 are the strong defaults;

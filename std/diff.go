@@ -16,8 +16,6 @@ import (
 // already used to reading a patch.
 const diffDefaultContext = 3
 
-func init() { Register(Diff) }
-
 // Diff is the "diff" host module: compare two texts and say what changed.
 //
 // magus is in the drift business (a generate target is a drift gate, `magus

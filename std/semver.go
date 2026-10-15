@@ -10,8 +10,6 @@ import (
 
 //go:generate go run ../cmd/magus-utils bindings -module semver -lang buzz -out ../internal/interp/bindings/gen/semver.go
 
-func init() { Register(Semver) }
-
 // Semver is the "semver" host module: semantic version parsing and comparison.
 var Semver = Module{
 	Name: "semver",

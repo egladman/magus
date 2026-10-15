@@ -10,8 +10,6 @@ import (
 
 //go:generate go run ../cmd/magus-utils bindings -module sort -lang buzz -out ../internal/interp/bindings/gen/sort.go
 
-func init() { Register(Sort) }
-
 // Sort is the "sort" host module: the orderings a build tool actually needs over
 // a list of strings.
 //

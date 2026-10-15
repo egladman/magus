@@ -32,8 +32,6 @@ import (
 
 //go:generate go run ../cmd/magus-utils bindings -module magus -lang buzz -out ../internal/interp/bindings/gen/magus.go
 
-func init() { Register(Magus) }
-
 // Magus declares the host-declarable subset of the magus module. The remaining
 // methods (target, dispatch, deps, pry, register) and the PROVIDER NAMESPACES
 // (magus\cache, magus\ci, magus\secret) are VM-infrastructure:

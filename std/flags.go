@@ -11,8 +11,6 @@ import (
 
 //go:generate go run ../cmd/magus-utils bindings -module flags -lang buzz -out ../internal/interp/bindings/gen/flags.go
 
-func init() { Register(Flags) }
-
 // Flags is the "flags" host module: argv parsing for a script that receives one.
 //
 // A Buzz script run by `magus buzz <file> -- <args>` gets its argv as a list and, before

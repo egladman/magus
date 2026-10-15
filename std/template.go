@@ -9,8 +9,6 @@ import (
 
 //go:generate go run ../cmd/magus-utils bindings -module template -lang buzz -out ../internal/interp/bindings/gen/template.go
 
-func init() { Register(Template) }
-
 // Template is the "template" host module: logic-less Mustache rendering via
 // github.com/cbroglie/mustache, which tracks the mustache/spec. Chosen over Go's
 // text/template: Mustache is a cross-language spec with a conformance suite, and

@@ -76,8 +76,6 @@ func armVariant() string {
 	return ""
 }
 
-func init() { Register(Platform) }
-
 // Platform is the "platform" host module: it coheres the many OS/architecture
 // spellings open-source projects use (aarch64 vs arm64, Darwin vs macOS vs mac)
 // onto canonical Go GOOS/GOARCH values, and renders them back out in a chosen

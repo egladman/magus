@@ -9,8 +9,6 @@ import (
 
 //go:generate go run ../cmd/magus-utils bindings -module merge -lang buzz -out ../internal/interp/bindings/gen/merge.go
 
-func init() { Register(Merge) }
-
 // Merge is the "merge" host module: combine two values.
 //
 // Buzz already merges map literals with `+`, one level, right-hand keys

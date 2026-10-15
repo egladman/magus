@@ -14,8 +14,6 @@ import (
 
 //go:generate go run ../cmd/magus-utils bindings -module env -lang buzz -out ../internal/interp/bindings/gen/env.go
 
-func init() { Register(Env) }
-
 // Env is the "env" host module: process environment-variable access, filtered by the sandbox policy.
 var Env = Module{
 	Name: "env",

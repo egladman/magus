@@ -11,8 +11,6 @@ import (
 
 //go:generate go run ../cmd/magus-utils bindings -module strings -lang buzz -out ../internal/interp/bindings/gen/strings.go
 
-func init() { Register(Strings) }
-
 // Strings is the "strings" host module: the string operations Buzz's builtins
 // lack. Buzz strings already do upper/lower/trim/split/replace/sub, but two
 // classes of work fall outside that. Codegen and naming tasks need to re-case an

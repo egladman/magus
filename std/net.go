@@ -14,8 +14,6 @@ import (
 
 //go:generate go run ../cmd/magus-utils bindings -module net -lang buzz -out ../internal/interp/bindings/gen/net.go
 
-func init() { Register(Net) }
-
 // netDefaultWaitMs bounds wait_for_port when the caller names no timeout. Thirty
 // seconds is long enough for a dev server or a database container to come up and
 // short enough that a wedged one is reported inside a coffee break rather than
