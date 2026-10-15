@@ -50,27 +50,21 @@ Disjoint write sets LICENSE parallelism; they do not require it. Every worker ca
 a fixed load before it reads a line of the diff{{if .Full}}: a system
 prompt, the repository's instruction file, the routing index, the skills that
 load, and the graph queries it runs to find its own footing, spent identically
-whether the unit is fifty lines or five hundred{{end}}. So after partitioning, ask whether
-each unit is big enough to be worth a worker.
+whether the unit is fifty lines or five hundred{{end}}.{{if .Full}} So after partitioning,
+ask whether each unit is big enough to be worth a worker.{{end}}
 
 - A depends-on chain is ONE worker in sequence, not two workers in turn{{if .Full}}.
   Two is two loads for one unit of work, and the second starts by rediscovering
   what the first just learned{{end}}.
-- For the rest, read the grouping lens: `{{tool "client"}}` (`{{buzz "insight"}}`,
-  read grouping), or the `grouping history` section of `{{cmd "describe job"}} <job>`.
-  Each shape (chained, split, solo) reports what a worker loaded before its first
-  write, and the context, wall time and collisions per group.
-- Where a shape is measured, weigh its numbers against the other shapes'{{if .Full}}.
-  That fixed load is this repository's own, measured, where the defaults below
-  guess it{{end}}.
+- For the rest, read the grouping lens (`{{buzz "insight"}}` through `{{tool "client"}}`,
+  or `grouping history` in `{{cmd "describe job"}} <job>`) and weigh each measured shape
+  against the others{{if .Full}}: chained, split and solo each report the load before a
+  first write and the context, wall time and collisions per group{{end}}. It reports
+  and never decides{{if .Full}}; a standing grouping rule is a person's to write{{end}}.
 - Where the lens answers unknown, apply these defaults and say in the plan that you
   did. Merge small disjoint units inside one project. Spawn only when more than one
   independent unit survives the merge. Fill idle root time from that pool, never by
   splitting finer.
-
-The lens reports and never decides{{if .Full}}: jobs were not assigned to a shape at
-random, so its numbers are evidence for a person, not a verdict{{end}}. A standing
-grouping rule is a person's to write.
 
 ## Run the graph-engineering loop
 

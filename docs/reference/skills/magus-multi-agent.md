@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 27515
-skill_short_bytes: 21864
+skill_full_bytes: 27251
+skill_short_bytes: 21542
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `135` |
 | `knowledge-schema-version` | `21` |
-| `skill-content` | `55f9ed4f6a24` |
+| `skill-content` | `837817f2e8e8` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -98,22 +98,17 @@ The guard enforces this by role.
 ## Coalesce what the write sets allow
 
 Disjoint write sets LICENSE parallelism; they do not require it. Every worker carries
-a fixed load before it reads a line of the diff. So after partitioning, ask whether
-each unit is big enough to be worth a worker.
+a fixed load before it reads a line of the diff.
 
 - A depends-on chain is ONE worker in sequence, not two workers in turn.
-- For the rest, read the grouping lens: `client` (`magus\insight`,
-  read grouping), or the `grouping history` section of `magus describe job <job>`.
-  Each shape (chained, split, solo) reports what a worker loaded before its first
-  write, and the context, wall time and collisions per group.
-- Where a shape is measured, weigh its numbers against the other shapes'.
+- For the rest, read the grouping lens (`magus\insight` through `client`,
+  or `grouping history` in `magus describe job <job>`) and weigh each measured shape
+  against the others. It reports
+  and never decides.
 - Where the lens answers unknown, apply these defaults and say in the plan that you
   did. Merge small disjoint units inside one project. Spawn only when more than one
   independent unit survives the merge. Fill idle root time from that pool, never by
   splitting finer.
-
-The lens reports and never decides. A standing
-grouping rule is a person's to write.
 
 ## Run the graph-engineering loop
 
@@ -554,27 +549,21 @@ Disjoint write sets LICENSE parallelism; they do not require it. Every worker ca
 a fixed load before it reads a line of the diff: a system
 prompt, the repository's instruction file, the routing index, the skills that
 load, and the graph queries it runs to find its own footing, spent identically
-whether the unit is fifty lines or five hundred. So after partitioning, ask whether
-each unit is big enough to be worth a worker.
+whether the unit is fifty lines or five hundred. So after partitioning,
+ask whether each unit is big enough to be worth a worker.
 
 - A depends-on chain is ONE worker in sequence, not two workers in turn.
   Two is two loads for one unit of work, and the second starts by rediscovering
   what the first just learned.
-- For the rest, read the grouping lens: `client` (`magus\insight`,
-  read grouping), or the `grouping history` section of `magus describe job <job>`.
-  Each shape (chained, split, solo) reports what a worker loaded before its first
-  write, and the context, wall time and collisions per group.
-- Where a shape is measured, weigh its numbers against the other shapes'.
-  That fixed load is this repository's own, measured, where the defaults below
-  guess it.
+- For the rest, read the grouping lens (`magus\insight` through `client`,
+  or `grouping history` in `magus describe job <job>`) and weigh each measured shape
+  against the others: chained, split and solo each report the load before a
+  first write and the context, wall time and collisions per group. It reports
+  and never decides; a standing grouping rule is a person's to write.
 - Where the lens answers unknown, apply these defaults and say in the plan that you
   did. Merge small disjoint units inside one project. Spawn only when more than one
   independent unit survives the merge. Fill idle root time from that pool, never by
   splitting finer.
-
-The lens reports and never decides: jobs were not assigned to a shape at
-random, so its numbers are evidence for a person, not a verdict. A standing
-grouping rule is a person's to write.
 
 ## Run the graph-engineering loop
 
