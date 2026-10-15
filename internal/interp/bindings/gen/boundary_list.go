@@ -100,6 +100,12 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Goal", Zero: types.Goal{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGoal(v.(types.Goal)) }},
 	{Name: "Grant", Zero: types.Grant{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGrant(v.(types.Grant)) }},
 	{Name: "Graph", Zero: types.GraphView{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGraphView(v.(types.GraphView)) }},
+	{Name: "Grouping", Zero: types.GroupingOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectGroupingOutput(v.(types.GroupingOutput), enums)
+	}},
+	{Name: "GroupingRecord", Zero: types.GroupingRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectGroupingRecord(v.(types.GroupingRecord), enums)
+	}},
 	{Name: "GuardBinary", Zero: types.GuardBinary{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGuardBinary(v.(types.GuardBinary)) }},
 	{Name: "GuardVerdict", Zero: types.GuardVerdict{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGuardVerdict(v.(types.GuardVerdict)) }},
 	{Name: "HarnessChange", Zero: types.HarnessChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHarnessChange(v.(types.HarnessChange)) }},

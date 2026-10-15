@@ -1651,6 +1651,9 @@ func MagusInsight(ctx context.Context, opts map[string]any) (types.InsightReport
 	if tiers, terr := a.ModelTierLens(ctx); terr == nil {
 		report.ModelTiers = tiers
 	}
+	if grouping, gerr := a.GroupingLens(ctx); gerr == nil {
+		report.Grouping = grouping
+	}
 	return report, nil
 }
 

@@ -119,6 +119,7 @@ github.com/egladman/magus.Magus.FindOutputProducer method(ptr) func(absPath stri
 github.com/egladman/magus.Magus.FreshenSymbolIndexes method(ptr) func(ctx context.Context) error
 github.com/egladman/magus.Magus.Get method(ptr) func(path string) *github.com/egladman/magus/types.Project
 github.com/egladman/magus.Magus.Graph method(ptr) func() (*github.com/egladman/magus/types.Graph, error)
+github.com/egladman/magus.Magus.GroupingLens method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.GroupingOutput, error)
 github.com/egladman/magus.Magus.Harnesses method(ptr) func() []string
 github.com/egladman/magus.Magus.HeldLocks method(ptr) func() []github.com/egladman/magus/types.StatusLock
 github.com/egladman/magus.Magus.Hotspots method(ptr) func(ctx context.Context, opts github.com/egladman/magus/types.InsightOptions) (github.com/egladman/magus/types.HotspotOutput, error)
@@ -2328,6 +2329,7 @@ github.com/egladman/magus/types.InsightAnalyzer type interface
 github.com/egladman/magus/types.InsightAnalyzer.Affinity imethod func(ctx context.Context, opts InsightOptions) (AffinityOutput, error)
 github.com/egladman/magus/types.InsightAnalyzer.Conformance imethod func(ctx context.Context) (ConformanceOutput, error)
 github.com/egladman/magus/types.InsightAnalyzer.Duplication imethod func(ctx context.Context) (DuplicationOutput, error)
+github.com/egladman/magus/types.InsightAnalyzer.GroupingLens imethod func(ctx context.Context) (GroupingOutput, error)
 github.com/egladman/magus/types.InsightAnalyzer.Hotspots imethod func(ctx context.Context, opts InsightOptions) (HotspotOutput, error)
 github.com/egladman/magus/types.InsightAnalyzer.ModelTierLens imethod func(ctx context.Context) (ModelTierOutput, error)
 github.com/egladman/magus/types.InsightAnalyzer.Ownership imethod func(ctx context.Context, opts InsightOptions) (OwnershipOutput, error)
@@ -2344,6 +2346,7 @@ github.com/egladman/magus/types.InsightReport type struct
 github.com/egladman/magus/types.InsightReport.Affinity field AffinityOutput "json:\"affinity\"    yaml:\"affinity\""
 github.com/egladman/magus/types.InsightReport.Conformance field ConformanceOutput "json:\"conformance\" yaml:\"conformance\""
 github.com/egladman/magus/types.InsightReport.Duplication field DuplicationOutput "json:\"duplication\" yaml:\"duplication\""
+github.com/egladman/magus/types.InsightReport.Grouping field GroupingOutput "json:\"grouping\" yaml:\"grouping\""
 github.com/egladman/magus/types.InsightReport.Hotspots field HotspotOutput "json:\"hotspots\"    yaml:\"hotspots\""
 github.com/egladman/magus/types.InsightReport.ModelTiers field ModelTierOutput "json:\"model_tiers\" yaml:\"model_tiers\""
 github.com/egladman/magus/types.InsightReport.Ownership field OwnershipOutput "json:\"ownership\"   yaml:\"ownership\""

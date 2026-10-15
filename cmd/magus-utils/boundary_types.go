@@ -235,6 +235,9 @@ var boundaryTypes = []boundaryType{
 	// There is deliberately no ModelTier object: that name is the workspace's own Buzz enum.
 	{Name: "ModelTierRecord", Type: reflect.TypeFor[types.ModelTierRecord](), RuntimeObject: true},
 	{Name: "ModelTierOutput", Type: reflect.TypeFor[types.ModelTierOutput](), RuntimeObject: true},
+	// The grouping lens: InsightReport.grouping is a Grouping, a list of records.
+	{Name: "GroupingRecord", Type: reflect.TypeFor[types.GroupingRecord](), RuntimeObject: true},
+	{Name: "Grouping", Type: reflect.TypeFor[types.GroupingOutput](), RuntimeObject: true},
 	{Name: "InsightReport", Type: reflect.TypeFor[types.InsightReport](), RuntimeObject: true},
 	{Name: "ImpactCoverage", Type: reflect.TypeFor[types.ImpactCoverage](), RuntimeObject: true},
 	{Name: "ImpactSymbol", Type: reflect.TypeFor[types.ImpactSymbol](), RuntimeObject: true},
@@ -488,6 +491,16 @@ var boundaryEnums = []boundaryEnum{
 		Name:  "ModelTierSource",
 		Type:  reflect.TypeFor[types.ModelTierSource](),
 		Cases: []enumCase{{"row", "row"}, {"matrix", "matrix"}, {"default", "default"}},
+	},
+	{
+		Name:  "GroupingShape",
+		Type:  reflect.TypeFor[types.GroupingShape](),
+		Cases: []enumCase{{"none", ""}, {"chained", "chained"}, {"split", "split"}, {"solo", "solo"}},
+	},
+	{
+		Name:  "GroupingVerdict",
+		Type:  reflect.TypeFor[types.GroupingVerdict](),
+		Cases: []enumCase{{"none", ""}, {"measured", "measured"}, {"unknown", "unknown"}},
 	},
 }
 

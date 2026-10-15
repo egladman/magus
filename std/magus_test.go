@@ -236,6 +236,7 @@ func raiseOpts(cause any, url string) map[string]any {
 // recordingAnalyzer is a workspace that can answer the insight lenses, recording the
 // options it was handed so a test can prove they arrived.
 type recordingAnalyzer struct {
+	groupingLens types.GroupingOutput
 	types.WorkspaceRepository
 	got             types.InsightOptions
 	failTrend       bool
@@ -278,15 +279,20 @@ func (f *recordingAnalyzer) ModelTierLens(context.Context) (types.ModelTierOutpu
 	return types.ModelTierOutput{}, errors.New("no run history")
 }
 
+func (f *recordingAnalyzer) GroupingLens(context.Context) (types.GroupingOutput, error) {
+	return f.groupingLens, nil
+}
+
 func TestInsightIsServedInProcess(t *testing.T) {
 	t.Parallel()
 
-	a := &recordingAnalyzer{}
+	a := &recordingAnalyzer{groupingLens: types.GroupingOutput{Definition: types.GroupingDefinition}}
 	ctx := types.WithWorkspace(t.Context(), a)
 
 	report, err := MagusInsight(ctx, nil)
 	require.NoError(t, err, "a workspace that analyses answers here, with no subprocess")
 	assert.Equal(t, "hot", report.Hotspots.Definition)
+	assert.Equal(t, types.GroupingDefinition, report.Grouping.Definition, "the report carries the grouping lens")
 	assert.Equal(t, 500, a.got.Commits, "the window the removed subcommand defaulted to")
 	assert.True(t, a.got.Files, "the report always carries the per-file ranking")
 }

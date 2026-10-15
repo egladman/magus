@@ -150,6 +150,9 @@ deny paths the workspace declares
   checkout/tax.sh: owned by live lease refactor/tax: coordinate, never work around
   magus.yaml: workspace configuration: changing it changes the plan every lease is running
 
+grouping history
+  none recorded for these projects
+
 the only check you run
 magus run test .
 refactor/pricing: 0 of 1 goal(s) met
@@ -356,6 +359,9 @@ projects
 deny paths the workspace declares
   pricing/total.sh: owned by live lease cents: coordinate, never work around
   magus.yaml: workspace configuration: changing it changes the plan every lease is running
+
+grouping history
+  none recorded for these projects
 
 the only check you run
 magus run test .

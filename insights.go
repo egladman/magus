@@ -170,6 +170,18 @@ func (m *Magus) ModelTierLens(ctx context.Context) (types.ModelTierOutput, error
 	return out, nil
 }
 
+// GroupingLens is the other job-history lens: what each grouping shape cost, over every
+// recorded outcome. A workspace with no history file has no outcome, so every shape is unknown.
+func (m *Magus) GroupingLens(ctx context.Context) (types.GroupingOutput, error) {
+	var hist forecast.History
+	if m.cfg.HistoryPath != "" {
+		if err := hist.Load(ctx, m.cfg.HistoryPath); err != nil {
+			return types.GroupingOutput{}, err
+		}
+	}
+	return job.GroupingRecords(hist.Jobs, nil), nil
+}
+
 // Unreferenced is the knowledge-graph lens: code symbols this workspace defines that
 // nothing in it names. Like Volatility it takes no window (it reads the graph, not a
 // commit scan), so it is workspace-wide.

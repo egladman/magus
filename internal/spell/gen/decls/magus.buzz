@@ -69,6 +69,19 @@ export enum<str> JobKind {
     prose = "prose",
 }
 
+export enum<str> GroupingShape {
+    none = "",
+    chained = "chained",
+    split = "split",
+    solo = "solo",
+}
+
+export enum<str> GroupingVerdict {
+    none = "",
+    measured = "measured",
+    unknown = "unknown",
+}
+
 export enum<str> SkillVariant {
     short = "short",
     full = "full",
@@ -676,6 +689,30 @@ export object ModelTierOutput {
     rows: [ModelTierRecord] = [],
 }
 
+export object GroupingRecord {
+    shape: GroupingShape = GroupingShape.none,
+    verdict: GroupingVerdict = GroupingVerdict.none,
+    jobs: int = 0,
+    groups: int = 0,
+    known: int = 0,
+    passLower: double? = null,
+    setupTokensMedian: int? = null,
+    setupShare: double? = null,
+    contextPerGroup: double? = null,
+    wallMsPerGroup: double? = null,
+    denialsPerJob: double? = null,
+    unattributedPerJob: double? = null,
+    reworkPerJob: double? = null,
+    wideningsPerJob: double? = null,
+}
+
+export object Grouping {
+    definition: str = "",
+    minSample: int = 0,
+    unclassified: int = 0,
+    rows: [GroupingRecord] = [],
+}
+
 export object InsightReport {
     hotspots: Hotspots = Hotspots{},
     affinity: Affinity = Affinity{},
@@ -686,6 +723,7 @@ export object InsightReport {
     duplication: Duplication = Duplication{},
     conformance: Conformance = Conformance{},
     modelTiers: ModelTierOutput = ModelTierOutput{},
+    grouping: Grouping = Grouping{},
 }
 
 export object Layer {

@@ -392,6 +392,9 @@ type InsightReport struct {
 	// ModelTiers is the job-history axis, a value like the rest: no recorded outcome is an
 	// empty list carrying the definition.
 	ModelTiers ModelTierOutput `json:"model_tiers" yaml:"model_tiers"`
+	// Grouping is the other job-history axis: every shape keeps its row, unknown below the
+	// minimum sample.
+	Grouping GroupingOutput `json:"grouping" yaml:"grouping"`
 }
 
 // ModelTierOutput is the model-tier lens: one row per (tier, job kind) the recorded job
@@ -412,9 +415,10 @@ type ModelTierOutput struct {
 // forked a whole magus (a process spawn, a second workspace load, a JSON encode and
 // a Buzz-side parse) to reach methods the calling process already had.
 //
-// Volatility, ModelTierLens, Unreferenced and Conformance take no options because they read
-// their whole source workspace-wide: the run-history file and the symbol index have no
-// commit window to narrow, which is the distinction the lens docs draw for a reader too.
+// Volatility, ModelTierLens, GroupingLens, Unreferenced and Conformance take no options
+// because they read their whole source workspace-wide: the history files and the symbol
+// index have no commit window to narrow, which is the distinction the lens docs draw for a
+// reader too.
 type InsightAnalyzer interface {
 	Hotspots(ctx context.Context, opts InsightOptions) (HotspotOutput, error)
 	Affinity(ctx context.Context, opts InsightOptions) (AffinityOutput, error)
@@ -425,4 +429,5 @@ type InsightAnalyzer interface {
 	Duplication(ctx context.Context) (DuplicationOutput, error)
 	Conformance(ctx context.Context) (ConformanceOutput, error)
 	ModelTierLens(ctx context.Context) (ModelTierOutput, error)
+	GroupingLens(ctx context.Context) (GroupingOutput, error)
 }

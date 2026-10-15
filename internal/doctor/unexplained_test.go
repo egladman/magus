@@ -60,6 +60,10 @@ func (h hotWorkspace) ModelTierLens(context.Context) (types.ModelTierOutput, err
 	return types.ModelTierOutput{}, nil
 }
 
+func (h hotWorkspace) GroupingLens(context.Context) (types.GroupingOutput, error) {
+	return types.GroupingOutput{}, nil
+}
+
 func hot(paths ...string) []types.FileHotspot {
 	out := make([]types.FileHotspot, 0, len(paths))
 	for _, p := range paths {

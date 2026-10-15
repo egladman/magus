@@ -858,7 +858,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	// A read: the symbol goals, their delta, the deletion candidates and the graph evidence
 	// take the graph as built, and none while a symbol index is stale (see jobGraph).
 	graph := newJobGraph(root, false)
-	facts := leaseBoundary(ctx, root, row, leases, graph)
+	facts := leaseBoundary(ctx, root, store, row, leases, graph)
 	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, graph, row.WritePaths)
 	brief := job.NewTerms(row, facts)
 

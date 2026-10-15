@@ -617,6 +617,74 @@ func ObjectModelTierOutput(v types.ModelTierOutput, enums ffi.EnumCases) vm.Valu
 	return out
 }
 
+func ObjectGroupingRecord(v types.GroupingRecord, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("shape", enums.Case("GroupingShape", string(v.Shape)))
+	out.MapSet("verdict", enums.Case("GroupingVerdict", string(v.Verdict)))
+	out.MapSet("jobs", vm.IntValue(int64(v.Jobs)))
+	out.MapSet("groups", vm.IntValue(int64(v.Groups)))
+	out.MapSet("known", vm.IntValue(int64(v.Known)))
+	optPassLower := vm.Null
+	if v.PassLower != nil {
+		optPassLower = vm.FloatValue(float64((*v.PassLower)))
+	}
+	out.MapSet("passLower", optPassLower)
+	optSetupTokensMedian := vm.Null
+	if v.SetupTokensMedian != nil {
+		optSetupTokensMedian = vm.IntValue(int64((*v.SetupTokensMedian)))
+	}
+	out.MapSet("setupTokensMedian", optSetupTokensMedian)
+	optSetupShare := vm.Null
+	if v.SetupShare != nil {
+		optSetupShare = vm.FloatValue(float64((*v.SetupShare)))
+	}
+	out.MapSet("setupShare", optSetupShare)
+	optContextPerGroup := vm.Null
+	if v.ContextPerGroup != nil {
+		optContextPerGroup = vm.FloatValue(float64((*v.ContextPerGroup)))
+	}
+	out.MapSet("contextPerGroup", optContextPerGroup)
+	optWallMsPerGroup := vm.Null
+	if v.WallMsPerGroup != nil {
+		optWallMsPerGroup = vm.FloatValue(float64((*v.WallMsPerGroup)))
+	}
+	out.MapSet("wallMsPerGroup", optWallMsPerGroup)
+	optDenialsPerJob := vm.Null
+	if v.DenialsPerJob != nil {
+		optDenialsPerJob = vm.FloatValue(float64((*v.DenialsPerJob)))
+	}
+	out.MapSet("denialsPerJob", optDenialsPerJob)
+	optUnattributedPerJob := vm.Null
+	if v.UnattributedPerJob != nil {
+		optUnattributedPerJob = vm.FloatValue(float64((*v.UnattributedPerJob)))
+	}
+	out.MapSet("unattributedPerJob", optUnattributedPerJob)
+	optReworkPerJob := vm.Null
+	if v.ReworkPerJob != nil {
+		optReworkPerJob = vm.FloatValue(float64((*v.ReworkPerJob)))
+	}
+	out.MapSet("reworkPerJob", optReworkPerJob)
+	optWideningsPerJob := vm.Null
+	if v.WideningsPerJob != nil {
+		optWideningsPerJob = vm.FloatValue(float64((*v.WideningsPerJob)))
+	}
+	out.MapSet("wideningsPerJob", optWideningsPerJob)
+	return out
+}
+
+func ObjectGroupingOutput(v types.GroupingOutput, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("definition", vm.StrValue(v.Definition))
+	out.MapSet("minSample", vm.IntValue(int64(v.MinSample)))
+	out.MapSet("unclassified", vm.IntValue(int64(v.Unclassified)))
+	itemsRows := make([]vm.Value, len(v.Rows))
+	for indexRows := range v.Rows {
+		itemsRows[indexRows] = ObjectGroupingRecord(v.Rows[indexRows], enums)
+	}
+	out.MapSet("rows", vm.ListValue(itemsRows))
+	return out
+}
+
 func ObjectInsightReport(v types.InsightReport, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("hotspots", ObjectHotspotOutput(v.Hotspots))
@@ -628,6 +696,7 @@ func ObjectInsightReport(v types.InsightReport, enums ffi.EnumCases) vm.Value {
 	out.MapSet("duplication", ObjectDuplicationOutput(v.Duplication, enums))
 	out.MapSet("conformance", ObjectConformanceOutput(v.Conformance, enums))
 	out.MapSet("modelTiers", ObjectModelTierOutput(v.ModelTiers, enums))
+	out.MapSet("grouping", ObjectGroupingOutput(v.Grouping, enums))
 	return out
 }
 

@@ -57,7 +57,7 @@ const leaseAffinityCommits = 200
 // A workspace that will not load DEGRADES rather than failing, the way the graph evidence
 // already does: the row alone carries the criteria, the boundary and the check, and a worker
 // in a tree whose magusfile is mid-edit is exactly who needs to read them.
-func leaseBoundary(ctx context.Context, root string, row types.Job, leases []types.Job, graph *jobGraph) job.TermsFacts {
+func leaseBoundary(ctx context.Context, root string, store *job.Store, row types.Job, leases []types.Job, graph *jobGraph) job.TermsFacts {
 	if len(row.WritePaths) == 0 {
 		return job.TermsFacts{}
 	}
@@ -73,7 +73,7 @@ func leaseBoundary(ctx context.Context, root string, row types.Job, leases []typ
 	derived = append(derived, leasedBoundary(row, leases)...)
 	derived = append(derived, sharedBoundary(m, affected.Seed)...)
 	notes := collectNotes(ctx, m, row)
-	return job.TermsFacts{
+	facts := job.TermsFacts{
 		Projects:           affected.Affected,
 		DerivedDenyPaths:   derived,
 		RegeneratedOutside: notes.RegeneratedOutside,
@@ -82,6 +82,11 @@ func leaseBoundary(ctx context.Context, root string, row types.Job, leases []typ
 		Stage:              workspaceStage(ctx, m),
 		DeletionCandidates: deletionCandidates(ctx, graph.load, row),
 	}
+	// A history file that does not read leaves the section out, the way Affinity's scan does.
+	if grouping, err := store.GroupingLens(ctx, affected.Seed); err == nil {
+		facts.Grouping = &grouping
+	}
+	return facts
 }
 
 // generatedBoundary is the declared output globs, across every project the lease
