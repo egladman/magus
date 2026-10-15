@@ -52,20 +52,24 @@ ctx := context.Background()
 
 // Inspect: read-only, no cache. Use this for introspection - listing,
 // describing, classifying files - and nothing else.
-ws, err := magus.Inspect(ctx, "/path/to/workspace")
+ws, err := magus.Inspect(ctx, "/path/to/workspace", magus.WithSpawnRule(magus.TierCeiling))
 
 // Open: builds an on-disk cache and returns the concrete *magus.Magus,
 // which adds Run. Use this when you intend to execute targets.
-m, err := magus.Open(ctx, "/path/to/workspace")
+m, err := magus.Open(ctx, "/path/to/workspace", magus.WithSpawnRule(magus.TierCeiling))
 ```
+
+Both require a spawn rule: the rule every job spawn is held to. A workspace has no
+default one, so leaving `WithSpawnRule` out fails the constructor, naming
+`magus.TierCeiling`, the reference rule the CLI passes.
 
 `Inspect` returns `types.WorkspaceRepository`, an interface: a signal that
 an introspection-only caller should keep coding against the interface rather
 than assume a concrete type. `Open` returns `*magus.Magus`, which also
 satisfies `types.WorkspaceRepository` and additionally has `Run`.
 
-`magus.FindRoot(dir)` walks up from `dir` (empty means the current
-directory) to locate the workspace root, the same walk the CLI performs
+`magus.FindRoot(dir)` walks up from `dir` (an empty `dir` is an error; pass
+`os.Getwd()` for the current directory) to locate the workspace root, the same walk the CLI performs
 before either constructor runs.
 
 ## A minimal working example
@@ -84,7 +88,7 @@ import (
 
 func main() {
     ctx := context.Background()
-    ws, err := magus.Inspect(ctx, "/path/to/workspace")
+    ws, err := magus.Inspect(ctx, "/path/to/workspace", magus.WithSpawnRule(magus.TierCeiling))
     if err != nil {
         log.Fatal(err)
     }
@@ -240,7 +244,7 @@ func TestProjectsOfAMonorepo(t *testing.T) {
         "api/magusfile.buzz": "",
     })
 
-    m, err := magus.Inspect(t.Context(), ws.Root())
+    m, err := magus.Inspect(t.Context(), ws.Root(), magus.WithSpawnRule(magus.TierCeiling))
     require.NoError(t, err)
 
     assert.Len(t, m.All(), 2)

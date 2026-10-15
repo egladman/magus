@@ -49,7 +49,7 @@ func countingOpen(t *testing.T) (string, func(context.Context) (*Magus, error), 
 	opens := new(int)
 	return root, func(ctx context.Context) (*Magus, error) {
 		*opens++
-		ws, err := Inspect(ctx, root)
+		ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
 		if err != nil {
 			return nil, err
 		}

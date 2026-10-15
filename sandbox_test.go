@@ -24,7 +24,7 @@ func openSandboxed(t *testing.T, mode types.SandboxMode) *Magus {
 		"magusfile.buzz": "",
 		"magus.yaml":     "sandbox:\n  mode: " + string(mode) + "\n",
 	})
-	m, err := Open(t.Context(), root)
+	m, err := Open(t.Context(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 	return m

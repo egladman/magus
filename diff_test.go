@@ -122,7 +122,7 @@ func TestDiffWithSkipOrderDoesNotComputeTheOrder(t *testing.T) {
 	for name, body := range orderTree {
 		files[name] = body
 	}
-	m, err := Open(t.Context(), writeWorkspace(t, files))
+	m, err := Open(t.Context(), writeWorkspace(t, files), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	paths := []string{"iface.go", "impl.go"}

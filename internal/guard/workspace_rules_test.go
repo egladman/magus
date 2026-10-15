@@ -17,7 +17,7 @@ import (
 // and the root package imports this one. An external test package may import both.
 func init() {
 	guard.WorkspaceInspect = func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
-		return magus.Inspect(ctx, root)
+		return magus.Inspect(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	}
 	guard.WorkspaceCacheDir = func(root string) (string, error) { return magus.ResolveCacheDir(root) }
 }

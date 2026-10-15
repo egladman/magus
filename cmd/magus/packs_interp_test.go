@@ -36,7 +36,7 @@ magus\project({
 })
 `)
 
-	_, err := magus.Inspect(context.Background(), w.Root())
+	_, err := magus.Inspect(context.Background(), w.Root(), magus.WithSpawnRule(magus.TierCeiling))
 	require.Error(t, err)
 	assert.ErrorContains(t, err, `per-target policy names unknown target "bogus-target"`)
 	assert.ErrorContains(t, err, "declared targets: build")
@@ -57,7 +57,7 @@ magus\project({
 })
 `)
 
-	ws, err := magus.Inspect(context.Background(), w.Root())
+	ws, err := magus.Inspect(context.Background(), w.Root(), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	p := ws.Get(".")
 	require.NotNil(t, p)
@@ -81,7 +81,7 @@ magus\project({
 	write("a/magusfile.buzz", "magus.project({});\n")
 	write("b/magusfile.buzz", "magus.project({});\n")
 
-	_, err := magus.Inspect(context.Background(), root)
+	_, err := magus.Inspect(context.Background(), root, magus.WithSpawnRule(magus.TierCeiling))
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "magus: a: ")
 	assert.ErrorContains(t, err, "magus: b: ")

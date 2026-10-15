@@ -391,7 +391,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 `)
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -445,7 +445,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 `)
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -724,7 +724,7 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 	t.Setenv("MAGUS_CACHE_DIR", t.TempDir())
 	t.Setenv("MAGUS_CACHE_REMOTE_TRUSTED_KEYS", "")
 	ctx := context.Background()
-	w, err := magus.Open(ctx, root)
+	w, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = w.Close() })
 

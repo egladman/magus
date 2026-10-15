@@ -46,7 +46,7 @@ func syncedHumanOnlyWorkspace(tb testing.TB) *testkit.Workspace {
 	w := testkit.NewWorkspace(tb)
 	w.Magusfile(humanOnlyMagusfile)
 	ctx := context.Background()
-	ws, err := Inspect(ctx, w.Root())
+	ws, err := Inspect(ctx, w.Root(), WithSpawnRule(TierCeiling))
 	require.NoError(tb, err)
 	_, err = workspacegraph.Build(ctx, ws, w.Root(), config.Config{}, false, slog.New(slog.DiscardHandler))
 	require.NoError(tb, err)
@@ -133,7 +133,7 @@ func BenchmarkHumanOnlyRead(b *testing.B) {
 	})
 	b.Run("inspect", func(b *testing.B) {
 		for b.Loop() {
-			ws, err := Inspect(ctx, root)
+			ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
 			if err != nil {
 				b.Fatal(err)
 			}

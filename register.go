@@ -83,11 +83,11 @@ func TierCeiling(parent, child types.ModelTier) error {
 	return nil
 }
 
-// WithSpawnRule sets the rule the workspace holds every job spawn to. There is no default
-// rule: Open and Inspect fail on a nil rule, naming TierCeiling, the reference rule the CLI
-// passes.
+// WithSpawnRule sets the rule the workspace holds every job spawn to. It is required:
+// there is no default rule, so Open and Inspect fail without one or on a nil one, naming
+// TierCeiling, the reference rule the CLI passes.
 func WithSpawnRule(rule SpawnRule) Option {
-	return func(o *workspace.Load) { o.SpawnRule, o.SpawnRuleGiven = rule, true }
+	return func(o *workspace.Load) { o.SpawnRule = rule }
 }
 
 // WithVersion supplies the running build's version so Open and Inspect can check it

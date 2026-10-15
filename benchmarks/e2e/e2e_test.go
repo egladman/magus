@@ -50,7 +50,7 @@ export fun beta(ctx: magus\Context, args: [str]) > void !> any {
 	}
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
@@ -109,7 +109,7 @@ func TestRunToolchainChangeRebuilds(t *testing.T) {
 	), 0o644))
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
@@ -152,7 +152,7 @@ export fun hit(ctx: magus\Context, args: [str]) > void !> any {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(src), 0o644))
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
@@ -181,7 +181,7 @@ export fun hit(ctx: magus\Context, args: [str]) > void {}
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(src), 0o644))
 
-	_, err := magus.Open(context.Background(), root)
+	_, err := magus.Open(context.Background(), root, magus.WithSpawnRule(magus.TierCeiling))
 	require.Error(t, err, "declaring the magusfile driver must fail")
 	assert.Contains(t, err.Error(), string(types.MagusfileIsNotASpell))
 	assert.Contains(t, err.Error(), "magusfile is not a spell")
@@ -211,7 +211,7 @@ func TestRunWithJSONLSink(t *testing.T) {
 	writeProject(t, root, "svc", "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
@@ -263,7 +263,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 	writeProject(t, root, "svc", body)
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
@@ -299,7 +299,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(build); }
 	writeProject(t, root, "svc", body)
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
@@ -339,7 +339,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(a, b); }
 	writeProject(t, root, "svc", body)
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
@@ -390,7 +390,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(build); }
 	writeProject(t, root, "svc", body)
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 

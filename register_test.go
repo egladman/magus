@@ -44,7 +44,7 @@ func TestWithDependsOnRelativeSibling(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("extensions/drape", WithDependsOn("../api"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	p := ws.Get("extensions/drape")
 	require.NotNil(t, p, "project extensions/drape not found")
@@ -62,7 +62,7 @@ func TestWithDependsOnRelativeUpTwo(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("a/b/c", WithDependsOn("../../.."))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	p := ws.Get("a/b/c")
 	require.NotNil(t, p, "project a/b/c not found")
@@ -81,7 +81,7 @@ func TestWithDependsOnBarePathUnchanged(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithDependsOn("api"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	p := ws.Get(".")
 	require.NotNil(t, p, "project . not found")
@@ -96,7 +96,7 @@ func TestWithDependsOnEscapesRoot(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithDependsOn("../outside"))
 
-	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	assert.Error(t, err, "Inspect: expected error for path escaping workspace root")
 }
 
@@ -110,7 +110,7 @@ func TestWithSpellAddsLanguage(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("go"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	p := ws.Get(".")
 	require.NotNil(t, p, "project . not discovered")
@@ -126,7 +126,7 @@ func TestWithSpellMultipleTools(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("go"), WithSpell("rust"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	p := ws.Get(".")
 	require.NotNil(t, p, "project . not found")
@@ -145,7 +145,7 @@ func TestWithSpellUnknownTool(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("nope"))
 
-	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	assert.ErrorIs(t, err, types.ErrSpellNotRegistered, "Inspect: expected error for unknown tool")
 }
 
@@ -162,7 +162,7 @@ func TestApplyIdempotent(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithDependsOn("api"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	p := ws.Get(".")
 	require.NotNil(t, p, "project . not found")
@@ -181,7 +181,7 @@ func TestApplyIdempotent(t *testing.T) {
 
 	// A second Inspect with the same registry must not double the deps;
 	// each *Workspace is distinct.
-	ws2, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws2, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "second Open")
 	p2 := ws2.Get(".")
 	require.NotNil(t, p2, "project . not found in second workspace")
@@ -195,7 +195,7 @@ func TestWithSpell(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("go"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	p := ws.Get(".")
 	require.NotNil(t, p, "project . not found")
@@ -257,7 +257,7 @@ func TestProvidedProjectIsAFullProject(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.AddProvider(nx)
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
 	foo := ws.Get("libs/foo")
@@ -287,7 +287,7 @@ func TestProviderThenCentralFormComposes(t *testing.T) {
 	reg.AddProvider(nx)
 	reg.RegisterProject("libs/foo", workspace.WithSources("schema/**/*.json"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
 	foo := ws.Get("libs/foo")
@@ -304,7 +304,7 @@ func TestProviderCannotShadowAMagusfile(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.AddProvider(nx)
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
 	foo := ws.Get("libs/foo")
@@ -319,7 +319,7 @@ func TestNoProviderWiredChangesNothing(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "libs/foo/package.json")
 	provider(t, spells.ProvidedProject{Path: "libs/foo"})
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(NewWorkspaceRegistry()))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(NewWorkspaceRegistry()), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
 	assert.Nil(t, ws.Get("libs/foo"), "no wiring, no fold")
@@ -336,7 +336,7 @@ func TestProvidedProjectRejectsEscapingPath(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.AddProvider(nx)
 
-	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), string(types.ProviderPathRejected))
@@ -358,7 +358,7 @@ func TestRunCIAnchorAllowsProvidedProjectWithCIOp(t *testing.T) {
 	reg.AddProvider(nx)
 
 	ctx := context.Background()
-	m, err := Open(ctx, root, WithWorkspaceRegistry(reg))
+	m, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
@@ -378,7 +378,7 @@ func TestRunCIAnchorRejectsProvidedProjectWithoutCIOp(t *testing.T) {
 	reg.AddProvider(nx)
 
 	ctx := context.Background()
-	m, err := Open(ctx, root, WithWorkspaceRegistry(reg))
+	m, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
@@ -404,7 +404,7 @@ func TestWithWatchIgnoreReachesTheProject(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("api", WithWatchIgnore(IgnoreGlob("**/*.tmp"), IgnoreLiteral("node_modules")))
 
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -427,7 +427,7 @@ func TestWithWatchIgnoreRejectsAMalformedRegexAtOpen(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("api", WithWatchIgnore(IgnoreRegex("(unclosed")))
 
-	_, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	_, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	assert.Error(t, err, "an ignore pattern that cannot compile must not open the workspace")
 }
 
@@ -451,7 +451,7 @@ func TestWithoutWorkspaceProvidersLeavesMagusfileProjectsAlone(t *testing.T) {
 		"api/magusfile.buzz": "",
 	})
 
-	ws, err := Inspect(context.Background(), root, WithoutWorkspaceProviders())
+	ws, err := Inspect(context.Background(), root, WithoutWorkspaceProviders(), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
 	paths := make([]string, 0, len(ws.All()))
@@ -500,7 +500,7 @@ func TestOpenRefusesABrokerItWouldNotUse(t *testing.T) {
 			if tc.yaml != "" {
 				files["magus.yaml"] = tc.yaml
 			}
-			m, err := Open(t.Context(), writeWorkspace(t, files), tc.opts...)
+			m, err := Open(t.Context(), writeWorkspace(t, files), append(tc.opts, WithSpawnRule(TierCeiling))...)
 			if tc.wantErr != "" {
 				require.EqualError(t, err, tc.wantErr)
 				return
@@ -599,19 +599,19 @@ func TestTierCeilingHoldsAChildAtMostItsParentsTier(t *testing.T) {
 	assert.Error(t, TierCeiling(otherLow, low), "two declarations cannot be ordered against each other")
 }
 
-// TestSpawnRuleHasNoDefault: a nil rule fails the open, naming the reference rule, and a
-// workspace opened with no rule refuses every spawn rather than allowing it.
+// TestSpawnRuleHasNoDefault: an omitted or nil rule fails the open, naming the reference
+// rule, so no workspace exists that allows every spawn.
 func TestSpawnRuleHasNoDefault(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
-	_, err := Inspect(t.Context(), root, WithSpawnRule(nil))
-	require.ErrorContains(t, err, "TierCeiling")
-
-	ws, err := Inspect(t.Context(), root)
-	require.NoError(t, err)
-	assert.ErrorContains(t, ws.(*Magus).internals().CheckSpawn(types.ModelTier{}, types.ModelTier{}), "WithSpawnRule")
+	_, err := Inspect(t.Context(), root)
+	require.ErrorContains(t, err, "WithSpawnRule(magus.TierCeiling)")
+	_, err = Open(t.Context(), root)
+	require.ErrorContains(t, err, "WithSpawnRule(magus.TierCeiling)")
+	_, err = Inspect(t.Context(), root, WithSpawnRule(nil))
+	require.ErrorContains(t, err, "WithSpawnRule(magus.TierCeiling)")
 
 	low, high := modelTiers(t)
-	ws, err = Inspect(t.Context(), root, WithSpawnRule(TierCeiling))
+	ws, err := Inspect(t.Context(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	assert.NoError(t, ws.(*Magus).internals().CheckSpawn(high, low))
 	assert.Error(t, ws.(*Magus).internals().CheckSpawn(low, high))
@@ -624,15 +624,15 @@ func TestWithVCSDriverIsTheWorkspacesVCS(t *testing.T) {
 	driver := mocks.NewMockVCSDriver(t)
 	driver.EXPECT().Name().Return("fossil").Maybe()
 
-	ws, err := Inspect(t.Context(), root, WithVCSDriver(driver))
+	ws, err := Inspect(t.Context(), root, WithVCSDriver(driver), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	assert.Same(t, driver, ws.VCSOptions().Driver)
 
-	_, err = Inspect(t.Context(), root, WithVCSDriver(nil))
+	_, err = Inspect(t.Context(), root, WithVCSDriver(nil), WithSpawnRule(TierCeiling))
 	require.ErrorContains(t, err, "nil driver")
 
-	_, err = Inspect(t.Context(), root, WithVCSDriver(driver),
-		workspace.WithLoadedConfig(config.Config{VCS: config.VCS{Name: "git"}}))
+	_, err = Inspect(t.Context(), root, WithVCSDriver(driver), workspace.WithLoadedConfig(config.Config{VCS: config.VCS{Name: "git"}}), WithSpawnRule(TierCeiling))
+
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `"fossil"`)
 	assert.Contains(t, err.Error(), `"git"`)

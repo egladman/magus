@@ -187,7 +187,7 @@ type Magus struct {
 	stderr io.Writer
 	// commandLine is WithCommandLine's; empty without one.
 	commandLine []string
-	// spawnRule is WithSpawnRule's; nil without one, which CheckSpawn refuses.
+	// spawnRule is WithSpawnRule's, which Open and Inspect require.
 	spawnRule SpawnRule
 }
 
@@ -203,11 +203,7 @@ func (m *Magus) env(key string) string {
 // processOptions are the WithEnv, WithStderr, WithCommandLine and WithSpawnRule this
 // workspace was opened with, for a workspace it opens on its own behalf.
 func (m *Magus) processOptions() []Option {
-	opts := []Option{WithEnv(m.environ), WithStderr(m.noticeWriter()), WithCommandLine(m.commandLine)}
-	if m.spawnRule != nil {
-		opts = append(opts, WithSpawnRule(m.spawnRule))
-	}
-	return opts
+	return []Option{WithEnv(m.environ), WithStderr(m.noticeWriter()), WithCommandLine(m.commandLine), WithSpawnRule(m.spawnRule)}
 }
 
 // noticeWriter is where WithStderr sends this workspace's notices, io.Discard without one.
@@ -230,6 +226,7 @@ func envGetter(env []string) func(string) string {
 	return func(k string) string { return vals[k] }
 }
 
+// internal/workspace cannot import this package, so the view is registered from here.
 func init() { workspace.SetView(viewOf) }
 
 // viewOf is workspace.View's answer: a *Magus as its internals, any other workspace
@@ -264,12 +261,8 @@ func (w internals) JobLimits() config.Jobs { return w.cfg.Jobs }
 func (w internals) SpellImports() *remotespell.Imports { return w.spellImports }
 
 // CheckSpawn holds a job at tier parent spawning one at tier child to the workspace's
-// spawn rule. A workspace opened with no rule refuses every spawn, naming the option that
-// sets one: there is no default rule.
+// spawn rule.
 func (w internals) CheckSpawn(parent, child types.ModelTier) error {
-	if w.spawnRule == nil {
-		return errors.New("magus: this workspace was opened with no spawn rule; open it with WithSpawnRule(magus.TierCeiling) or a rule of your own")
-	}
 	return w.spawnRule(parent, child)
 }
 
@@ -547,8 +540,8 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		}
 		ws.VCSOptions.Driver = vo.VCSDriver
 	}
-	if vo.SpawnRuleGiven && vo.SpawnRule == nil {
-		return nil, errors.New("magus: WithSpawnRule was given a nil rule; a workspace has no default rule, so pass magus.TierCeiling, the reference rule, or one of your own")
+	if vo.SpawnRule == nil {
+		return nil, errors.New("magus: no spawn rule: a workspace has no default one, so open it with WithSpawnRule(magus.TierCeiling), the reference rule, or a rule of your own")
 	}
 	m := &Magus{ws: ws, cfg: cfg, version: vo.Version, spawnRule: vo.SpawnRule, environ: vo.Env, getenv: envGetter(vo.Env), stderr: io.Discard, commandLine: vo.CommandLine}
 	if vo.Stderr != nil {

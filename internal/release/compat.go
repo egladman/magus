@@ -90,7 +90,7 @@ func CheckCompat(ctx context.Context, repoRoot, baseTag string) (CompatReport, e
 	cfg.Cache.Dir = filepath.Join(scratch, "cache")
 	cfg.Server.Enabled = false
 	cfg.Broker = types.BrokerOff
-	ws, err := magus.Inspect(ctx, tree, workspace.WithLoadedConfig(cfg), magus.WithoutWorkspaceProviders())
+	ws, err := magus.Inspect(ctx, tree, workspace.WithLoadedConfig(cfg), magus.WithoutWorkspaceProviders(), magus.WithSpawnRule(magus.TierCeiling))
 	if c, ok := ws.(io.Closer); ok {
 		_ = c.Close()
 	}

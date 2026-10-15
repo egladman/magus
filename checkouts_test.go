@@ -94,7 +94,7 @@ func TestOutputLookupsReadTheCheckoutThatRanTheRef(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	ctx := t.Context()
-	opened, err := Inspect(ctx, worker)
+	opened, err := Inspect(ctx, worker, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	m := opened.(*Magus)
 
@@ -150,7 +150,7 @@ func TestOutputKeyInputsStopAtTheCheckoutWhoseDescriptorResolved(t *testing.T) {
 	recordSessionRun(t, worker, orchestrator, ref)
 
 	ctx := t.Context()
-	opened, err := Inspect(ctx, worker)
+	opened, err := Inspect(ctx, worker, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
 	_, err = opened.(*Magus).OutputKeyInputs(ctx, ref)
@@ -176,7 +176,7 @@ func TestOutputMissNamesTheCheckoutThatRanTheRef(t *testing.T) {
 	recordSessionRun(t, worker, orchestrator, agedRef)
 
 	ctx := t.Context()
-	opened, err := Inspect(ctx, worker)
+	opened, err := Inspect(ctx, worker, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	m := opened.(*Magus)
 	lookups := map[string]func(ref string) error{
@@ -228,7 +228,7 @@ func TestRecordedCheckoutsLeaveOutThisCheckoutThroughASymlink(t *testing.T) {
 	recordSessionRun(t, worker, alias, ref)
 	recordSessionRun(t, worker, orchestrator, ref)
 
-	opened, err := Inspect(t.Context(), worker)
+	opened, err := Inspect(t.Context(), worker, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	assert.Equal(t, []string{orchestrator}, opened.(*Magus).recordedCheckouts(ref))
 }

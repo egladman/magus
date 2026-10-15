@@ -62,10 +62,9 @@ type Load struct {
 	// VCSDriver, when VCSDriverGiven, is the VCS to drive in place of a built-in one.
 	VCSDriver      types.VCSDriver
 	VCSDriverGiven bool
-	// SpawnRule, when SpawnRuleGiven, decides whether a job may spawn one at a given
-	// model tier.
-	SpawnRule      func(parent, child types.ModelTier) error
-	SpawnRuleGiven bool
+	// SpawnRule decides whether a job may spawn one at a given model tier. Required: a
+	// workspace has no default rule.
+	SpawnRule func(parent, child types.ModelTier) error
 }
 
 // Option configures Open or Inspect.

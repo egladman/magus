@@ -47,7 +47,7 @@ func TestClientStandInProcess(t *testing.T) {
 		if err != nil {
 			return ctx, err
 		}
-		if ws, err = magus.Open(ctx, root); err != nil {
+		if ws, err = magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling)); err != nil {
 			return ctx, err
 		}
 		return types.WithJobLease(types.WithWorkspace(ctx, ws), trail.LeaseFromEnv()), nil

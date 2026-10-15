@@ -914,7 +914,7 @@ func BenchmarkMagusOpenCold(b *testing.B) {
 		root := openBenchWorkspace(b, 10)
 		b.StartTimer()
 
-		m, err := magus.Open(ctx, root)
+		m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -945,7 +945,7 @@ func BenchmarkMagusOpenWarmGraphCache(b *testing.B) {
 	root := openBenchJSWorkspace(b, 50)
 
 	// Warm the on-disk workspace cache with one full Open.
-	warm, err := magus.Open(ctx, root)
+	warm, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -954,7 +954,7 @@ func BenchmarkMagusOpenWarmGraphCache(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		m, err := magus.Open(ctx, root)
+		m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -970,7 +970,7 @@ func BenchmarkMagusOpenWarmAOT(b *testing.B) {
 	ctx := context.Background()
 	root := openBenchWorkspace(b, 10)
 
-	warm, err := magus.Open(ctx, root)
+	warm, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -979,7 +979,7 @@ func BenchmarkMagusOpenWarmAOT(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		m, err := magus.Open(ctx, root)
+		m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 		if err != nil {
 			b.Fatal(err)
 		}

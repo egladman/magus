@@ -547,7 +547,7 @@ func TestShutdownOneShotTelemetryFlushesOnlyAProviderThisProcessOwns(t *testing.
 	require.NoError(t, err)
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
-	m, err := magus.Open(context.Background(), w.Root())
+	m, err := magus.Open(context.Background(), w.Root(), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 

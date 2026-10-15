@@ -377,7 +377,7 @@ func ExampleInspect() {
 	w, cleanup := newExampleWorkspace(map[string]string{"myapp/magusfile.buzz": ""})
 	defer cleanup()
 
-	ws, err := Inspect(context.Background(), w.Root())
+	ws, err := Inspect(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
 	if err != nil {
 		fmt.Println("inspect error:", err)
 		return
@@ -458,7 +458,7 @@ func ExampleOpen() {
 	ws, cleanup := exampleWorkspace()
 	defer cleanup()
 
-	m, err := Open(context.Background(), ws.Root())
+	m, err := Open(context.Background(), ws.Root(), WithSpawnRule(TierCeiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -479,7 +479,7 @@ func ExampleMagus_ExpandAffected() {
 	ws, cleanup := exampleWorkspace()
 	defer cleanup()
 
-	m, err := Open(context.Background(), ws.Root())
+	m, err := Open(context.Background(), ws.Root(), WithSpawnRule(TierCeiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -514,7 +514,7 @@ func ExampleWorkspaceRegistry_withSpell() {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("api", WithSpell(name))
 
-	m, err := Inspect(context.Background(), ws.Root(), WithWorkspaceRegistry(reg))
+	m, err := Inspect(context.Background(), ws.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	if err != nil {
 		fmt.Println("inspect:", err)
 		return
@@ -547,7 +547,7 @@ func newWorkspace(t *testing.T) types.WorkspaceRepository {
 		"extensions/drape/magusfile.buzz":   "", // "extensions/drape"
 		"extensions/lattice/magusfile.buzz": "", // "extensions/lattice"
 	})
-	ws, err := Inspect(context.Background(), w.Root())
+	ws, err := Inspect(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
 	if err != nil {
 		t.Fatalf("Inspect: %v", err)
 	}
@@ -729,7 +729,7 @@ func TestInspectWiresVCSOptionsFromConfig(t *testing.T) {
 	disabled := false
 	cfg.VCS.Enabled = &disabled
 
-	ws, err := Inspect(context.Background(), root, workspace.WithLoadedConfig(cfg))
+	ws, err := Inspect(context.Background(), root, workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Inspect")
 
 	got := ws.VCSOptions()
@@ -809,7 +809,7 @@ func TestOpenRefusesARequiredRemoteWriteWithNoBackend(t *testing.T) {
 	required := true
 	cfg.Cache.Remote.Write.Enabled = &required
 
-	m, err := Open(t.Context(), root, workspace.WithLoadedConfig(cfg))
+	m, err := Open(t.Context(), root, workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
 	if m != nil {
 		_ = m.Close()
 	}
@@ -852,11 +852,11 @@ func TestSharedProviderVisibleAcrossMagus(t *testing.T) {
 		return w.Root()
 	}
 
-	mBuild, err := Open(ctx, mkWS(), workspace.WithTelemetryProvider(tel))
+	mBuild, err := Open(ctx, mkWS(), workspace.WithTelemetryProvider(tel), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	defer func() { _ = mBuild.Close() }()
 
-	mBridge, err := Open(ctx, mkWS(), workspace.WithTelemetryProvider(tel))
+	mBridge, err := Open(ctx, mkWS(), workspace.WithTelemetryProvider(tel), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	defer func() { _ = mBridge.Close() }()
 
@@ -922,7 +922,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 `)
 
-	m, err := Open(context.Background(), w.Root())
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1144,7 +1144,7 @@ func TestWorkspaceLoadFailureWithoutAPosition(t *testing.T) {
 func TestRequiredVersion_TooOldBinaryIsRefused(t *testing.T) {
 	root := floorWorkspace(t, ">= 99.0.0")
 
-	_, err := Inspect(context.Background(), root, WithVersion("v0.3.0"))
+	_, err := Inspect(context.Background(), root, WithVersion("v0.3.0"), WithSpawnRule(TierCeiling))
 
 	require.Error(t, err, "a binary below the declared floor must not open the workspace")
 	assert.ErrorIs(t, err, types.WorkspaceNeedsNewerMagus)
@@ -1155,7 +1155,7 @@ func TestRequiredVersion_TooOldBinaryIsRefused(t *testing.T) {
 func TestRequiredVersion_SatisfiedBinaryOpens(t *testing.T) {
 	root := floorWorkspace(t, ">= 0.3.0")
 
-	_, err := Inspect(context.Background(), root, WithVersion("v0.4.0"))
+	_, err := Inspect(context.Background(), root, WithVersion("v0.4.0"), WithSpawnRule(TierCeiling))
 
 	require.NoError(t, err)
 }
@@ -1164,7 +1164,7 @@ func TestRequiredVersion_SatisfiedBinaryOpens(t *testing.T) {
 func TestRequiredVersion_NoFloorOpens(t *testing.T) {
 	root := floorWorkspace(t, "")
 
-	_, err := Inspect(context.Background(), root, WithVersion("v0.1.0"))
+	_, err := Inspect(context.Background(), root, WithVersion("v0.1.0"), WithSpawnRule(TierCeiling))
 
 	require.NoError(t, err)
 }
@@ -1173,7 +1173,7 @@ func TestRequiredVersion_NoFloorOpens(t *testing.T) {
 func TestRequiredVersion_NoVersionSuppliedOpens(t *testing.T) {
 	root := floorWorkspace(t, ">= 99.0.0")
 
-	_, err := Inspect(context.Background(), root)
+	_, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 
 	require.NoError(t, err, "magus.Open/Inspect without WithVersion must not be gated")
 }
@@ -1203,7 +1203,7 @@ func TestWorkingDiffIncludesUntrackedFiles(t *testing.T) {
 	repo.Write("tracked.txt", "one\nCHANGED\n")
 	repo.Write("fresh.txt", "hello\nworld\n")
 
-	m, err := Open(context.Background(), repo.Root())
+	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1223,7 +1223,7 @@ func TestWorkingDiffMarksUntrackedBinaryRatherThanDumpingIt(t *testing.T) {
 
 	repo.Write("blob.bin", string([]byte{0x00, 0x01, 0x02, 0x00}))
 
-	m, err := Open(context.Background(), repo.Root())
+	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1245,7 +1245,7 @@ func TestWorkingDiffSeparatesTheTrackedAndUntrackedHalves(t *testing.T) {
 	repo.Write("nonewline.txt", "two")
 	repo.Write("brand-new.txt", "fresh\n")
 
-	m, err := Open(context.Background(), repo.Root())
+	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1267,7 +1267,7 @@ func TestWorkingDiffSeparatesTheTrackedAndUntrackedHalves(t *testing.T) {
 func TestWorkingDiffOnACleanTreeIsEmpty(t *testing.T) {
 	repo := testkit.NewRepo(t, map[string]string{"a.txt": "x\n"})
 
-	m, err := Open(context.Background(), repo.Root())
+	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1392,7 +1392,7 @@ func TestLoadConfigReadsOnlyTheEnvironmentItIsGiven(t *testing.T) {
 // workspace keeps what it was given.
 func TestWorkspaceProcessOptionsDefaultToNothing(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{"magusfile.buzz": ""})
-	ws, err := Inspect(t.Context(), root)
+	ws, err := Inspect(t.Context(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	bare := ws.(*Magus)
 	assert.Equal(t, io.Discard, bare.noticeWriter())
@@ -1400,8 +1400,8 @@ func TestWorkspaceProcessOptionsDefaultToNothing(t *testing.T) {
 	assert.Empty(t, bare.env("PATH"), "no WithEnv: no environment variable reads as set")
 
 	var notices bytes.Buffer
-	ws, err = Inspect(t.Context(), root,
-		WithStderr(&notices), WithCommandLine([]string{"magus", "run", "x"}), WithEnv([]string{"A=1", "A=2"}))
+	ws, err = Inspect(t.Context(), root, WithStderr(&notices), WithCommandLine([]string{"magus", "run", "x"}), WithEnv([]string{"A=1", "A=2"}), WithSpawnRule(TierCeiling))
+
 	require.NoError(t, err)
 	given := ws.(*Magus)
 	assert.Same(t, &notices, given.noticeWriter())

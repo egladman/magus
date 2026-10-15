@@ -35,7 +35,7 @@ func newIdentityWorkspace(t *testing.T, defaultCharms ...string) *Magus {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	opts := []Option{WithWorkspaceRegistry(reg)}
+	opts := []Option{WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling)}
 	if len(defaultCharms) > 0 {
 		opts = append(opts, workspace.WithLoadedConfig(config.Config{DefaultCharms: defaultCharms}))
 	}
@@ -183,7 +183,7 @@ func TestIdentifyRef_SkipsTargetThatFailsToKey(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	ctx := context.Background()
@@ -291,7 +291,7 @@ func newIdentitySweepWorkspace(b *testing.B, nProjects, targetsPerProject, files
 		reg.RegisterProject(projPath, WithSpell(spellName))
 	}
 
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(config.Config{DefaultCharms: defaultCharms}))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(config.Config{DefaultCharms: defaultCharms}), WithSpawnRule(TierCeiling))
 	require.NoError(b, err, "Open")
 	b.Cleanup(func() { _ = m.Close() })
 	return m

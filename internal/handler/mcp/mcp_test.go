@@ -55,7 +55,7 @@ func fixtureMagus(t *testing.T) *magus.Magus {
 	pkg := filepath.Join(root, "pkg")
 	require.NoError(t, os.MkdirAll(pkg, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(pkg, "package.json"), []byte(`{"name":"pkg"}`), 0o644))
-	m, err := magus.Open(context.Background(), root)
+	m, err := magus.Open(context.Background(), root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	return m
 }

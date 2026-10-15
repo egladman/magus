@@ -58,7 +58,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/*.go", "!gen/runtime.go");
 }
 `)
-	m, err := magus.Open(t.Context(), ws.Root())
+	m, err := magus.Open(t.Context(), ws.Root(), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	resolver := mocks.NewMockConflictResolver(t)
 	resolver.EXPECT().IgnoredPaths(mock.Anything, mock.Anything, mock.Anything).Return(map[string]bool{}, nil)

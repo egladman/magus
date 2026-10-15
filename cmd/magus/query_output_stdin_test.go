@@ -48,7 +48,7 @@ func newRunningWorkspace(t *testing.T, output string, runErr error) (*magus.Magu
 	root := w.Root()
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
-	m, err := magus.Open(context.Background(), root, magus.WithWorkspaceRegistry(reg))
+	m, err := magus.Open(context.Background(), root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -198,7 +198,7 @@ magus\project({"targets": {
 }})
 `
 	w.Magusfile(mf)
-	m, err := magus.Open(context.Background(), root)
+	m, err := magus.Open(context.Background(), root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 	ctx := context.Background()

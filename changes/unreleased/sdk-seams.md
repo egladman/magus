@@ -35,5 +35,5 @@
   - Added: `WithEnv`, `WithStderr`, `WithCommandLine`; `WithVCSDriver` (and
     `types.VCSOptions.Driver`), which `vcs.Resolve` uses ahead of a name;
     `WithObserver`, a `RunOption` the run's graph builds report to; `SpawnRule`,
-    `WithSpawnRule` and `TierCeiling`, the reference rule. A nil spawn rule fails the
-    open, and a workspace opened with none refuses every spawn.
+    `WithSpawnRule` and `TierCeiling`, the reference rule. `Open` and `Inspect` require a
+    spawn rule: an omitted or nil one fails the open, naming `TierCeiling`.

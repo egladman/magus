@@ -288,7 +288,7 @@ func bootConsoleServer(t *testing.T) (base string, patterns []string, needs map[
 	root := fixtureWorkspace(t)
 	builtConsole(t)
 
-	m, err := magus.Open(t.Context(), root)
+	m, err := magus.Open(t.Context(), root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	logs = &syncBuffer{}
 	d, addr := testServer(t, func(opts mcp.Options) *Server {

@@ -50,7 +50,7 @@ func TestBuildGlobalKnowledgeGraph(t *testing.T) {
 	rootA := mkGlobalWS(t, "build")
 	rootB := mkGlobalWS(t, "deploy")
 
-	wsA, err := Inspect(ctx, rootA)
+	wsA, err := Inspect(ctx, rootA, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
 	g, err := buildGlobalKnowledgeGraph(ctx, wsA, config.Config{Knowledge: config.Knowledge{Workspaces: []string{rootB}}}, false, slog.Default())
@@ -77,7 +77,7 @@ func TestBuildGlobalKnowledgeGraph(t *testing.T) {
 func TestBuildGlobalKnowledgeGraphSkipsUnreachable(t *testing.T) {
 	ctx := context.Background()
 	rootA := mkGlobalWS(t, "build")
-	wsA, err := Inspect(ctx, rootA)
+	wsA, err := Inspect(ctx, rootA, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
 	// A registered workspace that does not exist is skipped, not fatal: the global
@@ -497,7 +497,7 @@ func TestBuildKnowledgeGraphChurnIsStableAcrossBuilds(t *testing.T) {
 	writeCommit(t, repo, "pkg/a.buzz", "export fun a(args: [str]) > void {}\n")
 	writeCommit(t, repo, "pkg/a.buzz", "export fun a(args: [str]) > void { }\n")
 
-	ws, err := Inspect(ctx, root)
+	ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
 
@@ -1041,7 +1041,7 @@ func indexedWorkspace(t *testing.T) (string, types.WorkspaceRepository, config.C
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg", "a"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg", "a", "a.go"), []byte("package a\n\ntype Foo struct{}\n"), 0o644))
 	writeSCIP(t, filepath.Join(root, "idx", "index.scip"))
-	ws, err := Inspect(context.Background(), root)
+	ws, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	cfg := config.Config{Knowledge: config.Knowledge{Symbols: []config.SymbolIndex{{Project: ".", Index: "idx/index.scip"}}}}
 	return root, ws, cfg
@@ -1117,7 +1117,7 @@ func TestBuildKnowledgeGraphAnswersFromTheStore(t *testing.T) {
 	root := w.Root()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "docs"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "docs", "guide.md"), []byte("# Guide\n"), 0o644))
-	ws, err := Inspect(ctx, root)
+	ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	build := func() string {
 		t.Helper()
@@ -1372,7 +1372,7 @@ func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(goSpell), WithSpell(buzzSpell))
-	ws, err := Open(ctx, root, WithWorkspaceRegistry(reg))
+	ws, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = ws.Close() })
 	log := slog.New(slog.DiscardHandler)

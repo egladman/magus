@@ -22,7 +22,7 @@ func TestCacheOperationsWithoutOpenCache(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
 	root := w.Root()
-	m, err := Inspect(context.Background(), root)
+	m, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	inspected := m.(*Magus)
 
@@ -182,7 +182,7 @@ func TestTailLogWithNoEntries(t *testing.T) {
 
 func TestListAndGetArtifactWithoutACache(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{"magusfile.buzz": ""})
-	ws, err := Inspect(context.Background(), root)
+	ws, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	m := ws.(*Magus)
 
@@ -217,7 +217,7 @@ func TestMetricsAreOffUnlessAskedFor(t *testing.T) {
 func TestMetricsCollectionYieldsAReadableSnapshot(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{"magusfile.buzz": ""})
 
-	m, err := Open(context.Background(), root, WithMetricsCollection())
+	m, err := Open(context.Background(), root, WithMetricsCollection(), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 

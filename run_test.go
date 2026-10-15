@@ -47,7 +47,7 @@ func TestStageRowSaysAdvisoryForAMemberTheCompositeCarriesOnPast(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithTarget("security",
 		Advisory("a vulnerability report is not a build failure")))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -136,7 +136,7 @@ func TestRun_RaceReexecutesCachedTarget(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -194,8 +194,8 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	root := w.Root()
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg),
-		WithBroker(broker.NewClient(addr)), WithBrokerPolicy(types.BrokerBestEffort))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithBroker(broker.NewClient(addr)), WithBrokerPolicy(types.BrokerBestEffort), WithSpawnRule(TierCeiling))
+
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -254,7 +254,7 @@ func TestRun_NoCacheReexecutesAndRefreshesEntry(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -292,7 +292,7 @@ func TestRunAffected_NoCacheReexecutes(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -327,7 +327,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 `
 	w.Magusfile(mf)
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -371,7 +371,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 `
 	w.Magusfile(mf)
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -402,7 +402,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 `
 	w.Magusfile(mf)
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -440,7 +440,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 `
 	w.Magusfile(mf)
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -592,7 +592,7 @@ func TestRun_CachedComposerStillRunsItsSkipCacheGate(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -646,7 +646,7 @@ func TestRun_FirstRunAfterAChangeIsStoredWhenASkipCacheMemberRewritesItsArtifact
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	p := m.Get(".")
@@ -685,7 +685,7 @@ func TestCheckOnlyTargetNeverReplaysAGeneratedTreeItDoesNotOwn(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	p := m.Get(".")
@@ -727,7 +727,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 export fun lint(ctx: magus\Context, args: [str]) > void {}
 `
 	w.Magusfile(mf)
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	p := m.Get(".")
@@ -784,7 +784,7 @@ export fun plain() > void {}
 `
 	w.Magusfile(mf)
 	w.Write("lib/index.buzz", lib)
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	p := m.Get(".")
@@ -824,7 +824,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 }
 `
 	w.Magusfile(mf)
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	p := m.Get(".")
@@ -855,7 +855,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/**");
 }
 `)
-	m, err := Open(context.Background(), w.Root())
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	p := m.Get(".")
@@ -880,7 +880,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 `
 	w.Magusfile(mf)
 
-	_, err := Open(context.Background(), root)
+	_, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.Error(t, err, "Open must reject a computed magus.inputs argument")
 	assert.Contains(t, err.Error(), "literal arguments", "error should explain the literal requirement")
 	assert.Contains(t, err.Error(), "build", "error should name the offending target")
@@ -904,7 +904,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 `
 	w.Magusfile(mf)
 
-	_, err := Open(context.Background(), root)
+	_, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "a computed ctx.withEnv must not be a load error")
 }
 
@@ -1153,7 +1153,7 @@ func TestCurrentRevisionNoVCS(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
 	root := w.Root()
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1174,7 +1174,7 @@ func TestCurrentRevisionWithVCS(t *testing.T) {
 	writeCommit(t, repo, ".gitignore", ".magus/\n")
 	head := repo.Head()
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1208,7 +1208,7 @@ func TestRun_NoVCSLeavesRevisionEmpty(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1231,7 +1231,7 @@ func TestRun_NoVCSLeavesRevisionEmpty(t *testing.T) {
 func TestExpandAffectedSignalsFallbackWithoutVCS(t *testing.T) {
 	root := mkGlobalWS(t, "build")
 
-	m, err := Open(t.Context(), root)
+	m, err := Open(t.Context(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
 	targets, source, fellBack, err := m.ExpandAffected(t.Context(), "build", "")
@@ -1330,7 +1330,7 @@ func TestRunCIAnchorIgnoresSpellCIOpOnMagusfileProject(t *testing.T) {
 	reg.RegisterProject(".", WithSpell(register.Spell(t, "ci-capable", spells.WithTargets("ci"))))
 
 	ctx := context.Background()
-	m, err := Open(ctx, root, WithWorkspaceRegistry(reg))
+	m, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
@@ -1791,7 +1791,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 	w.Magusfile(rootMF)
 	w.Write("leaf/magusfile.buzz", leafMF)
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1841,7 +1841,7 @@ func TestRun_RetryOnVolatileIsPerTargetNotPerRun(t *testing.T) {
 	// so the Wilson score plays no part and the only thing under test is the gate.
 	cfg := config.Defaults()
 	cfg.HistoryPath = filepath.Join(root, "history.json")
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1908,7 +1908,7 @@ func TestRun_RetryIsAudibleOffCI(t *testing.T) {
 	)
 	cfg := config.Defaults()
 	cfg.HistoryPath = filepath.Join(root, "history.json")
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1945,7 +1945,7 @@ func TestRun_NonRetryableFailureRecordsNotRetried(t *testing.T) {
 	)
 	cfg := config.Defaults()
 	cfg.HistoryPath = filepath.Join(root, "history.json")
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -2008,7 +2008,7 @@ func TestRun_MemoryClaimFollowsTheRunsShape(t *testing.T) {
 	reg.RegisterProject(".", WithSpell(spellName), WithTarget("work", workspace.MemoryMB(64)))
 	cfg := config.Defaults()
 	cfg.HistoryPath = historyPath
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -2195,7 +2195,7 @@ func TestComputeTargetKeyFoldsOpDeclaredEnvKeys(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	ctx := context.Background()
@@ -2264,7 +2264,7 @@ func TestReplayLeavesNestedProjectOutputsAlone(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName), WithOutputs("**/gen/*.txt"))
 	reg.RegisterProject("leaf")
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	require.NotNil(t, m.Get("leaf"), "the nested project must resolve")
@@ -2302,7 +2302,7 @@ func TestDirectHitReplayIntoANestedProjectIsAudited(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName), WithOutputs("leaf/gen/*.txt"))
 	reg.RegisterProject("leaf")
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -2342,7 +2342,7 @@ func runCancelledLint(t *testing.T, spellName string, invoke func(spells.InvokeR
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
 	reg.RegisterProject("leaf")
-	m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	p := m.Get(".")
@@ -2408,7 +2408,7 @@ func TestOutputGlobsByRootStopsAtNestedProjects(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithOutputs("**/gen/*.txt"))
 	reg.RegisterProject("leaf")
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 

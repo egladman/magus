@@ -171,7 +171,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/*.go", "!gen/runtime.go");
 }
 `)
-	m, err := magus.Open(t.Context(), w.Root())
+	m, err := magus.Open(t.Context(), w.Root(), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 

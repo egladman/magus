@@ -39,7 +39,7 @@ func TestInsightsUseHistoryAndProjectLabels(t *testing.T) {
 	reg.RegisterProject(".")
 	reg.RegisterProject("api", WithDependsOn(".."))
 	reg.RegisterProject("docs", WithDependsOn("api"))
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	m := ws.(*Magus)
 	canonicalRoot, err := filepath.EvalSymlinks(root)
@@ -172,7 +172,7 @@ func TestConformLensWithoutAnIndexIsUnknownAndMisconfigurationIsAnError(t *testi
 	reg.RegisterProject(".")
 
 	open := func(cfg config.Config) *Magus {
-		ws, err := Inspect(t.Context(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg))
+		ws, err := Inspect(t.Context(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
 		require.NoError(t, err)
 		return ws.(*Magus)
 	}
@@ -222,7 +222,7 @@ func TestProjectDisplayName(t *testing.T) {
 		"magusfile.buzz":     "",
 		"api/magusfile.buzz": "",
 	})
-	ws, err := Inspect(context.Background(), root)
+	ws, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	m := ws.(*Magus)
 
@@ -246,7 +246,7 @@ func TestDeclaredDeps(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("web", WithDependsOn("lib"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	m := ws.(*Magus)
 

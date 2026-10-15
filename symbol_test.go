@@ -209,7 +209,7 @@ func TestRunReturnsUndeclaredSourceModified(t *testing.T) {
 	reg.RegisterProject(".", WithSpell(spellName))
 	cfg := config.Defaults()
 	cfg.HistoryPath = filepath.Join(root, "history.json")
-	m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg))
+	m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -474,7 +474,7 @@ func newIndexedWorkspaceWith(t *testing.T, extra ...string) (*Magus, string, *st
 		opts = append(opts, WithSpell(name))
 	}
 	reg.RegisterProject(".", opts...)
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -665,7 +665,7 @@ func TestMissingBuzzIndexerFailsOnlyItsOwnIndex(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0o644))
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(goSpell), WithSpell(buzzSpell))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	ctx := context.Background()
@@ -804,7 +804,7 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("svc", WithSpell(goSpell))
 	reg.RegisterProject("web", WithSpell(tsSpell))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1124,7 +1124,7 @@ func TestScipReplayNeverKeepsAnIndexOfOtherSources(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	index := symbols.IndexPath(resolveCacheDir(m.Root(), m.cfg), m.Root(), spells.DefaultSymbolIndexOp)

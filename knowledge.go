@@ -45,6 +45,7 @@ import (
 	"golang.org/x/mod/modfile"
 )
 
+// workspacegraph cannot import this package, so the builders are registered from here.
 func init() {
 	workspacegraph.Register(workspacegraph.Builders{
 		BuildGlobal:          buildGlobalKnowledgeGraph,

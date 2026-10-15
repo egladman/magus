@@ -154,7 +154,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	})
 	reg := magus.NewWorkspaceRegistry()
 	reg.AddHarness("brief-host")
-	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg))
+	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	w.Write("host/hooks.json",
 		`{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"./magus buzz -s magus-command.buzz"}]}]}}`)

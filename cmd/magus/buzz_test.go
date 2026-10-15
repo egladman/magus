@@ -89,7 +89,7 @@ func buzzSandboxWorkspace(t *testing.T, mode types.SandboxMode) (context.Context
 	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
 	w.Write("magus.yaml", fmt.Sprintf("sandbox:\n  mode: %s\n", mode))
 
-	m, err := magus.Open(t.Context(), root)
+	m, err := magus.Open(t.Context(), root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "fixture workspace must open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -205,7 +205,7 @@ func buzzLazyWorkspace(t *testing.T, script string) (string, string) {
 func TestBuzzCmd_VanillaScriptDoesNotOpenTheWorkspace(t *testing.T) {
 	root, script := buzzLazyWorkspace(t, buzzVanillaScript)
 	opens := countWorkspaceOpens(t, func(ctx context.Context, _ string) (*magus.Magus, error) {
-		return magus.Open(ctx, root)
+		return magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	})
 
 	var runErr error
@@ -221,7 +221,7 @@ func TestBuzzCmd_WorkspaceMemberOpensTheWorkspaceOnce(t *testing.T) {
 	var m *magus.Magus
 	opens := countWorkspaceOpens(t, func(ctx context.Context, _ string) (*magus.Magus, error) {
 		var err error
-		m, err = magus.Open(ctx, root)
+		m, err = magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 		return m, err
 	})
 	t.Cleanup(func() {
@@ -302,7 +302,7 @@ func TestBuzzCmd_GuardGlueNeverOpensTheWorkspace(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			root, _ := buzzLazyWorkspace(t, buzzVanillaScript)
 			opens := countWorkspaceOpens(t, func(ctx context.Context, _ string) (*magus.Magus, error) {
-				return magus.Open(ctx, root)
+				return magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 			})
 			script, err := filepath.Abs(filepath.Join("..", "..", "docs", "guides", "integrations", "agents", name))
 			require.NoError(t, err)

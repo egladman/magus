@@ -44,7 +44,7 @@ func openRefusing(t *testing.T) (*Magus, *atomic.Int32) {
 	w.Magusfile(refuseEverything)
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(t.Context(), w.Root(), WithWorkspaceRegistry(reg))
+	m, err := Open(t.Context(), w.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	return m, runs

@@ -31,14 +31,14 @@ func TestOpenMagusfileWithoutEngine(t *testing.T) {
 
 	for name, load := range map[string]func(context.Context, string) error{
 		"Open": func(ctx context.Context, root string) error {
-			m, err := magus.Open(ctx, root)
+			m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 			if err == nil {
 				_ = m.Close()
 			}
 			return err
 		},
 		"Inspect": func(ctx context.Context, root string) error {
-			_, err := magus.Inspect(ctx, root)
+			_, err := magus.Inspect(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 			return err
 		},
 	} {
@@ -61,11 +61,11 @@ func TestOpenWorkspaceWithoutMagusfileWithoutEngine(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Write("go.mod", "module example.test/app\n")
 
-	ws, err := magus.Inspect(context.Background(), w.Root())
+	ws, err := magus.Inspect(context.Background(), w.Root(), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	assert.Empty(t, ws.All())
 
-	m, err := magus.Open(context.Background(), w.Root())
+	m, err := magus.Open(context.Background(), w.Root(), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	require.NoError(t, m.Close())
 }
