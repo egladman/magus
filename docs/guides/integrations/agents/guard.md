@@ -323,6 +323,7 @@ workspace sets any of them to `deny` or `off` with
 | [`stage-all`](../../../reference/rules/stage-all.md)                           | a whole-tree `git add`                                                 |
 | [`symbol-search`](../../../reference/rules/symbol-search.md)                   | a text search for a symbol the graph answers                           |
 | [`throwaway-copy`](../../../reference/rules/throwaway-copy.md)                 | a run inside a temp or scratchpad copy                                 |
+| [`unjudged-tool`](../../../reference/rules/unjudged-tool.md)                   | a tool call whose input no rule reads, from a tool the guard lacks     |
 | [`unknown-env`](../../../reference/rules/unknown-env.md)                       | a retired or misspelled `MAGUS_*` variable                             |
 
 The rules that explain from the start, such as `capture-filter`, `graph-pipe` and
@@ -795,7 +796,9 @@ advisory, never deny, and never change what another rule decided.
 All of them say nothing on any uncertainty. A rule fired on a guess trains the
 reader to ignore it, and a deny fired on a guess blocks real work.
 
-Wire this to your host's file-editing tool, not its shell tool.
+The shipped harnesses reach these rules through the entry every tool call reaches
+(see [Every tool reaches the guard](#every-tool-reaches-the-guard)). A host you wire by
+hand can instead wire `magus-path.buzz` to its file-editing tool.
 
 ## The verdict contract
 
@@ -861,6 +864,36 @@ identical to a guarded session:
 - An id naming a row in a terminal state (`pass`, `fail`, `no_return`) prints one
   notice per session saying its rules are inert. That is true and was invisible:
   the lease-scoped rules only ever read live rows.
+
+## Every tool reaches the guard
+
+Every shipped harness wires every tool call to the guard, not only the shell, the
+file editors and magus's own MCP tools: Claude Code and Codex through one `PreToolUse`
+entry matching `*`, Cursor through `preToolUse` matching `*`, OpenCode through the
+plugin's `tool.execute.before`. The glue hands `magus shell` the whole event, and the
+guard judges the call by the shape of its input:
+
+- a `command` is a command line, judged by the command rules;
+- a file path is a read or a write, which the tool decides: a read is judged as the
+  `cat` or `sed -n` line it stands for, so `read-navigation` and `read-paging` hold
+  whichever tool reads, and anything else is judged as a write;
+- a search pattern is the `rg` or `find` line it stands for;
+- a prompt is a spawn, a skill name a skill load, a magus MCP call the CLI verb it
+  stands for.
+
+What the shape cannot settle, the guard reads from one table of the host tool names
+it knows, each with what it can do: run a command, read, write, spawn, or touch
+nothing at all (a todo list, a plan, a web lookup, a read of a background task's
+output). A call to a tool that touches nothing passes before any rule loads, so wiring
+every tool costs the host no wait it did not already pay.
+
+A call whose input has none of those shapes, from a tool the table does not list, is
+one no rule could judge. The
+[`unjudged-tool`](../../../reference/rules/unjudged-tool.md) rule names it: it advises
+once per session by default, since the guard cannot know such a tool is harmful, and
+a workspace that wants every call judged sets it to `deny` with
+[`magus\guard.builtins`](#setting-a-built-in-rule). Another MCP server's tool is the
+common case.
 
 ## Commands magus suggested
 

@@ -38,6 +38,10 @@
 // spawn by, so a workspace spawn rule can deny it. subagentStart records the same spawn
 // again from the child's side where Cursor fires it; cursor-agent never has.
 //
+// preToolUse matches every tool. A call none of the above restates, carrying no file path,
+// goes to `magus shell` whole, as the envelope it reads: magus passes a tool its known-tool
+// table calls inert, and names one no rule can read (unjudged-tool).
+//
 // beforeSubmitPrompt hands the person's message to `magus shell --message`, which records
 // the topics it raises and judges nothing; the reply only says to go on.
 //
@@ -725,8 +729,14 @@ fun gateTool(scope: Scope, event: any?) > str {
     }
     final search = searchCommand(event);
     if (search != "") { return gateCall(scope, event: event, payload: search, asPath: false, family: "failed-search"); }
-    if (path == "") { return ALLOW; }
-    return gateCall(scope, event: event, payload: path, asPath: true, family: "failed-path");
+    if (path != "") { return gateCall(scope, event: event, payload: path, asPath: true, family: "failed-path"); }
+    // beforeMCPExecution judges an MCP call, with the server name this event lacks.
+    if (tool.startsWith(MCP_TOOL_PREFIX)) { return ALLOW; }
+    // Every other call goes to magus whole: it passes a tool its table knows touches
+    // nothing, and names one no rule can read rather than letting it run unseen.
+    final input = hook\dig(event, dotPath: "tool_input") ?? {<str: any>};
+    final call = envelope(scope, event: event, tool: tool, input: input);
+    return gateCall(scope, event: event, payload: call, asPath: false, family: "failed-call");
 }
 
 fun dispatch(event: any?, eventName: str, scope: Scope) > str {

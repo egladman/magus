@@ -417,6 +417,27 @@ func TestHostGluesCoverTheGuardContract(t *testing.T) {
 		assert.Contains(t, string(wiring), name,
 			"%s claims to cover the codex host, but codex-hooks.json never invokes it", name)
 	}
+
+	// Every input above reaches one glue through one entry: the shipped configs wire every
+	// tool call to magus-command.buzz under the catch-all matcher, so a write, an MCP call
+	// and a command are covered by the same entry, and no second entry judges one twice.
+	for host, path := range shippedHookConfigs {
+		raw, err := os.ReadFile(path)
+		require.NoError(t, err)
+		var cfg hookSettings
+		require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", path)
+		var judging []string
+		for _, entry := range cfg.Hooks["PreToolUse"] {
+			for _, h := range entry.Hooks {
+				assert.NotContains(t, h.Command, "magus-path.buzz",
+					"%s: a write reaches the catch-all entry whole; a path entry judges it twice", host)
+				if strings.Contains(h.Command, "magus-command.buzz") {
+					judging = append(judging, entry.Matcher)
+				}
+			}
+		}
+		assert.Equal(t, []string{"*"}, judging, "%s: one PreToolUse entry runs the command glue, on every tool", host)
+	}
 }
 
 // claimsGuardHost reports whether a template names host in one of its guard
@@ -610,9 +631,6 @@ func TestTransportCasesCoverTheContract(t *testing.T) {
 // unreachableCases records an input-and-decision cell the cases cannot execute,
 // and why. Every other cell owes a real case.
 var unreachableCases = map[string]string{
-	"mcp/advise": "every rule that fires on a judged MCP call denies, and the advisory families that " +
-		"could reach one (gate-repeat, graph-stale) each need state a testscript cannot " +
-		"make deterministic: run logs inside the window, a stale symbol index",
 	"path/ask": "the push gate is the only rule that asks, and it reads a shell command; no rule asks about a write. " +
 		"The arm is rendered and graded by TestRenderedGuardVerdictsValidateAgainstTheirHostSchema instead",
 	"mcp/ask": "the push gate is the only rule that asks, and it reads a shell command; no rule asks about an MCP call. " +

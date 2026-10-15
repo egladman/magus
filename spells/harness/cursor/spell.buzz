@@ -63,12 +63,12 @@ fun cursor_event_names() > [str] {
     ];
 }
 
+// Every tool, gated before it runs so a deny lands first. The glue restates Grep, Glob and
+// Read as the shell lines they stand for, judges Shell and Task as a command and a spawn,
+// and hands magus every other call whole, which judges it by its tool and the shape of its
+// input and names one no rule can read (the unjudged-tool rule).
 fun cursor_pretool_matcher() > str {
-    // Shell is gated here so a deny lands before the command runs, once per call.
-    // Grep, Glob and Read are restated as shell and gated here for the same reason: an
-    // advise after a log read or a terminals read is the call that already undermined
-    // magus. Task is the subagent spawn, gated as a spawn.
-    return "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|Task";
+    return "*";
 }
 
 // MCP:.* is how Cursor names an MCP tool on postToolUse (MCP:<tool>), probed live.
@@ -351,18 +351,14 @@ test "harness_entries covers every Cursor event magus uses" {
     }
 }
 
-test "preToolUse matcher gates the shell, edits and the tools restated as shell" {
-    final matcher = cursor_pretool_matcher();
-    assert\isTrue(matcher.indexOf("Shell") != null, "Shell, gated here so a deny lands before the command runs");
-    assert\isTrue(matcher.indexOf("Write") != null, "Write");
-    assert\isTrue(matcher.indexOf("StrReplace") != null, "StrReplace");
-    assert\isTrue(matcher.indexOf("Delete") != null, "Delete");
-    assert\isTrue(matcher.indexOf("Edit") != null, "Edit");
-    assert\isTrue(matcher.indexOf("NotebookEdit") != null, "NotebookEdit");
-    assert\isTrue(matcher.indexOf("Grep") != null, "Grep");
-    assert\isTrue(matcher.indexOf("Glob") != null, "Glob");
-    assert\isTrue(matcher.indexOf("Read") != null, "Read");
-    assert\isTrue(matcher.indexOf("Task") != null, "the subagent spawn");
+test "preToolUse gates every tool" {
+    assert\equal(cursor_pretool_matcher(), "*", "Cursor's validator reads * as every tool, not as a regex");
+    foreach (block in cursor_entries()) {
+        if ((block["path"] as [str])[1] != "preToolUse") { continue; }
+        final entries = block["entries"] as [any];
+        assert\equal(entries.len(), 1, "one entry, so no call is judged twice");
+        assert\equal("{entries[0]["matcher"]}", "*", "the entry carries the catch-all");
+    }
 }
 
 test "postToolUse matcher covers shell, search and MCP tools for advise" {

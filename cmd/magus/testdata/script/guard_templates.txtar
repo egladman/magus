@@ -14,8 +14,8 @@
 #
 # Every template is Buzz, run the way a host config wires it: a plain
 # `magus buzz -s <file> [-- flags]` argv. The per-entry knobs ride that argv: the host
-# name, and the `magus shell` flags an entry declares about itself. Whether to forward
-# the whole event is worked out from the event.
+# name, and the `magus shell` flags an entry declares about itself. Every event goes to
+# `magus shell` whole, which judges the call by its tool and the shape of its input.
 #
 # Every case is labeled `# case: <input>/<decision>`; TestTransportCasesCoverTheContract
 # in internal/agent/guard_test.go fails when the guard contract grows a cell no case covers.
@@ -99,9 +99,9 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name codex
 
 # --- magus-command.buzz: a host's Read tool, restated as the line it stands for ---
 #
-# The Read tool never reaches a shell, so the glue restates it: a whole Read as a whole-file
-# print (`cat`), a ranged one as a ranged print (`sed -n`). The read rules then judge it as
-# the command it replaces. These run the Buzz glue alone, the form the wirings name; the
+# The Read tool never reaches a shell, so magus restates the whole event it receives: a
+# whole Read as a whole-file print (`cat`), a ranged one as a ranged print (`sed -n`). The
+# read rules then judge it as the command it replaces. These run the Buzz glue alone, the form the wirings name; the
 # fixture workspace sets read-navigation to deny past 120 lines and holds a Go file over
 # that, so the whole print is refused and the ranged one is not.
 cd read-ws
@@ -145,10 +145,9 @@ exec magus job fork harness/mcp-worker --read-only --criteria 'the transport tes
 stdin $WORK/exec-mcp-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 
-# Both MCP cases forward the WHOLE event, which the glue works out from the event: an MCP
-# call carries no tool_input.command for HOST_EVENT_PATH to select. A derivation that
-# regressed to selecting `null` would judge text instead of a tool call, and the deny below
-# would vanish.
+# Both MCP cases forward the WHOLE event, as every call goes. A glue that regressed to
+# selecting a field would judge text instead of a tool call, and the deny below would
+# vanish.
 
 # case: mcp/pass
 # A judged MCP call that no rule refuses. `magus\describe` reads, and a bound worker
@@ -178,16 +177,15 @@ env XDG_STATE_HOME=
 # is filed beside the job store, so the state dir goes with it.
 rm $WORK/home/state
 
-# --- the edges of the whole-event derivation --------------------------------
+# --- the edges of the whole event -------------------------------------------
 #
-# The glue works out which payload to send from the event, so these are the shapes where
-# working it out could go wrong. Each says which branch it must take, and the last one is
-# the one that would be SILENT: a params object carrying a `command` key, where selecting
-# the field judges a string that was never a command line.
+# Every event goes whole, so these are the shapes where magus's decoder could misread one.
+# The last one is the one that would be SILENT: a params object carrying a `command` key,
+# where judging that field judges a string that was never a command line.
 
 # case: command/pass
-# An empty command is still a STRING, so it takes the field branch and magus judges an
-# empty command line. It must not be read as an absent field and turned into an envelope.
+# An empty command on the shell tool. The tool is one the guard knows, so a call with
+# nothing to run passes rather than being named as a tool no rule could read.
 stdin $WORK/empty-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
@@ -215,6 +213,21 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 stdin $WORK/mcp-command-param.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
+
+# case: mcp/advise
+# Another server's tool carries nothing magus can read, so unjudged-tool names it rather
+# than letting it run unseen. Advised, by default, once a session; in a fixture workspace
+# for the cache dir that holds it to once.
+cd read-ws
+stdin $WORK/mcp-unjudged.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"additionalContext"'
+stdout 'mcp__browser__click'
+! stdout 'permissionDecision'
+stdin $WORK/mcp-unjudged.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+! stdout .
+cd $WORK
 
 # --- the per-entry flag route: the argv after `--` ---------------------------
 #
@@ -338,12 +351,6 @@ stdout 'NEW DIRECTORY'
 
 cd $WORK
 
-# case: mcp/advise unreachable - no rule ADVISES on an MCP call. Every rule that reads one
-# denies (the lease-scoped gate, VCS and rebind rules, and the cache-dir rule), and the
-# three advisory families a rendered call could reach each need machine state a script
-# cannot make deterministic: the gate-repeat count, the stale symbol index, the stale
-# binary. A case here would pass for a reason that is not this transport.
-
 # --- magus-path.buzz: the same hosts, their file-writing tool -----------
 
 # case: path/advise
@@ -384,6 +391,14 @@ stdout 'nothing was judged'
 stdin pass-path.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
 ! stdout .
+
+# case: path/advise
+# The entry every shipped host wires to every tool judges a write too: magus-command.buzz
+# sends the whole event, and magus reads its file path as the write it is.
+stdin advise-path-whole.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"additionalContext":"'
+stdout 'every session'
 
 # case: path/deny
 # The notes store is the one rule that denies on file writes, and it fires only where a
@@ -1371,8 +1386,12 @@ exit 2
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": null}}
 -- no-command.json --
 {"session_id": "s1", "tool_name": "TodoWrite", "tool_input": {"todos": [{"content": "git stash the tree", "status": "pending"}]}}
+-- mcp-unjudged.json --
+{"session_id": "s-unjudged", "tool_name": "mcp__browser__click", "tool_input": {"ref": "e1"}}
 -- mcp-command-param.json --
 {"session_id": "s1", "tool_name": "mcp__magus__client", "tool_input": {"script": "import \"magus\"; magus\\describe(\"targets\")", "command": "git stash"}}
+-- advise-path-whole.json --
+{"session_id": "s-whole-write", "tool_name": "Write", "tool_input": {"file_path": "AGENTS.md"}}
 -- advise-path.json --
 {"session_id": "s1", "tool_name": "Write", "tool_input": {"file_path": "AGENTS.md"}}
 -- notebook-path.json --

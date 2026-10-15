@@ -68,17 +68,16 @@ fun claude_glue_command(input: str, flags: [str]) > str {
     return claude_named_command("magus-{input}", flags: flags);
 }
 
-// Declared on every entry that judges, because THIS config wires SKILL_MATCHER. A rule
-// that requires a skill before an act can only be satisfied where loads are reported, so
-// the wiring that reports them is what declares it; a harness without that matcher passes
-// nothing and those rules stand down rather than denying forever. It is the one thing an
+// Declared on every entry that judges, because THIS config wires every tool, the Skill tool
+// among them. A rule that requires a skill before an act can only be satisfied where loads
+// are reported, so the wiring that reports them is what declares it; a harness that does
+// not see skill loads passes nothing and those rules stand down rather than denying forever. It is the one thing an
 // entry knows that the event cannot say, which is why it is the one thing written on it.
 final REPORTS_SKILLS = "--reports-skills";
 
-// The Bash, MCP, Skill, spawn and message entries all take this one string. Their payloads
-// differ, but each has to reach `magus shell` whole or as the one field the glue selects,
-// and the glue reads which off the event rather than off the entry, so there is nothing
-// else to write on it.
+// The entries that judge no tool call before it runs (a finished spawn, a stop, the
+// person's message) take this one string. Each reaches `magus shell` whole, and magus reads
+// what it is off the event, so there is nothing else to write on it.
 fun claude_guard_command() > str {
     return claude_glue_command("command", flags: [REPORTS_SKILLS]);
 }
@@ -86,15 +85,16 @@ fun claude_guard_command() > str {
 // Claude Code's Bash tool waits 120000 ms on a command that names no timeout and lets one
 // name up to 600000 (code.claude.com/docs/en/settings, BASH_DEFAULT_TIMEOUT_MS and
 // BASH_MAX_TIMEOUT_MS); past its timeout the command moves to the background. Declared once
-// here, rendered onto the Bash entry and returned by harness_limits. A session that sets
+// here, rendered onto the catch-all entry and returned by harness_limits. A session that sets
 // those variables waits differently, and the advice that reads these numbers is off by
 // that much.
 final FOREGROUND_DEFAULT_MS = 120000;
 final FOREGROUND_MAX_MS = 600000;
 
-// The Bash entry alone carries the foreground limits: no other tool it judges has a timeout
-// or a background mode.
-fun claude_shell_command() > str {
+// The catch-all entry every tool call reaches. It carries the foreground limits, which the
+// glue forwards only for a shell command line: no other tool has a timeout or a background
+// mode.
+fun claude_call_command() > str {
     return claude_glue_command("command", flags: [
         REPORTS_SKILLS,
         "--foreground-default-ms", "{FOREGROUND_DEFAULT_MS}",
@@ -124,9 +124,14 @@ export fun harness_limits(target: Target, cb: fun(any)) > {str: any} {
 // network call. A model released after this spell's version matches no row, and the guard's
 // cost advice for it falls back to token counts; agents.models in magus.yaml fills the gap.
 // Prices are USD per million tokens; a price_step of 0 means the model has no step.
-fun claude_model(id: str, window: int, input: double, cacheWrite5m: double, cacheWrite1h: double, cacheRead: double, output: double, priceStep: int, stepFactor: double) > {str: any} {
+//
+// tier is the case of the shipped model tiers (magus/modeltiers) this exact id runs, "" for
+// none: a workspace that declares no tiers of its own maps each case to the row naming it,
+// and the agents magus ships run on the economy row.
+fun claude_model(id: str, tier: str, window: int, input: double, cacheWrite5m: double, cacheWrite1h: double, cacheRead: double, output: double, priceStep: int, stepFactor: double) > {str: any} {
     return {
         "id": id,
+        "tier": tier,
         "window": window,
         "input": input,
         "cache_write_5m": cacheWrite5m,
@@ -140,13 +145,13 @@ fun claude_model(id: str, window: int, input: double, cacheWrite5m: double, cach
 
 fun claude_models() > [any] {
     return [
-        claude_model("claude-fable-5-1", window: 1000000, input: 10.0, cacheWrite5m: 12.5, cacheWrite1h: 20.0, cacheRead: 0.25, output: 50.0, priceStep: 0, stepFactor: 0.0),
-        claude_model("claude-opus-5-5", window: 1000000, input: 4.0, cacheWrite5m: 5.0, cacheWrite1h: 8.0, cacheRead: 0.2, output: 20.0, priceStep: 0, stepFactor: 0.0),
-        claude_model("claude-sonnet-5-5", window: 1000000, input: 2.0, cacheWrite5m: 2.5, cacheWrite1h: 4.0, cacheRead: 0.1, output: 10.0, priceStep: 0, stepFactor: 0.0),
+        claude_model("claude-fable-5-1", tier: "", window: 1000000, input: 10.0, cacheWrite5m: 12.5, cacheWrite1h: 20.0, cacheRead: 0.25, output: 50.0, priceStep: 0, stepFactor: 0.0),
+        claude_model("claude-opus-5-5", tier: "principal", window: 1000000, input: 4.0, cacheWrite5m: 5.0, cacheWrite1h: 8.0, cacheRead: 0.2, output: 20.0, priceStep: 0, stepFactor: 0.0),
+        claude_model("claude-sonnet-5-5", tier: "standard", window: 1000000, input: 2.0, cacheWrite5m: 2.5, cacheWrite1h: 4.0, cacheRead: 0.1, output: 10.0, priceStep: 0, stepFactor: 0.0),
         // The one current model priced by prompt length: every category is 5x above 100000
         // prompt tokens, cache reads and writes included.
-        claude_model("claude-haiku-5-5", window: 1000000, input: 0.1, cacheWrite5m: 0.125, cacheWrite1h: 0.2, cacheRead: 0.01, output: 0.5, priceStep: 100000, stepFactor: 5.0),
-        claude_model("claude-haiku-4-5", window: 200000, input: 1.0, cacheWrite5m: 1.25, cacheWrite1h: 2.0, cacheRead: 0.1, output: 5.0, priceStep: 0, stepFactor: 0.0),
+        claude_model("claude-haiku-5-5", tier: "economy", window: 1000000, input: 0.1, cacheWrite5m: 0.125, cacheWrite1h: 0.2, cacheRead: 0.01, output: 0.5, priceStep: 100000, stepFactor: 5.0),
+        claude_model("claude-haiku-4-5", tier: "", window: 200000, input: 1.0, cacheWrite5m: 1.25, cacheWrite1h: 2.0, cacheRead: 0.1, output: 5.0, priceStep: 0, stepFactor: 0.0),
     ];
 }
 
@@ -154,32 +159,19 @@ export fun harness_models(target: Target, cb: fun(any)) > [any] {
     return claude_models();
 }
 
-fun claude_path_command() > str {
-    return claude_glue_command("path", flags: [REPORTS_SKILLS]);
-}
-
 fun claude_observe_command() > str {
     return claude_glue_command("observe", flags: [<str>]);
 }
 
-// The matcher that makes skill loads reportable, named once so the entry that DECLARES
-// they are reported can be checked against the entry that produces them. "Keep the two
-// in step" used to be a comment; the invariant test below is what keeps them.
-final SKILL_MATCHER = "Skill";
+// Every tool, so magus judges every call by its tool and the shape of its input, and a tool
+// no rule can read is named rather than run unseen (the unjudged-tool rule). Skill loads
+// ride it too, which is what lets the judging entries declare --reports-skills.
+final EVERY_TOOL = "*";
 
-// Both names the spawn tool has had across Claude Code releases. The same matcher runs
-// after the call too: the finished call's response carries the id the child was given,
-// which is what lets that child's own spawns name their parent.
+// Both names the spawn tool has had across Claude Code releases, matched after the call:
+// the finished call's response carries the id the child was given, which is what lets that
+// child's own spawns name their parent.
 final SPAWN_MATCHER = "Agent|Task";
-
-// A message to a subagent that already exists, so a workspace spawn rule sees every
-// continuation as well as every spawn.
-final CONTINUE_MATCHER = "SendMessage";
-
-// The tools that wait: a watcher running a command in the background, a read of a
-// background task's output, and a prompt queued for later. A watcher's command is judged
-// as the shell line it is, and the waiter rules count what each agent has armed.
-final WAITER_MATCHER = "Monitor|TaskOutput|ScheduleWakeup|CronCreate";
 
 // The lifecycle wrappers judge nothing, which is why they are built from
 // claude_buzz_command directly: their names are their own rather than an entry of the
@@ -226,19 +218,12 @@ fun claude_entries() > [any] {
         {
             "path": ["hooks", "PreToolUse"],
             "entries": [
-                claude_matched_entry("Bash", cmd: claude_shell_command()),
-                claude_matched_entry("Edit|Write|NotebookEdit", cmd: claude_path_command()),
-                claude_matched_entry("^mcp__magus__", cmd: claude_guard_command()),
+                // magus restates a read as the `cat` or `sed -n` line it stands for and a
+                // search as its rg or find line, so the read and search rules hold whichever
+                // tool performs them.
+                claude_matched_entry(EVERY_TOOL, cmd: claude_call_command()),
+                // The observer records the path a read reached; it judges nothing.
                 claude_matched_entry("Read", cmd: claude_observe_command()),
-                // The glue restates a Read as the `cat` or `sed -n` line it stands for, so
-                // the read rules judge it like the shell read it replaces.
-                claude_matched_entry("Read", cmd: claude_guard_command()),
-                // Likewise a content or file search as the rg or find line it stands for,
-                // so the symbol-search and listing rules hold whichever way it was asked.
-                claude_matched_entry("Grep|Glob", cmd: claude_guard_command()),
-                claude_matched_entry(SKILL_MATCHER, cmd: claude_guard_command()),
-                claude_matched_entry(SPAWN_MATCHER + "|" + CONTINUE_MATCHER, cmd: claude_guard_command()),
-                claude_matched_entry(WAITER_MATCHER, cmd: claude_guard_command()),
             ],
         },
         {
@@ -452,6 +437,20 @@ test "harness_models ships the five Claude rows, and only haiku-5-5 steps its pr
     assert\equal(steps.join(","), "claude-haiku-5-5", "the one model priced by prompt length");
 }
 
+test "each shipped tier runs on exactly one row, by its exact id" {
+    final tiers = mut {<str: str>};
+    foreach (row in claude_models()) {
+        final fields = row as {str: any};
+        final tier = "{fields["tier"]}";
+        if (tier == "") { continue; }
+        assert\isTrue(tiers[tier] == null, "tier {tier} names one model");
+        tiers[tier] = "{fields["id"]}";
+    }
+    assert\equal(tiers["economy"] ?? "", "claude-haiku-5-5", "the shipped agents' tier");
+    assert\equal(tiers["standard"] ?? "", "claude-sonnet-5-5", "the default tier");
+    assert\equal(tiers["principal"] ?? "", "claude-opus-5-5", "the top tier");
+}
+
 test "mgs_getName is the harness id describe and verify look up" {
     assert\equal(mgs_getName(), "claude-code", "id must match magus\\harness.provider wiring and --id");
 }
@@ -478,24 +477,39 @@ test "harness_skills installs both forms under .claude/skills" {
     assert\equal(paths[0], ".claude/skills", "Claude Code reads .claude/skills");
 }
 
+test "every tool call reaches the guard through one entry" {
+    final pre = claude_entries()[0]["entries"] as [any];
+    var everyTool = 0;
+    foreach (entry in pre) {
+        if ((entry["matcher"] as? str) == EVERY_TOOL) {
+            everyTool = everyTool + 1;
+            assert\equal("{(entry["hooks"] as [any])[0]["command"]}", claude_call_command(), "the catch-all runs the command glue");
+        }
+    }
+    assert\equal(everyTool, 1, "one catch-all, so no call is judged twice");
+    foreach (entry in pre) {
+        final command = "{(entry["hooks"] as [any])[0]["command"]}";
+        if ((entry["matcher"] as? str) != EVERY_TOOL) {
+            assert\isTrue(command.indexOf("magus-command.buzz") == null, "no second entry judges a call the catch-all judges: {command}");
+            assert\isTrue(command.indexOf("magus-path.buzz") == null, "a write is judged by the catch-all from the whole event");
+        }
+    }
+}
+
 test "a Read is both recorded and judged" {
     var observed = false;
-    var judged = false;
     foreach (entry in claude_entries()[0]["entries"] as [any]) {
         if ((entry["matcher"] as? str) != "Read") { continue; }
         foreach (hook in entry["hooks"] as [any]) {
-            final command = (hook["command"] as? str) ?? "";
-            if (command == claude_observe_command()) { observed = true; }
-            if (command == claude_guard_command()) { judged = true; }
+            if (((hook["command"] as? str) ?? "") == claude_observe_command()) { observed = true; }
         }
     }
-    assert\isTrue(observed, "the observer records the path");
-    assert\isTrue(judged, "the command guard judges the read it stands for");
+    assert\isTrue(observed, "the observer records the path; the catch-all judges the read it stands for");
 }
 
 test "guard commands name the Buzz glue, never the sh copies" {
     assert\isTrue(claude_guard_command().indexOf("magus-command.buzz") != null, "command hook");
-    assert\isTrue(claude_path_command().indexOf("magus-path.buzz") != null, "path hook");
+    assert\isTrue(claude_call_command().indexOf("magus-command.buzz") != null, "every tool call");
     assert\isTrue(claude_observe_command().indexOf("magus-observe.buzz") != null, "read observe");
     assert\isTrue(claude_guard_command().indexOf(".sh") == null, "no POSIX shell dependency");
     assert\isTrue(claude_guard_command().indexOf(" -s docs/") != null, "quiet interpreter");
@@ -516,53 +530,27 @@ test "no entry carries an environment assignment" {
     }
 }
 
-test "the spawn entry also sees every continuation" {
-    final pre = claude_entries()[0];
-    var matched = "";
-    var command = "";
-    foreach (entry in pre["entries"] as [any]) {
-        final matcher = (entry["matcher"] as? str) ?? "";
-        if (matcher.startsWith(SPAWN_MATCHER)) {
-            matched = matcher;
-            command = "{(entry["hooks"] as [any])[0]["command"]}";
-        }
-    }
-    assert\equal(matched, "Agent|Task|SendMessage", "spawn and continue share one entry, and so one verdict path");
-    assert\equal(command, claude_guard_command(), "the spawn entry is the guard command");
-}
-
 test "the one per-entry flag rides after the argv separator" {
     assert\equal(claude_guard_command(), claude_glue_command("command", flags: [<str>]) + " " + REPORTS_SKILLS,
         "the guard entry is the named glue command plus one forwarded flag");
-    assert\equal(claude_path_command(), claude_glue_command("path", flags: [<str>]) + " " + REPORTS_SKILLS,
-        "the path entry is the named glue command plus one forwarded flag");
 }
 
-test "the waiting tools reach the guard before they run" {
-    var wired = false;
-    foreach (entry in claude_entries()[0]["entries"] as [any]) {
-        if ((entry["matcher"] as? str) != WAITER_MATCHER) { continue; }
-        wired = true;
-        final hooks = entry["hooks"] as [any];
-        assert\equal((hooks[0]["command"] as? str) ?? "", claude_guard_command(), "judged like any other tool call");
-    }
-    assert\isTrue(wired, "Monitor, TaskOutput, ScheduleWakeup and CronCreate are matched on PreToolUse");
-}
-
-test "only the Bash entry declares the foreground limits, from the constants harness_limits returns" {
+test "only the catch-all entry declares the foreground limits, from the constants harness_limits returns" {
     final limits = claude_limits();
     assert\equal("{limits["foreground_default_ms"]}", "120000", "the Bash tool's default timeout");
     assert\equal("{limits["foreground_max_ms"]}", "600000", "the longest timeout the Bash tool takes");
-    assert\equal(claude_shell_command(),
+    assert\equal(claude_call_command(),
         claude_guard_command() + " --foreground-default-ms {FOREGROUND_DEFAULT_MS} --foreground-max-ms {FOREGROUND_MAX_MS}",
         "the guard command plus the two limits");
     foreach (block in claude_entries()) {
+        final event = (block["path"] as [str])[1];
         foreach (entry in block["entries"] as [any]) {
             final matcher = (entry["matcher"] as? str) ?? "";
             foreach (hook in entry["hooks"] as [any]) {
                 final command = (hook["command"] as? str) ?? "";
                 final declares = command.indexOf("--foreground-max-ms") != null;
-                assert\equal(declares, matcher == "Bash", "only a shell command has a foreground timeout: {matcher}");
+                assert\equal(declares, event == "PreToolUse" and matcher == EVERY_TOOL,
+                    "only the entry a shell command reaches declares the host's limits: {event} {matcher}");
             }
         }
     }
@@ -572,22 +560,23 @@ test "every glue entry names this host, and the rehydrate wrapper takes no argum
     // The glue reads the host from this argument and nowhere else, and refuses a call
     // without it, so every entry that reaches the glue carries the declaration's own name.
     final named = " -- --agent-name {mgs_getName()}";
-    assert\isTrue(claude_guard_command().indexOf(named) != null, "command, mcp, skill, spawn and message hooks");
-    assert\isTrue(claude_path_command().indexOf(named) != null, "path hook");
+    assert\isTrue(claude_guard_command().indexOf(named) != null, "spawn, stop and message hooks");
+    assert\isTrue(claude_call_command().indexOf(named) != null, "every tool call");
     assert\isTrue(claude_observe_command().endsWith(named), "read hook");
     assert\isTrue(claude_checkpoint_command().endsWith(named), "Stop checkpoint");
     assert\isTrue(claude_rehydrate_command().indexOf("--agent-name") == null,
         "rehydrate reads no host, and would report the argument as unsupported");
 }
 
-// The judging entries claim loads are REPORTED, and only the skill matcher reports them.
-// Left to a comment, dropping the matcher leaves the claim standing, and every skill gate
-// then denies over a load the host can no longer report. Derived from the entries rather
-// than pinned as a pair, so the coupling is what fails when it breaks.
+// The judging entries claim loads are REPORTED, and only a PreToolUse matcher the Skill tool
+// meets reports them. Left to a comment, narrowing the catch-all leaves the claim standing,
+// and every skill gate then denies over a load the host can no longer report. Derived from
+// the entries rather than pinned as a pair, so the coupling is what fails when it breaks.
 test "every judging entry declares reports-skills exactly while a matcher reports them" {
     var reports_loads = false;
     foreach (entry in claude_entries()[0]["entries"] as [any]) {
-        if (((entry["matcher"] as? str) ?? "") == SKILL_MATCHER) { reports_loads = true; }
+        final matcher = (entry["matcher"] as? str) ?? "";
+        if (matcher == EVERY_TOOL or matcher == "Skill") { reports_loads = true; }
     }
     foreach (block in claude_entries()) {
         foreach (entry in block["entries"] as [any]) {
@@ -642,7 +631,7 @@ test "the interpreter is the same string on every machine" {
     // Every hook, because one command built by hand rather than through the helper
     // is one entry describe keeps replacing against a config that already holds it.
     assert\isTrue(claude_guard_command().startsWith(head), "command mcp and skill hooks");
-    assert\isTrue(claude_path_command().startsWith(head), "path hook");
+    assert\isTrue(claude_call_command().startsWith(head), "every tool call");
     assert\isTrue(claude_observe_command().startsWith(head), "read hook");
     assert\isTrue(claude_rehydrate_command().startsWith(head), "SessionStart rehydrate");
     assert\isTrue(claude_checkpoint_command().startsWith(head), "Stop checkpoint");
@@ -688,7 +677,7 @@ test "harness_entries covers PreToolUse PostToolUse SessionStart Stop SubagentSt
     final pre_path = pre["path"] as [str];
     assert\equal(pre_path[1], "PreToolUse", "command path mcp and read ride PreToolUse");
     final pre_entries = pre["entries"] as [any];
-    assert\equal(pre_entries.len(), 9, "Bash path mcp Read-observe Read-guard search skill spawn and waiter matchers");
+    assert\equal(pre_entries.len(), 2, "every tool, and the Read observer");
     foreach (entry in pre_entries) {
         final hooks = entry["hooks"] as [any];
         assert\equal(hooks.len(), 1, "one command hook per matcher");
@@ -706,7 +695,7 @@ test "harness_entries covers PreToolUse PostToolUse SessionStart Stop SubagentSt
     assert\equal(post_path[1], "PostToolUse", "a finished spawn reports its child's id");
     final post_entries = post["entries"] as [any];
     assert\equal(post_entries.len(), 1, "only the spawn matcher runs after the call");
-    assert\equal(post_entries[0]["matcher"] as? str, SPAWN_MATCHER, "the same tools the spawn hook matches");
+    assert\equal(post_entries[0]["matcher"] as? str, SPAWN_MATCHER, "both names of the spawn tool");
     final start = entries[2];
     final start_path = start["path"] as [str];
     assert\equal(start_path[1], "SessionStart", "PATH on a fresh start, rehydrate on compact");

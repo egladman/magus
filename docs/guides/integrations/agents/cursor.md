@@ -146,7 +146,7 @@ and points every event at that copy, name included:
     "sessionStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
     "beforeShellExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
     "beforeMCPExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "failClosed": true, "timeout": 10 }],
-    "preToolUse": [{ "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|Task", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
+    "preToolUse": [{ "matcher": "*", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
     "postToolUse": [
       { "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch|MCP:.*", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }
     ],
@@ -199,9 +199,12 @@ never allowed.
 
 The `matcher` values are a regex (Cursor's own validator: outside `""` and `"*"`
 the string must compile). One entry per event is enough: the script is the same
-file on every arm by design, and it branches on payload shape. Scope the regex
-to tools that carry a command, a path, a Grep/Glob pattern, a Read path, a
-WebSearch / WebFetch query, or an MCP call (`MCP:.*`, the name Cursor gives an MCP
+file on every arm by design, and it branches on payload shape. `preToolUse` matches
+every tool (`*`): a call the script does not restate and that carries no path goes to
+magus whole, which passes a tool it knows touches nothing and names one no rule can read
+(see [Every tool reaches the guard](guard.md#every-tool-reaches-the-guard)). Scope the
+`postToolUse` regex to tools that carry a command, a path, a Grep/Glob pattern, a Read
+path, a WebSearch / WebFetch query, or an MCP call (`MCP:.*`, the name Cursor gives an MCP
 tool after the call); a postToolUse with none of those returns `{}`. Grep,
 Glob, and Read never reach `beforeShellExecution`. They are restated as the
 shell shapes the rules already know (`rg …`, `find <dir> -name …`, `cat …` for

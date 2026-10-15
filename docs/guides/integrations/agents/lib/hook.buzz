@@ -25,7 +25,7 @@ import "std";
 
 // The namespace a host gives a tool served over MCP. wholeEvent matches it so an
 // MCP call is forwarded whole rather than reduced to a command field it happens
-// to carry. Matching the namespace only ever adds a whole-envelope answer.
+// to carry.
 final MCP_TOOL_PREFIX = "mcp__";
 
 export fun envOr(name: str, fallback: str) > str {
@@ -74,15 +74,14 @@ export fun rawField(event: any?, dotPath: str) > str {
 // wholeEvent decides which of the two payloads magus shell gets: the whole
 // envelope, or the one string a dot-path selects out of it.
 //
-// Selecting a field is the narrow case and needs two facts at once. Everything
-// else forwards the envelope, because magus's decoder knows every payload shape
-// magus reads and answers "nothing to judge" for the rest, while a field taken
-// out of a shape this file did not recognize is judged as a command. Judging the
-// wrong string is silent in both directions. Refusing is not the safer answer:
-// the command port fails open, and a deny it cannot justify is one a reader
-// routes around.
+// The envelope is the default, and the shipped wiring never selects: every tool
+// reaches the guard, and the guard judges a call by its tool's name and the shape
+// of its whole input. A field taken out of the envelope loses the tool name, and a
+// read restated as the path it reads would be judged as a write.
 //
-// The two facts:
+// dotPath is HOST_EVENT_PATH, for a host whose envelope magus's decoder does not
+// know, and "" when it is unset. Even then a field is selected only when two facts
+// hold at once:
 //
 //   1. The tool is not an MCP call. magus shell reads an MCP call off the tool
 //      name, ahead of any command in the params, so a params object that happens
@@ -91,14 +90,10 @@ export fun rawField(event: any?, dotPath: str) > str {
 //      the namespace only ever adds a whole-envelope answer.
 //   2. The dot-path selects a string. A spawn is a prompt plus a subagent type,
 //      a skill load is a skill name, an MCP call is a tool name plus params:
-//      none of them carries the command field, so the field is absent and the
+//      none of them carries the selected field, so the field is absent and the
 //      envelope goes whole. Present but not a string takes the same road.
-//
-// No host publishes a schema that could settle this on types. Codex's published
-// pre-tool-use input declares tool_input as unconstrained. Claude Code types its
-// settings and its hook stdout, not an event. Cursor publishes no hook input
-// schema. Shape is the only fact on offer.
 export fun wholeEvent(event: any?, dotPath: str, toolPath: str) > bool {
+    if (dotPath == "") { return true; }
     if (field(event, dotPath: toolPath).startsWith(MCP_TOOL_PREFIX)) { return true; }
     final value = dig(event, dotPath: dotPath);
     if (value == null) { return true; }
@@ -373,4 +368,14 @@ test "a tree with no magus.yaml falls back to the nearest magusfile" {
     std\assert(workspaceRootAt("{root}/sub/deep") == "{root}/sub", message: "the nearest magusfile");
     std\assert(workspaceRootAt(root) == "", message: "none above");
     fs\removeAll(root);
+}
+
+test "the whole envelope goes to magus unless a host names a field to select" {
+    final bash = json\parse("\{\"tool_name\":\"Bash\",\"tool_input\":\{\"command\":\"ls\"}}") catch null;
+    std\assert(wholeEvent(bash, dotPath: "", toolPath: "tool_name"), message: "no HOST_EVENT_PATH: the tool name travels with the call");
+    std\assert(!wholeEvent(bash, dotPath: "tool_input.command", toolPath: "tool_name"), message: "a named string field is selected");
+    final mcp = json\parse("\{\"tool_name\":\"mcp__other__run\",\"tool_input\":\{\"command\":\"ls\"}}") catch null;
+    std\assert(wholeEvent(mcp, dotPath: "tool_input.command", toolPath: "tool_name"), message: "an MCP call is never reduced to a field");
+    final todo = json\parse("\{\"tool_name\":\"TodoWrite\",\"tool_input\":\{\"todos\":[]}}") catch null;
+    std\assert(wholeEvent(todo, dotPath: "tool_input.command", toolPath: "tool_name"), message: "an absent field sends the envelope");
 }

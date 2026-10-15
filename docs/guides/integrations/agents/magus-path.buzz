@@ -1,7 +1,9 @@
 // magus guard hook: judges ONE file path an agent is about to write.
 //
-// Companion to magus-command.buzz, wired to your host's file-editing tool
-// rather than its shell tool. It needs neither jq nor a POSIX shell.
+// Companion to magus-command.buzz, for a host config that wires its file-editing tool
+// apart from the rest. The shipped harnesses do not: they wire magus-command.buzz to every
+// tool, and it judges a write by the shape of the whole event. It needs neither jq nor a
+// POSIX shell.
 //
 // Run it as `magus buzz -s magus-path.buzz`; see magus-command.buzz for why `-s` is
 // load-bearing. It imports no magus Buzz module
@@ -63,7 +65,6 @@
 // renders as a deny.
 // magus-guard-template: 28
 // magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=2 host=codex input=path deny=model advise=model pass=none ask=model
 
 import "io";
 import "flags";
@@ -175,7 +176,8 @@ fun readEntryArgs(args: [str]) > EntryArgs {
 fun main(args: [str]) > void {
     final entry = readEntryArgs(args);
     final agentName = entry.agentName;
-    final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
+    // Empty unless the host names a field: the whole event goes, content included.
+    final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "");
     final sessionPath = hook\envOr("HOST_SESSION_PATH", fallback: "session_id");
     final agentPath = hook\envOr("HOST_AGENT_PATH", fallback: "agent_id");
     final transcriptPath = hook\envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");

@@ -583,7 +583,20 @@ export const MagusGuard: Plugin = async (ctx) => {
       if (mcp !== null) {
         const body = envelope("PreToolUse", who, `mcp__magus__${mcp}`, output.args);
         remember(input.callID, apply(await judge(shellArgs, body), false), true);
+        return;
       }
+
+      // Every other tool goes to magus whole, under its own name: magus passes a tool its
+      // known-tool table calls inert, judges a read as the line it stands for, and names a
+      // call no rule can read (unjudged-tool) rather than letting it run unseen. OpenCode
+      // spells a file filePath; magus reads file_path.
+      const filePath = argString(output.args, ["filePath"]);
+      const args =
+        filePath === ""
+          ? output.args
+          : { ...(output.args as Record<string, unknown>), file_path: filePath };
+      const body = envelope("PreToolUse", who, input.tool, args);
+      remember(input.callID, apply(await judge(shellArgs, body), false));
     },
 
     config: async (config) => {

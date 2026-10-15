@@ -46,14 +46,10 @@ fun codex_named_command(script: str) > str {
     return codex_buzz_command(script, flags: ["--agent-name", mgs_getName()]);
 }
 
-// One command serves the Bash, MCP, spawn and PermissionRequest matchers: the glue reads
-// off the event whether to forward it whole, so an MCP call needs nothing on its entry.
+// One command serves every entry that judges: each event reaches `magus shell` whole, and
+// magus reads off it what the call is, a command, a patch, an MCP call or a spawn.
 fun codex_guard_command() > str {
     return codex_named_command("magus-command");
-}
-
-fun codex_path_command() > str {
-    return codex_named_command("magus-path");
 }
 
 // Codex parses a SessionStart or SubagentStart hook's stdout as a reply, so the brief has
@@ -79,6 +75,10 @@ fun codex_command_hook(cmd: str, status: str) > {str: any} {
 // v2 models collaborationspawn_agent, and Agent is the documented alias.
 final SPAWN_MATCHER = "spawn_agent|collaborationspawn_agent|Agent";
 
+// Every tool Codex raises PreToolUse for, so magus judges each by its tool and the shape
+// of its input, and names one no rule can read (the unjudged-tool rule).
+final EVERY_TOOL = "*";
+
 fun codex_pretool_entry(matcher: str, cmd: str, status: str) > {str: any} {
     return {
         "matcher": matcher,
@@ -92,12 +92,9 @@ fun codex_entries() > [any] {
         {
             "path": ["hooks", "PreToolUse"],
             "entries": [
-                codex_pretool_entry("Bash", codex_guard_command(), "magus guard: checking command"),
-                codex_pretool_entry("Edit|Write", codex_path_command(), "magus guard: checking file"),
-                codex_pretool_entry("mcp__.*", codex_guard_command(), "magus guard: checking MCP tool call"),
                 // No entry declares --reports-skills: Codex has no skill tool to match, so a
                 // rule that requires a skill load has nothing to read and must stand down.
-                codex_pretool_entry(SPAWN_MATCHER, codex_guard_command(), "magus guard: checking subagent spawn"),
+                codex_pretool_entry(EVERY_TOOL, codex_guard_command(), "magus guard: checking the call"),
             ],
         },
         {
@@ -418,18 +415,15 @@ test "harness_skills installs both forms under .agents/skills" {
 test "every glue command names this host on its argv, and rehydrate takes none" {
     final named = " --agent-name {mgs_getName()}";
     assert\isTrue(codex_guard_command().endsWith(named), "command hook");
-    assert\isTrue(codex_path_command().endsWith(named), "path hook");
     assert\isTrue(codex_checkpoint_command().endsWith(named), "Stop checkpoint");
     assert\isTrue(codex_rehydrate_command().indexOf("--agent-name") == null, "rehydrate reads no host");
 }
 
 test "guard commands name the Buzz glue as a plain argv" {
     assert\isTrue(codex_guard_command().indexOf("magus-command.buzz") != null, "command hook");
-    assert\isTrue(codex_path_command().indexOf("magus-path.buzz") != null, "path hook");
     assert\isTrue(codex_rehydrate_command().endsWith(" -- --format json --rules AGENTS.md"), "SessionStart and SubagentStart need JSON stdout and AGENTS.md");
     assert\isTrue(codex_checkpoint_command().indexOf("magus-checkpoint.buzz") != null, "Stop checkpoint");
-    foreach (cmd in [codex_guard_command(), codex_path_command(),
-            codex_rehydrate_command(), codex_checkpoint_command()]) {
+    foreach (cmd in [codex_guard_command(), codex_rehydrate_command(), codex_checkpoint_command()]) {
         assert\isTrue(cmd.startsWith("magus buzz -s "), "no environment prefix and no POSIX shell: {cmd}");
         assert\isTrue(cmd.indexOf(".sh") == null, "no entry wires a shell script: {cmd}");
     }
@@ -506,15 +500,10 @@ test "harness_entries covers the tool, subagent, session, Stop and message event
     assert\equal(entries.len(), 8, "eight managed path blocks");
     final pre = codex_block("PreToolUse")!;
     final pre_entries = pre["entries"] as [any];
-    assert\equal(pre_entries.len(), 4, "Bash, EditWrite, mcp and spawn matchers: Codex has no Read tool");
-    var spawn = "";
-    foreach (entry in pre_entries) {
-        assert\isTrue("{entry["matcher"]}" != "Read", "a matcher no Codex tool carries never fires");
-        if ("{entry["matcher"]}" == SPAWN_MATCHER) {
-            spawn = "{(entry["hooks"] as [any])[0]["command"]}";
-        }
-    }
-    assert\equal(spawn, codex_guard_command(), "a spawn reaches the same glue as a command");
+    assert\equal(pre_entries.len(), 1, "one catch-all, so no call is judged twice");
+    assert\equal("{pre_entries[0]["matcher"]}", EVERY_TOOL, "every tool Codex raises the event for");
+    assert\equal("{(pre_entries[0]["hooks"] as [any])[0]["command"]}", codex_guard_command(),
+        "a command, a patch, an MCP call and a spawn reach one glue, which forwards the whole event");
     foreach (entry in pre_entries) {
         final hooks = entry["hooks"] as [any];
         assert\equal(hooks.len(), 1, "one command hook per matcher");

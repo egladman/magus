@@ -593,18 +593,36 @@ test("the magus server is found by its command, and its tool ids are OpenCode's 
 
   await h["tool.execute.before"]({ tool: "echo_say_hi", callID: "m2" }, { args: { who: "x" } });
   await h["tool.execute.before"]({ tool: "magus_client", callID: "m3" }, { args: {} });
-  assert.equal(
-    calls.length,
-    1,
-    "another server's tool, and a key that runs something else, are not magus's",
+  assert.deepEqual(
+    calls.slice(1).map((call) => sent(call).tool_name),
+    ["echo_say_hi", "magus_client"],
+    "another server's tool, and a key that runs something else, are judged under their own names, not as magus's",
   );
 });
 
-test("an MCP call with no config for magus is not judged", async () => {
-  const calls = stubBun(() => deny);
+test("an MCP call with no config for magus is judged under its own name", async () => {
+  const calls = stubBun(() => pass);
   const h = await hooks();
   await h["tool.execute.before"]({ tool: "magus_client", callID: "m1" }, { args: {} });
-  assert.equal(calls.length, 0);
+  assert.equal(calls.length, 1);
+  assert.equal(sent(calls[0]).tool_name, "magus_client");
+});
+
+test("every other tool reaches magus whole, its file path spelled the way magus reads it", async () => {
+  const calls = stubBun(() => pass);
+  const h = await hooks();
+  await h["tool.execute.before"]({ tool: "todowrite", callID: "o1" }, { args: { todos: [] } });
+  await h["tool.execute.before"](
+    { tool: "read", callID: "o2" },
+    { args: { filePath: "README.md", limit: 40 } },
+  );
+  assert.equal(calls.length, 2, "nothing is left unseen");
+  assert.equal(sent(calls[0]).tool_name, "todowrite");
+  assert.deepEqual(sent(calls[1]).tool_input, {
+    filePath: "README.md",
+    limit: 40,
+    file_path: "README.md",
+  });
 });
 
 test("a deny on an MCP call throws, and an advise rides in the result's content", async () => {
