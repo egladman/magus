@@ -87,7 +87,7 @@ github.com/egladman/magus.Magus.AutoResolve method(ptr) func(ctx context.Context
 github.com/egladman/magus.Magus.AutoResolveGlobs method(ptr) func() []string
 github.com/egladman/magus.Magus.BeginInvocation method(ptr) func(ctx context.Context, cmd Command, magusVersion string, extra ...log/slog.Handler) (context.Context, func(error))
 github.com/egladman/magus.Magus.BranchChanges method(ptr) func(ctx context.Context, limit int) ([]github.com/egladman/magus/types.BranchChange, error)
-github.com/egladman/magus.Magus.CacheDescription method(ptr) func() (tier string, mode string)
+github.com/egladman/magus.Magus.CacheDescription method(ptr) func() (tier string, mode string, dir string)
 github.com/egladman/magus.Magus.CacheDir method(ptr) func() string
 github.com/egladman/magus.Magus.CacheDiskBytes method(ptr) func() int64
 github.com/egladman/magus.Magus.CacheStats method(ptr) func() CacheStats
@@ -217,7 +217,7 @@ github.com/egladman/magus.ShortRevision func(id string) string
 github.com/egladman/magus.Sink type struct
 github.com/egladman/magus.Sink.Close method(ptr) func() error
 github.com/egladman/magus.Sink.EmitBase method(ptr) func(ctx context.Context, base string)
-github.com/egladman/magus.Sink.EmitCache method(ptr) func(ctx context.Context, tier string, mode string)
+github.com/egladman/magus.Sink.EmitCache method(ptr) func(ctx context.Context, tier string, mode string, dir string)
 github.com/egladman/magus.Sink.EmitCharms method(ptr) func(ctx context.Context, charms string)
 github.com/egladman/magus.Sink.EmitDetach method(ptr) func(ctx context.Context, pid int, logPath string)
 github.com/egladman/magus.Sink.EmitDiagnostic method(ptr) func(ctx context.Context, unit string, code github.com/egladman/magus/types.DiagnosticCode, message string)
