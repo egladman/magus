@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/eventstream"
 	"github.com/egladman/magus/types"
@@ -28,9 +28,9 @@ import (
 // magusfile is mid-edit or outright broken. A subscriber that only comes up when
 // the workspace is healthy is useless at exactly the moment someone wants it.
 func eventsCmd(ctx context.Context, root string, args []string) error {
-	var ef *gen.EventsFlags
+	var ef *flaggen.EventsFlags
 	rest, err := cmdParse("events", args, func(fs *flag.FlagSet) {
-		ef = gen.BindEvents(fs)
+		ef = flaggen.BindEvents(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus events [flags]")
 			fmt.Fprintln(os.Stderr, "")

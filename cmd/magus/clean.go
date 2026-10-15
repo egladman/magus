@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
@@ -19,9 +19,9 @@ import (
 //
 // Pass --dry-run (the global flag) to preview without deleting.
 func cleanCmd(ctx context.Context, root string, args []string) error {
-	var cf *gen.CleanFlags
+	var cf *flaggen.CleanFlags
 	projectArgs, err := cmdParse("clean", args, func(fs *flag.FlagSet) {
-		cf = gen.BindClean(fs)
+		cf = flaggen.BindClean(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus clean [flags] [project...]")
 			fmt.Fprintln(os.Stderr, "")

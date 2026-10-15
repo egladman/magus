@@ -344,7 +344,7 @@ func TestWriteBinderNamesTheFlagsItCannotCarry(t *testing.T) {
 // asked of one command instead of the whole registry.
 func TestWriteBinderEmitsParsableGo(t *testing.T) {
 	var b bytes.Buffer
-	b.WriteString("package gen\n\nimport (\n\t\"flag\"\n\t\"time\"\n)\n\n")
+	b.WriteString("package flaggen\n\nimport (\n\t\"flag\"\n\t\"time\"\n)\n\n")
 	b.WriteString("const (\n\tFlagDemoTimeout = \"timeout\"\n\tFlagDemoName = \"name\"\n\tFlagDemoDepth = \"depth\"\n)\n")
 	writeBinder(&b, "demo", "demo", []cli.Flag{
 		{Name: "timeout", Kind: cli.FlagDuration, Default: 90 * time.Second, Doc: "Give up after this long"},

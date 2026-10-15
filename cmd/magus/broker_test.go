@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/broker"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/types"
 )
 
@@ -152,7 +152,7 @@ func TestBrokerRefusesANegativeIdleExit(t *testing.T) {
 // in the CLI registry, on the package constant a broker a run starts uses.
 func TestBrokerIdleExitDefaultsToTheBrokers(t *testing.T) {
 	fs := flag.NewFlagSet("broker", flag.ContinueOnError)
-	f := gen.BindBroker(fs)
+	f := flaggen.BindBroker(fs)
 	assert.Equal(t, broker.DefaultIdleExit, f.IdleExit)
 }
 

@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module net -lang buzz -out ../internal/interp/bindings/gen/net.go
+//go:generate go run ../cmd/magus-utils bindings -module net -lang buzz -out ../internal/interp/bindings/gen/net.go -pkg bindgen
 
 // netDefaultWaitMs bounds wait_for_port when the caller names no timeout. Thirty
 // seconds is long enough for a dev server or a database container to come up and

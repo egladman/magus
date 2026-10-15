@@ -24,7 +24,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module os -lang buzz -out ../internal/interp/bindings/gen/os.go
+//go:generate go run ../cmd/magus-utils bindings -module os -lang buzz -out ../internal/interp/bindings/gen/os.go -pkg bindgen
 
 // magusWarned holds each typed member warnIfMagusBinary has already named, so a script
 // looping over one invocation hears about it once.

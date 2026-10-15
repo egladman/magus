@@ -20,7 +20,7 @@ import (
 
 	"mvdan.cc/sh/v3/syntax"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/queue"
@@ -272,7 +272,7 @@ func (e *queueEnv) openFacts(ctx context.Context, verb string, targetGiven bool,
 }
 
 func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
-	f, _, fs, err := queueParse(e, "describe", "magus queue describe --provider <provider> --base <branch> [flags]", args, gen.BindQueueDescribe)
+	f, _, fs, err := queueParse(e, "describe", "magus queue describe --provider <provider> --base <branch> [flags]", args, flaggen.BindQueueDescribe)
 	if err != nil {
 		return err
 	}
@@ -383,7 +383,7 @@ func writeQueueSetup(w io.Writer, provider, base string, caps types.Capabilities
 }
 
 func queueLs(ctx context.Context, e *queueEnv, args []string) error {
-	f, _, _, err := queueParse(e, "ls", "magus queue ls --provider <provider> --base <branch> [flags]", args, gen.BindQueueLs)
+	f, _, _, err := queueParse(e, "ls", "magus queue ls --provider <provider> --base <branch> [flags]", args, flaggen.BindQueueLs)
 	if err != nil {
 		return err
 	}
@@ -426,7 +426,7 @@ func queueLs(ctx context.Context, e *queueEnv, args []string) error {
 }
 
 func queuePlan(ctx context.Context, e *queueEnv, args []string) error {
-	f, _, fs, err := queueParse(e, "plan", "magus queue plan --provider <provider> --out <file> [flags]", args, gen.BindQueuePlan)
+	f, _, fs, err := queueParse(e, "plan", "magus queue plan --provider <provider> --out <file> [flags]", args, flaggen.BindQueuePlan)
 	if err != nil {
 		return err
 	}
@@ -449,7 +449,7 @@ func queuePlan(ctx context.Context, e *queueEnv, args []string) error {
 		return err
 	}
 	defer p.Close()
-	bf, _, closeFacts, err := e.openFacts(ctx, "plan", flagGiven(fs, gen.FlagQueuePlanTarget), f.Facts, f.Target)
+	bf, _, closeFacts, err := e.openFacts(ctx, "plan", flagGiven(fs, flaggen.FlagQueuePlanTarget), f.Facts, f.Target)
 	if err != nil {
 		return err
 	}
@@ -473,7 +473,7 @@ func queuePlan(ctx context.Context, e *queueEnv, args []string) error {
 }
 
 func queueReviews(ctx context.Context, e *queueEnv, args []string) error {
-	f, _, fs, err := queueParse(e, "reviews", "magus queue reviews --provider <provider> --base <branch> --change <id> [flags]", args, gen.BindQueueReviews)
+	f, _, fs, err := queueParse(e, "reviews", "magus queue reviews --provider <provider> --base <branch> --change <id> [flags]", args, flaggen.BindQueueReviews)
 	if err != nil {
 		return err
 	}
@@ -504,7 +504,7 @@ func queueReviews(ctx context.Context, e *queueEnv, args []string) error {
 		return err
 	}
 	defer p.Close()
-	bf, _, closeFacts, err := e.openFacts(ctx, "reviews", flagGiven(fs, gen.FlagQueueReviewsTarget), f.Facts, f.Target)
+	bf, _, closeFacts, err := e.openFacts(ctx, "reviews", flagGiven(fs, flaggen.FlagQueueReviewsTarget), f.Facts, f.Target)
 	if err != nil {
 		return err
 	}
@@ -572,7 +572,7 @@ func queueScratch(prefix string) (string, func(), error) {
 // queueValidate takes no --provider: it runs the changes' code, so it never talks to
 // one.
 func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) {
-	f, _, fs, err := queueParse(e, "validate", "magus queue validate --stdin --gate <command> --verdicts <dir> [flags] < plan.json", args, gen.BindQueueValidate)
+	f, _, fs, err := queueParse(e, "validate", "magus queue validate --stdin --gate <command> --verdicts <dir> [flags] < plan.json", args, flaggen.BindQueueValidate)
 	if err != nil {
 		return err
 	}
@@ -625,7 +625,7 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 	if err != nil {
 		return err
 	}
-	bf, grants, closeFacts, err := e.openFacts(ctx, "validate", flagGiven(fs, gen.FlagQueueValidateTarget), f.Facts, f.Target)
+	bf, grants, closeFacts, err := e.openFacts(ctx, "validate", flagGiven(fs, flaggen.FlagQueueValidateTarget), f.Facts, f.Target)
 	if err != nil {
 		return err
 	}
@@ -679,7 +679,7 @@ func queueCacheRead(remote config.CacheRemote, log *queue.HookLog) (*queue.Cache
 // path validate's gate takes, with the sandbox and grants validate would give it, read
 // by the same openFacts.
 func queueGate(ctx context.Context, e *queueEnv, args []string) error {
-	f, operands, _, err := queueParse(e, "gate", "magus queue gate [flags] -- <command> [args...]", args, gen.BindQueueGate, "command...")
+	f, operands, _, err := queueParse(e, "gate", "magus queue gate [flags] -- <command> [args...]", args, flaggen.BindQueueGate, "command...")
 	if err != nil {
 		return err
 	}
@@ -727,7 +727,7 @@ type queuePlanSource interface {
 }
 
 func queueApply(ctx context.Context, e *queueEnv, args []string) error {
-	f, operands, fs, err := queueParse(e, "apply", "magus queue apply --provider <provider> --base <branch> [flags] <source>", args, gen.BindQueueApply, "source")
+	f, operands, fs, err := queueParse(e, "apply", "magus queue apply --provider <provider> --base <branch> [flags] <source>", args, flaggen.BindQueueApply, "source")
 	if err != nil {
 		return err
 	}
@@ -737,7 +737,7 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	switch {
 	case f.Interval <= 0:
 		return usagef("magus queue apply: --interval must be positive")
-	case f.Once && flagGiven(fs, gen.FlagQueueApplyInterval):
+	case f.Once && flagGiven(fs, flaggen.FlagQueueApplyInterval):
 		return usagef("magus queue apply: --interval has no effect with --once")
 	}
 	src, err := parseQueueSource(operands[0])
@@ -788,7 +788,7 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	bf, grants, closeFacts, err := e.openFacts(ctx, "apply", flagGiven(fs, gen.FlagQueueApplyTarget), f.Facts, f.Target)
+	bf, grants, closeFacts, err := e.openFacts(ctx, "apply", flagGiven(fs, flaggen.FlagQueueApplyTarget), f.Facts, f.Target)
 	if err != nil {
 		return err
 	}
@@ -851,8 +851,8 @@ func renderRerun(root string, fs *flag.FlagSet, app string) string {
 		words = append(words, "--root", shellWord(root))
 	}
 	words = append(words, "queue", "describe")
-	for _, name := range []string{gen.FlagQueueDescribeProvider, gen.FlagQueueDescribeBase, gen.FlagQueueDescribeStatusContext,
-		gen.FlagQueueDescribeRemote, gen.FlagQueueDescribeVCS} {
+	for _, name := range []string{flaggen.FlagQueueDescribeProvider, flaggen.FlagQueueDescribeBase, flaggen.FlagQueueDescribeStatusContext,
+		flaggen.FlagQueueDescribeRemote, flaggen.FlagQueueDescribeVCS} {
 		if flagGiven(fs, name) {
 			words = append(words, "--"+name, shellWord(fs.Lookup(name).Value.String()))
 		}

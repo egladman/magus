@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/interactive/difftui"
@@ -48,7 +48,7 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		flags   gen.DiffFlags
+		flags   flaggen.DiffFlags
 		src     diffInput
 		format  Format
 		term    diffTUITerm
@@ -65,7 +65,7 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 		},
 		{
 			name:    "--generated composes: it only sets the initial fold",
-			flags:   gen.DiffFlags{Generated: true},
+			flags:   flaggen.DiffFlags{Generated: true},
 			src:     workingTree,
 			format:  outputText,
 			term:    atTerminal,
@@ -85,7 +85,7 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 		},
 		{
 			name:    "--no-tui is the one explicit answer",
-			flags:   gen.DiffFlags{NoTui: true},
+			flags:   flaggen.DiffFlags{NoTui: true},
 			src:     workingTree,
 			format:  outputText,
 			term:    atTerminal,
@@ -113,7 +113,7 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 		},
 		{
 			name:    "--watch drives the terminal itself",
-			flags:   gen.DiffFlags{Watch: true},
+			flags:   flaggen.DiffFlags{Watch: true},
 			src:     workingTree,
 			format:  outputText,
 			term:    atTerminal,
@@ -128,7 +128,7 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 		},
 		{
 			name:    "--impact asked for a report, which the viewer has nowhere to put",
-			flags:   gen.DiffFlags{Impact: true},
+			flags:   flaggen.DiffFlags{Impact: true},
 			src:     workingTree,
 			format:  outputText,
 			term:    atTerminal,
@@ -136,7 +136,7 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 		},
 		{
 			name:    "--ack records and returns",
-			flags:   gen.DiffFlags{Ack: true},
+			flags:   flaggen.DiffFlags{Ack: true},
 			src:     workingTree,
 			format:  outputText,
 			term:    atTerminal,
@@ -2029,31 +2029,31 @@ func TestScopeFromArgs(t *testing.T) {
 // flag, and exactly one flag may name it.
 func TestDiffSourceFromFlags(t *testing.T) {
 	t.Run("nothing named reads the working tree", func(t *testing.T) {
-		in, err := diffSourceFromFlags(&gen.DiffFlags{})
+		in, err := diffSourceFromFlags(&flaggen.DiffFlags{})
 		require.NoError(t, err)
 		assert.Equal(t, diffInput{kind: inputWorkingTree, label: "the working tree"}, in)
 	})
 
 	t.Run("--patch - reads stdin", func(t *testing.T) {
-		in, err := diffSourceFromFlags(&gen.DiffFlags{Patch: "-"})
+		in, err := diffSourceFromFlags(&flaggen.DiffFlags{Patch: "-"})
 		require.NoError(t, err)
 		assert.Equal(t, diffInput{kind: inputStdin, label: "a patch on stdin"}, in)
 	})
 
 	t.Run("--patch names a file", func(t *testing.T) {
-		in, err := diffSourceFromFlags(&gen.DiffFlags{Patch: "change.patch"})
+		in, err := diffSourceFromFlags(&flaggen.DiffFlags{Patch: "change.patch"})
 		require.NoError(t, err)
 		assert.Equal(t, diffInput{kind: inputFile, path: "change.patch", label: "the patch in change.patch"}, in)
 	})
 
 	t.Run("--rev reads a range", func(t *testing.T) {
-		in, err := diffSourceFromFlags(&gen.DiffFlags{Rev: "main...topic"})
+		in, err := diffSourceFromFlags(&flaggen.DiffFlags{Rev: "main...topic"})
 		require.NoError(t, err)
 		assert.Equal(t, diffInput{kind: inputRevRange, base: "main", head: "topic", label: "the range main...topic"}, in)
 	})
 
 	t.Run("two sources are refused rather than ranked", func(t *testing.T) {
-		_, err := diffSourceFromFlags(&gen.DiffFlags{Rev: "main...topic", Patch: "-"})
+		_, err := diffSourceFromFlags(&flaggen.DiffFlags{Rev: "main...topic", Patch: "-"})
 		require.Error(t, err)
 		assert.IsType(t, errUsage{}, err)
 		assert.Contains(t, err.Error(), "only one may be given")
@@ -2094,10 +2094,10 @@ func TestWantsTUIKeepsTheViewerForUnreadAndThread(t *testing.T) {
 	term := diffTUITerm{Reads: true, Paints: true}
 	src := diffInput{kind: inputWorkingTree}
 
-	assert.True(t, wantsTUI(&gen.DiffFlags{Unread: true}, src, outputText, term, true))
-	assert.True(t, wantsTUI(&gen.DiffFlags{Thread: "c1"}, src, outputText, term, true))
-	assert.False(t, wantsTUI(&gen.DiffFlags{Thread: "c1"}, src, outputJSON, term, true), "-o json prints the record")
-	assert.False(t, wantsTUI(&gen.DiffFlags{Thread: "c1", NoTui: true}, src, outputText, term, true))
+	assert.True(t, wantsTUI(&flaggen.DiffFlags{Unread: true}, src, outputText, term, true))
+	assert.True(t, wantsTUI(&flaggen.DiffFlags{Thread: "c1"}, src, outputText, term, true))
+	assert.False(t, wantsTUI(&flaggen.DiffFlags{Thread: "c1"}, src, outputJSON, term, true), "-o json prints the record")
+	assert.False(t, wantsTUI(&flaggen.DiffFlags{Thread: "c1", NoTui: true}, src, outputText, term, true))
 }
 
 // TestPrintDiffTextOrdersTheEvidence covers the whole text rendering: the counts headline,

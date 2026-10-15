@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
-	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/std"
@@ -54,7 +54,7 @@ var WASMCompatibleMagusModules = wasmCompatibleMagusModules()
 
 func wasmCompatibleMagusModules() map[string]func(context.Context, *buzz.Session) vm.Value {
 	out := make(map[string]func(context.Context, *buzz.Session) vm.Value)
-	for name, reg := range bindinggen.Modules {
+	for name, reg := range bindgen.Modules {
 		if !reg.Capabilities.Has(ffi.WASM) {
 			continue
 		}
@@ -74,7 +74,7 @@ func wasmCompatibleMagusModules() map[string]func(context.Context, *buzz.Session
 // registerWASMCompatibleMagusModules installs every module in WASMCompatibleMagusModules
 // on sess, so `import "strings"; strings.camelCase("hi")` etc. run in-browser.
 func registerWASMCompatibleMagusModules(ctx context.Context, sess *buzz.Session) {
-	for name, reg := range bindinggen.Modules {
+	for name, reg := range bindgen.Modules {
 		if reg.Capabilities.Has(ffi.WASM) {
 			installHostModule(sess, name, reg, reg.Register(ctx, sess))
 		}

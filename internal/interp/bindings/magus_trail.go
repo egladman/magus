@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
-	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -27,7 +27,7 @@ func buildTrail(obs buzz.DirectObserver) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return bindinggen.ObjectTrail(got), nil
+		return bindgen.ObjectTrail(got), nil
 	}))
 	t.MapSet("shape", directVal(obs, "magus.trail.shape", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		return ffi.StrVal(trail.CommandShape(ffi.Str(args, 0))), nil
@@ -40,14 +40,14 @@ func buildTrail(obs buzz.DirectObserver) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.ObjectSlice(marks, bindinggen.ObjectTrailMark), nil
+		return ffi.ObjectSlice(marks, bindgen.ObjectTrailMark), nil
 	}))
 	t.MapSet("mark", directVal(obs, "magus.trail.mark", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		m, err := std.MagusTrailMark(ctx, ffi.AnyMap(args, 0))
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return bindinggen.ObjectTrailMark(m), nil
+		return bindgen.ObjectTrailMark(m), nil
 	}))
 	return t
 }

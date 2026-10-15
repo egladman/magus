@@ -30,7 +30,7 @@ func TestBuzzFilesUpToDate(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			m, ok := hostmodules.Get(name)
 			require.True(t, ok, "hostmodules.Get(%q): module not registered", name)
-			want, err := emitBuzz(m)
+			want, err := emitBuzz(m, "bindgen")
 			require.NoError(t, err, "emitBuzz(%q)", name)
 			outPath := filepath.Join(genBuzzDir, name+".go")
 			got, err := os.ReadFile(outPath)
@@ -53,7 +53,7 @@ func TestObjectReturnContracts(t *testing.T) {
 func TestOptionStructArgDecodesTheBuzzMap(t *testing.T) {
 	m, ok := hostmodules.Get("magus")
 	require.True(t, ok)
-	got, err := emitBuzz(m)
+	got, err := emitBuzz(m, "bindgen")
 	require.NoError(t, err)
 	src := string(got)
 	assert.Contains(t, src, `opts, err := decodeKnowledgeQueryOptions("magus\\query", ffi.AnyMap(bzArgs, 1))`)
@@ -120,14 +120,20 @@ func TestRunBindings(t *testing.T) {
 		assert.Contains(t, err.Error(), "usage:")
 	})
 
+	t.Run("no -pkg", func(t *testing.T) {
+		err := runBindings([]string{"-module", "fs", "-out", filepath.Join(t.TempDir(), "x.go")})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "-pkg <package>")
+	})
+
 	t.Run("unknown module", func(t *testing.T) {
-		err := runBindings([]string{"-module", "nosuchmodule", "-out", filepath.Join(t.TempDir(), "x.go")})
+		err := runBindings([]string{"-module", "nosuchmodule", "-out", filepath.Join(t.TempDir(), "x.go"), "-pkg", "bindgen"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unknown module")
 	})
 
 	t.Run("unknown lang", func(t *testing.T) {
-		err := runBindings([]string{"-module", "fs", "-lang", "rust", "-out", filepath.Join(t.TempDir(), "x.go")})
+		err := runBindings([]string{"-module", "fs", "-lang", "rust", "-out", filepath.Join(t.TempDir(), "x.go"), "-pkg", "bindgen"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unknown lang")
 	})
@@ -135,11 +141,12 @@ func TestRunBindings(t *testing.T) {
 	t.Run("writes what emitBuzz renders", func(t *testing.T) {
 		m, ok := hostmodules.Get("fs")
 		require.True(t, ok)
-		want, err := emitBuzz(m)
+		want, err := emitBuzz(m, "bindgen")
 		require.NoError(t, err)
+		assert.Contains(t, string(want), "\npackage bindgen\n")
 
 		got := readGenerated(t, runBindings, func(out string) []string {
-			return []string{"-module", "fs", "-lang", "buzz", "-out", out}
+			return []string{"-module", "fs", "-lang", "buzz", "-out", out, "-pkg", "bindgen"}
 		})
 		assert.Equal(t, string(want), got)
 	})

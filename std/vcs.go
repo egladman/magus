@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module vcs -lang buzz -out ../internal/interp/bindings/gen/vcs.go
+//go:generate go run ../cmd/magus-utils bindings -module vcs -lang buzz -out ../internal/interp/bindings/gen/vcs.go -pkg bindgen
 
 // Vcs is the "vcs" host module: version-control queries for the current working tree.
 var Vcs = Module{

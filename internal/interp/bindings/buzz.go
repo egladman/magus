@@ -8,7 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
-	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -162,7 +162,7 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	// unbound. The hand-built members below are the VM-infra ones (project/cache/
 	// pry/log, plus the magus.Context) that can't share a Go Impl across the
 	// boundary; the two sets are disjoint.
-	magus := bindinggen.RegisterMagus(ctx, sess)
+	magus := bindgen.RegisterMagus(ctx, sess)
 	cache := buildCache(ctx, obs)
 	ci := buildCI(ctx, obs)
 	magus.MapSet("project", buildProject(ctx, obs))

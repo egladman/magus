@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 )
 
@@ -55,7 +55,7 @@ func bindGlobalFlags(fs *flag.FlagSet, root, cfgPath *string) {
 	fs.StringVar(root, "C", "", "Short for --root")
 	fs.StringVar(cfgPath, "config", "", "Config file path (must precede subcommand; default: search magus.yaml in CWD / XDG)")
 	fs.StringVar(cfgPath, "c", "", "Short for --config")
-	gen.BindFlags(fs, &globalCfg)
+	flaggen.BindFlags(fs, &globalCfg)
 }
 
 func bindDisplayFlags(fs *flag.FlagSet) {
@@ -72,7 +72,7 @@ func bindDisplayFlags(fs *flag.FlagSet) {
 // cmdParse binds config/display flags, runs local registration, parses args, and returns positionals.
 func cmdParse(name string, args []string, local func(*flag.FlagSet)) ([]string, error) {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
-	gen.BindFlags(fs, &globalCfg)
+	flaggen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
 	if local != nil {
 		local(fs)
@@ -200,7 +200,7 @@ func partitionFlags(fs *flag.FlagSet, args []string) (flags, positionals []strin
 // limit: one such flag survives it by luck of ordering, two do not.
 func splitTargetFromArgs(args []string, bind func(*flag.FlagSet)) (target string, rest []string, ok bool) {
 	fs := flag.NewFlagSet("prescan", flag.ContinueOnError)
-	gen.BindFlags(fs, &globalCfg)
+	flaggen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
 	if bind != nil {
 		bind(fs)
@@ -325,7 +325,7 @@ func printOwnDefaults(fs *flag.FlagSet) {
 // static version of this check unusable.
 func globalFlagNames() map[string]bool {
 	fs := flag.NewFlagSet("globals", flag.ContinueOnError)
-	gen.BindFlags(fs, &config.Config{})
+	flaggen.BindFlags(fs, &config.Config{})
 	bindDisplayFlags(fs)
 	out := map[string]bool{}
 	fs.VisitAll(func(f *flag.Flag) { out[f.Name] = true })

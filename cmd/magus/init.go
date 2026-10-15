@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
@@ -61,7 +61,7 @@ func initCmd(ctx context.Context, root string, args []string) error {
 
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	inf := gen.BindInit(fs)
+	inf := flaggen.BindInit(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus init [flags]")
 		fmt.Fprintln(os.Stderr, "")

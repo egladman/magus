@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/log/attr"
 )
 
@@ -65,7 +65,7 @@ func configCacheCmd(ctx context.Context, root string, args []string) error {
 func configCachePrune(ctx context.Context, root string, args []string) error {
 	fs := flag.NewFlagSet("config cache prune", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	pf := gen.BindConfigCachePrune(fs)
+	pf := flaggen.BindConfigCachePrune(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config cache prune [--older-than <duration>] [--keep-last <count>] [--remote] [flags]")
 		fmt.Fprintln(os.Stderr, "")
@@ -134,7 +134,7 @@ func configCacheExport(ctx context.Context, root string, args []string) error {
 	// --to, not --output: the global --output selects a FORMAT on every other
 	// command, and one command redefining it to mean a destination path is the
 	// kind of inconsistency that makes callers stop trusting the flag set.
-	ef := gen.BindConfigCacheExport(fs)
+	ef := flaggen.BindConfigCacheExport(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config cache export [--to <file> | --remote]")
 		fmt.Fprintln(os.Stderr, "")
@@ -208,7 +208,7 @@ func configCacheExport(ctx context.Context, root string, args []string) error {
 func configCacheImport(ctx context.Context, root string, args []string) error {
 	fs := flag.NewFlagSet("config cache import", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	imf := gen.BindConfigCacheImport(fs)
+	imf := flaggen.BindConfigCacheImport(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config cache import [<file> | --remote]")
 		fmt.Fprintln(os.Stderr, "")

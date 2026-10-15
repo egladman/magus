@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
-	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -40,7 +40,7 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return bindinggen.ObjectJobList(report, ffi.SessionEnums(ctx, sess, "magus")), nil
+		return bindgen.ObjectJobList(report, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	ns.MapSet("put", directVal(obs, "magus.job.put", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		put, err := job.DecodePut(ffi.AnyMap(args, 1))
@@ -51,7 +51,7 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return bindinggen.ObjectJob(row, ffi.SessionEnums(ctx, sess, "magus")), nil
+		return bindgen.ObjectJob(row, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	// register answers with a two-key map rather than the row alone, which is the shape
 	// list and put use. The advice sentence is DERIVED from the row and not a field on it
@@ -63,7 +63,7 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 			return vm.Null, ffi.Error(err)
 		}
 		out := vm.NewMap()
-		out.MapSet("job", bindinggen.ObjectJob(row, ffi.SessionEnums(ctx, sess, "magus")))
+		out.MapSet("job", bindgen.ObjectJob(row, ffi.SessionEnums(ctx, sess, "magus")))
 		out.MapSet("advice", ffi.StrVal(advice))
 		return out, nil
 	}))
@@ -83,7 +83,7 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return bindinggen.ObjectJob(row, ffi.SessionEnums(ctx, sess, "magus")), nil
+		return bindgen.ObjectJob(row, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	ns.MapSet("wait", directVal(obs, "magus.job.wait", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		var result *types.JobResult
@@ -98,7 +98,7 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return bindinggen.ObjectJobStatus(status), nil
+		return bindgen.ObjectJobStatus(status), nil
 	}))
 	ns.MapSet("clear", directVal(obs, "magus.job.clear", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
 		n, err := std.MagusClearJob(ctx)

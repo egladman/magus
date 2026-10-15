@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-//go:generate go run ../../../cmd/magus-utils bindings -module ini -lang buzz -out ../../../internal/interp/bindings/gen/ini.go
+//go:generate go run ../../../cmd/magus-utils bindings -module ini -lang buzz -out ../../../internal/interp/bindings/gen/ini.go -pkg bindgen
 
 // iniGlobalSection is the key holding entries that appear before any [section]
 // header. The empty string cannot collide with a real section name, because a

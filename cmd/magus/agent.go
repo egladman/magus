@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
@@ -114,7 +114,7 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	// and with stderr redirected that looked exactly like a successful install: the
 	// skills were never written and nothing said so.
 	bindDisplayFlags(fset)
-	af := gen.BindAgent(fset)
+	af := flaggen.BindAgent(fset)
 	fset.Usage = func() { agentUsage(os.Stderr) }
 	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
 		return err

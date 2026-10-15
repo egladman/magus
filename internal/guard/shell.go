@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cli"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -233,10 +233,10 @@ type runStage struct {
 // never reads its value as a project.
 var runStageFlags = sync.OnceValue(func() map[string]*flag.FlagSet {
 	run := flag.NewFlagSet("run", flag.ContinueOnError)
-	gen.BindRun(run)
-	run.String(gen.FlagRunSkip, "", "")
+	flaggen.BindRun(run)
+	run.String(flaggen.FlagRunSkip, "", "")
 	affected := flag.NewFlagSet("affected", flag.ContinueOnError)
-	gen.BindAffected(affected)
+	flaggen.BindAffected(affected)
 	return map[string]*flag.FlagSet{"run": run, "affected": affected}
 })
 
@@ -392,7 +392,7 @@ func (ch *runChain) breakWith(why string) {
 // pipeStdioFlags change what a stage reads from stdin or writes to stdout, or stop it
 // taking the project locks a pipe orders stages by.
 var pipeStdioFlags = []string{
-	gen.FlagRunStdin, gen.FlagRunStep, gen.FlagRunDetach, gen.FlagRunGraph,
+	flaggen.FlagRunStdin, flaggen.FlagRunStep, flaggen.FlagRunDetach, flaggen.FlagRunGraph,
 	"plan", "impact", "explain", "bisect", "dry-run", "h", "help",
 }
 

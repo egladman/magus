@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
-	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -62,7 +62,7 @@ func spellHandleFromMeta(m spells.Descriptor) vm.Value {
 		h.MapSet("symbol_indexer", rec)
 	}
 	if m.Sandbox != nil {
-		h.MapSet("sandbox", bindinggen.ObjectSandbox(*m.Sandbox, ffi.EnumBacking))
+		h.MapSet("sandbox", bindgen.ObjectSandbox(*m.Sandbox, ffi.EnumBacking))
 	}
 	bindBuzzTargetDispatch(h, m.Name, m.Ops)
 	return h

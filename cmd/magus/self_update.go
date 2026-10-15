@@ -6,7 +6,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"io"
 	"net/http"
@@ -66,7 +66,7 @@ func confirmInstall(out io.Writer, in io.Reader, isTerminal, yes bool, version, 
 		return nil
 	}
 	if !isTerminal {
-		return fmt.Errorf("non-interactive terminal: use --%s (-%s) to confirm the update", gen.FlagSelfUpdateYes, gen.FlagSelfUpdateY)
+		return fmt.Errorf("non-interactive terminal: use --%s (-%s) to confirm the update", flaggen.FlagSelfUpdateYes, flaggen.FlagSelfUpdateY)
 	}
 	fmt.Fprintf(out, "Install magus %s from %s -> %s? [y/N] ", version, host, targetPath)
 	var answer string
@@ -150,7 +150,7 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 		printOwnDefaults(fs)
 	}
 	// -y and --yes are one switch, which the registry expresses with AliasOf.
-	uf := gen.BindSelfUpdate(fs)
+	uf := flaggen.BindSelfUpdate(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -194,13 +194,13 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 			return fmt.Errorf(
 				"running build is unversioned (dev build): refusing to auto-select a release, "+
 					"use --%s to install a specific release, or --%s to proceed anyway",
-				gen.FlagSelfUpdateVersion, gen.FlagSelfUpdateForce,
+				flaggen.FlagSelfUpdateVersion, flaggen.FlagSelfUpdateForce,
 			)
 		}
 	} else if !uf.Force {
 		switch selfupdate.Compare(rel.Version, version) {
 		case 0:
-			return fmt.Errorf("magus self update: already running %s (use --%s to reinstall)", version, gen.FlagSelfUpdateForce)
+			return fmt.Errorf("magus self update: already running %s (use --%s to reinstall)", version, flaggen.FlagSelfUpdateForce)
 		case -1:
 			if uf.Version == "" {
 				// Auto-latest is below running: refuse unconditionally unless forced.
@@ -209,20 +209,20 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 						"you are running prerelease %s and automatic updates follow stable releases only, "+
 							"the newest stable release is %s, "+
 							"name a later prerelease with --%s, or use --%s %s --%s to return to stable",
-						version, rel.Version, gen.FlagSelfUpdateVersion,
-						gen.FlagSelfUpdateVersion, rel.Version, gen.FlagSelfUpdateForce,
+						version, rel.Version, flaggen.FlagSelfUpdateVersion,
+						flaggen.FlagSelfUpdateVersion, rel.Version, flaggen.FlagSelfUpdateForce,
 					)
 				}
 				return fmt.Errorf(
 					"index advertises %s but you are running %s: refusing downgrade, "+
 						"use --%s %s to install a specific older release, or --%s to override",
-					rel.Version, version, gen.FlagSelfUpdateVersion, rel.Version, gen.FlagSelfUpdateForce,
+					rel.Version, version, flaggen.FlagSelfUpdateVersion, rel.Version, flaggen.FlagSelfUpdateForce,
 				)
 			}
 			// Explicit --version downgrade: still require --force.
 			return fmt.Errorf(
 				"target %s is older than current %s (use --%s to allow downgrade)",
-				rel.Version, version, gen.FlagSelfUpdateForce,
+				rel.Version, version, flaggen.FlagSelfUpdateForce,
 			)
 		}
 	}

@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
@@ -86,7 +86,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// this list and this one used to be written separately and reconciled by a test.
 	// The two env-var defaults below are applied after binding, because they are a
 	// property of THIS process rather than of the documented flag.
-	var rf *gen.RunFlags
+	var rf *flaggen.RunFlags
 	var shardEnvErr error
 	projectArgs, err := cmdParse("run "+targetName, flagArgs, func(fs *flag.FlagSet) {
 		rf = bindRunFlags(fs, &skips)
@@ -95,8 +95,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		// value (an explicit flag still wins, since parsing runs after this) and
 		// mirroring it into DefValue so -h reports what the flag will actually do.
 		for _, seed := range []struct{ flag, env string }{
-			{gen.FlagRunShard, "MAGUS_SHARD"},
-			{gen.FlagRunNShards, "MAGUS_N_SHARDS"},
+			{flaggen.FlagRunShard, "MAGUS_SHARD"},
+			{flaggen.FlagRunNShards, "MAGUS_N_SHARDS"},
 		} {
 			if err := envDefault(fs, seed.flag, os.Getenv(seed.env)); err != nil {
 				shardEnvErr = fmt.Errorf("%s: %w", seed.env, err)
@@ -578,12 +578,12 @@ func resolveTargets(ctx context.Context, ws types.WorkspaceRepository, t types.T
 //
 // A nil skips binds the flag to a throwaway accumulator, which is what the prescan wants:
 // it has to know that --skip CONSUMES its next token, and has no use for the values.
-func bindRunFlags(fs *flag.FlagSet, skips *skipFlag) *gen.RunFlags {
-	rf := gen.BindRun(fs)
+func bindRunFlags(fs *flag.FlagSet, skips *skipFlag) *flaggen.RunFlags {
+	rf := flaggen.BindRun(fs)
 	if skips == nil {
 		skips = &skipFlag{}
 	}
-	fs.Var(skips, gen.FlagRunSkip, "Exclude projects from the selection; repeatable or comma-separated. Takes project references like positionals, or a doublestar glob over project paths (libs/*); a value matching nothing is an error")
+	fs.Var(skips, flaggen.FlagRunSkip, "Exclude projects from the selection; repeatable or comma-separated. Takes project references like positionals, or a doublestar glob over project paths (libs/*); a value matching nothing is an error")
 	return rf
 }
 
@@ -593,7 +593,7 @@ func bindRunFlags(fs *flag.FlagSet, skips *skipFlag) *gen.RunFlags {
 // value reads as false here; the parser reports it.
 func runReadsPlan(args []string) bool {
 	fs := flag.NewFlagSet("prescan", flag.ContinueOnError)
-	gen.BindFlags(fs, &globalCfg)
+	flaggen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
 	bindRunFlags(fs, nil)
 	flags, _ := partitionFlags(fs, args)
@@ -603,7 +603,7 @@ func runReadsPlan(args []string) bool {
 		f := fs.Lookup(name)
 		switch {
 		case f == nil:
-		case name == gen.FlagRunStdin:
+		case name == flaggen.FlagRunStdin:
 			stdin = !hasValue
 			if hasValue {
 				stdin, _ = strconv.ParseBool(value)

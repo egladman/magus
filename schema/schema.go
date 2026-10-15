@@ -5,14 +5,14 @@ import (
 
 	"github.com/kkyr/fig"
 
-	"github.com/egladman/magus/schema/gen"
+	schemagen "github.com/egladman/magus/schema/gen"
 )
 
 // EnvPrefix is the prefix shared by every env var in [Fields].
 const EnvPrefix = "MAGUS"
 
 // Fields is the precomputed inventory of every config-backed CLI flag and MAGUS_* env var.
-var Fields = gen.Fields
+var Fields = schemagen.Fields
 
 // UseEnv returns a [fig.Option] for schema's env scheme (equivalent to fig.UseEnv(EnvPrefix)).
 func UseEnv() fig.Option {

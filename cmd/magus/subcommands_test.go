@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cli"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/guard"
@@ -493,7 +493,7 @@ func resolveRegistryPath(globalFS *flag.FlagSet, args []string) (path []cli.Comm
 // bindUnlessRegistered copies node's own flags onto fs, skipping any name fs
 // already has. A flag documented on the registry can legitimately repeat a
 // GLOBAL flag's name (e.g. "config cache prune --dry-run" repeats the
-// gen.BindFlags-bound --dry-run purely so the man page's per-command Options
+// flaggen.BindFlags-bound --dry-run purely so the man page's per-command Options
 // section shows it in context); flag.FlagSet panics on a duplicate Var call,
 // so this is the one safe way to layer several nodes' declared flags onto one
 // FlagSet without assuming which level actually owns a given name.
@@ -558,7 +558,7 @@ func TestRegistryExamplesParse(t *testing.T) {
 					checked++
 					fs := flag.NewFlagSet(strings.Join(path, " "), flag.ContinueOnError)
 					fs.SetOutput(io.Discard)
-					gen.BindFlags(fs, &config.Config{})
+					flaggen.BindFlags(fs, &config.Config{})
 					bindDisplayFlags(fs)
 
 					cmdPath, matched := resolveRegistryPath(fs, gc.Args)

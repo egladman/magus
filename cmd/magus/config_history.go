@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
@@ -59,7 +59,7 @@ func configHistoryCmd(ctx context.Context, _ string, cfg config.Config, args []s
 func runHistoryPassed(ctx context.Context, cfg config.Config, args []string) error {
 	fs := flag.NewFlagSet("config history passed", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	hf := gen.BindConfigHistoryPassed(fs, gen.ConfigHistoryPassedDefaults{
+	hf := flaggen.BindConfigHistoryPassed(fs, flaggen.ConfigHistoryPassedDefaults{
 		History: cfg.HistoryPath,
 		Status:  string(forecast.RunPassed),
 	})
@@ -124,7 +124,7 @@ func runHistoryPassed(ctx context.Context, cfg config.Config, args []string) err
 func runHistoryImport(ctx context.Context, cfg config.Config, args []string) error {
 	fs := flag.NewFlagSet("config history import", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	imf := gen.BindConfigHistoryImport(fs, gen.ConfigHistoryImportDefaults{History: cfg.HistoryPath})
+	imf := flaggen.BindConfigHistoryImport(fs, flaggen.ConfigHistoryImportDefaults{History: cfg.HistoryPath})
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config history import [--history <path>] <history.json>...")
 		fmt.Fprintln(os.Stderr, "")

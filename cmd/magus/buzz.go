@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/bindings"
@@ -176,9 +176,9 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 	// is ONE switch, which a generated binder can only express because the registry
 	// marks the second AliasOf the first; modeled as two flags they would get two
 	// destinations and the shorthand would parse and then do nothing.
-	var bf *gen.BuzzFlags
+	var bf *flaggen.BuzzFlags
 	rest, err := cmdParse("buzz", args, func(fs *flag.FlagSet) {
-		bf = gen.BindBuzz(fs)
+		bf = flaggen.BindBuzz(fs)
 		fs.Usage = buzzUsage
 	})
 	if err != nil {
@@ -192,17 +192,17 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 	isRepl := bf.E == "" && !bf.Test && !bf.Check && len(rest) == 0
 	if !isRepl && bf.NoAutoload {
 		return usagef("magus buzz: --%s applies to the REPL, not to a script, -%s, or -%s",
-			gen.FlagBuzzNoAutoload, gen.FlagBuzzE, gen.FlagBuzzT)
+			flaggen.FlagBuzzNoAutoload, flaggen.FlagBuzzE, flaggen.FlagBuzzT)
 	}
 	if bf.Coverprofile != "" && !bf.Test {
-		return usagef("magus buzz: --%s requires -%s", gen.FlagBuzzCoverprofile, gen.FlagBuzzT)
+		return usagef("magus buzz: --%s requires -%s", flaggen.FlagBuzzCoverprofile, flaggen.FlagBuzzT)
 	}
 	// Refused rather than ordered, because either order is a defensible reading and
 	// picking one silently gives back an answer to a question nobody asked: -t runs the
 	// file, --check is the mode that does not.
 	if bf.Check && bf.Test {
 		return usagef("magus buzz: --%s and -%s are different modes; --%s does not run the file",
-			gen.FlagBuzzCheck, gen.FlagBuzzT, gen.FlagBuzzCheck)
+			flaggen.FlagBuzzCheck, flaggen.FlagBuzzT, flaggen.FlagBuzzCheck)
 	}
 	// A trace (-vvv) already carries a profile and prints it when the process
 	// exits. --profile is the switch for a run that is not otherwise traced, and
@@ -221,7 +221,7 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 		// name a source no reader can open at the position reported. `magus buzz -e`
 		// already surfaces a compile error on its own, since it compiles before it runs.
 		if bf.E != "" || len(rest) == 0 || (len(rest) == 1 && rest[0] == "-") {
-			return usagef("magus buzz: --%s takes one or more file paths", gen.FlagBuzzCheck)
+			return usagef("magus buzz: --%s takes one or more file paths", flaggen.FlagBuzzCheck)
 		}
 		ctx, cerr := buzzScriptContext(ctx, root)
 		if cerr != nil {
@@ -355,7 +355,7 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 	}
 	if cov != nil {
 		if err := os.WriteFile(bf.Coverprofile, []byte(cov.Report()), 0o644); err != nil {
-			return fmt.Errorf("magus buzz: write --%s: %w", gen.FlagBuzzCoverprofile, err)
+			return fmt.Errorf("magus buzz: write --%s: %w", flaggen.FlagBuzzCoverprofile, err)
 		}
 	}
 	return testErr
@@ -672,12 +672,12 @@ func cutBuzzWorkDir(args []string) (dir string, rest []string, ok bool) {
 		return "", args, false
 	}
 	switch a := args[0]; {
-	case a == "-"+gen.FlagBuzzC || a == "--"+gen.FlagBuzzC:
+	case a == "-"+flaggen.FlagBuzzC || a == "--"+flaggen.FlagBuzzC:
 		if len(args) < 2 {
 			return "", args, false
 		}
 		return args[1], args[2:], true
-	case strings.HasPrefix(a, "-"+gen.FlagBuzzC+"="), strings.HasPrefix(a, "--"+gen.FlagBuzzC+"="):
+	case strings.HasPrefix(a, "-"+flaggen.FlagBuzzC+"="), strings.HasPrefix(a, "--"+flaggen.FlagBuzzC+"="):
 		_, v, _ := strings.Cut(a, "=")
 		return v, args[1:], true
 	}
@@ -688,7 +688,7 @@ func cutBuzzWorkDir(args []string) (dir string, rest []string, ok bool) {
 // the directory it changes is its own.
 func buzzChdir(dir string) error {
 	if err := os.Chdir(dir); err != nil {
-		return usagef("magus buzz: -%s %s: %v", gen.FlagBuzzC, dir, errors.Unwrap(err))
+		return usagef("magus buzz: -%s %s: %v", flaggen.FlagBuzzC, dir, errors.Unwrap(err))
 	}
 	return nil
 }

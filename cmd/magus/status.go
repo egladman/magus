@@ -18,7 +18,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/broker"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
@@ -40,9 +40,9 @@ const statusWatchMin = 15 * time.Second
 // usage banner. The hand-written options struct this replaced described itself as
 // "the middle ground between loose per-flag vars and a declarative registry"; the
 // registry now exists, so the middle ground is gone.
-func bindStatus(f **gen.StatusFlags) func(*flag.FlagSet) {
+func bindStatus(f **flaggen.StatusFlags) func(*flag.FlagSet) {
 	return func(fs *flag.FlagSet) {
-		*f = gen.BindStatus(fs)
+		*f = flaggen.BindStatus(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus status [flags]")
 			fmt.Fprintln(os.Stderr, "\nShow magus's configured telemetry, cache settings, and (when a parent")
@@ -54,7 +54,7 @@ func bindStatus(f **gen.StatusFlags) func(*flag.FlagSet) {
 }
 
 func status(ctx context.Context, args []string) error {
-	var f *gen.StatusFlags
+	var f *flaggen.StatusFlags
 	if _, err := cmdParse("status", args, bindStatus(&f)); err != nil {
 		return err
 	}
@@ -193,7 +193,7 @@ func pipedRunClaims(ctx context.Context, rootOverride string) []types.MachineCla
 	t.Name = canonicalTarget(t.Name)
 	flagArgs, extraArgs := splitOnDashDash(rest)
 	fs := flag.NewFlagSet("prescan", flag.ContinueOnError)
-	gen.BindFlags(fs, &globalCfg)
+	flaggen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
 	prescan(fs)
 	_, projects := partitionFlags(fs, flagArgs)

@@ -10,7 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
-	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/parsecache"
 	"github.com/egladman/magus/internal/workspace"
@@ -409,7 +409,7 @@ func buzzModelTierMatrix(sess *buzz.Session, reg *workspace.WorkspaceRegistry, m
 				choice, err = nil, fmt.Errorf("%s: the matrix faulted the interpreter: %v", modelTierMember, r)
 			}
 		}()
-		reqValue := bindinggen.ObjectModelTierRequest(req, ffi.SessionEnums(ctx, sess, "magus"))
+		reqValue := bindgen.ObjectModelTierRequest(req, ffi.SessionEnums(ctx, sess, "magus"))
 		rv, err := sess.CallValue(ctx, matrix, []vm.Value{reqValue})
 		if err != nil {
 			return nil, fmt.Errorf("%s: the matrix raised: %w", modelTierMember, err)

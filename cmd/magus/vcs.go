@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
@@ -227,9 +227,9 @@ func vcsResolveUsage(w io.Writer) {
 // vcsResolveCmd classifies every conflicted path, settles the generated ones in bulk,
 // regenerates once, and records the result.
 func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string) error {
-	var rf *gen.VCSResolveFlags
+	var rf *flaggen.VCSResolveFlags
 	pos, err := cmdParse("vcs resolve", args, func(fs *flag.FlagSet) {
-		rf = gen.BindVCSResolve(fs)
+		rf = flaggen.BindVCSResolve(fs)
 		fs.Usage = func() { vcsResolveUsage(os.Stderr) }
 	})
 	if err != nil {
@@ -978,10 +978,10 @@ func vcsCheckpointUsage(w io.Writer) {
 
 // vcsCheckpointCmd reads the working state's identity and prints it.
 func vcsCheckpointCmd(ctx context.Context, root string, args []string) error {
-	var flags *gen.VCSCheckpointFlags
+	var flags *flaggen.VCSCheckpointFlags
 	pos, err := cmdParse("vcs checkpoint", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() { vcsCheckpointUsage(os.Stderr) }
-		flags = gen.BindVCSCheckpoint(fs)
+		flags = flaggen.BindVCSCheckpoint(fs)
 	})
 	if err != nil {
 		return err
@@ -1099,9 +1099,9 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	// --dry-run is the GLOBAL config flag, not a local one: it already means
 	// "show me what would happen" on every other command, and redefining it here
 	// panics the FlagSet anyway.
-	var af *gen.VCSAddFlags
+	var af *flaggen.VCSAddFlags
 	pos, err := cmdParse("vcs add", args, func(fs *flag.FlagSet) {
-		af = gen.BindVCSAdd(fs)
+		af = flaggen.BindVCSAdd(fs)
 		fs.Usage = func() { vcsAddUsage(os.Stderr) }
 	})
 	if err != nil {

@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -61,9 +61,9 @@ const defaultLogViewerURL = "https://eli.gladman.cc/magus/console/logs/"
 // after "--" pass through untouched.
 func splitQueryNegations(args []string) (kept, negations []string) {
 	fs := flag.NewFlagSet("query-prescan", flag.ContinueOnError)
-	gen.BindFlags(fs, &globalCfg)
+	flaggen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
-	gen.BindQuery(fs, gen.QueryDefaults{URL: defaultLogViewerURL})
+	flaggen.BindQuery(fs, flaggen.QueryDefaults{URL: defaultLogViewerURL})
 	flags, positionals := partitionFlags(fs, args)
 	kept = make([]string, 0, len(args))
 	for i := 0; i < len(flags); i++ {
@@ -95,9 +95,9 @@ func splitQueryNegations(args []string) (kept, negations []string) {
 
 func queryCmd(ctx context.Context, root string, args []string) error {
 	args, negations := splitQueryNegations(args)
-	var qf *gen.QueryFlags
+	var qf *flaggen.QueryFlags
 	pos, err := cmdParse("query", args, func(fs *flag.FlagSet) {
-		qf = gen.BindQuery(fs, gen.QueryDefaults{URL: defaultLogViewerURL})
+		qf = flaggen.BindQuery(fs, flaggen.QueryDefaults{URL: defaultLogViewerURL})
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus query <terms> [flags]")
 			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json|jsonl] [--open] [--attempts] [--identity] [--publish]")
@@ -842,9 +842,9 @@ func openOutputInViewer(ctx context.Context, desc magus.OutputDescriptor, events
 }
 
 func explainCmd(ctx context.Context, root string, args []string) error {
-	var xf *gen.ExplainFlags
+	var xf *flaggen.ExplainFlags
 	pos, err := cmdParse("explain", args, func(fs *flag.FlagSet) {
-		xf = gen.BindExplain(fs)
+		xf = flaggen.BindExplain(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus explain <node-id-or-name> [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -922,9 +922,9 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 }
 
 func pathCmd(ctx context.Context, root string, args []string) error {
-	var pf *gen.PathFlags
+	var pf *flaggen.PathFlags
 	pos, err := cmdParse("path", args, func(fs *flag.FlagSet) {
-		pf = gen.BindPath(fs)
+		pf = flaggen.BindPath(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus path <a> <b> [flags]")
 			fmt.Fprintln(os.Stderr, "")

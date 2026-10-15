@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
@@ -133,7 +133,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	// release per host. A wrapper that cannot extract a session id must still get a
 	// verdict. The one requirement is that installed glue (--transport) names its
 	// host at all; guard.Judge refuses it otherwise (MGS3024).
-	sf := gen.BindShell(fset)
+	sf := flaggen.BindShell(fset)
 	// --lease has no environment default: the guard reads BAGGAGE itself and ranks it below
 	// the spawn record and the marker, and a default here would pass that claim in as a
 	// flag that outranks both.

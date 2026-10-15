@@ -11,7 +11,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/types"
 )
@@ -42,7 +42,7 @@ func (f *ignoreFlag) Set(value string) error {
 func watchCmd(ctx context.Context, root string, rc runConfig, args []string) error {
 	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	wf := gen.BindWatch(fs)
+	wf := flaggen.BindWatch(fs)
 	// --ignore stays hand-bound: it is a repeatable custom flag.Value, a shape the
 	// registry has no kind for, so it is also absent from the man page.
 	var ignores ignoreFlag

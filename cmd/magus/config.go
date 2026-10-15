@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
@@ -133,7 +133,7 @@ func intOrDef(n int, def string) string {
 func runConfigSet(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("config set", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	sf := gen.BindConfigSet(fs)
+	sf := flaggen.BindConfigSet(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config set key=<key>,value=<value> [flags]")
 		fmt.Fprintln(os.Stderr, "")

@@ -9,7 +9,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module flags -lang buzz -out ../internal/interp/bindings/gen/flags.go
+//go:generate go run ../cmd/magus-utils bindings -module flags -lang buzz -out ../internal/interp/bindings/gen/flags.go -pkg bindgen
 
 // Flags is the "flags" host module: argv parsing for a script that receives one.
 //

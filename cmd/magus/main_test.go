@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
@@ -264,7 +264,7 @@ func TestPreScanExtractorsStopAtSeparator(t *testing.T) {
 
 // TestSnapshotGlobalsRestoresDryRun pins the fix for the server flag-bleed bug:
 // dispatchAdopted defers snapshotGlobals()() so one adopted client's flags (e.g.
-// --dry-run) cannot survive into the next dispatch on the same process. gen.BindFlags
+// --dry-run) cannot survive into the next dispatch on the same process. flaggen.BindFlags
 // binds each generated flag with the CURRENT struct field as its default, so an unset
 // flag on a later dispatch otherwise keeps whatever the previous one left in globalCfg.
 //
@@ -272,7 +272,7 @@ func TestPreScanExtractorsStopAtSeparator(t *testing.T) {
 // load a real workspace through loadMagus/inspectWorkspace, both memoized behind a
 // process-wide sync.Once that panics if invoked twice with a different root, not
 // something a unit test can safely drive. Instead this exercises the exact mechanism
-// dispatchAdopted's callees use to set the field (cmdParse -> gen.BindFlags) and proves
+// dispatchAdopted's callees use to set the field (cmdParse -> flaggen.BindFlags) and proves
 // snapshotGlobals's restore undoes it, which is the narrowest reachable seam for the fix.
 func TestSnapshotGlobalsRestoresDryRun(t *testing.T) {
 	savedCfg, savedGlobal := globalCfg, global
@@ -293,7 +293,7 @@ func TestSnapshotGlobalsRestoresDryRun(t *testing.T) {
 	}
 
 	// Second adopted dispatch: a different client, no --dry-run. Before the fix,
-	// gen.BindFlags binds the flag's default to the CURRENT (bled) field value, so
+	// flaggen.BindFlags binds the flag's default to the CURRENT (bled) field value, so
 	// an unset flag here would silently inherit true from the first dispatch.
 	restore = snapshotGlobals()
 	if _, err := cmdParse("run", nil, nil); err != nil {
@@ -428,7 +428,7 @@ func TestWantsUsage(t *testing.T) {
 // self-check against what the command actually accepts.
 func TestDiffUsageNamesEveryBoundFlag(t *testing.T) {
 	fs := flag.NewFlagSet("diff", flag.ContinueOnError)
-	gen.BindDiff(fs)
+	flaggen.BindDiff(fs)
 	var buf bytes.Buffer
 	diffUsage(&buf)
 	out := buf.String()

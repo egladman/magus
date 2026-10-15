@@ -8,7 +8,7 @@ import (
 	"github.com/pmezard/go-difflib/difflib"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module diff -lang buzz -out ../internal/interp/bindings/gen/diff.go
+//go:generate go run ../cmd/magus-utils bindings -module diff -lang buzz -out ../internal/interp/bindings/gen/diff.go -pkg bindgen
 
 // diffDefaultContext is how many unchanged lines surround each hunk when the
 // caller names none. Three is what `git diff` and `diff -u` both default to, and

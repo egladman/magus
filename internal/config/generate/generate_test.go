@@ -165,40 +165,36 @@ func TestParseConfigFlagsErrors(t *testing.T) {
 }
 
 // TestWriteRendersParsableGoForEveryArtifact is the generator's real contract:
-// four files, each valid Go. emit.Go gofmts before writing, so an unparsable
-// template fails Write, but nothing checks that the RIGHT binder reached each
-// field, which is what the per-kind assertions below do.
+// three files, each valid Go in the package it was told. emit.Go gofmts before
+// writing, so an unparsable template fails Write, but nothing checks that the RIGHT
+// binder reached each field, which is what the per-kind assertions below do.
 func TestWriteRendersParsableGoForEveryArtifact(t *testing.T) {
 	out := t.TempDir()
 	p := Paths{
-		Flags:    filepath.Join(out, "flags.go"),
-		Fields:   filepath.Join(out, "fields.go"),
-		Bind:     filepath.Join(out, "bind.go"),
-		ApplyEnv: filepath.Join(out, "env.go"),
+		Fields:   Output{Path: filepath.Join(out, "fields.go"), Package: "schemagen"},
+		Bind:     Output{Path: filepath.Join(out, "bind.go"), Package: "flaggen"},
+		ApplyEnv: Output{Path: filepath.Join(out, "env.go"), Package: "configgen"},
 	}
 	require.NoError(t, Write(writeSchema(t), p))
 
-	for _, path := range []string{p.Flags, p.Fields, p.Bind, p.ApplyEnv} {
-		_, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-		require.NoError(t, err, "%s is not parsable Go", filepath.Base(path))
+	for _, o := range []Output{p.Fields, p.Bind, p.ApplyEnv} {
+		f, err := parser.ParseFile(token.NewFileSet(), o.Path, nil, parser.PackageClauseOnly)
+		require.NoError(t, err, "%s is not parsable Go", filepath.Base(o.Path))
+		assert.Equal(t, o.Package, f.Name.Name, filepath.Base(o.Path))
 	}
 
-	flags := read(t, p.Flags)
-	assert.Contains(t, flags, `{"state-dir", "MAGUS_STATE_DIR", "string"},`)
-	assert.Contains(t, flags, `fs.DurationVar(&cfg.Timeout, "timeout", cfg.Timeout, "MAGUS_TIMEOUT")`)
-	assert.NotContains(t, flags, "cfg.Strict", "boolptr fields are env-only and must not be bound as flags")
-
-	fields := read(t, p.Fields)
+	fields := read(t, p.Fields.Path)
 	assert.Contains(t, fields, `GoPath:   "StateDir",`)
 	assert.Contains(t, fields, `Flag:     fieldtype.FlagNames{Long: "state-dir", Short: "s"},`)
 	assert.Contains(t, fields, "Kind:     fieldtype.KindBoolPtr,")
 	assert.Contains(t, fields, "Kind:     fieldtype.KindStringSlice,")
 
-	bind := read(t, p.Bind)
+	bind := read(t, p.Bind.Path)
 	assert.Contains(t, bind, `fs.StringVar(&cfg.StateDir, "s", cfg.StateDir, "Short for --state-dir")`)
-	assert.NotContains(t, bind, "cfg.Strict")
+	assert.Contains(t, bind, `fs.DurationVar(&cfg.Timeout, "timeout", cfg.Timeout, "MAGUS_TIMEOUT")`)
+	assert.NotContains(t, bind, "cfg.Strict", "boolptr fields are env-only and must not be bound as flags")
 
-	env := read(t, p.ApplyEnv)
+	env := read(t, p.ApplyEnv.Path)
 	assert.Contains(t, env, `if v := getenv("MAGUS_RETRIES"); v != ""`)
 	assert.Contains(t, env, "cfg.Strict = &b")
 	assert.Contains(t, env, `strings.Split(v, ",")`)
@@ -209,7 +205,7 @@ func TestWriteRendersParsableGoForEveryArtifact(t *testing.T) {
 func TestWriteSkipsUnnamedArtifacts(t *testing.T) {
 	out := t.TempDir()
 	fields := filepath.Join(out, "fields.go")
-	require.NoError(t, Write(writeSchema(t), Paths{Fields: fields}))
+	require.NoError(t, Write(writeSchema(t), Paths{Fields: Output{Path: fields, Package: "schemagen"}}))
 
 	entries, err := os.ReadDir(out)
 	require.NoError(t, err)
@@ -217,12 +213,23 @@ func TestWriteSkipsUnnamedArtifacts(t *testing.T) {
 	assert.Equal(t, filepath.Base(fields), entries[0].Name())
 }
 
+func TestWriteRefusesAnArtifactWithNoPackage(t *testing.T) {
+	out := t.TempDir()
+	fields := filepath.Join(out, "fields.go")
+	err := Write(writeSchema(t), Paths{Fields: Output{Path: fields}})
+	require.ErrorContains(t, err, fields+": no package clause named for it")
+
+	entries, err := os.ReadDir(out)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "nothing is written under a guessed package")
+}
+
 func TestWritePropagatesAnUnwritableTarget(t *testing.T) {
-	nested := filepath.Join(t.TempDir(), "no-such-dir", "flags.go")
+	nested := filepath.Join(t.TempDir(), "no-such-dir", "fields.go")
 	schema := writeSchema(t)
 
-	assert.Error(t, Write(schema, Paths{Flags: nested}))
-	assert.Error(t, Write(schema, Paths{Fields: nested}))
+	assert.Error(t, Write(schema, Paths{Fields: Output{Path: nested, Package: "schemagen"}}))
+	assert.Error(t, Write(schema, Paths{ApplyEnv: Output{Path: nested, Package: "configgen"}}))
 }
 
 func read(t *testing.T, path string) string {

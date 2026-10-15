@@ -21,7 +21,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/ci/forecast"
@@ -50,11 +50,11 @@ import (
 // terminal and an agent pairing with them are looking at the same ranking rather than two
 // tools' opinions of one changeset.
 func diffCmd(ctx context.Context, root string, args []string) error {
-	var rf *gen.DiffFlags
+	var rf *flaggen.DiffFlags
 	var gates types.DiffOptions
 	rest, err := cmdParse("diff", args, func(fs *flag.FlagSet) {
-		rf = gen.BindDiff(fs)
-		fs.Float64Var(&gates.MinShare, gen.FlagDiffConformanceMinShare, 0,
+		rf = flaggen.BindDiff(fs)
+		fs.Float64Var(&gates.MinShare, flaggen.FlagDiffConformanceMinShare, 0,
 			"The share of a conformance norm's declarations, above 0 and at most 1, that must agree before it is reported; defaults to knowledge.conform.gates.min_share")
 		fs.Usage = func() { diffUsage(os.Stderr) }
 	})
@@ -250,7 +250,7 @@ func scopeFromArgs(rest []string) ([]string, error) {
 // plausible list of the reader's OWN uncommitted edits under exit 0: the worst possible failure,
 // since the output looks exactly like an answer to the question they asked. --rev is that message's
 // successor: the ref has a door now, so the refusal became a feature.
-func diffSourceFromFlags(rf *gen.DiffFlags) (diffInput, error) {
+func diffSourceFromFlags(rf *flaggen.DiffFlags) (diffInput, error) {
 	patch, rev := strings.TrimSpace(rf.Patch), strings.TrimSpace(rf.Rev)
 	switch {
 	case patch != "" && rev != "":
@@ -318,7 +318,7 @@ func (t diffTUITerm) ok() bool { return t.Reads && t.Paints }
 //
 // It takes the terminal as an ARGUMENT rather than probing it, which is what makes this
 // testable without a pty.
-func wantsTUI(rf *gen.DiffFlags, src diffInput, format Format, term diffTUITerm, enabled bool) bool {
+func wantsTUI(rf *flaggen.DiffFlags, src diffInput, format Format, term diffTUITerm, enabled bool) bool {
 	switch {
 	case rf.NoTui, !enabled:
 		return false
@@ -373,7 +373,7 @@ func (in diffInput) readPatch(ctx context.Context, m *magus.Magus, paths []strin
 // impact is ADDITIVE: with it off, every byte emitted here is what this command emitted
 // before the flag existed, which is what lets a script parsing `magus diff -o json` keep
 // working and what keeps the flag honest about being context rather than a gate.
-func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputOptions, rf *gen.DiffFlags, gates types.DiffOptions, rootOverride string, tui, impact bool, scopePaths []string) error {
+func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputOptions, rf *flaggen.DiffFlags, gates types.DiffOptions, rootOverride string, tui, impact bool, scopePaths []string) error {
 	patch, base, err := src.readPatch(ctx, m, scopePaths)
 	if err != nil {
 		return err

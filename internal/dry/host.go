@@ -16,7 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
-	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -41,7 +41,7 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	// stops at it. proc is the exception: its exec traces, so doctor can see what a
 	// target runs. A wasm registry lists no IO module, so there these imports reach the
 	// resolver below.
-	for name, reg := range bindinggen.Modules {
+	for name, reg := range bindgen.Modules {
 		if reg.Capabilities.Has(ffi.WASM) {
 			continue
 		}
@@ -525,16 +525,16 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	}
 	m.MapSet("dir", fn("magus.dir", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		p := firstStr(args)
-		return bindinggen.ObjectDir(types.Dir{Path: p, ID: types.KindDir + ":" + p}), nil
+		return bindgen.ObjectDir(types.Dir{Path: p, ID: types.KindDir + ":" + p}), nil
 	}))
 	m.MapSet("dirs", fn("magus.dirs", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.ListValue(nil), nil
 	}))
 	m.MapSet("layer", fn("magus.layer", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		return bindinggen.ObjectLayer(types.Layer{Name: firstStr(args)}), nil
+		return bindgen.ObjectLayer(types.Layer{Name: firstStr(args)}), nil
 	}))
 	m.MapSet("neighborhood", fn("magus.neighborhood", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		return bindinggen.ObjectKnowledgeNeighborhoodOutput(types.KnowledgeNeighborhoodOutput{
+		return bindgen.ObjectKnowledgeNeighborhoodOutput(types.KnowledgeNeighborhoodOutput{
 			Definition: types.KnowledgeNeighborhoodDefinition,
 			Focus:      firstStr(args),
 			Answer:     types.KnowledgeAnswer{Verdict: types.VerdictUnknown, Reason: types.ReasonCoverageUnknown},
@@ -556,7 +556,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// marks find no trail; mark echoes a zero row for the reason job.put does.
 	trail := vm.NewMap()
 	trail.MapSet("read", fn("magus.trail.read", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindinggen.ObjectTrail(types.Trail{}), nil
+		return bindgen.ObjectTrail(types.Trail{}), nil
 	}))
 	trail.MapSet("shape", fn("magus.trail.shape", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.StrValue(""), nil
@@ -568,7 +568,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		return vm.ListValue(nil), nil
 	}))
 	trail.MapSet("mark", fn("magus.trail.mark", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindinggen.ObjectTrailMark(types.TrailMark{}), nil
+		return bindgen.ObjectTrailMark(types.TrailMark{}), nil
 	}))
 	m.MapSet("trail", trail)
 
@@ -930,11 +930,11 @@ func buildProc(tr *Tracer) vm.Value {
 			}
 			tr.addExec(append([]string{bin}, rest...))
 		}
-		return bindinggen.ObjectExecResult(types.ExecResult{OK: true}), nil
+		return bindgen.ObjectExecResult(types.ExecResult{OK: true}), nil
 	}))
 	m.MapSet("shell", fn("proc.shell", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		shell := cmp.Or(strArg(args, 1), "/bin/sh")
-		return bindinggen.ObjectShellCommand(types.ShellCommand{Bin: shell, Args: []string{"-c", strArg(args, 0)}}), nil
+		return bindgen.ObjectShellCommand(types.ShellCommand{Bin: shell, Args: []string{"-c", strArg(args, 0)}}), nil
 	}))
 	return m
 }

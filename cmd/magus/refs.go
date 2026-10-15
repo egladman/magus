@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/edit"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -31,13 +31,13 @@ import (
 // loads the lazily-loaded @symbols shards. Its output is occurrence-shaped (file:line
 // rows), which is why it is a distinct subcommand rather than a `magus query` neighborhood.
 func refsCmd(ctx context.Context, root string, args []string) error {
-	var rf *gen.RefsFlags
+	var rf *flaggen.RefsFlags
 	// --no-generated stays hand-bound, like watch's --ignore: it is declared in
 	// internal/cli/registry.go (Kind: FlagCustom) for the man page, but bound here
-	// directly rather than through gen.RefsFlags.
+	// directly rather than through flaggen.RefsFlags.
 	var noGenerated bool
 	pos, err := cmdParse("refs", args, func(fs *flag.FlagSet) {
-		rf = gen.BindRefs(fs)
+		rf = flaggen.BindRefs(fs)
 		fs.BoolVar(&noGenerated, "no-generated", false,
 			"Exclude declared-output files from the fallback text search entirely, instead of searching them and marking the ones that match")
 		fs.Usage = func() {

@@ -19,7 +19,7 @@ import (
 	"syscall"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/graph/url"
@@ -89,9 +89,9 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// Split on "--" before flag parsing so passthrough args aren't consumed by flag.
 	flagArgs, extraArgs := splitOnDashDash(rest)
 
-	var af *gen.AffectedFlags
+	var af *flaggen.AffectedFlags
 	_, err := cmdParse("affected "+target, flagArgs, func(fs *flag.FlagSet) {
-		af = gen.BindAffected(fs)
+		af = flaggen.BindAffected(fs)
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus affected %s [flags] [-- <extra args>]\n", target)
 			fmt.Fprintln(os.Stderr, "")
@@ -701,9 +701,9 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	}
 	target = canonicalTarget(target) // expand short aliases at the CLI edge, mirroring `magus run`
 
-	var pf *gen.AffectedPlanFlags
+	var pf *flaggen.AffectedPlanFlags
 	if _, err := cmdParse("affected "+target+" --plan", flagArgs, func(fs *flag.FlagSet) {
-		pf = gen.BindAffectedPlan(fs, gen.AffectedPlanDefaults{
+		pf = flaggen.BindAffectedPlan(fs, flaggen.AffectedPlanDefaults{
 			MaxShards:         globalCfg.CI.MaxShards,
 			MaxParallelBudget: globalCfg.CI.RunnerPoolBudget,
 		})
@@ -1069,9 +1069,9 @@ const undeclaredSeedHintCap = 5
 func affectedImpact(ctx context.Context, root string, args []string) error {
 	// --impact routed us here (hasModeFlag); bind it so the flag parser accepts it,
 	// then parse --base like the other forensic modes. No positional target is read.
-	var imf *gen.AffectedImpactFlags
+	var imf *flaggen.AffectedImpactFlags
 	if _, err := cmdParse("affected --impact", args, func(fs *flag.FlagSet) {
-		imf = gen.BindAffectedImpact(fs)
+		imf = flaggen.BindAffectedImpact(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus affected --impact [--base <ref>]")
 			fmt.Fprintln(os.Stderr, "")

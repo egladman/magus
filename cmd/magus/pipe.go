@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/workspace"
@@ -183,15 +183,15 @@ func buzzScriptStage(args []string) bool {
 	if len(own) > 0 && own[0] == "lsp" {
 		return false
 	}
-	for _, mode := range []string{gen.FlagBuzzT, "test", gen.FlagBuzzCheck} {
+	for _, mode := range []string{flaggen.FlagBuzzT, "test", flaggen.FlagBuzzCheck} {
 		if hasModeFlag(own, mode) {
 			return false
 		}
 	}
-	if hasModeFlag(own, gen.FlagBuzzE) {
+	if hasModeFlag(own, flaggen.FlagBuzzE) {
 		return true
 	}
-	file, _, ok := splitTargetFromArgs(own, func(fs *flag.FlagSet) { gen.BindBuzz(fs) })
+	file, _, ok := splitTargetFromArgs(own, func(fs *flag.FlagSet) { flaggen.BindBuzz(fs) })
 	return ok && file != "-"
 }
 

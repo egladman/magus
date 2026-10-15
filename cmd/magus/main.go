@@ -23,8 +23,8 @@
 //
 // Run any subcommand with -h/--help for its own flag list.
 //
-//go:generate go run ../magus-utils config -config ../../internal/config/config.go -fields-out ../../schema/gen/fields.go -bind-out gen/bind.go -apply-env-out ../../internal/config/gen/env.go
-//go:generate go run ../magus-utils cliflags -out gen/cli_flags.go
+//go:generate go run ../magus-utils config -config ../../internal/config/config.go -fields-out ../../schema/gen/fields.go -fields-pkg schemagen -bind-out gen/bind.go -bind-pkg flaggen -apply-env-out ../../internal/config/gen/env.go -apply-env-pkg configgen
+//go:generate go run ../magus-utils cliflags -out gen/cli_flags.go -pkg flaggen
 package main
 
 import (
@@ -45,7 +45,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
@@ -322,7 +322,7 @@ func hasDetachFlag(args []string) bool {
 		if !strings.HasPrefix(a, "-") {
 			continue
 		}
-		if key, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); key == gen.FlagRunDetach {
+		if key, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); key == flaggen.FlagRunDetach {
 			return true
 		}
 	}
@@ -602,7 +602,7 @@ func bindGlobalsAfterSubcommand(subArgs []string) {
 	fs := flag.NewFlagSet("globals-after-subcommand", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	fs.SetOutput(io.Discard)
-	gen.BindFlags(fs, &globalCfg)
+	flaggen.BindFlags(fs, &globalCfg)
 	takesValue := map[string]bool{}
 	fs.VisitAll(func(f *flag.Flag) { takesValue[f.Name] = !flagIsBool(f) })
 
@@ -633,14 +633,14 @@ func bindGlobalsAfterSubcommand(subArgs []string) {
 
 // globalValueFlags is the set of "-name"/"--name" tokens for every value-taking
 // global flag, derived once from the real bindings (the config-generated
-// gen.BindFlags plus the display flags) rather than hand-listed, so peekSub can
+// flaggen.BindFlags plus the display flags) rather than hand-listed, so peekSub can
 // never drift from them. Two bootstrap flags are added explicitly: root and config
 // precede config loading, so they are not part of the generated set. Deriving it
 // closes the latent gap where a value global flag missing from the old hand-kept
 // list made `magus --cache-dir x run` misread x as the subcommand.
 var globalValueFlags = sync.OnceValue(func() map[string]bool {
 	fs := flag.NewFlagSet("global", flag.ContinueOnError)
-	gen.BindFlags(fs, &globalCfg)
+	flaggen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
 	// Both short forms belong here beside their long names: peekSub reads this set to
 	// know a token consumes the next one, and a missing -C made `magus -C /ws run`
@@ -1156,7 +1156,7 @@ func usage() {
 
 // snapshotGlobals captures globalCfg and global, returning a restore func that puts them
 // back. runTarget/affected write flags straight into these package globals via cmdParse
-// (gen.BindFlags binds the CURRENT field as each flag's default, so an unset flag keeps
+// (flaggen.BindFlags binds the CURRENT field as each flag's default, so an unset flag keeps
 // whatever a previous dispatch left there); dispatchAdopted defers the returned restore
 // so one adopted client's flags cannot bleed into the next one dispatched on this process.
 func snapshotGlobals() (restore func()) {

@@ -4,7 +4,7 @@
 // MCPTools declaration on the module (std/magus.go) and rerun
 // `magus run mcp-tools-generate`, never this file.
 
-package gen
+package mcpgen
 
 // ParamDescriptor describes a single parameter on an MCP tool.
 type ParamDescriptor struct {

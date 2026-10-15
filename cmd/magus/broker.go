@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/broker"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
@@ -94,9 +94,9 @@ func brokerUsage() {
 // start race, so it exits 0. A socket a supervisor hands over is served instead of
 // binding one.
 func brokerServe(ctx context.Context, args []string) error {
-	var f *gen.BrokerFlags
+	var f *flaggen.BrokerFlags
 	rest, err := cmdParse("broker", args, func(fs *flag.FlagSet) {
-		f = gen.BindBroker(fs)
+		f = flaggen.BindBroker(fs)
 		fs.Usage = brokerUsage
 	})
 	if err != nil {
@@ -240,9 +240,9 @@ func brokerStatus(ctx context.Context, args []string) error {
 }
 
 func brokerStop(ctx context.Context, args []string) error {
-	var f *gen.BrokerStopFlags
+	var f *flaggen.BrokerStopFlags
 	if _, err := cmdParse("broker stop", args, func(fs *flag.FlagSet) {
-		f = gen.BindBrokerStop(fs)
+		f = flaggen.BindBrokerStop(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus broker stop [--services]")
 			fmt.Fprintln(os.Stderr, "")
@@ -324,7 +324,7 @@ func stateLogPath(name string) string {
 // without one being started.
 var spawnBroker = func() (pid int, logPath string, err error) {
 	logPath = brokerLogPath()
-	pid, err = spawnDetached([]string{"broker", "--" + gen.FlagBrokerLog, logPath}, logPath)
+	pid, err = spawnDetached([]string{"broker", "--" + flaggen.FlagBrokerLog, logPath}, logPath)
 	return pid, logPath, err
 }
 

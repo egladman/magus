@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../../../cmd/magus-utils bindings -module yaml -lang buzz -out ../../../internal/interp/bindings/gen/yaml.go
+//go:generate go run ../../../cmd/magus-utils bindings -module yaml -lang buzz -out ../../../internal/interp/bindings/gen/yaml.go -pkg bindgen
 
 // Module is the "yaml" host module: YAML parse and stringify via gopkg.in/yaml.v3.
 var Module = std.Module{

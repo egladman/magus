@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
@@ -115,7 +115,7 @@ func configMCPConnector(args []string) error {
 func configMCPConnectorCreate(args []string) error {
 	fs := flag.NewFlagSet("config mcp connector create", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	cf := gen.BindConfigMCPConnectorCreate(fs)
+	cf := flaggen.BindConfigMCPConnectorCreate(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config mcp connector create [--name <n>] [--expires <dur>]")
 		fmt.Fprintln(os.Stderr, "")

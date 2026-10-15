@@ -1,7 +1,7 @@
 package main
 
-//go:generate go run . boundarylist -out ../../internal/interp/bindings/gen/boundary_list.go
-//go:generate go run . boundaryobjects -out ../../internal/interp/bindings/gen/boundary_objects.go
+//go:generate go run . boundarylist -out ../../internal/interp/bindings/gen/boundary_list.go -pkg bindgen
+//go:generate go run . boundaryobjects -out ../../internal/interp/bindings/gen/boundary_objects.go -pkg bindgen
 
 import (
 	"reflect"

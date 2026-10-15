@@ -10,7 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
-	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -151,8 +151,8 @@ var clientWithheld = []string{"cmd", "pry"}
 // clientHostModules is the host-module set the MCP client tool provides: every
 // module marked WASM (pure compute) except env, which reads the process environment.
 func clientHostModules() ffi.Set {
-	out := make(ffi.Set, len(bindinggen.Modules))
-	for name, reg := range bindinggen.Modules {
+	out := make(ffi.Set, len(bindgen.Modules))
+	for name, reg := range bindgen.Modules {
 		if name == "env" || !reg.Capabilities.Has(ffi.WASM) {
 			continue
 		}
@@ -174,7 +174,7 @@ func ClientDeniedImportPaths() []string {
 		allowed[cmp.Or(reg.Path, name)] = true
 	}
 	var denied []string
-	for name, reg := range bindinggen.Modules {
+	for name, reg := range bindgen.Modules {
 		if path := cmp.Or(reg.Path, name); !allowed[path] {
 			denied = append(denied, path)
 		}
@@ -255,7 +255,7 @@ func WithScriptOutput(w io.Writer) ModuleOption {
 // namespace and the Target/Charm source types on top) and the `magus buzz`
 // runner, so the two never drift.
 func RegisterModules(ctx context.Context, sess *buzz.Session, opts ...ModuleOption) {
-	cfg := moduleConfig{modules: bindinggen.Modules, scriptOut: os.Stderr}
+	cfg := moduleConfig{modules: bindgen.Modules, scriptOut: os.Stderr}
 	for _, opt := range opts {
 		opt(&cfg)
 	}

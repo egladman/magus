@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module term -lang buzz -out ../internal/interp/bindings/gen/term.go
+//go:generate go run ../cmd/magus-utils bindings -module term -lang buzz -out ../internal/interp/bindings/gen/term.go -pkg bindgen
 
 // Term is the "term" host module: the terminal renderer magus already draws its
 // own output with, exposed so a magusfile can use it too.

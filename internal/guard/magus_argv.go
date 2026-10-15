@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 )
 
@@ -23,7 +23,7 @@ import (
 var magusGlobalFlags = sync.OnceValue(func() *flag.FlagSet {
 	fs := flag.NewFlagSet("magus", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	gen.BindFlags(fs, &config.Config{})
+	flaggen.BindFlags(fs, &config.Config{})
 	for _, name := range []string{"root", "C", "config", "c", "output", "o", "tee"} {
 		fs.String(name, "", "")
 	}

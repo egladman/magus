@@ -1628,7 +1628,7 @@ nothing. The inverse is the same command with the two names swapped.`,
 		{Name: "definition", Kind: FlagBool, Doc: "Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed"},
 		{Name: "source", Kind: FlagBool, Doc: "With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n"},
 		{Name: "text", Kind: FlagBool, Doc: "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope it, as grep's do; with none it searches the workspace"},
-		// Custom, not Bool: bound by refsCmd itself alongside gen.BindRefs, the
+		// Custom, not Bool: bound by refsCmd itself alongside flaggen.BindRefs, the
 		// same reason watch's --ignore is (see that entry above).
 		{Name: "no-generated", Kind: FlagCustom, Doc: "In the fallback text search shown beside a symbol miss, or with --text, exclude declared-output files entirely instead of searching them and marking the ones that match"},
 		{Name: "limit", Kind: FlagInt, Doc: "Print at most this many --text matches, then say how many more there were (0 for all). What `| head` would do, without losing the count or the exit code"},

@@ -22,7 +22,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module pipe -lang buzz -out ../internal/interp/bindings/gen/pipe.go
+//go:generate go run ../cmd/magus-utils bindings -module pipe -lang buzz -out ../internal/interp/bindings/gen/pipe.go -pkg bindgen
 
 // Pipe is the "pipe" host module: a `magus buzz` script as a stage of a shell pipe of
 // magus processes, between a stage that writes records and one that reads them.

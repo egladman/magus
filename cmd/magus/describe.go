@@ -7,7 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/spells"
 	"io/fs"
@@ -298,9 +298,9 @@ func unknownEntity(kind, name string, all []string) error {
 }
 
 func describeSpells(ctx context.Context, root string, args []string) error {
-	var sf *gen.DescribeSpellsFlags
+	var sf *flaggen.DescribeSpellsFlags
 	pos, err := cmdParse("describe spells", args, func(fs *flag.FlagSet) {
-		sf = gen.BindDescribeSpells(fs)
+		sf = flaggen.BindDescribeSpells(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe spell[s] [<name>] [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -625,9 +625,9 @@ func firstLine(s string) string {
 func describeTargetNoun(ctx context.Context, root string, args []string) error {
 	// Single parse for the whole noun: the delegates below take the parsed
 	// positionals and do not re-parse, so flags are handled exactly once.
-	var tf *gen.DescribeTargetFlags
+	var tf *flaggen.DescribeTargetFlags
 	pos, err := cmdParse("describe target", args, func(fs *flag.FlagSet) {
-		tf = gen.BindDescribeTarget(fs)
+		tf = flaggen.BindDescribeTarget(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe target[s] [<path:target>] [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -1098,9 +1098,9 @@ func describeTargets(ctx context.Context, root string) error {
 }
 
 func describeProjects(ctx context.Context, root string, args []string) error {
-	var pf *gen.DescribeProjectsFlags
+	var pf *flaggen.DescribeProjectsFlags
 	pos, err := cmdParse("describe projects", args, func(fs *flag.FlagSet) {
-		pf = gen.BindDescribeProjects(fs)
+		pf = flaggen.BindDescribeProjects(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe project[s] [<path>] [flags]")
 			fmt.Fprintln(os.Stderr, "")

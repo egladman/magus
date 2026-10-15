@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-//go:generate go run ../../../cmd/magus-utils bindings -module hex -lang buzz -out ../../../internal/interp/bindings/gen/hex.go
+//go:generate go run ../../../cmd/magus-utils bindings -module hex -lang buzz -out ../../../internal/interp/bindings/gen/hex.go -pkg bindgen
 
 // Module is the "encoding/hex" host module. Buzz strings carry a `.hex()`
 // method already; this is the decode half, which the language has no form of,

@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -322,9 +322,9 @@ func ingestSessions(ctx context.Context, root string) {
 // `magus run <target> --graph` and `magus affected <target> --graph` scope to a
 // run (those flags remain as scoped passthroughs).
 func graphDeps(ctx context.Context, root string, args []string) error {
-	var gf *gen.GraphDepsFlags
+	var gf *flaggen.GraphDepsFlags
 	pos, err := cmdParse("graph deps", args, func(fs *flag.FlagSet) {
-		gf = gen.BindGraphDeps(fs)
+		gf = flaggen.BindGraphDeps(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph deps [flags] [project...]")
 			fmt.Fprintln(os.Stderr, "")
@@ -359,9 +359,9 @@ func graphDeps(ctx context.Context, root string, args []string) error {
 // <cache>/knowledge, and writes the node-link export. The cache-first loader
 // makes building implicit: there is no separate build subcommand.
 func graphExport(ctx context.Context, root string, args []string) error {
-	var ef *gen.GraphExportFlags
+	var ef *flaggen.GraphExportFlags
 	pos, err := cmdParse("graph export", args, func(fs *flag.FlagSet) {
-		ef = gen.BindGraphExport(fs, gen.GraphExportDefaults{URL: defaultExploreURL, Budget: knowledge.DefaultBudget})
+		ef = flaggen.BindGraphExport(fs, flaggen.GraphExportDefaults{URL: defaultExploreURL, Budget: knowledge.DefaultBudget})
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph export [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -536,9 +536,9 @@ func stripUnreproducible(g *types.KnowledgeGraphOutput) {
 // coverage. It reads the graph cache-first rather than git history, the
 // structural companion to insight's history lenses (insight report embeds it).
 func graphStats(ctx context.Context, root string, args []string) error {
-	var sf *gen.GraphStatsFlags
+	var sf *flaggen.GraphStatsFlags
 	_, err := cmdParse("graph stats", args, func(fs *flag.FlagSet) {
-		sf = gen.BindGraphStats(fs)
+		sf = flaggen.BindGraphStats(fs)
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus graph stats [flags]\n\n%s\n\nFlags (global flags also accepted, see `magus -h`):\n", types.KnowledgeStatsDefinition)
 			printOwnDefaults(fs)

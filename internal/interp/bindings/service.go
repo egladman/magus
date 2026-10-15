@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
-	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -30,7 +30,7 @@ func buildService(obs buzz.DirectObserver) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return bindinggen.ObjectServiceLease(lease), nil
+		return bindgen.ObjectServiceLease(lease), nil
 	}))
 	ns.MapSet("release", directVal(obs, "magus.service.release", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		if err := releaseService(ctx, args); err != nil {

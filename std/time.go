@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module time -lang buzz -out ../internal/interp/bindings/gen/time.go
+//go:generate go run ../cmd/magus-utils bindings -module time -lang buzz -out ../internal/interp/bindings/gen/time.go -pkg bindgen
 
 // Time is the "time" host module: timestamp formatting/parsing and duration
 // parsing, delegated straight to Go's time package so a spell doesn't reinvent

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"log/slog"
 	"os"
@@ -176,9 +176,9 @@ const serverReadyTimeout = 60 * time.Second
 
 func serverStart(ctx context.Context, args []string) error {
 	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointServer)
-	var sf *gen.ServerStartFlags
+	var sf *flaggen.ServerStartFlags
 	_, err := cmdParse("server start", args, func(fs *flag.FlagSet) {
-		sf = gen.BindServerStart(fs)
+		sf = flaggen.BindServerStart(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server start [--foreground] [flags]")
 			fmt.Fprintln(os.Stderr, "\nStart the server: MCP and the console over HTTP, the APIs, background jobs and")
@@ -604,9 +604,9 @@ func wantsForeground(args []string) bool {
 // serverStop shuts down the persistent server, or with --pools the live
 // per-process pool parents whose build differs from this binary.
 func serverStop(ctx context.Context, args []string) error {
-	var tf *gen.ServerStopFlags
+	var tf *flaggen.ServerStopFlags
 	_, err := cmdParse("server stop", args, func(fs *flag.FlagSet) {
-		tf = gen.BindServerStop(fs)
+		tf = flaggen.BindServerStop(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server stop [flags]")
 			fmt.Fprintln(os.Stderr, "\nSend a graceful shutdown request to the running server. In-flight RPCs")

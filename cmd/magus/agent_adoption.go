@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
@@ -210,7 +210,7 @@ func topPatterns(counts map[string]int, n int) []patternCount {
 func agentAdoptionCmd(args []string) error {
 	fset := flag.NewFlagSet("agent adoption", flag.ContinueOnError)
 	bindDisplayFlags(fset)
-	af := gen.BindAgentAdoption(fset)
+	af := flaggen.BindAgentAdoption(fset)
 	fset.Usage = func() { agentAdoptionUsage(os.Stderr) }
 	if err := fset.Parse(args); err != nil {
 		return err

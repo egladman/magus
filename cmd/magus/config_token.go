@@ -15,7 +15,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
@@ -75,7 +75,7 @@ func configToken(args []string) error {
 func configTokenGenerate(args []string) error {
 	fs := flag.NewFlagSet("config token generate", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	gf := gen.BindConfigTokenGenerate(fs)
+	gf := flaggen.BindConfigTokenGenerate(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config token generate [--force]")
 		fmt.Fprintln(os.Stderr, "")

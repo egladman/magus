@@ -17,7 +17,7 @@ import (
 // itself generated, from the WASM field below plus each module's Name and Path. It
 // lives beside the trampolines rather than here because it names them.
 //
-//go:generate go run ../cmd/magus-utils moduleset -outdir ../internal/interp/bindings/gen
+//go:generate go run ../cmd/magus-utils moduleset -outdir ../internal/interp/bindings/gen -pkg bindgen
 
 // Callback is the host-side handle for a VM-side function value passed as
 // an argument. The generated bindings layer wraps a buzz.Session + function value.

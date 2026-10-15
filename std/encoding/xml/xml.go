@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-//go:generate go run ../../../cmd/magus-utils bindings -module xml -lang buzz -out ../../../internal/interp/bindings/gen/xml.go
+//go:generate go run ../../../cmd/magus-utils bindings -module xml -lang buzz -out ../../../internal/interp/bindings/gen/xml.go -pkg bindgen
 
 // Module is the "xml" host module: build and serialize an XML/SVG tree, and parse one
 // back. It is the markup counterpart to the json module: render is to stringify what
