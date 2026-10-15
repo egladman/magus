@@ -100,6 +100,9 @@ saying it, delete it here.
   reports them.
 - No silent defaults: a fallback says that it fell back, and an absent capability fails
   loudly rather than answering empty (`docs/doctrine.md`).
+- Local state is plain files: one file per independent entry, one row per line,
+  written by rename, never a JSON document
+  ([doctrine](docs/doctrine.md#everything-is-a-file)).
 - Before fixing behavior that looks wrong, find the test that pins it.
 - The docs site is classless Pico: semantic HTML, few custom classes, no inline
   styles.

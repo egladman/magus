@@ -111,6 +111,78 @@ The failure it prevents is quiet. A cache that becomes load-bearing does not
 announce the change; it works, for months, until someone clones fresh on a
 plane and discovers the build was distributed all along.
 
+### Everything is a file
+
+magus keeps its local state in files a person can read with the tools already
+on the machine. A store is a directory. An entry that stands alone is its own
+file, and a log is one file whose every line is a row. `ls` lists a store,
+`cat` reads an entry, `grep` finds a row, `diff` compares two, `rm` deletes
+one. None of that needs magus running or a parser for its format.
+
+The idea is old, and magus borrows from it selectively. Unix made the line the
+record, so `grep`, `sort`, `cut` and `wc` work on any file that keeps to it.
+git stores an object under a two-character fan-out of its hash and a ref as
+one line naming a commit, updated through a lock file and a rename. Maildir
+keeps one message per file and delivers by renaming from `tmp/` into `new/`,
+so no reader sees half a message and no writer takes a lock. `/proc` exposes
+one value per file. Plan 9 went furthest, with every service a file tree.
+magus takes what fits a store on disk: the layout, the line, the rename. It
+does not take synthetic file servers; the daemon still answers over RPC.
+
+The conventions:
+
+- **Layout and naming.** A store lives under the workspace's `.magus/` or a
+  user directory resolved by `internal/config` (`UserStateDir`,
+  `UserCacheDir`), never a literal path. A subdirectory names the kind and
+  the file name is the key (an id, a name, a hash), so the listing is the
+  index. A content-addressed store fans out on the first two hex digits of
+  the hash, as git's does (`cas/ab/ab12...`).
+- **One value per line.** A row is a line. A row with several fields writes
+  one `name<TAB>value` pair per line, the shape `internal/file/record`
+  encodes. A row with nested structure may be one JSON object on one line;
+  the file is still lines that `grep`, `tail` and `wc -l` read. A JSON
+  document, whose rows only a parser can find, is not a store format.
+- **One file per entry when entries are independent.** Writers on different
+  entries never contend, removal is `rm`, and no lock is needed. Independent
+  rows kept in one file make every write rewrite all of them under a lock,
+  and one bad write loses all of them.
+- **Atomic write via rename.** A rewrite goes to a temporary file in the same
+  directory and is renamed over the old one (`file.WriteFileAtomic`, which
+  also syncs). A reader sees the old file or the new one, never half of
+  either. An append is one write of one complete line.
+- **Append-only where history matters.** A log grows by appending.
+  Compaction rewrites it through a rename and never edits a line in place.
+- **Readable with cat, grep, ls and diff.** Text is UTF-8 and every line ends
+  in a newline. The one binary exception is a blob holding the bytes a tool
+  produced, stored verbatim.
+
+The failure this prevents is state nobody can inspect when it matters. A
+stuck run, a lease that will not release, or a row that reads wrong is
+debugged at a terminal with whatever is installed, often after the process
+that wrote it is gone. A format only magus can read puts the broken tool
+between you and the evidence of what broke it, and one document holding every
+row turns one corrupt write into a lost store.
+
+The mechanism is two helpers and no gate. `file.WriteFileAtomic` gives every
+store the rename and `internal/file/record` gives a small record its lines;
+nothing refuses a new JSON document, so the rule holds in review alone. The
+stores that do not follow it yet, as found on 2026-10-14:
+
+- **The job store** is one indented JSON document per repository
+  (`jobs.json`), rewritten whole under a lock on every change, with two JSON
+  sidecars. Its rows are independent jobs and want one file each.
+- **Runtime history** is one compact JSON document (`history/v1.json`) shared
+  by every workspace on the host, megabytes long and rewritten after every
+  run. It is a log and wants appended lines.
+- **Review state** (`viewed.json`, `drafts.json`, `seen-threads.json`,
+  `reading.json`, `receipts.json`) and the guard's memos (`guard-rows.json`,
+  `guard-settings.json`, `guard-policy.json`) are single JSON documents.
+- **The conformance ratchet** is a JSON document committed to the workspace.
+  It is policy rather than local state, and a person edits it by hand.
+- **One file per entry, a JSON document inside.** Cache manifests, run
+  descriptors, knowledge-graph shards, merge-queue verdicts, the service
+  journal and connector records keep the layout and break the line rule.
+
 ### Human-first is the AI integration
 
 magus was built for humans, and agents drive it well anyway, because an
