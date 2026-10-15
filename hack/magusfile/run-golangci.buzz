@@ -1,4 +1,4 @@
-// golangci.buzz - runs .magus/custom-gcl, the golangci-lint carrying this repo's own linters.
+// run-golangci.buzz - runs .magus/custom-gcl, the golangci-lint carrying this repo's own linters.
 // .golangci.yml names those linters, so the stock binary on PATH refuses it with
 // `plugin("...") not found`. Nothing here falls back to the stock binary.
 namespace golangci;

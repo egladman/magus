@@ -4,7 +4,7 @@
 import "magus";
 import "../../hack/magusfile/drift" as drift;
 import "../../hack/magusfile/index" as index;
-import "../../hack/magusfile/golangci" as golangci;
+import "../../hack/magusfile/run-golangci" as golangci;
 
 import "magus/spell/go";
 // Imported for dprint only. Listing it in spells would claim **/*.md, which the root lints.

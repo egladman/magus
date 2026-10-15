@@ -5,7 +5,7 @@ import "magus";
 import "fs";
 import "../../hack/magusfile/drift" as drift;
 import "../../hack/magusfile/index" as index;
-import "../../hack/magusfile/golangci" as golangci;
+import "../../hack/magusfile/run-golangci" as golangci;
 import "./proofread" as proofread;
 
 import "magus/spell/go";

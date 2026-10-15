@@ -1,7 +1,7 @@
 import "magus";
 import "./hack/magusfile/toolchain-policy" as policy;
 import "./hack/magusfile/drift" as drift;
-import "./hack/magusfile/golangci" as golangci;
+import "./hack/magusfile/run-golangci" as golangci;
 import "./hack/magusfile/harness" as hostconfig;
 // Aliased: a module and a target function cannot share a name.
 import "./hack/magusfile/toolchain" as toolchains;
