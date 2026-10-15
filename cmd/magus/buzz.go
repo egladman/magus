@@ -113,7 +113,7 @@ func (c *lazyWorkspaceContext) attach() {
 	if m == nil {
 		return
 	}
-	c.workspace = m
+	c.workspace = internalsOf(m)
 	c.trailBase = m.CacheDir()
 }
 
