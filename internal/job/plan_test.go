@@ -51,11 +51,11 @@ func TestMergeTimeoutStampsAndClearsTheDeadline(t *testing.T) {
 	cleared := applyMerge(t, map[string]any{"timeout": ""}, types.Job{ID: "u1", Deadline: 42})
 	assert.Zero(t, cleared.Deadline)
 
-	_, err := ParseMerge(map[string]any{"timeout": "soon"})
+	_, err := DecodePut(map[string]any{"timeout": "soon"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "timeout")
 
-	_, err = ParseMerge(map[string]any{"deadline": 5})
+	_, err = DecodePut(map[string]any{"deadline": 5})
 	require.Error(t, err, "the instant is the store's to stamp")
 }
 

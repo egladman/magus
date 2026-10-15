@@ -28,6 +28,7 @@ var publicGoPackages = []string{
 	"github.com/egladman/magus/types",
 	"github.com/egladman/magus/libs/testkit",
 	"github.com/egladman/magus/libs/testkit/register",
+	"github.com/egladman/magus/std",
 	"github.com/egladman/magus/types/gen/mocks",
 }
 

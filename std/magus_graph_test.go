@@ -242,7 +242,7 @@ func TestRefsMemoizesPerSymbolScope(t *testing.T) {
 	ws := &countingGraphs{builtGraphWorkspace: types.WorkspaceFromContext(dirContext(t)).(*builtGraphWorkspace)}
 	eval := types.WithEvalMemo(types.WithWorkspace(t.Context(), ws))
 	for range 2 {
-		_, err := MagusRefs(eval, graphSymbol, nil)
+		_, err := MagusRefs(eval, graphSymbol, types.KnowledgeRefsOptions{})
 		require.NoError(t, err)
 	}
 	assert.Equal(t, countingGraphs{
@@ -251,7 +251,7 @@ func TestRefsMemoizesPerSymbolScope(t *testing.T) {
 		reqs:                []types.GraphRequest{{Symbols: types.SymbolsMentioning(graphSymbol)}},
 	}, *ws)
 
-	_, err := MagusRefs(eval, "symbol:example.com/x Bar#", nil)
+	_, err := MagusRefs(eval, "symbol:example.com/x Bar#", types.KnowledgeRefsOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, 2, ws.builds, "a second symbol is a second scope")
 }

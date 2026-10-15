@@ -19,10 +19,10 @@ import (
 func clientScript(script string) map[string]any { return map[string]any{"script": script} }
 
 // TestClientPutRendersEveryMergedField holds the guard's view of a put to the job
-// store's own. A field job.ParseMerge applies and the rendering drops reaches the row with
+// store's own. A field job.DecodePut applies and the rendering drops reaches the row with
 // no rule having read it, and the rebind rule then clears a rewrite of it as a plain shrink.
 //
-// The accepted set is PROBED rather than restated: job.ParseMerge exports no key list, and a
+// The accepted set is PROBED rather than restated: job.DecodePut exports no key list, and a
 // second hand-written one is forgotten in the same direction as the first.
 func TestClientPutRendersEveryMergedField(t *testing.T) {
 	merged := 0
@@ -33,7 +33,7 @@ func TestClientPutRendersEveryMergedField(t *testing.T) {
 		merged++
 		line := buildCall(hint.ToolClient.String(), clientScript(`import "magus"; magus\job.put("a/b", opts: {"`+field+`": "x"});`), "")
 		assert.Contains(t, mcpParams(strings.Fields(line)), field,
-			"job.ParseMerge applies %q, so a put carrying it has to be judged", field)
+			"job.DecodePut applies %q, so a put carrying it has to be judged", field)
 	}
 	require.NotZero(t, merged, "the probe found no merged field at all, so it is measuring nothing")
 }
@@ -62,7 +62,11 @@ func jobMergeApplies(key string) bool {
 		"declared", "magus run test .", []any{"x"}, true,
 		[]any{map[string]any{"id": "g", "check": map[string]any{"target": "test", "project": "."}}},
 	} {
-		apply, err := job.ParseMerge(map[string]any{key: value})
+		put, err := job.DecodePut(map[string]any{key: value})
+		if err != nil {
+			continue
+		}
+		apply, err := job.PutMerge(put)
 		if err != nil {
 			continue
 		}

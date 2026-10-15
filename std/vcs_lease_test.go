@@ -26,7 +26,7 @@ func withVCSLeaseGate(t *testing.T, gate VCSLeaseGate) {
 func TestVcsLeaseRefusalAsksTheGateUnderALiveLease(t *testing.T) {
 	testkit.Isolate(t)
 	ws := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
-	_, err := MagusPutJob(ws, "worker", map[string]any{"criteria": "ship it", "state": "running", "read_only": true})
+	_, err := MagusPutJob(ws, "worker", types.JobPut{Criteria: new("ship it"), State: new(types.StateRunning), ReadOnly: new(true)})
 	require.NoError(t, err)
 
 	var asked []string

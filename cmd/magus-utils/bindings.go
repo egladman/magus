@@ -12,6 +12,7 @@ import (
 	"go/format"
 	"path"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -144,6 +145,7 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	// undeclared return, not to write one. The bodies are emitted once for the whole
 	// package by `magus-utils boundaryobjects`.
 	objects := newBuzzValueEmitter()
+	decoders := &optionDecoders{}
 	var members bytes.Buffer
 	for _, f := range m.Fields {
 		emitBuzzField(&members, f, implPkg)
@@ -154,7 +156,7 @@ func emitBuzz(m std.Module) ([]byte, error) {
 		if meth.Extern {
 			continue
 		}
-		if err := emitBuzzMethod(&members, m, meth, objects, implPkg); err != nil {
+		if err := emitBuzzMethod(&members, m, meth, objects, decoders, implPkg); err != nil {
 			return nil, err
 		}
 	}
@@ -171,6 +173,7 @@ func emitBuzz(m std.Module) ([]byte, error) {
 
 	fmt.Fprintln(&body, "\treturn m")
 	fmt.Fprintln(&body, "}")
+	decoders.emit(&body)
 
 	var b bytes.Buffer
 	// An IO module calls std functions that are themselves excluded from the wasm
@@ -195,6 +198,9 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, `import (`)
 	fmt.Fprintln(&b, `	"context"`)
+	if len(decoders.types) > 0 {
+		fmt.Fprintln(&b, `	"fmt"`)
+	}
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, `	buzz "github.com/egladman/magus/libs/gopherbuzz"`)
 	fmt.Fprintln(&b, `	vm "github.com/egladman/magus/libs/gopherbuzz/vm"`)
@@ -203,6 +209,11 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	}
 	if implPath != "" {
 		fmt.Fprintf(&b, "\t%q\n", implPath)
+	}
+	for _, p := range decoders.packages() {
+		if p != implPath {
+			fmt.Fprintf(&b, "\t%q\n", p)
+		}
 	}
 	fmt.Fprintln(&b, `)`)
 	fmt.Fprintln(&b)
@@ -276,7 +287,7 @@ func emitBuzzField(w *bytes.Buffer, f std.Field, implPkg string) {
 // the local identifier meth.Impl's package is imported under: "std" for a
 // module still living in std's flat root, or e.g. "json" for one implemented
 // in a std/encoding leaf package (see resolveImplPackage).
-func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buzzValueEmitter, implPkg string) error {
+func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buzzValueEmitter, decoders *optionDecoders, implPkg string) error {
 	name := std.CamelCase(meth.Name)
 	if meth.BuzzName != "" {
 		name = meth.BuzzName
@@ -284,7 +295,19 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buz
 	fmt.Fprintf(w, "\tm.MapSet(%q, vm.DirectValue(%q, func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {\n",
 		name, m.Name+"."+name)
 
+	impl := reflect.TypeOf(meth.Impl)
 	for i, a := range meth.Args {
+		if a.Type == std.TypeAnyMap && !a.Variadic && impl.In(i+1).Kind() == reflect.Struct {
+			fn, err := decoders.add(impl.In(i + 1))
+			if err != nil {
+				return fmt.Errorf("%s\\%s: %w", m.Name, meth.Name, err)
+			}
+			fmt.Fprintf(w, "\t\t%s, err := %s(%q, ffi.AnyMap(bzArgs, %d))\n", a.Name, fn, m.Name+"\\"+name, i)
+			fmt.Fprintln(w, "\t\tif err != nil {")
+			fmt.Fprintln(w, "\t\t\treturn vm.Null, ffi.Error(err)")
+			fmt.Fprintln(w, "\t\t}")
+			continue
+		}
 		emitBuzzArgDecode(w, a, i)
 	}
 
@@ -391,6 +414,117 @@ func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
 	default:
 		fmt.Fprintf(w, "\t\t%s := ffi.Any(bzArgs, %d) // unsupported type %s\n", a.Name, idx, a.Type.GoType())
 	}
+}
+
+// optionDecoders collects the option structs a module's opts maps decode into. A method
+// whose Impl takes a struct where the descriptor declares a map keeps its Buzz signature;
+// the trampoline reads the map into the struct strictly, by the struct's json tags.
+type optionDecoders struct {
+	types []reflect.Type
+}
+
+// add records t and returns the name of the function that decodes it.
+func (d *optionDecoders) add(t reflect.Type) (string, error) {
+	if _, err := optionFields(t); err != nil {
+		return "", err
+	}
+	if !slices.Contains(d.types, t) {
+		d.types = append(d.types, t)
+	}
+	return "decode" + t.Name(), nil
+}
+
+// packages are the import paths of the recorded structs, sorted.
+func (d *optionDecoders) packages() []string {
+	var out []string
+	for _, t := range d.types {
+		if !slices.Contains(out, t.PkgPath()) {
+			out = append(out, t.PkgPath())
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// emit writes one decoder per recorded struct. An unknown key or a value of the wrong
+// type raises: a dropped `{limt = 5}` would answer a different question with nothing to
+// say the typo did not take. A Buzz integer arrives as int64 and a Buzz float as float64.
+func (d *optionDecoders) emit(w *bytes.Buffer) {
+	for _, t := range d.types {
+		fields, _ := optionFields(t)
+		keys := make([]string, len(fields))
+		for i, f := range fields {
+			keys[i] = f.key
+		}
+		fmt.Fprintf(w, "\nfunc decode%s(member string, in map[string]any) (%s, error) {\n", t.Name(), t)
+		fmt.Fprintf(w, "\tvar out %s\n", t)
+		fmt.Fprintln(w, "\tfor key, v := range in {")
+		fmt.Fprintln(w, "\t\tswitch key {")
+		for _, f := range fields {
+			fmt.Fprintf(w, "\t\tcase %q:\n", f.key)
+			switch f.kind {
+			case reflect.Int:
+				fmt.Fprintln(w, "\t\t\tswitch x := v.(type) {")
+				fmt.Fprintln(w, "\t\t\tcase int64:")
+				fmt.Fprintf(w, "\t\t\t\tout.%s = int(x)\n", f.name)
+				fmt.Fprintln(w, "\t\t\tcase float64:")
+				fmt.Fprintf(w, "\t\t\t\tout.%s = int(x)\n", f.name)
+				fmt.Fprintln(w, "\t\t\tcase int:")
+				fmt.Fprintf(w, "\t\t\t\tout.%s = x\n", f.name)
+				fmt.Fprintln(w, "\t\t\tdefault:")
+				w.WriteString("\t\t\t\treturn out, fmt.Errorf(\"%s: %s must be a number, got %T\", member, key, v)\n")
+				fmt.Fprintln(w, "\t\t\t}")
+			case reflect.String, reflect.Bool:
+				fmt.Fprintf(w, "\t\t\tx, ok := v.(%s)\n", f.kind)
+				fmt.Fprintln(w, "\t\t\tif !ok {")
+				fmt.Fprintf(w, "\t\t\t\treturn out, fmt.Errorf(\"%%s: %%s must be a %s, got %%T\", member, key, v)\n", f.kind)
+				fmt.Fprintln(w, "\t\t\t}")
+				fmt.Fprintf(w, "\t\t\tout.%s = x\n", f.name)
+			}
+		}
+		fmt.Fprintln(w, "\t\tdefault:")
+		fmt.Fprintf(w, "\t\t\treturn out, fmt.Errorf(\"%%s: unknown option %%q (want %s)\", member, key)\n", strings.Join(keys, ", "))
+		fmt.Fprintln(w, "\t\t}")
+		fmt.Fprintln(w, "\t}")
+		fmt.Fprintln(w, "\treturn out, nil")
+		fmt.Fprintln(w, "}")
+	}
+}
+
+// optionField is one key of an option struct: its json name, Go field and kind.
+type optionField struct {
+	key, name string
+	kind      reflect.Kind
+}
+
+// optionFields lists t's keys in declaration order. Every exported field needs a json
+// name and a kind a Buzz literal can carry (int, string or bool); anything else is an
+// error at generation rather than a key the decoder silently cannot set.
+func optionFields(t reflect.Type) ([]optionField, error) {
+	var out []optionField
+	for i := range t.NumField() {
+		f := t.Field(i)
+		if !f.IsExported() {
+			continue
+		}
+		key, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+		if key == "" || key == "-" {
+			return nil, fmt.Errorf("option struct %s: field %s has no json name to read it by", t, f.Name)
+		}
+		switch f.Type.Kind() {
+		case reflect.Int, reflect.String, reflect.Bool:
+			if f.Type.PkgPath() != "" {
+				return nil, fmt.Errorf("option struct %s: field %s is the named type %s, which a decoded value cannot be assigned to", t, f.Name, f.Type)
+			}
+		default:
+			return nil, fmt.Errorf("option struct %s: field %s is %s, and an opts map decodes only int, string and bool", t, f.Name, f.Type)
+		}
+		out = append(out, optionField{key: key, name: f.Name, kind: f.Type.Kind()})
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("option struct %s has no field an opts map could set", t)
+	}
+	return out, nil
 }
 
 // returnConv returns the Go expression that converts a method return to a vm.Value.

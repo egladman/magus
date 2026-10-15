@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/egladman/magus/types"
 )
@@ -29,6 +30,34 @@ type CheckVerdict struct {
 // door opens stores for, so it must be safe for concurrent use.
 type CheckGrader func(ctx context.Context, root string, row types.Job) CheckVerdict
 
+var (
+	installedGraderMu sync.RWMutex
+	installedGrader   CheckGrader
+)
+
+// SetCheckGrader installs the grader a Store whose Location names none grades a declared
+// check with. The composition root installs one, because the grader runs the guard's
+// rules and the guard imports the doors that open stores; with none installed such a
+// Store grades nothing. It returns the grader it replaced, for a test that swaps in its
+// own to put back. Safe for concurrent use: a fork running meanwhile grades with the old
+// grader or the new one.
+func SetCheckGrader(g CheckGrader) (previous CheckGrader) {
+	installedGraderMu.Lock()
+	defer installedGraderMu.Unlock()
+	previous, installedGrader = installedGrader, g
+	return previous
+}
+
+// graderFor is the store's own grader, else the installed one.
+func graderFor(store *Store) CheckGrader {
+	if store.grader != nil {
+		return store.grader
+	}
+	installedGraderMu.RLock()
+	defer installedGraderMu.RUnlock()
+	return installedGrader
+}
+
 // CompilingCheck is the check a refusal recommends: it compiles the workspace without
 // linking its binary, so a worker the guard keeps from building can still run it. The
 // grader also judges it to tell a deny of the declared check from a deny of every command
@@ -45,10 +74,14 @@ const humanOnlyRule = "human-only"
 // of kind check, the guard would deny its holder. The holder runs every check under the
 // lease, so a denied one leaves the job unable to verify itself and ends it unverified.
 // Each check is graded as the row with that check, the first deny refuses, and a check
-// two goals share is graded once. A Store with no grader, and a job with no check, refuse
-// nothing.
+// two goals share is graded once. A Store with no grader of its own grades with the one
+// [SetCheckGrader] installed; with neither, and for a job with no check, nothing is refused.
 func RefuseDeniedCheck(ctx context.Context, store *Store, row types.Job) error {
-	if store == nil || store.grader == nil {
+	if store == nil {
+		return nil
+	}
+	grader := graderFor(store)
+	if grader == nil {
 		return nil
 	}
 	var graded []types.LeaseCheck
@@ -62,7 +95,7 @@ func RefuseDeniedCheck(ctx context.Context, store *Store, row types.Job) error {
 		graded = append(graded, goal.Check)
 		pending := row
 		pending.Check = &goal.Check
-		verdict := store.grader(ctx, store.root, pending)
+		verdict := grader(ctx, store.root, pending)
 		if !verdict.Denied {
 			continue
 		}

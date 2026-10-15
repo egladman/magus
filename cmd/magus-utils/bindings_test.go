@@ -47,6 +47,36 @@ func TestObjectReturnContracts(t *testing.T) {
 	require.NoError(t, checkObjectDecls(hostmodules.All()))
 }
 
+// A Go Impl taking an option struct keeps the Buzz map argument: the trampoline decodes
+// the map strictly before the call, so the rejections the map contract makes stay at
+// the Buzz edge.
+func TestOptionStructArgDecodesTheBuzzMap(t *testing.T) {
+	m, ok := hostmodules.Get("magus")
+	require.True(t, ok)
+	got, err := emitBuzz(m)
+	require.NoError(t, err)
+	src := string(got)
+	assert.Contains(t, src, `opts, err := decodeKnowledgeQueryOptions("magus\\query", ffi.AnyMap(bzArgs, 1))`)
+	assert.Contains(t, src, `opts, err := decodeKnowledgeRefsOptions("magus\\refs", ffi.AnyMap(bzArgs, 1))`)
+	assert.Contains(t, src, `"%s: unknown option %q (want budget, limit, offset)"`)
+	assert.Contains(t, src, `"%s: %s must be a number, got %T"`)
+	assert.Contains(t, src, `"fmt"`)
+}
+
+func TestOptionFieldsRefuseWhatAMapCannotSet(t *testing.T) {
+	_, err := optionFields(reflect.TypeFor[struct{ Limit int }]())
+	require.ErrorContains(t, err, "no json name")
+	_, err = optionFields(reflect.TypeFor[struct {
+		Paths []string `json:"paths"`
+	}]())
+	require.ErrorContains(t, err, "decodes only int, string and bool")
+	type count int
+	_, err = optionFields(reflect.TypeFor[struct {
+		N count `json:"n"`
+	}]())
+	require.ErrorContains(t, err, "named type")
+}
+
 func TestBuzzValueEmitterConvertsInterfaceByDynamicType(t *testing.T) {
 	e := newBuzzValueEmitter()
 	var w bytes.Buffer

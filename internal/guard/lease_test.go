@@ -1623,7 +1623,7 @@ func TestDenyLeaseScopedRebindLetsAHolderEnterBeneathIt(t *testing.T) {
 		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, command).Say, "enter a job not forked beneath", "%q", command)
 	}
 
-	_, err := job.ParseMerge(map[string]any{"op": "fork", "id": child.ID, "enter": "cmd/magus/x/a.go", "write_paths": "**"})
+	_, err := job.DecodePut(map[string]any{"op": "fork", "id": child.ID, "enter": "cmd/magus/x/a.go", "write_paths": "**"})
 	assert.ErrorContains(t, err, "write_paths does not belong beside it", "an entry carries nothing else for the store to apply")
 }
 

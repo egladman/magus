@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -27,7 +26,7 @@ type cacheDirer interface {
 
 // MagusTrailRead backs magus\trail.read: one session's guard record from every checkout's
 // trail.
-func MagusTrailRead(ctx context.Context, opts map[string]any) (types.Trail, error) {
+func MagusTrailRead(ctx context.Context, opts types.TrailReadOptions) (types.Trail, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		return types.Trail{}, errNoWorkspace("trail.read")
@@ -66,45 +65,17 @@ func listCheckouts(ctx context.Context, root string) []string {
 	return append([]string{root}, others...)
 }
 
-// feedbackWindow reads the trail call's options. An unknown key raises, since a misspelled
-// option silently read as its default is a report about the wrong window.
-func feedbackWindow(opts map[string]any, now time.Time) (trail.FeedbackWindow, error) {
-	known := []string{"session", "since", "until"}
-	for k := range opts {
-		if !slices.Contains(known, k) {
-			return trail.FeedbackWindow{}, fmt.Errorf("trail.read: unknown option %q, options are %s", k, strings.Join(known, ", "))
-		}
-	}
-	text := func(k string) (string, error) {
-		v, ok := opts[k]
-		if !ok || v == nil {
-			return "", nil
-		}
-		s, ok := v.(string)
-		if !ok {
-			return "", fmt.Errorf("trail.read: opts.%s is %T, want a string", k, v)
-		}
-		return strings.TrimSpace(s), nil
-	}
-	w := trail.FeedbackWindow{Until: now}
+// feedbackWindow reads the trail call's window. A value that does not parse raises rather
+// than reading as its default, which would be a report about the wrong window.
+func feedbackWindow(opts types.TrailReadOptions, now time.Time) (trail.FeedbackWindow, error) {
+	w := trail.FeedbackWindow{Until: now, Session: strings.TrimSpace(opts.Session)}
 	var err error
-	if w.Session, err = text("session"); err != nil {
-		return w, err
-	}
-	until, err := text("until")
-	if err != nil {
-		return w, err
-	}
-	if until != "" {
+	if until := strings.TrimSpace(opts.Until); until != "" {
 		if w.Until, err = time.Parse(time.RFC3339, until); err != nil {
 			return w, fmt.Errorf("trail.read: opts.until %q is not an RFC3339 time", until)
 		}
 	}
-	since, err := text("since")
-	if err != nil {
-		return w, err
-	}
-	switch since {
+	switch since := strings.TrimSpace(opts.Since); since {
 	case "":
 		w.Since = w.Until.Add(-trailDefaultSince)
 	default:

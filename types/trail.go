@@ -101,6 +101,19 @@ type Trail struct {
 	Spawns []TrailSpawn
 }
 
+// TrailReadOptions picks the session and window a trail read covers, the opts
+// magus\trail.read takes. Every field is text as a person writes it, and a value that does
+// not parse is an error, never the default.
+type TrailReadOptions struct {
+	// Session is the host's session id; empty reads the most recent session in the window.
+	Session string `json:"session,omitempty"`
+	// Since starts the window: a positive duration before Until ("6h") or an RFC3339
+	// time. Empty is 24 hours before Until.
+	Since string `json:"since,omitempty"`
+	// Until ends the window, an RFC3339 time. Empty is now.
+	Until string `json:"until,omitempty"`
+}
+
 // TrailObservation is one tool call the guard saw, and what it decided.
 type TrailObservation struct {
 	// At is unix milliseconds.

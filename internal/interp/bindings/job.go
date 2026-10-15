@@ -1,10 +1,14 @@
 package bindings
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -30,18 +34,20 @@ import (
 // one; handing them a differently-typed value than every other magus\* method does is a
 // difference they would only find at run time.
 func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) vm.Value {
-	job := vm.NewMap()
-	job.MapSet("list", directVal(obs, "magus.job.list", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
+	ns := vm.NewMap()
+	ns.MapSet("list", directVal(obs, "magus.job.list", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
 		report, err := std.MagusListJob(ctx)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
 		return bindinggen.ObjectJobList(report, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
-	job.MapSet("put", directVal(obs, "magus.job.put", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		id := ffi.Str(args, 0)
-		opts := ffi.AnyMap(args, 1)
-		row, err := std.MagusPutJob(ctx, id, opts)
+	ns.MapSet("put", directVal(obs, "magus.job.put", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		put, err := job.DecodePut(ffi.AnyMap(args, 1))
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		row, err := std.MagusPutJob(ctx, ffi.Str(args, 0), put)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
@@ -51,7 +57,7 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 	// list and put use. The advice sentence is DERIVED from the row and not a field on it
 	// (see job.BaseAdvice), so folding it in beside the row's own keys would put a
 	// rendering where a caller reads facts; "job" and "advice" keep the two apart.
-	job.MapSet("register", directVal(obs, "magus.job.register", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+	ns.MapSet("register", directVal(obs, "magus.job.register", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		row, advice, err := std.MagusRegisterJob(ctx, ffi.Str(args, 0))
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -61,7 +67,7 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 		out.MapSet("advice", ffi.StrVal(advice))
 		return out, nil
 	}))
-	job.MapSet("exit", directVal(obs, "magus.job.exit", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+	ns.MapSet("exit", directVal(obs, "magus.job.exit", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		var (
 			row types.Job
 			err error
@@ -69,17 +75,24 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 		if omittedOptionalMap(args, 1) {
 			row, err = std.MagusAbandonJob(ctx, ffi.Str(args, 0))
 		} else {
-			row, err = std.MagusExitJob(ctx, ffi.Str(args, 0), ffi.AnyMap(args, 1))
+			var result types.JobResult
+			if result, err = decodeJobResult(ffi.AnyMap(args, 1)); err == nil {
+				row, err = std.MagusExitJob(ctx, ffi.Str(args, 0), result)
+			}
 		}
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
 		return bindinggen.ObjectJob(row, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
-	job.MapSet("wait", directVal(obs, "magus.job.wait", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		var result map[string]any
+	ns.MapSet("wait", directVal(obs, "magus.job.wait", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		var result *types.JobResult
 		if !omittedOptionalMap(args, 1) {
-			result = ffi.AnyMap(args, 1)
+			decoded, err := decodeJobResult(ffi.AnyMap(args, 1))
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			result = &decoded
 		}
 		status, err := std.MagusWaitJob(ctx, ffi.Str(args, 0), result)
 		if err != nil {
@@ -87,16 +100,16 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 		}
 		return bindinggen.ObjectJobStatus(status), nil
 	}))
-	job.MapSet("clear", directVal(obs, "magus.job.clear", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
+	ns.MapSet("clear", directVal(obs, "magus.job.clear", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
 		n, err := std.MagusClearJob(ctx)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
 		return ffi.IntVal(n), nil
 	}))
-	registerModelTiers(ctx, sess, obs, job)
-	registerModelTierMatrix(ctx, sess, obs, job)
-	return job
+	registerModelTiers(ctx, sess, obs, ns)
+	registerModelTierMatrix(ctx, sess, obs, ns)
+	return ns
 }
 
 // omittedOptionalMap is the cross-boundary meaning of an optional map. Buzz
@@ -105,4 +118,16 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 // with the row, and an empty map cannot satisfy their versioned result contract.
 func omittedOptionalMap(args []vm.Value, index int) bool {
 	return len(args) <= index || args[index].IsNull() || (args[index].IsMap() && len(args[index].MapKeys()) == 0)
+}
+
+// decodeJobResult reads a result map through the versioned, strict decoder a JSON result
+// uses. Buzz's untyped map is the JSON-shaped contract, not a partial Go struct: an
+// unknown field is refused here too, or a result sent through a Buzz target could claim a
+// field no verifier reads.
+func decodeJobResult(result map[string]any) (types.JobResult, error) {
+	raw, err := json.Marshal(result)
+	if err != nil {
+		return types.JobResult{}, fmt.Errorf("magus\\job: encode result: %w", err)
+	}
+	return job.DecodeResult(bytes.NewReader(raw))
 }

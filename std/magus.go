@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
@@ -1778,32 +1777,6 @@ type workspaceJobLimits interface {
 	JobLimits() config.Jobs
 }
 
-// jobGrader is the CheckGrader for the Stores jobStoreFromContext opens, nil until the
-// composition root registers one.
-var (
-	jobGraderMu sync.RWMutex
-	jobGrader   job.CheckGrader
-)
-
-// RegisterJobGrader installs the grader magus\job.put and its siblings judge a declared
-// check with, as Location.Grader for the workspace on the context. It is registered rather
-// than imported because the grader runs the guard's rules, and the guard imports this
-// package; with none registered a check is not graded. A later call replaces it and
-// returns the one it replaced, for a test that swaps in its own to put back. Safe to call
-// while a magus\job member runs; that member sees the old grader or the new one.
-func RegisterJobGrader(g job.CheckGrader) (previous job.CheckGrader) {
-	jobGraderMu.Lock()
-	defer jobGraderMu.Unlock()
-	previous, jobGrader = jobGrader, g
-	return previous
-}
-
-func currentJobGrader() job.CheckGrader {
-	jobGraderMu.RLock()
-	defer jobGraderMu.RUnlock()
-	return jobGrader
-}
-
 // jobStoreFromContext opens the job store for the workspace already on ctx. A
 // fresh Store per call is deliberate and matches job.Store's own documented contract:
 // it holds no state beyond its path and lock, and a cross-process race over the file is
@@ -1827,7 +1800,9 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	if !ok {
 		return nil, fmt.Errorf("%s: this workspace has no cache directory", member)
 	}
-	loc := job.Location{CacheDir: cd.CacheDir(), Root: ws.Root(), Grader: currentJobGrader()}
+	// No Grader: the store grades with the one the composition root installed through
+	// job.SetCheckGrader.
+	loc := job.Location{CacheDir: cd.CacheDir(), Root: ws.Root()}
 	// Recovered by assertion like workspaceCacheDir; declared here, inside the one
 	// declaration this door owns.
 	type modelTiered interface {
@@ -1895,15 +1870,15 @@ func MagusListJob(ctx context.Context) (types.JobList, error) {
 	return queue.JoinInflight(ctx, root, list, job.Identity{Lease: store.Actor().Lease})
 }
 
-// MagusPutJob backs magus\job.put. The field merge is decoded by
-// internal/job.ParseMerge, the same decoder `magus job fork` calls, so
-// a caller of either accepts the same fields and rejects the same mistakes.
-func MagusPutJob(ctx context.Context, id string, opts map[string]any) (types.Job, error) {
+// MagusPutJob backs magus\job.put: it merges the fields put sets into row id, through
+// internal/job.PutMerge, and refuses what that refuses. The Buzz opts map is decoded into
+// put by internal/job.DecodePut at the binding.
+func MagusPutJob(ctx context.Context, id string, put types.JobPut) (types.Job, error) {
 	store, err := jobStoreFromContext(ctx, "job.put")
 	if err != nil {
 		return types.Job{}, err
 	}
-	merge, err := job.ParseMerge(opts)
+	merge, err := job.PutMerge(put)
 	if err != nil {
 		return types.Job{}, err
 	}
@@ -1946,18 +1921,6 @@ func MagusClearJob(ctx context.Context) (int, error) {
 	return store.Clear(ctx)
 }
 
-// jobResultFromMap applies the exact same versioned, strict decoder a JSON result uses.
-// Buzz's untyped map is deliberately treated as the JSON-shaped input contract rather
-// than as a partial Go struct: an unknown field must be rejected here too, or a result
-// an agent sends through a Buzz target could claim a field no verifier actually reads.
-func jobResultFromMap(result map[string]any) (types.JobResult, error) {
-	raw, err := json.Marshal(result)
-	if err != nil {
-		return types.JobResult{}, fmt.Errorf("magus\\job: encode result: %w", err)
-	}
-	return job.DecodeResult(strings.NewReader(string(raw)))
-}
-
 // jobAttemptFromContext reads the output descriptor from the workspace already on ctx.
 // A job plan is repository-wide but output records are checkout-local, so Exit resolves
 // the worker's record once and files its portable summary on the job for a later Wait.
@@ -1985,18 +1948,14 @@ func jobAttemptFromContext(ctx context.Context, ref string) (types.JobAttempt, e
 	}
 }
 
-// MagusExitJob backs magus\job.exit with a result map. The result map follows the
-// versioned JSON result contract; see jobResultFromMap.
-func MagusExitJob(ctx context.Context, id string, result map[string]any) (types.Job, error) {
+// MagusExitJob backs magus\job.exit with a result: it files result as the holder's
+// report on row id.
+func MagusExitJob(ctx context.Context, id string, result types.JobResult) (types.Job, error) {
 	store, err := jobStoreFromContext(ctx, "job.exit")
 	if err != nil {
 		return types.Job{}, err
 	}
-	report, err := jobResultFromMap(result)
-	if err != nil {
-		return types.Job{}, err
-	}
-	return job.Exit(ctx, store, strings.TrimSpace(id), &report, jobAttemptFromContext)
+	return job.Exit(ctx, store, strings.TrimSpace(id), &result, jobAttemptFromContext)
 }
 
 // MagusAbandonJob backs magus\job.exit without a result.
@@ -2009,8 +1968,8 @@ func MagusAbandonJob(ctx context.Context, id string) (types.Job, error) {
 }
 
 // MagusWaitJob backs magus\job.wait. A nil result selects the evidence Exit filed;
-// otherwise the supplied JSON-shaped map is decoded and resolved locally.
-func MagusWaitJob(ctx context.Context, id string, result map[string]any) (types.JobStatus, error) {
+// otherwise result is resolved locally.
+func MagusWaitJob(ctx context.Context, id string, result *types.JobResult) (types.JobStatus, error) {
 	store, err := jobStoreFromContext(ctx, "job.wait")
 	if err != nil {
 		return types.JobStatus{}, err
@@ -2024,10 +1983,7 @@ func MagusWaitJob(ctx context.Context, id string, result map[string]any) (types.
 	if result == nil {
 		return job.Wait(ctx, store, strings.TrimSpace(id), nil, nil, observe, nil)
 	}
-	report, err := jobResultFromMap(result)
-	if err != nil {
-		return types.JobStatus{}, err
-	}
+	report := *result
 	return job.Wait(ctx, store, strings.TrimSpace(id), &report, jobAttemptFromContext, observe, nil)
 }
 

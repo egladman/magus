@@ -10,7 +10,17 @@ import (
 
 func applyMerge(t *testing.T, params map[string]any, base types.Job) types.Job {
 	t.Helper()
-	apply, err := ParseMerge(params)
+	put, err := DecodePut(params)
+	require.NoError(t, err)
+	apply, err := PutMerge(put)
+	require.NoError(t, err)
+	apply(&base)
+	return base
+}
+
+func applyPut(t *testing.T, put types.JobPut, base types.Job) types.Job {
+	t.Helper()
+	apply, err := PutMerge(put)
 	require.NoError(t, err)
 	apply(&base)
 	return base
@@ -23,6 +33,7 @@ func TestMergeTouchesOnlyNamedFields(t *testing.T) {
 	got := applyMerge(t, map[string]any{"state": "running"}, base)
 	assert.Equal(t, types.Job{ID: "u1", Criteria: "original goal", Model: "standard", State: types.StateRunning}, got,
 		"an absent key must not erase what an earlier put set")
+	assert.Equal(t, base, applyPut(t, types.JobPut{}, base), "a put naming nothing changes nothing")
 }
 
 func TestMergeAnExplicitEmptyValueClears(t *testing.T) {
@@ -47,18 +58,22 @@ func TestMergeListAcceptsBothWireForms(t *testing.T) {
 func TestMergeRejectsAnUnknownState(t *testing.T) {
 	t.Parallel()
 
-	_, err := ParseMerge(map[string]any{"state": "passed"})
+	_, err := DecodePut(map[string]any{"state": "passed"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no_return")
+
+	_, err = PutMerge(types.JobPut{State: new(types.JobState("passed"))})
+	require.ErrorContains(t, err, "no_return", "a Go caller is held to the same vocabulary")
 }
 
 func TestMergeReportsEveryMistypedFieldTogether(t *testing.T) {
 	t.Parallel()
 
-	_, err := ParseMerge(map[string]any{"criteria": 3, "read_only": "yes"})
+	_, err := DecodePut(map[string]any{"criteria": 3, "read_only": "yes", "state": "passed"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "criteria")
 	assert.Contains(t, err.Error(), "read_only")
+	assert.Contains(t, err.Error(), "state must be one of", "a refusal PutMerge makes joins the decoding errors")
 }
 
 // A typo'd key read as a field that was taken into account, and the tool then reported
@@ -66,19 +81,19 @@ func TestMergeReportsEveryMistypedFieldTogether(t *testing.T) {
 func TestMergeRejectsAKeyNoRowCarries(t *testing.T) {
 	t.Parallel()
 
-	_, err := ParseMerge(map[string]any{"op": "put", "id": "u1", "state": "running", "passsed": true})
+	_, err := DecodePut(map[string]any{"op": "put", "id": "u1", "state": "running", "passsed": true})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "passsed")
 	assert.Contains(t, err.Error(), "write_paths", "the message names what a put does carry")
 
-	_, err = ParseMerge(map[string]any{"op": "put", "id": "u1", "state": "running"})
+	_, err = DecodePut(map[string]any{"op": "put", "id": "u1", "state": "running"})
 	require.NoError(t, err, "op and id name the call rather than a field")
 }
 
 func TestMergeRejectsAListElementOfTheWrongType(t *testing.T) {
 	t.Parallel()
 
-	_, err := ParseMerge(map[string]any{"depends_on": []any{"a", 2}})
+	_, err := DecodePut(map[string]any{"depends_on": []any{"a", 2}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "depends_on")
 }
@@ -92,7 +107,38 @@ func TestMergeReadsMaxAttemptsAsAWholeCount(t *testing.T) {
 	assert.Zero(t, applyMerge(t, map[string]any{"max_attempts": 0}, types.Job{MaxAttempts: 2}).MaxAttempts,
 		"zero clears the cap")
 	for _, v := range []any{2.5, -1, "three", true} {
-		_, err := ParseMerge(map[string]any{"max_attempts": v})
+		_, err := DecodePut(map[string]any{"max_attempts": v})
 		require.ErrorContains(t, err, "max_attempts", "%#v", v)
 	}
+	_, err := PutMerge(types.JobPut{MaxAttempts: new(-1)})
+	require.ErrorContains(t, err, "max_attempts")
+}
+
+func TestMergeSetsOrClearsTheCheck(t *testing.T) {
+	t.Parallel()
+
+	base := types.Job{ID: "u1"}
+	set := applyMerge(t, map[string]any{"check": "test ."}, base)
+	require.NotNil(t, set.Check)
+	assert.Equal(t, "test", set.Check.Target)
+	assert.Equal(t, set.Check.String(), set.Validation, "the row stores both halves")
+
+	cleared := applyPut(t, types.JobPut{Check: &types.LeaseCheck{}}, set)
+	assert.Nil(t, cleared.Check, "a check naming neither a target nor a script clears it")
+	assert.Empty(t, cleared.Validation)
+	assert.Nil(t, applyMerge(t, map[string]any{"check": " "}, set).Check, "an empty check line clears it")
+
+	_, err := DecodePut(map[string]any{"check": "test .", "validation": "magus run test ."})
+	require.ErrorContains(t, err, "not both")
+}
+
+func TestMergeKeepsAnEntryAlone(t *testing.T) {
+	t.Parallel()
+
+	_, err := PutMerge(types.JobPut{Enter: new("cmd/magus/x/a.go"), Criteria: new("x"), ReadOnly: new(true)})
+	require.ErrorContains(t, err, "so criteria does not belong beside it")
+	require.ErrorContains(t, err, "so read_only does not belong beside it")
+
+	got := applyPut(t, types.JobPut{Enter: new("cmd/magus/x/a.go")}, types.Job{ID: "u1"})
+	assert.Equal(t, []types.JobEntry{{Path: "cmd/magus/x/a.go"}}, got.Entries)
 }

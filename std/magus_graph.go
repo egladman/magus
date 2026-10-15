@@ -95,12 +95,11 @@ func graphCoverage(ctx context.Context, g knowledgeGraphs, input string, seeded 
 // MagusQuery backs magus\query: ranked matches for query plus their neighborhood, the
 // record `magus query -o json` prints. A query that seeds the symbol layer reads a graph
 // with the symbol shards merged in; every other query reads the domain graph.
-func MagusQuery(ctx context.Context, query string, opts map[string]any) (types.KnowledgeQueryOutput, error) {
+func MagusQuery(ctx context.Context, query string, opts types.KnowledgeQueryOptions) (types.KnowledgeQueryOutput, error) {
 	if strings.TrimSpace(query) == "" {
 		return types.KnowledgeQueryOutput{}, errors.New("magus\\query: needs search terms, such as \"kind=spell go\"")
 	}
-	o, err := intOptions("query", opts, "budget", "limit", "offset")
-	if err != nil {
+	if err := nonNegative("query", map[string]int{"budget": opts.Budget, "limit": opts.Limit, "offset": opts.Offset}); err != nil {
 		return types.KnowledgeQueryOutput{}, err
 	}
 	g, err := graphsFromContext(ctx, "query")
@@ -112,7 +111,7 @@ func MagusQuery(ctx context.Context, query string, opts map[string]any) (types.K
 	if err != nil {
 		return types.KnowledgeQueryOutput{}, err
 	}
-	out := kg.QueryPage(query, o["budget"], o["offset"], o["limit"])
+	out := kg.QueryPage(query, opts.Budget, opts.Offset, opts.Limit)
 	// The verdict judges the whole match set, not the page, so every page states the
 	// same coverage.
 	out.Answer = knowledge.Answer(query, out.MatchCount > 0, graphCoverage(ctx, g, query, seeded))
@@ -190,12 +189,11 @@ func MagusPath(ctx context.Context, node, to string, opts map[string]any) (types
 // references it, the record `magus refs -o json` prints. A symbol nothing defines is an
 // answer carrying a verdict, never a raise: absent and unknown are different facts and a
 // caller branches on answer.verdict to tell them apart.
-func MagusRefs(ctx context.Context, symbol string, opts map[string]any) (types.KnowledgeRefsOutput, error) {
+func MagusRefs(ctx context.Context, symbol string, opts types.KnowledgeRefsOptions) (types.KnowledgeRefsOutput, error) {
 	if symbol == "" {
 		return types.KnowledgeRefsOutput{}, errors.New("magus\\refs: needs a symbol ID or a name that resolves to one")
 	}
-	o, err := intOptions("refs", opts, "limit", "offset")
-	if err != nil {
+	if err := nonNegative("refs", map[string]int{"limit": opts.Limit, "offset": opts.Offset}); err != nil {
 		return types.KnowledgeRefsOutput{}, err
 	}
 	g, err := graphsFromContext(ctx, "refs")
@@ -216,13 +214,13 @@ func MagusRefs(ctx context.Context, symbol string, opts map[string]any) (types.K
 	}
 	out.Answer = knowledge.Answer(symbol, len(out.Refs) > 0, graphCoverage(ctx, g, symbol, true))
 	// fileCount and refCount keep describing the whole set; only refs is windowed.
-	if o["offset"] >= len(out.Refs) {
+	if opts.Offset >= len(out.Refs) {
 		out.Refs = nil
 	} else {
-		out.Refs = out.Refs[o["offset"]:]
+		out.Refs = out.Refs[opts.Offset:]
 	}
-	if o["limit"] > 0 && len(out.Refs) > o["limit"] {
-		out.Refs = out.Refs[:o["limit"]]
+	if opts.Limit > 0 && len(out.Refs) > opts.Limit {
+		out.Refs = out.Refs[:opts.Limit]
 	}
 	return out, nil
 }
@@ -715,4 +713,14 @@ func intOptions(member string, opts map[string]any, keys ...string) (map[string]
 		out[k] = n
 	}
 	return out, nil
+}
+
+// nonNegative refuses a negative window option, the first in name order.
+func nonNegative(member string, opts map[string]int) error {
+	for _, k := range slices.Sorted(maps.Keys(opts)) {
+		if opts[k] < 0 {
+			return fmt.Errorf("magus\\%s: %s must not be negative, got %d", member, k, opts[k])
+		}
+	}
+	return nil
 }
