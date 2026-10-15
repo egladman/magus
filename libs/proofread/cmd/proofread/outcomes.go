@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/libs/proofread"
+	"github.com/egladman/magus/libs/proofread/internal/xdg"
 )
 
 const (
@@ -69,9 +70,9 @@ var (
 )
 
 // outcomesPath is the one file proofread records to: outcomes.json under
-// $XDG_STATE_HOME/proofread (see [userStateDir]).
+// $XDG_STATE_HOME/proofread (see [xdg.StateDir]).
 func outcomesPath() (string, error) {
-	dir, err := userStateDir()
+	dir, err := xdg.StateDir()
 	if err != nil {
 		return "", fmt.Errorf("find the state directory: %w", err)
 	}

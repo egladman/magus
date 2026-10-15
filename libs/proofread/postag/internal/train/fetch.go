@@ -9,8 +9,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"time"
+
+	"github.com/egladman/magus/libs/proofread/internal/xdg"
 )
 
 const (
@@ -25,28 +26,6 @@ var ewtSHA256 = map[string]string{
 	"en_ewt-ud-test.conllu":  "fa024f43dc5da3c5ac02563bc9bd0e974f46cbb1560823976a8f342a37dc494a",
 }
 
-// userCacheDir copies magus's internal/config.UserCacheDir, which this module
-// cannot import: XDG_CACHE_HOME when absolute, LocalAppData on Windows, else
-// ~/.cache on every platform, macOS included.
-func userCacheDir() (string, error) {
-	if x := os.Getenv("XDG_CACHE_HOME"); x != "" && filepath.IsAbs(x) {
-		return x, nil
-	}
-
-	if runtime.GOOS == "windows" {
-		if lad := os.Getenv("LocalAppData"); lad != "" {
-			return lad, nil
-		}
-	}
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Join(home, ".cache"), nil
-}
-
 // fetch returns the bytes of one EWT file, from the cache when its digest
 // matches and from the network otherwise.
 func fetch(name string) ([]byte, error) {
@@ -55,7 +34,7 @@ func fetch(name string) ([]byte, error) {
 		return nil, fmt.Errorf("no pinned digest for %s", name)
 	}
 
-	cache, err := userCacheDir()
+	cache, err := xdg.CacheDir()
 	if err != nil {
 		return nil, err
 	}

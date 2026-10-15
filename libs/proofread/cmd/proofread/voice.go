@@ -16,6 +16,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/egladman/magus/libs/proofread"
+	"github.com/egladman/magus/libs/proofread/internal/xdg"
 )
 
 // runVoice runs `proofread voice build` or `proofread voice eval`.
@@ -330,9 +331,9 @@ func jsonLineTexts(name string, r io.Reader, kind proofread.Kind, field, kindFie
 }
 
 // defaultVoicePath is $XDG_CONFIG_HOME/proofread/voice.json (see
-// [userConfigDir]).
+// [xdg.ConfigDir]).
 func defaultVoicePath() (string, error) {
-	dir, err := userConfigDir()
+	dir, err := xdg.ConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("find the voice file's directory: %w", err)
 	}
