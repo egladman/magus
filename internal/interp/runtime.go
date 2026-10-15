@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/engine"
@@ -27,7 +28,6 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/parsecache"
-	"github.com/egladman/magus/internal/proc/buildid"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sandbox"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
@@ -700,7 +700,7 @@ func pruneStamps(stamps, keep string, cutoff time.Time) {
 // later process reuses.
 //
 // A var so a test can stand in for an executable with no build ID.
-var compilerStamp = buildid.Digest
+var compilerStamp = buildinfo.Digest
 
 // WithProjectPath stores the workspace-relative path of the project whose
 // magusfile is being parsed, so magus.project(fn) (the contextual form with no

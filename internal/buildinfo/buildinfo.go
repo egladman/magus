@@ -1,4 +1,4 @@
-package buildid
+package buildinfo
 
 import (
 	"bytes"
@@ -63,7 +63,7 @@ func randomToken() string {
 	if _, err := rand.Read(b); err != nil {
 		// A constant would make distinct unverifiable builds compare equal and adopt each
 		// other, so fail loudly instead.
-		panic("buildid: read random bytes for build identity: " + err.Error())
+		panic("buildinfo: read random bytes for build identity: " + err.Error())
 	}
 	return hex.EncodeToString(b)
 }

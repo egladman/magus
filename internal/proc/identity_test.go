@@ -3,7 +3,7 @@ package proc
 import (
 	"testing"
 
-	"github.com/egladman/magus/internal/proc/buildid"
+	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/stretchr/testify/assert"
 )
@@ -53,7 +53,7 @@ func TestAdoptionIdentityStampedDirtyIsNotShared(t *testing.T) {
 	const stamped = "v0.4.2-2-g6bfd32710-dirty"
 	got := adoptionIdentity(stamped)
 	assert.NotEqual(t, stamped, got, "a dirty build must not gate adoption on its shared describe string")
-	assert.Equal(t, buildid.File(), got, "a dirty build identifies as the executable file it runs from")
+	assert.Equal(t, buildinfo.File(), got, "a dirty build identifies as the executable file it runs from")
 	assert.NotEmpty(t, got)
 
 	// The escape hatch outranks the dirty rule: "" still disables the gate.
@@ -74,14 +74,14 @@ func TestAdoptionIdentityDevIsFingerprinted(t *testing.T) {
 	switch {
 	case ok && modified:
 		// Dirty build: the identity is the executable file's, per-file not per-process.
-		assert.Equal(t, buildid.File(), got)
+		assert.Equal(t, buildinfo.File(), got)
 	case !ok || rev == "":
 		// Unprovable build: identity is the per-process token, which never matches anything.
-		assert.Equal(t, buildid.Unverifiable(), got)
+		assert.Equal(t, buildinfo.Unverifiable(), got)
 	default:
 		// Clean build with an embedded revision: identity encodes it and is stable per build.
 		assert.Equal(t, "dev-"+rev, got)
-		assert.NotEqual(t, buildid.Unverifiable(), got, "a clean build has a revision-derived, not per-process, identity")
+		assert.NotEqual(t, buildinfo.Unverifiable(), got, "a clean build has a revision-derived, not per-process, identity")
 		assert.Equal(t, got, adoptionIdentity(devVersionSentinel), "a clean build's identity is deterministic")
 	}
 }

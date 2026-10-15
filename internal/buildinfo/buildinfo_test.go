@@ -1,4 +1,4 @@
-package buildid
+package buildinfo
 
 import (
 	"bytes"

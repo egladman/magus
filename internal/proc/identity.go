@@ -3,7 +3,7 @@ package proc
 import (
 	"runtime/debug"
 
-	"github.com/egladman/magus/internal/proc/buildid"
+	"github.com/egladman/magus/internal/buildinfo"
 )
 
 // This file computes the ADOPTION IDENTITY: the version string a magus build sends over
@@ -32,7 +32,7 @@ const devVersionSentinel = "unknown"
 //
 //   - "" passes through unchanged. An empty identity on either side disables the gate; it
 //     is the test-injection / pre-versioning escape hatch (see service.versionAdmits).
-//   - A MODIFIED-tree build maps to [buildid.File] whatever its display version says. A
+//   - A MODIFIED-tree build maps to [buildinfo.File] whatever its display version says. A
 //     stamped `git describe --dirty` string is shared by every dirty build of one commit,
 //     so trusting it let a stale server adopt a since-rebuilt client and execute the run
 //     with old code; the executable-file identity admits only the byte-identical binary.
@@ -41,7 +41,7 @@ const devVersionSentinel = "unknown"
 //   - The dev sentinel is replaced by a build fingerprint: "dev-<revision>" for a CLEAN
 //     build carrying VCS info (two clean builds of one commit are provably the same code
 //     and DO adopt each other, preserving the run-a-server-then-adopt-into-it workflow),
-//     or the per-process [buildid.Unverifiable] token for a VCS-less build (never matches:
+//     or the per-process [buildinfo.Unverifiable] token for a VCS-less build (never matches:
 //     adoption refused).
 //
 // Embedding the fingerprint IN the version string (rather than adding a new wire field) is
@@ -55,13 +55,13 @@ func adoptionIdentity(displayVersion string) string {
 	}
 	rev, modified, ok := buildVCS()
 	if ok && modified {
-		return buildid.File()
+		return buildinfo.File()
 	}
 	if displayVersion != devVersionSentinel {
 		return displayVersion
 	}
 	if !ok || rev == "" {
-		return buildid.Unverifiable()
+		return buildinfo.Unverifiable()
 	}
 	return "dev-" + rev
 }
