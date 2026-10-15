@@ -312,7 +312,7 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 			return inspectWorkspace(ctx, rootOverride)
 		}
 		return magus.Inspect(ctx, root,
-			append(processOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
+			append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
 	}
 	// An unresolvable path leaves the trail row without one; the version still records.
 	binary, _ := runningBinaryPath()
@@ -445,7 +445,7 @@ func workspaceModelTiers(ctx context.Context, inspect func(context.Context) (typ
 func guardCacheDir(rootOverride string) func(root string) (string, error) {
 	return func(root string) (string, error) {
 		if root != "" {
-			return magus.ResolveCacheDir(root, processOptions()...)
+			return magus.ResolveCacheDir(root, cliOptions()...)
 		}
 		found, err := workspace.FindRoot(rootOverride)
 		if err != nil {

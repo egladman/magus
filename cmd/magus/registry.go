@@ -68,7 +68,7 @@ func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observ
 	if tel != nil {
 		metricsOpt = workspace.WithTelemetryProvider(tel)
 	}
-	opts := append(processOptions(),
+	opts := append(cliOptions(),
 		workspace.WithLoadedConfig(cfg),
 		// The version lets a load failure that looks like a stale server say so.
 		magus.WithVersion(version),

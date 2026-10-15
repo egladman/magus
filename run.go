@@ -70,6 +70,7 @@ type run struct {
 	Gate              bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
 	narrowing         *project.OpNarrowing
 	session           string // the host session the guard judges the run for; see WithSession
+	observer          types.Observer
 }
 
 // out is the sink the run reports through.
@@ -132,6 +133,19 @@ func WithGate() RunOption { return func(o *run) { o.Gate = true } }
 // it acts under. Without it the run is judged as a caller no host named.
 func WithSession(session string) RunOption { return func(o *run) { o.session = session } }
 
+// WithObserver reports every dependency-graph build and query the run makes to o, the
+// affected-set computation of RunAffected included. The observer rides the run alone: two
+// runs on one workspace each report to their own.
+func WithObserver(o types.Observer) RunOption { return func(r *run) { r.observer = o } }
+
+// observed returns ctx carrying the run's observer, when it has one.
+func (o run) observed(ctx context.Context) context.Context {
+	if o.observer == nil {
+		return ctx
+	}
+	return types.ContextWithGraphObserver(ctx, o.observer)
+}
+
 func applyRunOpts(opts []RunOption) run {
 	var o run
 	for _, opt := range opts {
@@ -150,6 +164,7 @@ func applyRunOpts(opts []RunOption) run {
 // error. A ctx the CLI marked with guard.WithHostJudged is not judged again.
 func (m *Magus) Run(ctx context.Context, targets []types.Target, opts ...RunOption) error {
 	o := applyRunOpts(opts)
+	ctx = o.observed(ctx)
 	lines, err := runLines(targets, o.ExtraArgs)
 	if err != nil {
 		return err
@@ -291,6 +306,7 @@ func CharmsForCI(charms []string) []string {
 // is the verb that reaches it.
 func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOption) error {
 	o := applyRunOpts(opts)
+	ctx = o.observed(ctx)
 	lines, err := runLines(targets, o.ExtraArgs)
 	if err != nil {
 		return err
@@ -394,6 +410,7 @@ func anyProjectDeclaresCI(projects []*types.Project) (bool, error) {
 // WithBaseRef.
 func (m *Magus) RunAffected(ctx context.Context, target string, opts ...RunOption) error {
 	o := applyRunOpts(opts)
+	ctx = o.observed(ctx)
 	lines, err := affectedLine(target, o.BaseRef)
 	if err != nil {
 		return err

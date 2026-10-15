@@ -247,11 +247,13 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return err
 	}
 
-	sink, closeSink, err := openRunSink(ctx, m, opts)
+	sink, closeSink, err := openSink(ctx, opts)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = closeSink() }()
+	// The graph traversal is recorded on the same sink: the run's, and every read before it.
+	ctx = types.ContextWithGraphObserver(ctx, sink.GraphObserver())
 
 	// cwd is the caller's directory: for an adopted run it is the client's, carried on
 	// ctx, not the server's process cwd. It scopes target resolution below and is recorded

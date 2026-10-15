@@ -52,6 +52,43 @@ func TestResolveExplicitOverridesAutodetect(t *testing.T) {
 	assert.Equal(t, types.VCSSourceExplicit, res.Source)
 }
 
+// namedDriver is a built-in driver under another name: a VCS no built-in knows.
+type namedDriver struct {
+	types.VCSDriver
+	name string
+}
+
+func (d namedDriver) Name() string { return d.name }
+
+// TestResolveUsesTheGivenDriver: a driver the caller supplies is chosen explicitly, over
+// the directory's own markers and MAGUS_VCS_NAME alike.
+func TestResolveUsesTheGivenDriver(t *testing.T) {
+	t.Setenv("MAGUS_VCS_NAME", "jj")
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".hg"), 0o755))
+	driver := namedDriver{VCSDriver: gitVCS{}, name: "fossil"}
+
+	res, err := Resolve(context.Background(), root, "", types.VCSOptions{Driver: driver})
+	require.NoError(t, err)
+	assert.Equal(t, "fossil", res.Name)
+	assert.Equal(t, types.VCSSourceExplicit, res.Source)
+	assert.Equal(t, driver, res.VCS)
+
+	res, err = Resolve(context.Background(), root, "", types.VCSOptions{Driver: driver, Name: "fossil"})
+	require.NoError(t, err, "a Name that agrees with the driver is no conflict")
+	assert.Equal(t, "fossil", res.Name)
+}
+
+// TestResolveRefusesADriverBesideAnotherName: a driver and a VCS name that disagree are
+// a misconfiguration, never a silent pick of one.
+func TestResolveRefusesADriverBesideAnotherName(t *testing.T) {
+	driver := namedDriver{VCSDriver: gitVCS{}, name: "fossil"}
+	_, err := Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{Driver: driver, Name: "git"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `"fossil"`)
+	assert.Contains(t, err.Error(), `"git"`)
+}
+
 func TestResolveExplicitUnknown(t *testing.T) {
 	t.Setenv("MAGUS_VCS_NAME", "fossil")
 	_, err := Resolve(context.Background(), t.TempDir(), "origin/main", types.VCSOptions{})

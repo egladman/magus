@@ -62,17 +62,6 @@ func openSink(ctx context.Context, opts OutputOptions) (*magus.Sink, func() erro
 	return sink, func() error { return errors.Join(sink.Close(), tee.Close()) }, nil
 }
 
-// openRunSink is openSink for a command that runs targets on m, which records its graph
-// traversal on the same sink.
-func openRunSink(ctx context.Context, m *magus.Magus, opts OutputOptions) (*magus.Sink, func() error, error) {
-	sink, closeSink, err := openSink(ctx, opts)
-	if err != nil {
-		return nil, nil, err
-	}
-	m.SetGraphObserver(sink.GraphObserver())
-	return sink, closeSink, nil
-}
-
 // lazyFile opens path for appending on the first write, so a format that keeps stdout
 // empty leaves no --tee file behind. Not safe for concurrent writes.
 type lazyFile struct {

@@ -185,7 +185,7 @@ func (t teeEncoder) recordWriter() *report.Writer { return t.records.recordWrite
 func (s *Sink) Close() error { return s.enc.close() }
 
 // GraphObserver returns the observer that records graph-traversal events on this sink,
-// for [Magus.SetGraphObserver]. It observes nothing for a format that writes no records.
+// for [WithObserver]. It observes nothing for a format that writes no records.
 func (s *Sink) GraphObserver() types.Observer { return report.GraphObserver(s.records) }
 
 // EmitScope emits the run's project selection, the "projects: ..." header. It starts a

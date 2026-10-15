@@ -375,7 +375,7 @@ func recordBuzzRun(ctx context.Context, root, name, code string, args []string, 
 	if root == "" {
 		root = "."
 	}
-	dir, err := magus.ResolveCacheDir(root, processOptions()...)
+	dir, err := magus.ResolveCacheDir(root, cliOptions()...)
 	if err != nil {
 		slog.WarnContext(ctx, "--record: no output store here", attr.Notice(""), attr.Component("magus buzz"), attr.Error(err))
 		return

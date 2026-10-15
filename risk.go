@@ -106,6 +106,7 @@ func (m *Magus) AssessChange(ctx context.Context, target string, o AssessOptions
 //
 // It is judged as Run is, once, as `magus affected ci`, the verb that sizes a gate.
 func (m *Magus) RunGate(ctx context.Context, rep types.RiskReport, opts ...RunOption) error {
+	ctx = applyRunOpts(opts).observed(ctx)
 	lines, err := affectedLine(types.TargetCI, "")
 	if err != nil {
 		return err

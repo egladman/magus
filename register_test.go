@@ -8,11 +8,13 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/broker"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -560,4 +562,78 @@ func TestRefuseHumanOnlyInGate(t *testing.T) {
 			}
 		})
 	}
+}
+
+// modelTiers declares low and high, cheapest first, as a magusfile's enum would.
+func modelTiers(t *testing.T) (low, high types.ModelTier) {
+	t.Helper()
+	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+		Enum:   "Tier",
+		Site:   "magusfile.buzz:1",
+		Cases:  []string{"low", "high"},
+		Bounds: make([]types.ModelTierBounds, 2),
+		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort},
+	})
+	require.NoError(t, err)
+	low, err = set.Parse("low")
+	require.NoError(t, err)
+	high, err = set.Parse("high")
+	require.NoError(t, err)
+	return low, high
+}
+
+// TestTierCeilingHoldsAChildAtMostItsParentsTier: a child may run at its parent's tier or
+// below, never above, and an unassigned tier bounds nothing.
+func TestTierCeilingHoldsAChildAtMostItsParentsTier(t *testing.T) {
+	low, high := modelTiers(t)
+	assert.NoError(t, TierCeiling(high, low))
+	assert.NoError(t, TierCeiling(high, high))
+	err := TierCeiling(low, high)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `"low"`)
+	assert.Contains(t, err.Error(), `"high"`)
+	assert.NoError(t, TierCeiling(types.ModelTier{}, high), "an unassigned parent bounds nothing")
+	assert.NoError(t, TierCeiling(low, types.ModelTier{}), "an unassigned child is bounded by nothing")
+
+	otherLow, _ := modelTiers(t)
+	assert.Error(t, TierCeiling(otherLow, low), "two declarations cannot be ordered against each other")
+}
+
+// TestSpawnRuleHasNoDefault: a nil rule fails the open, naming the reference rule, and a
+// workspace opened with no rule refuses every spawn rather than allowing it.
+func TestSpawnRuleHasNoDefault(t *testing.T) {
+	root := makeWorkspaceRoot(t, "magusfile.buzz")
+	_, err := Inspect(t.Context(), root, WithSpawnRule(nil))
+	require.ErrorContains(t, err, "TierCeiling")
+
+	ws, err := Inspect(t.Context(), root)
+	require.NoError(t, err)
+	assert.ErrorContains(t, ws.(*Magus).internals().CheckSpawn(types.ModelTier{}, types.ModelTier{}), "WithSpawnRule")
+
+	low, high := modelTiers(t)
+	ws, err = Inspect(t.Context(), root, WithSpawnRule(TierCeiling))
+	require.NoError(t, err)
+	assert.NoError(t, ws.(*Magus).internals().CheckSpawn(high, low))
+	assert.Error(t, ws.(*Magus).internals().CheckSpawn(low, high))
+}
+
+// TestWithVCSDriverIsTheWorkspacesVCS: the driver given rides the workspace's VCS options;
+// a nil one, or one magus.yaml's vcs.name contradicts, fails the open.
+func TestWithVCSDriverIsTheWorkspacesVCS(t *testing.T) {
+	root := makeWorkspaceRoot(t, "magusfile.buzz")
+	driver := mocks.NewMockVCSDriver(t)
+	driver.EXPECT().Name().Return("fossil").Maybe()
+
+	ws, err := Inspect(t.Context(), root, WithVCSDriver(driver))
+	require.NoError(t, err)
+	assert.Same(t, driver, ws.VCSOptions().Driver)
+
+	_, err = Inspect(t.Context(), root, WithVCSDriver(nil))
+	require.ErrorContains(t, err, "nil driver")
+
+	_, err = Inspect(t.Context(), root, WithVCSDriver(driver),
+		workspace.WithLoadedConfig(config.Config{VCS: config.VCS{Name: "git"}}))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `"fossil"`)
+	assert.Contains(t, err.Error(), `"git"`)
 }

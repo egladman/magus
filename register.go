@@ -52,6 +52,44 @@ func WithCommandLine(args []string) Option {
 	return func(o *workspace.Load) { o.CommandLine = args }
 }
 
+// WithVCSDriver drives d as the workspace's VCS, in place of the built-in one its markers
+// or magus.yaml would pick: a VCS magus does not ship, or a test double. Open fails on a
+// nil d, and when magus.yaml's vcs.name names a different VCS than d does.
+func WithVCSDriver(d types.VCSDriver) Option {
+	return func(o *workspace.Load) { o.VCSDriver, o.VCSDriverGiven = d, true }
+}
+
+// SpawnRule decides whether a job at model tier parent may spawn one at tier child: nil
+// allows it, and an error refuses it, saying why. A tier is the zero value when none was
+// assigned. TierCeiling is the reference rule.
+type SpawnRule func(parent, child types.ModelTier) error
+
+// TierCeiling is the reference SpawnRule: a child's tier is at most its parent's, by the
+// order the workspace's model-tier declaration gives its cases (cheapest first). An
+// unassigned tier on either side bounds nothing, so it allows the spawn; tiers from two
+// different declarations cannot be ordered, so it refuses them.
+func TierCeiling(parent, child types.ModelTier) error {
+	if parent.IsZero() || child.IsZero() {
+		return nil
+	}
+	above, err := child.Above(parent)
+	if err != nil {
+		return fmt.Errorf("magus: spawn rule: %w", err)
+	}
+	if above {
+		return fmt.Errorf("magus: a job at model tier %q may not spawn one at %q: a child's tier is at most its parent's",
+			parent.Name(), child.Name())
+	}
+	return nil
+}
+
+// WithSpawnRule sets the rule the workspace holds every job spawn to. There is no default
+// rule: Open and Inspect fail on a nil rule, naming TierCeiling, the reference rule the CLI
+// passes.
+func WithSpawnRule(rule SpawnRule) Option {
+	return func(o *workspace.Load) { o.SpawnRule, o.SpawnRuleGiven = rule, true }
+}
+
 // WithVersion supplies the running build's version so Open and Inspect can check it
 // against the workspace's magus.yaml required_version floor (MGS1021). cmd/magus
 // passes its linker-stamped version; a library caller that omits it gets no floor

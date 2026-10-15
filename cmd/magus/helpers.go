@@ -171,7 +171,7 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 		magusOpened.root = root
 		stop := t.phase("magus.open")
 		defer relaxGC()()
-		opts := append(processOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))
+		opts := append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))
 		if lim := bootstrapLimiterFrom(ctx); lim != nil {
 			opts = append(opts, workspace.WithLimiter(lim))
 		}
@@ -287,7 +287,7 @@ func inspectWorkspace(ctx context.Context, rootOverride string) (types.Workspace
 		stop := t.phase("workspace.inspect")
 		defer relaxGC()()
 		inspectValue, inspectErr = magus.Inspect(ctx, root,
-			append(processOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
+			append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
 		stop()
 	})
 	if err := inspectOpened.check("inspectWorkspace", rootOverride); err != nil {
@@ -428,10 +428,14 @@ func (s *stringList) Set(v string) error {
 	return nil
 }
 
-// processOptions hands a workspace this process's environment, stderr and command line,
-// which a workspace the library opens reads none of unless given.
-func processOptions() []magus.Option {
-	return []magus.Option{magus.WithEnv(os.Environ()), magus.WithStderr(os.Stderr), magus.WithCommandLine(os.Args)}
+// cliOptions are what every workspace the CLI opens is given: this process's environment,
+// stderr and command line, which a workspace the library opens reads none of unless
+// given, and the reference spawn rule, since a workspace has no default one.
+func cliOptions() []magus.Option {
+	return []magus.Option{
+		magus.WithEnv(os.Environ()), magus.WithStderr(os.Stderr), magus.WithCommandLine(os.Args),
+		magus.WithSpawnRule(magus.TierCeiling),
+	}
 }
 
 // magusInternals is what workspace.View adds to an opened *magus.Magus for magus's own

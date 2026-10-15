@@ -103,7 +103,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 
 	if targetName == "ci" {
 		ciTargets := []types.Target{{Path: chosen.Path, Name: "ci"}}
-		ciOpts := []magus.RunOption{magus.WithSink(sink)}
+		ciOpts := []magus.RunOption{magus.WithSink(sink), magus.WithObserver(sink.GraphObserver())}
 		if globalCfg.DryRun {
 			ciOpts = append(ciOpts, magus.WithDryRun())
 		}
@@ -115,7 +115,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 	// Expand short aliases.
 	targetName = canonicalTarget(targetName)
 	targets := []types.Target{{Path: chosen.Path, Name: targetName}}
-	xOpts := []magus.RunOption{magus.WithSink(sink)}
+	xOpts := []magus.RunOption{magus.WithSink(sink), magus.WithObserver(sink.GraphObserver())}
 	if globalCfg.DryRun {
 		xOpts = append(xOpts, magus.WithDryRun())
 	}
@@ -342,7 +342,7 @@ func openXRun(ctx context.Context, root string) (*magus.Magus, *magus.Sink, func
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	sink, cleanup, err := openRunSink(ctx, m, opts)
+	sink, cleanup, err := openSink(ctx, opts)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -412,7 +412,7 @@ func reproduceRef(ctx context.Context, root, ref string, step bool) error {
 	}
 
 	targets := []types.Target{{Path: d.Project, Name: parsed.Name, Charms: parsed.Charms}}
-	opts := []magus.RunOption{magus.WithCharms(parsed.Charms...), magus.WithSink(sink)}
+	opts := []magus.RunOption{magus.WithCharms(parsed.Charms...), magus.WithSink(sink), magus.WithObserver(sink.GraphObserver())}
 	if d.Spell != "" {
 		opts = append(opts, magus.WithSpellFilter(d.Spell))
 	}

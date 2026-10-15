@@ -346,6 +346,9 @@ type VCSOptions struct {
 	Enabled *bool  // nil = check MAGUS_VCS_ENABLED
 	Name    string // overrides MAGUS_VCS_NAME
 	BaseRef string // overrides MAGUS_VCS_BASE_REF
+	// Driver, when set, is the VCS to drive in place of a built-in one, chosen as
+	// explicitly as a Name is. Name must then be empty or the driver's own name.
+	Driver VCSDriver `json:"-" yaml:"-"`
 }
 
 // VCSSource indicates how the active VCS was chosen.

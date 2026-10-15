@@ -165,11 +165,13 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		if err != nil {
 			return err
 		}
-		sink, closeSink, err := openRunSink(ctx, m, opts)
+		sink, closeSink, err := openSink(ctx, opts)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = closeSink() }()
+		// The graph traversal is recorded on the same sink: the run's, and every read before it.
+		ctx = types.ContextWithGraphObserver(ctx, sink.GraphObserver())
 		streamCtx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 		defer cancel()
 		runOpts := []magus.RunOption{magus.WithSink(sink)}
@@ -221,11 +223,13 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return err
 	}
 
-	sink, closeSink, err := openRunSink(ctx, m, opts)
+	sink, closeSink, err := openSink(ctx, opts)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = closeSink() }()
+	// The graph traversal is recorded on the same sink: the run's, and every read before it.
+	ctx = types.ContextWithGraphObserver(ctx, sink.GraphObserver())
 
 	targets, source, _, affectedSet, err := m.ExpandAffectedSet(ctx, target, af.Base)
 	if err != nil {

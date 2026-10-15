@@ -229,7 +229,9 @@ func TestClose_Idempotent(t *testing.T) {
 	require.NoError(t, m.Close(), "second Close")
 }
 
-func TestSetGraphObserver_Invoked(t *testing.T) {
+// TestWithObserverRidesTheRun: a run's observer sees the graph builds made under the run's
+// context, and nothing made outside it, so two runs on one workspace never share one.
+func TestWithObserverRidesTheRun(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
 	m, err := inspect(context.Background(), root)
@@ -242,17 +244,19 @@ func TestSetGraphObserver_Invoked(t *testing.T) {
 			builds++
 		}
 	}).Return().Maybe()
-	m.SetGraphObserver(obs)
-	_, err = m.Graph()
+	ctx := applyRunOpts([]RunOption{WithObserver(obs)}).observed(context.Background())
+	_, err = m.AffectedFromPaths(ctx, []string{"magusfile.buzz"})
 	require.NoError(t, err)
-	assert.NotZero(t, builds, "SetGraphObserver: no build observed after Graph()")
+	assert.NotZero(t, builds, "WithObserver: no build observed under the run's context")
 
-	// Clear the observer; subsequent Graph() must not increment.
 	before := builds
-	m.SetGraphObserver(nil)
+	_, err = m.AffectedFromPaths(context.Background(), []string{"magusfile.buzz"})
+	require.NoError(t, err)
+	assert.Equal(t, before, builds, "a build outside the run's context reached its observer")
+
 	_, err = m.Graph()
 	require.NoError(t, err)
-	assert.Equal(t, before, builds, "SetGraphObserver(nil): a build observed after clearing observer")
+	assert.Equal(t, before, builds, "the workspace holds no observer of its own")
 }
 
 func TestStepFor_RootProject(t *testing.T) {

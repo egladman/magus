@@ -973,7 +973,7 @@ func sessionShow(root string, args []string) error {
 // session read never needs.
 func sessionModelTable(root string) model.Table {
 	rows := harnessModelRows(context.Background(), root, func(ctx context.Context) (types.WorkspaceRepository, error) {
-		return magus.Inspect(ctx, root, append(processOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
+		return magus.Inspect(ctx, root, append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
 	})
 	return model.InEffect(rows(), globalCfg.Agents.ModelOverrides())
 }

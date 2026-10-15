@@ -96,12 +96,9 @@ func collapseOnSuccess(l config.Log) bool {
 
 // Magus is the high-level orchestrator. Read paths and the server's warm caches
 // (warmGraph, symbolStatus) are safe for concurrent use: that is what backs
-// `magus server`, where one Magus is shared across goroutines; concurrent callers
-// should use types.ContextWithGraphObserver rather than a shared default observer.
-// SetGraphObserver is NOT concurrency-safe: it mutates the underlying
-// *types.Workspace with no lock, which documents itself as safe only for a sole
-// owner, so call it once, before the workspace is shared. Inspect-constructed
-// workspaces have no cache.
+// `magus server`, where one Magus is shared across goroutines. A run reports its graph
+// traversal to the observer it was given (WithObserver), never to one the workspace
+// holds. Inspect-constructed workspaces have no cache.
 type Magus struct {
 	ws    *types.Workspace
 	cfg   config.Config
@@ -190,6 +187,8 @@ type Magus struct {
 	stderr io.Writer
 	// commandLine is WithCommandLine's; empty without one.
 	commandLine []string
+	// spawnRule is WithSpawnRule's; nil without one, which CheckSpawn refuses.
+	spawnRule SpawnRule
 }
 
 // env reads key from the environment WithEnv gave, "" for a key unset there or with no
@@ -201,10 +200,14 @@ func (m *Magus) env(key string) string {
 	return m.getenv(key)
 }
 
-// processOptions are the WithEnv, WithStderr and WithCommandLine this workspace was opened
-// with, for a workspace it opens on its own behalf.
+// processOptions are the WithEnv, WithStderr, WithCommandLine and WithSpawnRule this
+// workspace was opened with, for a workspace it opens on its own behalf.
 func (m *Magus) processOptions() []Option {
-	return []Option{WithEnv(m.environ), WithStderr(m.noticeWriter()), WithCommandLine(m.commandLine)}
+	opts := []Option{WithEnv(m.environ), WithStderr(m.noticeWriter()), WithCommandLine(m.commandLine)}
+	if m.spawnRule != nil {
+		opts = append(opts, WithSpawnRule(m.spawnRule))
+	}
+	return opts
 }
 
 // noticeWriter is where WithStderr sends this workspace's notices, io.Discard without one.
@@ -259,6 +262,16 @@ func (w internals) JobLimits() config.Jobs { return w.cfg.Jobs }
 // SpellImports returns the spells magus.yaml declares, as this workspace's load resolved
 // them.
 func (w internals) SpellImports() *remotespell.Imports { return w.spellImports }
+
+// CheckSpawn holds a job at tier parent spawning one at tier child to the workspace's
+// spawn rule. A workspace opened with no rule refuses every spawn, naming the option that
+// sets one: there is no default rule.
+func (w internals) CheckSpawn(parent, child types.ModelTier) error {
+	if w.spawnRule == nil {
+		return errors.New("magus: this workspace was opened with no spawn rule; open it with WithSpawnRule(magus.TierCeiling) or a rule of your own")
+	}
+	return w.spawnRule(parent, child)
+}
 
 // Telemetry returns this workspace's observability provider: nil on an Inspect workspace,
 // which builds none, and the shared instance when Open was given one
@@ -524,7 +537,20 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// caller of vcs.Resolve(..., m.ws.VCSOptions); without it the keys parsed and
 	// validated but never reached a resolution.
 	ws.VCSOptions = types.VCSOptions{Enabled: cfg.VCS.Enabled, Name: cfg.VCS.Name, BaseRef: cfg.VCS.BaseRef}
-	m := &Magus{ws: ws, cfg: cfg, version: vo.Version, environ: vo.Env, getenv: envGetter(vo.Env), stderr: io.Discard, commandLine: vo.CommandLine}
+	if vo.VCSDriverGiven {
+		if vo.VCSDriver == nil {
+			return nil, errors.New("magus: WithVCSDriver was given a nil driver; pass a driver, or leave the option out to use the built-in one")
+		}
+		if cfg.VCS.Name != "" && cfg.VCS.Name != vo.VCSDriver.Name() {
+			return nil, fmt.Errorf("magus: WithVCSDriver gives the %q driver but vcs.name in magus.yaml names %q; drop one or make them agree",
+				vo.VCSDriver.Name(), cfg.VCS.Name)
+		}
+		ws.VCSOptions.Driver = vo.VCSDriver
+	}
+	if vo.SpawnRuleGiven && vo.SpawnRule == nil {
+		return nil, errors.New("magus: WithSpawnRule was given a nil rule; a workspace has no default rule, so pass magus.TierCeiling, the reference rule, or one of your own")
+	}
+	m := &Magus{ws: ws, cfg: cfg, version: vo.Version, spawnRule: vo.SpawnRule, environ: vo.Env, getenv: envGetter(vo.Env), stderr: io.Discard, commandLine: vo.CommandLine}
 	if vo.Stderr != nil {
 		m.stderr = vo.Stderr
 	}
@@ -936,11 +962,6 @@ func (m *Magus) Harnesses() []string {
 		return nil
 	}
 	return m.wsReg.Harnesses()
-}
-
-// SetGraphObserver installs an observer on the workspace; pass nil to clear.
-func (m *Magus) SetGraphObserver(o types.Observer) {
-	m.ws.SetGraphObserver(o)
 }
 
 func (m *Magus) VCSOptions() types.VCSOptions { return m.ws.VCSOptions }

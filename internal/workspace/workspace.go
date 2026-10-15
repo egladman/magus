@@ -59,6 +59,13 @@ type Load struct {
 	// CommandLine is what the workspace records as this process's command line; nil
 	// records an empty one.
 	CommandLine []string
+	// VCSDriver, when VCSDriverGiven, is the VCS to drive in place of a built-in one.
+	VCSDriver      types.VCSDriver
+	VCSDriverGiven bool
+	// SpawnRule, when SpawnRuleGiven, decides whether a job may spawn one at a given
+	// model tier.
+	SpawnRule      func(parent, child types.ModelTier) error
+	SpawnRuleGiven bool
 }
 
 // Option configures Open or Inspect.

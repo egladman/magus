@@ -54,7 +54,9 @@ func IsSecondaryCheckout(dir string) bool {
 	return false
 }
 
-// Resolve picks the active VCS for root: disabled → explicit → auto (claim dir) → default (git).
+// Resolve picks the active VCS for root: disabled → explicit (opts.Driver, then a name) →
+// auto (claim dir) → default (git). A Driver beside a different Name is an error naming
+// both.
 // Base ref: runtimeBase → opts.BaseRef → MAGUS_VCS_BASE_REF → per-VCS env → built-in default.
 func Resolve(_ context.Context, root, runtimeBase string, opts types.VCSOptions) (types.VCSResolution, error) {
 	if opts.Enabled != nil && !*opts.Enabled {
@@ -74,14 +76,21 @@ func Resolve(_ context.Context, root, runtimeBase string, opts types.VCSOptions)
 		source types.VCSSource
 	)
 
-	if name != "" {
+	switch {
+	case opts.Driver != nil:
+		if opts.Name != "" && opts.Name != opts.Driver.Name() {
+			return types.VCSResolution{}, fmt.Errorf("vcs: the driver given is %q but the VCS named is %q; drop one or make them agree",
+				opts.Driver.Name(), opts.Name)
+		}
+		v, name, source = opts.Driver, opts.Driver.Name(), types.VCSSourceExplicit
+	case name != "":
 		impl, ok := lookupImpl(name)
 		if !ok {
 			return types.VCSResolution{}, fmt.Errorf("%w: %q", types.ErrVCSUnknown, name)
 		}
 		v = impl
 		source = types.VCSSourceExplicit
-	} else {
+	default:
 		for _, e := range builtin {
 			if claimsExist(root, e.Claims()) {
 				v = e

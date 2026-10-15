@@ -298,7 +298,7 @@ func declaresRoutingIndex(ctx context.Context, dir string) bool {
 	if err != nil || root != abs {
 		return false
 	}
-	ws, err := magus.Inspect(ctx, root, append(processOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
+	ws, err := magus.Inspect(ctx, root, append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
 	if err != nil {
 		return false
 	}
