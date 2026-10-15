@@ -458,7 +458,7 @@ func guardCacheDir(rootOverride string) func(root string) (string, error) {
 // guardRoot finds the workspace whose rules the guard enforces, searching from override,
 // or from the cwd when it is "". A variable so the hook's own tests judge by the built-in
 // rules alone rather than by the policy of whichever checkout they happen to run in.
-var guardRoot = magus.FindRoot
+var guardRoot = workspace.FindRoot
 
 // loadGuardRules loads the guard rules of the workspace found from rootOverride (the cwd's
 // when it is "") from its root magusfile alone, nil with the reason when that file does not load, and nil with no
