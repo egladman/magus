@@ -28,20 +28,19 @@
 package changeset
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 
-	"github.com/egladman/magus/internal/file"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
@@ -59,9 +58,9 @@ var ErrNoStateDir = errors.New("no state directory")
 type Store struct {
 	mu       sync.Mutex
 	sessions map[string]*types.DiffReview
-	// viewedPath is where the digest set is persisted, empty to disable persistence (tests).
+	// viewedPath is the JSON Lines file of read digests, empty to disable persistence (tests).
 	viewedPath string
-	// draftsPath is where unpublished human comments are persisted, empty to disable.
+	// draftsPath is the JSON Lines file of unpublished human comments, empty to disable.
 	draftsPath string
 	// seenPath is where the seen-comment watermark is persisted, empty to disable.
 	//
@@ -103,12 +102,9 @@ func NewStore(stateDir string) *Store {
 		content:  map[string]map[string]string{},
 	}
 	if stateDir != "" {
-		s.viewedPath = filepath.Join(stateDir, "review", "viewed.json")
-		s.draftsPath = filepath.Join(stateDir, "review", "drafts.json")
-		// compat(until: no installed magus reads seen-threads.json): the file predates the
-		// comment/thread vocabulary and holds comment ids; a rename would hand a released binary
-		// an empty watermark and mark every comment new.
-		s.seenPath = filepath.Join(stateDir, "review", "seen-threads.json")
+		s.viewedPath = filepath.Join(stateDir, "review", "viewed.jsonl")
+		s.draftsPath = filepath.Join(stateDir, "review", "drafts.jsonl")
+		s.seenPath = filepath.Join(stateDir, "review", "seen-comments.jsonl")
 	}
 	return s
 }
@@ -519,43 +515,126 @@ func (s *Store) persistDrafts(root string) {
 	s.saveDrafts(keep)
 }
 
-// loadDrafts reads the persisted drafts, empty on any failure, for the reason loadViewed
-// gives, and more so here: refusing to open a review because a draft file is corrupt would
-// take the changeset away along with the remarks.
+// loadDrafts reads the persisted drafts, for the reason loadViewed gives, and more so here:
+// refusing to open a review because the drafts file is corrupt would take the changeset away
+// along with the remarks.
 func (s *Store) loadDrafts() []types.DiffComment {
 	if s.draftsPath == "" {
 		return nil
 	}
-	b, err := os.ReadFile(s.draftsPath)
+	ctx := context.Background()
+	if err := s.legacyJSON("drafts.json"); err != nil {
+		reportStateFailure(ctx, "drafts", err)
+	}
+	held, err := s.draftsLog().load()
 	if err != nil {
+		reportStateFailure(ctx, "drafts", err)
 		return nil
 	}
-	var out []types.DiffComment
-	if err := json.Unmarshal(b, &out); err != nil {
-		return nil
+	out := make([]types.DiffComment, 0, len(held))
+	for _, l := range held {
+		out = append(out, *l.Comment)
 	}
+	// An edited draft is appended again, so the file's order is not the order they were made in.
+	slices.SortFunc(out, draftOrder)
 	return out
 }
 
-// saveDrafts persists the drafts, best-effort, via the same atomic write saveViewed uses so
-// a crash mid-write cannot leave a half-file where the drafts were.
+// draftOrder sorts drafts by id the way they were made: c2 before c10.
+func draftOrder(a, b types.DiffComment) int {
+	if len(a.ID) != len(b.ID) {
+		return len(a.ID) - len(b.ID)
+	}
+	return strings.Compare(a.ID, b.ID)
+}
+
+// The lines of the three files. A viewed digest ends with Viewed false, a draft with Removed,
+// and a seen comment never ends.
+type (
+	viewedLine struct {
+		Digest string `json:"digest"`
+		Viewed bool   `json:"viewed"`
+	}
+	seenLine struct {
+		ID string `json:"id"`
+	}
+	draftLine struct {
+		ID      string             `json:"id"`
+		Removed bool               `json:"removed,omitempty"`
+		Comment *types.DiffComment `json:"comment,omitempty"`
+	}
+)
+
+func (s *Store) viewedLog() jsonl[viewedLine] {
+	return jsonl[viewedLine]{path: s.viewedPath, perm: 0o644,
+		key: func(l viewedLine) string { return l.Digest }, live: func(l viewedLine) bool { return l.Viewed }}
+}
+
+func (s *Store) seenLog() jsonl[seenLine] {
+	return jsonl[seenLine]{path: s.seenPath, perm: 0o644, key: func(l seenLine) string { return l.ID }}
+}
+
+func (s *Store) draftsLog() jsonl[draftLine] {
+	return jsonl[draftLine]{path: s.draftsPath, perm: 0o644,
+		key: func(l draftLine) string { return l.ID }, live: func(l draftLine) bool { return !l.Removed && l.Comment != nil }}
+}
+
+// saveDrafts makes the file say drafts: a line for each draft that is new or changed, and a
+// removal for each that is gone. Best-effort, though a failure is logged, since the review
+// goes on without the write.
 func (s *Store) saveDrafts(drafts []types.DiffComment) {
 	if s.draftsPath == "" {
 		return
 	}
-	b, err := json.Marshal(drafts)
+	err := s.draftsLog().update(context.Background(), func(stored []draftLine) []draftLine {
+		held := make(map[string]*types.DiffComment, len(stored))
+		for _, l := range stored {
+			held[l.ID] = l.Comment
+		}
+		var add []draftLine
+		keep := make(map[string]bool, len(drafts))
+		for _, c := range drafts {
+			// Output-only, recomputed whenever the changeset is tracked, and kept out so
+			// that a draft nobody edited does not read as changed.
+			c.Rung = types.AnchorUnknown
+			keep[c.ID] = true
+			if old := held[c.ID]; old != nil && sameJSON(*old, c) {
+				continue
+			}
+			add = append(add, draftLine{ID: c.ID, Comment: &c})
+		}
+		for _, l := range stored {
+			if !keep[l.ID] {
+				add = append(add, draftLine{ID: l.ID, Removed: true})
+			}
+		}
+		return add
+	})
 	if err != nil {
-		return
+		reportStateFailure(context.Background(), "could not persist the drafts", err)
 	}
-	_ = file.WriteFileAtomic(s.draftsPath, b, 0o644)
 }
 
-// loadViewed reads the persisted digest set. Every failure yields an empty set rather than an
-// error: losing review progress is a nuisance, and failing to open a review because a
+// sameJSON reports whether a and b encode alike.
+func sameJSON(a, b any) bool {
+	x, errA := json.Marshal(a)
+	y, errB := json.Marshal(b)
+	return errA == nil && errB == nil && bytes.Equal(x, y)
+}
+
+// reportStateFailure logs review state that could not be read or written. The review opens
+// regardless, so the file's own error is how a person learns the marks were not kept.
+func reportStateFailure(ctx context.Context, what string, err error) {
+	slog.With(attr.Component("magus")).ErrorContext(ctx, "review state: "+what, attr.Error(err))
+}
+
+// loadViewed reads the persisted digest set. A failure yields an empty set, reported rather
+// than returned: losing review progress is a nuisance, and failing to open a review because a
 // progress file is corrupt would be worse than forgetting what was read.
 func (s *Store) loadViewed() []string {
 	out, err := s.LoadViewed()
 	if err != nil {
+		reportStateFailure(context.Background(), "read marks", err)
 		return nil
 	}
 	return out
@@ -566,11 +645,29 @@ func (s *Store) saveViewed(digests []string) {
 	if s.viewedPath == "" {
 		return
 	}
-	b, err := json.Marshal(digests)
+	err := s.viewedLog().update(context.Background(), func(stored []viewedLine) []viewedLine {
+		held := make(map[string]bool, len(stored))
+		for _, l := range stored {
+			held[l.Digest] = true
+		}
+		var add []viewedLine
+		want := make(map[string]bool, len(digests))
+		for _, d := range digests {
+			if !held[d] && !want[d] {
+				add = append(add, viewedLine{Digest: d, Viewed: true})
+			}
+			want[d] = true
+		}
+		for _, l := range stored {
+			if !want[l.Digest] {
+				add = append(add, viewedLine{Digest: l.Digest})
+			}
+		}
+		return add
+	})
 	if err != nil {
-		return
+		reportStateFailure(context.Background(), "could not persist the read marks", err)
 	}
-	_ = file.WriteFileAtomic(s.viewedPath, b, 0o644)
 }
 
 // LoadDrafts reads the persisted unsent remarks WITHOUT a session, for the same reason
@@ -585,16 +682,16 @@ func (s *Store) LoadViewed() ([]string, error) {
 	if s.viewedPath == "" {
 		return nil, fmt.Errorf("read marks: %w", ErrNoStateDir)
 	}
-	b, err := os.ReadFile(s.viewedPath)
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-		return nil, nil
-	case err != nil:
+	if err := s.legacyJSON("viewed.json"); err != nil {
+		return nil, fmt.Errorf("read marks: %w", err)
+	}
+	held, err := s.viewedLog().load()
+	if err != nil {
 		return nil, fmt.Errorf("read marks: %w", err)
 	}
 	var out []string
-	if err := json.Unmarshal(b, &out); err != nil {
-		return nil, fmt.Errorf("read marks in %s: %w", s.viewedPath, err)
+	for _, l := range held {
+		out = append(out, l.Digest)
 	}
 	return out, nil
 }
@@ -606,8 +703,8 @@ func (s *Store) LoadViewed() ([]string, error) {
 // a session is also what keeps the job from looking like a reader who opened a review.
 func (s *Store) LoadSeenComments() []string { return s.loadSeen() }
 
-// loadSeen reads the persisted watermark. Every failure yields an empty set, for the reason
-// loadViewed does: a corrupt progress file must not stop a review from opening.
+// loadSeen reads the persisted watermark. A failure yields an empty set, reported, for the
+// reason loadViewed does: a corrupt progress file must not stop a review from opening.
 //
 // An empty set means "nothing has been read here", which is also what a workspace where nobody
 // ever opened a review looks like. That is the same answer for both, and the caller wanting to
@@ -616,15 +713,20 @@ func (s *Store) loadSeen() []string {
 	if s.seenPath == "" {
 		return nil
 	}
-	b, err := os.ReadFile(s.seenPath)
+	ctx := context.Background()
+	if err := s.legacyJSON("seen-threads.json"); err != nil {
+		reportStateFailure(ctx, "seen comments", err)
+	}
+	held, err := s.seenLog().load()
 	if err != nil {
+		reportStateFailure(ctx, "seen comments", err)
 		return nil
 	}
-	var out []string
-	if err := json.Unmarshal(b, &out); err != nil {
-		return nil
+	var ids []string
+	for _, l := range held {
+		ids = append(ids, l.ID)
 	}
-	return out
+	return ids
 }
 
 // saveSeen adds ids to the persisted watermark, best-effort for the same reason saveViewed
@@ -639,17 +741,19 @@ func (s *Store) saveSeen(ids []string) {
 		return
 	}
 	ctx := context.Background()
-	err := file.Doc[[]string]{Path: s.seenPath}.Update(ctx, func(stored *[]string) error {
-		n := len(*stored)
+	err := s.seenLog().update(ctx, func(stored []seenLine) []seenLine {
+		held := make(map[string]bool, len(stored))
+		for _, l := range stored {
+			held[l.ID] = true
+		}
+		var add []seenLine
 		for _, id := range ids {
-			if !slices.Contains(*stored, id) {
-				*stored = append(*stored, id)
+			if !held[id] {
+				held[id] = true
+				add = append(add, seenLine{ID: id})
 			}
 		}
-		if len(*stored) == n {
-			return file.ErrSkipWrite
-		}
-		return nil
+		return add
 	})
 	if err != nil {
 		slog.With(attr.Component("magus")).WarnContext(ctx, "could not persist the review's seen threads", attr.Error(err))

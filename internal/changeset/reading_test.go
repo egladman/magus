@@ -150,7 +150,40 @@ func TestReadingMarkWithoutAStateDirIsAnError(t *testing.T) {
 func TestReadingMarkCorruptFileReadsAsNoMark(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "review"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "review", "reading.json"), []byte("{not json"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "review", "reading.jsonl"), []byte("not json\n"), 0o644))
 
 	assert.False(t, NewStore(dir).LoadReading().Active())
+}
+
+// The mark is what a person finds with cat while a merge goes unreported: a line is appended
+// for each change, the last one is the mark, and clearing is a line without a review.
+func TestReadingMarkIsAppendedAsJSONLines(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+	_, err := s.SetReading(context.Background(), types.ReviewTarget{ID: "42", Repo: "acme/web"}, time.UnixMilli(1700000000000))
+	require.NoError(t, err)
+
+	path := filepath.Join(dir, "review", "reading.jsonl")
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, `{"review":"42","repo":"acme/web","since":1700000000000}`+"\n", string(b))
+
+	require.NoError(t, s.ClearReading(context.Background()))
+	b, err = os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, `{"review":"42","repo":"acme/web","since":1700000000000}`+"\n"+`{"review":"","since":0}`+"\n", string(b))
+	assert.False(t, NewStore(dir).LoadReading().Active())
+}
+
+func TestReadingMarkOfAnOlderMagusIsNamedNotRead(t *testing.T) {
+	dir := t.TempDir()
+	old := filepath.Join(dir, "review", "reading.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(old), 0o755))
+	require.NoError(t, os.WriteFile(old, []byte(`{"review":"42","since":1}`), 0o644))
+
+	err := NewStore(dir).legacyJSON("reading.json")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), old)
+	assert.False(t, NewStore(dir).LoadReading().Active(), "the JSON is not read as a second format")
 }
