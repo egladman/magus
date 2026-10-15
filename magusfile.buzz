@@ -164,10 +164,7 @@ magus\project({
             "skip_cache": "launches paid agent sessions and writes benchmarks/agent/results; a replay would be a run that never happened",
             "human_only": "launches paid Claude sessions, $0.05-$4 each by task budget_usd (pilot.manifest: 8 sessions), and a result is an average a person decides to pay for",
         },
-        "agent-eval": {
-            "skip_cache": "launches paid agent sessions; a replay would be a run that never happened",
-            "human_only": "launches paid Claude sessions, one per variant and rep, and a result is a run a person decides to pay for",
-        },
+        "agent-eval": {"skip_cache": "launches paid agent sessions; a replay would be a run that never happened"},
         "hoste2e-test": {
             "skip_cache": "drives the installed agent hosts, whose versions and logins no input glob can key",
             "human_only": "drives Claude Code, Codex, Cursor and OpenCode on the person's own logins and spends model tokens on each",
