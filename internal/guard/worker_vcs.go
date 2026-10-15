@@ -75,9 +75,7 @@ func removesOwnCheckout(command, cwd string, row types.Job) bool {
 // checkoutAddDenial words the lease-vcs refusal of a checkout made by hand. what is the
 // refused call as the reader typed it.
 func checkoutAddDenial(what string, row types.Job, role string) string {
-	return fmt.Sprintf("magus workspace: a job's checkout is made by the fork that declares the job, not by hand.\n"+
-		"%s makes one, and lease %s is %s. `%s` makes it, copies in the magus the forking checkout runs, "+
-		"takes the job there and nowhere else, and removes it once the job ends unless it holds work.",
+	return fmt.Sprintf("magus workspace: %s makes a checkout by hand, and lease %s is %s: `%s` makes a job's checkout, and removes it once the job ends",
 		what, row.ID, role, hint.JobFork.With("<job>", "--checkout", "<dir>"))
 }
 

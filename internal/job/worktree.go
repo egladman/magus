@@ -58,7 +58,7 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 			owned.Kept = ""
 			return owned, false, nil
 		}
-		return types.JobWorktree{}, false, fmt.Errorf("job: %s already owns the checkout %s, which magus removes once the job ends; fork it with `--checkout %s` or let it end first",
+		return types.JobWorktree{}, false, fmt.Errorf("job: %s already owns the checkout %s, which magus removes once the job ends, so fork it with `--checkout %s` or let it end first",
 			id, owned.Root, owned.Root)
 	}
 	revision, digest := types.ParseCheckpointToken(checkpoint)
@@ -71,7 +71,7 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 		// uncommitted changes stay where they are.
 		token, err := s.CheckoutToken(ctx)
 		if err != nil {
-			return types.JobWorktree{}, false, fmt.Errorf("job: %s names a checkout and no checkpoint, and the forking checkout's revision cannot be read: %w", id, err)
+			return types.JobWorktree{}, false, fmt.Errorf("%s names a checkout and no checkpoint, and the forking checkout's revision cannot be read: %w", id, err)
 		}
 		revision, _ = types.ParseCheckpointToken(token)
 	}
@@ -94,7 +94,7 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 	if binary != "" {
 		placed, err := placeBinary(binary, dir)
 		if err != nil {
-			return types.JobWorktree{}, false, errors.Join(fmt.Errorf("job: placing %s in %s: %w", binary, dir, err), drv.RemoveCheckout(ctx, source, dir))
+			return types.JobWorktree{}, false, errors.Join(fmt.Errorf("placing %s in %s: %w", binary, dir, err), drv.RemoveCheckout(ctx, source, dir))
 		}
 		wt.Binary = placed
 	}
