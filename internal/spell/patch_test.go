@@ -338,12 +338,12 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Tools: map[string]spells.Tool{
 			"go": {Probe: spells.Command{Bin: "go", Args: []string{"version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch},
 				Supported: spells.VersionBounds{Min: "1.21"}, Lifecycle: "go"},
-			"golangci-lint": {Probe: spells.Command{Bin: "golangci-lint", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}},
 			// Observe only, no Probe: a version probe keys every target in the project,
-			// so the database date `-version` prints reached targets that never run the
-			// scanner. See spells/golang/spell.buzz.
-			"govulncheck": {Observe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}}},
-			"scip-go":     {Observe: spells.Command{Bin: "scip-go", Args: []string{"--version"}}},
+			// so the database date `-version` prints, or a linter upgrade, reached targets
+			// that never run the tool. See spells/golang/spell.buzz.
+			"golangci-lint": {Observe: spells.Command{Bin: "golangci-lint", Args: []string{"--version"}}},
+			"govulncheck":   {Observe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}}},
+			"scip-go":       {Observe: spells.Command{Bin: "scip-go", Args: []string{"--version"}}},
 		},
 		Language:           "go",
 		LanguageExtensions: []string{".go"},

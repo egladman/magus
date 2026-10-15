@@ -805,6 +805,9 @@ func TestScripts(t *testing.T) {
 			// A run starts a broker otherwise, and a script must leave nothing running.
 			e.Setenv("MAGUS_BROKER", "off")
 			e.Setenv("MAGUS_HINTS_ENABLED", "false")
+			// The cache store lives under the user cache dir, which HOME=/no-home cannot hold.
+			// Beside $WORK rather than in it, where a script's VCS status would list it.
+			e.Setenv("XDG_CACHE_HOME", e.WorkDir+"-cache")
 			// The shipped guard templates, by ABSOLUTE PATH to the real files.
 			// A script that copied them into its own archive would be testing a
 			// copy, and a copy of the artifact readers download is exactly what
