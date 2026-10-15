@@ -1285,6 +1285,7 @@ func TestJobForkRefusesACheckTheGuardDeniesItsWorker(t *testing.T) {
 	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
+	installCheckGrader(t, newCheckGrader())
 	fork := func(check string) error {
 		return jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", check})
 	}
@@ -1445,12 +1446,41 @@ func TestJobForkIsNotRefusedByADenyThatHoldsForEveryCommand(t *testing.T) {
 	assert.Contains(t, verdict.NotGraded, "the hook binary is older than the tree", "the first line of the verdict is quoted")
 	assert.NotContains(t, verdict.NotGraded, "rebuild it")
 
+	installCheckGrader(t, newCheckGrader())
 	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."}))
 	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "the fork went through")
+}
+
+// installCheckGrader installs g as runCLI installs newCheckGrader, and puts back what was
+// installed. The grader is process-wide, so a test that uses it does not run in parallel.
+func installCheckGrader(t *testing.T, g job.CheckGrader) {
+	t.Helper()
+	previous := job.SetCheckGrader(g)
+	t.Cleanup(func() { job.SetCheckGrader(previous) })
+}
+
+// One grader judges every fork: runCLI installs it, and the Store `magus job fork` opens
+// names none of its own, as the Stores magus\job.put opens over MCP and in the daemon do
+// (std's TestMagusPutJobGradesTheCheckLikeFork).
+func TestJobForkGradesWithTheInstalledGrader(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	testkit.Isolate(t)
+	global = globalFlags{}
+	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "run.go": "package run\n"}).Root()
+	resetWorkspaceMemo(t)
+	t.Chdir(root)
+	var graded []string
+	installCheckGrader(t, func(_ context.Context, at string, _ types.Job) job.CheckVerdict {
+		graded = append(graded, at)
+		return job.CheckVerdict{}
+	})
+
+	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."}))
+	assert.Equal(t, []string{root}, graded)
 }
 
 func TestEvidenceFlagCollectsGoalRefPairs(t *testing.T) {

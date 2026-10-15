@@ -186,7 +186,7 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	loc := job.Location{CacheDir: cacheDir, Root: root, Outputs: outputsIn, Grader: newCheckGrader(), DryRun: o.DryRun,
+	loc := job.Location{CacheDir: cacheDir, Root: root, Outputs: outputsIn, DryRun: o.DryRun,
 		TrailBase: func(checkoutRoot string) (string, error) { return magus.ResolveCacheDir(checkoutRoot, cliOptions()...) }}
 	if o.ModelTiers && root != "" {
 		m, err := loadMagus(ctx, root)
@@ -210,8 +210,8 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 // that declares none pays nothing, and are reused until a file they were read from
 // changes: a grader lives as long as the Store, or the daemon, it was made for, and
 // grading against rules an edit has since replaced would admit or refuse the wrong check.
-// magus\job.put opens its own Store inside std, which cannot import the guard, so runCLI
-// registers one with std as well.
+// runCLI installs one with job.SetCheckGrader, and it is the only grader: every fork door
+// (`magus job fork`, magus\job.put over MCP, the daemon) opens a Store that names none.
 func newCheckGrader() job.CheckGrader {
 	var (
 		mu     sync.Mutex
