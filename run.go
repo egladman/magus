@@ -1665,11 +1665,6 @@ func observationsForTarget(p *types.Project, target string, probed map[string]st
 	return out
 }
 
-// executeOnProjects runs handler for every project for a single target.
-func (m *Magus) executeOnProjects(ctx context.Context, projects []*types.Project, target string, scopeLabel string, opts run, handler TargetHandler) error {
-	return m.executeStages(ctx, []stage{{target: target, handler: handler, projects: projects}}, scopeLabel, opts)
-}
-
 // executeStages schedules every (project,target) pair via dependency-ordered RunAll.
 //
 // The named return is for the stall watchdog: once armed it can abort from any of the

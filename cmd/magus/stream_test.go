@@ -1,4 +1,4 @@
-package magus
+package main
 
 import (
 	"bytes"
@@ -12,6 +12,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus"
 )
 
 // TestReadBatches_NewlineMode verifies that blank-line-delimited batches are
@@ -94,43 +96,43 @@ func TestReadBatches_CancelUnblocksAParkedRead(t *testing.T) {
 	}
 }
 
-// TestStream_ContextCancellation verifies that Stream returns nil when ctx is
+// TestStream_ContextCancellation verifies that streamAffected returns nil when ctx is
 // already cancelled on entry.
 func TestStream_ContextCancellation(t *testing.T) {
 	t.Parallel()
-	m := &Magus{}
+	m := &magus.Magus{}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	pr, pw := io.Pipe()
 	pw.Close()
-	require.NoError(t, m.Stream(ctx, pr, "build", nil), "Stream with cancelled ctx")
+	require.NoError(t, streamAffected(ctx, m, pr, "build", false, nil), "streamAffected with cancelled ctx")
 }
 
 // TestStream_EmptyBatchSkipped verifies that an input containing only blank
 // lines produces no handler invocations (and no error).
 func TestStream_EmptyBatchSkipped(t *testing.T) {
 	t.Parallel()
-	m := &Magus{}
+	m := &magus.Magus{}
 	var errCalled bool
 	pr, pw := io.Pipe()
 	go func() {
 		io.WriteString(pw, "\n\n\n")
 		pw.Close()
 	}()
-	require.NoError(t, m.Stream(context.Background(), pr, "build", func(error) { errCalled = true }), "Stream (empty input)")
-	assert.False(t, errCalled, "Stream (empty input): errFn called unexpectedly")
+	require.NoError(t, streamAffected(context.Background(), m, pr, "build", false, func(error) { errCalled = true }), "streamAffected (empty input)")
+	assert.False(t, errCalled, "streamAffected (empty input): errFn called unexpectedly")
 }
 
 // TestStream_BatchErrorDoesNotStopTheLoop pins that a failed batch is reported through
 // errFn and skipped rather than ending the stream: the next change still gets a turn,
-// and Stream itself returns nil. Under --watch that is what turns a refused run (exit
+// and streamAffected itself returns nil. Under --watch that is what turns a refused run (exit
 // 75, another invocation holding the lock) into a retry on the next change.
 //
 // A zero Magus has no workspace, so every batch fails in AffectedFromPaths; the loop's
 // handling of a failure is what this pins, whatever the cause.
 func TestStream_BatchErrorDoesNotStopTheLoop(t *testing.T) {
 	t.Parallel()
-	m := &Magus{}
+	m := &magus.Magus{}
 	var errs atomic.Int32
 	firstFailed := make(chan struct{})
 	var once sync.Once
@@ -143,10 +145,32 @@ func TestStream_BatchErrorDoesNotStopTheLoop(t *testing.T) {
 		_, _ = io.WriteString(pw, "b\n\n")
 		_ = pw.Close()
 	}()
-	err := m.Stream(context.Background(), pr, "build", func(error) {
+	err := streamAffected(context.Background(), m, pr, "build", false, func(error) {
 		errs.Add(1)
 		once.Do(func() { close(firstFailed) })
 	})
-	require.NoError(t, err, "a batch failure must never become Stream's own return value")
+	require.NoError(t, err, "a batch failure must never become streamAffected's own return value")
 	assert.Equal(t, int32(2), errs.Load(), "both the failing batch and the next change must be attempted")
+}
+
+// TestMergePaths verifies dedup + lex ordering, the contract callers
+// rely on for deterministic stream-driven affected output.
+func TestMergePaths(t *testing.T) {
+	t.Parallel()
+
+	// merge normalizes a nil result to an empty slice so the comparison is
+	// against a non-nil expected value (assert.Equal distinguishes nil/empty).
+	merge := func(a, b []string) []string {
+		got := mergePaths(a, b)
+		if got == nil {
+			got = []string{}
+		}
+		return got
+	}
+
+	assert.Equal(t, []string{}, merge(nil, nil), "both empty")
+	assert.Equal(t, []string{"a", "x"}, merge(nil, []string{"x", "a"}), "a empty")
+	assert.Equal(t, []string{"a", "x"}, merge([]string{"x", "a"}, nil), "b empty")
+	assert.Equal(t, []string{"a", "b", "c"}, merge([]string{"a", "b"}, []string{"b", "c"}), "dedup across")
+	assert.Equal(t, []string{"a"}, merge([]string{"a", "a"}, []string{"a"}), "all dupes")
 }

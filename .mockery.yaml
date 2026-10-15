@@ -25,8 +25,8 @@
 #  2. It is PUBLIC and someone building on magus would have to fake it. A downstream
 #     consumer cannot import internal/, so a mock there serves nobody outside this repo;
 #     the extension boundary (types.VCSDriver and its capability probes, spells.Driver,
-#     types.Observer) and the read interfaces (types.WorkspaceRepository and friends,
-#     magus.Server) are what an external test suite has to stand in for. Publishing those
+#     types.Observer) and the read interfaces (types.WorkspaceRepository and friends)
+#     are what an external test suite has to stand in for. Publishing those
 #     mocks is part of the package API, not test scaffolding, so they are generated
 #     whether or not one of OUR tests happens to use them today.
 #
@@ -38,10 +38,6 @@ dir: "{{.InterfaceDir}}/gen/mocks"
 pkgname: mocks
 filename: "{{.InterfaceName | snakecase}}.go"
 packages:
-  # Public: the composition root a consumer embeds.
-  github.com/egladman/magus:
-    interfaces:
-      Server:
   # Public: the domain interfaces. VCSDriver plus the capability probes a driver may
   # optionally satisfy - a consumer's code has to handle a driver that implements
   # some and not others, which is exactly what these mocks let it test.

@@ -97,10 +97,9 @@ func collapseOnSuccess(l config.Log) bool {
 // (warmGraph, symbolStatus) are safe for concurrent use: that is what backs
 // `magus server`, where one Magus is shared across goroutines; concurrent callers
 // should use types.ContextWithGraphObserver rather than a shared default observer.
-// SetGraphObserver and SetServer are NOT concurrency-safe: each mutates shared
-// state with no lock and is meant to be called once, before the workspace is
-// shared (SetGraphObserver mutates the underlying *types.Workspace, which
-// documents itself as safe only for a sole owner). Inspect-constructed
+// SetGraphObserver is NOT concurrency-safe: it mutates the underlying
+// *types.Workspace with no lock, which documents itself as safe only for a sole
+// owner, so call it once, before the workspace is shared. Inspect-constructed
 // workspaces have no cache.
 type Magus struct {
 	ws    *types.Workspace
@@ -181,30 +180,6 @@ type Magus struct {
 	ownsBroker    bool
 	brokerPolicy  types.BrokerPolicy // WithBrokerPolicy's override; empty keeps the config's
 	skipProviders bool               // open without running wired workspace providers (see WithoutWorkspaceProviders)
-
-	server Server
-}
-
-// Server is the set of HTTP routes `magus server` hosts over this workspace: the MCP
-// endpoint, the console and its API. The CLI injects it under `magus server` ONLY, so
-// ordinary command paths never construct one, and it is an interface so the root magus
-// package need not import the handler packages that depend on it. The concrete
-// *server.Server satisfies it.
-type Server interface {
-	Serve(ctx context.Context) error
-}
-
-// SetServer installs the Server that Serve delegates to. Called once, under `magus
-// server`; other command paths leave it nil so no listener is ever constructed.
-func (m *Magus) SetServer(s Server) { m.server = s }
-
-// Serve runs the injected Server, blocking until ctx is cancelled or the listener
-// fails. It errors if no Server was installed via SetServer.
-func (m *Magus) Serve(ctx context.Context) error {
-	if m.server == nil {
-		return errors.New("magus: no server configured")
-	}
-	return m.server.Serve(ctx)
 }
 
 // FindRoot walks up from dir, or the cwd when dir is empty, to the workspace root. The

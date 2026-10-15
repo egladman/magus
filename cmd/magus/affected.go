@@ -172,19 +172,16 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		defer func() { _ = closeSink() }()
 		streamCtx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 		defer cancel()
-		streamOpts := []magus.StreamOption{magus.WithStreamSink(sink)}
+		runOpts := []magus.RunOption{magus.WithSink(sink)}
 		if globalCfg.DryRun {
-			streamOpts = append(streamOpts, magus.WithStreamDryRun())
-		}
-		if af.Null {
-			streamOpts = append(streamOpts, magus.WithStreamNull())
+			runOpts = append(runOpts, magus.WithDryRun())
 		}
 		if len(extraArgs) > 0 {
-			streamOpts = append(streamOpts, magus.WithStreamExtraArgs(extraArgs))
+			runOpts = append(runOpts, magus.WithExtraArgs(extraArgs))
 		}
-		return m.Stream(streamCtx, os.Stdin, target, func(err error) {
+		return streamAffected(streamCtx, m, os.Stdin, target, af.Null, func(err error) {
 			slog.ErrorContext(streamCtx, "affected --stdin", attr.Error(err))
-		}, streamOpts...)
+		}, runOpts...)
 	}
 
 	if target == "ls" {

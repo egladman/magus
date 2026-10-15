@@ -1,4 +1,4 @@
-package magus
+package main
 
 import (
 	"bufio"
@@ -8,53 +8,24 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/types"
 )
 
-type streamOpts struct {
-	Null bool
-	run  []RunOption // applied to every batch's run
-}
-
-// StreamOption configures a [Stream] invocation.
-type StreamOption func(*streamOpts)
-
-// WithStreamDryRun prints what would run without invoking handlers.
-func WithStreamDryRun() StreamOption {
-	return func(o *streamOpts) { o.run = append(o.run, WithDryRun()) }
-}
-
-// WithStreamNull expects NUL-separated paths and double-NUL batch boundaries.
-func WithStreamNull() StreamOption { return func(o *streamOpts) { o.Null = true } }
-
-// WithStreamExtraArgs forwards args to spells via project.WithExtraArgs.
-func WithStreamExtraArgs(args []string) StreamOption {
-	return func(o *streamOpts) { o.run = append(o.run, WithExtraArgs(args)) }
-}
-
-// WithStreamSink routes every batch through s, as [WithSink] routes one run.
-func WithStreamSink(s *Sink) StreamOption {
-	return func(o *streamOpts) { o.run = append(o.run, WithSink(s)) }
-}
-
-// StreamAllSentinel is a stream-batch marker that triggers a full-workspace selection.
+// streamAllSentinel is a stream-batch marker that triggers a full-workspace selection.
 // The NUL prefix ensures it cannot collide with a real file path.
-const StreamAllSentinel = "\x00ALL"
+const streamAllSentinel = "\x00ALL"
 
-// Stream reads file-path batches from r and runs target on the affected projects.
-// Builds run synchronously; batches arriving during a build are merged and run after.
-// StreamAllSentinel triggers a full-workspace build. Per-batch errors go to errFn.
-func (m *Magus) Stream(ctx context.Context, r io.Reader, target string, errFn func(error), opts ...StreamOption) error {
-	handler := m.targetHandler(target)
+// streamAffected reads file-path batches from r and runs target on the affected
+// projects, each batch through m.Run with runOpts, so the guard judges it as it judges
+// any run. Builds run synchronously; batches arriving during a build are merged and run
+// after. streamAllSentinel triggers a full-workspace build. null reads NUL-separated
+// paths with double-NUL batch boundaries. Per-batch errors go to errFn.
+func streamAffected(ctx context.Context, m *magus.Magus, r io.Reader, target string, null bool, errFn func(error), runOpts ...magus.RunOption) error {
 	if errFn == nil {
 		errFn = func(error) {}
 	}
-	var so streamOpts
-	for _, opt := range opts {
-		opt(&so)
-	}
-
-	batches := readBatches(ctx, r, so.Null)
+	batches := readBatches(ctx, r, null)
 
 	var (
 		mu      sync.Mutex
@@ -65,7 +36,7 @@ func (m *Magus) Stream(ctx context.Context, r io.Reader, target string, errFn fu
 
 	runBatch := func(paths []string) {
 		var batchTargets []types.Target
-		if slices.Contains(paths, StreamAllSentinel) {
+		if slices.Contains(paths, streamAllSentinel) {
 			ts, err := m.ExpandPath(types.Target{Name: target})
 			if err != nil {
 				errFn(fmt.Errorf("stream: expand all: %w", err))
@@ -86,8 +57,7 @@ func (m *Magus) Stream(ctx context.Context, r io.Reader, target string, errFn fu
 				batchTargets[i] = types.Target{Path: p, Name: target}
 			}
 		}
-		projects := m.targetProjects(batchTargets)
-		if err := m.executeOnProjects(ctx, projects, target, "stream", applyRunOpts(so.run), handler); err != nil {
+		if err := m.Run(ctx, batchTargets, runOpts...); err != nil {
 			errFn(fmt.Errorf("stream: %s: %w", target, err))
 		}
 	}

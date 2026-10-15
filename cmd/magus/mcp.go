@@ -368,7 +368,7 @@ func serveBridge(ctx context.Context, cancel context.CancelFunc, m *magus.Magus,
 	// Capture the server's own socket now (set by startServer) so the health handlers
 	// query this server, not whatever a per-request discovery scan happens to find.
 	status := serverSnapshot(os.Getenv(proc.SocketEnv))
-	m.SetServer(server.New(internalmcp.Options{
+	srv := server.New(internalmcp.Options{
 		Magus:      m,
 		Logger:     slog.Default(),
 		Version:    version,
@@ -392,9 +392,9 @@ func serveBridge(ctx context.Context, cancel context.CancelFunc, m *magus.Magus,
 			services:       bridgeServices,
 			knowledgeGraph: m.KnowledgeGraphHealthy,
 		}),
-	}, bridgeServerOptions()...))
+	}, bridgeServerOptions()...)
 	go func() {
-		err := m.Serve(ctx)
+		err := srv.Serve(ctx)
 		if err != nil && ctx.Err() == nil {
 			// Serve exiting due to ctx cancellation is normal shutdown.
 			// Any other error means MCP is gone while the server is still up —

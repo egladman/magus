@@ -6,10 +6,6 @@
 // server's unix socket as well. It is the composition point that ties together
 // internal/handler/mcp, internal/httpx, and internal/service/console so
 // neither the handler/mcp package nor the root magus package has to.
-//
-// The CLI injects a *Server into the root magus package via
-// magus.SetServer; magus.Serve then delegates here. That indirection
-// keeps magus free of an import cycle (server depends on magus, not vice versa).
 package server
 
 import (
@@ -74,7 +70,7 @@ import (
 var connectReadMax = connect.WithReadMaxBytes(handler.MaxWireBodyBytes)
 
 // Server assembles and runs the server's HTTP listener from a set of MCP server
-// options. It satisfies magus.Server.
+// options.
 type Server struct {
 	opts       mcp.Options
 	runs       func() []types.StatusRun

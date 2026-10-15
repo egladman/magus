@@ -45,17 +45,6 @@ func TestMain(m *testing.M) {
 	testkit.Main(m, "LOCKTEST_*", "PIPETEST_*")
 }
 
-// TestContainsAll covers the StreamAllSentinel detection used by the
-// affected --stdin streaming flow.
-func TestContainsAll(t *testing.T) {
-	t.Parallel()
-	assert.False(t, slices.Contains([]string(nil), StreamAllSentinel), "empty slice")
-	assert.True(t, slices.Contains([]string{StreamAllSentinel}, StreamAllSentinel), "only sentinel")
-	assert.True(t, slices.Contains([]string{"a", StreamAllSentinel, "b"}, StreamAllSentinel), "sentinel mid")
-	assert.False(t, slices.Contains([]string{"a", "b"}, StreamAllSentinel), "no sentinel")
-	assert.False(t, slices.Contains([]string{"--all-things"}, StreamAllSentinel), "sentinel-like prefix")
-}
-
 // TestMakeHandlerConventionalTargets asserts that targetHandler returns a
 // non-nil handler for the six conventional target names and that invoking
 // it on an empty project (no packs) returns nil without panic.
@@ -78,8 +67,7 @@ func TestTargetHandlerConventionalTargets(t *testing.T) {
 }
 
 // TestSpellTargetSources asserts that TargetSources returns the correct globs for a
-// known target and nil for unknown targets, covering the generic enrichment loop in
-// executeOnProjects.
+// known target and nil for unknown targets.
 func TestSpellTargetSources(t *testing.T) {
 	t.Parallel()
 	vs := map[string][]string{
@@ -99,28 +87,6 @@ func TestSpellTargetSources_nilMap(t *testing.T) {
 	t.Parallel()
 	s := spells.NewSpell("bare")
 	assert.Nil(t, s.TargetSources()["lint"], "TargetSources on nil-map spell")
-}
-
-// TestMergePaths verifies dedup + lex ordering, the contract callers
-// rely on for deterministic stream-driven affected output.
-func TestMergePaths(t *testing.T) {
-	t.Parallel()
-
-	// merge normalizes a nil result to an empty slice so the comparison is
-	// against a non-nil expected value (assert.Equal distinguishes nil/empty).
-	merge := func(a, b []string) []string {
-		got := mergePaths(a, b)
-		if got == nil {
-			got = []string{}
-		}
-		return got
-	}
-
-	assert.Equal(t, []string{}, merge(nil, nil), "both empty")
-	assert.Equal(t, []string{"a", "x"}, merge(nil, []string{"x", "a"}), "a empty")
-	assert.Equal(t, []string{"a", "x"}, merge([]string{"x", "a"}, nil), "b empty")
-	assert.Equal(t, []string{"a", "b", "c"}, merge([]string{"a", "b"}, []string{"b", "c"}), "dedup across")
-	assert.Equal(t, []string{"a"}, merge([]string{"a", "a"}, []string{"a"}), "all dupes")
 }
 
 // TestForEachSpell_BudgetHonored verifies that when the context carries a
