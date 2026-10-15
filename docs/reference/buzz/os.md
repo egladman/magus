@@ -18,18 +18,18 @@ The machine and this process: platform triple, CPU count, hostname, the running 
 
 Add env vars to subprocesses `proc\exec` / `proc\shell` start inside callback. Never touches the process's own environment - a lookup like os\env inside callback does not see them.
 
-**Signature:** `os\withEnv(env, callback)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L542)
+**Signature:** `os\withEnv(env, callback)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L540)
 
 | Parameter  | Type                                                                        | Optional | Description |
 | ---------- | --------------------------------------------------------------------------- | -------- | ----------- |
 | `env`      | `map[string]string`                                                         |          |             |
-| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |          |             |
+| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L25) |          |             |
 
 ### platform
 
 Return the Docker/OCI platform triple: (os, arch, variant).
 
-**Signature:** `os\platform() -> string, string, string` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L359)
+**Signature:** `os\platform() -> string, string, string` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L357)
 
 **Returns:** string, string, string
 
@@ -37,7 +37,7 @@ Return the Docker/OCI platform triple: (os, arch, variant).
 
 Abort the current run with the given exit code - typically after logging an error. Does NOT call os.Exit (that would kill a shared server); it raises, ending the target, and the code becomes magus's process exit status.
 
-**Signature:** `os\exit(code)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L350)
+**Signature:** `os\exit(code)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L348)
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
@@ -47,7 +47,7 @@ Abort the current run with the given exit code - typically after logging an erro
 
 Pause for the given number of milliseconds (fractional allowed), matching Buzz's os\sleep. Cancellable: if the run is interrupted it returns early with the cancellation error rather than blocking.
 
-**Signature:** `os\sleep(ms)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L326)
+**Signature:** `os\sleep(ms)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L324)
 
 | Parameter | Type      | Optional | Description |
 | --------- | --------- | -------- | ----------- |
@@ -57,7 +57,7 @@ Pause for the given number of milliseconds (fractional allowed), matching Buzz's
 
 Return the number of logical CPUs available, for sizing a command's own internal parallelism (see os\with_slots).
 
-**Signature:** `os\numCpu() -> int` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L262)
+**Signature:** `os\numCpu() -> int` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L260)
 
 **Returns:** int
 
@@ -65,7 +65,7 @@ Return the number of logical CPUs available, for sizing a command's own internal
 
 Return the host machine's name.
 
-**Signature:** `os\hostname() -> string` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L267)
+**Signature:** `os\hostname() -> string` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L265)
 
 **Returns:** string
 
@@ -73,7 +73,7 @@ Return the host machine's name.
 
 Return the absolute path of the running magus binary. Pair it with fs\stat inside a long-lived watch loop to detect that the binary was rebuilt or upgraded underneath the process, which means any output it goes on to generate would be stale.
 
-**Signature:** `os\executable() -> string` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L279)
+**Signature:** `os\executable() -> string` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L277)
 
 **Returns:** string
 
@@ -81,12 +81,12 @@ Return the absolute path of the running magus binary. Pair it with fs\stat insid
 
 Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. An error a host call inside fn raised keeps its type, and one typed non-retryable stops at once; a value fn throws itself, a string included, is retried. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}; a wrongly typed or negative option raises.
 
-**Signature:** `os\retry(max, fn, [opts]) -> any` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L567)
+**Signature:** `os\retry(max, fn, [opts]) -> any` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L565)
 
 | Parameter | Type                                                                        | Optional | Description |
 | --------- | --------------------------------------------------------------------------- | -------- | ----------- |
 | `max`     | `int`                                                                       |          |             |
-| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |          |             |
+| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L25) |          |             |
 | `opts`    | `map[string]any`                                                            | yes      |             |
 
 **Returns:** any
