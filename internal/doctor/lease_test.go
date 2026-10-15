@@ -160,13 +160,13 @@ func TestBoundLeaseFailsOnATerminalBoundRow(t *testing.T) {
 }
 
 // A row with no state can no longer be written through the store, which stores it as
-// declared; one an older magus wrote is planted as the file it left.
+// declared; one an older magus wrote is planted as the line it left.
 func TestBoundLeaseFailsOnARowWithNoState(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
 	path, err := store.Path()
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.WriteFile(path, []byte(`{"jobs":[{"id":"adj/stateless","created":1,"updated":1}]}`), 0o644))
+	require.NoError(t, os.WriteFile(path, []byte(`{"id":"adj/stateless","created":1,"updated":1}`+"\n"), 0o644))
 	bindCheckout(t, cacheDir, "adj/stateless")
 
 	got := checkBoundLease(harnessProbeCtx(), cacheDir, root)

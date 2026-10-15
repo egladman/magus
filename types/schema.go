@@ -86,8 +86,8 @@ var JobSchema = SchemaLedger{
 	Name:    "job",
 	Type:    reflect.TypeFor[Job](),
 	Version: JobSchemaVersion,
-	// The four boundary renames, still folded from stored rows (see job.foldStoredNames),
-	// and completion_gates, which a stored row drops unread.
+	// The four boundary renames and completion_gates, names only the JSON document an
+	// older magus kept the plan in carried.
 	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates"},
 	Requires: map[int]string{
 		10: "dead-job-end",

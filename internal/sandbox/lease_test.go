@@ -34,13 +34,13 @@ func leaseWorkspace(t *testing.T, row types.Job) (root, cacheDir string) {
 	case row.ID == "":
 	case row.State == "":
 		// The store stores a row naming no state as declared, so the legacy row an older
-		// magus left is planted as the file it wrote.
+		// magus left is planted as the line it wrote.
 		path, err := store.Path()
 		require.NoError(t, err)
-		body, err := json.Marshal(map[string]any{"jobs": []types.Job{row}})
+		line, err := json.Marshal(row)
 		require.NoError(t, err)
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-		require.NoError(t, os.WriteFile(path, body, 0o644))
+		require.NoError(t, os.WriteFile(path, append(line, '\n'), 0o644))
 	default:
 		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 		require.NoError(t, err)

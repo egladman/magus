@@ -172,12 +172,16 @@ func TestGradeLeasedWriteIdleFleet(t *testing.T) {
 
 	t.Run("no state recorded", func(t *testing.T) {
 		// The store stores a row naming no state as declared, so the legacy row an older
-		// magus left is planted as the file it wrote.
+		// magus left is planted as the lines it wrote.
 		ctx, root := fleetFixture(t)
 		leases := fixture.FleetLeases()
 		leases[0].State, leases[1].State = "", ""
-		body, err := json.Marshal(map[string]any{"jobs": leases})
-		require.NoError(t, err)
+		var body []byte
+		for _, row := range leases {
+			line, err := json.Marshal(row)
+			require.NoError(t, err)
+			body = append(append(body, line...), '\n')
+		}
 		path, err := job.NewStore(job.Location{CacheDir: ctx.Value(locationKey{}).(location).cacheDir, Root: root}).Path()
 		require.NoError(t, err)
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
