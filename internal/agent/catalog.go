@@ -397,7 +397,10 @@ import (
 //
 // 132: magus-diagram says a figure receipt carries the figure id, the stamp, the claim
 // counts and the findings, and no index digest.
-const SkillVersion = 132
+//
+// 133: magus-sdk describes the SDK as it stands: a deterministic substrate around an agent
+// loop, never a runtime or a model router.
+const SkillVersion = 133
 
 const skillLicense = "GPL-3.0-or-later"
 
