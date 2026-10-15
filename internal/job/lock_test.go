@@ -44,7 +44,7 @@ func TestALockWaitNamesTheHolder(t *testing.T) {
 func TestReadLockHolder(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join(t.TempDir(), "jobs.json.lock")
+	path := filepath.Join(t.TempDir(), "jobs.jsonl.lock")
 	now := time.Unix(1_000_100, 0)
 	for _, tc := range []struct{ content, want string }{
 		{"", ""},

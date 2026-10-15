@@ -113,7 +113,7 @@ func (s *Store) retainWindow() (time.Duration, error) {
 	return cfg.Jobs.Retain, nil
 }
 
-// dropExpiredFiles removes from the store's directory each archive (jobs-*.json) last
+// dropExpiredFiles removes from the store's directory each archive (jobs-*.jsonl) last
 // written window ago and each writer's temp file strayTempAge old. Best effort: a file
 // that cannot be read or removed stays for the next pass.
 func (s *Store) dropExpiredFiles(now time.Time, window time.Duration) {
@@ -125,7 +125,7 @@ func (s *Store) dropExpiredFiles(now time.Time, window time.Duration) {
 		name := e.Name()
 		var age time.Duration
 		switch {
-		case strings.HasPrefix(name, "jobs-") && strings.HasSuffix(name, ".json") && window > 0:
+		case strings.HasPrefix(name, "jobs-") && strings.HasSuffix(name, ".jsonl") && window > 0:
 			age = window
 		case strings.HasPrefix(name, ".") && strings.Contains(name, ".tmp."):
 			age = strayTempAge

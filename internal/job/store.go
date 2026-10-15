@@ -12,6 +12,7 @@
 package job
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"crypto/sha256"
@@ -19,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -48,9 +50,10 @@ var ErrNoID = errors.New("job: a lease needs an id")
 // the same cap.
 var ErrMaxAttempts = errors.New("job: max_attempts reached")
 
-// Store is the repository's lease ledger, a single JSON file in the per-repository state
-// directory. Every operation reads the file, acts, and writes it back, so a Store is
-// cheap to construct and holds no state between calls beyond the path and its lock.
+// Store is the repository's lease ledger, one JSON Lines file in the per-repository state
+// directory (see [Store.Path]). Every operation reads the file, acts, and writes what
+// changed, so a Store is cheap to construct and holds no state between calls beyond the
+// path and its lock.
 //
 // TWO locks, because there are two kinds of concurrent writer and neither lock sees the
 // other's:
@@ -58,7 +61,7 @@ var ErrMaxAttempts = errors.New("job: max_attempts reached")
 //   - The mutex serializes writers within one process while they share a Store, which is
 //     why the server builds exactly one and hands it to both of its doors (the
 //     client MCP tool's magus\job and the console's read route).
-//   - An OS file lock beside jobs.json serializes writers across PROCESSES. The CLI, the
+//   - An OS file lock beside jobs.jsonl serializes writers across PROCESSES. The CLI, the
 //     server, and an MCP client each hold their own Store on the same file, from any
 //     worktree or clone of the repository, and workers now register and heartbeat against
 //     it, so "one orchestrating agent writes this"
@@ -71,9 +74,10 @@ var ErrMaxAttempts = errors.New("job: max_attempts reached")
 // that merge done under a single acquisition, and it is what a field-at-a-time writer (the
 // client MCP tool's magus\job.put) has to use.
 //
-// READS take neither. Every write replaces the file by rename, so a reader either sees the
-// whole previous ledger or the whole next one; blocking List behind a writer in another
-// process would buy nothing and would let a wedged writer stall the console.
+// READS take neither. A write appends whole lines in one write or replaces the file by
+// rename, so a reader sees each row's previous line or its next one; blocking List behind
+// a writer in another process would buy nothing and would let a wedged writer stall the
+// console.
 type Store struct {
 	mu   sync.Mutex
 	path string
@@ -113,16 +117,16 @@ type Store struct {
 	owners          func(context.Context, []string) ([]string, error)
 }
 
-// Location is where a Store lives: the repository whose rows these are, and the state
-// base and legacy cache directory that place the file.
+// Location is where a Store lives: the repository whose rows these are, the state base
+// that places the file, and the checkout's cache directory.
 //
 // A struct rather than positional params because the paths are transposable at every
 // call site and nothing downstream would notice: a ledger written into the workspace and
 // digested against the state dir reads as an ordinary empty job store.
 type Location struct {
-	// CacheDir is the workspace's cache directory (magus.CacheDir), which is where the
-	// ledger USED to live. It is read only to adopt <CacheDir>/ledger on first use;
-	// nothing is written there any more. Empty skips the adoption.
+	// CacheDir is the workspace's cache directory (magus.CacheDir), where the checkout's
+	// binding record names the acting lease (see [ActingActor]) and the guard records its
+	// trail. The ledger itself never lives there.
 	CacheDir string
 	// Root is the checkout this Store was opened from. It answers two questions: which
 	// REPOSITORY owns the rows (through vcs.StateDir, which folds every worktree and clone of
@@ -176,10 +180,10 @@ type Location struct {
 	Owners func(ctx context.Context, files []string) ([]string, error)
 }
 
-// NewStore returns the ledger for loc's repository, adopting the legacy cache-dir
-// location on the way past. The leases file itself is created by the first Update.
+// NewStore returns the ledger for loc's repository. The file itself is created by the
+// first write.
 //
-// THE CACHE DIRECTORY IS NO LONGER THE HOME, and that is the whole point of this
+// THE CACHE DIRECTORY IS NOT THE HOME, and that is the whole point of this
 // resolution: a cache dir belongs to one CHECKOUT, so an orchestrator's rows in one
 // worktree were invisible to a worker in another, and a lease-scoped guard rule could
 // not bind across the two. The rows describe a repository's plan, so they key on
@@ -205,8 +209,7 @@ func (s *Store) Actor() Actor {
 	return ActingActor(s.cacheDir)
 }
 
-// jobsPath places the jobs file: <XDG state>/magus/jobs/<repo>/jobs.json, after
-// carrying forward whatever an older magus left at <CacheDir>/job.
+// jobsPath places the jobs file: <XDG state>/magus/jobs/<repo>/jobs.jsonl.
 func jobsPath(loc Location) (string, error) {
 	base := loc.StateBase
 	if base == "" {
@@ -219,80 +222,40 @@ func jobsPath(loc Location) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("job: %w", err)
 	}
-	// compat(until: no checkout's cache dir still holds a ledger/ directory; observe
-	// with `find ~ -path '*/.magus/cache/ledger' -maxdepth 6` returning nothing):
-	// carries forward the rows an older magus kept per checkout.
-	if loc.CacheDir != "" {
-		if err := vcs.Adopt(filepath.Join(loc.CacheDir, "ledger"), dir); err != nil {
-			return "", fmt.Errorf("job: %w", err)
-		}
-	}
-	path := filepath.Join(dir, "jobs.json")
-	if err := adoptLedgerPlan(base, dir, path); err != nil {
-		return "", err
-	}
-	return path, nil
+	return filepath.Join(dir, jobsFileName), nil
 }
 
-// The store's previous home, one rename ago: the kind directory and the file name the
-// plan was kept under while a job was called a lease.
 const (
-	legacyKind = "ledger"
-	legacyFile = "leases.json"
+	jobsFileName = "jobs.jsonl"
+	// documentFileName is the one JSON document an older magus kept the plan in.
+	documentFileName = "jobs.json"
 )
 
-// adoptLedgerPlan copies a pre-rename plan into the job store, once, when the job store
-// has none of its own.
-//
-// A COPY rather than a move, which is the whole reason this is not vcs.Adopt: binaries
-// of the previous vintage are still reading leases.json from other checkouts of this
-// repository, and taking the file out from under them empties their plan mid-session. The
-// cost is that rows written to the old file after this runs are not seen here, which is
-// what a rename between two live binaries buys either way.
-//
-// The rows are carried as RAW JSON, so a member this magus does not know survives the
-// copy. Decoding into the row struct would drop exactly what the reader of an older file
-// most needs kept.
-//
-// compat(until: no store still holds a pre-rename leases.json; observe:
-// `find ~/.local/state/magus/ledger -name leases.json` returning nothing).
-func adoptLedgerPlan(base, dir, path string) error {
-	if _, err := os.Stat(path); err == nil {
+// refuseDocument fails when the store's directory still holds the plan an older magus kept
+// as one JSON document. Reading past it would show an empty plan while the rows sit beside
+// it, and the guard reads an empty plan as nothing leased.
+func (s *Store) refuseDocument() error {
+	old := filepath.Join(filepath.Dir(s.path), documentFileName)
+	if _, err := os.Stat(old); errors.Is(err, fs.ErrNotExist) {
 		return nil
-	}
-	legacy := filepath.Join(base, "magus", legacyKind, filepath.Base(dir), legacyFile)
-	raw, err := os.ReadFile(legacy)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("job: read the plan at %s to carry it into %s: %w", legacy, path, err)
-	}
-	var envelope map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &envelope); err != nil {
-		return fmt.Errorf("job: the plan at %s is not readable, so it was not carried into %s: %w", legacy, path, err)
-	}
-	rows, ok := envelope["leases"]
-	if !ok {
-		return nil
-	}
-	carried, err := json.MarshalIndent(map[string]json.RawMessage{"jobs": rows}, "", "  ")
-	if err != nil {
+	} else if err != nil {
 		return fmt.Errorf("job: %w", err)
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("job: %w", err)
-	}
-	return file.WriteFileAtomic(path, append(carried, '\n'), 0o644)
+	return fmt.Errorf("job: %s is a plan an older magus wrote as one JSON document, which this magus does not read;"+
+		" it keeps the plan in %s, one row per line. Move the old file aside to start an empty plan"+
+		" (`mv %s %s.old`), then declare the jobs again", old, s.path, old, old)
 }
 
-// Path is the leases file this Store reads and writes, for a reader that has to name it:
-// a person asking where their plan is kept, or a test planting one. The file itself may
+// Path is the JSON Lines file this Store reads and writes, for a reader that has to name
+// it: a person asking where their plan is kept, or a test planting one. The file itself may
 // not exist yet, which is an empty ledger and not an error.
 func (s *Store) Path() (string, error) { return s.path, s.err }
 
-// jobsFile is the on-disk envelope. An object rather than a bare array so a later
-// member can be added without every existing reader failing to parse the file.
+// jobsFile is the ledger as read: the header and the rows.
+//
+// The file is JSON Lines. The header is the line without an id, written first by every
+// rewrite, and each other line is one version of one row. A row's LAST line is the row, and
+// it keeps the place its first line had, so the rows read in the order they were declared.
 //
 // Its Schema.Requires is the one refusal wider than a row: a writer sets it only for a
 // break no row-level requirement can express, and a reader lacking one refuses the file.
@@ -300,8 +263,29 @@ type jobsFile struct {
 	types.Schema
 	// Retained is when the last retention pass ran, in unix seconds; see [Store.retainDue].
 	Retained int64       `json:"retained,omitempty"`
-	Jobs     []types.Job `json:"jobs"`
+	Jobs     []types.Job `json:"-"`
 }
+
+// jobsLog is the file a write read, so the write appends only the lines that changed.
+type jobsLog struct {
+	header []byte
+	// rows is the last line of each row, by id.
+	rows    map[string][]byte
+	lines   int
+	partial bool
+}
+
+// compactAt is how many lines a ledger of rows rows may hold before a write rewrites it to
+// one line per row. Every read decodes every line, so the bound keeps a read within twice
+// the rows plus the slack, while a row heartbeating alone rewrites the file at most once
+// per compactSlack beats.
+func compactAt(rows int) int { return 2*rows + compactSlack }
+
+const compactSlack = 64
+
+// tailWait is how long a reader waits for an append it caught mid-write to finish before
+// it reports the file's last line as one no writer finished.
+const tailWait = 50 * time.Millisecond
 
 // readOnly refuses a write to row when it requires a feature this magus lacks. The row
 // stays listed and graded; only writing it is out of reach, since a write by a reader
@@ -578,7 +562,7 @@ func widensInPlace(prev, next types.Job) bool {
 }
 
 // mutate is the locked read-modify-write [Store.Update], [Store.Exec] and [Wait] share, and
-// the only place jobs.json is rewritten row-wise. kind says what the write is; see
+// the only place a row is written row-wise. kind says what the write is; see
 // [grading].
 //
 // apply gets what Update does not need: exists, because Update creates a row while Exec
@@ -840,7 +824,7 @@ func (s *Store) List() ([]types.Job, error) {
 }
 
 // Clear drops every row, which is how a fresh plan starts, ARCHIVING what it dropped to a
-// timestamped sibling file first, and returns how many rows it dropped. Clearing an empty
+// timestamped sibling file (jobs-<UTC time>.jsonl) first, and returns how many rows it dropped. Clearing an empty
 // or absent ledger is not an error and archives nothing: the caller asked for an empty
 // ledger and got one.
 //
@@ -879,17 +863,18 @@ func (s *Store) Clear(ctx context.Context) (int, error) {
 	return dropped, nil
 }
 
-// archive writes the rows a clear or a delete is about to drop beside the ledger, named
-// for the moment they were dropped. A second drop within the same second overwrites the
-// first archive rather than growing a suffix scheme: two plans wiped in one second is one
-// mistake being repeated, and the rows worth keeping are the ones there now.
+// archive writes the rows a clear or a delete is about to drop beside the ledger, in the
+// ledger's own shape and named for the moment they were dropped. A second drop within the
+// same second overwrites the first archive rather than growing a suffix scheme: two plans
+// wiped in one second is one mistake being repeated, and the rows worth keeping are the
+// ones there now.
 func (s *Store) archive(f jobsFile) error {
-	raw, err := json.MarshalIndent(f, "", "  ")
+	lines, err := encodeJobs(f)
 	if err != nil {
 		return err
 	}
-	name := "jobs-" + time.Now().UTC().Format("20060102T150405Z") + ".json"
-	return file.WriteFileAtomic(filepath.Join(filepath.Dir(s.path), name), append(raw, '\n'), 0o644)
+	name := "jobs-" + time.Now().UTC().Format("20060102T150405Z") + ".jsonl"
+	return rewriteLines(filepath.Join(filepath.Dir(s.path), name), lines)
 }
 
 // releases carries the row's recorded releases forward and adds the paths this write
@@ -1045,25 +1030,20 @@ func (s *Store) declarationDigest(ctx context.Context, p, decl string) string {
 // is from the reader's side.
 const maxDigestBytes = 32 << 20
 
-// doc is the ledger file. Every rewrite goes through [Store.update], under the OS file
-// lock beside jobs.json, so a read-modify-write cannot interleave with one from another
-// magus process. The lock wait is BOUNDED, where the workspace project locks
-// (magus/lock.go) wait forever with a heartbeat: their holder is a build that may run for
-// hours, and a ledger write is a small file rewrite, so a longer wait means a stuck holder.
-func (s *Store) doc() file.Doc[jobsFile] {
-	return file.Doc[jobsFile]{Path: s.path, Decode: s.decode}
-}
-
-// update runs fn over the ledger as it stands under the file lock and writes what fn
-// leaves, with a retention pass when one is due (see [Store.retainDue]). fn returning an
+// update runs fn over the ledger as it stands under the file lock beside jobs.jsonl, so a
+// read-modify-write cannot interleave with one from another magus process, and writes what
+// fn leaves, with a retention pass when one is due (see [Store.retainDue]). fn returning an
 // error, file.ErrSkipWrite included, writes nothing.
+//
+// The lock wait is BOUNDED, where the workspace project locks (magus/lock.go) wait forever
+// with a heartbeat: their holder is a build that may run for hours, and a ledger write is a
+// small append, so a longer wait means a stuck holder.
 func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
 	if s.err != nil {
 		return s.err
 	}
-	doc := s.doc()
 	return s.locked(ctx, func() error {
-		f, err := doc.Load()
+		f, log, err := s.readFile(false)
 		if err != nil {
 			return err
 		}
@@ -1080,12 +1060,48 @@ func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
 		if retained != 0 && f.Retained != retained {
 			s.pruneFootprints(f.Jobs)
 		}
-		raw, err := encodeJobs(f)
-		if err != nil {
-			return err
-		}
-		return file.WriteFileAtomic(s.path, raw, 0o644)
+		return s.write(f, log)
 	})
+}
+
+// write records f against log, the file it was read from: the lines of the rows that
+// changed are appended, and the file is rewritten to one line per row instead when a row
+// was dropped, the header changed, the file ended in a line no writer finished, or the
+// appended lines would take it past [compactAt].
+func (s *Store) write(f jobsFile, log jobsLog) error {
+	f.Version = max(f.Version, types.JobSchemaVersion)
+	lines, err := encodeJobs(f)
+	if err != nil {
+		return err
+	}
+	header, rows := lines[0], lines[1:]
+	var changed [][]byte
+	kept := 0
+	for i, row := range f.Jobs {
+		prev, ok := log.rows[row.ID]
+		if ok {
+			kept++
+		}
+		if !bytes.Equal(rows[i], prev) {
+			changed = append(changed, rows[i])
+		}
+	}
+	dropped := kept < len(log.rows)
+	sameHeader := bytes.Equal(header, log.header)
+	if len(changed) == 0 && !dropped && sameHeader && !log.partial {
+		return nil
+	}
+	if !dropped && sameHeader && !log.partial && log.lines+len(changed) <= compactAt(len(f.Jobs)) {
+		return appendLines(s.path, changed)
+	}
+	if log.partial {
+		out := s.notices
+		if out == nil {
+			out = os.Stderr
+		}
+		fmt.Fprintf(out, "job: %s ended in a line no writer finished; the rewrite dropped it\n", s.path)
+	}
+	return rewriteLines(s.path, lines)
 }
 
 // pruneFootprints removes the footprint cache of every checkpoint revision no live row in
@@ -1120,41 +1136,91 @@ func (s *Store) now() time.Time {
 // read loads the file. An absent file is an empty ledger, not a failure: nothing has
 // been recorded yet for this repository.
 func (s *Store) read() (jobsFile, error) {
-	if s.err != nil {
-		return jobsFile{}, s.err
-	}
-	return s.doc().Load()
+	f, _, err := s.readFile(true)
+	return f, err
 }
 
-// decode parses the ledger.
+// readFile parses the ledger and the log a write compares against.
+//
+// A reader holding no lock may catch an append mid-write, so with wait it reads again for
+// up to [tailWait] while the file ends in an unfinished line, and reports one that stays
+// unfinished. A writer holds the lock, so an unfinished line it finds was left by a writer
+// that died, and the write drops it.
 //
 // A row newer than this magus is read like any other: the members it does not declare
 // ride in the row's Schema.Unknown and go back out on the next write, and authorizeRow and
 // jobOverlaps need only fields every version carries. A row requiring a feature this magus
 // lacks is read too, and only a write to it is refused (see readOnly).
-func (s *Store) decode(raw []byte, f *jobsFile) error {
-	if err := json.Unmarshal(raw, f); err != nil {
-		return err
+func (s *Store) readFile(wait bool) (jobsFile, jobsLog, error) {
+	if s.err != nil {
+		return jobsFile{}, jobsLog{}, s.err
+	}
+	if err := s.refuseDocument(); err != nil {
+		return jobsFile{}, jobsLog{}, err
+	}
+	deadline := time.Now().Add(tailWait)
+	var read jsonLines
+	for {
+		var err error
+		if read, err = readLines(s.path); err != nil {
+			return jobsFile{}, jobsLog{}, fmt.Errorf("job: %w", err)
+		}
+		if !read.partial || !wait {
+			break
+		}
+		if time.Now().After(deadline) {
+			return jobsFile{}, jobsLog{}, fmt.Errorf("job: %s ends in a line no writer finished; the next write to the plan drops it", s.path)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	var f jobsFile
+	log := jobsLog{rows: make(map[string][]byte, len(read.lines)), lines: len(read.lines), partial: read.partial}
+	at := map[string]int{}
+	for _, line := range read.lines {
+		var row types.Job
+		if err := json.Unmarshal(line.text, &row); err != nil {
+			return jobsFile{}, jobsLog{}, fmt.Errorf("job: %s line %d: %w", s.path, line.n, err)
+		}
+		if row.ID == "" {
+			var header jobsFile
+			if err := json.Unmarshal(line.text, &header); err != nil {
+				return jobsFile{}, jobsLog{}, fmt.Errorf("job: %s line %d: %w", s.path, line.n, err)
+			}
+			f.Schema, f.Retained, log.header = header.Schema, header.Retained, line.text
+			continue
+		}
+		log.rows[row.ID] = line.text
+		if i, ok := at[row.ID]; ok {
+			f.Jobs[i] = row
+			continue
+		}
+		at[row.ID] = len(f.Jobs)
+		f.Jobs = append(f.Jobs, row)
 	}
 	if lacks := f.Unmet(types.JobSchema.Features()); lacks != nil {
-		return fmt.Errorf("job: %s requires %s, which this magus (schema %d) lacks, update magus",
+		return jobsFile{}, jobsLog{}, fmt.Errorf("job: %s requires %s, which this magus (schema %d) lacks, update magus",
 			s.path, quoteAll(lacks), types.JobSchemaVersion)
 	}
-	if err := foldStoredNames(f.Jobs); err != nil {
-		return fmt.Errorf("%s: %w", s.path, err)
-	}
-	return nil
+	return f, log, nil
 }
 
-// encodeJobs serializes the ledger. Every row, touched this call or not, carries its
-// Schema.Unknown back out, and the file's stamp never drops below what it read.
-func encodeJobs(f jobsFile) ([]byte, error) {
-	f.Version = max(f.Version, types.JobSchemaVersion)
-	raw, err := json.MarshalIndent(f, "", "  ")
+// encodeJobs renders the ledger as its lines: the header first, then one line per row.
+// Every row, touched this call or not, carries its Schema.Unknown back out.
+func encodeJobs(f jobsFile) ([][]byte, error) {
+	header, err := json.Marshal(f)
 	if err != nil {
 		return nil, err
 	}
-	return append(raw, '\n'), nil
+	lines := make([][]byte, 0, len(f.Jobs)+1)
+	lines = append(lines, header)
+	for _, row := range f.Jobs {
+		line, err := json.Marshal(row)
+		if err != nil {
+			return nil, fmt.Errorf("job: %s: %w", row.ID, err)
+		}
+		lines = append(lines, line)
+	}
+	return lines, nil
 }
 
 // Delete removes ONE row and returns it, or reports that no such row exists.

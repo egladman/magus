@@ -243,12 +243,16 @@ that turns it into a verdict. Every uncertainty there fails open with at most an
 advisory (no store, an unreadable one, a writer that took no lease) because this
 is a seatbelt for a harness that opted in and not a sandbox.
 
-**One set of jobs per repository.** The rows live in one JSON file in the
-per-REPOSITORY state directory (`<XDG state>/magus/jobs/<repo>/jobs.json`),
+**One set of jobs per repository.** The rows live in one JSON Lines file in the
+per-REPOSITORY state directory (`<XDG state>/magus/jobs/<repo>/jobs.jsonl`),
 keyed the way session history is keyed: every worktree and every clone of one repository reads one
 set. That is what lets an orchestrator declare a plan in its own checkout and a
-holder take its lease from another. A store an older magus left behind is
-carried forward the first time the new one opens it.
+holder take its lease from another. Each line is one version of one row, and a
+row's last line is the row, so `grep '"id":"wave/a"'` shows a job's history and
+`tail -1` of that its current state. A write appends the lines that changed, and
+once the file would hold more than twice as many lines as rows, plus 64, the
+write rewrites it to one line per row. A `jobs.json` an older magus left in that directory is
+refused with an error naming the `mv` that sets it aside.
 
 **A read-only job carries an abbreviated row**: `read_only` set, and empty write
 and deny paths that then read as deliberate rather than forgotten. It passes

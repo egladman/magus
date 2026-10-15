@@ -1191,15 +1191,29 @@ func (s *Store) resolveStaleAfter() (time.Duration, error) {
 // read would put subprocesses on every tool call.
 const landingInterval = 5 * time.Minute
 
-// landingProbesFile holds when each exited row was last probed, beside jobs.json, so the
-// interval holds across processes.
-const landingProbesFile = "landing-probes.json"
+// landingProbesFile logs when each exited row was last probed, one line per probe beside
+// jobs.jsonl, so the interval holds across processes. A row's last line is its entry.
+const landingProbesFile = "landing-probes.jsonl"
 
 // landingProbe is one row's entry in landingProbesFile: when it was probed, and the row's
 // Updated then, so a row that exits again is probed at once.
 type landingProbe struct {
 	At      int64 `json:"at"`
 	Updated int64 `json:"updated"`
+}
+
+// landingProbeLine is one line of landingProbesFile.
+type landingProbeLine struct {
+	ID      string `json:"id"`
+	At      int64  `json:"at"`
+	Updated int64  `json:"updated"`
+}
+
+// probeLog is the probe history as read, and what a write needs to append to it.
+type probeLog struct {
+	probes  map[string]landingProbe
+	lines   int
+	partial bool
 }
 
 // landingCandidate reports an exited row whose result names changed paths in a checkout,
@@ -1223,6 +1237,7 @@ func (s *Store) landings(rows []types.Job, now int64) map[string]landing {
 	if probe == nil {
 		probe = s.landedOnBase
 	}
+	var log probeLog
 	var history map[string]landingProbe
 	read := false
 	next := map[string]landingProbe{}
@@ -1232,7 +1247,8 @@ func (s *Store) landings(rows []types.Job, now int64) map[string]landing {
 			continue
 		}
 		if !read {
-			history, read = s.readLandingProbes(), true
+			log, read = s.readLandingProbes(), true
+			history = log.probes
 		}
 		last, ok := history[row.ID]
 		if ok {
@@ -1251,7 +1267,7 @@ func (s *Store) landings(rows []types.Job, now int64) map[string]landing {
 		next[row.ID] = landingProbe{At: now, Updated: row.Updated}
 	}
 	if read && !s.dryRun && !maps.Equal(history, next) {
-		s.writeLandingProbes(next)
+		s.writeLandingProbes(log, next)
 	}
 	out := map[string]landing{}
 	for _, row := range due {
@@ -1281,31 +1297,57 @@ func lastProbeRound(history map[string]landingProbe) int64 {
 	return last
 }
 
-func (s *Store) readLandingProbes() map[string]landingProbe {
+// readLandingProbes reads the probe history. A line that does not parse is skipped: the
+// history only paces the probes, and losing an entry costs one early probe.
+func (s *Store) readLandingProbes() probeLog {
 	if s.err != nil || s.path == "" {
-		return nil
+		return probeLog{}
 	}
-	raw, err := os.ReadFile(filepath.Join(filepath.Dir(s.path), landingProbesFile))
+	read, err := readLines(filepath.Join(filepath.Dir(s.path), landingProbesFile))
 	if err != nil {
-		return nil
+		return probeLog{}
 	}
-	var out map[string]landingProbe
-	if json.Unmarshal(raw, &out) != nil {
-		return nil
+	log := probeLog{probes: map[string]landingProbe{}, lines: len(read.lines), partial: read.partial}
+	for _, line := range read.lines {
+		var p landingProbeLine
+		if json.Unmarshal(line.text, &p) == nil && p.ID != "" {
+			log.probes[p.ID] = landingProbe{At: p.At, Updated: p.Updated}
+		}
 	}
-	return out
+	return log
 }
 
-func (s *Store) writeLandingProbes(probes map[string]landingProbe) {
+// writeLandingProbes records next against log, the history it was decided from: the
+// entries that changed are appended, and the file is rewritten to next alone when next
+// drops an entry or the log has grown past [compactAt].
+func (s *Store) writeLandingProbes(log probeLog, next map[string]landingProbe) {
 	if s.err != nil || s.path == "" {
 		return
 	}
-	raw, err := json.Marshal(probes)
-	if err != nil {
+	dropped := false
+	for id := range log.probes {
+		if _, ok := next[id]; !ok {
+			dropped = true
+		}
+	}
+	var changed, all [][]byte
+	for _, id := range slices.Sorted(maps.Keys(next)) {
+		p := next[id]
+		line, err := json.Marshal(landingProbeLine{ID: id, At: p.At, Updated: p.Updated})
+		if err != nil {
+			return
+		}
+		all = append(all, line)
+		if prev, ok := log.probes[id]; !ok || prev != p {
+			changed = append(changed, line)
+		}
+	}
+	path := filepath.Join(filepath.Dir(s.path), landingProbesFile)
+	if !dropped && !log.partial && log.lines+len(changed) <= compactAt(len(next)) {
+		_ = appendLines(path, changed)
 		return
 	}
-	_ = os.MkdirAll(filepath.Dir(s.path), 0o755)
-	_ = file.WriteFileAtomic(filepath.Join(filepath.Dir(s.path), landingProbesFile), raw, 0o644)
+	_ = rewriteLines(path, all)
 }
 
 // landedOnBase reports why row's work is on the base branch, or "" when that is not

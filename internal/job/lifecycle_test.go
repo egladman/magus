@@ -684,7 +684,7 @@ func TestALandingSweepIsBoundedAndRecordsItsProbesFirst(t *testing.T) {
 	plant(t, s, rows...)
 	var probed []string
 	s.landed = func(_ context.Context, row types.Job) string {
-		assert.Contains(t, s.readLandingProbes(), row.ID, "recorded before the probe runs")
+		assert.Contains(t, s.readLandingProbes().probes, row.ID, "recorded before the probe runs")
 		probed = append(probed, row.ID)
 		return ""
 	}

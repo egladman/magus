@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 )
 
-// locked runs fn holding the OS file lock beside jobs.json, waiting at most
+// locked runs fn holding the OS file lock beside jobs.jsonl, waiting at most
 // [file.LockWait]. The holder writes its pid, start time and command line into the lock
 // file, so a caller that gives up names who it waited on.
 func (s *Store) locked(ctx context.Context, fn func() error) error {

@@ -558,23 +558,33 @@ func plantRaw(t *testing.T, s *Store, body string) string {
 	return path
 }
 
-// storedRow reads row id back from the file as JSON, not through the struct, so a member
-// the struct does not declare is visible.
-func storedRow(t *testing.T, path, id string) map[string]any {
+// storedLines reads the store's file back as JSON, one object per line, not through the
+// struct, so a member the struct does not declare is visible.
+func storedLines(t *testing.T, path string) []map[string]any {
 	t.Helper()
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
-	var f struct {
-		Jobs []map[string]any `json:"jobs"`
+	require.True(t, strings.HasSuffix(string(raw), "\n"), "every line of %s ends in a newline", path)
+	var out []map[string]any
+	for line := range strings.SplitSeq(strings.TrimSuffix(string(raw), "\n"), "\n") {
+		var m map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &m), "line %q", line)
+		out = append(out, m)
 	}
-	require.NoError(t, json.Unmarshal(raw, &f))
-	for _, row := range f.Jobs {
-		if row["id"] == id {
-			return row
+	return out
+}
+
+// storedRow is row id's last line in the file.
+func storedRow(t *testing.T, path, id string) map[string]any {
+	t.Helper()
+	var row map[string]any
+	for _, line := range storedLines(t, path) {
+		if line["id"] == id {
+			row = line
 		}
 	}
-	require.Failf(t, "no row", "%s holds no row %s", path, id)
-	return nil
+	require.NotNil(t, row, "%s holds no row %s", path, id)
+	return row
 }
 
 // A row a newer magus wrote is an ordinary row to this one: updating it or any other row
@@ -583,9 +593,9 @@ func TestStoreKeepsANewerRowWhole(t *testing.T) {
 	t.Parallel()
 
 	s := tmpStore(t, t.TempDir())
-	path := plantRaw(t, s, fmt.Sprintf(`{"jobs":[`+
-		`{"id":"future","schema_version":99,"requires":[],"state":"running","created":1,"updated":1,"future_field":{"x":1}},`+
-		`{"id":"other","schema_version":%d,"state":"running","created":1,"updated":1}]}`, types.JobSchemaVersion))
+	path := plantRaw(t, s, fmt.Sprintf(
+		`{"id":"future","schema_version":99,"requires":[],"state":"running","created":1,"updated":1,"future_field":{"x":1}}`+"\n"+
+			`{"id":"other","schema_version":%d,"state":"running","created":1,"updated":1}`, types.JobSchemaVersion))
 	want := map[string]any{"x": float64(1)}
 
 	_, err := s.Update(t.Context(), "other", func(u *types.Job) { u.Criteria = "moved" })
@@ -616,9 +626,9 @@ func TestStoreDegradesARowItCannotActOn(t *testing.T) {
 	t.Parallel()
 
 	s, notices := sweepStore(t, 10_000, time.Hour)
-	path := plantRaw(t, s, fmt.Sprintf(`{"jobs":[`+
-		`{"id":"future","schema_version":99,"requires":["never-implemented"],"state":"declared","created":1,"updated":1,"future_field":7},`+
-		`{"id":"other","schema_version":%d,"state":"running","created":9999,"updated":9999}]}`, types.JobSchemaVersion))
+	path := plantRaw(t, s, fmt.Sprintf(
+		`{"id":"future","schema_version":99,"requires":["never-implemented"],"state":"declared","created":1,"updated":1,"future_field":7}`+"\n"+
+			`{"id":"other","schema_version":%d,"state":"running","created":9999,"updated":9999}`, types.JobSchemaVersion))
 	before := storedRow(t, path, "future")
 
 	rows, err := s.List()
@@ -648,7 +658,7 @@ func TestStoreRefusesAFileItCannotActOn(t *testing.T) {
 	t.Parallel()
 
 	s := tmpStore(t, t.TempDir())
-	path := plantRaw(t, s, `{"schema_version":99,"requires":["jobs-v2"],"jobs":[]}`)
+	path := plantRaw(t, s, `{"schema_version":99,"requires":["jobs-v2"]}`)
 
 	_, err := s.List()
 	assert.Equal(t, fmt.Sprintf(`job: %s requires "jobs-v2", which this magus (schema %d) lacks, update magus`,
@@ -661,69 +671,130 @@ func TestStoreKeepsTheFileEnvelope(t *testing.T) {
 
 	s := tmpStore(t, t.TempDir())
 	s.clock = func() time.Time { return time.Unix(1_700_000_000, 0) }
-	path := plantRaw(t, s, `{"schema_version":99,"plan":"p1","jobs":[]}`)
+	path := plantRaw(t, s, `{"schema_version":99,"plan":"p1"}`)
 	seed(t, s, lease("a"))
 	_, err := s.Clear(t.Context())
 	require.NoError(t, err)
 
-	raw, err := os.ReadFile(path)
-	require.NoError(t, err)
-	var f map[string]any
-	require.NoError(t, json.Unmarshal(raw, &f))
-	assert.Equal(t, map[string]any{"schema_version": float64(99), "plan": "p1", "jobs": nil, "retained": float64(1_700_000_000)}, f,
-		"the store's own retention stamp rides beside it")
+	assert.Equal(t, []map[string]any{{"schema_version": float64(99), "plan": "p1", "retained": float64(1_700_000_000)}},
+		storedLines(t, path), "a clear leaves the header alone, and the store's own retention stamp rides in it")
 }
 
-// compat: see the legacy fields on Row. A plan written before the rename keeps its
-// boundaries; without the fold every one of them would read empty and the next put would store
-// that as the truth.
-func TestStoreReadsAPlanWrittenBeforeTheRename(t *testing.T) {
+// An update appends the row's next line and leaves every other line as it was; the last
+// line of a row is the row, in the place its first line put it.
+func TestStoreUpdateAppendsTheRowsNextLine(t *testing.T) {
+	t.Parallel()
+
+	s := tmpStore(t, t.TempDir())
+	seed(t, s, lease("a"))
+	seed(t, s, lease("b"))
+	path, err := s.Path()
+	require.NoError(t, err)
+	before := storedLines(t, path)
+
+	_, err = s.Update(t.Context(), "a", func(u *types.Job) { u.Criteria = "moved" })
+	require.NoError(t, err)
+	after := storedLines(t, path)
+	require.Len(t, after, len(before)+1, "one line appended, nothing rewritten")
+	assert.Equal(t, before, after[:len(before)])
+	assert.Equal(t, "a", after[len(before)]["id"])
+	assert.Equal(t, "moved", after[len(before)]["criteria"])
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a", "b"}, []string{rows[0].ID, rows[1].ID}, "a row keeps its first line's place")
+	assert.Equal(t, "moved", rows[0].Criteria)
+}
+
+// The file is rewritten to one line per row once superseded lines pass compactAt.
+func TestStoreCompactsPastTheBound(t *testing.T) {
+	t.Parallel()
+
+	s := tmpStore(t, t.TempDir())
+	seed(t, s, lease("a"))
+	path, err := s.Path()
+	require.NoError(t, err)
+	for i := range compactAt(1) {
+		_, err := s.Update(t.Context(), "a", func(u *types.Job) { u.Criteria = fmt.Sprint(i) })
+		require.NoError(t, err)
+		assert.LessOrEqual(t, len(storedLines(t, path)), compactAt(1))
+	}
+	lines := storedLines(t, path)
+	assert.Less(t, len(lines), compactAt(1), "the bound was crossed and the file rewritten")
+	assert.NotContains(t, lines[0], "id", "a rewrite puts the header first")
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, fmt.Sprint(compactAt(1)-1), rows[0].Criteria)
+}
+
+// A delete drops the row's every line by rewriting the file.
+func TestStoreDeleteRewritesWithoutTheRow(t *testing.T) {
+	t.Parallel()
+
+	s := tmpStore(t, t.TempDir())
+	seed(t, s, lease("a"))
+	seed(t, s, lease("b"))
+	_, err := s.Update(t.Context(), "a", func(u *types.Job) { u.Criteria = "moved" })
+	require.NoError(t, err)
+	_, err = s.Delete(t.Context(), "a", false)
+	require.NoError(t, err)
+
+	path, err := s.Path()
+	require.NoError(t, err)
+	lines := storedLines(t, path)
+	require.Len(t, lines, 2, "the header and b")
+	assert.Equal(t, "b", lines[1]["id"])
+}
+
+// A reader catching an append mid-write waits for it; a line no writer finished stays an
+// error to readers, and the next write drops it and says so.
+func TestStoreHandlesALineNoWriterFinished(t *testing.T) {
+	t.Parallel()
+
+	s := tmpStore(t, t.TempDir())
+	var notices strings.Builder
+	s.notices = &notices
+	seed(t, s, lease("a"))
+	path, err := s.Path()
+	require.NoError(t, err)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o644)
+	require.NoError(t, err)
+	_, err = f.WriteString(`{"id":"b","sta`)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	_, err = s.List()
+	require.ErrorContains(t, err, "ends in a line no writer finished")
+
+	seed(t, s, lease("c"))
+	assert.Contains(t, notices.String(), "ended in a line no writer finished; the rewrite dropped it")
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a", "c"}, []string{rows[0].ID, rows[1].ID})
+}
+
+// A plan an older magus kept as one JSON document is refused, never read as empty, and the
+// error says how to move it aside.
+func TestStoreRefusesTheOneDocumentPlan(t *testing.T) {
 	t.Parallel()
 
 	s := tmpStore(t, t.TempDir())
 	path, err := s.Path()
 	require.NoError(t, err)
+	old := filepath.Join(filepath.Dir(path), "jobs.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.WriteFile(path, []byte(`{"jobs":[{"id":"adj/store","schema_version":1,`+
-		`"owned_paths":["internal/ledger"],"forbidden_paths":["MAGUS.md"],"focus":["internal/hint"],`+
-		`"tier":"principal"}]}`+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(old, []byte(`{"jobs":[{"id":"a"}]}`+"\n"), 0o644))
 
-	rows, err := s.List()
-	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	assert.Equal(t, types.Job{
-		Schema:     rows[0].Schema, // the envelope is the store's
-		ID:         "adj/store",
-		WritePaths: []string{"internal/ledger"},
-		DenyPaths:  []string{"MAGUS.md"},
-		ReadPaths:  []string{"internal/hint"},
-		Model:      "principal",
-	}, rows[0])
-}
+	_, err = s.List()
+	require.ErrorContains(t, err, "mv "+old+" "+old+".old")
+	_, err = s.Update(t.Context(), "a", func(*types.Job) {})
+	require.ErrorContains(t, err, "one JSON document", "a write is refused too")
+	assert.NoFileExists(t, path)
 
-// completion_gates is a reserved name, so a row still carrying it reads back with no goals
-// and loses the key on its next write.
-func TestStoreDropsTheReservedGoalsSpelling(t *testing.T) {
-	t.Parallel()
-
-	s := tmpStore(t, t.TempDir())
-	path := plantRaw(t, s, `{"jobs":[{"id":"a","schema_version":11,"state":"running","created":1,"updated":1,`+
-		`"completion_gates":[{"id":"gone","kind":"symbol","expect":"absent","symbols":["Legacy"]}]}]}`)
-
-	rows, err := s.List()
-	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	assert.Empty(t, rows[0].Goals)
-
-	_, err = s.Update(t.Context(), "a", func(u *types.Job) {
-		u.Goals = []types.Goal{{ID: "gone", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"Legacy"}}}
-	})
-	require.NoError(t, err)
-	stored := storedRow(t, path, "a")
-	assert.NotContains(t, stored, "completion_gates")
-	assert.Equal(t, []any{map[string]any{
-		"id": "gone", "kind": "symbol", "expect": "absent", "symbols": []any{"Legacy"}, "check": map[string]any{"target": ""},
-	}}, stored["goals"])
+	require.NoError(t, os.Rename(old, old+".old"))
+	seed(t, s, lease("a"))
 }
 
 func TestStoreClear(t *testing.T) {
@@ -768,12 +839,12 @@ func TestClearArchivesWhatItDropped(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, dropped)
 
-	archives, err := filepath.Glob(filepath.Join(filepath.Dir(path), "jobs-*.json"))
+	archives, err := filepath.Glob(filepath.Join(filepath.Dir(path), "jobs-*.jsonl"))
 	require.NoError(t, err)
 	require.Len(t, archives, 1)
-	raw, err := os.ReadFile(archives[0])
-	require.NoError(t, err)
-	assert.Contains(t, string(raw), "adj/store")
+	lines := storedLines(t, archives[0])
+	require.Len(t, lines, 2, "the header and the row, in the ledger's own shape")
+	assert.Equal(t, "adj/store", lines[1]["id"])
 }
 
 func TestStorePersistsAcrossStores(t *testing.T) {
@@ -789,9 +860,6 @@ func TestStorePersistsAcrossStores(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, stamped(lease("a"), got[0]), got[0])
-
-	assert.NoFileExists(t, filepath.Join(loc.CacheDir, "ledger", "leases.json"),
-		"the cache directory is no longer the ledger's home")
 }
 
 // The split this move closes: an orchestrator declares a plan in one worktree and a
@@ -820,135 +888,26 @@ func TestLedgerIsSharedAcrossWorktreesOfOneRepository(t *testing.T) {
 	assert.Equal(t, "plan/unit", got[0].ID)
 }
 
-// The old home was <cacheDir>/job. A ledger written there before the move is carried
-// forward once, so a plan declared by an older magus is not silently emptied.
-func TestLedgerAdoptsTheLegacyCacheDirLocation(t *testing.T) {
-	t.Parallel()
-
-	loc := tmpLoc(t, t.TempDir())
-	legacy := filepath.Join(loc.CacheDir, "ledger")
-	require.NoError(t, os.MkdirAll(legacy, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(legacy, "jobs.json"),
-		[]byte(`{"jobs":[{"id":"carried","created":1,"updated":1}]}`), 0o644))
-
-	got, err := NewStore(loc).List()
-	require.NoError(t, err)
-	require.Len(t, got, 1)
-	assert.Equal(t, "carried", got[0].ID)
-	assert.NoDirExists(t, legacy, "adopted, not copied: a second reader cannot find an older answer")
-
-	// Once. A ledger planted at the old home after the move stays where it is, because
-	// the store that owns the rows now already exists.
-	require.NoError(t, os.MkdirAll(legacy, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(legacy, "jobs.json"),
-		[]byte(`{"jobs":[{"id":"stale","created":1,"updated":1}]}`), 0o644))
-	seed(t, NewStore(loc), lease("live"))
-	again, err := NewStore(loc).List()
-	require.NoError(t, err)
-	ids := make([]string, len(again))
-	for i, u := range again {
-		ids[i] = u.ID
-	}
-	assert.Equal(t, []string{"carried", "live"}, ids)
-	assert.DirExists(t, legacy)
-}
-
-// The plan the previous vintage kept as <state>/magus/ledger/<repo>/leases.json is carried
-// into the job store once, with every member of every row intact, and the old file is LEFT
-// for the binaries still reading it.
-func TestStoreCarriesAPreRenamePlanForward(t *testing.T) {
-	t.Parallel()
-
-	loc := tmpLoc(t, t.TempDir())
-	path, err := NewStore(loc).Path()
-	require.NoError(t, err)
-	legacy := filepath.Join(loc.StateBase, "magus", "ledger", filepath.Base(filepath.Dir(path)), "leases.json")
-	require.NoError(t, os.MkdirAll(filepath.Dir(legacy), 0o755))
-	require.NoError(t, os.WriteFile(legacy, []byte(`{"leases":[{"id":"wave3/move","schema_version":1,`+
-		`"write_paths":["internal/guard"],"state":"running","created":1,"updated":1,"woolgathering":7}]}`+"\n"), 0o644))
-
-	got, err := NewStore(loc).List()
-	require.NoError(t, err)
-	require.Len(t, got, 1)
-	assert.Equal(t, types.Job{
-		Schema:     got[0].Schema, // the envelope carries the members this magus does not know
-		ID:         "wave3/move",
-		WritePaths: []string{"internal/guard"},
-		State:      types.StateRunning,
-		Created:    1,
-		Updated:    1,
-	}, got[0])
-	assert.FileExists(t, legacy, "copied, not moved: an older binary elsewhere is still reading it")
-
-	carried, err := os.ReadFile(path)
-	require.NoError(t, err)
-	assert.Contains(t, string(carried), `"woolgathering": 7`, "a member this magus does not know survives the carry")
-
-	// Once. Rows written to the old file afterwards do not reach a store that has its own.
-	require.NoError(t, os.WriteFile(legacy, []byte(`{"leases":[{"id":"later","created":1,"updated":1}]}`+"\n"), 0o644))
-	again, err := NewStore(loc).List()
-	require.NoError(t, err)
-	require.Len(t, again, 1)
-	assert.Equal(t, "wave3/move", again[0].ID)
-}
-
-// TestStoreUpdatePreservesAnUnknownMember is the UPDATE path: mutate rewrites the WHOLE
-// file on every put, so a member neither this binary's struct nor this call introduced was
-// dropped from every row in the file, not just the one being touched. This planted the
-// member directly at the store's own path, unlike TestStoreCarriesAPreRenamePlanForward,
-// which covers the one-time carry from the pre-rename file.
+// A member neither this binary's struct nor this call introduced survives an update of the
+// row that carries it.
 func TestStoreUpdatePreservesAnUnknownMember(t *testing.T) {
 	t.Parallel()
 
 	s := tmpStore(t, t.TempDir())
-	path, err := s.Path()
-	require.NoError(t, err)
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.WriteFile(path, []byte(fmt.Sprintf(
-		`{"jobs":[{"id":"adj/store","schema_version":%d,"state":"running","created":1,"updated":1,"woolgathering":7}]}`,
-		types.JobSchemaVersion)+"\n"), 0o644))
+	path := plantRaw(t, s, fmt.Sprintf(
+		`{"id":"adj/store","schema_version":%d,"state":"running","created":1,"updated":1,"woolgathering":7}`,
+		types.JobSchemaVersion))
 
-	_, err = s.Update(t.Context(), "adj/store", func(u *types.Job) { u.State = types.StatePass })
+	_, err := s.Update(t.Context(), "adj/store", func(u *types.Job) { u.State = types.StatePass })
 	require.NoError(t, err)
 
-	raw, err := os.ReadFile(path)
-	require.NoError(t, err)
-	assert.Contains(t, string(raw), `"woolgathering": 7`,
+	assert.Equal(t, float64(7), storedRow(t, path, "adj/store")["woolgathering"],
 		"a member this binary does not know survives an update to a field it does know")
 
 	rows, err := s.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, types.StatePass, rows[0].State, "the field the update named was still applied")
-}
-
-// A pre-rename spelling folded onto its current field by foldStoredNames must not
-// ride back out under the old name too: the row's unknown members would otherwise carry it
-// forward forever, and the NEXT read would find the field declared under both spellings,
-// which foldStoredNames refuses outright.
-func TestStoreUpdateDropsAFoldedLegacySpelling(t *testing.T) {
-	t.Parallel()
-
-	s := tmpStore(t, t.TempDir())
-	path, err := s.Path()
-	require.NoError(t, err)
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.WriteFile(path, []byte(fmt.Sprintf(
-		`{"jobs":[{"id":"adj/store","schema_version":%d,"owned_paths":["internal/ledger"],"created":1,"updated":1}]}`,
-		types.JobSchemaVersion)+"\n"), 0o644))
-
-	_, err = s.Update(t.Context(), "adj/store", func(u *types.Job) { u.State = types.StateRunning })
-	require.NoError(t, err)
-
-	raw, err := os.ReadFile(path)
-	require.NoError(t, err)
-	assert.NotContains(t, string(raw), "owned_paths", "the old spelling does not ride forward once it has been folded")
-	assert.Contains(t, string(raw), `"write_paths"`, "the current spelling carries the folded value")
-
-	rows, err := s.List()
-	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	assert.Equal(t, []string{"internal/ledger"}, rows[0].WritePaths, "a second read does not trip the both-spellings refusal")
 }
 
 func TestStoreListReturnsCopies(t *testing.T) {
@@ -974,10 +933,10 @@ func TestStoreReportsAnUnreadableFile(t *testing.T) {
 	path, err := s.Path()
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o644))
+	require.NoError(t, os.WriteFile(path, []byte("{not json\n"), 0o644))
 
 	_, err = s.List()
-	assert.Error(t, err, "a corrupt job store is reported, never silently read as empty")
+	assert.ErrorContains(t, err, path+" line 1", "a corrupt job store is reported, never silently read as empty")
 }
 
 func TestRecordUnattributedWrite(t *testing.T) {

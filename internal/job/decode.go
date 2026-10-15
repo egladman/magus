@@ -20,60 +20,6 @@ import (
 //go:embed gen/job.schema.json
 var DeclarationSchema string
 
-// foldStoredNames moves the renamed fields a previous magus wrote out of each row's
-// unknown members onto their current spelling, then drops every name [types.JobSchema]
-// reserves, so a reserved name is never carried back out as data.
-//
-// compat: see the legacy fields on [Declaration]. Without it a plan written before the rename
-// comes back with every boundary empty, and the next put stores that as the truth.
-func foldStoredNames(rows []types.Job) error {
-	for i := range rows {
-		if len(rows[i].Unknown) == 0 {
-			continue
-		}
-		var old struct {
-			WritePaths []string `json:"owned_paths"`
-			DenyPaths  []string `json:"forbidden_paths"`
-			ReadPaths  []string `json:"focus"`
-			Model      string   `json:"tier"`
-		}
-		bag, err := json.Marshal(rows[i].Unknown)
-		if err != nil {
-			return err
-		}
-		if err := json.Unmarshal(bag, &old); err != nil {
-			return fmt.Errorf("row %s: %w", rows[i].ID, err)
-		}
-		for _, name := range types.JobSchema.Reserved {
-			delete(rows[i].Unknown, name)
-		}
-		fold := func(name string, into *[]string, from []string) error {
-			if len(from) == 0 {
-				return nil
-			}
-			if len(*into) > 0 {
-				return fmt.Errorf("row %s carries %s and its renamed spelling, and nothing here can say which one it meant", rows[i].ID, name)
-			}
-			*into = from
-			return nil
-		}
-		if err := errors.Join(
-			fold("owned_paths", &rows[i].WritePaths, old.WritePaths),
-			fold("forbidden_paths", &rows[i].DenyPaths, old.DenyPaths),
-			fold("focus", &rows[i].ReadPaths, old.ReadPaths),
-		); err != nil {
-			return err
-		}
-		if old.Model != "" {
-			if rows[i].Model != "" {
-				return fmt.Errorf("row %s carries tier and its renamed spelling, and nothing here can say which one it meant", rows[i].ID)
-			}
-			rows[i].Model = old.Model
-		}
-	}
-	return nil
-}
-
 // maxInputBytes bounds one decoded record. A row and a report are both a few hundred
 // bytes of paths and sentences; the cap is what keeps a caller that piped the wrong file
 // into stdin from being read into memory before it is rejected.

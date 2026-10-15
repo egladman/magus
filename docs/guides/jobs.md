@@ -51,8 +51,8 @@ upgrade, a translation, a release checklist.
   started from. When it says no, it exits 1 and names every rule that failed.
 
 The store is kept per repository in your state directory
-(`$XDG_STATE_HOME/magus/jobs/`), so every worktree and clone on one machine reads the
-same set. It does not travel between machines, which is why the CI example declares
+(`$XDG_STATE_HOME/magus/jobs/<repo>/jobs.jsonl`, one JSON object per line), so every
+worktree and clone on one machine reads the same set. It does not travel between machines, which is why the CI example declares
 its own.
 
 Every transcript below is what the command printed, compared byte for byte by the

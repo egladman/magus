@@ -83,10 +83,10 @@ func TestAWriteRetainsOncePerInterval(t *testing.T) {
 		return p
 	}
 	week := config.Defaults().Jobs.Retain
-	oldArchive := plant("jobs-20260101T000000Z.json", week+time.Hour)
-	newArchive := plant("jobs-20260201T000000Z.json", time.Hour)
-	lostTemp := plant(".jobs.json.tmp.123", 2*time.Hour)
-	other := plant("landing-probes.json", week+time.Hour)
+	oldArchive := plant("jobs-20260101T000000Z.jsonl", week+time.Hour)
+	newArchive := plant("jobs-20260201T000000Z.jsonl", time.Hour)
+	lostTemp := plant(".jobs.jsonl.tmp.123", 2*time.Hour)
+	other := plant("landing-probes.jsonl", week+time.Hour)
 
 	write := func(rows ...types.Job) {
 		t.Helper()
@@ -175,12 +175,12 @@ func TestDeleteArchivesOnlyTheDroppedRow(t *testing.T) {
 
 	path, err := s.Path()
 	require.NoError(t, err)
-	archives, err := filepath.Glob(filepath.Join(filepath.Dir(path), "jobs-*.json"))
+	archives, err := filepath.Glob(filepath.Join(filepath.Dir(path), "jobs-*.jsonl"))
 	require.NoError(t, err)
 	require.Len(t, archives, 1)
-	raw, err := os.ReadFile(archives[0])
+	archived := NewStore(Location{StateBase: t.TempDir(), Root: t.TempDir()})
+	archived.path = archives[0]
+	f, err := archived.read()
 	require.NoError(t, err)
-	var f jobsFile
-	require.NoError(t, s.decode(raw, &f))
 	assert.Equal(t, []string{"drop"}, ids(f.Jobs))
 }

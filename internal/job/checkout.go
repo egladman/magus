@@ -298,9 +298,14 @@ func (s *Store) sweepRecords(w *sweeper, rows []types.Job, ended bool) {
 // it saw has gone.
 const recordSweepEvery = 10 * time.Minute
 
-// recordsSweptFile holds when the last full pass over the binding records ran and the
-// rows it saw, beside jobs.json, so the interval holds across processes.
-const recordsSweptFile = "records-swept.json"
+// recordsSweptFile logs the full passes over the binding records, one line per pass with
+// when it ran and the rows it saw, beside jobs.jsonl, so the interval holds across
+// processes. Only the last line is read.
+const recordsSweptFile = "records-swept.jsonl"
+
+// recordsSweptKept is how many passes the log holds before a pass rewrites it to its own
+// line alone.
+const recordsSweptKept = 16
 
 type recordsPass struct {
 	At   int64    `json:"at"`
@@ -310,12 +315,12 @@ type recordsPass struct {
 // recordsSwept reports whether a pass within recordSweepEvery of now saw only rows that
 // are still in rows. A history that cannot be read reads as no pass.
 func (s *Store) recordsSwept(now int64, rows []types.Job) bool {
-	raw, err := os.ReadFile(filepath.Join(filepath.Dir(s.path), recordsSweptFile))
-	if err != nil {
+	read, err := readLines(filepath.Join(filepath.Dir(s.path), recordsSweptFile))
+	if err != nil || len(read.lines) == 0 {
 		return false
 	}
 	var last recordsPass
-	if json.Unmarshal(raw, &last) != nil {
+	if json.Unmarshal(read.lines[len(read.lines)-1].text, &last) != nil {
 		return false
 	}
 	if since := now - last.At; since < 0 || since >= int64(recordSweepEvery/time.Second) {
@@ -333,9 +338,16 @@ func (s *Store) writeRecordsSwept(now int64, rows []types.Job) {
 	for i, r := range rows {
 		pass.Rows[i] = r.ID
 	}
-	if raw, err := json.Marshal(pass); err == nil {
-		_ = file.WriteFileAtomic(filepath.Join(filepath.Dir(s.path), recordsSweptFile), raw, 0o644)
+	line, err := json.Marshal(pass)
+	if err != nil {
+		return
 	}
+	path := filepath.Join(filepath.Dir(s.path), recordsSweptFile)
+	if read, err := readLines(path); err == nil && !read.partial && len(read.lines) < recordsSweptKept {
+		_ = appendLines(path, [][]byte{line})
+		return
+	}
+	_ = rewriteLines(path, [][]byte{line})
 }
 
 // dropRecord removes the record at path if it still holds b.
