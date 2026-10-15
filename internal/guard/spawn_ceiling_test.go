@@ -51,10 +51,10 @@ func TestSpawnAboveParentTierRefusesAProvenCeiling(t *testing.T) {
 
 	v := judgeSpawnBy(ctx, t, deps, "", "opus")
 
-	assert.Equal(t, decisionDeny, v.Decision)
-	assert.Equal(t, string(denyRuleSpawnAboveParentTier), v.Rule)
-	assert.Contains(t, v.Reason, "this spawn runs opus, model tier principal (rank 2), above this session's model, sonnet, model tier standard (rank 1)")
-	assert.Contains(t, v.Reason, "spawn it on sonnet or a lower tier, or a person forks the higher-tier row")
+	shape, text := spoken(v)
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnAboveParentTier)}, shape)
+	assert.Contains(t, text, "this spawn runs opus, model tier principal (rank 2), above this session's model, sonnet, model tier standard (rank 1)")
+	assert.Contains(t, text, "spawn it on sonnet or lower")
 }
 
 func TestSpawnAboveParentTierPassesAtOrBelowTheCeiling(t *testing.T) {
@@ -75,9 +75,9 @@ func TestSpawnAboveParentTierAdvisesAnInferredCeiling(t *testing.T) {
 
 	v := judgeSpawnBy(ctx, t, deps, "", "opus")
 
-	assert.Equal(t, decisionAdvise, v.Decision)
-	assert.Equal(t, string(denyRuleSpawnAboveParentTier), v.Rule)
-	assert.Contains(t, v.Context, "this spawn runs opus, model tier principal (rank 2)")
+	shape, text := spoken(v)
+	assert.Equal(t, types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleSpawnAboveParentTier)}, shape)
+	assert.Contains(t, text, "this spawn runs opus, model tier principal (rank 2)")
 }
 
 // A subagent's ceiling is the model its own spawn named, proven; one spawned on no model
@@ -90,9 +90,9 @@ func TestSpawnAboveParentTierReadsASubagentsSpawnedModel(t *testing.T) {
 	writeAgentMarker(facts, spawnedAgentKind("a1"), body)
 
 	v := judgeSpawnBy(ctx, t, deps, "a1", "sonnet")
-	assert.Equal(t, decisionDeny, v.Decision)
-	assert.Equal(t, string(denyRuleSpawnAboveParentTier), v.Rule)
-	assert.Contains(t, v.Reason, "above the model this agent was spawned on, haiku, model tier economy (rank 0)")
+	shape, text := spoken(v)
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnAboveParentTier)}, shape)
+	assert.Contains(t, text, "above the model this agent was spawned on, haiku, model tier economy (rank 0)")
 
 	ctx, deps, _ = ceilingFixture(t, "sonnet", true)
 	v = judgeSpawnBy(ctx, t, deps, "a2", "opus")
@@ -105,8 +105,8 @@ func TestSpawnAboveParentTierTakesItsDeclaredSetting(t *testing.T) {
 	ctx, deps, _ := ceilingFixture(t, "sonnet", true)
 	deps.Builtins[string(denyRuleSpawnAboveParentTier)] = builtin.Setting{Decision: builtin.Advise}
 	v := judgeSpawnBy(ctx, t, deps, "", "opus")
-	assert.Equal(t, decisionAdvise, v.Decision, "set to advise, proof is advised")
-	assert.Equal(t, string(denyRuleSpawnAboveParentTier), v.Rule)
+	shape, _ := spoken(v)
+	assert.Equal(t, types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleSpawnAboveParentTier)}, shape, "set to advise, proof is advised")
 
 	ctx, deps, _ = ceilingFixture(t, "sonnet", true)
 	deps.Builtins[string(denyRuleSpawnAboveParentTier)] = builtin.Setting{Decision: builtin.Off}
@@ -139,11 +139,11 @@ func TestSpawnAboveParentTierAdvisesAnUnknownTier(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, deps, _ := ceilingFixture(t, tt.session, true)
 			v := judgeSpawnBy(ctx, t, deps, "", tt.spawn)
-			assert.Equal(t, decisionAdvise, v.Decision)
-			assert.Equal(t, string(denyRuleSpawnAboveParentTier), v.Rule)
-			assert.Contains(t, v.Context, tt.why)
-			assert.Contains(t, v.Context, tt.add+` with its "tier" to the claude-code harness spell's harness_models`)
-			assert.Contains(t, v.Context, "the declaration at hack/tiers.buzz:3 maps haiku, sonnet, opus for claude-code")
+			shape, text := spoken(v)
+			assert.Equal(t, types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleSpawnAboveParentTier)}, shape)
+			assert.Contains(t, text, tt.why)
+			assert.Contains(t, text, tt.add+` with "tier" to the claude-code spell's harness_models`)
+			assert.Contains(t, text, "the declaration at hack/tiers.buzz:3 maps haiku, sonnet, opus for claude-code")
 		})
 	}
 }
@@ -157,13 +157,21 @@ func TestSpawnAboveParentTierReadsTheHarnessRowsTier(t *testing.T) {
 	}
 
 	v := judgeSpawnBy(ctx, t, deps, "", "opus")
-	assert.Equal(t, decisionDeny, v.Decision)
-	assert.Equal(t, string(denyRuleSpawnAboveParentTier), v.Rule)
-	assert.Contains(t, v.Reason, "above this session's model, claude-sonnet-5-5, model tier standard (rank 1)")
+	shape, text := spoken(v)
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnAboveParentTier)}, shape)
+	assert.Contains(t, text, "above this session's model, claude-sonnet-5-5, model tier standard (rank 1)")
 
 	v = judgeSpawnBy(ctx, t, deps, "", "claude-sonnet-5-5-20261001")
 	assert.Equal(t, decisionAdvise, v.Decision, "a dated spelling is another id until a row names it")
 	assert.Contains(t, v.Context, "add a row for claude-sonnet-5-5-20261001")
+}
+
+// spoken splits a judgment into its shape, to compare whole, and the text it said, to
+// assert on: the text is wording a field-by-field comparison would pin to the letter.
+func spoken(v types.GuardJudgment) (shape types.GuardJudgment, text string) {
+	text = v.Reason + v.Context
+	v.Reason, v.Context, v.SchemaVersion = "", "", 0
+	return v, text
 }
 
 // A host the declaration does not map names no tier, and the advice says so.

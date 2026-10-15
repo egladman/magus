@@ -430,7 +430,7 @@ func denyUnboundedBackground(command string, background bool, d Dialect) denial 
 		return denial{}
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `%s` runs in the background unbounded; use `magus job exec --timeout <duration> -- <command>` or `timeout --kill-after=10 <seconds>`.", program),
+		Say: fmt.Sprintf("magus workspace: `%s` runs in the background unbounded; use `magus job exec --timeout <duration> -- <command>`.", program),
 		Why: "A backgrounded command outlives the agent that started it: the host stops it only when asked, and an agent that finishes first leaves it running with nobody told. " +
 			"`magus job exec --timeout D -- cmd` runs it in its own process group under the broker, which names its owner (your lease) in `magus status`, stops the whole group at the deadline or when the wrapper dies, and files one attention row when it does. " +
 			"`timeout N` or `gtimeout N` in front of each command that can run long also bounds it; stock macOS ships neither, and Homebrew's coreutils installs `gtimeout`. " +

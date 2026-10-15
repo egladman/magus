@@ -219,7 +219,7 @@ func (s *Stdio) AwaitUpstream(ctx context.Context, root string, cfg config.Confi
 	return &upstreamError{
 		DiagnosticError: types.DiagnosticErrorf(types.PipeUpstreamFailed,
 			"pid %d (%s), upstream of this run in a pipe, %s, so this run printed nothing."+
-				" A pipeline of magus runs stops at its first failed stage: fix that stage, then run the pipeline again.",
+				" A pipeline stops at its first failed stage: fix it, then run the pipeline again.",
 			red.stage.PID, red.stage.Command(), red.rec.ending()),
 		status: red.rec.exitCode(),
 	}
@@ -376,12 +376,12 @@ func RecordUpstream(ctx context.Context, in *os.File, writes func(argv []string)
 func ReadRecords(stdin *os.File) (*report.Reader, error) {
 	src, _, err := dupForDrain(stdin)
 	if err != nil {
-		return nil, fmt.Errorf("pipe: read the records on stdin: %w", err)
+		return nil, fmt.Errorf("read the records on stdin: %w", err)
 	}
 	w, err := installRelay(stdin)
 	if err != nil {
 		_ = src.Close()
-		return nil, fmt.Errorf("pipe: relay stdin: %w", err)
+		return nil, fmt.Errorf("relay stdin: %w", err)
 	}
 	relay := newByteRelay(w)
 	r := report.NewReader(src, relay)
@@ -625,8 +625,8 @@ func walkUpstream(ctx context.Context, in pipepeer.Pipe, takesLocks func([]strin
 				// loop through a magus stage would wait on itself.
 				if w == self && depth > 0 && len(out) > 0 {
 					return nil, types.DiagnosticErrorf(types.PipeCycle,
-						"this run's standard input is written, through magus pid %s, by this run itself; each stage would wait on the one before it, so it is refused instead."+
-							" Break the loop so one stage's input does not depend on its own output.", joinPIDs(out))
+						"this run's standard input is written, through magus pid %s, by this run itself."+
+							" Break the loop so no stage's input depends on its own output.", joinPIDs(out))
 				}
 				if seen[w] || ancestors[w] {
 					continue
@@ -814,7 +814,7 @@ func FailedUpstream(dir string, ups []Stage) error {
 	return &upstreamError{
 		DiagnosticError: types.DiagnosticErrorf(types.PipeUpstreamFailed,
 			"pid %d (%s), upstream of this run in a pipe, %s, so this run started nothing."+
-				" A pipeline of magus runs stops at its first failed stage: fix that stage, then run the pipeline again.",
+				" A pipeline stops at its first failed stage: fix it, then run the pipeline again.",
 			red.stage.PID, red.stage.Command(), red.rec.ending()),
 		status: red.rec.exitCode(),
 	}

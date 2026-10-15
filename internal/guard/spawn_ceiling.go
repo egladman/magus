@@ -70,9 +70,9 @@ func gradeSpawnCeiling(deps Dependencies, verdict types.GuardJudgment, env hookR
 		return applyFindings(gate, verdict, []costFinding{{
 			rule: denyRuleSpawnAboveParentTier,
 			key:  hint.MarkerKind(denyRuleSpawnAboveParentTier) + "-unknown",
-			say: fmt.Sprintf("magus workspace: this spawn's tier ceiling is not judged: %s %s (%s). "+
-				"A tier is read from an exact id, never inferred from a name: add a row for %s with its \"tier\" to the %s harness spell's harness_models, or map it in the declaration at %s.",
-				strings.Join(unknown, " and "), why, declaredAliases(set, host), strings.Join(missing, " and "), host.ID, set.Site()),
+			say: fmt.Sprintf("magus workspace: this spawn's tier ceiling is not judged: %s %s (%s): "+
+				"add a row for %s with \"tier\" to the %s spell's harness_models, or map it in that declaration.",
+				strings.Join(unknown, " and "), why, declaredAliases(set, host), strings.Join(missing, " and "), host.ID),
 		}}, from)
 	}
 	if child.Within(parent) == nil {
@@ -88,8 +88,8 @@ func gradeSpawnCeiling(deps Dependencies, verdict types.GuardJudgment, env hookR
 		rule: denyRuleSpawnAboveParentTier,
 		deny: s.Decision == builtin.Deny,
 		key:  hint.MarkerKind(denyRuleSpawnAboveParentTier),
-		say: fmt.Sprintf("magus workspace: this spawn runs %s, model tier %s (rank %d), above %s, %s, model tier %s (rank %d); "+
-			"a child never outranks its parent, so spawn it on %s or a lower tier, or a person forks the higher-tier row and runs it from a session at that tier.",
+		say: fmt.Sprintf("magus workspace: this spawn runs %s, model tier %s (rank %d), above %s, %s, model tier %s (rank %d): "+
+			"a child never outranks its parent, so spawn it on %s or lower.",
 			env.DeclaredModel, child.Name(), child.Rank(), spawner.says, spawner.model, parent.Name(), parent.Rank(), alias),
 	}}, from)
 }

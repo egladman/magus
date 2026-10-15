@@ -188,10 +188,8 @@ func TestDenyUnboundedBackground(t *testing.T) {
 			}
 			require.True(t, d.refused())
 			assert.Contains(t, d.Say, "`"+tc.want+"` runs in the background")
-			assert.Contains(t, d.Say, "timeout --kill-after=10 <seconds>")
-			assert.Less(t, strings.Index(d.Say, "magus job exec --timeout <duration> -- <command>"), strings.Index(d.Say, "timeout --kill-after"),
-				"the wrapper is the first remedy")
 			assert.Contains(t, d.Say, "magus job exec --timeout <duration> -- <command>")
+			assert.Contains(t, d.Why, "`timeout N` or `gtimeout N`", "the other remedy is behind the ref")
 		})
 	}
 	assert.False(t, denyUnboundedBackground(`grep -r x .`, false, DialectBash).refused(), "a foreground call is the host's to time out")

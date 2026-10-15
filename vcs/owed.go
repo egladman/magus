@@ -101,7 +101,7 @@ func DeferredSettle(ctx context.Context, root string) (HookOperation, bool, erro
 	}
 	op := HookOperation{Kind: "deferred", gitDir: p.gitDir, base: base}
 	if op.Changed, err = hookChangedFiles(ctx, root, op); err != nil {
-		return HookOperation{}, false, fmt.Errorf("vcs: delete %s and regenerate it by hand, as it names %s: %w",
+		return HookOperation{}, false, fmt.Errorf("delete %s and regenerate it by hand, as it names %s: %w",
 			filepath.Join(p.gitDir, deferredSettleFile), base, err)
 	}
 	return op, true, nil

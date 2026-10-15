@@ -40,18 +40,17 @@ const denyRuleUnjudgedTool denyRuleName = "unjudged-tool"
 func denyUnjudgedTool(tool string, tools agent.ToolRows) denial {
 	if tools.Err != nil {
 		return denial{
-			Say: fmt.Sprintf("magus guard: no rule could judge this %s call: its input carries no command, file path, search, prompt or skill, "+
-				"and there are no tool rows to say what %s does: %v.", tool, tool, tools.Err),
+			Say: fmt.Sprintf("magus workspace: no rule could judge this %s call: its input carries no command, file path, search, prompt or skill, "+
+				"and no tool row says what %s does: %v.", tool, tool, tools.Err),
 			Why: "Every tool call reaches the guard, and the host's tool rows say what a tool does where the shape of its input cannot. " +
 				"A shell command is still judged by its shape, so the install that writes the rows runs.",
 		}
 	}
 	return denial{
-		Say: fmt.Sprintf("magus guard: no rule could judge this %s call: its input carries no command, file path, search, prompt or skill, "+
-			"and %s is not a tool the host's tool rows list. Do this step with a tool the guard judges (a shell command, a file read or write), "+
-			"or ask the person you work for to add a row for %s to the harness spell's harness_tools, or to allow it unjudged.", tool, tool, tool),
-		Why: "Every tool call reaches the guard, and the guard judges a call by the shape of its input. A tool whose input has none of the shapes it reads " +
-			"could do anything a rule exists to stop, and nothing would say so. Setting unjudged-tool to advise or off in magus\\guard.builtins is the person's call.",
+		Say: fmt.Sprintf("magus workspace: no rule could judge this %s call, and %s is in no tool row: use a tool the guard judges, or ask a person to add a row for %s to harness_tools.", tool, tool, tool),
+		Why: "Every tool call reaches the guard, and the guard judges a call by the shape of its input: a command, file path, search, prompt or skill. A tool whose input has none of the shapes it reads " +
+			"could do anything a rule exists to stop, and nothing would say so. A shell command or a file read or write is judged; a row for the tool in the harness spell's harness_tools says what it does. " +
+			"Setting unjudged-tool to advise or off in magus\\guard.builtins, which allows it unjudged, is the person's call.",
 	}
 }
 

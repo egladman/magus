@@ -46,8 +46,8 @@ func runGoAPI(args []string) error {
 		return err
 	}
 	if leaks := internalLeaks(pkgs); len(leaks) > 0 {
-		return fmt.Errorf("goapi: %d exported declarations name an internal type, which no caller outside this module can construct;"+
-			" unexport, move or retype each before the lock is written:\n%s", len(leaks), strings.Join(leaks, "\n"))
+		return fmt.Errorf("goapi: %d exported declarations name an internal type, which no caller outside this module can construct,"+
+			" so unexport, move or retype each before the lock is written: %s", len(leaks), strings.Join(leaks, ", "))
 	}
 	data := []byte(strings.Join(renderGoAPI(pkgs), "\n") + "\n")
 	if *out == "" {

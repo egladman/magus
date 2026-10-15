@@ -79,7 +79,7 @@ func Resolve(_ context.Context, root, runtimeBase string, opts types.VCSOptions)
 	switch {
 	case opts.Driver != nil:
 		if opts.Name != "" && opts.Name != opts.Driver.Name() {
-			return types.VCSResolution{}, fmt.Errorf("vcs: the driver given is %q but the VCS named is %q; drop one or make them agree",
+			return types.VCSResolution{}, fmt.Errorf("vcs: the driver given is %q but the VCS named is %q, so drop one or make them agree",
 				opts.Driver.Name(), opts.Name)
 		}
 		v, name, source = opts.Driver, opts.Driver.Name(), types.VCSSourceExplicit

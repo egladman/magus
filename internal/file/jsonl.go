@@ -109,7 +109,7 @@ func RefuseOld(old string) error {
 	if err != nil {
 		return err
 	}
-	return fmt.Errorf("%s is a store an older magus wrote and this one does not read; move it aside with `mv %s %s.old`", old, old, old)
+	return fmt.Errorf("%s is a store an older magus wrote and this one does not read, so move it aside with `mv %s %s.old`", old, old, old)
 }
 
 // JSONL is an append-only JSON Lines file of T. Key names an entry, and the last line for a
@@ -160,7 +160,7 @@ func (l JSONL[T]) Update(ctx context.Context, fn func(entries []T) []T) error {
 		}
 		if partial {
 			slog.With(attr.Component("magus")).WarnContext(ctx, "store rewritten",
-				attr.Error(fmt.Errorf("%s ended in a line no writer finished; the rewrite dropped it", l.Path)))
+				attr.Error(fmt.Errorf("%s ended in a line no writer finished, so the rewrite dropped it", l.Path)))
 		}
 		return l.write(RewriteLines, live)
 	})

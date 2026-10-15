@@ -236,7 +236,7 @@ func refuseAboveParent(set *types.ModelTierSet, row types.Job, plan []types.Job)
 	if child.Within(parent) == nil {
 		return nil
 	}
-	err := fmt.Errorf("job: %s would run at model tier %s, and its parent %s was forked at %s; a child never outranks its parent,"+
+	err := fmt.Errorf("job: %s would run at model tier %s, and its parent %s was forked at %s, and a child never outranks its parent,"+
 		" so fork it at %s or lower (`--model %s`), or a person forks it at %s as a row of its own",
 		row.ID, row.ModelTier, row.Parent, plan[i].ModelTier, parent.Name(), parent.Name(), child.Name())
 	return types.NonRetryable(err, types.RetryAfterPerson, "a person forks the higher-tier row")

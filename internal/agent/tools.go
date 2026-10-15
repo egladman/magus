@@ -164,21 +164,21 @@ type ToolRows struct {
 func ReadToolRows(root, dir string) ToolRows {
 	rows := ToolRows{Dir: dir}
 	if dir == "" {
-		rows.Err = errors.New("the hook wiring names no --tool-rows directory, so it predates the tool rows; reinstall it with `magus agent harness install`")
+		rows.Err = errors.New("the hook wiring names no --tool-rows directory, so it predates the tool rows, so reinstall it with `magus agent harness install`")
 		return rows
 	}
 	abs := dir
 	if !filepath.IsAbs(abs) {
 		abs = filepath.Join(root, dir)
 	}
-	reinstall := "; write it with `magus agent harness install`"
+	reinstall := "write it with `magus agent harness install`"
 	version, err := os.ReadFile(filepath.Join(abs, toolRowsVersionFile))
 	if err != nil {
-		rows.Err = fmt.Errorf("no tool rows at %s: %w%s", dir, err, reinstall)
+		rows.Err = fmt.Errorf("no tool rows at %s, %s: %w", dir, reinstall, err)
 		return rows
 	}
 	if got := strings.TrimSpace(string(version)); got != strconv.Itoa(ToolRowsVersion) {
-		rows.Err = fmt.Errorf("the tool rows at %s are version %s and this magus reads version %d%s", dir, got, ToolRowsVersion, reinstall)
+		rows.Err = fmt.Errorf("the tool rows at %s are version %s and this magus reads version %d, %s", dir, got, ToolRowsVersion, reinstall)
 		return rows
 	}
 	rows.capabilities = map[string]ToolCapability{}
@@ -188,7 +188,7 @@ func ReadToolRows(root, dir string) ToolRows {
 			continue
 		}
 		if err != nil {
-			rows.capabilities, rows.Err = nil, fmt.Errorf("no tool rows at %s: %w%s", dir, err, reinstall)
+			rows.capabilities, rows.Err = nil, fmt.Errorf("no tool rows at %s, %s: %w", dir, reinstall, err)
 			return rows
 		}
 		for _, name := range strings.Split(string(body), "\n") {

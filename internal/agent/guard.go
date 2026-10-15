@@ -219,7 +219,7 @@ var guardInputs = []string{"command", "path", "mcp"}
 // still prepends its stdin and quiet-output prefix to every Cursor command.
 //
 // 29: every tool reaches magus-command.buzz through one catch-all entry, which forwards the
-// whole event, and magus-command.buzz, cursor-hook.buzz and the OpenCode plugin forward
+// whole event, and magus-command.buzz, cursor-hook.buzz and the plugin glue forward
 // --tool-rows, the directory the host's tool rows are installed in. Under a config written
 // for 29, a 28 copy reports --tool-rows as unsupported, so the guard knows no tool and
 // refuses every call whose input names no command or path.

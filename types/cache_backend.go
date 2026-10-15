@@ -37,8 +37,8 @@ type CacheBackend interface {
 }
 
 // ErrCacheMiss is GetArtifact's answer when the store holds nothing for the key.
-var ErrCacheMiss = errors.New("cache: not in the remote store")
+var ErrCacheMiss = errors.New("not in the remote store")
 
 // ErrCacheExists is PutArtifact's answer when the key is already stored, or is being
 // stored by another writer.
-var ErrCacheExists = errors.New("cache: already in the remote store")
+var ErrCacheExists = errors.New("already in the remote store")

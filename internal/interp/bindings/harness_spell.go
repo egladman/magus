@@ -186,7 +186,7 @@ func cheapestTierModel(ctx context.Context, id string, tierModels map[string]str
 	if model, ok := tierModels[cheapest.Name()]; ok {
 		return model, nil
 	}
-	return "", fmt.Errorf("its %s rows name a model for tiers %s and none for %s, the cheapest tier of the declaration at %s; "+
+	return "", fmt.Errorf("its %s rows name a model for tiers %s and none for %s, the cheapest tier of the declaration at %s, so "+
 		"add \"tier\": %q to the row of the model its shipped agents should run on, or map %s in that declaration's hosts",
 		spells.HarnessModelsContract, strings.Join(slices.Sorted(maps.Keys(tierModels)), ", "), cheapest.Name(), set.Site(), cheapest.Name(), id)
 }
@@ -223,7 +223,7 @@ func harnessTierHosts(ctx context.Context, cases, wired []string) (map[types.Har
 		for i, c := range cases {
 			model, ok := tiers[c]
 			if !ok {
-				return nil, fmt.Errorf("harness spell %q: its %s rows name no model for tier %s; add \"tier\": %q to the row of the model that tier runs on",
+				return nil, fmt.Errorf("harness spell %q: its %s rows name no model for tier %s, so add \"tier\": %q to the row of the model that tier runs on",
 					id, spells.HarnessModelsContract, c, c)
 			}
 			models[i] = model

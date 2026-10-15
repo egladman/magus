@@ -99,9 +99,8 @@ func TestToolRowsDecideWhetherAPathIsReadOrWritten(t *testing.T) {
 	}
 
 	read := decode("Read", map[string]any{"file_path": "/r/a.go", "offset": float64(1), "limit": float64(40)})
-	assert.False(t, read.IsPath, "a read is not a write")
-	assert.Equal(t, "/r/a.go", read.Value, "the path the read reached")
-	assert.Equal(t, "sed -n 1,40p /r/a.go", read.Read, "judged as the line it stands for")
+	assert.Equal(t, hookRequest{Value: "/r/a.go", Cwd: "/r", Read: "sed -n 1,40p /r/a.go", Who: hookAttribution{Session: "s1", Event: "PreToolUse"}}, read,
+		"a read is not a write: it reaches the path, judged as the line it stands for")
 
 	for _, tool := range []string{"Delete", "SomeoneElsesTool"} {
 		req := decode(tool, map[string]any{"file_path": "/r/a.go"})
@@ -186,11 +185,10 @@ func TestPagedReadIsJudgedTheSameWhicheverToolReadsIt(t *testing.T) {
 	assert.NotEqual(t, "deny", judge("a1", bash("sed -n 1,40p paged.go")).Decision)
 	assert.NotEqual(t, "deny", judge("a1", read(41, 40)).Decision, "a read tool's window counts with the shell's")
 	refused := judge("a1", bash("sed -n 81,121p paged.go"))
-	require.Equal(t, "deny", refused.Decision)
-	assert.Equal(t, string(denyRuleReadPaging), refused.Rule)
-	again := judge("a1", read(81, 41))
-	assert.Equal(t, "deny", again.Decision, "the same window through the read tool is refused too")
-	assert.Equal(t, string(denyRuleReadPaging), again.Rule)
+	refusedShape, _ := spoken(refused)
+	require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleReadPaging)}, refusedShape)
+	again, _ := spoken(judge("a1", read(81, 41)))
+	assert.Equal(t, refusedShape, again, "the same window through the read tool is refused too")
 
 	assert.NotEqual(t, "deny", judge("a2", read(1, 40)).Decision)
 	assert.NotEqual(t, "deny", judge("a2", bash("sed -n 41,80p paged.go")).Decision)
@@ -207,15 +205,15 @@ func TestUnjudgedToolAdvisesOnceAndDeniesWhereTheWorkspaceSaysSo(t *testing.T) {
 	}
 
 	first := call(Dependencies{}, "unjudged-advise", "mcp__browser__click")
-	assert.Equal(t, decisionAdvise, first.Decision, "the shipped default advises")
-	assert.Equal(t, string(denyRuleUnjudgedTool), first.Rule)
-	assert.Contains(t, first.Context, "mcp__browser__click")
+	firstShape, firstText := spoken(first)
+	assert.Equal(t, types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleUnjudgedTool)}, firstShape, "the shipped default advises")
+	assert.Contains(t, firstText, "mcp__browser__click")
 	assert.Equal(t, decisionPass, call(Dependencies{}, "unjudged-advise", "mcp__browser__click").Decision, "said once a session")
 
 	denied := call(withSetting(string(denyRuleUnjudgedTool), builtin.Deny), "unjudged-deny", "mcp__browser__click")
-	assert.Equal(t, decisionDeny, denied.Decision)
-	assert.Equal(t, string(denyRuleUnjudgedTool), denied.Rule)
-	assert.Contains(t, denied.Reason, "mcp__browser__click")
+	deniedShape, deniedText := spoken(denied)
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleUnjudgedTool)}, deniedShape)
+	assert.Contains(t, deniedText, "mcp__browser__click")
 
 	assert.Equal(t, decisionPass, call(withSetting(string(denyRuleUnjudgedTool), builtin.Deny), "unjudged-deny", "TodoWrite").Decision,
 		"an inert tool is never named")

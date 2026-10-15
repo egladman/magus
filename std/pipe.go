@@ -442,7 +442,7 @@ type pipeFields struct {
 func parsePipeRecord(line report.Line) (types.PipeRecord, error) {
 	var f pipeFields
 	if err := line.Decode(&f); err != nil {
-		return types.PipeRecord{}, fmt.Errorf("pipe: %s record: %w", line.Type, err)
+		return types.PipeRecord{}, fmt.Errorf("%s record: %w", line.Type, err)
 	}
 	return types.PipeRecord{
 		Schema: line.Schema, Type: line.Type,

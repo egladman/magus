@@ -234,7 +234,7 @@ const (
 // it, and the guard reads an empty plan as nothing leased.
 func (s *Store) refuseDocument() error {
 	if err := file.RefuseOld(filepath.Join(filepath.Dir(s.path), documentFileName)); err != nil {
-		return fmt.Errorf("job: %w; this magus keeps the plan in %s and starts it empty, so declare the jobs again", err, s.path)
+		return fmt.Errorf("%w: this magus keeps the plan in %s and starts it empty, so declare the jobs again", err, s.path)
 	}
 	return nil
 }
@@ -1154,7 +1154,7 @@ func (s *Store) readFile(wait bool) (jobsFile, jobsLog, error) {
 			break
 		}
 		if time.Now().After(deadline) {
-			return jobsFile{}, jobsLog{}, fmt.Errorf("job: %s ends in a line no writer finished; the next write to the plan drops it", s.path)
+			return jobsFile{}, jobsLog{}, fmt.Errorf("job: %s ends in a line no writer finished, so the next write to the plan drops it", s.path)
 		}
 		time.Sleep(time.Millisecond)
 	}

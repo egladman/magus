@@ -623,7 +623,7 @@ func sameJSON(a, b any) bool {
 // reportStateFailure logs review state that could not be read or written. The review opens
 // regardless, so the file's own error is how a person learns the marks were not kept.
 func reportStateFailure(ctx context.Context, what string, err error) {
-	slog.With(attr.Component("magus")).ErrorContext(ctx, "review state: "+what, attr.Error(err))
+	slog.With(attr.Component("magus")).ErrorContext(ctx, "review state not kept: "+what, attr.Error(err))
 }
 
 // loadViewed reads the persisted digest set. A failure yields an empty set, reported rather

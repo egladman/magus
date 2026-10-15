@@ -281,7 +281,7 @@ func (w internals) Telemetry() observability.Provider { return w.tel }
 // to fall back to, so pass the directory to start from (os.Getwd's, if that is meant).
 func FindRoot(dir string) (string, error) {
 	if dir == "" {
-		return "", errors.New("magus: FindRoot needs a directory to start from; pass one, such as the result of os.Getwd")
+		return "", errors.New("magus: FindRoot needs a directory to start from, so pass one, such as the result of os.Getwd")
 	}
 	return workspace.FindRoot(dir)
 }
@@ -535,10 +535,10 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	ws.VCSOptions = types.VCSOptions{Enabled: cfg.VCS.Enabled, Name: cfg.VCS.Name, BaseRef: cfg.VCS.BaseRef}
 	if vo.VCSDriverGiven {
 		if vo.VCSDriver == nil {
-			return nil, errors.New("magus: WithVCSDriver was given a nil driver; pass a driver, or leave the option out to use the built-in one")
+			return nil, errors.New("magus: WithVCSDriver was given a nil driver, so pass a driver, or leave the option out to use the built-in one")
 		}
 		if cfg.VCS.Name != "" && cfg.VCS.Name != vo.VCSDriver.Name() {
-			return nil, fmt.Errorf("magus: WithVCSDriver gives the %q driver but vcs.name in magus.yaml names %q; drop one or make them agree",
+			return nil, fmt.Errorf("magus: WithVCSDriver gives the %q driver but vcs.name in magus.yaml names %q, so drop one or make them agree",
 				vo.VCSDriver.Name(), cfg.VCS.Name)
 		}
 		ws.VCSOptions.Driver = vo.VCSDriver
@@ -547,7 +547,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		return nil, errors.New("magus: no spawn rule: a workspace has no default one, so open it with WithSpawnRule(magus.TierCeiling), the reference rule, or a rule of your own")
 	}
 	if vo.CacheBackendGiven && vo.CacheBackend == nil {
-		return nil, errors.New("magus: WithCacheBackend was given a nil backend; pass a backend, or leave the option out to use the one the magusfile wires")
+		return nil, errors.New("magus: WithCacheBackend was given a nil backend, so pass a backend, or leave the option out to use the one the magusfile wires")
 	}
 	m := &Magus{ws: ws, cfg: cfg, version: vo.Version, spawnRule: vo.SpawnRule, cacheBackend: vo.CacheBackend,
 		environ: vo.Env, getenv: envGetter(vo.Env), stderr: io.Discard, commandLine: vo.CommandLine}
@@ -897,7 +897,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	name := m.wsReg.RemoteBackend()
 	if name != "" && m.cacheBackend != nil {
 		shutdownTel()
-		return nil, fmt.Errorf("magus: WithCacheBackend gives the %q backend and the magusfile wires magus.cache.remote(%q); a workspace has one remote cache, so drop one",
+		return nil, fmt.Errorf("magus: WithCacheBackend gives the %q backend and the magusfile wires magus.cache.remote(%q), and a workspace has one remote cache, so drop one",
 			m.cacheBackend.Name(), name)
 	}
 	if name != "" || m.cacheBackend != nil {

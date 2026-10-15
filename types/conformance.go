@@ -468,7 +468,7 @@ func (r *ConformanceRatchet) add(row conformanceRow, line int, seen *conformance
 	switch row.kind {
 	case "schema":
 		if seen.schema != 0 {
-			return fmt.Errorf("schema: given twice, first at line %d", seen.schema)
+			return fmt.Errorf("schema row given twice, first at line %d", seen.schema)
 		}
 		seen.schema, r.Schema = line, row.schema
 	case "measured":

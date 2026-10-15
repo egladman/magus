@@ -362,5 +362,5 @@ func TestReadConformanceRatchetRefusesASecondSchema(t *testing.T) {
 	t.Parallel()
 
 	_, err := ReadConformanceRatchet("r.jsonl", conformanceRecord(`{"kind":"schema","schema":1}`, `{"kind":"schema", "schema":1}`))
-	assert.EqualError(t, err, "r.jsonl:2: schema: given twice, first at line 1")
+	assert.EqualError(t, err, "r.jsonl:2: schema row given twice, first at line 1")
 }
