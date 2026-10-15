@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -120,4 +121,32 @@ func TestEndlessBackgroundWatch(t *testing.T) {
 	assert.Empty(t, gradeWatch(facts, "", false, w, now).Rule.Name)
 	recordWatch(facts, "", w, now)
 	assert.Equal(t, denyRuleMonitorDuplicate, gradeWatch(facts, "", false, w, now).Rule.Name, "a second one in the session")
+}
+
+// The guard judges a tool by the shape of its input, so a command run through any host
+// tool reaches the rules a shell call does. A wait loop one denies must be denied by the
+// other, whichever of the watcher's two shapes (a timeout, or no end) it arrives in.
+func TestAWaitLoopIsDeniedWhicheverToolRunsIt(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	deps := strict(Dependencies{})
+	loops := []string{
+		"until [ -s out.txt ]; do sleep 5; done; cat out.txt",
+		"while ! test -s out.txt; do echo waiting; sleep 5; done",
+		`until ! pgrep -f "magus run test"; do sleep 15; done`,
+	}
+	envelopes := map[string]map[string]any{
+		"shell":      {"tool_name": "Bash", "tool_input": map[string]any{"description": "wait"}},
+		"watcher":    {"tool_name": "Monitor", "tool_input": map[string]any{"description": "wait", "timeout_ms": float64(600000)}},
+		"persistent": {"tool_name": "Monitor", "tool_input": map[string]any{"description": "wait", "persistent": true}},
+	}
+	for i, loop := range loops {
+		for name, env := range envelopes {
+			env["session_id"] = "wait-" + name + "-" + strconv.Itoa(i)
+			env["hook_event_name"] = "PreToolUse"
+			env["tool_input"].(map[string]any)["command"] = loop
+			v := Judge(ctx, deps, Request{Input: hookJSON(t, env), Host: "claude-code"})
+			assert.Equal(t, "deny", v.Decision, "%s: %s", name, loop)
+			assert.Equal(t, string(denyRuleBusyWait), v.Rule, "%s: %s", name, loop)
+		}
+	}
 }
