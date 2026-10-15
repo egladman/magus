@@ -151,8 +151,8 @@ Assign the check from the pipeline the workspace composed, not from convention.
 `{{cmd "describe target"}} ci <project>` names what `ci` chains and in what order.
 
 - A job gets the narrowest check that covers its edits: the target from that
-  decomposition, scoped to its own tests with `-- -run '<names>'` where the runner
-  has a filter. Never the full suite.
+  decomposition, scoped to its own tests with the test runner's filter after `--`
+  where it has one. Never the full suite.
 - The integrator re-runs the described order, and `{{cmd "affected"}} ci` re-proves the
   whole composition.{{if .Full}} A worker hand-sequencing lint, format, and test is re-deriving an
   order the magusfile already owns, and the step it forgets fails silently by
@@ -489,7 +489,8 @@ The root never builds. The integrator is a role, never a check: spawned `<parent
    empty section means nobody could measure it, not that nothing was found.
 7. Validate once per wave, not once per fix:
    - After a failed full run, read it (`{{cmd "query output"}} <ref>`). Rerun only the
-     failing tests with `-- -run '<names>'` until green, then run the full suite once.
+     failing tests with the test runner's own filter after `--` until green (`{{skill "run"}}`
+     lists one per runner), then run the full suite once.
    - Name a test that fails for an outside reason once, and do not rerun it.
    - A failing set that repeats unchanged stops the wave and goes to the person.
 8. Run `{{cmd "affected"}} ci` once, at the end, and evaluate the top-level acceptance criteria.

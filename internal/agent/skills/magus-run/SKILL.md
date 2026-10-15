@@ -111,7 +111,7 @@ still walks up from your cwd. Pass `--root` when you mean elsewhere.{{end}}
 magus run ci web                  # verify one project: the composed pipeline, in order
 magus affected ci                 # the final gate: everything the diff reaches
 magus run test web                # iterate on the one failing target ci named
-magus run go-test web -- -run 'TestA'  # rerun only the tests a failed run named
+magus run test web -- -k 'name'   # rerun only the failing tests (pytest filter shown)
 magus affected test               # only projects affected by the VCS diff
 ```
 
@@ -260,8 +260,12 @@ Each target's result line mints an output reference id (`out1a2b3c`).
 Fix a failed full run by narrowing, not by repeating it:
 
 1. Read the failure from its ref and list the failing tests.
-2. Rerun only those with the runner's filter after `--`, for example
-   `{{cmd "run"}} go-test <project> -- -run '<names>'`, until they pass.
+2. Rerun only those with the test runner's own filter, passed after `--`, until they
+   pass: `{{cmd "run"}} test <project> -- <filter>`. Examples by runner:
+   - Go (go test): `-- -run 'TestA|TestB'`
+   - pytest: `-- -k 'name'`
+   - Jest or Vitest: `-- -t 'name'`
+   - cargo test: `-- name`
 3. Run the full target ONCE more. A full run after a failed full run, with nothing
    narrowed between them, reports nothing new{{if .Full}} and costs the whole suite again{{end}}.
 
