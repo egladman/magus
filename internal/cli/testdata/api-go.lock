@@ -1047,6 +1047,7 @@ github.com/egladman/magus/types.CheckoutProvisioner type interface
 github.com/egladman/magus/types.CheckoutProvisioner.Checkouts imethod func(ctx context.Context, root string) ([]string, error)
 github.com/egladman/magus/types.CheckoutProvisioner.CreateCheckout imethod func(ctx context.Context, root string, dir string, rev string) error
 github.com/egladman/magus/types.CheckoutProvisioner.RemoveCheckout imethod func(ctx context.Context, root string, dir string) error
+github.com/egladman/magus/types.CheckoutProvisioner.StrandedRevisions imethod func(ctx context.Context, dir string, bases ...string) ([]string, error)
 github.com/egladman/magus/types.CheckoutReporter type interface
 github.com/egladman/magus/types.CheckoutReporter.RegisteredCheckouts imethod func(ctx context.Context, dir string) ([]RegisteredCheckout, error)
 github.com/egladman/magus/types.CheckoutReporter.UnpublishedRevisions imethod func(ctx context.Context, dir string, rev string, bases ...string) ([]string, error)
@@ -1333,6 +1334,7 @@ github.com/egladman/magus/types.Declaration.Apply method func(u *Job)
 github.com/egladman/magus/types.Declaration.ApplySpec method func(u *Job)
 github.com/egladman/magus/types.Declaration.Breaks field []string "json:\"breaks,omitempty\""
 github.com/egladman/magus/types.Declaration.Check field *LeaseCheck "json:\"check,omitempty\""
+github.com/egladman/magus/types.Declaration.Checkout field string "json:\"checkout,omitempty\""
 github.com/egladman/magus/types.Declaration.Checkpoint field string "json:\"checkpoint,omitempty\""
 github.com/egladman/magus/types.Declaration.Criteria field string "json:\"criteria,omitempty\""
 github.com/egladman/magus/types.Declaration.DenyPaths field []string "json:\"deny_paths,omitempty\""
@@ -2432,6 +2434,7 @@ github.com/egladman/magus/types.Job.Updated field int64 "json:\"updated\" yaml:\
 github.com/egladman/magus/types.Job.Validation field string "json:\"validation,omitempty\" yaml:\"validation,omitempty\""
 github.com/egladman/magus/types.Job.WaiterEvidence field *JobIntegration "json:\"waiter_evidence,omitempty\" yaml:\"waiter_evidence,omitempty\""
 github.com/egladman/magus/types.Job.Widenings field int "json:\"widenings,omitempty\"     yaml:\"widenings,omitempty\""
+github.com/egladman/magus/types.Job.Worktree field *JobWorktree "json:\"worktree,omitempty\" yaml:\"worktree,omitempty\""
 github.com/egladman/magus/types.Job.WritePaths field []string "json:\"write_paths,omitempty\" yaml:\"write_paths,omitempty\""
 github.com/egladman/magus/types.Job.WriteProof field JobWriteProof "json:\"write_proof,omitempty\" yaml:\"write_proof,omitempty\""
 github.com/egladman/magus/types.JobAncestors func(rows []Job, id string) []Job
@@ -2646,6 +2649,15 @@ github.com/egladman/magus/types.JobWork.SetupContext field *int64 "json:\"setup_
 github.com/egladman/magus/types.JobWork.SetupMs field *int64 "json:\"setup_ms,omitempty\"       yaml:\"setup_ms,omitempty\""
 github.com/egladman/magus/types.JobWork.SetupTokens field *int64 "json:\"setup_tokens,omitempty\"   yaml:\"setup_tokens,omitempty\""
 github.com/egladman/magus/types.JobWork.Writes field int "json:\"writes\" yaml:\"writes\""
+github.com/egladman/magus/types.JobWorktree type struct
+github.com/egladman/magus/types.JobWorktree.Base field string "json:\"base\" yaml:\"base\""
+github.com/egladman/magus/types.JobWorktree.Binary field string "json:\"binary,omitempty\" yaml:\"binary,omitempty\""
+github.com/egladman/magus/types.JobWorktree.Created field int64 "json:\"created\" yaml:\"created\""
+github.com/egladman/magus/types.JobWorktree.Kept field string "json:\"kept,omitempty\" yaml:\"kept,omitempty\""
+github.com/egladman/magus/types.JobWorktree.Removed field int64 "json:\"removed,omitempty\" yaml:\"removed,omitempty\""
+github.com/egladman/magus/types.JobWorktree.Root field string "json:\"root\" yaml:\"root\""
+github.com/egladman/magus/types.JobWorktree.Source field string "json:\"source\" yaml:\"source\""
+github.com/egladman/magus/types.JobWorktree.Standing method(ptr) func() bool
 github.com/egladman/magus/types.JobWriteProof type string
 github.com/egladman/magus/types.KindAuthor const untyped string = "author"
 github.com/egladman/magus/types.KindCharm const untyped string = "charm"

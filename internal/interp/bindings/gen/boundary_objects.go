@@ -3109,6 +3109,18 @@ func ObjectJobRun(v types.JobRun) vm.Value {
 	return out
 }
 
+func ObjectJobWorktree(v types.JobWorktree) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("root", vm.StrValue(v.Root))
+	out.MapSet("source", vm.StrValue(v.Source))
+	out.MapSet("base", vm.StrValue(v.Base))
+	out.MapSet("created", vm.IntValue(int64(v.Created)))
+	out.MapSet("binary", vm.StrValue(v.Binary))
+	out.MapSet("removed", vm.IntValue(int64(v.Removed)))
+	out.MapSet("kept", vm.StrValue(v.Kept))
+	return out
+}
+
 func ObjectJobModelTier(v types.JobModelTier, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StrValue(v.Name))
@@ -3349,6 +3361,11 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	out.MapSet("registeredBy", ObjectOrigin(v.RegisteredBy))
 	out.MapSet("registered", vm.IntValue(int64(v.Registered)))
 	out.MapSet("checkoutRoot", vm.StrValue(v.CheckoutRoot))
+	optWorktree := vm.Null
+	if v.Worktree != nil {
+		optWorktree = ObjectJobWorktree((*v.Worktree))
+	}
+	out.MapSet("worktree", optWorktree)
 	out.MapSet("endReason", vm.StrValue(v.EndReason))
 	out.MapSet("created", vm.IntValue(int64(v.Created)))
 	out.MapSet("updated", vm.IntValue(int64(v.Updated)))

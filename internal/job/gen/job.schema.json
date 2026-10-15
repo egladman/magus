@@ -78,6 +78,10 @@
       "type": "string",
       "description": "Model is the model or effort tier the work was matched to, a free string because hosts name their models differently."
     },
+    "checkout": {
+      "type": "string",
+      "description": "Checkout is an absolute directory, outside the workspace, where the fork makes a new checkout of the repository for this job at its checkpoint, or at the forking checkout's revision when it names none. The job owns it: see [JobWorktree]. Empty works wherever the job is taken."
+    },
     "owned_paths": {
       "type": "array",
       "items": {

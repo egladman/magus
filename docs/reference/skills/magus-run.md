@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 14550
-skill_short_bytes: 9006
+skill_full_bytes: 14548
+skill_short_bytes: 9004
 ---
 
 # magus-run
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `136` |
+| `agent-skill-version` | `137` |
 | `knowledge-schema-version` | `21` |
-| `skill-content` | `c32b72ec4e22` |
+| `skill-content` | `69006c550030` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -110,9 +110,8 @@ still walks up from your cwd. Pass `--root` when you mean elsewhere.
      pass. A check wired to the wrong path passes the same way.
    - Verify in place; never `git stash`/`reset` first. It destroys a concurrent agent's untracked
      work, and the tree is already what you want to verify.
-3. Reach for an individual target only to iterate on a failure `ci` named,
-   narrowed as "When a target fails" below says; `ci` afterwards
-   proves the change. `magus describe targets` lists every target (`-o name` for
+3. Reach for an individual target only to iterate on a failure `ci` named.
+   Narrow it as "When a target fails" below says; `ci` afterwards proves the change. `magus describe targets` lists every target (`-o name` for
    bare names). Ask the
    workspace; do not read `MAGUS.md`.
 4. Do not run raw language tools (`go test`, `eslint`, `pytest`, `tsc`, ...) for
@@ -346,9 +345,8 @@ VCS.
      pass. A check wired to the wrong path passes the same way.
    - Verify in place; never `git stash`/`reset` first (data-loss-prone and pointless: the tree is
      already what you want to verify).
-3. Reach for an individual target only to iterate on a failure `ci` named,
-   narrowed as "When a target fails" below says; `ci` afterwards
-   proves the change. `magus describe targets` lists every target (`-o name` for
+3. Reach for an individual target only to iterate on a failure `ci` named.
+   Narrow it as "When a target fails" below says; `ci` afterwards proves the change. `magus describe targets` lists every target (`-o name` for
    bare names) and classifies each as canonical, spell,
    or custom; `client` (`magus\describe.target`) is the MCP equivalent. Ask the
    workspace; do not read `MAGUS.md`: that file is a generated index

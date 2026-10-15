@@ -1028,6 +1028,16 @@ export object JobEntry {
     consumed: int = 0,
 }
 
+export object JobWorktree {
+    root: str = "",
+    source: str = "",
+    base: str = "",
+    created: int = 0,
+    binary: str = "",
+    removed: int = 0,
+    kept: str = "",
+}
+
 export object JobResultValidation {
     command: str = "",
     outputRef: str = "",
@@ -1126,6 +1136,7 @@ export object Job {
     registeredBy: Origin = Origin{},
     registered: int = 0,
     checkoutRoot: str = "",
+    worktree: JobWorktree? = null,
     endReason: str = "",
     created: int = 0,
     updated: int = 0,

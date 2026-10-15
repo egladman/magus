@@ -266,6 +266,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "JobGateAttempt", Type: reflect.TypeFor[types.JobGateAttempt](), RuntimeObject: true},
 	{Name: "JobIntegration", Type: reflect.TypeFor[types.JobIntegration](), RuntimeObject: true},
 	{Name: "JobRun", Type: reflect.TypeFor[types.JobRun](), RuntimeObject: true},
+	{Name: "JobWorktree", Type: reflect.TypeFor[types.JobWorktree](), RuntimeObject: true},
 	// Model tiers. A magusfile's bounds function and a harness spell build the first two,
 	// so they carry no encoder; a matrix function is handed the request, whose history is
 	// a list of records. There is deliberately no ModelTier object: that name is the

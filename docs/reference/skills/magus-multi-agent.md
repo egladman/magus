@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 27438
-skill_short_bytes: 21291
+skill_full_bytes: 27497
+skill_short_bytes: 21353
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `136` |
+| `agent-skill-version` | `137` |
 | `knowledge-schema-version` | `21` |
-| `skill-content` | `d66eed385144` |
+| `skill-content` | `4bca0b0e9b8d` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -176,8 +176,8 @@ Assign the check from the pipeline the workspace composed, not from convention.
 `magus describe target ci <project>` names what `ci` chains and in what order.
 
 - A job gets the narrowest check that covers its edits: the target from that
-  decomposition, scoped to its own tests with the test runner's filter after `--`
-  where it has one. Never the full suite.
+  decomposition. Scope it to the job's own tests with the runner's filter after `--`
+  where one exists. Never the full suite.
 - The integrator re-runs the described order, and `magus affected ci` re-proves the
   whole composition.
 
@@ -320,7 +320,7 @@ project's magusfile, its `magus.yaml`, or a spell source a magusfile imports.
 magus READS those files to load the workspace. A half-saved one stops the workspace
 loading for everybody in that checkout at once.
 When `magus job fork` refuses one, the answer is a separate worktree, not a narrower
-boundary.
+boundary: fork with `--checkout <dir>` outside the workspace, never by hand.
 
 Fork records what it could prove in `write_proof` (`alone`, `disjoint` or
 `overlapping`), and `magus ls jobs` prints it. An overlap is recorded, not refused:
@@ -471,8 +471,8 @@ The root never builds. The integrator is a role, never a check: spawned `<parent
    empty section means nobody could measure it, not that nothing was found.
 7. Validate once per wave, not once per fix:
    - After a failed full run, read it (`magus query output <ref>`). Rerun only the
-     failing tests with the test runner's own filter after `--` until green (`magus-run`
-     lists one per runner), then run the full suite once.
+     failing tests, with the runner's filter after `--`, until green; `magus-run`
+     lists one per runner. Then run the full suite once.
    - Name a test that fails for an outside reason once, and do not rerun it.
    - A failing set that repeats unchanged stops the wave and goes to the person.
 8. Run `magus affected ci` once, at the end, and evaluate the top-level acceptance criteria.
@@ -560,7 +560,7 @@ ask whether each unit is big enough to be worth a worker.
   or `grouping history` in `magus describe job <job>`) and weigh each measured shape
   against the others: chained, split and solo each report the load before a
   first write and the context, wall time and collisions per group. It reports
-  and never decides; a standing grouping rule is a person's to write.
+  and never decides; a person writes any standing grouping policy.
 - Where the lens answers unknown, apply these defaults and say in the plan that you
   did. Merge small disjoint units inside one project. Spawn only when more than one
   independent unit survives the merge. Fill idle root time from that pool, never by
@@ -645,8 +645,8 @@ Assign the check from the pipeline the workspace composed, not from convention.
 `magus describe target ci <project>` names what `ci` chains and in what order.
 
 - A job gets the narrowest check that covers its edits: the target from that
-  decomposition, scoped to its own tests with the test runner's filter after `--`
-  where it has one. Never the full suite.
+  decomposition. Scope it to the job's own tests with the runner's filter after `--`
+  where one exists. Never the full suite.
 - The integrator re-runs the described order, and `magus affected ci` re-proves the
   whole composition. A worker hand-sequencing lint, format, and test is re-deriving an
   order the magusfile already owns, and the step it forgets fails silently by
@@ -814,7 +814,7 @@ cannot see. Measured 2026-09-17: three workers
 shared a checkout, one saved the root magusfile mid-edit, and all three were
 stopped for the duration by a file only one of them had ever opened.
 When `magus job fork` refuses one, the answer is a separate worktree, not a narrower
-boundary.
+boundary: fork with `--checkout <dir>` outside the workspace, never by hand.
 
 Fork records what it could prove in `write_proof` (`alone`, `disjoint` or
 `overlapping`), and `magus ls jobs` prints it. An overlap is recorded, not refused:
@@ -982,8 +982,8 @@ The root never builds. The integrator is a role, never a check: spawned `<parent
    empty section means nobody could measure it, not that nothing was found.
 7. Validate once per wave, not once per fix:
    - After a failed full run, read it (`magus query output <ref>`). Rerun only the
-     failing tests with the test runner's own filter after `--` until green (`magus-run`
-     lists one per runner), then run the full suite once.
+     failing tests, with the runner's filter after `--`, until green; `magus-run`
+     lists one per runner. Then run the full suite once.
    - Name a test that fails for an outside reason once, and do not rerun it.
    - A failing set that repeats unchanged stops the wave and goes to the person.
 8. Run `magus affected ci` once, at the end, and evaluate the top-level acceptance criteria.
