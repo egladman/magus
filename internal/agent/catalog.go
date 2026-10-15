@@ -405,7 +405,10 @@ import (
 //
 // 135: magus-workspace-rules names knowledge.conformance, magus\conformance and the
 // conformance-ratchet doctor check; the conform spellings are gone.
-const SkillVersion = 135
+//
+// 136: magus-run and magus-multi-agent teach the fix loop: rerun only the failing tests
+// after a failed full run, one full run per wave, one affected ci at the end.
+const SkillVersion = 136
 
 const skillLicense = "GPL-3.0-or-later"
 

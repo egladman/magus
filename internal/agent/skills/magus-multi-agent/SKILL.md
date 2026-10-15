@@ -72,15 +72,9 @@ Prove it before you plan it. A claim a plan or brief rests on cites the output r
 a run that settled it. A guess nobody ran stays out of the plan.
 
 {{if .Full}}Graph engineering is a natural evolution of loop engineering: the graph improves
-the loop's partition and collision decisions, and does not replace the loop. Run it:
-
-1. State the top-level goal, constraints, and observable acceptance criteria.
-2. Map the affected graph and propose collision-resistant edit jobs.
-3. Give every job its own criteria, ownership boundary, and goals.
-4. Hand out work, within any cap the user set.
-5. Observe agents and Magus processes through their separate control planes.
-6. Evaluate evidence and revise ownership or ordering until the criteria pass.
-7. Hand integration and the release gate to the checkout's integrator.
+the loop's partition and collision decisions, and does not replace the loop. The loop:
+state the goal and acceptance criteria, partition, hand out, observe, evaluate against
+the evidence, revise ownership or ordering, then integrate.
 
 Acceptance evidence is an output ref the root reopens (`{{cmd "query output"}} <ref>`),
 never a worker's prose. A worker that ran a filtered subset, or quietly restated its
@@ -156,7 +150,9 @@ worktrees are available.
 Assign the check from the pipeline the workspace composed, not from convention.
 `{{cmd "describe target"}} ci <project>` names what `ci` chains and in what order.
 
-- A job gets the narrowest target from that decomposition.
+- A job gets the narrowest check that covers its edits: the target from that
+  decomposition, scoped to its own tests with `-- -run '<names>'` where the runner
+  has a filter. Never the full suite.
 - The integrator re-runs the described order, and `{{cmd "affected"}} ci` re-proves the
   whole composition.{{if .Full}} A worker hand-sequencing lint, format, and test is re-deriving an
   order the magusfile already owns, and the step it forgets fails silently by
@@ -483,16 +479,17 @@ The root never builds. The integrator is a role, never a check: spawned `<parent
    names a passing run of this job's own check, never that the work meets the job's
    GOAL. A worker's prose about its criteria is not that evidence.
 3. Resolve cross-job API changes centrally; never assign the same seam twice.
-4. Regenerate declared outputs once, after source work converges.
+4. Regenerate declared outputs once, after source work converges and before the full
+   test run, or a drift test fails for nothing.
 5. Re-run `{{cmd "affected"}} <target> --plan` over the actual diff. If its shape
    invalidates the original partition, stop parallel integration and reconcile.
 6. Read the integrated changeset with `{{cmd "diff"}} --impact` before landing it.
-   {{- if .Full}} It shows
-   what the fleet's combined edit reaches, who else has been changing it, and a
-   rebuild estimate from recorded run times. It adds what the advisors say and any
-   note anchored to a file it touched. Context, never a verdict: nothing gates on it and
-   the exit code is unchanged, and a section that is empty means nobody could
-   measure it, not that nothing was found.{{else}} It shows reach, other recent
-   editors, a rebuild estimate, advisors and anchored notes. It is context, never a
-   verdict. An empty section means nobody could measure it, not that nothing was found.{{end}}
-7. Run `{{cmd "affected"}} ci` and evaluate the top-level acceptance criteria.
+   It shows reach, other recent editors, a rebuild estimate from recorded run times,
+   advisors and anchored notes. It is context, never a verdict: nothing gates on it. An
+   empty section means nobody could measure it, not that nothing was found.
+7. Validate once per wave, not once per fix:
+   - After a failed full run, read it (`{{cmd "query output"}} <ref>`). Rerun only the
+     failing tests with `-- -run '<names>'` until green, then run the full suite once.
+   - Name a test that fails for an outside reason once, and do not rerun it.
+   - A failing set that repeats unchanged stops the wave and goes to the person.
+8. Run `{{cmd "affected"}} ci` once, at the end, and evaluate the top-level acceptance criteria.

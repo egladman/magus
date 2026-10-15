@@ -85,8 +85,8 @@ still walks up from your cwd. Pass `--root` when you mean elsewhere.{{end}}
    - Verify in place; never `git stash`/`reset` first{{if .Full}} (data-loss-prone and pointless: the tree is
      already what you want to verify){{else}}. It destroys a concurrent agent's untracked
      work, and the tree is already what you want to verify{{end}}.
-3. Reach for an individual target only to iterate on a failure `ci` named.
-   Rerunning one failing target is cheaper while you fix it; `ci` afterwards
+3. Reach for an individual target only to iterate on a failure `ci` named,
+   narrowed as "When a target fails" below says; `ci` afterwards
    proves the change. `{{cmd "describe targets"}}` lists every target (`-o name` for
    bare names){{if .Full}} and classifies each as canonical, spell,
    or custom; `{{tool "client"}}` (`{{buzz "describe.target"}}`) is the MCP equivalent{{end}}. Ask the
@@ -111,6 +111,7 @@ still walks up from your cwd. Pass `--root` when you mean elsewhere.{{end}}
 magus run ci web                  # verify one project: the composed pipeline, in order
 magus affected ci                 # the final gate: everything the diff reaches
 magus run test web                # iterate on the one failing target ci named
+magus run go-test web -- -run 'TestA'  # rerun only the tests a failed run named
 magus affected test               # only projects affected by the VCS diff
 ```
 
@@ -255,6 +256,17 @@ Each target's result line mints an output reference id (`out1a2b3c`).
 3. `{{cmd "doctor"}}` validates the workspace itself (config, cache, tool availability,
    cycles){{if .Full}} when failures look environmental rather than caused by
    your change{{end}}.
+
+Fix a failed full run by narrowing, not by repeating it:
+
+1. Read the failure from its ref and list the failing tests.
+2. Rerun only those with the runner's filter after `--`, for example
+   `{{cmd "run"}} go-test <project> -- -run '<names>'`, until they pass.
+3. Run the full target ONCE more. A full run after a failed full run, with nothing
+   narrowed between them, reports nothing new{{if .Full}} and costs the whole suite again{{end}}.
+
+A test known to fail for an outside reason is named once and left out of every rerun.
+Run generators before the full test run, so a drift test does not fail for nothing.
 
 ## When another magus process holds the project
 
