@@ -846,10 +846,10 @@ github.com/egladman/magus/types.ConformProvenance type struct
 github.com/egladman/magus/types.ConformProvenance.Date field string "json:\"date\""
 github.com/egladman/magus/types.ConformProvenance.Rev field string "json:\"rev\""
 github.com/egladman/magus/types.ConformRatchet type struct
-github.com/egladman/magus/types.ConformRatchet.Known field []ConformKnown "json:\"known\""
-github.com/egladman/magus/types.ConformRatchet.Measured field ConformProvenance "json:\"measured\""
-github.com/egladman/magus/types.ConformRatchet.Schema field int "json:\"schema\""
-github.com/egladman/magus/types.ConformRatchet.Thresholds field []ConformThreshold "json:\"thresholds\""
+github.com/egladman/magus/types.ConformRatchet.Known field []ConformKnown
+github.com/egladman/magus/types.ConformRatchet.Measured field ConformProvenance
+github.com/egladman/magus/types.ConformRatchet.Schema field int
+github.com/egladman/magus/types.ConformRatchet.Thresholds field []ConformThreshold
 github.com/egladman/magus/types.ConformRow type struct
 github.com/egladman/magus/types.ConformRow.Anchor field int "json:\"anchor\"     yaml:\"anchor\""
 github.com/egladman/magus/types.ConformRow.Key field ConformKey "json:\"key\"        yaml:\"key\""
@@ -876,7 +876,7 @@ github.com/egladman/magus/types.ConformThreshold.Line field int "json:\"-\""
 github.com/egladman/magus/types.ConformThreshold.N field int "json:\"n\""
 github.com/egladman/magus/types.ConformThreshold.Percentile field float64 "json:\"percentile\""
 github.com/egladman/magus/types.ConformThreshold.Value field int "json:\"value\""
-github.com/egladman/magus/types.ConformThreshold.Why field string "json:\"why\""
+github.com/egladman/magus/types.ConformThreshold.Why field string "json:\"why,omitempty\""
 github.com/egladman/magus/types.ConformTypeMethods const ConformMetric = "type-methods"
 github.com/egladman/magus/types.ConsoleFileWithheld const DiagnosticCode = "MGS9010"
 github.com/egladman/magus/types.ConsoleNotBuilt const DiagnosticCode = "MGS9013"
