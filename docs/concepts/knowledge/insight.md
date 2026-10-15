@@ -114,6 +114,19 @@ Each lens is a field on the report:
   tab-separated and single-document JSON formats before this one are refused the same
   way; rewrite them as lines.
 
+- `grouping`: what splitting work across workers cost in this workspace, read from the
+  job outcomes in the history file, not git. Each job is `chained` (one worker whose
+  write paths reach two or more projects), `split` (two or more jobs forked under one
+  attempt of one parent) or `solo`. Per shape the row sets the context a worker loaded
+  before its first write beside the context, wall time, denials and unattributed writes
+  per group, folded from the guard's trail when each job ended.
+
+  A shape with fewer than `min_sample` groups, or with most trails rotated away, answers
+  `unknown` with its counts and no figure. `unclassified` counts jobs whose projects did
+  not resolve. The lens is observational: bigger work is split more often, so it says
+  what each shape cost, never which to choose. `magus describe job` prints the same rows
+  for the groups that wrote in the job's projects.
+
 ## Bounding the scan
 
 `commits` caps the scan by count; `since` bounds it by date (`90d`, `12w`, `6mo`,
