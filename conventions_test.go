@@ -865,7 +865,7 @@ var storeMechanicsAllowed = map[string]string{
 	"internal/queue/verdicts.go:VerdictDir.RecordWithBundle": "publishes a directory, not a file",
 	"lock.go:projectLocker.acquire":                          "a project lock waits unbounded with a heartbeat: its holder is a build",
 	"lock.go:lockIsHeld":                                     "probes a project lock without holding it",
-	"pipe.go:GatePipe":                                       "a project lock waits unbounded with a heartbeat: its holder is a build",
+	"internal/pipe/pipe.go:Gate":                             "a project lock waits unbounded with a heartbeat: its holder is a build",
 	"pipe.go:projectLocker.publishHolds":                     "a project lock waits unbounded with a heartbeat: its holder is a build",
 }
 

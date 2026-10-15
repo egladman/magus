@@ -431,7 +431,7 @@ func TestHelperHold(t *testing.T) {
 	if inv := os.Getenv("LOCKTEST_INV"); inv != "" {
 		ctx = journal.WithInvocationID(types.AppendInvocationAncestor(ctx, os.Getpid(), inv), inv)
 	}
-	var opts []lockerOption
+	opts := []lockerOption{withCommandLine(os.Args)}
 	if os.Getenv("LOCKTEST_GATE") == "1" {
 		opts = append(opts, asGate())
 	}

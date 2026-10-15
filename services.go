@@ -89,7 +89,9 @@ func (m *Magus) newServiceSession(_ context.Context) *service.Session {
 // ServiceSession returns a service session routed the way a run's is: through the
 // broker when one is wired, in-process otherwise. The caller owns it and ends it with
 // ReleaseAll; this is how a `magus buzz` script's magus\service leases are hosted.
-func (w internals) ServiceSession() *service.Session { return w.newServiceSession(context.Background()) }
+func (w internals) ServiceSession() *service.Session {
+	return w.newServiceSession(context.Background())
+}
 
 // warnNearDuplicateServices emits MGS5001 when a run brings up services that look
 // like near-duplicate copies of one shared service. It is scoped to the run's
