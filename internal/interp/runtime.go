@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/buildinfo"
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/engine"
 	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
@@ -34,6 +33,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -566,7 +566,7 @@ func sealedBytecodeStoreUnder(name, root string) buzz.BytecodeStore {
 	if stamp == "" {
 		return nil
 	}
-	base, err := config.UserCacheDir()
+	base, err := xdg.CacheDir()
 	if err != nil {
 		return nil
 	}
@@ -631,7 +631,7 @@ func (s sealedBytecodeStore) seal(key string, blob []byte) []byte {
 // bytecodeSecret reads the key chunks are sealed with, creating it on first use.
 // It lives in the state dir, apart from the cache it protects.
 func bytecodeSecret() ([]byte, error) {
-	base, err := config.UserStateDir()
+	base, err := xdg.StateDir()
 	if err != nil {
 		return nil, err
 	}

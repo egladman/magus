@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -31,7 +31,7 @@ var feedbackID = regexp.MustCompile(`^fb[0-9a-f]{12}$`)
 // session store does, so a mark made in one worktree is read in every other one and in
 // later sessions.
 func FeedbackMarksDir(root string) (string, error) {
-	base, err := config.UserStateDir()
+	base, err := xdg.StateDir()
 	if err != nil {
 		return "", fmt.Errorf("feedback: resolve state dir, set XDG_STATE_HOME to a writable absolute path: %w", err)
 	}

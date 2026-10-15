@@ -34,6 +34,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -392,7 +393,7 @@ func configFilePaths(root string) []string {
 			paths = append(paths, p)
 		}
 	}
-	if udc, err := config.UserConfigDir(); err == nil {
+	if udc, err := xdg.ConfigDir(); err == nil {
 		add(filepath.Join(udc, "magus"))
 	}
 	if root != "" {

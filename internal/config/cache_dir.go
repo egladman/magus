@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -37,7 +38,7 @@ func StoreDir(root string, cfg Config) (string, error) {
 	if cfg.Cache.Dir != "" {
 		return CacheDir(root, cfg), nil
 	}
-	base, err := UserCacheDir()
+	base, err := xdg.CacheDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve the shared cache dir, set XDG_CACHE_HOME to a writable absolute path or cache.dir: %w", err)
 	}

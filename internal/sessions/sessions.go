@@ -59,9 +59,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -202,7 +202,7 @@ const fileExt = ".jsonl"
 // directory, so a session started in one is visible from another. Keyed through
 // vcs.StateDir so it agrees with every other per-repo store about what a repo is.
 func Dir(root string) (string, error) {
-	base, err := config.UserStateDir()
+	base, err := xdg.StateDir()
 	if err != nil {
 		return "", fmt.Errorf("sessions: resolve state dir, set XDG_STATE_HOME to a writable absolute path: %w", err)
 	}

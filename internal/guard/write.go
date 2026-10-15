@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"gopkg.in/yaml.v3"
@@ -1139,7 +1140,7 @@ func vcsOffSwitchTargets(root string) []string {
 		filepath.Join(root, config.Filename),
 		filepath.Join(root, config.DottedFilename),
 	}
-	if udc, err := config.UserConfigDir(); err == nil {
+	if udc, err := xdg.ConfigDir(); err == nil {
 		targets = append(targets,
 			filepath.Join(udc, "magus", config.Filename),
 			filepath.Join(udc, "magus", config.DottedFilename))

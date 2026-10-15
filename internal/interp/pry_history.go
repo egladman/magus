@@ -4,12 +4,15 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/libs/xdg"
 )
 
 // defaultHistoryCap is the maximum number of lines kept in memory and on disk.
@@ -23,16 +26,17 @@ type history struct {
 	lines []string
 }
 
-// defaultHistoryPath returns $XDG_STATE_HOME/magus/pry_history, falling back to ~/.local/state.
-func defaultHistoryPath() string {
-	if dir := os.Getenv("XDG_STATE_HOME"); dir != "" {
-		return filepath.Join(dir, "magus", "pry_history")
+// openDefaultHistory opens <xdg.StateDir>/magus/pry_history, shared by Repl and Pry so
+// a session opened either way recalls what the other left behind. With no state dir it
+// says so on stderr and returns nil: the session runs without recall.
+func openDefaultHistory(stderr io.Writer) *history {
+	base, err := xdg.StateDir()
+	if err != nil {
+		fmt.Fprintf(stderr, "history off: resolve the state dir, set XDG_STATE_HOME to a writable absolute path: %v\n", err)
+		return nil
 	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, ".local", "state", "magus", "pry_history")
-	}
-	// Last resort: cwd-relative.
-	return ".magus_pry_history"
+	hist, _ := openHistory(filepath.Join(base, "magus", "pry_history"), 0)
+	return hist
 }
 
 // openHistory loads up to maxCap lines from path (0 = defaultHistoryCap); a missing file is not an error.

@@ -31,10 +31,10 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/buildinfo"
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -135,7 +135,7 @@ type Location struct {
 	// releases; it just cannot say what was in them.
 	Root string
 	// StateBase overrides the user state directory the ledger resolves under. Empty
-	// means config.UserStateDir, which is what every caller outside a test wants.
+	// means xdg.StateDir, which is what every caller outside a test wants.
 	StateBase string
 	// Actor is who the Store writes as. A pointer because the zero Actor is UNBOUND and
 	// is a real value: nil is the only way to say "resolve it at every write, from the
@@ -218,7 +218,7 @@ func jobsPath(loc Location) (string, error) {
 	base := loc.StateBase
 	if base == "" {
 		var err error
-		if base, err = config.UserStateDir(); err != nil {
+		if base, err = xdg.StateDir(); err != nil {
 			return "", fmt.Errorf("job: resolve state dir, set XDG_STATE_HOME to a writable absolute path: %w", err)
 		}
 	}

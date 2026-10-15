@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -168,7 +169,7 @@ func runConfigSet(ctx context.Context, args []string) error {
 
 	var cfgPath string
 	if sf.Global {
-		dir, err := config.UserConfigDir()
+		dir, err := xdg.ConfigDir()
 		if err != nil {
 			return fmt.Errorf("config set --global: cannot determine config directory: %w", err)
 		}

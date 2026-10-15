@@ -132,8 +132,8 @@ does not take synthetic file servers; the daemon still answers over RPC.
 The conventions:
 
 - **Layout and naming.** A store lives under the workspace's `.magus/` or a
-  user directory resolved by `internal/config` (`UserStateDir`,
-  `UserCacheDir`), never a literal path. A directory names the kind and the
+  user directory resolved by `libs/xdg` (`StateDir`, `CacheDir`), never a
+  literal path. A directory names the kind and the
   file in it is the store (`jobs.jsonl`), so the listing is the index. A
   content-addressed store of blobs fans out on the first two hex digits of the
   hash, as git's does (`cas/ab/ab12...`).

@@ -34,7 +34,7 @@ import (
 // ErrNoToken is returned by LoadOperator when no operator token file exists yet.
 var ErrNoToken = errors.New("auth: no token configured")
 
-// OperatorPath returns the operator token file: <UserStateDir>/magus/mcp_token. It lives in
+// OperatorPath returns the operator token file: <xdg.StateDir>/magus/mcp_token. It lives in
 // the state dir, not the config dir, because config may be shared or committed and a secret
 // must not ride along.
 func OperatorPath() (string, error) {

@@ -1107,7 +1107,8 @@ func EnvVarDocs() []EnvVarDoc {
 // on the next one.
 const DefaultShutdownGrace = 5 * time.Minute
 
-// Defaults returns a Config populated with the magus built-in defaults.
+// Defaults returns a Config populated with the magus built-in defaults. It reads no
+// environment, so HistoryPath is empty; the loaders set it from [DefaultHistoryPath].
 func Defaults() Config {
 	return Config{
 		CI: CI{MaxShards: 8, RecordRuns: true},
@@ -1121,7 +1122,6 @@ func Defaults() Config {
 				CheckReview:      15 * time.Minute,   // the only one that reaches a forge; a merge happens once
 			},
 		},
-		HistoryPath:   DefaultHistoryPath(),
 		ShutdownGrace: DefaultShutdownGrace,
 		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1},
 		Queue:         Queue{CarryApprovals: CarryApprovals(queuetypes.DefaultCarryPolicy())},

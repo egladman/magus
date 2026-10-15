@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -99,7 +100,7 @@ func (a Agents) ResolveBilling(getenv func(string) string) types.AgentBilling {
 // does not decode or validate.
 func LoadAgents(root string) (Agents, error) {
 	user := Defaults()
-	if dir, err := UserConfigDir(); err == nil {
+	if dir, err := xdg.ConfigDir(); err == nil {
 		loaded, err := loadDirInto(user, filepath.Join(dir, "magus"))
 		if err != nil {
 			return Agents{}, err

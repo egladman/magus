@@ -17,12 +17,12 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/sys/mem"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -313,7 +313,7 @@ func serverLogPath() string { return stateLogPath("server.log") }
 func crashReportDir() string { return stateLogPath("crashes") }
 
 func stateLogPath(name string) string {
-	dir, err := config.UserStateDir()
+	dir, err := xdg.StateDir()
 	if err != nil {
 		dir = os.TempDir()
 	}
@@ -492,7 +492,7 @@ func gatherUnitFacts() (broker.UnitFacts, error) {
 	if err != nil {
 		return broker.UnitFacts{}, err
 	}
-	configDir, err := config.UserConfigDir()
+	configDir, err := xdg.ConfigDir()
 	if err != nil {
 		return broker.UnitFacts{}, err
 	}

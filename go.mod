@@ -89,6 +89,7 @@ require (
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/egladman/magus/libs/diagnostics v0.2.0
 	github.com/egladman/magus/libs/gopherbuzz v0.2.0
+	github.com/egladman/magus/libs/xdg v0.1.0
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -138,3 +139,5 @@ tool (
 replace github.com/egladman/magus/libs/diagnostics => ./libs/diagnostics
 
 replace github.com/egladman/magus/libs/gopherbuzz => ./libs/gopherbuzz
+
+replace github.com/egladman/magus/libs/xdg => ./libs/xdg
