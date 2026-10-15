@@ -121,7 +121,10 @@ func (c *Cache) snapshotOne(abs, rel string) (OutputRecord, error) {
 	}
 	hash := preHash
 	dst := c.blobPath(preHash)
-	if _, err := os.Stat(dst); errors.Is(err, os.ErrNotExist) {
+	// Touching an existing blob claims it (see blobGrace): the manifest naming it is not
+	// written yet, and another checkout's GC may find it unreferenced meanwhile.
+	now := time.Now()
+	if err := os.Chtimes(dst, now, now); errors.Is(err, os.ErrNotExist) {
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return OutputRecord{}, err
 		}

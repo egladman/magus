@@ -95,6 +95,26 @@ func (c *Cache) markUsed(projectPath, hash string) {
 	_ = os.Chtimes(c.manifestPath(projectPath, hash), now, now)
 }
 
+// blobGrace is how long gcBlobs keeps an unreferenced blob after its last write or
+// claim. Every checkout of a repository shares the store, so another process may hold a
+// blob no manifest names yet (it is between snapshotting outputs and writing the
+// manifest) or one whose manifest an eviction just removed (it is replaying that entry).
+// A file's mtime needs no lock file to go stale when a process dies; the window only has
+// to outlast one snapshot or replay.
+const blobGrace = 15 * time.Minute
+
+// claimBlobs moves the mtime of every blob m names to now, so for blobGrace no process's
+// gcBlobs removes them whatever happens to m. A blob already gone is left for the replay
+// to report.
+func (c *Cache) claimBlobs(m *Manifest) {
+	now := time.Now()
+	for _, out := range m.Outputs {
+		if out.Blob != "" {
+			_ = os.Chtimes(c.blobPath(out.Blob), now, now)
+		}
+	}
+}
+
 // diskSizeTTL bounds how often DiskBytes re-walks the cache tree, so a status stream
 // polling every few seconds does not stat the whole cache each frame.
 const diskSizeTTL = 15 * time.Second

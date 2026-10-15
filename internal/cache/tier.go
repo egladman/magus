@@ -92,6 +92,9 @@ func (t *localTier) lookup(ctx context.Context, s *Step, hash string) (*entry, e
 	if t.c.treeMoved(ctx, s, m) {
 		return nil, errTierMiss
 	}
+	if t.write {
+		t.c.claimBlobs(m)
+	}
 	return &entry{manifest: m, root: t.c.store}, nil
 }
 

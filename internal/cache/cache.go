@@ -1916,14 +1916,8 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 	return nil
 }
 
-// Evict removes LRU entries down to the size cap, then collects unreferenced CAS
-// blobs.
-func (c *Cache) Evict(ctx context.Context) error {
-	c.evictOldest(ctx, c.sizeCap())
-	return c.gcBlobs(ctx)
-}
-
-// gcBlobs removes CAS blobs not referenced by any surviving manifest.
+// gcBlobs removes CAS blobs not referenced by any surviving manifest and not written or
+// claimed within blobGrace.
 func (c *Cache) gcBlobs(ctx context.Context) error {
 	casDir := filepath.Join(c.store, "cas")
 	manifestsDir := filepath.Join(c.store, "manifests")
@@ -1963,10 +1957,15 @@ func (c *Cache) gcBlobs(ctx context.Context) error {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
-		blob := filepath.Base(p)
-		if _, ok := referenced[blob]; !ok {
-			_ = os.Remove(p) // p is always under c.store; symlink escapes are not a concern for a local cache
+		if _, ok := referenced[filepath.Base(p)]; ok {
+			return nil
 		}
+		// Statted now rather than from the walk's entry: a claim landing between the two is
+		// the case the grace exists for.
+		if info, err := os.Lstat(p); err != nil || time.Since(info.ModTime()) < blobGrace {
+			return nil //nolint:nilerr // a blob gone since the walk listed it needs no removal
+		}
+		_ = os.Remove(p) // p is always under c.store; symlink escapes are not a concern for a local cache
 		return nil
 	}); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("magus/cache: gc walk cas: %w", err)

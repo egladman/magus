@@ -1461,7 +1461,7 @@ func TestRunAllBeforeKeyRunsAfterUpstreamsAndFailsOnlyItsStep(t *testing.T) {
 	assert.Contains(t, order, "run:peer", "an unrelated step still runs")
 }
 
-func TestMain(m *testing.M) { testkit.Main(m) }
+func TestMain(m *testing.M) { testkit.Main(m, "CACHETEST_*") }
 
 // discardLogger is a slog.Logger that drops all output, keeping benchmark
 // results clean.
