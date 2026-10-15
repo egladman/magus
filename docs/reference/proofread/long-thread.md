@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A long exchange in text reads as a stalemate to the people watching it, and a call settles it faster. It needs the thread length (-thread-length), and stays silent without it.
+A long exchange in text reads as a stalemate to the people watching it, and a call settles it faster. It needs the thread length (--thread-length), and stays silent without it.
 
 ## Default decision
 

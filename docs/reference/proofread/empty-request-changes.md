@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A review that requests changes holds the merge; GitHub's review API requires its body. Google's review guide (eng-practices, "The Standard of Code Review") asks the reviewer to say what blocks, and Ebert et al. (SANER 2019) found missing rationale the most frequent cause of confusion. A body naming code, a path, a line, a failure, a list of items or the inline comments passes. It needs the review's event (-event), and judges nothing without it. It is inferred from those sources rather than measured, so it advises.
+A review that requests changes holds the merge; GitHub's review API requires its body. Google's review guide (eng-practices, "The Standard of Code Review") asks the reviewer to say what blocks, and Ebert et al. (SANER 2019) found missing rationale the most frequent cause of confusion. A body naming code, a path, a line, a failure, a list of items or the inline comments passes. It needs the review's event (--event), and judges nothing without it. It is inferred from those sources rather than measured, so it advises.
 
 ## Default decision
 

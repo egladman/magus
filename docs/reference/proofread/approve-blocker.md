@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Google's review guide (eng-practices, "The Standard of Code Review") approves a change once it improves code health and labels what is left as optional. An approval that names a blocker lets the change merge with the blocker in it, or leaves the author unsure the approval holds. "non-blocking" and "no blockers" are left alone. It needs the review's event (-event), and judges nothing without it. It is a convention, not a study, so it advises.
+Google's review guide (eng-practices, "The Standard of Code Review") approves a change once it improves code health and labels what is left as optional. An approval that names a blocker lets the change merge with the blocker in it, or leaves the author unsure the approval holds. "non-blocking" and "no blockers" are left alone. It needs the review's event (--event), and judges nothing without it. It is a convention, not a study, so it advises.
 
 ## Default decision
 
