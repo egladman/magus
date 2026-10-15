@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -357,21 +358,98 @@ func TestAChildsStartJoinsItToTheSpawnBeforeIt(t *testing.T) {
 // A foreground spawn returns only after its child stopped, and the host sends no start for
 // it, so the spawn's registration is all that can bind the child's first call.
 func TestAForegroundChildsFirstCallJoinsItToItsSpawn(t *testing.T) {
-	row := types.Job{ID: "guard-facts", State: types.StateDeclared, WritePaths: []string{"internal/guard/**"}}
-	ctx, root := fleetFixture(t, row)
-	target := filepath.Join(root, "internal", "guard", "guard.go")
-	require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
-	require.NoError(t, os.WriteFile(target, []byte("package guard\n"), 0o644))
-	claude := func(env map[string]any) types.GuardJudgment {
-		env["session_id"], env["cwd"] = "claude-s", root
-		return Judge(ctx, Dependencies{}, Request{Input: hookJSON(t, env), Host: "claude-code"})
-	}
+	f := newForegroundFleet(t, "guard-facts")
+	f.spawn(t, "guard-facts")
 
-	spawn := claude(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Agent",
-		"tool_input": map[string]any{"prompt": "implement it", "subagent_type": "general-purpose", "run_in_background": false, "description": "orchestrator/impl guard-facts"}})
-	require.NotEqual(t, "deny", spawn.Decision, spawn.Reason)
-
-	write := claude(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Write", "agent_id": "a1b2c3", "agent_type": "general-purpose",
-		"tool_input": map[string]any{"file_path": target, "content": "package guard // x\n"}})
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=guard-facts")
+	write := f.write(t, "a1b2c3", "guard-facts")
 	assert.Equal(t, "guard-facts", write.Lease, "the child acts under the job its spawn named")
+}
+
+// One message can start several foreground workers, and each declares the job it works as.
+// The worker that calls second is bound to its own job, not to the oldest spawn waiting.
+func TestParallelForegroundChildrenEachJoinTheirOwnSpawn(t *testing.T) {
+	f := newForegroundFleet(t, "job-a", "job-b")
+	f.spawn(t, "job-a")
+	f.spawn(t, "job-b")
+
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=job-b")
+	assert.Equal(t, "job-b", f.write(t, "agent-b", "job-b").Lease)
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=job-a")
+	assert.Equal(t, "job-a", f.write(t, "agent-a", "job-a").Lease)
+}
+
+func TestAForegroundChildThatCannotBePlacedIsRefusedWithTheReason(t *testing.T) {
+	declare := trail.EnvBaggage + "=" + trail.BaggageLease + "=<job>"
+	for name, tc := range map[string]struct {
+		claim    string
+		spawns   []string
+		contains []string
+	}{
+		"declaring no lease":              {"", []string{"job-a", "job-b"}, []string{"declares no lease", "job-a, job-b", declare}},
+		"declaring a job no spawn names":  {"job-c", []string{"job-a", "job-b"}, []string{"declares lease job-c", "none of the 2 spawn(s)", "job-a, job-b", declare}},
+		"declaring a job two spawns name": {"job-a", []string{"job-a", "job-a"}, []string{"matches 2 waiting spawns of job job-a"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newForegroundFleet(t, "job-a", "job-b", "job-c")
+			for _, id := range tc.spawns {
+				f.spawn(t, id)
+			}
+			if tc.claim == "" {
+				t.Setenv(trail.EnvBaggage, "")
+			} else {
+				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.claim)
+			}
+			write := f.write(t, "agent-x", "job-a")
+			require.Equal(t, "deny", write.Decision)
+			for _, want := range tc.contains {
+				assert.Contains(t, write.Reason, want)
+			}
+		})
+	}
+}
+
+// foregroundFleet is a session whose orchestrator spawns foreground workers, one job row each.
+type foregroundFleet struct {
+	ctx  context.Context
+	root string
+}
+
+func newForegroundFleet(t *testing.T, jobs ...string) foregroundFleet {
+	t.Helper()
+	rows := make([]types.Job, len(jobs))
+	for i, id := range jobs {
+		rows[i] = types.Job{ID: id, State: types.StateDeclared, WritePaths: []string{"internal/" + id + "/**"}}
+	}
+	ctx, root := fleetFixture(t, rows...)
+	f := foregroundFleet{ctx: ctx, root: root}
+	for _, id := range jobs {
+		require.NoError(t, os.MkdirAll(filepath.Dir(f.target(id)), 0o755))
+		require.NoError(t, os.WriteFile(f.target(id), []byte("package x\n"), 0o644))
+	}
+	return f
+}
+
+func (f foregroundFleet) target(job string) string {
+	return filepath.Join(f.root, "internal", job, "x.go")
+}
+
+func (f foregroundFleet) call(t *testing.T, env map[string]any) types.GuardJudgment {
+	t.Helper()
+	env["session_id"], env["cwd"] = "claude-s", f.root
+	return Judge(f.ctx, Dependencies{}, Request{Input: hookJSON(t, env), Host: "claude-code"})
+}
+
+func (f foregroundFleet) spawn(t *testing.T, job string) {
+	t.Helper()
+	t.Setenv(trail.EnvBaggage, "")
+	spawn := f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Agent",
+		"tool_input": map[string]any{"prompt": "implement it", "subagent_type": "general-purpose", "run_in_background": false, "description": "orchestrator/impl " + job}})
+	require.NotEqual(t, "deny", spawn.Decision, spawn.Reason)
+}
+
+func (f foregroundFleet) write(t *testing.T, agentID, job string) types.GuardJudgment {
+	t.Helper()
+	return f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Write", "agent_id": agentID, "agent_type": "general-purpose",
+		"tool_input": map[string]any{"file_path": f.target(job), "content": "package x // y\n"}})
 }

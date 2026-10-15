@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/trail"
 )
 
 // The multi-agent skill is the one piece of guidance a spawn cannot be written well
@@ -156,21 +157,17 @@ func recordPendingSpawn(facts hint.Gate, env hookRequest, spawner string, now ti
 	writeAgentMarker(facts, hint.MarkerKind(pendingSpawnPrefix+strconv.FormatInt(now.UnixNano(), 10)), body)
 }
 
-// joinStartedChild pairs a child whose start names only its own id with the oldest spawn
-// in this session still waiting for one, and files the child under that spawn as a
-// finished spawn call would: its title's job, its name and its model. A host whose spawn
-// is answered by a name, and whose child's own calls carry an id, joins the two here.
-// Nothing is joined to a child magus already has a record of, or to a spawn older than
-// pendingSpawnWindow.
-//
-// A host that sends no start for a foreground child has only the child's first call to join
-// it by, which names no spawn. That join (firstCall) takes only a spawn whose title names a
-// live job, since binding a job is all it is for and a guess that binds nothing could only
-// take a spawn another child is waiting on.
-func joinStartedChild(ctx context.Context, at location, facts hint.Gate, who hookAttribution, child string, now time.Time, firstCall bool) {
-	if _, known := readSpawnedAgent(facts, child); known {
-		return
-	}
+// pendingSpawnEntry is one pending spawn still waiting for its child, with the marker kind
+// it is filed under.
+type pendingSpawnEntry struct {
+	kind  hint.MarkerKind
+	spawn pendingSpawn
+}
+
+// livePendingSpawns lists, oldest first, the spawns of this session that no child has joined
+// and that are not older than pendingSpawnWindow.
+func livePendingSpawns(facts hint.Gate, now time.Time) []pendingSpawnEntry {
+	var out []pendingSpawnEntry
 	for _, kind := range facts.Kinds(pendingSpawnPrefix) {
 		if strings.HasSuffix(string(kind), pendingSpawnJoined) {
 			continue
@@ -184,21 +181,75 @@ func joinStartedChild(ctx context.Context, at location, facts hint.Gate, who hoo
 		if err != nil || json.Unmarshal(body, &p) != nil {
 			continue
 		}
-		if firstCall {
-			if _, titled := spawnTitleJob(ctx, at, p.Record.Description); !titled {
-				continue
-			}
-		}
-		if facts.MarkFired(kind + pendingSpawnJoined) {
-			continue
+		out = append(out, pendingSpawnEntry{kind: kind, spawn: p})
+	}
+	return out
+}
+
+// joinStartedChild pairs a child whose start names only its own id with the oldest spawn
+// in this session still waiting for one, and files the child under that spawn as a
+// finished spawn call would: its title's job, its name and its model. A host whose spawn
+// is answered by a name, and whose child's own calls carry an id, joins the two here.
+// Nothing is joined to a child magus already has a record of, or to a spawn older than
+// pendingSpawnWindow.
+//
+// A host that sends no start for a foreground child has only the child's first call to join
+// it by, which names no spawn, and several foreground spawns can wait at once. That join
+// (firstCall) guesses nothing: it takes the one pending spawn whose title names a live job
+// equal to the lease the caller declares (see [trail.LeaseFromEnv]). When spawns are waiting
+// and the declaration matches none, or more than one, nothing is joined and the returned
+// refusal says why and what to declare. It is empty when the child was joined, was already
+// known, or no spawn naming a job was waiting.
+func joinStartedChild(ctx context.Context, at location, facts hint.Gate, who hookAttribution, child string, now time.Time, firstCall bool) (refusal string) {
+	if _, known := readSpawnedAgent(facts, child); known {
+		return ""
+	}
+	pending := livePendingSpawns(facts, now)
+	join := func(e pendingSpawnEntry) {
+		if facts.MarkFired(e.kind + pendingSpawnJoined) {
+			return
 		}
 		recordSpawnedAgent(ctx, at, facts, who, hookRequest{
 			SpawnedAgent:  child,
-			DeclaredModel: p.Record.Model,
-			Spawn:         spawnFields{Description: p.Record.Description, Name: p.Record.Name},
-		}, p.Spawner)
-		return
+			DeclaredModel: e.spawn.Record.Model,
+			Spawn:         spawnFields{Description: e.spawn.Record.Description, Name: e.spawn.Record.Name},
+		}, e.spawn.Spawner)
 	}
+	if !firstCall {
+		if len(pending) > 0 {
+			join(pending[0])
+		}
+		return ""
+	}
+	var titled, matched []pendingSpawnEntry
+	var jobs []string
+	claim := trail.LeaseFromEnv()
+	for _, e := range pending {
+		row, ok := spawnTitleJob(ctx, at, e.spawn.Record.Description)
+		if !ok {
+			continue
+		}
+		titled = append(titled, e)
+		jobs = append(jobs, row.ID)
+		if claim != "" && row.ID == claim {
+			matched = append(matched, e)
+		}
+	}
+	switch {
+	case len(titled) == 0:
+		return ""
+	case len(matched) == 1:
+		join(matched[0])
+		return ""
+	case len(matched) > 1:
+		return fmt.Sprintf("magus workspace: this worker's first call matches %d waiting spawns of job %s, and magus will not guess between them: "+
+			"wait for one spawn of that job to be joined, or title the spawns for different jobs.", len(matched), claim)
+	case claim == "":
+		return fmt.Sprintf("magus workspace: this worker's first call declares no lease, and %d spawn(s) are waiting for a worker (%s), so magus cannot tell which is its own: "+
+			"declare the job it works as `%s=<job>` in its environment.", len(titled), strings.Join(jobs, ", "), envHookLease)
+	}
+	return fmt.Sprintf("magus workspace: this worker declares lease %s, and none of the %d spawn(s) waiting for a worker names that job (%s): "+
+		"declare the job its spawn title names as `%s=<job>` in its environment.", claim, len(titled), strings.Join(jobs, ", "), envHookLease)
 }
 
 // scheduleShapeKeys are the tool_input fields of a call that queues a prompt for a later

@@ -663,10 +663,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		}
 		// A foreground spawn returns after its child stopped and a host may send no start for
 		// it, so the child's first call joins it to the spawn too; joinStartedChild leaves a
-		// child it already has a record of alone.
+		// child it already has a record of alone, and refuses one it cannot place exactly.
 		if child := cmp.Or(env.ChildStarted, who.Agent); child != "" && !req.DryRun {
 			at := hookLocation(ctx, deps)
-			joinStartedChild(withJobStoreRows(ctx, at), at, hint.NewGate(at.cacheDir, who.factsKey()), who, child, time.Now(), env.ChildStarted == "")
+			if refusal := joinStartedChild(withJobStoreRows(ctx, at), at, hint.NewGate(at.cacheDir, who.factsKey()), who, child, time.Now(), env.ChildStarted == ""); refusal != "" {
+				return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: refusal}
+			}
 		}
 		if env.NothingToJudge && env.UnjudgedTool == "" {
 			// A host envelope whose tool_input carries no command, path or prompt (a todo
