@@ -240,8 +240,8 @@ func TestJobForkRegistryFlagsAreTheFlagsItBinds(t *testing.T) {
 		if !assert.True(t, ok, "--%s is in the registry and not bound", declared.Name) {
 			continue
 		}
-		assert.Equal(t, declared.Doc, got.Usage, "--%s", declared.Name)
-		assert.Equal(t, declared.Kind == cli.FlagBool, got.Bool, "--%s: whether it takes a value", declared.Name)
+		want := recordedFlag{Name: declared.Name, Usage: declared.Doc, Bool: declared.Kind == cli.FlagBool}
+		assert.Equal(t, want, got, "--%s: its doc, and whether it takes a value", declared.Name)
 	}
 }
 
