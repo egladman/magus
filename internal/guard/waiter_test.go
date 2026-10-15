@@ -95,7 +95,7 @@ func TestBackgroundedSleepIsATimerAndCountsTowardThePile(t *testing.T) {
 
 	raised := withSetting(string(denyRuleSleepPoll), builtin.Deny)
 	v := judge(raised, "sleep 540")
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSleepPoll)}, decidedBy(v))
+	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSleepPoll)}, judgedAs(v))
 
 	// By default it advises, and the timers it lets through are counted.
 	for i := range monitorPileAdvise - 1 {
@@ -103,13 +103,13 @@ func TestBackgroundedSleepIsATimerAndCountsTowardThePile(t *testing.T) {
 		assert.NotEqual(t, "deny", v.Decision)
 	}
 	v = judge(withSetting(string(denyRuleMonitorPile), builtin.Deny), "sleep 300")
-	assert.Equal(t, types.GuardJudgment{Decision: "advise", Rule: string(denyRuleMonitorPile)}, decidedBy(v),
+	assert.Equal(t, types.GuardJudgment{Decision: "advise", Rule: string(denyRuleMonitorPile)}, judgedAs(v),
 		"the third live waiter is advised against")
 	for range monitorPileDeny - monitorPileAdvise - 1 {
 		judge(Dependencies{}, "sleep 301")
 	}
 	v = judge(withSetting(string(denyRuleMonitorPile), builtin.Deny), "sleep 302")
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleMonitorPile)}, decidedBy(v), "the fifth is refused")
+	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleMonitorPile)}, judgedAs(v), "the fifth is refused")
 
 	// A sleep in the foreground is not a waiter.
 	v = Judge(ctx, Dependencies{}, Request{Input: "sleep 302", Session: "timers", Host: "claude-code"})
@@ -141,7 +141,7 @@ func TestSpawnDuplicateRefusesASecondWorkerForAJob(t *testing.T) {
 				"tool_input": map[string]any{"description": title, "prompt": "Carry the job to its done-when."},
 			}), Host: "claude-code"})
 			if tt.want {
-				require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSpawnDuplicate)}, decidedBy(v), v.Context)
+				require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSpawnDuplicate)}, judgedAs(v), v.Context)
 				assert.Contains(t, v.Reason, "guard-facts")
 			} else {
 				assert.NotEqual(t, string(denyRuleSpawnDuplicate), v.Rule)
@@ -163,10 +163,10 @@ func TestSpawnWaiterAndNestedWaiter(t *testing.T) {
 		return Judge(ctx, withSetting(string(denyRuleSpawnWaiter), builtin.Deny), Request{Input: hookJSON(t, env), Host: "claude-code"})
 	}
 	v := spawn("", "wait for the workers to finish")
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSpawnWaiter)}, decidedBy(v))
+	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSpawnWaiter)}, judgedAs(v))
 
 	v = spawn("a1b2c3", "add the watch flag")
-	assert.Equal(t, types.GuardJudgment{Decision: "advise", Rule: string(advisorySpawnNestedWaiter)}, decidedBy(v),
+	assert.Equal(t, types.GuardJudgment{Decision: "advise", Rule: string(advisorySpawnNestedWaiter)}, judgedAs(v),
 		"a worker's helper speaking of watching is advised against")
 	assert.Equal(t, "pass", spawn("a1b2c3", "add the watch flag").Decision, "once a session")
 	assert.Equal(t, "pass", spawn("", "add the watch flag").Decision, "the root is not nested")

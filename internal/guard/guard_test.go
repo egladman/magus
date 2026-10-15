@@ -57,9 +57,9 @@ func unworded(v types.GuardJudgment) types.GuardJudgment {
 	return v
 }
 
-// decidedBy is v with only its decision and rule kept, for a test whose other assertions own
+// judgedAs is v with only its decision and rule kept, for a test whose other assertions own
 // the wording, the lease and the remedy: compare it with a types.GuardJudgment of both.
-func decidedBy(v types.GuardJudgment) types.GuardJudgment {
+func judgedAs(v types.GuardJudgment) types.GuardJudgment {
 	return types.GuardJudgment{Decision: v.Decision, Rule: v.Rule}
 }
 

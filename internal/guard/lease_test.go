@@ -230,7 +230,7 @@ func TestDenyRepeatGate(t *testing.T) {
 		assert.Contains(t, d.Why, "--plan", "and the command that sizes the risk")
 
 		raised := Judge(ctx, Dependencies{Builtins: map[string]builtin.Setting{string(advisoryGateRepeat): {Decision: builtin.Deny}}}, Request{Input: gate})
-		assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(advisoryGateRepeat)}, decidedBy(raised),
+		assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(advisoryGateRepeat)}, judgedAs(raised),
 			"Judge reaches the rule through the role-scoped list")
 	})
 	t.Run("a file written after the verdict", func(t *testing.T) {
@@ -583,7 +583,7 @@ func TestWorkerRawTool(t *testing.T) {
 	deps := composingWorkspace(t)
 
 	v := Judge(ctx, Dependencies{Spells: spellCatalog}, Request{Input: bashCall(t, "s1", "a1", "go test ./internal/guard"), Host: "claude-code", Lease: row.ID})
-	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleWorkerCheckOnly)}, decidedBy(v),
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleWorkerCheckOnly)}, judgedAs(v),
 		"Judge reaches the rule: %s", v.Reason)
 
 	reason := denyWorkerRawTool(ctx, deps, row.ID, "go test ./internal/guard")

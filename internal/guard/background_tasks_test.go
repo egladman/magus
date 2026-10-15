@@ -107,7 +107,7 @@ func TestJudgeStopNamesLiveBackgroundTasks(t *testing.T) {
 	t.Run("a subagent with a live task is refused, the task named", func(t *testing.T) {
 		v, ok := judgeStop(Dependencies{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, live...)), started.Add(4*time.Hour))
 		require.True(t, ok)
-		assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft)}, decidedBy(v))
+		assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft)}, judgedAs(v))
 		assert.Contains(t, v.Reason, "bc0m5o2bg  started 11:37:41Z, 4h0m0s ago: cd ~/.claude/projects; grep -rhoE")
 	})
 	t.Run("set to advise, a subagent is advised", func(t *testing.T) {
@@ -240,7 +240,7 @@ func TestJudgeRefusesAnUnboundedBackgroundedCall(t *testing.T) {
 		return Judge(ctx, Dependencies{}, Request{Input: line, Session: "bg", Host: "claude-code", CallBackground: true})
 	}
 	v := judge("rsync -a src/ dst/")
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleBackgroundUnbounded)}, decidedBy(v))
+	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleBackgroundUnbounded)}, judgedAs(v))
 	assert.NotEqual(t, "deny", judge("timeout 600 rsync -a src/ dst/").Decision)
 
 	timer := judge("sleep 540")

@@ -69,20 +69,20 @@ func TestMonitorDuplicateAndPile(t *testing.T) {
 	first := watch("w1", `tail -f build.log | grep --line-buffered -E "FAIL|ok"`)
 	assert.NotEqual(t, "deny", first.Decision, first.Reason)
 	again := watch("w1", `tail -f build.log | grep --line-buffered -E "FAIL|ok"`)
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleMonitorDuplicate)}, decidedBy(again))
+	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleMonitorDuplicate)}, judgedAs(again))
 	assert.NotEqual(t, "deny", watch("w2", `tail -f build.log | grep --line-buffered -E "FAIL|ok"`).Decision,
 		"another agent's watcher is its own")
 
 	own := watch("w1", "until [ -s /tmp/claude/tasks/bpr89hsbc.output ]; do sleep 1; done")
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleMonitorDuplicate)}, decidedBy(own),
+	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleMonitorDuplicate)}, judgedAs(own),
 		"a task capture is the agent's own backgrounded work")
 
 	assert.NotEqual(t, "deny", watch("w1", "tail -f deploy.log").Decision)
 	third := watch("w1", "tail -f other.log")
-	require.Equal(t, types.GuardJudgment{Decision: "advise", Rule: string(denyRuleMonitorPile)}, decidedBy(third))
+	require.Equal(t, types.GuardJudgment{Decision: "advise", Rule: string(denyRuleMonitorPile)}, judgedAs(third))
 	assert.NotEqual(t, "deny", watch("w1", "tail -f more.log").Decision)
 	fifth := watch("w1", "tail -f last.log")
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleMonitorPile)}, decidedBy(fifth))
+	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleMonitorPile)}, judgedAs(fifth))
 	assert.Contains(t, fifth.Reason, hint.JobWait.With("<job>"))
 }
 
@@ -92,7 +92,7 @@ func TestMonitorOnABackgroundedCommandsProcessIsADuplicate(t *testing.T) {
 	run := Judge(ctx, raised, Request{Input: "timeout 600 go version", Session: "watchers", Host: "claude-code", Agent: "w1", CallBackground: true})
 	require.NotEqual(t, "deny", run.Decision, run.Reason)
 	v := Judge(ctx, raised, Request{Input: monitorCall(t, "w1", `until ! pgrep -f "go version"; do sleep 15; done`), Host: "claude-code"})
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleMonitorDuplicate)}, decidedBy(v))
+	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleMonitorDuplicate)}, judgedAs(v))
 }
 
 func TestAnExpiredWatcherIsNotLive(t *testing.T) {
