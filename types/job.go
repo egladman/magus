@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strconv"
@@ -834,6 +835,10 @@ type Job struct {
 	// stamped by the store on that write. Once the directory is gone, nobody can be
 	// holding the job, and the store ends it.
 	CheckoutRoot string `json:"checkout_root,omitempty" yaml:"checkout_root,omitempty"`
+	// Worktree is the checkout a fork made for this job (see [Declaration.Checkout]), nil
+	// when the job works wherever it is taken. Store-computed like CheckoutRoot: only the
+	// fork that made it and the removal at the job's end write it.
+	Worktree *JobWorktree `json:"worktree,omitempty" yaml:"worktree,omitempty"`
 	// EndReason is why the row ended as no_return: the sweep's reason when magus ended it
 	// itself, or which end a holder's or a person's exit was. Store-computed; see
 	// job.Store.List for the sweep's rules.
@@ -890,6 +895,33 @@ type Job struct {
 	// job's state, so the record exists only for a job that passed.
 	WaiterEvidence *JobIntegration `json:"waiter_evidence,omitempty" yaml:"waiter_evidence,omitempty"`
 }
+
+// JobWorktree is a checkout `magus job fork --checkout` made for one job, which the job
+// owns: the job's holder takes it there and nowhere else, and magus removes it once the job
+// ends unless removing it would lose work.
+type JobWorktree struct {
+	// Root is the checkout's top level, absolute.
+	Root string `json:"root" yaml:"root"`
+	// Source is the checkout the fork made it from, which removes it: an hg share or a jj
+	// workspace is recorded only there.
+	Source string `json:"source" yaml:"source"`
+	// Base is the full revision it was made at.
+	Base string `json:"base" yaml:"base"`
+	// Created is unix seconds.
+	Created int64 `json:"created" yaml:"created"`
+	// Binary is the magus the fork placed in it, the same file the forking checkout runs,
+	// "" when the forking checkout ran magus from PATH and so the job's runs it too.
+	Binary string `json:"binary,omitempty" yaml:"binary,omitempty"`
+	// Removed is unix seconds when magus removed it, zero while it stands.
+	Removed int64 `json:"removed,omitempty" yaml:"removed,omitempty"`
+	// Kept is why magus left it standing after the job ended, "" until then or once it is
+	// removed.
+	Kept string `json:"kept,omitempty" yaml:"kept,omitempty"`
+}
+
+// Standing reports whether the checkout has not been removed: it binds its job's holder,
+// and the guard treats it as its job's own.
+func (w *JobWorktree) Standing() bool { return w != nil && w.Removed == 0 }
 
 // JobIntegration is a job's check goals graded against runs recorded in Checkout, the tree
 // an integration branch was merged into, at At (unix seconds).
@@ -991,6 +1023,11 @@ type Declaration struct {
 	// Model is the model or effort tier the work was matched to, a free string because
 	// hosts name their models differently.
 	Model string `json:"model,omitempty"`
+	// Checkout is an absolute directory, outside the workspace, where the fork makes a new
+	// checkout of the repository for this job at its checkpoint, or at the forking
+	// checkout's revision when it names none.
+	// The job owns it: see [JobWorktree]. Empty works wherever the job is taken.
+	Checkout string `json:"checkout,omitempty"`
 	// LegacyWritePaths is the pre-rename spelling of write_paths, accepted on input and
 	// never emitted.
 	//
@@ -1108,6 +1145,9 @@ func (r Declaration) Validate() error {
 	}
 	if r.MaxAttempts < 0 {
 		return fmt.Errorf("%w: max_attempts is %d, and it is a count of forks or 0 for no cap", errInvalidJob, r.MaxAttempts)
+	}
+	if r.Checkout != "" && !filepath.IsAbs(r.Checkout) {
+		return fmt.Errorf("%w: checkout %q is relative, and a fork names the checkout it makes by an absolute path", errInvalidJob, r.Checkout)
 	}
 	for _, field := range []struct {
 		name  string
@@ -2100,6 +2140,10 @@ func (u Job) Clone() Job {
 	}
 	c.Integration = cloneIntegration(u.Integration)
 	c.WaiterEvidence = cloneIntegration(u.WaiterEvidence)
+	if u.Worktree != nil {
+		wt := *u.Worktree
+		c.Worktree = &wt
+	}
 	c.Prior = slices.Clone(u.Prior)
 	for i, p := range c.Prior {
 		c.Prior[i].Unmet = cloneGateStatuses(p.Unmet)

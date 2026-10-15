@@ -86,6 +86,7 @@ var JobSchema = SchemaLedger{
 	Name:    "job",
 	Type:    reflect.TypeFor[Job](),
 	Version: JobSchemaVersion,
+	Added:   map[string]int{"worktree": 13},
 	// The four boundary renames and completion_gates, names only the JSON document an
 	// older magus kept the plan in carried.
 	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates"},
@@ -103,6 +104,7 @@ var DeclarationSchema = SchemaLedger{
 	Name:    "declaration",
 	Type:    reflect.TypeFor[Declaration](),
 	Version: JobSchemaVersion,
+	Added:   map[string]int{"checkout": 13},
 	// goals' spelling frozen in v11. A record sending it is refused as an unknown member.
 	Reserved: []string{"completion_gates"},
 	Requires: JobSchema.Requires,

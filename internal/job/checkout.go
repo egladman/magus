@@ -418,7 +418,7 @@ func RefuseSharedCheckout(store *Store, rows []types.Job, row types.Job) error {
 	if store == nil || len(row.WritePaths) == 0 {
 		return nil
 	}
-	held := heldHere(rows, store.root, row.ID)
+	held := heldHere(rows, workingCheckout(store.root, row), row.ID)
 	if len(held) == 0 {
 		return nil
 	}
@@ -557,13 +557,14 @@ func (s *Store) WriteProof(rows []types.Job, row types.Job) types.JobWriteProof 
 	if s == nil || s.root == "" {
 		return types.WriteProofAlone
 	}
-	here, err := filepath.Abs(s.root)
+	here, err := filepath.Abs(workingCheckout(s.root, row))
 	if err != nil {
 		return types.WriteProofAlone
 	}
 	peers := slices.DeleteFunc(slices.Clone(rows), func(peer types.Job) bool {
+		there := workingCheckout(peer.CheckoutRoot, peer)
 		return peer.ID == row.ID || !Editing(peer) || len(peer.WritePaths) == 0 ||
-			peer.CheckoutRoot != "" && peer.CheckoutRoot != here
+			there != "" && !samePath(there, here)
 	})
 	if len(peers) == 0 {
 		return types.WriteProofAlone

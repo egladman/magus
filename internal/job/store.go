@@ -672,6 +672,15 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		row.Schema = prev.Schema
 		row.Version = max(prev.Version, types.JobSchemaVersion)
 		row.ModelTier = prev.ModelTier
+		// Only RecordWorktree and EndWorktrees write the worktree record. The next attempt
+		// keeps a checkout that still stands and forgets one magus removed.
+		row.Worktree = prev.Clone().Worktree
+		if refork && row.Worktree != nil {
+			row.Worktree.Kept = ""
+			if row.Worktree.Removed != 0 {
+				row.Worktree = nil
+			}
+		}
 		if s.modelTiers != nil && (i < 0 || prev.Model != row.Model) {
 			assigned, aerr := s.assignModelTierWithHistory(ctx, row, f.Jobs)
 			if aerr != nil {

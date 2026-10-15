@@ -885,6 +885,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return emitNames([]string{row.ID})
 	case outputText:
 		fmt.Print(brief.String())
+		printJobWorktree(os.Stdout, row)
 		job.RenderGates(os.Stdout, status)
 		printJobEntries(os.Stdout, row.Entries)
 		joined, _, err := joinInflight(ctx, root, store, types.JobList{Jobs: leases})
@@ -995,7 +996,7 @@ func (e evidenceFlag) Set(value string) error {
 // job piped in are the same declaration.
 type forkFlags struct {
 	criteria, parent, check, model, checkpoint string
-	timeout                                    string
+	timeout, checkout                          string
 	writePaths, readPaths, denyPaths           listFlag
 	dependsOn                                  listFlag
 	readOnly                                   bool
@@ -1018,6 +1019,7 @@ func (f forkFlags) row(id string) types.Declaration {
 		Model:      f.model,
 		ReadOnly:   f.readOnly,
 		Timeout:    f.timeout,
+		Checkout:   f.checkout,
 	}
 }
 
@@ -1068,6 +1070,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		fs.StringVar(&declared.check, "check", "", "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
 		fs.StringVar(&declared.model, "model", "", "The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier")
 		fs.BoolVar(&declared.readOnly, "read-only", false, "A job that gathers evidence and writes nothing")
+		fs.StringVar(&declared.checkout, "checkout", "", "Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job fork <job> [flags]")
 			fmt.Fprintln(os.Stderr, "       magus job fork --stdin < job.json")
@@ -1099,6 +1102,13 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "job records it. The guard lets that one write through once the holder has been")
 			fmt.Fprintln(os.Stderr, "idle for a minute. A job takes two entries; past that, resume its holder.")
 			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "--checkout <dir> makes a new checkout of this repository at dir (a git worktree,")
+			fmt.Fprintln(os.Stderr, "an hg share, a jj workspace) at the job's checkpoint, or at this checkout's")
+			fmt.Fprintln(os.Stderr, "revision when it names none. A ./magus this checkout runs is copied into it. The")
+			fmt.Fprintln(os.Stderr, "job is taken there and nowhere else, and once it ends magus removes the checkout")
+			fmt.Fprintln(os.Stderr, "if it is clean and every commit in it is on a branch, bookmark, remote or its")
+			fmt.Fprintln(os.Stderr, "base; otherwise it keeps it and records why.")
+			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "There is no --state: this declares a NEW job, and one nobody has taken is")
 			fmt.Fprintln(os.Stderr, string(types.StateDeclared)+". A holder moves its own job with `"+hint.JobExec.String()+"` and `"+hint.JobExit.String()+"`.")
 			fmt.Fprintln(os.Stderr, "")
@@ -1128,6 +1138,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	case len(pos) != 1:
 		return usagef("magus job fork: requires exactly one job id, or --stdin with a job on it")
 	default:
+		if declared.checkout != "" {
+			if declared.checkout, err = filepath.Abs(declared.checkout); err != nil {
+				return usagef("magus job fork: --checkout: %s", err)
+			}
+		}
 		row = declared.row(pos[0])
 		if err := row.Validate(); err != nil {
 			return usagef("magus job fork: %s", err)
@@ -1149,7 +1164,33 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	// The reader loads the graph only when a gate names a symbol, or when the deletion
 	// candidates ask for it, and the two share one load.
 	graph := newJobGraph(root, true)
-	stored, err := job.ForkMerge(ctx, store, row.ID, job.Declare(row, globalCfg.Jobs.DefaultTimeout), globalCfg.Jobs, graphSymbolReader(graph.load))
+	merge := job.Declare(row, globalCfg.Jobs.DefaultTimeout)
+	var worktree types.JobWorktree
+	made := false
+	if row.Checkout != "" {
+		exe, _ := os.Executable()
+		if worktree, made, err = store.ForkWorktree(ctx, row.ID, row.Checkout, row.Checkpoint, job.MirroredBinary(exe, root)); err != nil {
+			return err
+		}
+		declare := merge
+		merge = func(u *types.Job) {
+			declare(u)
+			// The job starts from what its checkout holds, not from the forker's tree.
+			if u.Checkpoint == "" {
+				u.Checkpoint = worktree.Base
+			}
+			u.Worktree = &worktree
+		}
+	}
+	stored, err := job.ForkMerge(ctx, store, row.ID, merge, globalCfg.Jobs, graphSymbolReader(graph.load))
+	switch {
+	case err != nil && made:
+		err = errors.Join(err, store.DiscardWorktree(ctx, worktree))
+	case err == nil && row.Checkout != "":
+		if stored, err = store.RecordWorktree(ctx, stored.ID, worktree); err != nil && made {
+			err = errors.Join(err, store.DiscardWorktree(ctx, worktree))
+		}
+	}
 	var refused *job.RefusedError
 	switch {
 	case errors.As(err, &refused):
@@ -1181,6 +1222,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if stored.ModelTier != nil {
 			fmt.Printf("model tier: %s\n", stored.ModelTier)
 		}
+		printJobWorktree(os.Stdout, stored)
 		printClaimNotes(os.Stdout, job.ForkNotes(ctx, store, plan, stored))
 		if len(derived) > 0 {
 			fmt.Printf("its symbol goals claimed %d declaration(s) its write paths did not cover:\n", len(derived))
@@ -1594,10 +1636,48 @@ func abandonJobs(ctx context.Context, store *job.Store, ids []string) error {
 		}
 		fmt.Printf("ended %s, recorded %s: %s\n", stored.ID, stored.State, stored.EndReason)
 	}
+	ended := endWorktrees(ctx, os.Stdout, store)
 	if len(refused) > 0 {
-		return usagef("magus job exit: %d of %d jobs not ended:\n  %s", len(refused), len(ids), strings.Join(refused, "\n  "))
+		return errors.Join(usagef("magus job exit: %d of %d jobs not ended:\n  %s", len(refused), len(ids), strings.Join(refused, "\n  ")), ended)
+	}
+	return ended
+}
+
+// endWorktrees removes the checkouts that jobs which ended own, and prints what became of
+// each one whose record changed: removed, or kept and why.
+func endWorktrees(ctx context.Context, out io.Writer, store *job.Store) error {
+	if globalCfg.DryRun {
+		return nil
+	}
+	changed, err := store.EndWorktrees(ctx)
+	for _, row := range changed {
+		printJobWorktree(out, row)
+	}
+	if err != nil {
+		return fmt.Errorf("magus job: recording what became of a job's checkout: %w", err)
 	}
 	return nil
+}
+
+// printJobWorktree says where the checkout a job owns stands: made for it, removed, or kept
+// and why.
+func printJobWorktree(out io.Writer, row types.Job) {
+	wt := row.Worktree
+	switch {
+	case wt == nil:
+	case wt.Removed != 0:
+		fmt.Fprintf(out, "checkout %s: removed once job %s ended\n", wt.Root, row.ID)
+	case wt.Kept != "":
+		fmt.Fprintf(out, "checkout %s: kept after job %s ended: %s\n", wt.Root, row.ID, wt.Kept)
+	default:
+		fmt.Fprintf(out, "checkout %s: made for job %s at %.12s; its holder takes it there with `%s`, and magus removes it once the job ends unless it holds work\n",
+			wt.Root, row.ID, wt.Base, hint.JobExec.With(row.ID))
+		if wt.Binary != "" {
+			fmt.Fprintf(out, "  placed %s, the magus the forking checkout runs\n", wt.Binary)
+		} else {
+			fmt.Fprintln(out, "  placed no magus: the forking checkout runs magus from PATH, and so does the job")
+		}
+	}
 }
 
 // jobWait collects a returned job's result and verifies it against the job's own terms.
@@ -1725,15 +1805,19 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	// A job's checkout is told of in text alone; the row records it for every format.
+	told := io.Discard
 	switch opts.Format {
 	case outputName:
 		err = emitNames([]string{status.Job})
 	case outputText:
 		printJobStatus(os.Stdout, status)
 		pointAtConsole(ctx, status.Job)
+		told = os.Stdout
 	default:
 		err = emitFormatted(opts, status)
 	}
+	err = errors.Join(err, endWorktrees(ctx, told, store))
 	if err != nil || status.Verified {
 		return err
 	}
@@ -2379,7 +2463,7 @@ func jobPrune(ctx context.Context, root string, args []string) error {
 		return emitNames(ids)
 	case outputText:
 		printPruned(os.Stdout, ended, globalCfg.DryRun)
-		return nil
+		return endWorktrees(ctx, os.Stdout, store)
 	default:
 		if ended == nil {
 			ended = []job.Ending{}

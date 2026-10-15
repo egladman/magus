@@ -241,6 +241,28 @@ refactor/tax      shop-tax      no_return  standard  1      disjoint  magus run 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
 
+### Letting the fork make the worktree
+
+Ana made both worktrees by hand, and removing them is hers to remember. `--checkout`
+hands both ends to magus:
+
+```sh
+magus job fork refactor/pricing --criteria 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .' --checkout ../shop-pricing
+```
+
+The fork makes the checkout at the job's checkpoint, or at the revision her checkout
+is on when the job names none: a git worktree, an hg share or a jj workspace. Sapling
+has no second checkout and refuses. The directory must lie outside the workspace. When
+her checkout runs its own `./magus`, the fork copies that file in; when she runs magus
+from PATH, it copies nothing and the job uses PATH too. The fork prints the checkout,
+`describe job` shows it, and `job exec` takes the job there and nowhere else.
+
+Once the job ends (pass, fail or no_return), the next `job wait`, `job exit` or
+`job prune` removes the checkout if nothing in it is uncommitted and every commit in
+it is on a branch, a bookmark, a remote or the revision it was made at. Otherwise it
+keeps the checkout and records why, which `describe job` prints. A command run inside
+the checkout never removes it.
+
 ## Two people, one file
 
 Ana and Ben share a workstation, each in a worktree of the shop: `../ana` and

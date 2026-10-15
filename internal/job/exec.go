@@ -42,7 +42,8 @@ func (heldError) Unwrap() error { return ErrHeldElsewhere }
 //
 // It refuses a job another checkout holds. Wait grades the checkout the row names, so a
 // second taker would silently move that grade off the holder's tree; the job moves only
-// once its holder ends it and it is declared again, which clears the checkout.
+// once its holder ends it and it is declared again, which clears the checkout. A job that
+// owns a checkout (see [types.Job.Worktree]) is taken there and nowhere else.
 //
 // THE BASE VERDICT IS A FACT, NOT A GATE. Every verdict registers, BaseDiverged included: refusing here would
 // leave the orchestrator with no record that a worker went to the wrong base, which is the
@@ -86,6 +87,9 @@ func (s *Store) Exec(ctx context.Context, id string) (types.Job, error) {
 		if cur.State.Terminal() && !resumed {
 			return fmt.Errorf("job: %s already ended %s, so there is nothing left to take,"+
 				" `%s` lists the live ones", id, cur.State, hint.LsJobs)
+		}
+		if err := WrongCheckout(*cur, here); err != nil {
+			return err
 		}
 		if resumed {
 			cur.State = types.StateRunning
