@@ -122,14 +122,14 @@ func gradeFocusRead(ctx context.Context, deps Dependencies, actingLease, command
 	// The lease's declared paths outrank the working directory, because a worker
 	// runs wherever its checkout is and the orchestrator's declaration is the thing
 	// that was actually decided. Only a lease gets a deny.
-	focus, leaseID, ok := focusForLease(ctx, ws, location, actingLease)
+	focus, lease, ok := focusForLease(ctx, ws, location, actingLease)
 	if !ok {
 		if focus, ok = project.FocusAt(ws, focusDir(location)); !ok {
 			return focusGrade{}
 		}
-		leaseID = ""
+		lease = types.Job{}
 	}
-	return focusVerdict(focus, leaseID, location.workspace, focusDir(location), operands)
+	return focusVerdict(focus, job.ReadBoundary(lease), lease.ID, location.workspace, focusDir(location), operands)
 }
 
 // focusVerdict judges resolved operands against a resolved focus, and is where the
@@ -138,7 +138,11 @@ func gradeFocusRead(ctx context.Context, deps Dependencies, actingLease, command
 // Split from the resolution above so it can be graded without a workspace on disk.
 // The first operand that leaves the focus is the verdict: a line that reads three
 // files needs one explanation, not three.
-func focusVerdict(focus project.Focus, leaseID, root, dir string, paths []string) focusGrade {
+//
+// declared is the lease's read boundary. A declaration that opens with a wildcard
+// (`**/*.md`) names no project, so the focus omits it; the file it covers is still
+// the lease's to read.
+func focusVerdict(focus project.Focus, declared []string, leaseID, root, dir string, paths []string) focusGrade {
 	for _, op := range paths {
 		abs, placed := placePath(op, dir, userHome())
 		if !placed {
@@ -146,6 +150,9 @@ func focusVerdict(focus project.Focus, leaseID, root, dir string, paths []string
 		}
 		rel, inside := workspaceRelative(root, abs)
 		if !inside || focus.Contains(rel) {
+			continue
+		}
+		if _, covered, _ := declarationCovering(declared, rel); covered {
 			continue
 		}
 		owner := focus.Owner(rel)
@@ -173,30 +180,30 @@ func focusVerdict(focus project.Focus, leaseID, root, dir string, paths []string
 	return focusGrade{}
 }
 
-// focusForLease resolves the focus the bound lease declares, reporting the row it
+// focusForLease resolves the focus the bound lease declares, returning the row it
 // came from so the caller knows a deny is available.
 //
 // A lease that declares neither read paths nor write paths (a read_only investigator)
 // yields none, and the caller falls back to the working directory, which advises.
 // That is the intended asymmetry: a hard read boundary needs somebody to have
 // declared one.
-func focusForLease(ctx context.Context, ws types.WorkspaceReader, location location, actingLease string) (project.Focus, string, bool) {
+func focusForLease(ctx context.Context, ws types.WorkspaceReader, location location, actingLease string) (project.Focus, types.Job, bool) {
 	if actingLease == "" || !types.ValidJobID(actingLease) || location.cacheDir == "" {
-		return project.Focus{}, "", false
+		return project.Focus{}, types.Job{}, false
 	}
 	leases, err := leaseRows(ctx, location)
 	if err != nil {
-		return project.Focus{}, "", false
+		return project.Focus{}, types.Job{}, false
 	}
 	me, enrolled := liveLease(liveLeases(leases), actingLease)
 	if !enrolled {
-		return project.Focus{}, "", false
+		return project.Focus{}, types.Job{}, false
 	}
 	focus, ok := leaseFocus(ws, me)
 	if !ok {
-		return project.Focus{}, "", false
+		return project.Focus{}, types.Job{}, false
 	}
-	return focus, me.ID, true
+	return focus, me, true
 }
 
 // leaseFocus is the focus a lease row declares: the projects of its write paths and its
