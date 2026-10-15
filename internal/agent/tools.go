@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -84,9 +85,9 @@ func capabilityNames() string {
 	return strings.Join(names, ", ")
 }
 
-// Files renders the rows as the files a tool rows directory holds: one per capability, each
-// tool name on its own line in sorted order, and the version file. A capability no row has
-// is an empty file, so a reader tells "none" from "not installed".
+// Files renders the rows as the files a tool rows directory holds: one per capability that
+// has a row, each tool name on its own line in sorted order, and the version file, which
+// is what tells an installed directory from none.
 func (t HarnessTools) Files() []HarnessAgentFile {
 	byCapability := map[ToolCapability][]string{}
 	for _, r := range t.Rows {
@@ -95,6 +96,9 @@ func (t HarnessTools) Files() []HarnessAgentFile {
 	files := make([]HarnessAgentFile, 0, len(ToolCapabilities)+1)
 	for _, c := range ToolCapabilities {
 		names := byCapability[c]
+		if len(names) == 0 {
+			continue
+		}
 		slices.Sort(names)
 		var b strings.Builder
 		for _, n := range names {
@@ -179,6 +183,9 @@ func ReadToolRows(root, dir string) ToolRows {
 	rows.capabilities = map[string]ToolCapability{}
 	for _, c := range ToolCapabilities {
 		body, err := os.ReadFile(filepath.Join(abs, string(c)))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
 		if err != nil {
 			rows.capabilities, rows.Err = nil, fmt.Errorf("no tool rows at %s: %w%s", dir, err, reinstall)
 			return rows

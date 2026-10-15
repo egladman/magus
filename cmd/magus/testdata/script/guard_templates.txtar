@@ -629,9 +629,10 @@ stdout '"permission":"allow"'
 grep '"tool_name":"Read"' $WORK/calls.log.stdin
 grep 'skills/magus-run/SKILL.md' $WORK/calls.log.stdin
 
+# case: mcp/advise
 # beforeMCPExecution files the verdict under the tool and the input, which it sends as a
 # JSON string; postToolUse names the same call MCP:<tool>, its input an object with the
-# keys in another order and no server.
+# keys in another order and no server, and carries the advice to the model.
 stdin cursor-mcp-counted.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
 stdout '"permission":"allow"'
@@ -1440,13 +1441,8 @@ magus\project({
 magus\guard.builtins({"read-navigation": {"decision": "deny", "lines": 120}});
 -- read-ws/tools/version --
 1
--- read-ws/tools/runs --
 -- read-ws/tools/reads --
 Read
--- read-ws/tools/writes --
--- read-ws/tools/spawns --
--- read-ws/tools/network --
--- read-ws/tools/inert --
 -- read-ws/big.go --
 package fixture
 

@@ -18,8 +18,8 @@ func writeToolFiles(t *testing.T, root string, files []HarnessAgentFile) {
 	}
 }
 
-// The directory is one file per capability, a tool name a line in sorted order, and the
-// version: an empty file for a capability no row has, so "none" reads apart from "missing".
+// The directory is one file per capability that has a row, a tool name a line in sorted
+// order, and the version, which marks the directory installed.
 func TestHarnessToolsFilesAreOneFilePerCapability(t *testing.T) {
 	tools := HarnessTools{Dir: "host/magus/tools", Rows: []HarnessTool{
 		{Name: "Shell", Capability: ToolRuns},
@@ -30,9 +30,6 @@ func TestHarnessToolsFilesAreOneFilePerCapability(t *testing.T) {
 	assert.Equal(t, []HarnessAgentFile{
 		{Path: "host/magus/tools/runs", Content: "Shell\n"},
 		{Path: "host/magus/tools/reads", Content: "Glob\nRead\n"},
-		{Path: "host/magus/tools/writes", Content: ""},
-		{Path: "host/magus/tools/spawns", Content: ""},
-		{Path: "host/magus/tools/network", Content: ""},
 		{Path: "host/magus/tools/inert", Content: "Todo\n"},
 		{Path: "host/magus/tools/version", Content: "1\n"},
 	}, tools.Files())

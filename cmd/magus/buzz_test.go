@@ -876,6 +876,11 @@ func TestGlueRepliesValidateAgainstTheirHostSchema(t *testing.T) {
 		}
 
 		for _, a := range glueArrangements {
+			// A glue answers only the hosts it declares; which hosts wire it is the harness
+			// spells' to say, and their own tests hold it.
+			if !hosts[a.host] {
+				continue
+			}
 			t.Run(name+"/"+a.label, func(t *testing.T) {
 				body, rendersAsk := runGlue(t, name, a)
 				require.NotEmpty(t, body, "%s (%s) handed magus no template", name, a.label)
