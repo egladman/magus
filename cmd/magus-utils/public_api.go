@@ -45,6 +45,10 @@ func runGoAPI(args []string) error {
 	if err != nil {
 		return err
 	}
+	if leaks := internalLeaks(pkgs); len(leaks) > 0 {
+		return fmt.Errorf("goapi: %d exported declarations name an internal type, which no caller outside this module can construct;"+
+			" unexport, move or retype each before the lock is written:\n%s", len(leaks), strings.Join(leaks, "\n"))
+	}
 	data := []byte(strings.Join(renderGoAPI(pkgs), "\n") + "\n")
 	if *out == "" {
 		_, err := os.Stdout.Write(data)
@@ -299,4 +303,161 @@ func (r goAPIRenderer) typeParams(list *gotypes.TypeParamList) string {
 		parts[i] = tp.Obj().Name() + " " + r.typeString(tp.Constraint())
 	}
 	return "[" + strings.Join(parts, ", ") + "]"
+}
+
+// internalLeaks lists, sorted, every exported declaration of pkgs whose signature,
+// fields or methods name a defined type from an internal package, as
+// "<symbol> names <type>". An alias to a type outside pkgs is checked through that
+// type's members, as the lock expands them. A type an exported alias in the same
+// package re-exports is not a leak: the alias is how a caller names it (magus.Option).
+func internalLeaks(pkgs []*gotypes.Package) []string {
+	public := map[string]bool{}
+	for _, p := range pkgs {
+		public[p.Path()] = true
+	}
+	var out []string
+	for _, pkg := range pkgs {
+		l := leakFinder{aliased: aliasTargets(pkg)}
+		scope := pkg.Scope()
+		for _, name := range scope.Names() {
+			obj := scope.Lookup(name)
+			if !obj.Exported() {
+				continue
+			}
+			id := pkg.Path() + "." + name
+			tn, isType := obj.(*gotypes.TypeName)
+			if !isType {
+				out = append(out, l.check(id, obj.Type())...)
+				continue
+			}
+			named, ok := gotypes.Unalias(tn.Type()).(*gotypes.Named)
+			switch {
+			case !ok:
+				out = append(out, l.check(id, tn.Type())...)
+			case tn.IsAlias() && (named.Obj().Pkg() == nil || public[named.Obj().Pkg().Path()]):
+			case tn.IsAlias():
+				out = append(out, l.members(id, named)...)
+			default:
+				// The lock spells a declared type's underlying type unless it is a struct or
+				// an interface, whose members it lists instead.
+				switch named.Underlying().(type) {
+				case *gotypes.Struct, *gotypes.Interface:
+				default:
+					out = append(out, l.check(id, named.Underlying())...)
+				}
+				out = append(out, l.members(id, named)...)
+			}
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+// aliasTargets is the set of types pkg's exported aliases name.
+func aliasTargets(pkg *gotypes.Package) map[*gotypes.TypeName]bool {
+	out := map[*gotypes.TypeName]bool{}
+	scope := pkg.Scope()
+	for _, name := range scope.Names() {
+		tn, ok := scope.Lookup(name).(*gotypes.TypeName)
+		if !ok || !tn.Exported() || !tn.IsAlias() {
+			continue
+		}
+		if named, ok := gotypes.Unalias(tn.Type()).(*gotypes.Named); ok {
+			out[named.Obj()] = true
+		}
+	}
+	return out
+}
+
+// leakFinder finds the internal types a declaration names, excusing those its package
+// re-exports by alias.
+type leakFinder struct {
+	aliased map[*gotypes.TypeName]bool
+}
+
+// members checks named's exported fields, interface methods and embeds, and the
+// exported methods of *named, under id.
+func (l leakFinder) members(id string, named *gotypes.Named) []string {
+	var out []string
+	switch u := named.Underlying().(type) {
+	case *gotypes.Struct:
+		for i := range u.NumFields() {
+			if f := u.Field(i); f.Exported() {
+				out = append(out, l.check(id+"."+f.Name(), f.Type())...)
+			}
+		}
+	case *gotypes.Interface:
+		for i := range u.NumExplicitMethods() {
+			if m := u.ExplicitMethod(i); m.Exported() {
+				out = append(out, l.check(id+"."+m.Name(), m.Type())...)
+			}
+		}
+		for i := range u.NumEmbeddeds() {
+			out = append(out, l.check(id+".embeds", u.EmbeddedType(i))...)
+		}
+		return out
+	}
+	ptrSet := gotypes.NewMethodSet(gotypes.NewPointer(named))
+	for i := range ptrSet.Len() {
+		if fn, ok := ptrSet.At(i).Obj().(*gotypes.Func); ok && fn.Exported() {
+			out = append(out, l.check(id+"."+fn.Name(), fn.Type())...)
+		}
+	}
+	return out
+}
+
+// check returns a line for each internal type t names.
+func (l leakFinder) check(id string, t gotypes.Type) []string {
+	var out []string
+	l.walk(t, func(named *gotypes.Named) {
+		out = append(out, id+" names "+gotypes.TypeString(named, nil))
+	})
+	return out
+}
+
+// walk calls leak for every defined internal type t is built from. It does not descend
+// into a defined type's own underlying type: that type's declaration is checked where
+// it is declared.
+func (l leakFinder) walk(t gotypes.Type, leak func(*gotypes.Named)) {
+	switch t := gotypes.Unalias(t).(type) {
+	case *gotypes.Named:
+		if p := t.Obj().Pkg(); p != nil && strings.Contains(p.Path(), "/internal/") && !l.aliased[t.Obj()] {
+			leak(t)
+		}
+		for i := range t.TypeArgs().Len() {
+			l.walk(t.TypeArgs().At(i), leak)
+		}
+	case *gotypes.Pointer:
+		l.walk(t.Elem(), leak)
+	case *gotypes.Slice:
+		l.walk(t.Elem(), leak)
+	case *gotypes.Array:
+		l.walk(t.Elem(), leak)
+	case *gotypes.Chan:
+		l.walk(t.Elem(), leak)
+	case *gotypes.Map:
+		l.walk(t.Key(), leak)
+		l.walk(t.Elem(), leak)
+	case *gotypes.Signature:
+		for _, tuple := range []*gotypes.Tuple{t.Params(), t.Results()} {
+			for i := range tuple.Len() {
+				l.walk(tuple.At(i).Type(), leak)
+			}
+		}
+	case *gotypes.Struct:
+		for i := range t.NumFields() {
+			l.walk(t.Field(i).Type(), leak)
+		}
+	case *gotypes.Interface:
+		for i := range t.NumExplicitMethods() {
+			l.walk(t.ExplicitMethod(i).Type(), leak)
+		}
+		for i := range t.NumEmbeddeds() {
+			l.walk(t.EmbeddedType(i), leak)
+		}
+	case *gotypes.Union:
+		for i := range t.Len() {
+			l.walk(t.Term(i).Type(), leak)
+		}
+	}
 }

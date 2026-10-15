@@ -312,6 +312,65 @@ func F() {}
 	}
 }
 
+// leakSource type-checks src as example.com/m beside an internal package that declares
+// T, R (whose method takes a T) and Option, and returns the leaks internalLeaks finds.
+func leakSource(t *testing.T, src string) []string {
+	t.Helper()
+	pk := newSourcePackages()
+	pk.check(t, "example.com/m/internal/x", `package x
+
+type T struct{}
+type R struct{}
+func (*R) Use(T) {}
+type Option func(*T)
+`)
+	return internalLeaks([]*types.Package{pk.check(t, "example.com/m", src)})
+}
+
+func TestInternalLeaksFindsAParameter(t *testing.T) {
+	got := leakSource(t, "package m\nimport \"example.com/m/internal/x\"\nfunc F(v x.T) {}\n")
+	assert.Equal(t, []string{"example.com/m.F names example.com/m/internal/x.T"}, got)
+}
+
+func TestInternalLeaksFindsAResult(t *testing.T) {
+	got := leakSource(t, "package m\nimport \"example.com/m/internal/x\"\nfunc G() []*x.T { return nil }\n")
+	assert.Equal(t, []string{"example.com/m.G names example.com/m/internal/x.T"}, got)
+}
+
+func TestInternalLeaksFindsAStructField(t *testing.T) {
+	got := leakSource(t, "package m\nimport \"example.com/m/internal/x\"\ntype S struct{ F map[string]x.T; hidden x.T }\n")
+	assert.Equal(t, []string{"example.com/m.S.F names example.com/m/internal/x.T"}, got,
+		"an unexported field is no caller's business")
+}
+
+func TestInternalLeaksFindsAMethodOfAnAliasedType(t *testing.T) {
+	got := leakSource(t, "package m\nimport \"example.com/m/internal/x\"\ntype R = x.R\n")
+	assert.Equal(t, []string{"example.com/m.R.Use names example.com/m/internal/x.T"}, got,
+		"R itself is re-exported, but the T its method takes is not")
+}
+
+func TestInternalLeaksExcusesATypeTheSamePackageAliases(t *testing.T) {
+	got := leakSource(t, `package m
+
+import "example.com/m/internal/x"
+
+type Option = x.Option
+
+func With() Option { return nil }
+`)
+	assert.Empty(t, got, "the alias is how a caller names the type, so naming it is no leak")
+}
+
+func TestInternalLeaksExcusesAnAliasOfAnExternalType(t *testing.T) {
+	got := leakSource(t, "package m\nimport \"bytes\"\ntype Buffer = bytes.Buffer\nfunc New() *Buffer { return nil }\n")
+	assert.Empty(t, got)
+}
+
+func TestInternalLeaksFindsADeclaredFuncType(t *testing.T) {
+	got := leakSource(t, "package m\nimport \"example.com/m/internal/x\"\ntype Hook func(x.T) error\n")
+	assert.Equal(t, []string{"example.com/m.Hook names example.com/m/internal/x.T"}, got)
+}
+
 func TestPublicGoPackagesNamesDistinctPackages(t *testing.T) {
 	seen := map[string]bool{}
 	for _, path := range publicGoPackages {
