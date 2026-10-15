@@ -38,7 +38,6 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
-	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -159,9 +158,9 @@ func cleanRoot(root string) string {
 	return filepath.Clean(root)
 }
 
-// resolveCacheDir is workspace.CacheDir, the one resolution the root, the pipe records
+// resolveCacheDir is config.CacheDir, the one resolution the root, the pipe records
 // and the internal packages share.
-func resolveCacheDir(root string, cfg config.Config) string { return workspace.CacheDir(root, cfg) }
+func resolveCacheDir(root string, cfg config.Config) string { return config.CacheDir(root, cfg) }
 
 // cacheImmutable reports whether the cache is read-only, matching cache.Open's own
 // cache.write.enabled / MAGUS_CACHE_WRITE_ENABLED check.

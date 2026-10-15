@@ -845,7 +845,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	}
 
 	cacheDir := resolveCacheDir(m.ws.Root, m.cfg)
-	storeDir, err := workspace.StoreDir(m.ws.Root, m.cfg)
+	storeDir, err := config.StoreDir(m.ws.Root, m.cfg)
 	if err != nil {
 		return nil, err
 	}

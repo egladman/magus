@@ -5,12 +5,12 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
-	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -50,7 +50,7 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 	// get every toolchain's grants; runTarget narrows a spell op's child to its project's.
 	// A service spell's grants are kept for its own ops alone (sandbox.ForProvider).
 	loaded := project.DefaultSpellRegistry().All()
-	storeDir, err := workspace.StoreDir(m.ws.Root, m.cfg)
+	storeDir, err := config.StoreDir(m.ws.Root, m.cfg)
 	if err != nil {
 		return ctx, err
 	}

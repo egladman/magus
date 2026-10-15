@@ -32,7 +32,6 @@ import (
 	"github.com/egladman/magus/internal/serviceaudit"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/project"
@@ -417,7 +416,7 @@ func firstExistingConfig(dir string) string {
 
 // cacheDir resolves the workspace's cache directory, honoring an absolute or
 // root-relative cache.dir override.
-func (r *runner) cacheDir() string { return workspace.CacheDir(r.root, r.opts.cfg) }
+func (r *runner) cacheDir() string { return config.CacheDir(r.root, r.opts.cfg) }
 
 // checkCacheYield surfaces the same finding the run path emits as a hint, so `magus
 // doctor` gives the whole picture rather than only the target you happened to run.
@@ -496,7 +495,7 @@ func (r *runner) checkCacheYield(projects []*types.Project) types.Check {
 func (r *runner) checkCacheWritable() types.Check {
 	const name = "cache-writable"
 	cacheDir := r.cacheDir()
-	store, err := workspace.StoreDir(r.root, r.opts.cfg)
+	store, err := config.StoreDir(r.root, r.opts.cfg)
 	if err != nil {
 		return types.Check{Name: name, Status: types.CheckFail, Message: err.Error()}
 	}

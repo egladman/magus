@@ -100,9 +100,9 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 	repo := testkit.NewRepo(t, map[string]string{"magusfile.buzz": mf, "in.txt": "one"})
 	wt := repo.AddWorktree("sibling")
 
-	storeA, err := workspace.StoreDir(repo.Root(), config.Config{})
+	storeA, err := config.StoreDir(repo.Root(), config.Config{})
 	require.NoError(t, err)
-	storeB, err := workspace.StoreDir(wt.Root(), config.Config{})
+	storeB, err := config.StoreDir(wt.Root(), config.Config{})
 	require.NoError(t, err)
 	assert.Equal(t, storeA, storeB, "every worktree of one repository resolves one store")
 

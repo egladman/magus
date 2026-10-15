@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -709,7 +708,7 @@ func TestCheckCacheWritable(t *testing.T) {
 		assert.Contains(t, got.Message, root)
 		_, err := os.Stat(filepath.Join(root, ".magus"))
 		require.NoError(t, err, "cache dir not created")
-		store, err := workspace.StoreDir(root, config.Config{})
+		store, err := config.StoreDir(root, config.Config{})
 		require.NoError(t, err)
 		assert.True(t, strings.HasPrefix(store, userCache), "the shared store lives in the user cache: %s", store)
 		assert.Contains(t, got.Message, store, "the check names the store every checkout shares")

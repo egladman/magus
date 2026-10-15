@@ -15,13 +15,13 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/retry"
 	"github.com/egladman/magus/internal/symbols"
-	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -599,7 +599,7 @@ func (m *Magus) freshnessCache(ctx context.Context) *cache.Cache {
 		return m.cache
 	}
 	m.probeCacheOnce.Do(func() {
-		storeDir, err := workspace.StoreDir(m.Root(), m.cfg)
+		storeDir, err := config.StoreDir(m.Root(), m.cfg)
 		if err != nil {
 			slog.With(attr.Component("magus")).WarnContext(ctx, "cannot open the cache to probe symbol index freshness", attr.Error(err))
 			return

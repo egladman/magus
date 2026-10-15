@@ -190,7 +190,7 @@ func (s *Stdio) SettlePipeline(ctx context.Context, root string, cfg config.Conf
 		// The record reader drains it; closing it under that reader is what exiting does.
 		stdin = nil
 	}
-	return s.pipeline.settle(ctx, stdin, Dir(workspace.CacheDir(root, cfg), root), newNotices(cfg))
+	return s.pipeline.settle(ctx, stdin, Dir(config.CacheDir(root, cfg), root), newNotices(cfg))
 }
 
 // AwaitUpstream holds back a stage whose output another stage acts on, such as a shard
@@ -207,7 +207,7 @@ func (s *Stdio) AwaitUpstream(ctx context.Context, root string, cfg config.Confi
 	if s.ReadsRecords() {
 		stdin = nil
 	}
-	red, ok, err := s.pipeline.wait(ctx, stdin, Dir(workspace.CacheDir(root, cfg), root), newNotices(cfg))
+	red, ok, err := s.pipeline.wait(ctx, stdin, Dir(config.CacheDir(root, cfg), root), newNotices(cfg))
 	if err != nil {
 		return err
 	}
@@ -234,7 +234,7 @@ func RecordExit(root string, cfg config.Config, status int, signal string) {
 	if !IsPipe(os.Stdout) {
 		return
 	}
-	cacheDir := workspace.CacheDir(root, cfg)
+	cacheDir := config.CacheDir(root, cfg)
 	// Never recreate a cache dir: `magus clean` just removed it, or nothing has run here.
 	if _, err := os.Stat(cacheDir); err != nil {
 		return
@@ -259,7 +259,7 @@ func Gate(root string, cfg config.Config) {
 	if gate != nil || !IsPipe(os.Stdout) {
 		return
 	}
-	dir := Dir(workspace.CacheDir(root, cfg), root)
+	dir := Dir(config.CacheDir(root, cfg), root)
 	if os.MkdirAll(dir, 0o755) != nil {
 		return
 	}
