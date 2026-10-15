@@ -10,4 +10,4 @@ The treebank's authors and contributors are listed in its README:
 https://github.com/UniversalDependencies/UD_English-EWT/blob/r2.18/README.md
 
 gen/model.gz is trained on the same release's train split; regenerate both with
-`magus run postag-generate libs/proofread`.
+`magus run wordclass-generate libs/proofread`.
