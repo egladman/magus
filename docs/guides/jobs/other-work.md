@@ -81,7 +81,7 @@ done
 <!-- golden: job_people_upgrade.txtar ls-done.out -->
 
 ```console
-$ magus ls jobs
+$ magus ls jobs --all
 JOB          HOLDER  STATE  MODEL     PATHS  PROOF     CHECK
 upgrade/api  ana     pass   standard  1      alone     magus run test api
 upgrade/web  ben     pass   standard  1      disjoint  magus run test web
@@ -226,12 +226,12 @@ unresolved risks its holder reported
 ```
 
 Exit 1, every unmet rule named, and the risk repeated where the person deciding
-reads it. The board is the checklist:
+reads it. The board with its ended rows is the checklist:
 
 <!-- golden: job_people_release.txtar ls-board.out -->
 
 ```console
-$ magus ls jobs
+$ magus ls jobs --all
 JOB                    HOLDER     STATE   MODEL     PATHS  PROOF     CHECK
 release-1.3/changelog  changelog  pass    standard  1      alone     -
 release-1.3/notes      notes      exited  standard  1      disjoint  -

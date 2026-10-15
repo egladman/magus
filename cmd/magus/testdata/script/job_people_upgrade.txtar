@@ -47,7 +47,7 @@ cp stdout $WORK/raw
 exec sh -c 'sed -e "s/out[0-9a-f]\{12\}/out<hex>/g" "$WORK/raw"'
 cmp stdout $WORK/wait-api.out
 exec magus job wait upgrade/web
-exec magus ls jobs
+exec magus ls jobs --all
 cmp stdout $WORK/ls-done.out
 
 -- shop/.gitignore --

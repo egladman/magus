@@ -1077,6 +1077,7 @@ func TestLsJobsListsLiveRowsAndLeavesEndedOnesToAll(t *testing.T) {
 		types.Job{ID: "handed-in", State: types.StateExited},
 	)
 	withOutput(t, "name")
+	useTextLogger(t)
 	ls := func(args ...string) (ids, notice string) {
 		notice = captureStderr(t, func() {
 			ids = captureStdout(t, func() { require.NoError(t, lsJobs(root, args)) })

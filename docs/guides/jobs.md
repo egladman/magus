@@ -224,12 +224,13 @@ passed and was recorded after the job was declared, and read the diff since the
 checkpoint: every changed line is inside the job's write paths. A run older than the
 job, a failing run, or a change outside `total.sh` would have been named
 here, and wait would have exited 1. Whether the change is good code is still Ana's
-call; wait checks what is mechanical.
+call; wait checks what is mechanical. Both jobs have ended, so `ls jobs` lists them only
+with `--all`:
 
 <!-- golden: job_people_solo.txtar ls-done.out -->
 
 ```console
-$ magus ls jobs
+$ magus ls jobs --all
 JOB               HOLDER        STATE      MODEL     PATHS  PROOF     CHECK
 refactor/pricing  shop-pricing  pass       standard  1      alone     magus run test .
 refactor/tax      shop-tax      no_return  standard  1      disjoint  magus run test .

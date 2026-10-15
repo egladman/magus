@@ -53,6 +53,10 @@ var lsNouns = []string{"target", "targets", "job", "jobs"}
 // The noun is optional and defaults to projects, so the long-standing bare
 // `magus ls` keeps its meaning.
 func ls(ctx context.Context, root string, args []string) error {
+	// ls jobs parses its own flags: ls's flag set would refuse its --all.
+	if len(args) > 0 && (args[0] == "job" || args[0] == "jobs") {
+		return lsJobs(resolveRootOrEmpty(root), args[1:])
+	}
 	pos, err := cmdParse("ls", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus ls [<noun>] [project] [flags]")
@@ -62,12 +66,13 @@ func ls(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Nouns (singular or plural):")
 			fmt.Fprintln(os.Stderr, "  project   every discovered project, with spell, sources, outputs, depends_on")
 			fmt.Fprintln(os.Stderr, "  target    what a project can run, with the doc and spell ops behind each")
-			fmt.Fprintln(os.Stderr, "  job       every job this repository carries, whoever holds it")
+			fmt.Fprintln(os.Stderr, "  job       every live job this repository carries, whoever holds it")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "  magus ls                     every project in the workspace")
 			fmt.Fprintln(os.Stderr, "  magus ls targets             what the cwd project can run")
 			fmt.Fprintln(os.Stderr, "  magus ls targets libs/foo    what libs/foo can run")
-			fmt.Fprintln(os.Stderr, "  magus ls jobs                every job, with its state and write paths")
+			fmt.Fprintln(os.Stderr, "  magus ls jobs                every live job, with its state and write paths")
+			fmt.Fprintln(os.Stderr, "  magus ls jobs --all          the jobs that ended too")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			printOwnDefaults(fs)

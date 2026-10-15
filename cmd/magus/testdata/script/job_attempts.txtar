@@ -36,7 +36,7 @@ exec magus job exit scout
 stdin $WORK/two.json
 ! exec magus job fork --stdin
 stderr 'max_attempts reached: scout used 2 of its 2 attempt\(s\)'
-exec magus ls jobs
+exec magus ls jobs --all
 stdout 'scout .*no_return'
 
 ! exec magus job apply -f $WORK/three.json
