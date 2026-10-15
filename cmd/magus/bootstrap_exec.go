@@ -14,7 +14,7 @@ import (
 // bootstrapExecSentinelVar marks a process that already replaced itself with a
 // workspace-local ./magus via maybeBootstrapExec, so a second hop can never chain.
 //
-// Distinct from run.AncestorsEnvVar / MAGUS_LEVEL (internal/proc/run/exec.go): those
+// Distinct from spawn.AncestorsEnvVar / MAGUS_LEVEL (internal/proc/spawn/exec.go): those
 // describe a magus process spawning ANOTHER magus as a child invocation, i.e.
 // recursion depth. This is not that: the exec below replaces THIS process's image
 // with the same argv, stdio and exit code, so it is one invocation continuing under a

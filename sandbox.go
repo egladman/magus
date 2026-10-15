@@ -7,7 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/project"
@@ -96,7 +96,7 @@ var warnedKernelUnavailable sync.Once
 // landlock. A nested magus says nothing: the invocation that started it already did,
 // and a line per nested run would teach a reader to skip it.
 func warnKernelUnavailable(ctx context.Context) {
-	if procrun.CurrentLevel() > 0 {
+	if spawn.CurrentLevel() > 0 {
 		return
 	}
 	warnedKernelUnavailable.Do(func() {

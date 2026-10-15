@@ -41,7 +41,7 @@ import (
 	"github.com/rogpeppe/go-internal/txtar"
 
 	"github.com/egladman/magus/internal/interactive/screen"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 )
 
 const (
@@ -193,7 +193,7 @@ func materialize(dir string) error {
 		{"-c", "user.email=demo@example.com", "-c", "user.name=magus", "commit", "-qm", "demo workspace"},
 		{"update-ref", "refs/remotes/origin/main", "HEAD"},
 	} {
-		res, err := run.Exec(context.Background(), "git", args, run.ExecOptions{Dir: dir, Quiet: true, Capture: true})
+		res, err := spawn.Exec(context.Background(), "git", args, spawn.ExecOptions{Dir: dir, Quiet: true, Capture: true})
 		if err != nil {
 			return fmt.Errorf("git %s: %w", args[0], err)
 		}
@@ -211,7 +211,7 @@ func materialize(dir string) error {
 // half of this command that cannot be reproduced. CI renders from the committed
 // capture and never runs this.
 func recordSession() error {
-	res, err := run.Exec(context.Background(), "bash", []string{sessionPath}, run.ExecOptions{
+	res, err := spawn.Exec(context.Background(), "bash", []string{sessionPath}, spawn.ExecOptions{
 		TTY:     true,
 		TTYCols: cols,
 		TTYRows: rows,

@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/engine"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 )
 
 // withStepGate installs the TTY step gate on ctx, together with the REPL it
@@ -25,8 +25,8 @@ import (
 // available outside a magusfile run)" every time. Installing them together is
 // what makes the advertised key impossible to leave dead.
 func withStepGate(ctx context.Context) context.Context {
-	ctx = run.WithStepRepl(ctx, stepRepl)
-	return run.WithStepGate(ctx, newStepGate())
+	ctx = spawn.WithStepRepl(ctx, stepRepl)
+	return spawn.WithStepGate(ctx, newStepGate())
 }
 
 // stepRepl opens a Buzz REPL at a step boundary, seeded with the command that is
@@ -63,19 +63,19 @@ func stepRepl(ctx context.Context, name string, args []string, dir string) error
 	})
 }
 
-// newStepGate returns a run.StepGate that prompts before each subprocess (s/c/k/r/a).
+// newStepGate returns a spawn.StepGate that prompts before each subprocess (s/c/k/r/a).
 //
 // "continue" latches HERE rather than by clearing the gate off a context: the gate is
 // installed once on the run's root ctx, and a caller that cleared it would only be
 // clearing its own copy, so the next command re-prompted and [c] never meant continue.
-func newStepGate() run.StepGate {
+func newStepGate() spawn.StepGate {
 	var mu sync.Mutex // serialize prompts: overlapping raw-mode TTY prompts corrupt the terminal
 	var resumed bool  // set by [c]; guarded by mu
-	return func(ctx context.Context, name string, args []string, dir string) run.StepAction {
+	return func(ctx context.Context, name string, args []string, dir string) spawn.StepAction {
 		mu.Lock()
 		defer mu.Unlock()
 		if resumed {
-			return run.StepActionContinue
+			return spawn.StepActionContinue
 		}
 		for {
 			// The prompt and its key echo stay direct writes: a run is blocked on the
@@ -93,7 +93,7 @@ func newStepGate() run.StepGate {
 			if err != nil {
 				// Can't go raw: fall back to step-always so the user still sees commands.
 				slog.WarnContext(ctx, "(terminal unavailable, stepping)", attr.Notice(""))
-				return run.StepActionStep
+				return spawn.StepActionStep
 			}
 
 			restore := func() {
@@ -107,22 +107,22 @@ func newStepGate() run.StepGate {
 			for {
 				if _, err := os.Stdin.Read(buf); err != nil {
 					restore()
-					return run.StepActionAbort
+					return spawn.StepActionAbort
 				}
 				switch buf[0] {
 				case 's', '\r', '\n':
 					fmt.Fprintln(os.Stderr, "step")
 					restore()
-					return run.StepActionStep
+					return spawn.StepActionStep
 				case 'c':
 					fmt.Fprintln(os.Stderr, "continue")
 					restore()
 					resumed = true
-					return run.StepActionContinue
+					return spawn.StepActionContinue
 				case 'k':
 					fmt.Fprintln(os.Stderr, "skip")
 					restore()
-					return run.StepActionSkip
+					return spawn.StepActionSkip
 				case 'r':
 					fmt.Fprintln(os.Stderr, "repl")
 					restore()
@@ -130,7 +130,7 @@ func newStepGate() run.StepGate {
 				case 'a', 'q', 3: // 3 = Ctrl-C
 					fmt.Fprintln(os.Stderr, "abort")
 					restore()
-					return run.StepActionAbort
+					return spawn.StepActionAbort
 				default:
 					continue
 				}
@@ -138,7 +138,7 @@ func newStepGate() run.StepGate {
 			}
 
 			if wantRepl {
-				if replFn := run.StepReplFrom(ctx); replFn != nil {
+				if replFn := spawn.StepReplFrom(ctx); replFn != nil {
 					if err := replFn(ctx, name, args, dir); err != nil {
 						slog.ErrorContext(ctx, "", attr.Notice(""), attr.Component("repl"), attr.Error(err))
 					}

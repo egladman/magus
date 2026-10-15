@@ -8,7 +8,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -546,7 +546,7 @@ func vcsExe(ctx context.Context) (string, error) {
 	if v == nil {
 		return "", nil
 	}
-	path, err := run.LookPath(ctx, v.Name())
+	path, err := spawn.LookPath(ctx, v.Name())
 	if err != nil {
 		return "", types.WrapDiagnostic(types.ToolNotOnPath, err, "%s is the resolved VCS but is not on PATH", v.Name())
 	}

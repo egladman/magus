@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,12 +19,12 @@ import (
 // impossible; this checks they stay together.
 func TestStepGateAlwaysBringsItsRepl(t *testing.T) {
 	ctx := withStepGate(context.Background())
-	require.NotNil(t, run.StepReplFrom(ctx),
+	require.NotNil(t, spawn.StepReplFrom(ctx),
 		"the gate offers [r]epl, so the ctx it installs must carry one")
 }
 
 func TestStepReplIsAbsentWithoutTheGate(t *testing.T) {
 	// And not attached to a context nobody asked to step, so an ordinary run
 	// carries nothing extra.
-	assert.Nil(t, run.StepReplFrom(context.Background()))
+	assert.Nil(t, spawn.StepReplFrom(context.Background()))
 }

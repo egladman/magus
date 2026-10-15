@@ -34,7 +34,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
-	runPkg "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/types"
 )
 
@@ -1378,14 +1378,14 @@ func (c *Cache) runAsideAdmitted(ctx context.Context, s Step, lim *Limiter, fn f
 
 // runSeated runs a step's body holding what admission seated it with: the limiter it
 // draws from, its slots, and a jobserver that holds make, cargo and any other client of
-// the GNU make protocol to those slots (run.SeatJobserver says when there is none).
+// the GNU make protocol to those slots (spawn.SeatJobserver says when there is none).
 //
 // Inside Cache.Run's callback, so a replayed step opens no pipe, and the pool closes the
 // moment the body returns: whatever tokens a child still holds die with it.
 func runSeated(ctx context.Context, lim *Limiter, slots int, fn func(context.Context) error) error {
 	ctx = ContextWithLimiter(ctx, lim)
 	ctx = WithSlotsHeld(ctx, slots)
-	ctx, closeJobserver, err := runPkg.SeatJobserver(ctx, slots)
+	ctx, closeJobserver, err := spawn.SeatJobserver(ctx, slots)
 	if err != nil {
 		return err
 	}
@@ -2000,9 +2000,9 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 		stdoutTap = col.newLineTap(io.MultiWriter(os.Stderr, safeLogF), journal.StreamStdout)
 		stderrTap = col.newLineTap(io.MultiWriter(os.Stderr, safeLogF), journal.StreamStderr)
 	}
-	captureCtx := runPkg.WithOutputWriters(ctx, stdoutTap, stderrTap)
+	captureCtx := spawn.WithOutputWriters(ctx, stdoutTap, stderrTap)
 	// Tag the step so subprocesses run under fn emit exec events labeled with this
-	// project/target (the run primitive reads this from ctx; see internal/proc/run).
+	// project/target (the run primitive reads this from ctx; see internal/proc/spawn).
 	captureCtx = journal.WithStep(captureCtx, projectPath, target)
 	// So an error raised below can name the log a reader should open. Nothing in the
 	// engine can construct this path: it is the store's own layout.

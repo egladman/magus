@@ -32,7 +32,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/notes"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/spell"
@@ -1669,7 +1669,7 @@ func symbolGaps(ctx context.Context, in symbolIngestInputs) []types.KnowledgeSym
 // from ctx would hand it, which is where the indexer would have to be found.
 func indexerInstalled(ctx context.Context) func(bin string) bool {
 	return func(bin string) bool {
-		_, err := procrun.LookPath(ctx, bin)
+		_, err := spawn.LookPath(ctx, bin)
 		return err == nil
 	}
 }

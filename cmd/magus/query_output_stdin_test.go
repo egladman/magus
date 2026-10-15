@@ -19,7 +19,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
-	runPkg "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -38,7 +38,7 @@ func newRunningWorkspace(t *testing.T, output string, runErr error) (*magus.Magu
 	t.Helper()
 	spellName := register.Spell(t, "zzz-output-import", spells.WithTargets("build"),
 		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
-			stdout, _ := runPkg.OutputWriters(ctx)
+			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprint(stdout, output)
 			return nil, runErr
 		}))

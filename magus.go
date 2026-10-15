@@ -35,7 +35,7 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/oci"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/risk"
@@ -63,10 +63,10 @@ func (m *Magus) withRecordedOutput(ctx context.Context) context.Context {
 	if m.records == nil {
 		return ctx
 	}
-	if _, _, ok := procrun.CapturedOutput(ctx); ok {
+	if _, _, ok := spawn.CapturedOutput(ctx); ok {
 		return ctx
 	}
-	return procrun.WithOutputWriters(ctx,
+	return spawn.WithOutputWriters(ctx,
 		report.NewLineNotices(ctx, m.records, "stdout"),
 		report.NewLineNotices(ctx, m.records, "stderr"))
 }

@@ -814,9 +814,9 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 			displayProjectLabel(label, project), FormatBytes(recordInt(r, "bytes")))
 	case "run.exec":
 		// Every subprocess magus spawns (proc.exec, fork spells) logs through this event
-		// in run.Exec. Rendered as a shell-style echo, indented under the owning
+		// in spawn.Exec. Rendered as a shell-style echo, indented under the owning
 		// project/stage. At debug level it surfaces with -v during a real run; in a dry
-		// run run.Exec logs it at info so the planned commands always show.
+		// run spawn.Exec logs it at info so the planned commands always show.
 		cmd := recordStr(r, "cmd")
 		if args := recordStrs(r, "args"); len(args) > 0 {
 			cmd += " " + strings.Join(args, " ")

@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/log/attr"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/retry"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/spells"
@@ -743,7 +743,7 @@ func installedIndexes(ctx context.Context, idxs []projectIndex) []projectIndex {
 	installed := make([]bool, len(idxs))
 	present := map[string]bool{}
 	for i, idx := range idxs {
-		_, err := procrun.LookPath(ctx, idx.bin)
+		_, err := spawn.LookPath(ctx, idx.bin)
 		installed[i] = err == nil
 		if installed[i] {
 			present[idx.project.Path] = true

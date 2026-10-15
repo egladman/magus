@@ -547,7 +547,7 @@ func (r *Resolver) addRedactable(v string) {
 //     value across a delimiter) still defeats it.
 //   - A secret straddling two writes is masked only if both halves land in one call.
 //     This applies to the live stream, the raw log, AND the output store: the capture tap
-//     redacts per Write, and all three read those same chunks. Only run.Exec's buffered
+//     redacts per Write, and all three read those same chunks. Only spawn.Exec's buffered
 //     ExecResult is redacted whole.
 func (r *Resolver) Redact(p []byte) []byte {
 	if r == nil || len(p) == 0 {

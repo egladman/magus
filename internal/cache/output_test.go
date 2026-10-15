@@ -8,7 +8,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
-	runPkg "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -387,7 +387,7 @@ func TestPortableRefDeterministicAcrossCaches(t *testing.T) {
 		c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(true))
 		require.NoError(t, err)
 		r, err := c.Run(context.Background(), makeStep(root), func(ctx context.Context) error {
-			stdout, _ := runPkg.OutputWriters(ctx)
+			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "built")
 			return nil
 		})
@@ -417,7 +417,7 @@ func TestVolatileFailuresAccumulateAttemptsUnderOneRef(t *testing.T) {
 	var refs []string
 	for i := 0; i < 3; i++ {
 		_, err := c.Run(context.Background(), step, func(ctx context.Context) error {
-			stdout, _ := runPkg.OutputWriters(ctx)
+			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintf(stdout, "attempt %d failed\n", i)
 			return boom
 		})
@@ -858,7 +858,7 @@ func TestRunOutputNoTrailingNewline(t *testing.T) {
 
 	step := makeStep(root)
 	r, err := c.Run(context.Background(), step, func(ctx context.Context) error {
-		stdout, _ := runPkg.OutputWriters(ctx)
+		stdout, _ := spawn.OutputWriters(ctx)
 		fmt.Fprint(stdout, "no newline here") // no '\n' -> the trailing partial line goes through flush
 		return nil
 	})
@@ -901,7 +901,7 @@ func TestRunPersistsOutputRef(t *testing.T) {
 
 	pass := makeStep(root)
 	rPass, err := c.Run(context.Background(), pass, func(ctx context.Context) error {
-		stdout, _ := runPkg.OutputWriters(ctx)
+		stdout, _ := spawn.OutputWriters(ctx)
 		fmt.Fprintln(stdout, "build ok: 3 files")
 		return nil
 	})
@@ -920,7 +920,7 @@ func TestRunPersistsOutputRef(t *testing.T) {
 	fail.Target = "test"
 	boom := errors.New("exit status 1")
 	_, err = c.Run(context.Background(), fail, func(ctx context.Context) error {
-		stdout, _ := runPkg.OutputWriters(ctx)
+		stdout, _ := spawn.OutputWriters(ctx)
 		fmt.Fprintln(stdout, "FAIL: assertion failed")
 		return boom
 	})
@@ -1113,7 +1113,7 @@ func TestFailingRunRefResolves(t *testing.T) {
 
 	boom := errors.New("exit status 1")
 	res, err := c.Run(context.Background(), step, func(ctx context.Context) error {
-		stdout, _ := runPkg.OutputWriters(ctx)
+		stdout, _ := spawn.OutputWriters(ctx)
 		fmt.Fprintln(stdout, "FAIL: one assertion")
 		return boom
 	})

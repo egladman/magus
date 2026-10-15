@@ -94,7 +94,7 @@ func (t *lineTap) Write(p []byte) (int, error) {
 	defer t.mu.Unlock()
 
 	// Redact any value read through magus\secret.read before ANYTHING sees it: dest is
-	// the terminal and the raw log file, and t.buf becomes the emitted events. run.Exec
+	// the terminal and the raw log file, and t.buf becomes the emitted events. spawn.Exec
 	// redacts its own buffered result separately; this covers the taps, which a target's
 	// own output also reaches.
 	//

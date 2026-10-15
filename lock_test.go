@@ -17,7 +17,7 @@ import (
 
 	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/internal/journal"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
@@ -426,8 +426,8 @@ func TestHelperHold(t *testing.T) {
 	holdMS, _ := strconv.Atoi(os.Getenv("LOCKTEST_HOLD_MS"))
 
 	// Assembled the way a nested magus assembles it: the inherited ancestry, then its own id.
-	t.Setenv(procrun.AncestorsEnvVar, os.Getenv("LOCKTEST_ANCESTORS"))
-	ctx := types.WithInvocationAncestors(context.Background(), procrun.AncestorsFromEnv())
+	t.Setenv(spawn.AncestorsEnvVar, os.Getenv("LOCKTEST_ANCESTORS"))
+	ctx := types.WithInvocationAncestors(context.Background(), spawn.AncestorsFromEnv())
 	if inv := os.Getenv("LOCKTEST_INV"); inv != "" {
 		ctx = journal.WithInvocationID(types.AppendInvocationAncestor(ctx, os.Getpid(), inv), inv)
 	}

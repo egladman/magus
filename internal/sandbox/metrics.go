@@ -13,7 +13,7 @@ import (
 // MetricsRecorder is the narrow slice of the observability provider that the
 // binding-layer sandbox checks report into. It lives here (not as a direct
 // observability import) because internal/sandbox sits below internal/observability
-// in the import graph (observability -> cache -> proc/run -> sandbox), so sandbox
+// in the import graph (observability -> cache -> proc/spawn -> sandbox), so sandbox
 // cannot import observability without a cycle. The full observability.Provider
 // satisfies this interface structurally; the root package, which can see both, stamps
 // the live provider onto ctx via WithMetrics.

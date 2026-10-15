@@ -8,7 +8,7 @@ import (
 // Peak resident memory, collected per target execution.
 //
 // The exec layer already knows this number (the kernel counted it, and
-// run.ExecResult.MaxRSSBytes reads it off the same ProcessState the exit code
+// spawn.ExecResult.MaxRSSBytes reads it off the same ProcessState the exit code
 // comes from), but the code that DECIDES what may run alongside what is the
 // shard planner, several layers up, and nothing carried the number between
 // them. This is that carrier, and it is deliberately the same shape as the
@@ -29,7 +29,7 @@ import (
 // `go test -race ./internal/...` held 3.11GiB across 17 processes while the
 // largest single one was 1.28GiB.
 //
-// run.ExecResult.MaxRSSBytes therefore folds the kernel's figure together with a
+// spawn.ExecResult.MaxRSSBytes therefore folds the kernel's figure together with a
 // sampled total of the live process tree, and reports the larger. A figure here is
 // still a FLOOR, because sampling only sees the instants it looks at, but it no
 // longer misses concurrency by construction.

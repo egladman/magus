@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/interactive/screen"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 )
 
 // repoFile reads a path relative to the repo root. The tests run in the command's
@@ -354,9 +354,9 @@ func TestMaterializeLeavesAResolvableBaseRef(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "magusfile.buzz")); err != nil {
 		t.Errorf("the demo workspace has no root magusfile: %v", err)
 	}
-	res, err := run.Exec(context.Background(), "git",
+	res, err := spawn.Exec(context.Background(), "git",
 		[]string{"merge-base", "origin/main", "HEAD"},
-		run.ExecOptions{Dir: dir, Quiet: true, Capture: true})
+		spawn.ExecOptions{Dir: dir, Quiet: true, Capture: true})
 	if err != nil {
 		t.Fatalf("git merge-base: %v", err)
 	}

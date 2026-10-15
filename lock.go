@@ -19,7 +19,7 @@ import (
 	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/pipe"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/internal/workspace"
@@ -95,7 +95,7 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	// MGS3007. The env var is already in this process; read it here so the third
 	// entry point is covered too, and only when nothing upstream stamped one.
 	if len(types.InvocationAncestorsFromContext(ctx)) == 0 {
-		ctx = types.WithInvocationAncestors(ctx, procrun.AncestorsFromEnv())
+		ctx = types.WithInvocationAncestors(ctx, spawn.AncestorsFromEnv())
 	}
 	lopts := []lockerOption{withReportWriter(rw), writingTo(m.noticeWriter()), withCommandLine(m.commandLine)}
 	if gate {

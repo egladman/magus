@@ -32,7 +32,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/spells"
@@ -192,18 +192,18 @@ type hookCommand struct {
 // itself (setsid) escapes this, and only the machine's own boundary, a CI job's, ends
 // it. An argument [types.CheckUnit] refuses is an error, since Args follow Command's
 // own.
-func (c hookCommand) Run(ctx context.Context) (procrun.ExecResult, error) {
+func (c hookCommand) Run(ctx context.Context) (spawn.ExecResult, error) {
 	if len(c.Command) == 0 {
-		return procrun.ExecResult{}, errors.New("empty command hook")
+		return spawn.ExecResult{}, errors.New("empty command hook")
 	}
 	for _, a := range c.Args {
 		if err := types.CheckUnit(a); err != nil {
-			return procrun.ExecResult{}, fmt.Errorf("%s hook: %w", c.Command[0], err)
+			return spawn.ExecResult{}, fmt.Errorf("%s hook: %w", c.Command[0], err)
 		}
 	}
 	policy, err := c.policy()
 	if err != nil {
-		return procrun.ExecResult{}, err
+		return spawn.ExecResult{}, err
 	}
 	stdout, stderr := c.Stdout, c.Stderr
 	if stdout == nil {
@@ -212,7 +212,7 @@ func (c hookCommand) Run(ctx context.Context) (procrun.ExecResult, error) {
 	if stderr == nil {
 		stderr = io.Discard
 	}
-	ctx = procrun.WithOutputWriters(sandbox.WithPolicy(ctx, policy), stdout, stderr)
+	ctx = spawn.WithOutputWriters(sandbox.WithPolicy(ctx, policy), stdout, stderr)
 	// A `--` ends the line's own options and starts what it forwards, and the units are
 	// operands of the line itself: after it, `magus run ci -- --x` forwarded them to
 	// every step and selected no project.
@@ -222,7 +222,7 @@ func (c hookCommand) Run(ctx context.Context) (procrun.ExecResult, error) {
 	} else {
 		words = slices.Concat(words, c.Args)
 	}
-	return procrun.Exec(ctx, c.Command[0], words, procrun.ExecOptions{
+	return spawn.Exec(ctx, c.Command[0], words, spawn.ExecOptions{
 		Dir:         c.Dir,
 		Env:         c.Env,
 		Stdin:       c.Stdin,
@@ -448,7 +448,7 @@ func HookFailed(err error) (why string, code int, ok bool) {
 // not run.
 //
 // Not retry.Do: only ExitTempFail reruns, and the queue reads the last run's bare changeFailure.
-func runHook(ctx context.Context, c hookCommand) (procrun.ExecResult, error) {
+func runHook(ctx context.Context, c hookCommand) (spawn.ExecResult, error) {
 	for attempt := 1; ; attempt++ {
 		res, err := c.Run(ctx)
 		if ctx.Err() != nil {
@@ -556,7 +556,7 @@ func spellCacheEnv(dir string, grants map[string]spells.Sandbox) ([]string, erro
 // refused, so nothing passed moves the box.
 func (e HookEnv) Pass(names []string) (HookEnv, error) {
 	boxed := boxedLocations(e.Sandbox, e.Spells)
-	set := map[string]bool{procrun.SandboxEnvVar: true}
+	set := map[string]bool{spawn.SandboxEnvVar: true}
 	for _, kv := range boxEnv("/", "/", "") {
 		name, _, _ := strings.Cut(kv, "=")
 		set[name] = true

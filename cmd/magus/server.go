@@ -25,7 +25,7 @@ import (
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/service/console"
 	sysPID "github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/internal/trail"
@@ -394,7 +394,7 @@ func servingSuffix(st *proc.StatusReply) string {
 // would be excused from the budget, and a run with no ancestry of its own would be judged
 // a nested magus that had lost it.
 func detachedChildEnv() []string {
-	drop := []string{proc.SocketEnv + "=", proc.TokenEnv + "=", procrun.AncestorsEnvVar + "=", "MAGUS_LEVEL="}
+	drop := []string{proc.SocketEnv + "=", proc.TokenEnv + "=", spawn.AncestorsEnvVar + "=", "MAGUS_LEVEL="}
 	env := os.Environ()
 	out := make([]string, 0, len(env))
 	for _, kv := range env {

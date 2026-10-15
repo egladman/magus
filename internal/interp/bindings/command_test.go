@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/internal/service"
@@ -118,10 +118,10 @@ func TestRunCommandForegroundsDirectService(t *testing.T) {
 
 // streamOp runs a shell line under capture (and quiet when asked) and returns what
 // the call returned alongside what reached the step's output writers.
-func streamOp(t *testing.T, script string, quiet bool) (res run.ExecResult, stdout, stderr string, err error) {
+func streamOp(t *testing.T, script string, quiet bool) (res spawn.ExecResult, stdout, stderr string, err error) {
 	t.Helper()
 	var out, errOut bytes.Buffer
-	ctx := run.WithOutputWriters(std.WithCwd(t.Context(), t.TempDir()), &out, &errOut)
+	ctx := spawn.WithOutputWriters(std.WithCwd(t.Context(), t.TempDir()), &out, &errOut)
 	op := spells.Op{Command: spells.Command{Bin: "sh", Args: []string{"-c", script}, Capture: true, Quiet: quiet}, Capture: true}
 	res, err = runCommand(ctx, op, commandOpts{})
 	return res, out.String(), errOut.String(), err
@@ -131,7 +131,7 @@ func TestRunCommandQuietCaptureReturnsOutputWithoutStreaming(t *testing.T) {
 	res, stdout, stderr, err := streamOp(t, `echo '{"Module":{}}'; echo note >&2`, true)
 	require.NoError(t, err)
 	res.MaxRSSBytes = 0
-	assert.Equal(t, run.ExecResult{Stdout: "{\"Module\":{}}\n", Stderr: "note\n", Code: 0, Started: true}, res)
+	assert.Equal(t, spawn.ExecResult{Stdout: "{\"Module\":{}}\n", Stderr: "note\n", Code: 0, Started: true}, res)
 	assert.Empty(t, stdout, "a quiet op's stdout belongs to its caller, not the step log")
 	assert.Empty(t, stderr, "a quiet op that succeeds writes nothing to the step log")
 }
@@ -185,7 +185,7 @@ func TestExecCommandReportsRealExitCode(t *testing.T) {
 }
 
 // TestExecCommandReportsNotStartedErrorNotExitCode proves a process that never
-// started (binary missing from PATH) reports run.Exec's classified error, not a
+// started (binary missing from PATH) reports spawn.Exec's classified error, not a
 // fabricated "exited 1". A process with no PID has no exit code of its own, and
 // synthesizing one discards the MGS3003 tool-not-on-PATH diagnostic that explains
 // WHY it failed, the same shape TestExecCommandReportsCancellationNotExitCode
@@ -195,7 +195,7 @@ func TestExecCommandReportsNotStartedErrorNotExitCode(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, exec.ErrNotFound,
-		"a start failure must propagate run.Exec's classified error, not a fabricated exit code")
+		"a start failure must propagate spawn.Exec's classified error, not a fabricated exit code")
 	assert.NotContains(t, err.Error(), "exited",
 		"a process that never started has no exit code of its own to report")
 }
@@ -279,7 +279,7 @@ func TestRunCommandAdvisesOnRealFailure(t *testing.T) {
 		ctx = std.WithCwd(ctx, t.TempDir())
 		// The advice must ride the run's OWN writers: that is what puts it in the
 		// persisted log and the output ref rather than only on a terminal.
-		ctx = run.WithOutputWriters(ctx, io.Discard, &stderr)
+		ctx = spawn.WithOutputWriters(ctx, io.Discard, &stderr)
 		_, _ = runCommand(ctx, op, commandOpts{})
 		return stderr.String()
 	}
@@ -291,7 +291,7 @@ func TestRunCommandAdvisesOnRealFailure(t *testing.T) {
 	})
 
 	t.Run("a cancelled run advises nothing", func(t *testing.T) {
-		// The critical case: run.Exec joins ctx.Err() into its error, so gating on err
+		// The critical case: spawn.Exec joins ctx.Err() into its error, so gating on err
 		// alone told a user who pressed Ctrl-C to go and authenticate.
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -574,7 +574,7 @@ func TestRunCommandSourcesEmptyMatchIsNoop(t *testing.T) {
 	op := logInvocationOp([]string{"**/*.doesnotexist"}, false)
 	res, err := runCommand(ctx, op, commandOpts{env: map[string]string{"LOGFILE": logFile}})
 	require.NoError(t, err)
-	assert.Equal(t, run.ExecResult{}, res, "an empty match must report the same zero result as a skipped step")
+	assert.Equal(t, spawn.ExecResult{}, res, "an empty match must report the same zero result as a skipped step")
 	assert.NoFileExists(t, logFile, "Bin must never have been invoked")
 }
 
@@ -640,7 +640,7 @@ func TestResolveRunnerRefs(t *testing.T) {
 }
 
 // TestRunCommandResolvesMagusRef is the integration proof that runCommand
-// itself feeds run.SelfVars into resolveRunnerRefs: an op referencing
+// itself feeds spawn.SelfVars into resolveRunnerRefs: an op referencing
 // $MAGUS_LEVEL in Args (the same shape magus-buzz uses for $MAGUS) receives the
 // runner's own value, with no shell involved.
 func TestRunCommandResolvesMagusRef(t *testing.T) {
@@ -658,8 +658,8 @@ func TestRunCommandResolvesMagusRef(t *testing.T) {
 	require.NoError(t, err)
 	// Not hardcoded to "1": this test process's own MAGUS_LEVEL is whatever
 	// invoked it (0 when run directly, higher under a nested magus run; see
-	// run.CurrentLevel), and the child is always one past that.
-	want := strconv.Itoa(run.CurrentLevel() + 1)
+	// spawn.CurrentLevel), and the child is always one past that.
+	want := strconv.Itoa(spawn.CurrentLevel() + 1)
 	assert.Equal(t, want, string(got), "MAGUS_LEVEL is this process's level plus one for the child")
 }
 

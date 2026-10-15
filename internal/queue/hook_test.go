@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/config"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/sandbox"
 	sandboxenv "github.com/egladman/magus/internal/sandbox/env"
@@ -266,14 +266,14 @@ func TestAHooksEnvironmentIsTheSandboxesInItsBox(t *testing.T) {
 	require.NotEmpty(t, seen["MAGUS"])
 	assert.Equal(t, filepath.Dir(seen["MAGUS"])+string(os.PathListSeparator)+os.Getenv("PATH"), seen["PATH"],
 		"the inherited PATH, behind the running magus's own directory, so a bare magus in a hook is this build")
-	assert.Equal(t, string(magustypes.SandboxModeBestEffort), seen[procrun.SandboxEnvVar])
+	assert.Equal(t, string(magustypes.SandboxModeBestEffort), seen[spawn.SandboxEnvVar])
 	assert.Equal(t, "p", seen["PASSED"])
 	assert.Equal(t, "g", seen["GLOB_X"])
 	assert.Equal(t, "s", seen["SET"])
 	assert.Equal(t, "/dev/null", seen["GIT_CONFIG_GLOBAL"], "a child reads no global git config")
 	allowed := slices.Concat(sandboxenv.DefaultAllow(), boxedNames, []string{"PASSED", "GLOB_X", "SET"},
 		// What magus gives every sandboxed child: itself, its mode, and no global git config.
-		[]string{"MAGUS", "MAGUS_LEVEL", procrun.AncestorsEnvVar, procrun.SandboxEnvVar, "GIT_CONFIG_GLOBAL"},
+		[]string{"MAGUS", "MAGUS_LEVEL", spawn.AncestorsEnvVar, spawn.SandboxEnvVar, "GIT_CONFIG_GLOBAL"},
 		[]string{"SHLVL", "_", "OLDPWD", "PWD"}) // what sh sets itself
 	for name := range seen {
 		assert.Contains(t, allowed, name, "%s reaches the hook", name)
@@ -1125,7 +1125,7 @@ func TestPassCarriesNamedVariablesAndRefusesWhatWouldMoveTheBox(t *testing.T) {
 	assert.Equal(t, []string{"SET=s"}, env.Fixed, "env itself is unchanged")
 
 	for _, name := range []string{"HOME", "TMPDIR", "XDG_CACHE_HOME", "XDG_RUNTIME_DIR", "MAGUS_CACHE_DIR", "MAGUS_CACHE_WRITE_ENABLED",
-		"GOTOOLCHAIN", "GOCACHE", "GOPATH", "MISE_DATA_DIR", "TOOL_CACHE", procrun.SandboxEnvVar, "", "A=B"} {
+		"GOTOOLCHAIN", "GOCACHE", "GOPATH", "MISE_DATA_DIR", "TOOL_CACHE", spawn.SandboxEnvVar, "", "A=B"} {
 		_, err := env.Pass([]string{name})
 		assert.Error(t, err, "%q", name)
 	}

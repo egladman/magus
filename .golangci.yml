@@ -462,7 +462,7 @@ linters:
             - jsonv2    # names the GOEXPERIMENT
             - libproc   # the Darwin API
             - vmstat    # the Darwin tool
-            - jobserver # GNU make's name for the token protocol internal/proc/run implements
+            - jobserver # GNU make's name for the token protocol internal/proc/spawn implements
             - changelog # Keep a Changelog's own word for the file proofread's changelog kind judges
 
       nameoutput:
@@ -803,7 +803,7 @@ linters:
         linters: [testlayout]
       - path: ^internal/job/store_unix_test\.go$
         linters: [testlayout]
-      - path: ^internal/proc/run/(jobserver_unix|jobserver_unix_test|pty_unix|reap_unix|reap_unix_test|run_unix|rusage_unix)\.go$
+      - path: ^internal/proc/spawn/(jobserver_unix|jobserver_unix_test|pty_unix|reap_unix|reap_unix_test|run_unix|rusage_unix)\.go$
         linters: [testlayout]
       - path: ^internal/proc/sockdir/(sockdir_unix|sockdir_unix_test)\.go$
         linters: [testlayout]

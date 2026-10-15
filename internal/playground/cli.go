@@ -17,7 +17,7 @@ import (
 // actually has without listing any of them here.
 //
 // What the console still CANNOT do is run them. A browser has no processes, no
-// filesystem and no git, which is why internal/proc/run/run_wasm.go and friends
+// filesystem and no git, which is why internal/proc/spawn/run_wasm.go and friends
 // exist. So the registry buys three things that need no execution: completing a
 // subcommand, completing its flags, and explaining what one does. Everything
 // else stays the playground's own in-memory evaluation.

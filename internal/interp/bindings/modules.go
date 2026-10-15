@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
@@ -267,7 +267,7 @@ func RegisterModules(ctx context.Context, sess *buzz.Session, opts ...ModuleOpti
 	// A print goes to the captured stdout on ctx when there is one: a target's print is
 	// its output, withheld, streamed and stored under its ref like a subprocess's.
 	env := buzz.ModuleEnv{Ctx: ctx, OutFunc: func(ctx context.Context) io.Writer {
-		if stdout, _, ok := run.CapturedOutput(ctx); ok {
+		if stdout, _, ok := spawn.CapturedOutput(ctx); ok {
 			return stdout
 		}
 		return cfg.scriptOut

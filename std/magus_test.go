@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -107,7 +107,7 @@ func TestNestedExecOptionsCarriesStdin(t *testing.T) {
 
 	fed := nestedExecOptions(ctx, map[string]any{"stdin": "ghp_token", "quiet": true}, nil)
 	// A nested magus is always captured; the caller reads its output.
-	assert.Equal(t, run.ExecOptions{Dir: "/ws/api", Capture: true, Quiet: true, Stdin: "ghp_token"}, fed)
+	assert.Equal(t, spawn.ExecOptions{Dir: "/ws/api", Capture: true, Quiet: true, Stdin: "ghp_token"}, fed)
 
 	bare := nestedExecOptions(ctx, nil, nil)
 	assert.Empty(t, bare.Stdin, "no opt means the child inherits nothing on stdin")
@@ -120,7 +120,7 @@ func TestNestedExecOptionsCarriesStdin(t *testing.T) {
 // contract: a non-zero exit raises, unless opts.allow_failure returns the result.
 func TestNestedResultHonorsAllowFailure(t *testing.T) {
 	full := []string{"status"}
-	failed := run.ExecResult{Stdout: "partial\n", Stderr: "boom\n", Code: 3, Started: true}
+	failed := spawn.ExecResult{Stdout: "partial\n", Stderr: "boom\n", Code: 3, Started: true}
 
 	_, err := nestedResult("cmd", full, failed, nil, nil)
 	require.Error(t, err)
@@ -130,7 +130,7 @@ func TestNestedResultHonorsAllowFailure(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, types.ExecResult{Stdout: "partial", Stderr: "boom", Code: 3, OK: false}, got)
 
-	notStarted := run.ExecResult{Code: -1}
+	notStarted := spawn.ExecResult{Code: -1}
 	_, err = nestedResult("cmd", full, notStarted, errors.New("no such file"), nil)
 	require.ErrorContains(t, err, "no such file")
 	got, err = nestedResult("cmd", full, notStarted, errors.New("no such file"), map[string]any{"allow_failure": true})
@@ -138,10 +138,10 @@ func TestNestedResultHonorsAllowFailure(t *testing.T) {
 	assert.Equal(t, -1, got.Code)
 	assert.False(t, got.OK)
 
-	_, err = nestedResult("cmd", full, run.ExecResult{Code: -1}, types.ExecDenied, map[string]any{"allow_failure": true})
+	_, err = nestedResult("cmd", full, spawn.ExecResult{Code: -1}, types.ExecDenied, map[string]any{"allow_failure": true})
 	assert.ErrorIs(t, err, types.ExecDenied, "a sandbox denial is never swallowed")
 
-	ok, err := nestedResult("cmd", full, run.ExecResult{Stdout: "fine", Started: true}, nil, nil)
+	ok, err := nestedResult("cmd", full, spawn.ExecResult{Stdout: "fine", Started: true}, nil, nil)
 	require.NoError(t, err)
 	assert.True(t, ok.OK)
 }

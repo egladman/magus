@@ -19,7 +19,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/retry"
 	"github.com/egladman/magus/types"
 )
@@ -309,7 +309,7 @@ func OsStdinIsTerminal(_ context.Context) (bool, error) {
 //
 //	try { final vhs = proc\which("vhs"); ... } catch (e) { magus\log.info("vhs not installed"); }
 func OsWhich(ctx context.Context, cmd string) (string, error) {
-	path, err := run.LookPath(ctx, cmd)
+	path, err := spawn.LookPath(ctx, cmd)
 	if err != nil {
 		return "", types.WrapDiagnostic(types.ToolNotOnPath, err, "%q is not on PATH", cmd)
 	}
@@ -376,7 +376,7 @@ func optStringDefault(opts map[string]any, key, def string) string {
 	return def
 }
 
-// runResult forks name+args through run.Exec (sharing the fork/sandbox/env/cancel
+// runResult forks name+args through spawn.Exec (sharing the fork/sandbox/env/cancel
 // core with fork spell targets), capturing output for the returned {stdout,
 // stderr} object while still streaming it to `magus tail` and the report. Per-call
 // os.with_env overrides ride ctx (withEnvKey). label/cmd name the command in the
@@ -394,7 +394,7 @@ func optStringDefault(opts map[string]any, key, def string) string {
 // Capture stays on regardless, so a quiet call still returns stdout.
 func runResult(ctx context.Context, name string, args []string, dir, label, cmd string, opts map[string]any) (types.ExecResult, error) {
 	overrides, _ := ctx.Value(withEnvKey{}).([]string)
-	res, err := run.Exec(ctx, name, args, run.ExecOptions{
+	res, err := spawn.Exec(ctx, name, args, spawn.ExecOptions{
 		Dir:     dir,
 		Env:     overrides,
 		Stdin:   optStringDefault(opts, "stdin", ""),
@@ -637,7 +637,7 @@ func retryFloat(v any) (float64, bool) {
 // standalone run) it just invokes cb. Mirrors archive.*: the build slot already
 // held is handed back while the n are reserved, so peak in-flight stays within the
 // cap rather than cap+n. Processes cb starts share a jobserver of n slots
-// (run.SeatJobserver), so a `make` or cargo given no -j of its own runs n wide.
+// (spawn.SeatJobserver), so a `make` or cargo given no -j of its own runs n wide.
 func OsWithSlots(ctx context.Context, n int, cb Callback) error {
 	if lim := cache.LimiterFromContext(ctx); lim != nil && n > 0 {
 		// Hand back every slot we hold (a weighted step holds more than one) so
@@ -651,7 +651,7 @@ func OsWithSlots(ctx context.Context, n int, cb Callback) error {
 		}
 		defer lim.ReleaseN(n)
 		// The step's own pool was sized to the slots just handed back.
-		seated, closeJobserver, err := run.SeatJobserver(ctx, n)
+		seated, closeJobserver, err := spawn.SeatJobserver(ctx, n)
 		if err != nil {
 			return fmt.Errorf("os.with_slots: %w", err)
 		}

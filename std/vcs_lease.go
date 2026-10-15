@@ -87,7 +87,7 @@ func vcsLeaseRefusal(ctx context.Context, backend string, args []string, dir str
 
 // childEnv is the environment a command run through runResult starts with, as far as a
 // variable the child reads is concerned: the sandbox's base environment or this
-// process's, the run's env\set changes, then os\with_env overrides. run.Exec adds only
+// process's, the run's env\set changes, then os\with_env overrides. spawn.Exec adds only
 // magus's own variables past these.
 func childEnv(ctx context.Context) []string {
 	base := os.Environ()

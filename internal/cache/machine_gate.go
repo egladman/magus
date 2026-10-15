@@ -13,7 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
-	runPkg "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/types"
 )
 
@@ -159,7 +159,7 @@ func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func()
 // variable was in the process the whole time), and refused an in-process SDK run against
 // its own parent's claim.
 func blindToOwnAncestry(ctx context.Context) bool {
-	return runPkg.CurrentLevel() > 0 && len(ancestorInvocations(ctx)) == 0
+	return spawn.CurrentLevel() > 0 && len(ancestorInvocations(ctx)) == 0
 }
 
 // releaser hands the claim back on a fresh, BOUNDED context. Fresh because the step's
@@ -212,7 +212,7 @@ func ancestorInvocations(ctx context.Context) []string {
 	if len(refs) == 0 {
 		// Nothing upstream stamped one, so the environment is the only carrier left.
 		// childEnv puts it on every op subprocess, magus or not.
-		return runPkg.AncestorsFromEnv()
+		return spawn.AncestorsFromEnv()
 	}
 	if mintedHere(refs[len(refs)-1]) {
 		return refs[:len(refs)-1]
@@ -368,7 +368,7 @@ func machineBlindError(c types.MachineClaim, v types.MachineVerdict) error {
 	return types.ExitError{Code: ExitCodeMachineDeclaration, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
 		"not starting %s %s: this magus runs underneath another one but was started without %s, so it cannot tell its own parent's claim from a stranger's and will not queue behind a run that is waiting for it; %s. %s."+
 			" Pass that variable through to nested magus invocations, or let magus set it by not clearing the environment.",
-		displayProject(c.Project), c.Target, runPkg.AncestorsEnvVar,
+		displayProject(c.Project), c.Target, spawn.AncestorsEnvVar,
 		describeMachineRemaining(v), describeMachineHolders(v.Holders))}
 }
 

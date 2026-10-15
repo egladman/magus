@@ -11,7 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -77,7 +77,7 @@ func TestAttributeRunNamesAnAnonymousRun(t *testing.T) {
 // report MGS3007. Both fallbacks fire only on an empty ctx, so the adopt must come first.
 func TestAttributeRunAdoptsAncestryFromTheEnvironment(t *testing.T) {
 	parent := "4242:invparent"
-	t.Setenv(procrun.AncestorsEnvVar, parent)
+	t.Setenv(spawn.AncestorsEnvVar, parent)
 
 	ctx := attributeRun(context.Background())
 

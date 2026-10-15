@@ -57,7 +57,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -152,10 +152,10 @@ func runCLI() int {
 	// Adopt the ancestry a parent magus passed down, before anything can take a project
 	// lock. Stamped here rather than in BeginInvocation because every subcommand that
 	// locks needs it, including the ones with no invocation record of their own (clean).
-	rootCtx = types.WithInvocationAncestors(rootCtx, run.AncestorsFromEnv())
+	rootCtx = types.WithInvocationAncestors(rootCtx, spawn.AncestorsFromEnv())
 	// env\set lands here rather than in the process environment. An adopted run gets its
 	// own from the proc server, so under `magus server` one run's PATH is not another's.
-	rootCtx = run.WithEnvOverlay(rootCtx)
+	rootCtx = spawn.WithEnvOverlay(rootCtx)
 	rootCtx = proveStdio(rootCtx, args)
 
 	res, exitCode := startup(rootCtx, args)
@@ -1327,14 +1327,14 @@ func sandboxFlag(args []string) (mode types.SandboxMode, set bool) {
 
 // refuseInheritedSandboxWeakened refuses a nested magus that would run under a weaker
 // sandbox mode than the run that started it. The parent hands every child its mode
-// (run.SandboxEnvVar, the setting's own variable), and only a flag can lower it, so this
+// (spawn.SandboxEnvVar, the setting's own variable), and only a flag can lower it, so this
 // is the flag's check.
 func refuseInheritedSandboxWeakened(mode types.SandboxMode) error {
-	if run.CurrentLevel() == 0 {
+	if spawn.CurrentLevel() == 0 {
 		return nil
 	}
 	// An unknown value never reaches here: loading the config already refused it.
-	inherited := types.SandboxMode(os.Getenv(run.SandboxEnvVar))
+	inherited := types.SandboxMode(os.Getenv(spawn.SandboxEnvVar))
 	if !inherited.Valid() || !mode.WeakerThan(inherited) {
 		return nil
 	}

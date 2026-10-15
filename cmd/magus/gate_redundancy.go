@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
-	runPkg "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -147,7 +147,7 @@ func (g *gateRedundancy) evaluate(ctx context.Context, disabled bool) error {
 	facts := internalci.GateFacts{
 		Redundant: redundant,
 		Forced:    disabled,
-		Nested:    runPkg.CurrentLevel() > 0,
+		Nested:    spawn.CurrentLevel() > 0,
 	}
 	switch internalci.DecideGate(facts) {
 	case internalci.GateRefuse:

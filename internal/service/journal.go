@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/spells"
 )
 
@@ -124,7 +124,7 @@ func (j *Journal) Sweep(ctx context.Context) SweepResult {
 		// policy and MAGUS_LEVEL like any other magus subprocess. Quiet discards the
 		// output; the error is ignored: a wedged or already-dead orphan must not
 		// stall the sweep.
-		_, _ = run.Exec(cctx, e.Stop.Bin, e.Stop.Args, run.ExecOptions{Quiet: true})
+		_, _ = spawn.Exec(cctx, e.Stop.Bin, e.Stop.Args, spawn.ExecOptions{Quiet: true})
 		cancel()
 		_ = os.Remove(path)
 		res.Reaped++

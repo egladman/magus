@@ -8,7 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"log/slog"
 	"maps"
 	"os"
@@ -122,7 +122,7 @@ const maxProbeOutput = 4 << 10
 // is privileged: the argv comes from the Tool entry rather than being baked into a
 // per-tool closure.
 //
-// It forks through run.Exec, like every other spell-declared command, rather than
+// It forks through spawn.Exec, like every other spell-declared command, rather than
 // exec.Command directly. A spell's `probe` argv is authored input, so it must meet
 // the sandbox's exec check; and the fork wants the process group and wait delay that
 // let a probe which hangs be reaped with its children.
@@ -130,7 +130,7 @@ func versionProber(ctx context.Context, probe spells.Command, dir string) (strin
 	if probe.Bin == "" {
 		return "", nil
 	}
-	res, err := run.Exec(ctx, probe.Bin, probe.Args, run.ExecOptions{Dir: dir, Capture: true, Quiet: true})
+	res, err := spawn.Exec(ctx, probe.Bin, probe.Args, spawn.ExecOptions{Dir: dir, Capture: true, Quiet: true})
 	if err != nil {
 		// The exit status alone says nothing; the tool's own words usually name the cause
 		// (pnpm: `Command "tsc" not found`). pnpm reports on stdout, so stdout is the
@@ -383,7 +383,7 @@ func probeUntilReady(ctx context.Context, probe spells.Command, tool, dir string
 	probeOp := spells.Op{Command: probe, Capture: true}
 	probeOp.Command.Capture = true
 
-	notReady := func(res run.ExecResult, cause error) error {
+	notReady := func(res spawn.ExecResult, cause error) error {
 		msg := strings.TrimSpace(res.Stderr)
 		if msg == "" {
 			msg = strings.TrimSpace(res.Stdout)

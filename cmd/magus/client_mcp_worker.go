@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/interp/mcpclient"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
@@ -63,7 +63,7 @@ func clientWorkspace(ctx context.Context, errOut io.Writer) (context.Context, er
 	if err != nil {
 		return ctx, err
 	}
-	ctx = run.WithOutputWriters(sandboxed, errOut, errOut)
+	ctx = spawn.WithOutputWriters(sandboxed, errOut, errOut)
 	ctx = trail.ContextWithBase(ctx, m.CacheDir())
 	ctx = types.WithJobLease(ctx, trail.LeaseFromEnv())
 	return trail.ContextWithEntryPoint(ctx, types.EntryPointMCP), nil

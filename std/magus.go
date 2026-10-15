@@ -21,7 +21,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/diagnostics"
@@ -2131,9 +2131,9 @@ func resolveRunDir(ctx context.Context, opts map[string]any) string {
 //     case it exists for: an argument would put the token in a process listing and in every
 //     run log. It was missing, so the magusfile that pipes a token to `graph push` had it
 //     dropped on the floor and the publish failed on every push to main.
-func nestedExecOptions(ctx context.Context, opts map[string]any, env []string) run.ExecOptions {
+func nestedExecOptions(ctx context.Context, opts map[string]any, env []string) spawn.ExecOptions {
 	quiet, _ := opts["quiet"].(bool)
-	return run.ExecOptions{
+	return spawn.ExecOptions{
 		Dir:     resolveRunDir(ctx, opts),
 		Env:     env,
 		Capture: true,
@@ -2163,7 +2163,7 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 	var rec types.ExecResult
 	var cmdErr error
 	runFn := func() error {
-		res, err := run.Exec(ctx, self, full, nestedExecOptions(ctx, opts, env))
+		res, err := spawn.Exec(ctx, self, full, nestedExecOptions(ctx, opts, env))
 		rec, cmdErr = nestedResult(label, full, res, err, opts)
 		return nil
 	}
@@ -2176,7 +2176,7 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 // nestedResult turns a nested magus's exit into what the calling method returns.
 // A non-zero exit raises unless opts.allow_failure is true, which returns the
 // result instead, as proc.exec's runResult does; a sandbox denial always raises.
-func nestedResult(label string, full []string, res run.ExecResult, err error, opts map[string]any) (types.ExecResult, error) {
+func nestedResult(label string, full []string, res spawn.ExecResult, err error, opts map[string]any) (types.ExecResult, error) {
 	if err != nil && errors.Is(err, types.ExecDenied) {
 		return types.ExecResult{}, err
 	}
@@ -2225,7 +2225,7 @@ func recursiveMagusEnv(ctx context.Context) []string {
 	if lease := types.JobLeaseFromContext(ctx); lease != "" {
 		env = append(env, trail.EnvBaggage+"="+trail.BaggageLease+"="+lease)
 	}
-	for _, k := range run.ProcForwardVars {
+	for _, k := range spawn.ProcForwardVars {
 		if v := os.Getenv(k); v != "" {
 			env = append(env, k+"="+v)
 			slog.DebugContext(ctx, types.FormatDiagnostic(types.ProcSocketWithheld,

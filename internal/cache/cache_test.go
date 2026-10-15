@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
-	runPkg "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -120,7 +120,7 @@ func TestCacheHitReplaysLogToStderrNotStdout(t *testing.T) {
 
 	const marker = "BUILD OUTPUT MARKER"
 	fn := func(ctx context.Context) error {
-		stdout, _ := runPkg.OutputWriters(ctx)
+		stdout, _ := spawn.OutputWriters(ctx)
 		fmt.Fprintln(stdout, marker)
 		return os.WriteFile(out, []byte("built"), 0o644)
 	}
@@ -702,7 +702,7 @@ func TestCaptureRunCollapseSuppressesOutputOnSuccess(t *testing.T) {
 
 	out := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
-			stdout, _ := runPkg.OutputWriters(ctx)
+			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "compiling lots of noisy output...")
 			return nil
 		})
@@ -721,7 +721,7 @@ func TestCaptureRunCollapseShowsFailureExcerpt(t *testing.T) {
 
 	stderrOut := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
-			stdout, _ := runPkg.OutputWriters(ctx)
+			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "lint: undefined symbol foo")
 			return want
 		})
@@ -766,7 +766,7 @@ func TestCaptureRunSilentBubblesNotices(t *testing.T) {
 
 	out := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
-			stdout, _ := runPkg.OutputWriters(ctx)
+			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "compiling...")
 			fmt.Fprintln(stdout, "magus:notice: deployed api v1.2.3")
 			return nil
@@ -788,7 +788,7 @@ func TestCaptureRunSilentBoundsFailureAndKeepsLog(t *testing.T) {
 
 	out := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
-			stdout, _ := runPkg.OutputWriters(ctx)
+			stdout, _ := spawn.OutputWriters(ctx)
 			for i := 0; i < maxFailTailLines+10; i++ {
 				fmt.Fprintf(stdout, "line %d\n", i)
 			}
@@ -818,7 +818,7 @@ func TestCaptureRunQuietRetainsFailureLog(t *testing.T) {
 
 	_ = testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
-			stdout, _ := runPkg.OutputWriters(ctx)
+			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "line 0")
 			return want
 		})
@@ -836,7 +836,7 @@ func TestCaptureRunSilentPassNoNoticeIsSilent(t *testing.T) {
 
 	out := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
-			stdout, _ := runPkg.OutputWriters(ctx)
+			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "all good, nothing to report")
 			return nil
 		})
@@ -1321,13 +1321,13 @@ func TestRunAllSeatsAJobserverOnlyForAMultiSlotStep(t *testing.T) {
 	var mu sync.Mutex
 	got := map[string][2]string{}
 	_, err := c.RunAll(context.Background(), steps, func(ctx context.Context, s Step) error {
-		flags, err := runPkg.Exec(ctx, "sh", []string{"-c", `printf %s "$CARGO_MAKEFLAGS"`}, runPkg.ExecOptions{Capture: true, Quiet: true})
+		flags, err := spawn.Exec(ctx, "sh", []string{"-c", `printf %s "$CARGO_MAKEFLAGS"`}, spawn.ExecOptions{Capture: true, Quiet: true})
 		if err != nil {
 			return err
 		}
-		var tokens runPkg.ExecResult
+		var tokens spawn.ExecResult
 		if s.Slots > 1 {
-			if tokens, err = runPkg.Exec(ctx, "sh", []string{"-c", "head -c 2 <&3"}, runPkg.ExecOptions{Capture: true, Quiet: true}); err != nil {
+			if tokens, err = spawn.Exec(ctx, "sh", []string{"-c", "head -c 2 <&3"}, spawn.ExecOptions{Capture: true, Quiet: true}); err != nil {
 				return err
 			}
 		}

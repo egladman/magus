@@ -30,7 +30,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/pipe"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/race"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/sandbox"
@@ -489,7 +489,7 @@ func (m *Magus) targetProjects(targets []types.Target) []*types.Project {
 // TargetHandler runs one target on one resolved project. It is the single executor
 // seam the run pipeline schedules: the same handler serves both a real run and a dry
 // run: types.WithTrace(ctx) switches it, so under a tracing context the effect
-// boundary (proc/run.Exec, fs, net) records each op's intent and skips it instead of
+// boundary (proc/spawn.Exec, fs, net) records each op's intent and skips it instead of
 // executing. One path, two modes: no separate dry-run executor, just a tracing
 // context over this one contract. (The in-browser evaluator in internal/dry is a
 // different thing: it takes raw source, never a resolved *Project, so it sits before
@@ -3130,7 +3130,7 @@ func attributeRun(ctx context.Context) context.Context {
 	// (internal/cache/machine_gate.go, lock.go): stamping first silences them and leaves
 	// the run blind to the very ancestor this identity exists to recognize.
 	if len(types.InvocationAncestorsFromContext(ctx)) == 0 {
-		ctx = types.WithInvocationAncestors(ctx, procrun.AncestorsFromEnv())
+		ctx = types.WithInvocationAncestors(ctx, spawn.AncestorsFromEnv())
 	}
 	id := journal.NewInvocationID()
 	return types.AppendInvocationAncestor(journal.WithInvocationID(ctx, id), os.Getpid(), id)

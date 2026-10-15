@@ -25,7 +25,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/internal/pipe"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
@@ -121,7 +121,7 @@ func pattern(n int) []byte {
 func pipeStage(t *testing.T, cacheDir string, env map[string]string, args ...string) *exec.Cmd {
 	t.Helper()
 	cmd := exec.Command(os.Args[0], append([]string{"-test.run=^TestHelperPipeStage$"}, args...)...)
-	cmd.Env = append(os.Environ(), "PIPETEST_HELPER=1", "PIPETEST_CACHE_DIR="+cacheDir, procrun.AncestorsEnvVar+"=")
+	cmd.Env = append(os.Environ(), "PIPETEST_HELPER=1", "PIPETEST_CACHE_DIR="+cacheDir, spawn.AncestorsEnvVar+"=")
 	for k, v := range env {
 		cmd.Env = append(cmd.Env, "PIPETEST_"+k+"="+v)
 	}

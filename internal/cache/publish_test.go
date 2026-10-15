@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	runPkg "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,7 +33,7 @@ func TestRemoteHitResolvesProducersRef(t *testing.T) {
 	stepA := makeStep(rootA)
 	stepA.Target = "build"
 	rA, err := cA.Run(context.Background(), stepA, func(ctx context.Context) error {
-		stdout, _ := runPkg.OutputWriters(ctx)
+		stdout, _ := spawn.OutputWriters(ctx)
 		_, _ = stdout.Write([]byte("built on machine A\n"))
 		return nil
 	})
@@ -201,7 +201,7 @@ func TestPublishedBundleResolvesRemotely(t *testing.T) {
 	step.Target = "test"
 	boom := errors.New("exit status 1")
 	_, err = cA.Run(context.Background(), step, func(ctx context.Context) error {
-		stdout, _ := runPkg.OutputWriters(ctx)
+		stdout, _ := spawn.OutputWriters(ctx)
 		_, _ = stdout.Write([]byte("FAIL: assertion failed on machine A\n"))
 		return boom
 	})

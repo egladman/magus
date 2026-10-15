@@ -1,6 +1,6 @@
 // Package environ is one run's view of the environment: the process environment with the
 // run's own env\set and env\unset layered on top. A leaf, like sockdir, so the env host
-// module can reach it from the wasm build where internal/proc/run does not compile.
+// module can reach it from the wasm build where internal/proc/spawn does not compile.
 package environ
 
 import (

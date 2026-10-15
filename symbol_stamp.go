@@ -13,7 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/types"
 )
@@ -128,7 +128,7 @@ func (m *Magus) SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolInde
 		if _, err := os.Stat(index); err != nil {
 			// The install hint is the fix for an index that was never built because its
 			// indexer is missing; an index whose indexer a run would find needs only a build.
-			if _, err := procrun.LookPath(ctx, idx.bin); err != nil {
+			if _, err := spawn.LookPath(ctx, idx.bin); err != nil {
 				out[i].Detail = symbols.MissingIndexerHint(idx.language, idx.bin)
 			}
 			continue

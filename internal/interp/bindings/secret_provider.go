@@ -7,7 +7,7 @@ import (
 
 	interactivepkg "github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -78,7 +78,7 @@ func (p spellSecretProvider) Fetch(ctx context.Context, ref string) (secret.Valu
 	// cover, because the value is unknown until the command that reveals it has printed.
 	// Discarding both streams is the only correct answer; a provider that needs to
 	// report something must do it by failing.
-	ctx = run.WithOutputWriters(ctx, io.Discard, io.Discard)
+	ctx = spawn.WithOutputWriters(ctx, io.Discard, io.Discard)
 
 	resp, err := p.drv.Invoke(ctx, spells.InvokeRequest{
 		Target: "resolve_secret",

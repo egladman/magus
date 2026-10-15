@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
@@ -32,7 +32,7 @@ import (
 // it into the returned object.
 func TestOsExecTeesToOutputWriters(t *testing.T) {
 	var tee bytes.Buffer
-	ctx := run.WithOutputWriters(context.Background(), &tee, &tee)
+	ctx := spawn.WithOutputWriters(context.Background(), &tee, &tee)
 	res, err := OsExec(ctx, "printf", []string{"hello"}, "", nil)
 	require.NoError(t, err)
 	got := res.Stdout
@@ -178,7 +178,7 @@ func TestOsWithSlotsReseatsTheJobserver(t *testing.T) {
 	}
 	lim := cache.NewLimiter(4)
 	require.NoError(t, lim.AcquireN(context.Background(), 4))
-	stepCtx, closeStep, err := run.SeatJobserver(cache.ContextWithLimiter(context.Background(), lim), 4)
+	stepCtx, closeStep, err := spawn.SeatJobserver(cache.ContextWithLimiter(context.Background(), lim), 4)
 	require.NoError(t, err)
 	defer closeStep()
 	stepCtx = cache.WithSlotsHeld(stepCtx, 4)
@@ -188,7 +188,7 @@ func TestOsWithSlotsReseatsTheJobserver(t *testing.T) {
 	probe := func(n int, script string) string {
 		var got string
 		err := OsWithSlots(stepCtx, n, cbFunc(func(ctx context.Context) error {
-			res, err := run.Exec(ctx, "sh", []string{"-c", script}, run.ExecOptions{Capture: true, Quiet: true})
+			res, err := spawn.Exec(ctx, "sh", []string{"-c", script}, spawn.ExecOptions{Capture: true, Quiet: true})
 			got = res.Stdout
 			return err
 		}))

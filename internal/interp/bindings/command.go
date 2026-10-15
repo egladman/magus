@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/spell"
@@ -38,7 +38,7 @@ import (
 //   - ignoreDirs: the issuing spell's own mgs_listIgnoreDirs, so a Command.Sources
 //     expansion inherits them instead of the op re-declaring them.
 //   - refs: op-specific runner-computed values a $NAME token may resolve to, alongside
-//     run.SelfVars. Deliberately separate from env, which can carry a resolved Secret,
+//     spawn.SelfVars. Deliberately separate from env, which can carry a resolved Secret,
 //     and a Secret must never be reachable through Args.
 type commandOpts struct {
 	spell      string // the spell declaring the op, whose sandbox grants its child gets; "" for none
@@ -56,17 +56,17 @@ type commandOpts struct {
 // active charms (see resolveCharmArgs). Empty Cmd is a no-op. opts.cwd defaults to
 // "." (the process cwd). Write-mode rides along as the "rw" charm on ctx, so no
 // separate write flag is needed.
-func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecResult, error) {
+func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (spawn.ExecResult, error) {
 	if tgt.Bin == "" {
-		return run.ExecResult{}, nil
+		return spawn.ExecResult{}, nil
 	}
 	// Checked against the caller's args alone: Args and DefaultArgs are the op's own,
 	// and an explicit empty list is no more an answer than none.
 	if tgt.NeedsArgs != "" && len(opts.args) == 0 {
 		if opts.op != "" {
-			return run.ExecResult{}, fmt.Errorf("%s: %s", opts.op, tgt.NeedsArgs)
+			return spawn.ExecResult{}, fmt.Errorf("%s: %s", opts.op, tgt.NeedsArgs)
 		}
-		return run.ExecResult{}, errors.New(tgt.NeedsArgs)
+		return spawn.ExecResult{}, errors.New(tgt.NeedsArgs)
 	}
 	dir := opts.cwd
 	if dir == "" {
@@ -80,13 +80,13 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	if !filepath.IsAbs(dir) {
 		base, err := std.EffectiveCwd(ctx)
 		if err != nil {
-			return run.ExecResult{}, err
+			return spawn.ExecResult{}, err
 		}
 		dir = filepath.Join(base, dir)
 	}
 	args, err := resolveCharmArgs(ctx, tgt.Args, tgt.Charms)
 	if err != nil {
-		return run.ExecResult{}, err
+		return spawn.ExecResult{}, err
 	}
 	// Warn on the real execution path only (not the describe/render path, which
 	// resolveCharmArgs also serves and which surfaces conflicts in its own output).
@@ -116,7 +116,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	refs := runnerRefs(ctx, opts)
 	bin, args, err := resolveRunnerRefs(opts.op, tgt.Bin, args, refs)
 	if err != nil {
-		return run.ExecResult{}, err
+		return spawn.ExecResult{}, err
 	}
 	// A nested magus keeps the workspace's grants: landlock domains stack, so whatever
 	// this child is denied, every target the nested run starts is denied too.
@@ -131,7 +131,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	if len(tgt.Secrets) > 0 {
 		env, err := resolveSecretEnv(ctx, opts.op, tgt.Secrets, opts.env)
 		if err != nil {
-			return run.ExecResult{}, err
+			return spawn.ExecResult{}, err
 		}
 		opts.env = env
 	}
@@ -160,7 +160,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 			root = ws.Root()
 		}
 		if handled, serr := service.TrySupervise(ctx, service.Key(root, svc), svc); handled {
-			return run.ExecResult{}, serr
+			return spawn.ExecResult{}, serr
 		}
 	}
 	// Failure advice tees a bounded TAIL of each stream so a non-zero exit can be
@@ -179,17 +179,17 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	var outTail, errTail *outputTail
 	if len(tgt.Hints) > 0 {
 		outTail, errTail = newOutputTail(hintTailBytes), newOutputTail(hintTailBytes)
-		stdout, stderr := run.OutputWriters(ctx)
-		ctx = run.WithOutputWriters(ctx, io.MultiWriter(outTail, stdout), io.MultiWriter(errTail, stderr))
+		stdout, stderr := spawn.OutputWriters(ctx)
+		ctx = spawn.WithOutputWriters(ctx, io.MultiWriter(outTail, stdout), io.MultiWriter(errTail, stderr))
 	}
-	var res run.ExecResult
+	var res spawn.ExecResult
 	if len(tgt.Sources) == 0 {
 		res, err = execCommand(ctx, dir, bin, args, opts.env, opts.stdin, tgt.Capture, tgt.Quiet)
 	} else {
 		res, err = runSourcedCommand(ctx, tgt, bin, dir, args, opts)
 	}
 	// A REAL failure only: the process started and exited non-zero, and nothing cancelled
-	// it. run.Exec joins ctx.Err() into its error, so gating on err alone would advise a
+	// it. spawn.Exec joins ctx.Err() into its error, so gating on err alone would advise a
 	// user who pressed Ctrl-C to go and authenticate, diagnosing a failure that never
 	// happened.
 	failed := res.Started && res.Code != 0 && ctx.Err() == nil
@@ -198,7 +198,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 		// tool's diagnosis. Writing it through the step's stderr puts it in the log and,
 		// through the tee, in front of the hints; stdout feeds its tail directly so it
 		// stays out of the log.
-		_, stderr := run.OutputWriters(ctx)
+		_, stderr := spawn.OutputWriters(ctx)
 		_, _ = io.WriteString(stderr, res.Stderr)
 		if outTail != nil {
 			_, _ = io.WriteString(outTail, res.Stdout)
@@ -207,7 +207,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	if outTail != nil && failed {
 		// Each stream is matched on its own; see the tee comment above. res.Stdout/Stderr
 		// are deliberately NOT consulted: a capturing op streams through these same tees
-		// (run.Exec buffers on top of the writers rather than instead of them), so reading
+		// (spawn.Exec buffers on top of the writers rather than instead of them), so reading
 		// the result too would only add a duplicate and an unbounded copy of the whole log.
 		if advice := hintAdvice(tgt.Hints, outTail.String(), errTail.String()); advice != "" {
 			// Through the run's own stderr writer, not os.Stderr. That writer is the tap
@@ -216,7 +216,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 			// CI failure after the fact. It also keeps the advice attributed and ordered
 			// with the target's own output when several projects run at once.
 			if _, ok := interactive.TakeHint(slog.LevelInfo, advice); ok {
-				_, stderr := run.OutputWriters(ctx)
+				_, stderr := spawn.OutputWriters(ctx)
 				_, _ = fmt.Fprintf(stderr, "%s: %s\n", attr.HintLabel, advice)
 			}
 		}
@@ -235,7 +235,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 var runnerRefPattern = regexp.MustCompile(`^\$[A-Za-z_][A-Za-z0-9_]*$`)
 
 // runnerRefs returns the values a static op's Bin/Args may reference via a bare
-// $NAME token (see resolveRunnerRefs): run.SelfVars for this invocation (MAGUS,
+// $NAME token (see resolveRunnerRefs): spawn.SelfVars for this invocation (MAGUS,
 // MAGUS_LEVEL, the ancestor chain; the same values every spell subprocess
 // already receives in its own environment) plus whatever opts.refs adds
 // explicitly for one op (e.g. the per-run cache destination dispatchOp sets for
@@ -246,7 +246,7 @@ var runnerRefPattern = regexp.MustCompile(`^\$[A-Za-z_][A-Za-z0-9_]*$`)
 // moment a spell wrote $A_SECRET_NAME.
 func runnerRefs(ctx context.Context, opts commandOpts) map[string]string {
 	refs := make(map[string]string, len(opts.refs)+2)
-	for _, kv := range run.SelfVars(ctx) {
+	for _, kv := range spawn.SelfVars(ctx) {
 		if k, v, ok := strings.Cut(kv, "="); ok {
 			refs[k] = v
 		}
@@ -428,7 +428,7 @@ var directMagusBinaryWarnOnce sync.Once
 // execCommand runs cmd with args in dir, inheriting stdio and sandbox policy. When
 // env is non-empty it overlays the base environment (the sandbox baseline when
 // present, else the process env); later entries win per Go's exec duplicate-key rule.
-func execCommand(ctx context.Context, dir, cmd string, args []string, env map[string]string, stdin string, capture, quiet bool) (run.ExecResult, error) {
+func execCommand(ctx context.Context, dir, cmd string, args []string, env map[string]string, stdin string, capture, quiet bool) (spawn.ExecResult, error) {
 	if filepath.Base(cmd) == "magus" {
 		directMagusBinaryWarnOnce.Do(func() {
 			slog.With(attr.Component("magus")).WarnContext(ctx, "command spell target called with 'magus' binary",
@@ -436,7 +436,7 @@ func execCommand(ctx context.Context, dir, cmd string, args []string, env map[st
 		})
 	}
 	// Sort the per-call env overrides so the subprocess environment is deterministic
-	// regardless of map iteration order; run.Exec applies them over the sandbox
+	// regardless of map iteration order; spawn.Exec applies them over the sandbox
 	// BaseEnv (later entries win).
 	var overrides []string
 	if len(env) > 0 {
@@ -450,7 +450,7 @@ func execCommand(ctx context.Context, dir, cmd string, args []string, env map[st
 			overrides = append(overrides, k+"="+env[k])
 		}
 	}
-	res, err := run.Exec(ctx, cmd, args, run.ExecOptions{Dir: dir, Env: overrides, Stdin: stdin, Capture: capture, Quiet: quiet})
+	res, err := spawn.Exec(ctx, cmd, args, spawn.ExecOptions{Dir: dir, Env: overrides, Stdin: stdin, Capture: capture, Quiet: quiet})
 	if err != nil && errors.Is(err, types.ExecDenied) {
 		return res, err // sandbox exec denial: surface the diagnostic verbatim
 	}
@@ -458,19 +458,19 @@ func execCommand(ctx context.Context, dir, cmd string, args []string, env map[st
 	// own: ExitCode() reports -1, which the floor below would turn into "<cmd> exited
 	// 1": indistinguishable from the tool genuinely failing, printed with a
 	// `reproduce:` line that does not reproduce it and (because a killed child writes
-	// no stderr) no diagnostic to explain it. run.Exec already joins ctx.Err() for
+	// no stderr) no diagnostic to explain it. spawn.Exec already joins ctx.Err() for
 	// exactly this; propagate it instead of blaming the tool. A child that reached a
 	// real exit code before the kill landed still reports that code.
 	if ctx.Err() != nil && (!res.Started || res.Code <= 0) {
 		if err != nil {
-			return res, err // already carries ctx.Err(), joined by run.Exec
+			return res, err // already carries ctx.Err(), joined by spawn.Exec
 		}
 		return res, ctx.Err()
 	}
 	if !res.Started {
 		if err != nil {
 			// A process that never started has no exit code of its own: fabricating
-			// "%s exited %d" here would discard run.Exec's classified error (e.g. the
+			// "%s exited %d" here would discard spawn.Exec's classified error (e.g. the
 			// MGS3003 tool-not-on-PATH diagnostic) and print a verdict on a tool that
 			// never ran. Mirrors the cancellation branch above: propagate, don't invent.
 			return res, err
@@ -510,16 +510,16 @@ const sourcesBatchLimit = 256
 // so the op still fails overall. A process that never started (bad exec, sandbox denial)
 // or a cancelled run stops the loop immediately: every remaining invocation would fail
 // identically, or should not proceed.
-func runSourcedCommand(ctx context.Context, tgt spells.Op, bin, dir string, baseArgs []string, opts commandOpts) (run.ExecResult, error) {
+func runSourcedCommand(ctx context.Context, tgt spells.Op, bin, dir string, baseArgs []string, opts commandOpts) (spawn.ExecResult, error) {
 	files, err := cache.ExpandSources(tgt.Sources, dir, nil, opts.ignoreDirs)
 	if err != nil {
-		return run.ExecResult{}, err
+		return spawn.ExecResult{}, err
 	}
 	if len(files) == 0 {
-		return run.ExecResult{}, nil
+		return spawn.ExecResult{}, nil
 	}
 
-	var combined run.ExecResult
+	var combined spawn.ExecResult
 	var firstErr error
 	for _, batch := range sourceBatches(files, tgt.SourcesEach) {
 		args := append(append([]string(nil), baseArgs...), batch...)

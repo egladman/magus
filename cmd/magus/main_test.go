@@ -28,7 +28,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/testscript"
@@ -1217,18 +1217,18 @@ func TestSandboxFlag(t *testing.T) {
 // weaker --sandbox to shed its parent's mode, and may pass a stronger one.
 func TestRefuseInheritedSandboxWeakened(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "1")
-	t.Setenv(run.SandboxEnvVar, "required")
+	t.Setenv(spawn.SandboxEnvVar, "required")
 	require.ErrorIs(t, refuseInheritedSandboxWeakened(types.SandboxModeOff), types.SandboxWeakened)
 	require.ErrorIs(t, refuseInheritedSandboxWeakened(types.SandboxModeBestEffort), types.SandboxWeakened)
 	require.NoError(t, refuseInheritedSandboxWeakened(types.SandboxModeRequired))
 
-	t.Setenv(run.SandboxEnvVar, "best-effort")
+	t.Setenv(spawn.SandboxEnvVar, "best-effort")
 	require.NoError(t, refuseInheritedSandboxWeakened(types.SandboxModeRequired), "a nested run may strengthen")
 
 	t.Setenv("MAGUS_LEVEL", "0")
 	require.NoError(t, refuseInheritedSandboxWeakened(types.SandboxModeOff), "at the top level the person's flag is the authority")
 	t.Setenv("MAGUS_LEVEL", "1")
-	t.Setenv(run.SandboxEnvVar, "")
+	t.Setenv(spawn.SandboxEnvVar, "")
 	require.NoError(t, refuseInheritedSandboxWeakened(types.SandboxModeOff), "a parent that ran unsandboxed passes nothing down")
 }
 

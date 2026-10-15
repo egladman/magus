@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sandbox"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -56,7 +56,7 @@ type upstreamGuard func(ctx context.Context, args []vm.Value, orig func() (vm.Va
 //
 // With no policy on the call's ctx each wrapper calls straight through, so a script
 // outside the sandbox sees upstream Buzz exactly. Under one, os.env reads through the env
-// allowlist as env.lookup does, os.execute forks through run.Exec (exec check, scrubbed
+// allowlist as env.lookup does, os.execute forks through spawn.Exec (exec check, scrubbed
 // env, no proc socket), and a path is checked the way magus's fs module checks it.
 func guardUpstreamStdlib(sess *buzz.Session) {
 	caller := newUpstreamCaller(sess)
@@ -167,7 +167,7 @@ func upstreamEnv(ctx context.Context, args []vm.Value, orig func() (vm.Value, er
 	return vm.StrValue(v), nil
 }
 
-// upstreamExecute is os.execute forked through run.Exec, so the child gets the exec check,
+// upstreamExecute is os.execute forked through spawn.Exec, so the child gets the exec check,
 // the scrubbed environment and no proc socket. Upstream handed it this process's whole
 // environment, MAGUS_PROC_SOCKET included. A VCS binary is refused as proc\exec refuses
 // it, so the lease rules vcs\cmd applies have no second way around them.
@@ -180,7 +180,7 @@ func upstreamExecute(ctx context.Context, args []vm.Value, orig func() (vm.Value
 		return vm.Null, err
 	}
 	cwd, _ := std.CwdFromContext(ctx)
-	res, err := run.Exec(ctx, argv[0], argv[1:], run.ExecOptions{Dir: cwd})
+	res, err := spawn.Exec(ctx, argv[0], argv[1:], spawn.ExecOptions{Dir: cwd})
 	if res.Started {
 		return vm.IntValue(int64(res.Code)), nil
 	}

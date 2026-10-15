@@ -17,7 +17,7 @@ const SocketEnv = "MAGUS_PROC_SOCKET"
 
 // TokenEnv carries the secret the server at [SocketEnv] requires on every /proc/ request.
 // A magus exports it beside SocketEnv, and like SocketEnv only a nested magus inherits
-// it: an ordinary op subprocess is never handed either (see run.ProcForwardVars).
+// it: an ordinary op subprocess is never handed either (see spawn.ProcForwardVars).
 const TokenEnv = "MAGUS_PROC_TOKEN" //nolint:gosec // G101: an env var NAME, not a credential
 
 // tokenHeader is the request header a client presents the token in.

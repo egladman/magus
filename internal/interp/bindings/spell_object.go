@@ -7,7 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
@@ -145,7 +145,7 @@ func execRecordToBuzz(rec map[string]any) vm.Value {
 // runCommand). With explicit opts.args it uses them; otherwise it forwards the
 // `magus run <t> -- <extra>` args, so a bare go.test() still threads through
 // `magus run test -- -run X`.
-func runBuzzCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecResult, error) {
+func runBuzzCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (spawn.ExecResult, error) {
 	if !opts.hasArgs {
 		opts.args = project.ExtraArgs(ctx)
 	}

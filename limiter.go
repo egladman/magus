@@ -122,7 +122,7 @@ func (m *Magus) claimMemory(step *cache.Step, p *types.Project, target string, s
 
 const (
 	// peakMargin is the headroom a measured claim carries over the highest peak seen.
-	// A recorded peak is a floor, sampled every 200ms (see internal/proc/run), and
+	// A recorded peak is a floor, sampled every 200ms (see internal/proc/spawn), and
 	// 1.25 is the same ratio doctor's MGS1030 treats as a material under-declaration,
 	// so a claim sized here is never one that check would flag.
 	peakMargin = 1.25
