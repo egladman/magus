@@ -75,6 +75,9 @@ const (
 	advisoryCheckpointState denyRuleName = "checkpoint-state"
 	// advisoryReadSymbol is a bounded read inside one declaration; see read.go.
 	advisoryReadSymbol denyRuleName = "read-symbol"
+	// advisorySpawnUnplaced is a subagent's first call that no waiting spawn names; see
+	// joinStartedChild.
+	advisorySpawnUnplaced denyRuleName = "spawn-unplaced"
 )
 
 // advisoryFocusPath keys a marker on the PATH as well as on the kind, so a session

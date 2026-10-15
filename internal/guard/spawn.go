@@ -195,14 +195,16 @@ func livePendingSpawns(facts hint.Gate, now time.Time) []pendingSpawnEntry {
 //
 // A host that sends no start for a foreground child has only the child's first call to join
 // it by, which names no spawn, and several foreground spawns can wait at once. That join
-// (firstCall) guesses nothing: it takes the one pending spawn whose title names a live job
-// equal to the lease the caller declares (see [trail.LeaseFromEnv]). When spawns are waiting
-// and the declaration matches none, or more than one, nothing is joined and the returned
-// refusal says why and what to declare. It is empty when the child was joined, was already
-// known, or no spawn naming a job was waiting.
-func joinStartedChild(ctx context.Context, at location, facts hint.Gate, who hookAttribution, child string, now time.Time, firstCall bool) (refusal string) {
+// (firstCall) guesses nothing. It reads the spawn title the host filed for the child (see
+// hostSpawnTitle) and joins the pending spawn with that title, or none. A host that files
+// no title leaves the lease the hook process declares (see [trail.LeaseFromEnv]), which is
+// the host's environment and not a worker's shell export. When spawns naming jobs are
+// waiting and that declaration matches none, the caller runs unbound and advice says so: a
+// subagent that is no worker must not be refused while spawns wait. Two waiting spawns of
+// the declared job are refused, since either could be the caller's.
+func joinStartedChild(ctx context.Context, at location, facts hint.Gate, who hookAttribution, child string, now time.Time, firstCall bool) (refusal, advice string) {
 	if _, known := readSpawnedAgent(facts, child); known {
-		return ""
+		return "", ""
 	}
 	pending := livePendingSpawns(facts, now)
 	join := func(e pendingSpawnEntry) {
@@ -219,10 +221,16 @@ func joinStartedChild(ctx context.Context, at location, facts hint.Gate, who hoo
 		if len(pending) > 0 {
 			join(pending[0])
 		}
-		return ""
+		return "", ""
+	}
+	if title, filed := hostSpawnTitle(who.Transcript, child); filed {
+		// Two spawns with one title name one job, so the oldest binds the same lease.
+		if i := slices.IndexFunc(pending, func(e pendingSpawnEntry) bool { return e.spawn.Record.Description == title }); i >= 0 {
+			join(pending[i])
+		}
+		return "", ""
 	}
 	var titled, matched []pendingSpawnEntry
-	var jobs []string
 	claim := trail.LeaseFromEnv()
 	for _, e := range pending {
 		row, ok := spawnTitleJob(ctx, at, e.spawn.Record.Description)
@@ -230,26 +238,50 @@ func joinStartedChild(ctx context.Context, at location, facts hint.Gate, who hoo
 			continue
 		}
 		titled = append(titled, e)
-		jobs = append(jobs, row.ID)
 		if claim != "" && row.ID == claim {
 			matched = append(matched, e)
 		}
 	}
 	switch {
 	case len(titled) == 0:
-		return ""
+		return "", ""
 	case len(matched) == 1:
 		join(matched[0])
-		return ""
+		return "", ""
 	case len(matched) > 1:
-		return fmt.Sprintf("magus workspace: this worker's first call matches %d waiting spawns of job %s, and magus will not guess between them: "+
-			"wait for one spawn of that job to be joined, or title the spawns for different jobs.", len(matched), claim)
-	case claim == "":
-		return fmt.Sprintf("magus workspace: this worker's first call declares no lease, and %d spawn(s) are waiting for a worker (%s), so magus cannot tell which is its own: "+
-			"declare the job it works as `%s=<job>` in its environment.", len(titled), strings.Join(jobs, ", "), envHookLease)
+		return fmt.Sprintf("magus workspace: %d waiting spawns name job %s, so this worker's first call cannot pick its own; title each spawn for its own job.",
+			len(matched), claim), ""
 	}
-	return fmt.Sprintf("magus workspace: this worker declares lease %s, and none of the %d spawn(s) waiting for a worker names that job (%s): "+
-		"declare the job its spawn title names as `%s=<job>` in its environment.", claim, len(titled), strings.Join(jobs, ", "), envHookLease)
+	return "", fmt.Sprintf("magus workspace: none of the %d waiting spawn(s) names this caller, so it runs under no lease; a worker binds with `%s`.",
+		len(titled), hint.JobExec.With("<job>"))
+}
+
+// hostSpawnTitle is the spawn title the host filed for child beside the session transcript:
+// Claude Code writes <session>/subagents/agent-<id>.meta.json when the child starts, before
+// its first call, with the spawn's description. ok is false for a host that files none.
+func hostSpawnTitle(transcript, child string) (title string, ok bool) {
+	if transcript == "" || child == "" || child != filepath.Base(child) || child == "." || child == ".." {
+		return "", false
+	}
+	name := "agent-" + child + ".meta.json"
+	dirs := []string{filepath.Join(strings.TrimSuffix(transcript, ".jsonl"), "subagents")}
+	if filepath.Base(filepath.Dir(transcript)) == "subagents" {
+		// A nested child's calls may name its parent's transcript, which sits in the same folder.
+		dirs = append(dirs, filepath.Dir(transcript))
+	}
+	for _, dir := range dirs {
+		body, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			continue
+		}
+		var meta struct {
+			Description string `json:"description"`
+		}
+		if json.Unmarshal(body, &meta) == nil && meta.Description != "" {
+			return meta.Description, true
+		}
+	}
+	return "", false
 }
 
 // scheduleShapeKeys are the tool_input fields of a call that queues a prompt for a later

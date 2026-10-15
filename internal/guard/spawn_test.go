@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
@@ -379,16 +380,19 @@ func TestParallelForegroundChildrenEachJoinTheirOwnSpawn(t *testing.T) {
 	assert.Equal(t, "job-a", f.write(t, "agent-a", "job-a").Lease)
 }
 
-func TestAForegroundChildThatCannotBePlacedIsRefusedWithTheReason(t *testing.T) {
-	declare := trail.EnvBaggage + "=" + trail.BaggageLease + "=<job>"
+// A subagent no waiting spawn names is advised and runs unbound, never refused: it may be no
+// worker at all, and spawns wait up to pendingSpawnWindow. Only two spawns of the job it
+// declares refuse it, since either could be its own.
+func TestAForegroundChildThatCannotBePlacedIsAdvisedNotRefused(t *testing.T) {
 	for name, tc := range map[string]struct {
 		claim    string
 		spawns   []string
-		contains []string
+		decision string
+		contains string
 	}{
-		"declaring no lease":              {"", []string{"job-a", "job-b"}, []string{"declares no lease", "job-a, job-b", declare}},
-		"declaring a job no spawn names":  {"job-c", []string{"job-a", "job-b"}, []string{"declares lease job-c", "none of the 2 spawn(s)", "job-a, job-b", declare}},
-		"declaring a job two spawns name": {"job-a", []string{"job-a", "job-a"}, []string{"matches 2 waiting spawns of job job-a"}},
+		"declaring no lease":              {"", []string{"job-a", "job-b"}, "advise", "none of the 2 waiting spawn(s) names this caller"},
+		"declaring a job no spawn names":  {"job-c", []string{"job-a", "job-b"}, "advise", "runs under no lease"},
+		"declaring a job two spawns name": {"job-a", []string{"job-a", "job-a"}, "deny", "2 waiting spawns name job job-a"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newForegroundFleet(t, "job-a", "job-b", "job-c")
@@ -400,13 +404,71 @@ func TestAForegroundChildThatCannotBePlacedIsRefusedWithTheReason(t *testing.T) 
 			} else {
 				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.claim)
 			}
-			write := f.write(t, "agent-x", "job-a")
-			require.Equal(t, "deny", write.Decision)
-			for _, want := range tc.contains {
-				assert.Contains(t, write.Reason, want)
-			}
+			// A read-only command, which no lease or path rule has an opinion on.
+			list := f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Bash", "agent_id": "agent-x",
+				"agent_type": "general-purpose", "tool_input": map[string]any{"command": "ls"}})
+			require.Equal(t, tc.decision, list.Decision, list.Reason)
+			assert.Contains(t, list.Reason+list.Context, tc.contains)
 		})
 	}
+}
+
+// Claude Code files each child's spawn title beside the session transcript before the
+// child's first call, and the hook process carries no worker's BAGGAGE. The title alone
+// binds each parallel foreground worker to its own spawn, and a subagent whose title no
+// waiting spawn carries passes unbound.
+func TestTheHostsFiledSpawnTitleJoinsAForegroundChild(t *testing.T) {
+	f := newForegroundFleet(t, "job-a", "job-b", "job-c")
+	f.spawn(t, "job-a")
+	f.spawn(t, "job-b")
+	t.Setenv(trail.EnvBaggage, "sentry-environment=production")
+	transcript := filepath.Join(t.TempDir(), "claude-s.jsonl")
+	file := func(agentID, title string) {
+		dir := filepath.Join(strings.TrimSuffix(transcript, ".jsonl"), "subagents")
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		body := `{"agentType":"general-purpose","description":"` + title + `","toolUseId":"toolu_1"}`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "agent-"+agentID+".meta.json"), []byte(body), 0o644))
+	}
+	write := func(agentID, job string) types.GuardJudgment {
+		return f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Write", "agent_id": agentID,
+			"agent_type": "general-purpose", "transcript_path": transcript,
+			"tool_input": map[string]any{"file_path": f.target(job), "content": "package x // y\n"}})
+	}
+
+	file("agent-b", "orchestrator/impl job-b")
+	assert.Equal(t, "job-b", write("agent-b", "job-b").Lease, "the second spawn's child, calling first")
+	file("agent-a", "orchestrator/impl job-a")
+	assert.Equal(t, "job-a", write("agent-a", "job-a").Lease)
+
+	f.spawn(t, "job-c")
+	t.Setenv(trail.EnvBaggage, "sentry-environment=production")
+	file("scout", "explore the cache layer")
+	scout := f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Bash", "agent_id": "scout",
+		"agent_type": "Explore", "transcript_path": transcript, "tool_input": map[string]any{"command": "ls"}})
+	assert.Equal(t, "pass", scout.Decision, scout.Reason+scout.Context)
+	assert.Empty(t, scout.Lease, "a subagent no waiting spawn names joins none")
+	file("agent-c", "orchestrator/impl job-c")
+	assert.Equal(t, "job-c", write("agent-c", "job-c").Lease, "the scout left job-c's spawn waiting for its own child")
+}
+
+func TestHostSpawnTitleReadsOnlyAPlainChildID(t *testing.T) {
+	transcript := filepath.Join(t.TempDir(), "s.jsonl")
+	dir := filepath.Join(strings.TrimSuffix(transcript, ".jsonl"), "subagents")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "agent-a1.meta.json"), []byte(`{"description":"root/review r1"}`), 0o644))
+
+	title, ok := hostSpawnTitle(transcript, "a1")
+	require.True(t, ok)
+	assert.Equal(t, "root/review r1", title)
+	nested, ok := hostSpawnTitle(filepath.Join(dir, "agent-parent.jsonl"), "a1")
+	require.True(t, ok, "a nested child's call naming its parent's transcript")
+	assert.Equal(t, "root/review r1", nested)
+	for _, child := range []string{"", "..", "../a1", "missing"} {
+		_, ok := hostSpawnTitle(transcript, child)
+		assert.False(t, ok, child)
+	}
+	_, ok = hostSpawnTitle("", "a1")
+	assert.False(t, ok, "a host that names no transcript files no title")
 }
 
 // foregroundFleet is a session whose orchestrator spawns foreground workers, one job row each.

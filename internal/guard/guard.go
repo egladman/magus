@@ -626,6 +626,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	mcpTool, readOnlyTool := "", false
 	var write writeFields
 	unjudged := ""
+	// unplaced is the advice a first call gets when no waiting spawn names its caller.
+	unplaced := ""
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
 	// a wrapper that passed them meant them.
@@ -663,12 +665,15 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		}
 		// A foreground spawn returns after its child stopped and a host may send no start for
 		// it, so the child's first call joins it to the spawn too; joinStartedChild leaves a
-		// child it already has a record of alone, and refuses one it cannot place exactly.
+		// child it already has a record of alone, and advises one it cannot place, which a
+		// passing verdict carries below.
 		if child := cmp.Or(env.ChildStarted, who.Agent); child != "" && !req.DryRun {
 			at := hookLocation(ctx, deps)
-			if refusal := joinStartedChild(withJobStoreRows(ctx, at), at, hint.NewGate(at.cacheDir, who.factsKey()), who, child, time.Now(), env.ChildStarted == ""); refusal != "" {
+			refusal, advice := joinStartedChild(withJobStoreRows(ctx, at), at, hint.NewGate(at.cacheDir, who.factsKey()), who, child, time.Now(), env.ChildStarted == "")
+			if refusal != "" {
 				return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: refusal}
 			}
+			unplaced = advice
 		}
 		if env.NothingToJudge && env.UnjudgedTool == "" {
 			// A host envelope whose tool_input carries no command, path or prompt (a todo
@@ -1356,6 +1361,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			next = servableRemedy(ctx, deps, location, callDir, standing, actingLease, verdict.Next)
 		}
 		verdict.Reason, verdictRef, verdict.Next = shapeDeny(ctx, shapeGate, verdict.Rule, verdict.Reason, why, note, next, req.DryRun)
+	}
+	if verdict.Decision == decisionPass && unplaced != "" && !req.Observe {
+		verdict.Decision, verdict.Context, verdict.Rule = decisionAdvise, unplaced, string(advisorySpawnUnplaced)
 	}
 	if verdict.Decision == decisionAdvise && !req.Observe && adviceRepeated(markers, who.Agent, verdict.Rule, verdict.Context) {
 		verdict.Decision, verdict.Context, verdict.Rule = decisionPass, "", ""

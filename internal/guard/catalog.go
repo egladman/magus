@@ -117,6 +117,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocLeaseState, advisory: true},
 	{doc: ruleDocTimedMagus, advisory: true},
 	{doc: ruleDocReadSymbol, advisory: true},
+	{doc: ruleDocSpawnUnplaced, advisory: true},
 	{doc: ruleDocFocus, advisory: true, enrolled: true},
 	{doc: ruleDocGateRepeat},
 	{doc: ruleDocGeneratedWrite, advisory: true, enrolled: true},
@@ -801,6 +802,12 @@ var ruleDocReadSymbol = types.RuleDoc{
 	Name:    string(advisoryReadSymbol),
 	Catches: "a bounded read inside one indexed declaration, which refs --definition --source prints checked",
 	Why:     "Silent inside a method: refs resolves bare names, so its command would print every method of that name.",
+}
+
+var ruleDocSpawnUnplaced = types.RuleDoc{
+	Name:    string(advisorySpawnUnplaced),
+	Catches: "a subagent's first call that no waiting spawn names, which then runs under no lease",
+	Why:     "Advice, not a refusal: the caller may be no worker at all, and spawns wait for their child up to two minutes.",
 }
 
 var ruleDocFocus = types.RuleDoc{
