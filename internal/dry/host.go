@@ -378,12 +378,12 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		duplication.MapSet("groups", vm.ListValue(nil))
 		duplication.MapSet("answer", answer)
 
-		conform := vm.NewMap()
-		conform.MapSet("definition", vm.StrValue(""))
-		conform.MapSet("rows", vm.ListValue(nil))
-		conform.MapSet("stale", vm.ListValue(nil))
-		conform.MapSet("excluded", vm.IntValue(0))
-		conform.MapSet("answer", answer)
+		conformance := vm.NewMap()
+		conformance.MapSet("definition", vm.StrValue(""))
+		conformance.MapSet("rows", vm.ListValue(nil))
+		conformance.MapSet("stale", vm.ListValue(nil))
+		conformance.MapSet("excluded", vm.IntValue(0))
+		conformance.MapSet("answer", answer)
 
 		modelTiers := vm.NewMap()
 		modelTiers.MapSet("definition", vm.StrValue(""))
@@ -397,7 +397,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("volatility", volatility)
 		res.MapSet("unreferenced", unreferenced)
 		res.MapSet("duplication", duplication)
-		res.MapSet("conform", conform)
+		res.MapSet("conformance", conformance)
 		res.MapSet("modelTiers", modelTiers)
 		res.MapSet("graphStats", stats)
 		return res, nil
@@ -510,7 +510,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		"symbols": empty, "indexes": empty,
 	}))
 	// Empty for the reason precedents is.
-	m.MapSet("conform", shaped("magus.conform", map[string]vm.Value{
+	m.MapSet("conformance", shaped("magus.conformance", map[string]vm.Value{
 		"definition": vm.StrValue(""), "rows": empty, "stale": empty, "excluded": vm.IntValue(0),
 		"answer": vm.NewMap(), "indexes": empty,
 	}))

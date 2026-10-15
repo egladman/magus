@@ -9,7 +9,7 @@ import (
 )
 
 // checkThreshold is the Check.Name of thresholdCheck's findings.
-const checkThreshold = "conform-threshold"
+const checkThreshold = "conformance-threshold"
 
 // Scores of thresholdCheck's two findings: a subject past its value is a measurement, and a
 // subject that passes only because the change moved the ratchet is the sharper fact.
@@ -19,7 +19,7 @@ const (
 )
 
 // thresholdCheck reports a symbol the change adds, renames or re-signs that sits past the value
-// [types.ConformOptions.Effective] enforces for one of the symbol-level conform metrics, and one
+// [types.ConformanceOptions.Effective] enforces for one of the symbol-level conformance metrics, and one
 // that sits past the value only the base's ratchet enforced: the change raised the ceiling or
 // listed the symbol as known. It judges against the committed value or the anchor and never a
 // live percentile, and it is silent in a workspace that names no ratchet.
@@ -28,7 +28,7 @@ type thresholdCheck struct{}
 func (thresholdCheck) name() string { return checkThreshold }
 
 func (thresholdCheck) run(x *namingIndex) []finding {
-	o := x.change.Conform
+	o := x.change.Conformance
 	if o.RatchetPath == "" || len(x.subjects) == 0 {
 		return nil
 	}
@@ -38,7 +38,7 @@ func (thresholdCheck) run(x *namingIndex) []finding {
 			byItem[id] = s
 		}
 	}
-	head := x.g.Conform(o)
+	head := x.g.Conformance(o)
 	past := thresholdPast(head, byItem)
 	var out []finding
 	for _, p := range past {
@@ -54,7 +54,7 @@ func (thresholdCheck) run(x *namingIndex) []finding {
 	}
 	baseOpts := o
 	baseOpts.Ratchet = *x.change.RatchetBase
-	for _, p := range thresholdPast(x.g.Conform(baseOpts), byItem) {
+	for _, p := range thresholdPast(x.g.Conformance(baseOpts), byItem) {
 		if slices.ContainsFunc(past, func(h thresholdHit) bool { return h.subject == p.subject && h.key == p.key }) {
 			continue
 		}
@@ -76,29 +76,29 @@ func (thresholdCheck) run(x *namingIndex) []finding {
 // thresholdHit is one subject found past the value its row enforces.
 type thresholdHit struct {
 	subject *namingDecl
-	key     types.ConformKey
+	key     types.ConformanceKey
 	measure int
 	value   int
-	source  types.ConformSource
+	source  types.ConformanceSource
 }
 
 // ownCheck holds the metrics another check reports with its own evidence, so a subject past
 // one is named once. The coupling metrics are conjuncts of shared-loop: past any one alone is
 // what a codebase keeps on purpose.
-var ownCheck = map[types.ConformMetric]string{
-	types.ConformCallSequence: types.CheckCallSequence,
-	types.ConformSharedBody:   types.CheckSharedLoop,
-	types.ConformSharedReach:  types.CheckSharedLoop,
-	types.ConformCallerSpread: types.CheckSharedLoop,
-	types.ConformModeKnobs:    types.CheckSharedLoop,
-	types.ConformAliasShare:   types.CheckImportAlias,
-	types.ConformNameClash:    types.CheckImportAlias,
+var ownCheck = map[types.ConformanceMetric]string{
+	types.ConformanceCallSequence: types.CheckCallSequence,
+	types.ConformanceSharedBody:   types.CheckSharedLoop,
+	types.ConformanceSharedReach:  types.CheckSharedLoop,
+	types.ConformanceCallerSpread: types.CheckSharedLoop,
+	types.ConformanceModeKnobs:    types.CheckSharedLoop,
+	types.ConformanceAliasShare:   types.CheckImportAlias,
+	types.ConformanceNameClash:    types.CheckImportAlias,
 }
 
 // thresholdPast finds the subjects among the violations of out, past a metric no other check
 // owns. A clone group is one violation naming its members, so a subject in a group is past the
 // clone-tokens value.
-func thresholdPast(out types.ConformOutput, byItem map[string]*namingDecl) []thresholdHit {
+func thresholdPast(out types.ConformanceOutput, byItem map[string]*namingDecl) []thresholdHit {
 	var hits []thresholdHit
 	for _, row := range out.Rows {
 		if _, owned := ownCheck[row.Key.Metric]; owned {
@@ -106,7 +106,7 @@ func thresholdPast(out types.ConformOutput, byItem map[string]*namingDecl) []thr
 		}
 		for _, v := range row.Violations {
 			ids := []string{v.ID}
-			if row.Key.Metric == types.ConformCloneTokens {
+			if row.Key.Metric == types.ConformanceCloneTokens {
 				ids = strings.Split(v.ID, ", ")
 			}
 			for _, id := range ids {
@@ -119,7 +119,7 @@ func thresholdPast(out types.ConformOutput, byItem map[string]*namingDecl) []thr
 	return hits
 }
 
-// thresholdItemID names a subject the way a conform item does, "vcs/hg.go#hgVCS.Bisect".
+// thresholdItemID names a subject the way a conformance item does, "vcs/hg.go#hgVCS.Bisect".
 func thresholdItemID(d *namingDecl) (string, bool) {
 	p, ok := parseDescriptors(d.id)
 	if !ok {
@@ -132,12 +132,12 @@ func thresholdItemID(d *namingDecl) (string, bool) {
 	return symbolItemID(d.file(), local), true
 }
 
-func thresholdName(k types.ConformKey) string {
+func thresholdName(k types.ConformanceKey) string {
 	return string(k.Metric) + " " + string(k.Population)
 }
 
-func thresholdSource(s types.ConformSource) string {
-	if s == types.ConformFromRatchet {
+func thresholdSource(s types.ConformanceSource) string {
+	if s == types.ConformanceFromRatchet {
 		return "committed value"
 	}
 	return "configured anchor"

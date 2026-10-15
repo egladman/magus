@@ -11,7 +11,7 @@ import (
 
 const (
 	thresholdFile = "internal/a/a.go"
-	thresholdPath = "hack/policy/conform.json"
+	thresholdPath = "hack/policy/conformance.json"
 )
 
 // thresholdFixture is two functions sharing one 90-token body, the first ten lines long, and a
@@ -23,29 +23,29 @@ func thresholdFixture() (g *Graph, subjects map[string]string) {
 		return s
 	}
 	syms := []types.KnowledgeSymbol{
-		conformPkg(a, []string{thresholdFile}),
-		conformPkg(b, []string{"internal/b/b.go"}),
-		named(conformSym(a, "Frobnicate().", thresholdFile, 3, 12, 40, "S1", 90), "Frobnicate"),
-		named(conformSym(a, "Hobnob().", thresholdFile, 14, 16, 40, "", 0), "Hobnob"),
-		named(conformSym(b, "Gadget().", "internal/b/b.go", 3, 4, 20, "S1", 90), "Gadget"),
+		conformancePkg(a, []string{thresholdFile}),
+		conformancePkg(b, []string{"internal/b/b.go"}),
+		named(conformanceSym(a, "Frobnicate().", thresholdFile, 3, 12, 40, "S1", 90), "Frobnicate"),
+		named(conformanceSym(a, "Hobnob().", thresholdFile, 14, 16, 40, "", 0), "Hobnob"),
+		named(conformanceSym(b, "Gadget().", "internal/b/b.go", 3, 4, 20, "S1", 90), "Gadget"),
 	}
 	g = mergeAll([]Shard{assembleSymbols(".", syms, nil)})
 	return g, map[string]string{
-		"Frobnicate": symbolID(conformNS(a) + "Frobnicate()."),
-		"Hobnob":     symbolID(conformNS(a) + "Hobnob()."),
+		"Frobnicate": symbolID(conformanceNS(a) + "Frobnicate()."),
+		"Hobnob":     symbolID(conformanceNS(a) + "Hobnob()."),
 	}
 }
 
-func thresholdOptions() types.ConformOptions {
-	return types.ConformOptions{
-		Limits: map[types.ConformKey]types.ConformLimit{
-			{Metric: types.ConformFuncLines, Population: types.ConformPopSource}:   {Percentile: 95, Anchor: 8},
-			{Metric: types.ConformCloneTokens, Population: types.ConformPopSource}: {Percentile: 50, Anchor: 80},
+func thresholdOptions() types.ConformanceOptions {
+	return types.ConformanceOptions{
+		Limits: map[types.ConformanceKey]types.ConformanceLimit{
+			{Metric: types.ConformanceFuncLines, Population: types.ConformancePopSource}:   {Percentile: 95, Anchor: 8},
+			{Metric: types.ConformanceCloneTokens, Population: types.ConformancePopSource}: {Percentile: 50, Anchor: 80},
 		},
 		MinSample:   1,
 		Step:        0.05,
 		RatchetPath: thresholdPath,
-		Ratchet:     types.ConformRatchet{Schema: 1},
+		Ratchet:     types.ConformanceRatchet{Schema: 1},
 		Gates:       testGates(),
 	}
 }
@@ -69,7 +69,7 @@ const (
 func TestThresholdCheckReportsASubjectPastItsValue(t *testing.T) {
 	g, id := thresholdFixture()
 
-	got := g.Conformance(ConformanceChange{Subjects: []string{id["Frobnicate"], id["Hobnob"]}, Conform: thresholdOptions()})
+	got := g.ConformanceChecks(ConformanceChange{Subjects: []string{id["Frobnicate"], id["Hobnob"]}, Conformance: thresholdOptions()})
 
 	assert.Equal(t, []string{pastLines, pastClone}, thresholdMessages(t, got[id["Frobnicate"]]))
 	assert.NotContains(t, got, id["Hobnob"], "three lines and no shared body is past nothing")
@@ -78,11 +78,11 @@ func TestThresholdCheckReportsASubjectPastItsValue(t *testing.T) {
 func TestThresholdCheckEnforcesTheCommittedValueOverTheAnchor(t *testing.T) {
 	g, id := thresholdFixture()
 	o := thresholdOptions()
-	o.Ratchet.Thresholds = []types.ConformThreshold{{
-		ConformKey: types.ConformKey{Metric: types.ConformFuncLines, Population: types.ConformPopSource}, Value: 6,
+	o.Ratchet.Thresholds = []types.ConformanceThreshold{{
+		ConformanceKey: types.ConformanceKey{Metric: types.ConformanceFuncLines, Population: types.ConformancePopSource}, Value: 6,
 	}}
 
-	got := g.Conformance(ConformanceChange{Subjects: []string{id["Frobnicate"]}, Conform: o})
+	got := g.ConformanceChecks(ConformanceChange{Subjects: []string{id["Frobnicate"]}, Conformance: o})
 
 	assert.Equal(t, []string{
 		"`Frobnicate` measures 10 for func-lines source, past the committed value of 6", pastClone,
@@ -94,18 +94,18 @@ func TestThresholdCheckIsSilentWithoutARatchet(t *testing.T) {
 	o := thresholdOptions()
 	o.RatchetPath = ""
 
-	assert.Empty(t, g.Conformance(ConformanceChange{Subjects: []string{id["Frobnicate"]}, Conform: o}))
-	assert.Empty(t, g.Conformance(ConformanceChange{Subjects: []string{id["Frobnicate"]}, Conform: testConform()}), "no policy at all")
+	assert.Empty(t, g.ConformanceChecks(ConformanceChange{Subjects: []string{id["Frobnicate"]}, Conformance: o}))
+	assert.Empty(t, g.ConformanceChecks(ConformanceChange{Subjects: []string{id["Frobnicate"]}, Conformance: testConformance()}), "no policy at all")
 }
 
 func TestThresholdCheckSkipsAKnownItem(t *testing.T) {
 	g, id := thresholdFixture()
 	o := thresholdOptions()
-	o.Ratchet.Known = []types.ConformKnown{{
-		Metric: types.ConformFuncLines, Items: []string{thresholdFile + "#Frobnicate"}, Reason: "split pending",
+	o.Ratchet.Known = []types.ConformanceKnown{{
+		Metric: types.ConformanceFuncLines, Items: []string{thresholdFile + "#Frobnicate"}, Reason: "split pending",
 	}}
 
-	got := g.Conformance(ConformanceChange{Subjects: []string{id["Frobnicate"]}, Conform: o})
+	got := g.ConformanceChecks(ConformanceChange{Subjects: []string{id["Frobnicate"]}, Conformance: o})
 
 	assert.Equal(t, []string{pastClone}, thresholdMessages(t, got[id["Frobnicate"]]))
 }
@@ -116,10 +116,10 @@ func TestThresholdCheckReportsASubjectThatPassesOnlyBecauseTheRatchetMoved(t *te
 
 	t.Run("ceiling raised", func(t *testing.T) {
 		o := thresholdOptions()
-		o.Ratchet.Thresholds = []types.ConformThreshold{{
-			ConformKey: types.ConformKey{Metric: types.ConformFuncLines, Population: types.ConformPopSource}, Value: 20,
+		o.Ratchet.Thresholds = []types.ConformanceThreshold{{
+			ConformanceKey: types.ConformanceKey{Metric: types.ConformanceFuncLines, Population: types.ConformancePopSource}, Value: 20,
 		}}
-		got := g.Conformance(ConformanceChange{Subjects: []string{id["Frobnicate"]}, Conform: o, RatchetBase: &base})
+		got := g.ConformanceChecks(ConformanceChange{Subjects: []string{id["Frobnicate"]}, Conformance: o, RatchetBase: &base})
 
 		assert.Equal(t, []string{
 			"`Frobnicate` measures 10 for func-lines source, past the 8 the base enforced; this change raises the ceiling from 8 to 20",
@@ -129,10 +129,10 @@ func TestThresholdCheckReportsASubjectThatPassesOnlyBecauseTheRatchetMoved(t *te
 
 	t.Run("listed as known", func(t *testing.T) {
 		o := thresholdOptions()
-		o.Ratchet.Known = []types.ConformKnown{{
-			Metric: types.ConformFuncLines, Items: []string{thresholdFile + "#Frobnicate"}, Reason: "split pending",
+		o.Ratchet.Known = []types.ConformanceKnown{{
+			Metric: types.ConformanceFuncLines, Items: []string{thresholdFile + "#Frobnicate"}, Reason: "split pending",
 		}}
-		got := g.Conformance(ConformanceChange{Subjects: []string{id["Frobnicate"]}, Conform: o, RatchetBase: &base})
+		got := g.ConformanceChecks(ConformanceChange{Subjects: []string{id["Frobnicate"]}, Conformance: o, RatchetBase: &base})
 
 		assert.Equal(t, []string{
 			"`Frobnicate` measures 10 for func-lines source, past the 8 the base enforced; this change lists it as known",
@@ -141,7 +141,7 @@ func TestThresholdCheckReportsASubjectThatPassesOnlyBecauseTheRatchetMoved(t *te
 	})
 
 	t.Run("unchanged ratchet", func(t *testing.T) {
-		got := g.Conformance(ConformanceChange{Subjects: []string{id["Frobnicate"]}, Conform: thresholdOptions(), RatchetBase: &base})
+		got := g.ConformanceChecks(ConformanceChange{Subjects: []string{id["Frobnicate"]}, Conformance: thresholdOptions(), RatchetBase: &base})
 
 		assert.Equal(t, []string{pastLines, pastClone}, thresholdMessages(t, got[id["Frobnicate"]]),
 			"already past in both, so nothing is reported as moved")
@@ -153,21 +153,21 @@ func TestThresholdCheckHonorsTheFindingCap(t *testing.T) {
 
 	o := thresholdOptions()
 	o.Gates.MaxFindings = 1
-	got := g.Conformance(ConformanceChange{Subjects: []string{id["Frobnicate"]}, Conform: o})
+	got := g.ConformanceChecks(ConformanceChange{Subjects: []string{id["Frobnicate"]}, Conformance: o})
 
 	assert.Equal(t, []string{pastLines}, thresholdMessages(t, got[id["Frobnicate"]]))
 }
 
 func TestThresholdPastLeavesAMetricWithItsOwnCheckToThatCheck(t *testing.T) {
 	const item = thresholdFile + "#Frobnicate"
-	row := func(m types.ConformMetric) types.ConformRow {
-		return types.ConformRow{
-			Key:        types.ConformKey{Metric: m, Population: types.ConformPopSource},
+	row := func(m types.ConformanceMetric) types.ConformanceRow {
+		return types.ConformanceRow{
+			Key:        types.ConformanceKey{Metric: m, Population: types.ConformancePopSource},
 			Value:      1,
-			Violations: []types.ConformItem{{ID: item, Measure: 9}},
+			Violations: []types.ConformanceItem{{ID: item, Measure: 9}},
 		}
 	}
-	out := types.ConformOutput{Rows: []types.ConformRow{row(types.ConformFuncLines)}}
+	out := types.ConformanceOutput{Rows: []types.ConformanceRow{row(types.ConformanceFuncLines)}}
 	for m := range ownCheck {
 		out.Rows = append(out.Rows, row(m))
 	}
@@ -175,5 +175,5 @@ func TestThresholdPastLeavesAMetricWithItsOwnCheckToThatCheck(t *testing.T) {
 	hits := thresholdPast(out, map[string]*namingDecl{item: {id: "frob", label: "Frobnicate"}})
 
 	require.Len(t, hits, 1)
-	assert.Equal(t, types.ConformFuncLines, hits[0].key.Metric)
+	assert.Equal(t, types.ConformanceFuncLines, hits[0].key.Metric)
 }

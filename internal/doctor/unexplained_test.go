@@ -52,8 +52,8 @@ func (h hotWorkspace) Duplication(context.Context) (types.DuplicationOutput, err
 	return types.DuplicationOutput{}, nil
 }
 
-func (h hotWorkspace) Conform(context.Context) (types.ConformOutput, error) {
-	return types.ConformOutput{}, nil
+func (h hotWorkspace) Conformance(context.Context) (types.ConformanceOutput, error) {
+	return types.ConformanceOutput{}, nil
 }
 
 func (h hotWorkspace) ModelTierLens(context.Context) (types.ModelTierOutput, error) {

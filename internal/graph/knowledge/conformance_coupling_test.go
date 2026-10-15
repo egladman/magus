@@ -39,7 +39,7 @@ func couplingFiles() []string {
 // identifiers its body branches on, and the files that call it.
 func couplingFn(pkg, name, file string, start, end int, sig string, branches []string, callers ...string) types.KnowledgeSymbol {
 	s := types.KnowledgeSymbol{
-		Key: conformNS(pkg) + name + "().", Label: name, Language: "go", Namespace: conformNS(pkg), Signature: sig,
+		Key: conformanceNS(pkg) + name + "().", Label: name, Language: "go", Namespace: conformanceNS(pkg), Signature: sig,
 		Source: fmt.Sprintf("%s:%d", file, start), DefEndLine: end, Defs: []string{file}, BranchIdents: branches,
 	}
 	for _, c := range callers {
@@ -51,7 +51,7 @@ func couplingFn(pkg, name, file string, start, end int, sig string, branches []s
 // runField is a field of run.Options that the given files reference.
 func runField(name string, refs ...string) types.KnowledgeSymbol {
 	s := types.KnowledgeSymbol{
-		Key: conformNS(runPkg) + "Options#" + name + ".", Label: name, Language: "go", Namespace: conformNS(runPkg),
+		Key: conformanceNS(runPkg) + "Options#" + name + ".", Label: name, Language: "go", Namespace: conformanceNS(runPkg),
 		Source: "internal/proc/run/exec.go:75", Defs: []string{"internal/proc/run/exec.go"},
 	}
 	for _, r := range refs {
@@ -64,14 +64,14 @@ func runField(name string, refs ...string) types.KnowledgeSymbol {
 // three hops apart once run is removed: termcast and std import a, a, queue and c import b.
 func couplingPackages() []types.KnowledgeSymbol {
 	return []types.KnowledgeSymbol{
-		conformPkg(runPkg, []string{"internal/proc/run/exec.go"}, couplingFiles()...),
-		conformPkg("/internal/a", []string{couplingFile("/internal/a")}, couplingFile("/cmd/termcast"), couplingFile("/std")),
-		conformPkg("/internal/b", []string{couplingFile("/internal/b")},
+		conformancePkg(runPkg, []string{"internal/proc/run/exec.go"}, couplingFiles()...),
+		conformancePkg("/internal/a", []string{couplingFile("/internal/a")}, couplingFile("/cmd/termcast"), couplingFile("/std")),
+		conformancePkg("/internal/b", []string{couplingFile("/internal/b")},
 			couplingFile("/internal/a"), couplingFile("/internal/queue"), couplingFile("/internal/c")),
-		conformPkg("/internal/c", []string{couplingFile("/internal/c")}),
-		conformPkg("/internal/queue", []string{couplingFile("/internal/queue")}),
-		conformPkg("/cmd/termcast", []string{couplingFile("/cmd/termcast")}),
-		conformPkg("/std", []string{couplingFile("/std")}),
+		conformancePkg("/internal/c", []string{couplingFile("/internal/c")}),
+		conformancePkg("/internal/queue", []string{couplingFile("/internal/queue")}),
+		conformancePkg("/cmd/termcast", []string{couplingFile("/cmd/termcast")}),
+		conformancePkg("/std", []string{couplingFile("/std")}),
 	}
 }
 
@@ -82,7 +82,7 @@ func execShape() []types.KnowledgeSymbol {
 	return []types.KnowledgeSymbol{
 		couplingFn(runPkg, "Exec", "internal/proc/run/exec.go", 135, 291, "func Exec(ctx context.Context, opts Options) error", nil, files...),
 		{
-			Key: conformNS(runPkg) + "Options#", Label: "Options", Language: "go", Namespace: conformNS(runPkg),
+			Key: conformanceNS(runPkg) + "Options#", Label: "Options", Language: "go", Namespace: conformanceNS(runPkg),
 			Source: "internal/proc/run/exec.go:70", Defs: []string{"internal/proc/run/exec.go"},
 		},
 		runField("TTYCols", couplingFile("/cmd/termcast")),
@@ -98,13 +98,13 @@ func couplingGraph(syms ...types.KnowledgeSymbol) *Graph {
 
 // couplingOptions are this tree's live relative values as anchors, so the run.Exec shape
 // crosses them the way it crosses a committed ratchet.
-func couplingOptions() types.ConformOptions {
-	return types.ConformOptions{
-		Limits: map[types.ConformKey]types.ConformLimit{
-			couplingKey(types.ConformSharedBody):   {Percentile: 90, Anchor: 30},
-			couplingKey(types.ConformSharedReach):  {Percentile: 95, Anchor: 4},
-			couplingKey(types.ConformCallerSpread): {Percentile: 95, Anchor: 2},
-			couplingKey(types.ConformModeKnobs):    {Percentile: 0, Anchor: 0},
+func couplingOptions() types.ConformanceOptions {
+	return types.ConformanceOptions{
+		Limits: map[types.ConformanceKey]types.ConformanceLimit{
+			couplingKey(types.ConformanceSharedBody):   {Percentile: 90, Anchor: 30},
+			couplingKey(types.ConformanceSharedReach):  {Percentile: 95, Anchor: 4},
+			couplingKey(types.ConformanceCallerSpread): {Percentile: 95, Anchor: 2},
+			couplingKey(types.ConformanceModeKnobs):    {Percentile: 0, Anchor: 0},
 		},
 		MinSample: 1,
 		Step:      0.05,
@@ -151,7 +151,7 @@ func TestSharedUsesReadTheExecShape(t *testing.T) {
 		},
 	}, exec)
 	assert.True(t, exec.overShared(couplingOptions()))
-	assert.False(t, exec.overShared(types.ConformOptions{}), "with nothing configured the rule holds no verdict")
+	assert.False(t, exec.overShared(types.ConformanceOptions{}), "with nothing configured the rule holds no verdict")
 }
 
 func TestModeKnobs(t *testing.T) {
@@ -180,31 +180,31 @@ func TestModeKnobs(t *testing.T) {
 
 // The lens judges the run.Exec shape as one mode-knobs item, and a known entry that names a
 // function no longer past the rule is stale.
-func TestConformModeKnobsRow(t *testing.T) {
+func TestConformanceModeKnobsRow(t *testing.T) {
 	g := couplingGraph(execShape()...)
 	o := couplingOptions()
 
-	out := g.Conform(o)
-	knobs := conformRowFor(t, out, types.ConformModeKnobs, types.ConformPopSource, "")
-	assert.Equal(t, []types.ConformItem{{ID: "internal/proc/run/exec.go#Exec", Source: "internal/proc/run/exec.go:135", Measure: 3}}, knobs.Violations)
+	out := g.Conformance(o)
+	knobs := conformanceRowFor(t, out, types.ConformanceModeKnobs, types.ConformancePopSource, "")
+	assert.Equal(t, []types.ConformanceItem{{ID: "internal/proc/run/exec.go#Exec", Source: "internal/proc/run/exec.go:135", Measure: 3}}, knobs.Violations)
 	assert.Equal(t, []int{1, 157, 30}, []int{
-		conformRowFor(t, out, types.ConformSharedBody, types.ConformPopSource, "").N,
-		conformRowFor(t, out, types.ConformSharedBody, types.ConformPopSource, "").P99,
-		conformRowFor(t, out, types.ConformSharedBody, types.ConformPopSource, "").Value,
+		conformanceRowFor(t, out, types.ConformanceSharedBody, types.ConformancePopSource, "").N,
+		conformanceRowFor(t, out, types.ConformanceSharedBody, types.ConformancePopSource, "").P99,
+		conformanceRowFor(t, out, types.ConformanceSharedBody, types.ConformancePopSource, "").Value,
 	})
-	assert.Equal(t, 3, conformRowFor(t, out, types.ConformCallerSpread, types.ConformPopSource, "").P99)
-	assert.Equal(t, 6, conformRowFor(t, out, types.ConformSharedReach, types.ConformPopSource, "").P99)
+	assert.Equal(t, 3, conformanceRowFor(t, out, types.ConformanceCallerSpread, types.ConformancePopSource, "").P99)
+	assert.Equal(t, 6, conformanceRowFor(t, out, types.ConformanceSharedReach, types.ConformancePopSource, "").P99)
 
-	o.Ratchet = types.ConformRatchet{Schema: 1, Known: []types.ConformKnown{{
-		Metric: types.ConformModeKnobs, Items: []string{"internal/proc/run/exec.go#Exec", "internal/a/a.go#Gone"},
+	o.Ratchet = types.ConformanceRatchet{Schema: 1, Known: []types.ConformanceKnown{{
+		Metric: types.ConformanceModeKnobs, Items: []string{"internal/proc/run/exec.go#Exec", "internal/a/a.go#Gone"},
 		Reason: "one process primitive: TTY sizing is termcast's knob, CancelGrace the queue's", Line: 2,
 	}}}
-	out = g.Conform(o)
-	knobs = conformRowFor(t, out, types.ConformModeKnobs, types.ConformPopSource, "")
+	out = g.Conformance(o)
+	knobs = conformanceRowFor(t, out, types.ConformanceModeKnobs, types.ConformancePopSource, "")
 	assert.Empty(t, knobs.Violations)
 	assert.Equal(t, 1, knobs.Known)
-	assert.Equal(t, []types.ConformKnown{{
-		Metric: types.ConformModeKnobs, Items: []string{"internal/a/a.go#Gone"},
+	assert.Equal(t, []types.ConformanceKnown{{
+		Metric: types.ConformanceModeKnobs, Items: []string{"internal/a/a.go#Gone"},
 		Reason: "one process primitive: TTY sizing is termcast's knob, CancelGrace the queue's", Line: 2,
 	}}, out.Stale)
 }

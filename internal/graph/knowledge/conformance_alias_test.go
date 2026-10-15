@@ -15,7 +15,7 @@ import (
 // aliasPkg is Go package pkg declaring name in files, imported by each importer file under
 // the alias it maps to, "" for none.
 func aliasPkg(pkg, name string, files []string, importers map[string]string) types.KnowledgeSymbol {
-	s := conformPkg(pkg, files)
+	s := conformancePkg(pkg, files)
 	s.PackageName = name
 	for _, f := range slices.Sorted(maps.Keys(importers)) {
 		s.Refs = append(s.Refs, types.KnowledgeSymbolRef{Path: f, Count: 1, Lines: []int{3}, Alias: importers[f]})
@@ -67,11 +67,11 @@ func aliasGraph(syms ...types.KnowledgeSymbol) *Graph {
 	return mergeAll([]Shard{assembleSymbols(".", append(aliasFixture(), syms...), nil)})
 }
 
-func aliasOptions() types.ConformOptions {
-	return types.ConformOptions{
-		Limits: map[types.ConformKey]types.ConformLimit{
-			couplingKey(types.ConformAliasShare): {Percentile: 95, Anchor: 30, MinSubject: 5},
-			couplingKey(types.ConformNameClash):  {Percentile: 99, Anchor: 25, MinSubject: 5},
+func aliasOptions() types.ConformanceOptions {
+	return types.ConformanceOptions{
+		Limits: map[types.ConformanceKey]types.ConformanceLimit{
+			couplingKey(types.ConformanceAliasShare): {Percentile: 95, Anchor: 30, MinSubject: 5},
+			couplingKey(types.ConformanceNameClash):  {Percentile: 99, Anchor: 25, MinSubject: 5},
 		},
 		MinSample: 1,
 		Step:      0.05,
@@ -118,41 +118,41 @@ func TestImportAliasesWithoutAnIndex(t *testing.T) {
 func TestAliasSamples(t *testing.T) {
 	samples := aliasSamples(aliasGraph(), aliasOptions())
 
-	assert.Equal(t, []types.ConformItem{
+	assert.Equal(t, []types.ConformanceItem{
 		{ID: "internal/json", Source: "internal/json/json.go:1", Measure: 0},
 		{ID: "internal/queue/types", Source: "internal/queue/types/types.go:1", Measure: 38},
 		{ID: "internal/spell/remote", Source: "internal/spell/remote/remote.go:1", Measure: 100},
 		{ID: "lib/mcp", Source: "lib/mcp/mcp.go:1", Measure: 80},
 		{ID: "types", Source: "types/types.go:1", Measure: 0},
-	}, samples[couplingKey(types.ConformAliasShare)], "internal/ci is under MinSubject; internal/a/gen is generated")
-	assert.Equal(t, []types.ConformItem{
+	}, samples[couplingKey(types.ConformanceAliasShare)], "internal/ci is under MinSubject; internal/a/gen is generated")
+	assert.Equal(t, []types.ConformanceItem{
 		{ID: "internal/queue/types", Source: "internal/queue/types/types.go:1", Measure: 62},
-	}, samples[couplingKey(types.ConformNameClash)], "the clash blames the lesser package only")
+	}, samples[couplingKey(types.ConformanceNameClash)], "the clash blames the lesser package only")
 }
 
-func TestConformAliasRows(t *testing.T) {
+func TestConformanceAliasRows(t *testing.T) {
 	g := aliasGraph()
 	o := aliasOptions()
 
-	out := g.Conform(o)
-	share := conformRowFor(t, out, types.ConformAliasShare, types.ConformPopSource, "")
+	out := g.Conformance(o)
+	share := conformanceRowFor(t, out, types.ConformanceAliasShare, types.ConformancePopSource, "")
 	assert.Equal(t, []string{"internal/spell/remote", "lib/mcp", "internal/queue/types"}, itemIDs(share.Violations))
-	clash := conformRowFor(t, out, types.ConformNameClash, types.ConformPopSource, "")
+	clash := conformanceRowFor(t, out, types.ConformanceNameClash, types.ConformancePopSource, "")
 	assert.Equal(t, []string{"internal/queue/types"}, itemIDs(clash.Violations))
 
-	o.Ratchet = types.ConformRatchet{Schema: 1, Known: []types.ConformKnown{{
-		Metric: types.ConformAliasShare, Items: []string{"internal/spell/remote", "internal/gone"}, Reason: "rename pending", Line: 3,
+	o.Ratchet = types.ConformanceRatchet{Schema: 1, Known: []types.ConformanceKnown{{
+		Metric: types.ConformanceAliasShare, Items: []string{"internal/spell/remote", "internal/gone"}, Reason: "rename pending", Line: 3,
 	}}}
-	out = g.Conform(o)
-	share = conformRowFor(t, out, types.ConformAliasShare, types.ConformPopSource, "")
+	out = g.Conformance(o)
+	share = conformanceRowFor(t, out, types.ConformanceAliasShare, types.ConformancePopSource, "")
 	assert.Equal(t, 1, share.Known)
 	assert.Equal(t, []string{"lib/mcp", "internal/queue/types"}, itemIDs(share.Violations))
-	assert.Equal(t, []types.ConformKnown{{
-		Metric: types.ConformAliasShare, Items: []string{"internal/gone"}, Reason: "rename pending", Line: 3,
+	assert.Equal(t, []types.ConformanceKnown{{
+		Metric: types.ConformanceAliasShare, Items: []string{"internal/gone"}, Reason: "rename pending", Line: 3,
 	}}, out.Stale)
 }
 
-func itemIDs(items []types.ConformItem) []string {
+func itemIDs(items []types.ConformanceItem) []string {
 	var out []string
 	for _, it := range items {
 		out = append(out, it.ID)

@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Conform measures every conform metric over g, one row per metric, population and scope,
+// Conformance measures every conformance metric over g, one row per metric, population and scope,
 // and judges each row against the value o.Effective enforces: the committed ratchet value,
 // else the configured anchor. A live percentile is reported and may be proposed, never
 // enforced. A key with no configured value is measured only: no violations, no proposal.
@@ -28,31 +28,31 @@ import (
 // answers unknown rather than an empty pass. A language with no BodyShape lexer
 // contributes no clone samples, and one with no package clause no main population. It
 // reads g only and writes nothing.
-func (g *Graph) Conform(o types.ConformOptions) types.ConformOutput {
+func (g *Graph) Conformance(o types.ConformanceOptions) types.ConformanceOutput {
 	if !g.HasSymbols() {
-		return types.ConformOutput{Answer: types.ClassifyAnswer(false, types.ReasonSymbolIndexMissing, nil)}
+		return types.ConformanceOutput{Answer: types.ClassifyAnswer(false, types.ReasonSymbolIndexMissing, nil)}
 	}
-	samples := conformSamples(g, o)
+	samples := conformanceSamples(g, o)
 	loops, knobbed := sharedLoops(g, o)
 	maps.Copy(samples, loops)
-	samples[couplingKey(types.ConformModeKnobs)] = knobbed
+	samples[couplingKey(types.ConformanceModeKnobs)] = knobbed
 	maps.Copy(samples, aliasSamples(g, o))
 	groups := cloneGroups(g, o)
-	known := conformKnownItems(o.Ratchet.Known)
+	known := conformanceKnownItems(o.Ratchet.Known)
 	// past holds, per metric, every item some enforced row found past its value: a known
 	// item outside it is stale.
-	past := map[types.ConformMetric]map[string]bool{}
-	mark := func(m types.ConformMetric, id string) {
+	past := map[types.ConformanceMetric]map[string]bool{}
+	mark := func(m types.ConformanceMetric, id string) {
 		if past[m] == nil {
 			past[m] = map[string]bool{}
 		}
 		past[m][id] = true
 	}
 
-	out := types.ConformOutput{Excluded: conformExcluded(g, o)}
-	for _, key := range slices.SortedFunc(maps.Keys(samples), compareConformKeys) {
+	out := types.ConformanceOutput{Excluded: conformanceExcluded(g, o)}
+	for _, key := range slices.SortedFunc(maps.Keys(samples), compareConformanceKeys) {
 		items := samples[key]
-		row := types.ConformRow{Key: key, N: len(items)}
+		row := types.ConformanceRow{Key: key, N: len(items)}
 		measures := make([]int, len(items))
 		for i, it := range items {
 			measures[i] = it.Measure
@@ -60,7 +60,7 @@ func (g *Graph) Conform(o types.ConformOptions) types.ConformOutput {
 		slices.Sort(measures)
 		row.P50, row.P90, row.P95, row.P99 = nearestRank(measures, 50), nearestRank(measures, 90),
 			nearestRank(measures, 95), nearestRank(measures, 99)
-		limit, limited := conformLimit(o, key)
+		limit, limited := conformanceLimit(o, key)
 		if limited {
 			row.Live, row.Anchor = nearestRank(measures, limit.Percentile), limit.Anchor
 		}
@@ -90,7 +90,7 @@ func (g *Graph) Conform(o types.ConformOptions) types.ConformOutput {
 				row.Violations = append(row.Violations, it)
 			}
 		}
-		slices.SortFunc(row.Violations, func(a, b types.ConformItem) int {
+		slices.SortFunc(row.Violations, func(a, b types.ConformanceItem) int {
 			return cmp.Or(cmp.Compare(b.Measure, a.Measure), cmp.Compare(a.ID, b.ID))
 		})
 		if limited && row.N >= o.MinSample && float64(row.Live) < float64(row.Value)*(1-o.Step) {
@@ -105,7 +105,7 @@ func (g *Graph) Conform(o types.ConformOptions) types.ConformOutput {
 
 // cloneKey is the one row clone groups are judged in: source and main code together, since
 // a body copied between a command and a library is one duplicate.
-var cloneKey = types.ConformKey{Metric: types.ConformCloneTokens, Population: types.ConformPopSource}
+var cloneKey = types.ConformanceKey{Metric: types.ConformanceCloneTokens, Population: types.ConformancePopSource}
 
 // nearestRank is the p-th percentile of sorted by nearest rank, the element at index
 // ceil(p/100*n)-1, or zero when sorted is empty. p*n is formed before dividing so an
@@ -118,41 +118,41 @@ func nearestRank(sorted []int, p float64) int {
 	return sorted[min(max(i, 0), len(sorted)-1)]
 }
 
-// conformLimit is the configured limit for k: its own scope's, else the unscoped key's.
-func conformLimit(o types.ConformOptions, k types.ConformKey) (types.ConformLimit, bool) {
+// conformanceLimit is the configured limit for k: its own scope's, else the unscoped key's.
+func conformanceLimit(o types.ConformanceOptions, k types.ConformanceKey) (types.ConformanceLimit, bool) {
 	if l, ok := o.Limits[k]; ok {
 		return l, true
 	}
-	l, ok := o.Limits[types.ConformKey{Metric: k.Metric, Population: k.Population}]
+	l, ok := o.Limits[types.ConformanceKey{Metric: k.Metric, Population: k.Population}]
 	return l, ok
 }
 
-func compareConformKeys(a, b types.ConformKey) int {
+func compareConformanceKeys(a, b types.ConformanceKey) int {
 	return cmp.Or(cmp.Compare(a.Metric, b.Metric), cmp.Compare(a.Population, b.Population), cmp.Compare(a.Scope, b.Scope))
 }
 
-// conformSamples measures every item of every metric, keyed by metric, population and
+// conformanceSamples measures every item of every metric, keyed by metric, population and
 // scope, each list in ID order. Generated and excluded files belong to no population. A
 // dep-fanout package is keyed by its own directory when a value is configured for that
 // directory, else by its layer. clone-tokens samples every callable with a shape, test
 // code in its own row; its violations are cloneGroups, not these samples. call-sequence
 // samples are callSeqSamples'.
-func conformSamples(g *Graph, o types.ConformOptions) map[types.ConformKey][]types.ConformItem {
-	x := newConformIndex(g, o)
-	out := map[types.ConformKey][]types.ConformItem{}
-	add := func(m types.ConformMetric, p types.ConformPopulation, scope string, it types.ConformItem) {
-		k := types.ConformKey{Metric: m, Population: p, Scope: scope}
+func conformanceSamples(g *Graph, o types.ConformanceOptions) map[types.ConformanceKey][]types.ConformanceItem {
+	x := newConformanceIndex(g, o)
+	out := map[types.ConformanceKey][]types.ConformanceItem{}
+	add := func(m types.ConformanceMetric, p types.ConformancePopulation, scope string, it types.ConformanceItem) {
+		k := types.ConformanceKey{Metric: m, Population: p, Scope: scope}
 		out[k] = append(out[k], it)
 	}
 	x.fileSamples(add)
 	x.symbolSamples(add)
 	x.depSamples(add)
 	for _, e := range x.exports() {
-		add(types.ConformExportScope, e.pop, "", e.item)
+		add(types.ConformanceExportScope, e.pop, "", e.item)
 	}
 	maps.Copy(out, callSeqSamples(g, o))
 	for _, items := range out {
-		slices.SortFunc(items, func(a, b types.ConformItem) int { return cmp.Compare(a.ID, b.ID) })
+		slices.SortFunc(items, func(a, b types.ConformanceItem) int { return cmp.Compare(a.ID, b.ID) })
 	}
 	return out
 }
@@ -162,22 +162,22 @@ func conformSamples(g *Graph, o types.ConformOptions) map[types.ConformKey][]typ
 // token count. Copies whose files differ only by a platform suffix are one body written
 // per platform, so a shape held only by such twins forms no group. Members are in ID
 // order and groups in first-member order.
-func cloneGroups(g *Graph, o types.ConformOptions) [][]types.ConformItem {
-	x := newConformIndex(g, o)
+func cloneGroups(g *Graph, o types.ConformanceOptions) [][]types.ConformanceItem {
+	x := newConformanceIndex(g, o)
 	limit, _ := o.Effective(cloneKey)
-	byShape := map[string][]types.ConformItem{}
+	byShape := map[string][]types.ConformanceItem{}
 	for _, s := range x.callables() {
-		if s.pop == types.ConformPopTest || s.shape == "" || s.tokens <= limit {
+		if s.pop == types.ConformancePopTest || s.shape == "" || s.tokens <= limit {
 			continue
 		}
-		byShape[s.shape] = append(byShape[s.shape], types.ConformItem{ID: s.itemID, Source: s.node.Source, Measure: s.tokens})
+		byShape[s.shape] = append(byShape[s.shape], types.ConformanceItem{ID: s.itemID, Source: s.node.Source, Measure: s.tokens})
 	}
-	var out [][]types.ConformItem
+	var out [][]types.ConformanceItem
 	for _, members := range byShape {
 		if len(members) < 2 {
 			continue
 		}
-		slices.SortFunc(members, func(a, b types.ConformItem) int { return cmp.Compare(a.ID, b.ID) })
+		slices.SortFunc(members, func(a, b types.ConformanceItem) int { return cmp.Compare(a.ID, b.ID) })
 		var bodies []string
 		for _, m := range members {
 			file := itemFile(m.ID)
@@ -189,7 +189,7 @@ func cloneGroups(g *Graph, o types.ConformOptions) [][]types.ConformItem {
 			out = append(out, members)
 		}
 	}
-	slices.SortFunc(out, func(a, b []types.ConformItem) int { return cmp.Compare(a[0].ID, b[0].ID) })
+	slices.SortFunc(out, func(a, b []types.ConformanceItem) int { return cmp.Compare(a[0].ID, b[0].ID) })
 	return out
 }
 
@@ -197,9 +197,9 @@ func cloneGroups(g *Graph, o types.ConformOptions) [][]types.ConformItem {
 // directory or in a main package, that no non-test file outside its package directory
 // references, in ID order. Methods are out of scope, since an interface may need them
 // exported, and so is a module's root package, whose exports are its API.
-func exportScope(g *Graph, o types.ConformOptions) []types.ConformItem {
-	var out []types.ConformItem
-	for _, e := range newConformIndex(g, o).exports() {
+func exportScope(g *Graph, o types.ConformanceOptions) []types.ConformanceItem {
+	var out []types.ConformanceItem
+	for _, e := range newConformanceIndex(g, o).exports() {
 		if e.item.Measure > 0 {
 			out = append(out, e.item)
 		}
@@ -252,10 +252,10 @@ func platformStem(file string) (stem string, ok bool) {
 	return base, ok
 }
 
-// conformIndex places the graph's files and symbols in their populations.
-type conformIndex struct {
+// conformanceIndex places the graph's files and symbols in their populations.
+type conformanceIndex struct {
 	g      *Graph
-	o      types.ConformOptions
+	o      types.ConformanceOptions
 	fileNS map[string][]string
 	// main holds the namespace IDs of Go main packages: those defining a top-level main.
 	main map[string]bool
@@ -263,9 +263,9 @@ type conformIndex struct {
 	local map[string][]descriptor
 }
 
-func newConformIndex(g *Graph, o types.ConformOptions) *conformIndex {
+func newConformanceIndex(g *Graph, o types.ConformanceOptions) *conformanceIndex {
 	g.ensureAdj()
-	x := &conformIndex{g: g, o: o, fileNS: g.fileNamespaces(), main: map[string]bool{}, local: map[string][]descriptor{}}
+	x := &conformanceIndex{g: g, o: o, fileNS: g.fileNamespaces(), main: map[string]bool{}, local: map[string][]descriptor{}}
 	for id, n := range g.nodes {
 		if n.Kind != types.KindSymbol {
 			continue
@@ -285,25 +285,25 @@ func newConformIndex(g *Graph, o types.ConformOptions) *conformIndex {
 }
 
 // population places a workspace file, or reports false for generated or excluded output.
-func (x *conformIndex) population(file string) (types.ConformPopulation, bool) {
-	if conformGenerated(x.g, x.o, file) || conformExcludes(x.o, file) {
+func (x *conformanceIndex) population(file string) (types.ConformancePopulation, bool) {
+	if conformanceGenerated(x.g, x.o, file) || conformanceExcludes(x.o, file) {
 		return "", false
 	}
 	if types.IsTestPath(file) {
-		return types.ConformPopTest, true
+		return types.ConformancePopTest, true
 	}
 	for _, ns := range x.fileNS[fileID(file)] {
 		if x.main[ns] {
-			return types.ConformPopMain, true
+			return types.ConformancePopMain, true
 		}
 	}
-	return types.ConformPopSource, true
+	return types.ConformancePopSource, true
 }
 
-// conformGenerated reports whether file is generated output: declared by a target, opening
+// conformanceGenerated reports whether file is generated output: declared by a target, opening
 // with the generated-code header, under a gen directory, written by a protocol compiler,
 // or a fixture or dependency tree.
-func conformGenerated(g *Graph, o types.ConformOptions, file string) bool {
+func conformanceGenerated(g *Graph, o types.ConformanceOptions, file string) bool {
 	if o.Generated[file] || g.nodes[fileID(file)].Attrs[attrGenerated] == "true" {
 		return true
 	}
@@ -322,9 +322,9 @@ func conformGenerated(g *Graph, o types.ConformOptions, file string) bool {
 	return false
 }
 
-// conformExcludes reports whether one of o.Exclude's globs matches file. A malformed glob
+// conformanceExcludes reports whether one of o.Exclude's globs matches file. A malformed glob
 // matches nothing here; refusing it is the loader's job.
-func conformExcludes(o types.ConformOptions, file string) bool {
+func conformanceExcludes(o types.ConformanceOptions, file string) bool {
 	for _, glob := range o.Exclude {
 		if ok, err := doublestar.Match(glob, file); err == nil && ok {
 			return true
@@ -333,22 +333,22 @@ func conformExcludes(o types.ConformOptions, file string) bool {
 	return false
 }
 
-// conformExcluded counts the source files o.Exclude hides that would otherwise be measured.
-func conformExcluded(g *Graph, o types.ConformOptions) int {
+// conformanceExcluded counts the source files o.Exclude hides that would otherwise be measured.
+func conformanceExcluded(g *Graph, o types.ConformanceOptions) int {
 	n := 0
 	for _, f := range g.nodes {
-		if f.Kind == types.KindFile && f.Attrs[attrLanguage] != "" && !conformGenerated(g, o, f.Source) && conformExcludes(o, f.Source) {
+		if f.Kind == types.KindFile && f.Attrs[attrLanguage] != "" && !conformanceGenerated(g, o, f.Source) && conformanceExcludes(o, f.Source) {
 			n++
 		}
 	}
 	return n
 }
 
-type conformAdd func(types.ConformMetric, types.ConformPopulation, string, types.ConformItem)
+type conformanceAdd func(types.ConformanceMetric, types.ConformancePopulation, string, types.ConformanceItem)
 
 // fileSamples measures each sized source file's lines and its top-level declarations. A
 // file with no language is a document, not code.
-func (x *conformIndex) fileSamples(add conformAdd) {
+func (x *conformanceIndex) fileSamples(add conformanceAdd) {
 	for id, f := range x.g.nodes {
 		if f.Kind != types.KindFile || f.Attrs[attrLanguage] == "" {
 			continue
@@ -368,24 +368,24 @@ func (x *conformIndex) fileSamples(add conformAdd) {
 			}
 		}
 		source := f.Source + ":1"
-		add(types.ConformFileLines, pop, "", types.ConformItem{ID: f.Source, Source: source, Measure: lines})
-		add(types.ConformFileSymbols, pop, "", types.ConformItem{ID: f.Source, Source: source, Measure: decls})
+		add(types.ConformanceFileLines, pop, "", types.ConformanceItem{ID: f.Source, Source: source, Measure: lines})
+		add(types.ConformanceFileSymbols, pop, "", types.ConformanceItem{ID: f.Source, Source: source, Measure: decls})
 	}
 }
 
-// conformSymbol is one workspace-defined symbol placed in a population.
-type conformSymbol struct {
+// conformanceSymbol is one workspace-defined symbol placed in a population.
+type conformanceSymbol struct {
 	id, itemID string
 	node       types.KnowledgeNode
 	local      []descriptor
-	pop        types.ConformPopulation
+	pop        types.ConformancePopulation
 	shape      string
 	tokens     int
 }
 
 // symbols are the symbols defined in a measured file.
-func (x *conformIndex) symbols() []conformSymbol {
-	var out []conformSymbol
+func (x *conformanceIndex) symbols() []conformanceSymbol {
+	var out []conformanceSymbol
 	for id, local := range x.local {
 		n := x.g.nodes[id]
 		file, _, ok := splitPathLine(n.Source)
@@ -396,7 +396,7 @@ func (x *conformIndex) symbols() []conformSymbol {
 		if !ok {
 			continue
 		}
-		s := conformSymbol{id: id, itemID: symbolItemID(file, local), node: n, local: local, pop: pop}
+		s := conformanceSymbol{id: id, itemID: symbolItemID(file, local), node: n, local: local, pop: pop}
 		if tokens, err := strconv.Atoi(n.Attrs[attrBodyTokens]); err == nil && n.Attrs[AttrBodyShape] != "" {
 			s.shape, s.tokens = n.Attrs[AttrBodyShape], tokens
 		}
@@ -405,8 +405,8 @@ func (x *conformIndex) symbols() []conformSymbol {
 	return out
 }
 
-func (x *conformIndex) callables() []conformSymbol {
-	var out []conformSymbol
+func (x *conformanceIndex) callables() []conformanceSymbol {
+	var out []conformanceSymbol
 	for _, s := range x.symbols() {
 		if k := neutralKind(s.local); k == declFunction || k == declMethod {
 			out = append(out, s)
@@ -432,21 +432,21 @@ func itemFile(id string) string {
 }
 
 // symbolSamples measures each callable's lines and body tokens, and each type's methods.
-func (x *conformIndex) symbolSamples(add conformAdd) {
+func (x *conformanceIndex) symbolSamples(add conformanceAdd) {
 	methods := map[string]int{}
 	for _, s := range x.callables() {
-		item := types.ConformItem{ID: s.itemID, Source: s.node.Source}
+		item := types.ConformanceItem{ID: s.itemID, Source: s.node.Source}
 		if start, end := definitionSpan(s.node); start > 0 && end >= start {
 			item.Measure = end - start + 1
-			add(types.ConformFuncLines, s.pop, "", item)
+			add(types.ConformanceFuncLines, s.pop, "", item)
 		}
 		if s.shape != "" {
-			pop := types.ConformPopSource
-			if s.pop == types.ConformPopTest {
-				pop = types.ConformPopTest
+			pop := types.ConformancePopSource
+			if s.pop == types.ConformancePopTest {
+				pop = types.ConformancePopTest
 			}
 			item.Measure = s.tokens
-			add(types.ConformCloneTokens, pop, "", item)
+			add(types.ConformanceCloneTokens, pop, "", item)
 		}
 		if neutralKind(s.local) == declMethod {
 			methods[s.id[:strings.LastIndexByte(s.id, '#')+1]]++
@@ -462,21 +462,21 @@ func (x *conformIndex) symbolSamples(add conformAdd) {
 		if !ok {
 			continue
 		}
-		add(types.ConformTypeMethods, pop, "", types.ConformItem{ID: symbolItemID(file, x.local[typeID]), Source: t.Source, Measure: n})
+		add(types.ConformanceTypeMethods, pop, "", types.ConformanceItem{ID: symbolItemID(file, x.local[typeID]), Source: t.Source, Measure: n})
 	}
 }
 
 // depSamples measures how many other workspace package directories each package imports,
 // read from the imports the index recorded. What a generated file imports is its
 // generator's choice and is not counted, but importing a generated package is.
-func (x *conformIndex) depSamples(add conformAdd) {
+func (x *conformanceIndex) depSamples(add conformanceAdd) {
 	deps := x.g.packageDepsExcept(func(file string) bool {
 		_, ok := x.population(file)
 		return !ok
 	})
 	dirs, targets := x.packageDirs(true), x.packageDirs(false)
 	imports := map[string]map[string]bool{}
-	pops := map[string]types.ConformPopulation{}
+	pops := map[string]types.ConformancePopulation{}
 	for ns, dir := range dirs {
 		if imports[dir] == nil {
 			imports[dir] = map[string]bool{}
@@ -493,16 +493,16 @@ func (x *conformIndex) depSamples(add conformAdd) {
 	for dir, tos := range imports {
 		pop := pops[dir]
 		scope := dir
-		if !x.pinned(types.ConformKey{Metric: types.ConformDepFanout, Population: pop, Scope: dir}) {
+		if !x.pinned(types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: pop, Scope: dir}) {
 			scope = x.layer(dir)
 		}
-		add(types.ConformDepFanout, pop, scope, types.ConformItem{ID: dir, Source: dir, Measure: len(tos)})
+		add(types.ConformanceDepFanout, pop, scope, types.ConformanceItem{ID: dir, Source: dir, Measure: len(tos)})
 	}
 }
 
 // packageDirs places each namespace in the lowest directory holding a non-test file that
 // defines it, counting only measured files when measured is set.
-func (x *conformIndex) packageDirs(measured bool) map[string]string {
+func (x *conformanceIndex) packageDirs(measured bool) map[string]string {
 	dirs := map[string]string{}
 	for fid, nss := range x.fileNS {
 		f := x.g.nodes[fid]
@@ -522,25 +522,25 @@ func (x *conformIndex) packageDirs(measured bool) map[string]string {
 	return dirs
 }
 
-func (x *conformIndex) packagePopulation(ns string) types.ConformPopulation {
+func (x *conformanceIndex) packagePopulation(ns string) types.ConformancePopulation {
 	if x.main[ns] {
-		return types.ConformPopMain
+		return types.ConformancePopMain
 	}
-	return types.ConformPopSource
+	return types.ConformancePopSource
 }
 
 // pinned reports whether k itself, not its unscoped fallback, has a configured or committed
 // value.
-func (x *conformIndex) pinned(k types.ConformKey) bool {
+func (x *conformanceIndex) pinned(k types.ConformanceKey) bool {
 	if _, ok := x.o.Limits[k]; ok {
 		return true
 	}
-	return slices.ContainsFunc(x.o.Ratchet.Thresholds, func(t types.ConformThreshold) bool { return t.ConformKey == k })
+	return slices.ContainsFunc(x.o.Ratchet.Thresholds, func(t types.ConformanceThreshold) bool { return t.ConformanceKey == k })
 }
 
 // layer is dir's declared layer, else its first path segment, as the precedent miner
 // places a package.
-func (x *conformIndex) layer(dir string) string {
+func (x *conformanceIndex) layer(dir string) string {
 	if declared := x.g.nodes[dirID(dir)].Attrs[types.AttrLayer]; declared != "" {
 		return declared
 	}
@@ -548,27 +548,27 @@ func (x *conformIndex) layer(dir string) string {
 	return first
 }
 
-// conformExport is one in-scope exported symbol: Measure 1 when nothing outside its
+// conformanceExport is one in-scope exported symbol: Measure 1 when nothing outside its
 // package references it, else 0.
-type conformExport struct {
-	item types.ConformItem
-	pop  types.ConformPopulation
+type conformanceExport struct {
+	item types.ConformanceItem
+	pop  types.ConformancePopulation
 }
 
-func (x *conformIndex) exports() []conformExport {
+func (x *conformanceIndex) exports() []conformanceExport {
 	dirs := x.packageDirs(true)
-	var out []conformExport
+	var out []conformanceExport
 	for _, s := range x.symbols() {
 		ns := s.node.Attrs[attrNamespace]
 		dir, placed := dirs[ns]
-		if s.pop == types.ConformPopTest || !placed || s.node.Attrs[attrLanguage] != "go" || len(s.local) != 1 ||
+		if s.pop == types.ConformancePopTest || !placed || s.node.Attrs[attrLanguage] != "go" || len(s.local) != 1 ||
 			!exportedName(s.local[0].Name) || moduleRoot(ns) {
 			continue
 		}
 		if !x.main[ns] && !slices.Contains(strings.Split(dir, "/"), "internal") {
 			continue
 		}
-		item := types.ConformItem{ID: s.itemID, Source: s.node.Source, Measure: 1}
+		item := types.ConformanceItem{ID: s.itemID, Source: s.node.Source, Measure: 1}
 		for _, e := range x.g.in[s.id] {
 			ref := strings.TrimPrefix(e.Source, types.KindFile+":")
 			if e.Relation == types.RelationReferences && !types.IsTestPath(ref) && path.Dir(ref) != dir {
@@ -576,9 +576,9 @@ func (x *conformIndex) exports() []conformExport {
 				break
 			}
 		}
-		out = append(out, conformExport{item: item, pop: s.pop})
+		out = append(out, conformanceExport{item: item, pop: s.pop})
 	}
-	slices.SortFunc(out, func(a, b conformExport) int { return cmp.Compare(a.item.ID, b.item.ID) })
+	slices.SortFunc(out, func(a, b conformanceExport) int { return cmp.Compare(a.item.ID, b.item.ID) })
 	return out
 }
 
@@ -598,9 +598,9 @@ func moduleRoot(ns string) bool {
 	return ok && len(p) == 1 && p[0].Suffix == '/' && p[0].Name == parts[1]
 }
 
-// conformKnownItems indexes the known items by metric.
-func conformKnownItems(known []types.ConformKnown) map[types.ConformMetric]map[string]bool {
-	out := map[types.ConformMetric]map[string]bool{}
+// conformanceKnownItems indexes the known items by metric.
+func conformanceKnownItems(known []types.ConformanceKnown) map[types.ConformanceMetric]map[string]bool {
+	out := map[types.ConformanceMetric]map[string]bool{}
 	for _, k := range known {
 		if out[k.Metric] == nil {
 			out[k.Metric] = map[string]bool{}
@@ -614,30 +614,30 @@ func conformKnownItems(known []types.ConformKnown) map[types.ConformMetric]map[s
 
 // knownCloneGroup reports whether one known clone entry lists every member of grp: a copy
 // added to an accepted group makes the group a violation again.
-func knownCloneGroup(grp []types.ConformItem, known []types.ConformKnown) bool {
-	return slices.ContainsFunc(known, func(k types.ConformKnown) bool {
-		return k.Metric == types.ConformCloneTokens && !slices.ContainsFunc(grp, func(m types.ConformItem) bool {
+func knownCloneGroup(grp []types.ConformanceItem, known []types.ConformanceKnown) bool {
+	return slices.ContainsFunc(known, func(k types.ConformanceKnown) bool {
+		return k.Metric == types.ConformanceCloneTokens && !slices.ContainsFunc(grp, func(m types.ConformanceItem) bool {
 			return !slices.Contains(k.Items, m.ID)
 		})
 	})
 }
 
 // cloneItem is a clone group as one violation, named by its members.
-func cloneItem(grp []types.ConformItem) types.ConformItem {
+func cloneItem(grp []types.ConformanceItem) types.ConformanceItem {
 	ids := make([]string, len(grp))
 	for i, m := range grp {
 		ids[i] = m.ID
 	}
-	return types.ConformItem{ID: strings.Join(ids, ", "), Source: grp[0].Source, Measure: grp[0].Measure}
+	return types.ConformanceItem{ID: strings.Join(ids, ", "), Source: grp[0].Source, Measure: grp[0].Measure}
 }
 
 // staleKnown is each known entry narrowed to the items no longer past their value, in
 // record order. A clone entry is stale whole once no group shares two of its members.
-func staleKnown(known []types.ConformKnown, past map[types.ConformMetric]map[string]bool, groups [][]types.ConformItem) []types.ConformKnown {
-	var out []types.ConformKnown
+func staleKnown(known []types.ConformanceKnown, past map[types.ConformanceMetric]map[string]bool, groups [][]types.ConformanceItem) []types.ConformanceKnown {
+	var out []types.ConformanceKnown
 	for _, k := range known {
-		if k.Metric == types.ConformCloneTokens {
-			if !slices.ContainsFunc(groups, func(grp []types.ConformItem) bool { return sharedMembers(grp, k.Items) >= 2 }) {
+		if k.Metric == types.ConformanceCloneTokens {
+			if !slices.ContainsFunc(groups, func(grp []types.ConformanceItem) bool { return sharedMembers(grp, k.Items) >= 2 }) {
 				out = append(out, k)
 			}
 			continue
@@ -653,11 +653,11 @@ func staleKnown(known []types.ConformKnown, past map[types.ConformMetric]map[str
 			out = append(out, stale)
 		}
 	}
-	slices.SortStableFunc(out, func(a, b types.ConformKnown) int { return cmp.Compare(a.Line, b.Line) })
+	slices.SortStableFunc(out, func(a, b types.ConformanceKnown) int { return cmp.Compare(a.Line, b.Line) })
 	return out
 }
 
-func sharedMembers(grp []types.ConformItem, items []string) int {
+func sharedMembers(grp []types.ConformanceItem, items []string) int {
 	n := 0
 	for _, m := range grp {
 		if slices.Contains(items, m.ID) {

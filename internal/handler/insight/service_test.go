@@ -114,10 +114,10 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 				FirstAttempts: 10, FirstPass: 7, FirstPassLower: 0.39, NotRetryable: 2,
 			}},
 		},
-		Conform: &types.ConformOutput{
-			Definition: types.ConformDefinition,
-			Rows: []types.ConformRow{{
-				Key:        types.ConformKey{Metric: types.ConformDepFanout, Population: types.ConformPopSource, Scope: "cmd/magus"},
+		Conformance: &types.ConformanceOutput{
+			Definition: types.ConformanceDefinition,
+			Rows: []types.ConformanceRow{{
+				Key:        types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: "cmd/magus"},
 				N:          1,
 				P50:        81,
 				P90:        82,
@@ -128,10 +128,10 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 				Anchor:     130,
 				Propose:    86,
 				Known:      1,
-				Source:     types.ConformFromRatchet,
-				Violations: []types.ConformItem{{ID: "cmd/magus", Source: "cmd/magus:1", Measure: 140}},
+				Source:     types.ConformanceFromRatchet,
+				Violations: []types.ConformanceItem{{ID: "cmd/magus", Source: "cmd/magus:1", Measure: 140}},
 			}},
-			Stale:    []types.ConformKnown{{Metric: types.ConformCloneTokens, Items: []string{"a.go#A"}, Reason: "twins"}},
+			Stale:    []types.ConformanceKnown{{Metric: types.ConformanceCloneTokens, Items: []string{"a.go#A"}, Reason: "twins"}},
 			Excluded: 3,
 			Answer: types.KnowledgeAnswer{
 				Verdict: types.VerdictUnknown,
@@ -216,10 +216,10 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 				FirstAttempts: 10, FirstPass: 7, FirstPassLower: 0.39, NotRetryable: 2,
 			}},
 		},
-		Conform: &insightv1.ConformOutput{
-			Definition: types.ConformDefinition,
-			Rows: []*insightv1.ConformRow{{
-				Key:        &insightv1.ConformKey{Metric: "dep-fanout", Population: "source", Scope: "cmd/magus"},
+		Conformance: &insightv1.ConformanceOutput{
+			Definition: types.ConformanceDefinition,
+			Rows: []*insightv1.ConformanceRow{{
+				Key:        &insightv1.ConformanceKey{Metric: "dep-fanout", Population: "source", Scope: "cmd/magus"},
 				N:          1,
 				P50:        81,
 				P90:        82,
@@ -231,9 +231,9 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 				Propose:    86,
 				Known:      1,
 				Source:     "ratchet",
-				Violations: []*insightv1.ConformItem{{Id: "cmd/magus", Source: "cmd/magus:1", Measure: 140}},
+				Violations: []*insightv1.ConformanceItem{{Id: "cmd/magus", Source: "cmd/magus:1", Measure: 140}},
 			}},
-			Stale:    []*insightv1.ConformKnown{{Metric: "clone-tokens", Items: []string{"a.go#A"}, Reason: "twins"}},
+			Stale:    []*insightv1.ConformanceKnown{{Metric: "clone-tokens", Items: []string{"a.go#A"}, Reason: "twins"}},
 			Excluded: 3,
 			Answer: &graphv1.Answer{
 				Verdict: "unknown",
@@ -263,7 +263,7 @@ func TestGetInsight_NilVolatility(t *testing.T) {
 	require.True(t, proto.Equal(want, got), "wire mismatch:\ngot  %v\nwant %v", got, want)
 	require.Nil(t, got.GetVolatility(), "a nil report must stay absent on the wire")
 	require.Nil(t, got.GetModelTiers(), "so must a nil model-tier lens")
-	require.Nil(t, got.GetConform(), "and a conform lens the server never read")
+	require.Nil(t, got.GetConformance(), "and a conformance lens the server never read")
 }
 
 // A zero time.Time is UNSET on the wire, not the year-0001 sentinel the JSON route emitted.

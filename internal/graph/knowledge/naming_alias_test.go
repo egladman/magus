@@ -39,7 +39,7 @@ func TestAliasCheckReportsAnAliasedImport(t *testing.T) {
 			use := aliasUser(tc.file)
 			g := aliasGraph(use)
 
-			got := g.Conformance(ConformanceChange{Subjects: []string{symID(use)}, Conform: aliasOptions()})
+			got := g.ConformanceChecks(ConformanceChange{Subjects: []string{symID(use)}, Conformance: aliasOptions()})
 
 			require.Len(t, got[symID(use)], 1)
 			c := got[symID(use)][0]
@@ -61,12 +61,12 @@ func TestAliasCheckNamesMixedSpellings(t *testing.T) {
 func TestAliasCheckSkipsKnownPackages(t *testing.T) {
 	use := aliasUser("internal/use/q00.go")
 	o := aliasOptions()
-	o.Ratchet = types.ConformRatchet{Schema: 1, Known: []types.ConformKnown{
-		{Metric: types.ConformNameClash, Items: []string{"internal/queue/types"}, Reason: "rename pending"},
-		{Metric: types.ConformAliasShare, Items: []string{"internal/queue/types"}, Reason: "rename pending"},
+	o.Ratchet = types.ConformanceRatchet{Schema: 1, Known: []types.ConformanceKnown{
+		{Metric: types.ConformanceNameClash, Items: []string{"internal/queue/types"}, Reason: "rename pending"},
+		{Metric: types.ConformanceAliasShare, Items: []string{"internal/queue/types"}, Reason: "rename pending"},
 	}}
 
-	assert.Empty(t, aliasGraph(use).Conformance(ConformanceChange{Subjects: []string{symID(use)}, Conform: o}))
+	assert.Empty(t, aliasGraph(use).ConformanceChecks(ConformanceChange{Subjects: []string{symID(use)}, Conformance: o}))
 }
 
 // A new package is the cheapest one to rename: one taking an existing package's clause is
@@ -76,17 +76,17 @@ func TestAliasCheckReportsANewPackageTakingAName(t *testing.T) {
 	pkg := aliasPkg("/internal/newq", "types", []string{"internal/newq/newq.go"}, nil)
 	g := aliasGraph(pkg, fresh)
 
-	got := g.Conformance(ConformanceChange{Subjects: []string{symID(fresh)}, Introduced: introduced(fresh), Conform: aliasOptions()})
+	got := g.ConformanceChecks(ConformanceChange{Subjects: []string{symID(fresh)}, Introduced: introduced(fresh), Conformance: aliasOptions()})
 
 	assert.Equal(t, map[string][]types.Check{symID(fresh): {advice(types.CheckImportAlias,
 		"internal/newq takes the package name types, which internal/queue/types (13 importers), types (20 importers) already declares: "+
 			"consider another name before anything imports both",
 	)}}, got)
 
-	assert.Empty(t, g.Conformance(ConformanceChange{Subjects: []string{symID(fresh)}, Conform: aliasOptions()}),
+	assert.Empty(t, g.ConformanceChecks(ConformanceChange{Subjects: []string{symID(fresh)}, Conformance: aliasOptions()}),
 		"a package that already existed is the alias-share check's to judge")
 }
 
 func TestAliasCheckIsSilentWithoutASymbolIndex(t *testing.T) {
-	assert.Empty(t, NewGraph().Conformance(ConformanceChange{Subjects: []string{"symbol:x"}, Conform: aliasOptions()}))
+	assert.Empty(t, NewGraph().ConformanceChecks(ConformanceChange{Subjects: []string{"symbol:x"}, Conformance: aliasOptions()}))
 }

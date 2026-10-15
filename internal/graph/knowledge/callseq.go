@@ -24,7 +24,7 @@ const callSeqWrapperUsers = 3
 
 // callSeqCheck reports a function the change adds, renames or re-signs that calls the same
 // workspace functions in the same order as another function, over a run longer than the
-// call-sequence value [types.ConformOptions.Effective] enforces for its population: the
+// call-sequence value [types.ConformanceOptions.Effective] enforces for its population: the
 // pipeline was copied, often with a step or two interleaved, and a rule added to one copy
 // misses the other. Each callee counts once per sequence, so the run is also its count of
 // distinct callees.
@@ -46,9 +46,9 @@ type callSeqCheck struct{}
 func (callSeqCheck) name() string { return types.CheckCallSequence }
 
 func (callSeqCheck) run(x *namingIndex) []finding {
-	o := x.change.Conform
+	o := x.change.Conformance
 	var q *callSeqIndex
-	known := conformKnownItems(o.Ratchet.Known)[types.ConformCallSequence]
+	known := conformanceKnownItems(o.Ratchet.Known)[types.ConformanceCallSequence]
 	subjects := map[string]bool{}
 	for _, id := range x.change.Subjects {
 		subjects[id] = true
@@ -65,7 +65,7 @@ func (callSeqCheck) run(x *namingIndex) []finding {
 		if !ok {
 			continue
 		}
-		limit, src := o.Effective(types.ConformKey{Metric: types.ConformCallSequence, Population: q.pop[i]})
+		limit, src := o.Effective(types.ConformanceKey{Metric: types.ConformanceCallSequence, Population: q.pop[i]})
 		if src == "" || known[q.items[i]] {
 			continue
 		}
@@ -102,19 +102,19 @@ func (callSeqCheck) run(x *namingIndex) []finding {
 // callSeqSamples measures, for each source and main callable that calls a workspace function
 // past its wrappers, the longest run it shares with any other such callable, keyed by
 // population and in item ID order. A callable calling none has no sequence and no sample.
-func callSeqSamples(g *Graph, o types.ConformOptions) map[types.ConformKey][]types.ConformItem {
+func callSeqSamples(g *Graph, o types.ConformanceOptions) map[types.ConformanceKey][]types.ConformanceItem {
 	q := newCallSeqIndex(g, o)
-	out := map[types.ConformKey][]types.ConformItem{}
+	out := map[types.ConformanceKey][]types.ConformanceItem{}
 	for i, id := range q.ids {
 		if len(q.steps[i]) == 0 {
 			continue
 		}
 		_, n := q.best(i, nil)
-		k := types.ConformKey{Metric: types.ConformCallSequence, Population: q.pop[i]}
-		out[k] = append(out[k], types.ConformItem{ID: q.items[i], Source: g.nodes[id].Source, Measure: n})
+		k := types.ConformanceKey{Metric: types.ConformanceCallSequence, Population: q.pop[i]}
+		out[k] = append(out[k], types.ConformanceItem{ID: q.items[i], Source: g.nodes[id].Source, Measure: n})
 	}
 	for _, items := range out {
-		slices.SortFunc(items, func(a, b types.ConformItem) int { return cmp.Compare(a.ID, b.ID) })
+		slices.SortFunc(items, func(a, b types.ConformanceItem) int { return cmp.Compare(a.ID, b.ID) })
 	}
 	return out
 }
@@ -149,7 +149,7 @@ func callSequences(g *Graph) map[string][]string {
 			continue
 		}
 		file, _, ok := splitPathLine(n.Source)
-		if !ok || types.IsTestPath(file) || conformGenerated(g, types.ConformOptions{}, file) {
+		if !ok || types.IsTestPath(file) || conformanceGenerated(g, types.ConformanceOptions{}, file) {
 			continue
 		}
 		p, _ := parseDescriptors(id)
@@ -260,12 +260,12 @@ func callSeqWrappers(g *Graph, seqs map[string][]string) map[string]bool {
 // counts shared callees in a slice rather than a map.
 type callSeqIndex struct {
 	g        *Graph
-	ci       *conformIndex
+	ci       *conformanceIndex
 	wrappers map[string]bool
 	ids      []string
 	idx      map[string]int
 	items    []string
-	pop      []types.ConformPopulation
+	pop      []types.ConformancePopulation
 	seqs     [][]string
 	// steps are the sequences less their wrappers, as sets.
 	steps   []map[string]bool
@@ -275,13 +275,13 @@ type callSeqIndex struct {
 
 // newCallSeqIndex places every sequenced callable in its population, leaving out tests and
 // what o generates or excludes.
-func newCallSeqIndex(g *Graph, o types.ConformOptions) *callSeqIndex {
+func newCallSeqIndex(g *Graph, o types.ConformanceOptions) *callSeqIndex {
 	all := callSequences(g)
-	q := &callSeqIndex{g: g, ci: newConformIndex(g, o), wrappers: callSeqWrappers(g, all), idx: map[string]int{}, callers: map[string][]int{}}
+	q := &callSeqIndex{g: g, ci: newConformanceIndex(g, o), wrappers: callSeqWrappers(g, all), idx: map[string]int{}, callers: map[string][]int{}}
 	for _, id := range slices.Sorted(maps.Keys(all)) {
 		file, _, _ := splitPathLine(g.nodes[id].Source)
 		pop, ok := q.ci.population(file)
-		if !ok || pop == types.ConformPopTest {
+		if !ok || pop == types.ConformancePopTest {
 			continue
 		}
 		i := len(q.ids)
@@ -337,7 +337,7 @@ func (q *callSeqIndex) best(i int, skip func(int) bool) (partner, n int) {
 // copied pipeline: most of the shared callees are methods of one type, or both are Go command
 // verbs taking a []string argument list.
 func (q *callSeqIndex) excluded(i, j int) bool {
-	if q.pop[i] == types.ConformPopMain && q.pop[j] == types.ConformPopMain && q.takesArgList(i) && q.takesArgList(j) {
+	if q.pop[i] == types.ConformancePopMain && q.pop[j] == types.ConformancePopMain && q.takesArgList(i) && q.takesArgList(j) {
 		return true
 	}
 	shared, byType := 0, map[string]int{}

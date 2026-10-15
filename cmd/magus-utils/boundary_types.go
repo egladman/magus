@@ -224,13 +224,13 @@ var boundaryTypes = []boundaryType{
 	{Name: "DuplicationGroup", Type: reflect.TypeFor[types.DuplicationGroup](), RuntimeObject: true},
 	{Name: "DuplicationHistory", Type: reflect.TypeFor[types.DuplicationHistory](), RuntimeObject: true},
 	{Name: "Duplication", Type: reflect.TypeFor[types.DuplicationOutput](), RuntimeObject: true},
-	// The conform lens, leaf first: ConformRow carries a ConformKey and [ConformItem], and
-	// Conform carries [ConformRow] and [ConformKnown]. InsightReport.conform is a Conform.
-	{Name: "ConformKey", Type: reflect.TypeFor[types.ConformKey](), RuntimeObject: true},
-	{Name: "ConformItem", Type: reflect.TypeFor[types.ConformItem](), RuntimeObject: true},
-	{Name: "ConformKnown", Type: reflect.TypeFor[types.ConformKnown](), RuntimeObject: true},
-	{Name: "ConformRow", Type: reflect.TypeFor[types.ConformRow](), RuntimeObject: true},
-	{Name: "Conform", Type: reflect.TypeFor[types.ConformOutput](), RuntimeObject: true},
+	// The conformance lens, leaf first: ConformanceRow carries a ConformanceKey and [ConformanceItem], and
+	// Conformance carries [ConformanceRow] and [ConformanceKnown]. InsightReport.conformance is a Conformance.
+	{Name: "ConformanceKey", Type: reflect.TypeFor[types.ConformanceKey](), RuntimeObject: true},
+	{Name: "ConformanceItem", Type: reflect.TypeFor[types.ConformanceItem](), RuntimeObject: true},
+	{Name: "ConformanceKnown", Type: reflect.TypeFor[types.ConformanceKnown](), RuntimeObject: true},
+	{Name: "ConformanceRow", Type: reflect.TypeFor[types.ConformanceRow](), RuntimeObject: true},
+	{Name: "Conformance", Type: reflect.TypeFor[types.ConformanceOutput](), RuntimeObject: true},
 	// The model-tier lens: InsightReport.modelTiers is a ModelTierOutput, a list of records.
 	// There is deliberately no ModelTier object: that name is the workspace's own Buzz enum.
 	{Name: "ModelTierRecord", Type: reflect.TypeFor[types.ModelTierRecord](), RuntimeObject: true},

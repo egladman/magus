@@ -1891,7 +1891,7 @@ func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	fs.StringVar(&f.Rev, FlagDiffRev, "", "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work")
 	fs.StringVar(&f.Patch, FlagDiffPatch, "", "Review a patch somebody handed you instead of the working tree; `-` reads stdin")
 	fs.StringVar(&f.Baseline, FlagDiffBaseline, "", "The base's `graph export --symbols -o json`: adds what each changed symbol did to the API and the smallest semver bump that proves")
-	fs.IntVar(&f.ConformanceMinCohort, FlagDiffConformanceMinCohort, 0, "How many declarations a conformance norm needs before a changed symbol is compared against it; defaults to knowledge.conform.gates.min_cohort")
+	fs.IntVar(&f.ConformanceMinCohort, FlagDiffConformanceMinCohort, 0, "How many declarations a conformance norm needs before a changed symbol is compared against it; defaults to knowledge.conformance.gates.min_cohort")
 	return &f
 }
 

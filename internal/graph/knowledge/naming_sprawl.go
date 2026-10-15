@@ -63,7 +63,7 @@ const (
 // change. A subject added to several carriers at once is reported once, on the first by ID.
 // The score starts at 0.4 and gains 0.1 for each of: sprawlMinFamily members sharing one
 // parameter list, sprawlMinFamily carrying owners, and an owner with more methods than the
-// type-methods source value [types.ConformOptions.Effective] enforces. The default bar of 0.5
+// type-methods source value [types.ConformanceOptions.Effective] enforces. The default bar of 0.5
 // therefore needs one of the three.
 type sprawlCheck struct{}
 
@@ -79,7 +79,7 @@ func (sprawlCheck) run(x *namingIndex) []finding {
 	if len(subjects) == 0 {
 		return nil
 	}
-	wide, src := x.change.Conform.Effective(types.ConformKey{Metric: types.ConformTypeMethods, Population: types.ConformPopSource})
+	wide, src := x.change.Conformance.Effective(types.ConformanceKey{Metric: types.ConformanceTypeMethods, Population: types.ConformancePopSource})
 	reported := map[string]finding{}
 	for _, f := range x.siblingFamilies(x.callables) {
 		kin := x.kin(f)

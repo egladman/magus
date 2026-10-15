@@ -34,7 +34,7 @@ func (s *seqGraph) def(pkg, desc, file string, start, end int, sig string) strin
 		sig = "func " + label + "()"
 	}
 	r := &types.KnowledgeSymbol{
-		Key: conformNS(pkg) + desc, Label: label, Language: "go", Namespace: conformNS(pkg), Signature: sig,
+		Key: conformanceNS(pkg) + desc, Label: label, Language: "go", Namespace: conformanceNS(pkg), Signature: sig,
 		Source: fmt.Sprintf("%s:%d", file, start), DefEndLine: end, Defs: []string{file},
 	}
 	s.recs = append(s.recs, r)
@@ -80,7 +80,7 @@ func (s *seqGraph) call(caller string, callees ...string) {
 func (s *seqGraph) graph() *Graph {
 	var syms []types.KnowledgeSymbol
 	for pkg, files := range s.pkgs {
-		syms = append(syms, conformPkg(pkg, files))
+		syms = append(syms, conformancePkg(pkg, files))
 	}
 	for _, r := range s.recs {
 		syms = append(syms, *r)
@@ -88,11 +88,11 @@ func (s *seqGraph) graph() *Graph {
 	return mergeAll([]Shard{assembleSymbols(".", syms, nil)})
 }
 
-func callSeqOptions() types.ConformOptions {
-	return types.ConformOptions{
-		Limits: map[types.ConformKey]types.ConformLimit{
-			{Metric: types.ConformCallSequence, Population: types.ConformPopSource}: {Percentile: 99, Anchor: 7},
-			{Metric: types.ConformCallSequence, Population: types.ConformPopMain}:   {Percentile: 99, Anchor: 7},
+func callSeqOptions() types.ConformanceOptions {
+	return types.ConformanceOptions{
+		Limits: map[types.ConformanceKey]types.ConformanceLimit{
+			{Metric: types.ConformanceCallSequence, Population: types.ConformancePopSource}: {Percentile: 99, Anchor: 7},
+			{Metric: types.ConformanceCallSequence, Population: types.ConformancePopMain}:   {Percentile: 99, Anchor: 7},
 		},
 		Gates: testGates(),
 	}
@@ -129,8 +129,8 @@ func TestCallSeqCheckReportsACopiedPipeline(t *testing.T) {
 	s, a, b := pipelinePair(8, "internal/b/b.go")
 	g := s.graph()
 
-	got := g.Conformance(ConformanceChange{
-		Subjects: []string{symbolID(b)}, Introduced: map[string]bool{symbolID(b): true}, Conform: callSeqOptions(),
+	got := g.ConformanceChecks(ConformanceChange{
+		Subjects: []string{symbolID(b)}, Introduced: map[string]bool{symbolID(b): true}, Conformance: callSeqOptions(),
 	})
 
 	assert.Equal(t, map[string][]types.Check{symbolID(b): {advice(types.CheckCallSequence,
@@ -154,7 +154,7 @@ func TestCallSeqCheckRunLength(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, _, b := pipelinePair(tc.steps, "internal/b/b.go")
-			got := s.graph().Conformance(ConformanceChange{Subjects: []string{symbolID(b)}, Conform: callSeqOptions()})
+			got := s.graph().ConformanceChecks(ConformanceChange{Subjects: []string{symbolID(b)}, Conformance: callSeqOptions()})
 			assert.Equal(t, tc.fires, len(callSeqAdvice(t, got, symbolID(b))) == 1)
 		})
 	}
@@ -172,7 +172,7 @@ func TestCallSeqCheckNeverCountsAWrapper(t *testing.T) {
 	s.call(b, append(steps, w)...)
 	s.call(c, w)
 
-	assert.Empty(t, s.graph().Conformance(ConformanceChange{Subjects: []string{symbolID(b)}, Conform: callSeqOptions()}))
+	assert.Empty(t, s.graph().ConformanceChecks(ConformanceChange{Subjects: []string{symbolID(b)}, Conformance: callSeqOptions()}))
 }
 
 func TestCallSeqCheckExcludesBuildersAndVerbs(t *testing.T) {
@@ -187,7 +187,7 @@ func TestCallSeqCheckExcludesBuildersAndVerbs(t *testing.T) {
 		s.call(p, methods...)
 		s.call(q, methods...)
 
-		assert.Empty(t, s.graph().Conformance(ConformanceChange{Subjects: []string{symbolID(q)}, Conform: callSeqOptions()}),
+		assert.Empty(t, s.graph().ConformanceChecks(ConformanceChange{Subjects: []string{symbolID(q)}, Conformance: callSeqOptions()}),
 			"every shared callee is a method of Value")
 	})
 
@@ -207,7 +207,7 @@ func TestCallSeqCheckExcludesBuildersAndVerbs(t *testing.T) {
 			s.call(p, steps...)
 			s.call(q, steps...)
 
-			got := s.graph().Conformance(ConformanceChange{Subjects: []string{symbolID(q)}, Conform: callSeqOptions()})
+			got := s.graph().ConformanceChecks(ConformanceChange{Subjects: []string{symbolID(q)}, Conformance: callSeqOptions()})
 			assert.Equal(t, tc.fires, len(callSeqAdvice(t, got, symbolID(q))) == 1,
 				"two verbs of a main package share its argument prologue")
 		})
@@ -217,9 +217,9 @@ func TestCallSeqCheckExcludesBuildersAndVerbs(t *testing.T) {
 func TestCallSeqCheckSkipsAKnownItem(t *testing.T) {
 	s, _, b := pipelinePair(8, "internal/b/b.go")
 	o := callSeqOptions()
-	o.Ratchet.Known = []types.ConformKnown{{Metric: types.ConformCallSequence, Items: []string{"internal/b/b.go#B"}, Reason: "fold pending"}}
+	o.Ratchet.Known = []types.ConformanceKnown{{Metric: types.ConformanceCallSequence, Items: []string{"internal/b/b.go#B"}, Reason: "fold pending"}}
 
-	assert.Empty(t, s.graph().Conformance(ConformanceChange{Subjects: []string{symbolID(b)}, Conform: o}))
+	assert.Empty(t, s.graph().ConformanceChecks(ConformanceChange{Subjects: []string{symbolID(b)}, Conformance: o}))
 }
 
 func TestCallSeqCheckIgnoresTestAndGeneratedPartners(t *testing.T) {
@@ -235,7 +235,7 @@ func TestCallSeqCheckIgnoresTestAndGeneratedPartners(t *testing.T) {
 			s, a, _ := pipelinePair(8, tc.file)
 			o := callSeqOptions()
 			o.Generated = tc.generated
-			got := s.graph().Conformance(ConformanceChange{Subjects: []string{symbolID(a)}, Generated: tc.generated, Conform: o})
+			got := s.graph().ConformanceChecks(ConformanceChange{Subjects: []string{symbolID(a)}, Generated: tc.generated, Conformance: o})
 			assert.Empty(t, got, "B in %s is never a partner", tc.file)
 		})
 	}
@@ -247,8 +247,8 @@ func TestCallSeqCheckNeverMeasuresAgainstAnIntroducedPartner(t *testing.T) {
 	s, a, b := pipelinePair(8, "internal/b/b.go")
 	g := s.graph()
 
-	got := g.Conformance(ConformanceChange{
-		Subjects: []string{symbolID(a)}, Introduced: map[string]bool{symbolID(b): true}, Conform: callSeqOptions(),
+	got := g.ConformanceChecks(ConformanceChange{
+		Subjects: []string{symbolID(a)}, Introduced: map[string]bool{symbolID(b): true}, Conformance: callSeqOptions(),
 	})
 
 	assert.Empty(t, got)
@@ -266,7 +266,7 @@ func TestCallSeqCheckScoresAPartnerTheChangeAlsoTouches(t *testing.T) {
 		{name: "partner re-signed", subjects: []string{symbolID(a), symbolID(b)}, want: callSeqPartnerScore},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			x := newNamingIndex(g, ConformanceChange{Subjects: tc.subjects, Conform: callSeqOptions()})
+			x := newNamingIndex(g, ConformanceChange{Subjects: tc.subjects, Conformance: callSeqOptions()})
 			var scores []float64
 			for _, f := range (callSeqCheck{}).run(x) {
 				if f.subject == symbolID(b) {
@@ -279,20 +279,20 @@ func TestCallSeqCheckScoresAPartnerTheChangeAlsoTouches(t *testing.T) {
 }
 
 func TestCallSeqCheckIsSilentWithoutASymbolIndexOrAValue(t *testing.T) {
-	assert.Empty(t, NewGraph().Conformance(ConformanceChange{Subjects: []string{"symbol:x"}, Conform: callSeqOptions()}))
+	assert.Empty(t, NewGraph().ConformanceChecks(ConformanceChange{Subjects: []string{"symbol:x"}, Conformance: callSeqOptions()}))
 
 	s, _, b := pipelinePair(8, "internal/b/b.go")
-	assert.Empty(t, s.graph().Conformance(ConformanceChange{Subjects: []string{symbolID(b)}, Conform: testConform()}),
+	assert.Empty(t, s.graph().ConformanceChecks(ConformanceChange{Subjects: []string{symbolID(b)}, Conformance: testConformance()}),
 		"no call-sequence value is configured or committed")
 }
 
 func TestCallSeqCheckIsDeterministic(t *testing.T) {
 	s, _, b := pipelinePair(8, "internal/b/b.go")
-	change := ConformanceChange{Subjects: []string{symbolID(b)}, Conform: callSeqOptions()}
-	first := s.graph().Conformance(change)
+	change := ConformanceChange{Subjects: []string{symbolID(b)}, Conformance: callSeqOptions()}
+	first := s.graph().ConformanceChecks(change)
 	require.NotEmpty(t, first)
 	for range 10 {
-		assert.Equal(t, first, s.graph().Conformance(change))
+		assert.Equal(t, first, s.graph().ConformanceChecks(change))
 	}
 }
 

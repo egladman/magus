@@ -46,7 +46,7 @@ func TestSprawlCheckReportsTheCacheTrio(t *testing.T) {
 	subj := trio[2]
 	g := namingGraph(t, trio)
 
-	got := g.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(subj), Introduced: introduced(subj)})
+	got := g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(subj), Introduced: introduced(subj)})
 
 	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(types.CheckSiblingSprawl, cacheTrioMessage,
 		"members: RecordCacheError, RecordCacheHit, RecordCacheMiss",
@@ -106,7 +106,7 @@ func TestSprawlCheckIsSilent(t *testing.T) {
 			}
 			g := namingGraph(t, tc.syms)
 
-			assert.Empty(t, g.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(subj), Introduced: fresh}))
+			assert.Empty(t, g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(subj), Introduced: fresh}))
 		})
 	}
 }
@@ -122,7 +122,7 @@ func TestSprawlCheckReportsACarriedFamilyOnce(t *testing.T) {
 	}
 	g := namingGraph(t, syms)
 
-	got := g.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(added...), Introduced: introduced(added...)})
+	got := g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(added...), Introduced: introduced(added...)})
 
 	assert.Equal(t, map[string][]string{symID(added[0]): {
 		"`RecordCacheError` joins `RecordCache<X>` on `Provider`: 3 members differ in that one word (error, hit, miss)",
@@ -143,7 +143,7 @@ func TestSprawlCheckReportsAPairThreeOwnersCarry(t *testing.T) {
 	subj := syms[5]
 	g := namingGraph(t, syms)
 
-	got := g.Conformance(ConformanceChange{Conform: testConform(), Subjects: subjectIDs(subj), Introduced: introduced(subj)})
+	got := g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(subj), Introduced: introduced(subj)})
 
 	assert.Equal(t, map[string][]string{symID(subj): {
 		"`RecordSessionEviction` joins `RecordSession<X>` on `sessionC`: 2 members differ in that one word (eviction, reuse)",
@@ -157,8 +157,8 @@ func TestSprawlCheckNeverCountsGeneratedCode(t *testing.T) {
 	subj := trio[2]
 	g := namingGraph(t, trio)
 
-	got := g.Conformance(ConformanceChange{
-		Conform: testConform(), Subjects: subjectIDs(subj), Introduced: introduced(subj),
+	got := g.ConformanceChecks(ConformanceChange{
+		Conformance: testConformance(), Subjects: subjectIDs(subj), Introduced: introduced(subj),
 		Generated: map[string]bool{sprawlDir + "/x_gen.go": true},
 	})
 
@@ -177,7 +177,7 @@ func TestSprawlCheckWideTypeBonusFollowsTheRatchet(t *testing.T) {
 	}
 	subj := syms[2]
 	g := namingGraph(t, syms)
-	key := types.ConformKey{Metric: types.ConformTypeMethods, Population: types.ConformPopSource}
+	key := types.ConformanceKey{Metric: types.ConformanceTypeMethods, Population: types.ConformancePopSource}
 	for _, tc := range []struct {
 		name      string
 		committed int
@@ -192,14 +192,14 @@ func TestSprawlCheckWideTypeBonusFollowsTheRatchet(t *testing.T) {
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			o := testConform()
+			o := testConformance()
 			if tc.limited {
-				o.Limits = map[types.ConformKey]types.ConformLimit{key: {Percentile: 95, Anchor: 49}}
+				o.Limits = map[types.ConformanceKey]types.ConformanceLimit{key: {Percentile: 95, Anchor: 49}}
 			}
 			if tc.committed > 0 {
-				o.Ratchet = types.ConformRatchet{Schema: 1, Thresholds: []types.ConformThreshold{{ConformKey: key, Value: tc.committed}}}
+				o.Ratchet = types.ConformanceRatchet{Schema: 1, Thresholds: []types.ConformanceThreshold{{ConformanceKey: key, Value: tc.committed}}}
 			}
-			got := g.Conformance(ConformanceChange{Conform: o, Subjects: subjectIDs(subj), Introduced: introduced(subj)})
+			got := g.ConformanceChecks(ConformanceChange{Conformance: o, Subjects: subjectIDs(subj), Introduced: introduced(subj)})
 			if tc.want == nil {
 				assert.Empty(t, got)
 				return
@@ -217,11 +217,11 @@ func TestSprawlCheckIsDeterministic(t *testing.T) {
 		syms = append(syms, trio...)
 		added = append(added, trio[2])
 	}
-	change := ConformanceChange{Conform: testConform(), Subjects: subjectIDs(added...), Introduced: introduced(added...)}
-	first := namingGraph(t, syms).Conformance(change)
+	change := ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(added...), Introduced: introduced(added...)}
+	first := namingGraph(t, syms).ConformanceChecks(change)
 	require.NotEmpty(t, first)
 	for range 10 {
-		assert.Equal(t, first, namingGraph(t, syms).Conformance(change))
+		assert.Equal(t, first, namingGraph(t, syms).ConformanceChecks(change))
 	}
 }
 

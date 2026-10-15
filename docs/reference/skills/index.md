@@ -32,4 +32,4 @@ See [Skills](../../guides/integrations/agents/skills.md) for the difference.
   <a class="landing-card" href="magus-workspace-rules/"><span class="landing-card-title">magus-workspace-rules</span><span class="landing-card-body">Adapt magus's installed agent integration to THIS workspace without breaking it.</span><span class="landing-card-body"><small>9.5 KB short, 12.2 KB full - 22% shorter</small></span></a>
 </div>
 
-All 16 together are 129.4 KB installed as the short form, against 176.4 KB for the full twins: 26% less always-loaded text.
+All 16 together are 129.4 KB installed as the short form, against 176.5 KB for the full twins: 26% less always-loaded text.

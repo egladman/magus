@@ -6,7 +6,7 @@
   whose body and callers are past the coupling rule, and a re-signed function two callers
   share that now branches on a parameter. Its remedies are a copy per caller with one line
   saying why, or a `mode-knobs` known entry saying why it stays shared.
-- **Four coupling conform metrics.** `shared-body` (anchor 94), `shared-reach` (7),
+- **Four coupling conformance metrics.** `shared-body` (anchor 94), `shared-reach` (7),
   `caller-spread` (3) and the `mode-knobs` list (0). Measured on this tree, 7 of 731 functions
   that two or more other packages call carry a knob, 1 is past the relative rule
   (`spawn.Exec` in `internal/proc/spawn`), and none is past the anchors.

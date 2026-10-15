@@ -14,12 +14,12 @@ const execMessage = "`Exec` (157 lines) is shared by 6 packages 3 import hops ap
 	"Share it only when its callers have the same failure semantics and policy knobs, so a bug in one is a bug in the other; " +
 	"otherwise give each caller its own copy with one line saying why, or record why it stays shared as a mode-knobs known entry"
 
-func execID() string { return symbolID(conformNS(runPkg) + "Exec().") }
+func execID() string { return symbolID(conformanceNS(runPkg) + "Exec().") }
 
 func TestCouplingCheckReportsTheExecShape(t *testing.T) {
 	g := couplingGraph(execShape()...)
 
-	got := g.Conformance(ConformanceChange{Subjects: []string{execID()}, Conform: couplingOptions()})
+	got := g.ConformanceChecks(ConformanceChange{Subjects: []string{execID()}, Conformance: couplingOptions()})
 
 	assert.Equal(t, map[string][]types.Check{execID(): {advice(types.CheckSharedLoop, execMessage,
 		"callers: cmd/termcast, internal/a, internal/b, internal/c, internal/queue, std",
@@ -40,7 +40,7 @@ func TestCouplingCheckScoresTheMergeHigher(t *testing.T) {
 		{name: "the change is the merge", introduced: map[string]bool{execID(): true}, want: overSharedIntroducedScore},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			x := newNamingIndex(g, ConformanceChange{Subjects: []string{execID()}, Introduced: tc.introduced, Conform: couplingOptions()})
+			x := newNamingIndex(g, ConformanceChange{Subjects: []string{execID()}, Introduced: tc.introduced, Conformance: couplingOptions()})
 			found := (couplingCheck{}).run(x)
 			require.Len(t, found, 1)
 			assert.InDelta(t, tc.want, found[0].score, 0)
@@ -51,12 +51,12 @@ func TestCouplingCheckScoresTheMergeHigher(t *testing.T) {
 func TestCouplingCheckSkipsAKnownEntry(t *testing.T) {
 	g := couplingGraph(execShape()...)
 	o := couplingOptions()
-	o.Ratchet = types.ConformRatchet{Schema: 1, Known: []types.ConformKnown{{
-		Metric: types.ConformModeKnobs, Items: []string{"internal/proc/run/exec.go#Exec"},
+	o.Ratchet = types.ConformanceRatchet{Schema: 1, Known: []types.ConformanceKnown{{
+		Metric: types.ConformanceModeKnobs, Items: []string{"internal/proc/run/exec.go#Exec"},
 		Reason: "one process primitive: TTY sizing is termcast's knob, CancelGrace the queue's",
 	}}}
 
-	assert.Empty(t, g.Conformance(ConformanceChange{Subjects: []string{execID()}, Conform: o}))
+	assert.Empty(t, g.ConformanceChecks(ConformanceChange{Subjects: []string{execID()}, Conformance: o}))
 }
 
 // What the doctrine keeps shared stays silent: a small utility far callers share, a decision
@@ -88,10 +88,10 @@ func TestCouplingCheckIsSilentOnWhatStaysShared(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			g := couplingGraph(conformPkg("/internal/json", []string{"internal/json/json.go"}), tc.fn)
+			g := couplingGraph(conformancePkg("/internal/json", []string{"internal/json/json.go"}), tc.fn)
 			id := symbolID(tc.fn.Key)
 
-			got := g.Conformance(ConformanceChange{Subjects: []string{id}, Introduced: map[string]bool{id: true}, Conform: couplingOptions()})
+			got := g.ConformanceChecks(ConformanceChange{Subjects: []string{id}, Introduced: map[string]bool{id: true}, Conformance: couplingOptions()})
 
 			assert.Empty(t, got)
 		})
@@ -104,11 +104,11 @@ func TestCouplingCheckReportsABranchForOneCaller(t *testing.T) {
 	const graphGo, queryGo = "cmd/magus/graph.go", "cmd/magus/query.go"
 	load := couplingFn("/cmd/magus", "loadWorkspaceGraph", graphGo, 647, 700,
 		"func loadWorkspaceGraph(ctx context.Context, root string, global bool) (*Graph, error)", []string{"global"}, graphGo, queryGo)
-	g := couplingGraph(conformPkg("/cmd/magus", []string{graphGo, queryGo}), load)
+	g := couplingGraph(conformancePkg("/cmd/magus", []string{graphGo, queryGo}), load)
 	id := symbolID(load.Key)
 
 	t.Run("re-signed", func(t *testing.T) {
-		got := g.Conformance(ConformanceChange{Subjects: []string{id}, Conform: couplingOptions()})
+		got := g.ConformanceChecks(ConformanceChange{Subjects: []string{id}, Conformance: couplingOptions()})
 
 		assert.Equal(t, map[string][]types.Check{id: {advice(types.CheckSharedLoop,
 			"`loadWorkspaceGraph` now branches on `global`, and 2 files call it (cmd/magus/graph.go, cmd/magus/query.go): "+
@@ -118,20 +118,20 @@ func TestCouplingCheckReportsABranchForOneCaller(t *testing.T) {
 	})
 
 	t.Run("added", func(t *testing.T) {
-		assert.Empty(t, g.Conformance(ConformanceChange{Subjects: []string{id}, Introduced: map[string]bool{id: true}, Conform: couplingOptions()}),
+		assert.Empty(t, g.ConformanceChecks(ConformanceChange{Subjects: []string{id}, Introduced: map[string]bool{id: true}, Conformance: couplingOptions()}),
 			"a new function bends nothing that was shared before")
 	})
 }
 
 func TestCouplingCheckIsDeterministic(t *testing.T) {
-	change := ConformanceChange{Subjects: []string{execID()}, Conform: couplingOptions()}
-	first := couplingGraph(execShape()...).Conformance(change)
+	change := ConformanceChange{Subjects: []string{execID()}, Conformance: couplingOptions()}
+	first := couplingGraph(execShape()...).ConformanceChecks(change)
 	require.NotEmpty(t, first)
 	for range 10 {
-		assert.Equal(t, first, couplingGraph(execShape()...).Conformance(change))
+		assert.Equal(t, first, couplingGraph(execShape()...).ConformanceChecks(change))
 	}
 }
 
 func TestCouplingCheckIsSilentWithoutASymbolIndex(t *testing.T) {
-	assert.Empty(t, NewGraph().Conformance(ConformanceChange{Subjects: []string{execID()}, Conform: couplingOptions()}))
+	assert.Empty(t, NewGraph().ConformanceChecks(ConformanceChange{Subjects: []string{execID()}, Conformance: couplingOptions()}))
 }

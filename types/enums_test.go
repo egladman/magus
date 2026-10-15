@@ -21,7 +21,7 @@ func TestEnumPrecedentFamilyClosesItsSet(t *testing.T) {
 	assert.Equal(t, "unset", PrecedentFamily("").String())
 }
 
-func TestEnumConformSetsClose(t *testing.T) {
+func TestEnumConformanceSetsClose(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t,
@@ -29,15 +29,15 @@ func TestEnumConformSetsClose(t *testing.T) {
 			"file-lines", "func-lines", "type-methods", "file-symbols", "dep-fanout", "clone-tokens", "export-scope",
 			"call-sequence", "shared-body", "shared-reach", "caller-spread", "mode-knobs", "alias-share", "name-clash",
 		},
-		ConformMetric("").Values())
-	assert.Equal(t, []string{"source", "main", "test"}, ConformPopulation("").Values())
-	assert.Equal(t, []string{"ratchet", "anchor"}, ConformSource("").Values())
+		ConformanceMetric("").Values())
+	assert.Equal(t, []string{"source", "main", "test"}, ConformancePopulation("").Values())
+	assert.Equal(t, []string{"ratchet", "anchor"}, ConformanceSource("").Values())
 	assert.Equal(t,
 		[]bool{true, false, true, false, true, false},
 		[]bool{
-			ConformCloneTokens.Valid(), ConformMetric("clones").Valid(),
-			ConformPopMain.Valid(), ConformPopulation("vendor").Valid(),
-			ConformFromAnchor.Valid(), ConformSource("live").Valid(),
+			ConformanceCloneTokens.Valid(), ConformanceMetric("clones").Valid(),
+			ConformancePopMain.Valid(), ConformancePopulation("vendor").Valid(),
+			ConformanceFromAnchor.Valid(), ConformanceSource("live").Valid(),
 		})
-	assert.Equal(t, "unset", ConformMetric("").String())
+	assert.Equal(t, "unset", ConformanceMetric("").String())
 }

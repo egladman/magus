@@ -55,13 +55,13 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	rest, err := cmdParse("diff", args, func(fs *flag.FlagSet) {
 		rf = flaggen.BindDiff(fs)
 		fs.Float64Var(&gates.MinShare, flaggen.FlagDiffConformanceMinShare, 0,
-			"The share of a conformance norm's declarations, above 0 and at most 1, that must agree before it is reported; defaults to knowledge.conform.gates.min_share")
+			"The share of a conformance norm's declarations, above 0 and at most 1, that must agree before it is reported; defaults to knowledge.conformance.gates.min_share")
 		fs.Usage = func() { diffUsage(os.Stderr) }
 	})
 	if err != nil {
 		return err
 	}
-	// compat(until: the advice action reads knowledge.conform.gates): the action passes its own
+	// compat(until: the advice action reads knowledge.conformance.gates): the action passes its own
 	// 5 and 0.8 on every run, so a flag overrides the configured gate even when nobody chose it.
 	gates.MinCohort = rf.ConformanceMinCohort
 	if gates.MinCohort < 0 || gates.MinShare < 0 || gates.MinShare > 1 {
@@ -741,13 +741,13 @@ func attachLayout(ctx context.Context, m *magus.Magus, rev *types.Diff, opts typ
 			generated[e.Path] = true
 		}
 	}
-	conform, err := m.ConformOptions()
+	conformance, err := m.ConformanceOptions()
 	if err != nil {
 		fail(err)
 		return
 	}
 	// compat: see diffCmd.
-	gates := conform.Gates.Override(opts.MinCohort, opts.MinShare)
+	gates := conformance.Gates.Override(opts.MinCohort, opts.MinShare)
 	found := graph.Layout(knowledge.LayoutChange{Added: added, Generated: generated, Gates: gates})
 	for dir, checks := range found {
 		i := slices.IndexFunc(rev.Files, func(f types.DiffFile) bool { return path.Dir(f.Path) == dir })
@@ -1471,10 +1471,10 @@ func diffUsage(w io.Writer) {
 		"so the base must come from the same indexers this tree is indexed with.")
 	tty.ProseItem(w, tty.SystemProbe, "  --conformance-min-cohort ",
 		"how many declarations a conformance norm needs before a changed symbol is compared against it;",
-		"defaults to knowledge.conform.gates.min_cohort")
+		"defaults to knowledge.conformance.gates.min_cohort")
 	tty.ProseItem(w, tty.SystemProbe, "  --conformance-min-share  ",
 		"the share of a norm's declarations, above 0 and at most 1, that must agree;",
-		"defaults to knowledge.conform.gates.min_share.",
+		"defaults to knowledge.conformance.gates.min_share.",
 		"Both apply to the printed report, not the viewer.")
 }
 

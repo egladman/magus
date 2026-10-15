@@ -237,10 +237,10 @@ func raiseOpts(cause any, url string) map[string]any {
 // options it was handed so a test can prove they arrived.
 type recordingAnalyzer struct {
 	types.WorkspaceRepository
-	got         types.InsightOptions
-	failTrend   bool
-	failConform error
-	conformLens types.ConformOutput
+	got             types.InsightOptions
+	failTrend       bool
+	failConformance error
+	conformanceLens types.ConformanceOutput
 }
 
 func (f *recordingAnalyzer) Hotspots(_ context.Context, o types.InsightOptions) (types.HotspotOutput, error) {
@@ -270,8 +270,8 @@ func (f *recordingAnalyzer) Duplication(context.Context) (types.DuplicationOutpu
 	return types.DuplicationOutput{}, errors.New("no symbol index")
 }
 
-func (f *recordingAnalyzer) Conform(context.Context) (types.ConformOutput, error) {
-	return f.conformLens, f.failConform
+func (f *recordingAnalyzer) Conformance(context.Context) (types.ConformanceOutput, error) {
+	return f.conformanceLens, f.failConformance
 }
 
 func (f *recordingAnalyzer) ModelTierLens(context.Context) (types.ModelTierOutput, error) {
@@ -381,20 +381,20 @@ func TestInsightReportKeepsTheBestEffortSections(t *testing.T) {
 	require.Error(t, err)
 }
 
-// TestInsightReportCarriesConformAndItsMisconfiguration pins that the conform lens rides the
+// TestInsightReportCarriesConformanceAndItsMisconfiguration pins that the conformance lens rides the
 // report, and that a configuration it cannot honor fails the report rather than hiding as a
 // clean section.
-func TestInsightReportCarriesConformAndItsMisconfiguration(t *testing.T) {
+func TestInsightReportCarriesConformanceAndItsMisconfiguration(t *testing.T) {
 	t.Parallel()
 
-	a := &recordingAnalyzer{conformLens: types.ConformOutput{Definition: "conform"}}
+	a := &recordingAnalyzer{conformanceLens: types.ConformanceOutput{Definition: "conformance"}}
 	report, err := buildInsightReport(t.Context(), a, types.InsightOptions{})
 	require.NoError(t, err)
-	assert.Equal(t, "conform", report.Conform.Definition)
+	assert.Equal(t, "conformance", report.Conformance.Definition)
 
-	a.failConform = errors.New("conform: hack/policy/conform.json: no such file")
+	a.failConformance = errors.New("conformance: hack/policy/conformance.json: no such file")
 	_, err = buildInsightReport(t.Context(), a, types.InsightOptions{})
-	assert.ErrorContains(t, err, "conform.json")
+	assert.ErrorContains(t, err, "conformance.json")
 }
 
 // ledgerWorkspace is a workspace that can back a job Store: it

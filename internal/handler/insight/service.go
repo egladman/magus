@@ -54,7 +54,7 @@ func (s *Service) GetInsight(ctx context.Context, _ *connect.Request[insightv1.G
 }
 
 // insightToProto maps the domain view onto the wire. Every lens is always present; only
-// volatility, the model-tier lens and conform are nilable, and a nil report stays nil so a
+// volatility, the model-tier lens and conformance are nilable, and a nil report stays nil so a
 // reader can tell "no run history recorded" from "no volatile targets".
 func insightToProto(v types.InsightView) *insightv1.Insight {
 	return &insightv1.Insight{
@@ -83,21 +83,21 @@ func insightToProto(v types.InsightView) *insightv1.Insight {
 			Since:      v.Trend.Since,
 			Projects:   mapSlice(v.Trend.Projects, trendToProto),
 		},
-		Volatility: volatilityToProto(v.Volatility),
-		ModelTiers: modelTiersToProto(v.ModelTiers),
-		Conform:    conformToProto(v.Conform),
+		Volatility:  volatilityToProto(v.Volatility),
+		ModelTiers:  modelTiersToProto(v.ModelTiers),
+		Conformance: conformanceToProto(v.Conformance),
 	}
 }
 
-func conformToProto(o *types.ConformOutput) *insightv1.ConformOutput {
+func conformanceToProto(o *types.ConformanceOutput) *insightv1.ConformanceOutput {
 	if o == nil {
 		return nil
 	}
-	return &insightv1.ConformOutput{
+	return &insightv1.ConformanceOutput{
 		Definition: o.Definition,
-		Rows: mapSlice(o.Rows, func(r types.ConformRow) *insightv1.ConformRow {
-			return &insightv1.ConformRow{
-				Key: &insightv1.ConformKey{
+		Rows: mapSlice(o.Rows, func(r types.ConformanceRow) *insightv1.ConformanceRow {
+			return &insightv1.ConformanceRow{
+				Key: &insightv1.ConformanceKey{
 					Metric:     string(r.Key.Metric),
 					Population: string(r.Key.Population),
 					Scope:      r.Key.Scope,
@@ -113,19 +113,19 @@ func conformToProto(o *types.ConformOutput) *insightv1.ConformOutput {
 				Propose:    int32(r.Propose),
 				Known:      int32(r.Known),
 				Source:     string(r.Source),
-				Violations: mapSlice(r.Violations, conformItemToProto),
+				Violations: mapSlice(r.Violations, conformanceItemToProto),
 			}
 		}),
-		Stale: mapSlice(o.Stale, func(k types.ConformKnown) *insightv1.ConformKnown {
-			return &insightv1.ConformKnown{Metric: string(k.Metric), Items: k.Items, Reason: k.Reason}
+		Stale: mapSlice(o.Stale, func(k types.ConformanceKnown) *insightv1.ConformanceKnown {
+			return &insightv1.ConformanceKnown{Metric: string(k.Metric), Items: k.Items, Reason: k.Reason}
 		}),
 		Excluded: int32(o.Excluded),
 		Answer:   answerToProto(o.Answer),
 	}
 }
 
-func conformItemToProto(i types.ConformItem) *insightv1.ConformItem {
-	return &insightv1.ConformItem{Id: i.ID, Source: i.Source, Measure: int32(i.Measure)}
+func conformanceItemToProto(i types.ConformanceItem) *insightv1.ConformanceItem {
+	return &insightv1.ConformanceItem{Id: i.ID, Source: i.Source, Measure: int32(i.Measure)}
 }
 
 // answerToProto is the graph handler's mapping of a coverage verdict, kept beside its one

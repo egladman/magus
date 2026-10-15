@@ -651,12 +651,12 @@ type Knowledge struct {
 	// The defaults were set against this repository; a codebase of many small helpers
 	// will want MinShared higher, one of large functions may want MinScore lower.
 	Duplication DuplicationConfig `json:"duplication" yaml:"duplication"`
-	// Conform is the policy of the conform lens and its checks: which code distributions are
+	// Conformance is the policy of the conformance lens and its checks: which code distributions are
 	// measured, the shipped anchor each is bounded by, and the committed ratchet record.
 	//
 	// cli:"-": magus.yaml ONLY. A ratchet is committed policy, so a per-run flag or one
 	// exported env var would loosen every check without a trace in any file.
-	Conform ConformConfig `json:"conform" yaml:"conform" cli:"-"`
+	Conformance ConformanceConfig `json:"conformance" yaml:"conformance" cli:"-"`
 	// Sessions declares which agent hosts' transcripts to fold into the @session overlay,
 	// the layer that answers which code agents actually touch. `magus graph build` runs
 	// each declared adapter before assembling, so the server's sync-graph job keeps it
@@ -742,12 +742,12 @@ func (c DuplicationConfig) Options() types.DuplicationOptions {
 	}
 }
 
-// ConformConfig is knowledge.conform in magus.yaml. See types.ConformOptions for how the
+// ConformanceConfig is knowledge.conformance in magus.yaml. See types.ConformanceOptions for how the
 // graph reads it.
 //
 // A key written in a magus.yaml replaces the default for that whole field, as every
 // non-zero config value does: writing checks states all of them.
-type ConformConfig struct {
+type ConformanceConfig struct {
 	// Ratchet is the workspace-relative path of the committed record of measured
 	// thresholds. Empty enforces the anchors alone and records no proposals.
 	Ratchet string `json:"ratchet" yaml:"ratchet"`
@@ -761,23 +761,23 @@ type ConformConfig struct {
 	// a vendored or upstream-shaped tree. Generated output is always out.
 	Exclude []string `json:"exclude" yaml:"exclude"`
 	// Gates are the absolute noise gates of the conformance checks.
-	Gates ConformGatesConfig `json:"gates" yaml:"gates"`
+	Gates ConformanceGatesConfig `json:"gates" yaml:"gates"`
 	// Checks is the policy per metric and population. A metric or population left out is
 	// not checked.
-	Checks map[types.ConformMetric]map[types.ConformPopulation]ConformLimitConfig `json:"checks" yaml:"checks"`
+	Checks map[types.ConformanceMetric]map[types.ConformancePopulation]ConformanceLimitConfig `json:"checks" yaml:"checks"`
 }
 
-// ConformGatesConfig is knowledge.conform.gates: the cohort a convention needs before it
+// ConformanceGatesConfig is knowledge.conformance.gates: the cohort a convention needs before it
 // binds a change, and how many findings are reported.
-type ConformGatesConfig struct {
+type ConformanceGatesConfig struct {
 	MinCohort   int     `json:"min_cohort" yaml:"min_cohort" validate:"gte=1"`
 	MinShare    float64 `json:"min_share" yaml:"min_share" validate:"gte=0,lte=1"`
 	Bar         float64 `json:"bar" yaml:"bar" validate:"gte=0,lte=1"`
 	MaxFindings int     `json:"max_findings" yaml:"max_findings" validate:"gte=1"`
 }
 
-// ConformLimitConfig is the policy for one metric and population.
-type ConformLimitConfig struct {
+// ConformanceLimitConfig is the policy for one metric and population.
+type ConformanceLimitConfig struct {
 	// Percentile is the percentile of the live distribution a proposal measures at.
 	Percentile float64 `json:"percentile" yaml:"percentile"`
 	// Anchor is the ceiling no committed value may exceed, and the value enforced while
@@ -795,27 +795,27 @@ type ConformLimitConfig struct {
 
 // Options is the config as the graph package reads it, which cannot import this one.
 // Ratchet and Generated are the caller's to fill from files. A scope becomes its own key.
-func (c ConformConfig) Options() types.ConformOptions {
-	limits := map[types.ConformKey]types.ConformLimit{}
+func (c ConformanceConfig) Options() types.ConformanceOptions {
+	limits := map[types.ConformanceKey]types.ConformanceLimit{}
 	for metric, pops := range c.Checks {
 		for pop, l := range pops {
-			limits[types.ConformKey{Metric: metric, Population: pop}] = types.ConformLimit{
+			limits[types.ConformanceKey{Metric: metric, Population: pop}] = types.ConformanceLimit{
 				Percentile: l.Percentile, Anchor: l.Anchor, MinSubject: l.MinSubject,
 			}
 			for scope, anchor := range l.Scopes {
-				limits[types.ConformKey{Metric: metric, Population: pop, Scope: scope}] = types.ConformLimit{
+				limits[types.ConformanceKey{Metric: metric, Population: pop, Scope: scope}] = types.ConformanceLimit{
 					Percentile: l.Percentile, Anchor: anchor, MinSubject: l.MinSubject,
 				}
 			}
 		}
 	}
-	return types.ConformOptions{
+	return types.ConformanceOptions{
 		Limits:      limits,
 		RatchetPath: c.Ratchet,
 		MinSample:   c.MinSample,
 		Step:        c.Step,
 		Exclude:     slices.Clone(c.Exclude),
-		Gates: types.ConformGates{
+		Gates: types.ConformanceGates{
 			MinCohort:   c.Gates.MinCohort,
 			MinShare:    c.Gates.MinShare,
 			Bar:         c.Gates.Bar,
@@ -824,8 +824,8 @@ func (c ConformConfig) Options() types.ConformOptions {
 	}
 }
 
-// conformDefaults are magus's own numbers, in the way DuplicationConfig's are: a
-// workspace with no knowledge.conform fails nothing magus would not fail on itself.
+// conformanceDefaults are magus's own numbers, in the way DuplicationConfig's are: a
+// workspace with no knowledge.conformance fails nothing magus would not fail on itself.
 //
 // An anchor is magus's own p99 at the measuring rev, rounded up to two significant
 // figures, with two exceptions. clone-tokens' anchor is the smallest body worth one shared
@@ -838,33 +838,33 @@ func (c ConformConfig) Options() types.ConformOptions {
 // test is deliberate, p50 for clones, p90 for a shared body, p95 elsewhere. They name no
 // path: an exclusion or a scope is one workspace's layout, so it lives in that workspace's
 // magus.yaml.
-func conformDefaults() ConformConfig {
-	limit := func(percentile float64, anchor int) ConformLimitConfig {
-		return ConformLimitConfig{Percentile: percentile, Anchor: anchor}
+func conformanceDefaults() ConformanceConfig {
+	limit := func(percentile float64, anchor int) ConformanceLimitConfig {
+		return ConformanceLimitConfig{Percentile: percentile, Anchor: anchor}
 	}
 	const (
-		src  = types.ConformPopSource
-		main = types.ConformPopMain
-		test = types.ConformPopTest
+		src  = types.ConformancePopSource
+		main = types.ConformancePopMain
+		test = types.ConformancePopTest
 	)
-	return ConformConfig{
+	return ConformanceConfig{
 		MinSample: 30,
 		Step:      0.05,
-		Gates:     ConformGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
-		Checks: map[types.ConformMetric]map[types.ConformPopulation]ConformLimitConfig{
-			types.ConformFileLines:    {src: limit(95, 2200), main: limit(95, 3000), test: limit(99, 1900)},
-			types.ConformFuncLines:    {src: limit(99, 92), main: limit(99, 140), test: limit(99, 73)},
-			types.ConformTypeMethods:  {src: limit(95, 49), main: limit(95, 22), test: limit(95, 32)},
-			types.ConformFileSymbols:  {src: limit(95, 82)},
-			types.ConformCloneTokens:  {src: limit(50, 80), main: limit(50, 80)},
-			types.ConformDepFanout:    {src: limit(95, 62)},
-			types.ConformCallSequence: {src: limit(99, 7), main: limit(99, 7)},
-			types.ConformSharedBody:   {src: limit(90, 94)},
-			types.ConformSharedReach:  {src: limit(95, 7)},
-			types.ConformCallerSpread: {src: limit(95, 3)},
-			types.ConformModeKnobs:    {src: limit(0, 0)},
-			types.ConformAliasShare:   {src: {Percentile: 95, Anchor: 100, MinSubject: 5}},
-			types.ConformNameClash:    {src: {Percentile: 99, Anchor: 62, MinSubject: 5}},
+		Gates:     ConformanceGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
+		Checks: map[types.ConformanceMetric]map[types.ConformancePopulation]ConformanceLimitConfig{
+			types.ConformanceFileLines:    {src: limit(95, 2200), main: limit(95, 3000), test: limit(99, 1900)},
+			types.ConformanceFuncLines:    {src: limit(99, 92), main: limit(99, 140), test: limit(99, 73)},
+			types.ConformanceTypeMethods:  {src: limit(95, 49), main: limit(95, 22), test: limit(95, 32)},
+			types.ConformanceFileSymbols:  {src: limit(95, 82)},
+			types.ConformanceCloneTokens:  {src: limit(50, 80), main: limit(50, 80)},
+			types.ConformanceDepFanout:    {src: limit(95, 62)},
+			types.ConformanceCallSequence: {src: limit(99, 7), main: limit(99, 7)},
+			types.ConformanceSharedBody:   {src: limit(90, 94)},
+			types.ConformanceSharedReach:  {src: limit(95, 7)},
+			types.ConformanceCallerSpread: {src: limit(95, 3)},
+			types.ConformanceModeKnobs:    {src: limit(0, 0)},
+			types.ConformanceAliasShare:   {src: {Percentile: 95, Anchor: 100, MinSubject: 5}},
+			types.ConformanceNameClash:    {src: {Percentile: 99, Anchor: 62, MinSubject: 5}},
 		},
 	}
 }
@@ -1144,7 +1144,7 @@ func Defaults() Config {
 			// MinShared 4 is the line that mattered: at 3, identical triples of small
 			// helpers scored a perfect 1.0 and were most of the list.
 			Duplication: DuplicationConfig{MinCallees: 3, MinShared: 4, MinScore: 0.7, MinSpanRatio: 0.5},
-			Conform:     conformDefaults(),
+			Conformance: conformanceDefaults(),
 		},
 		Telemetry: Telemetry{
 			Protocol:    "grpc",

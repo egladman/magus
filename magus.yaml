@@ -114,7 +114,7 @@ knowledge:
   # layout: libs/gopherbuzz follows upstream Buzz, and cmd/magus is the one binary that
   # imports every package. Writing checks replaces the defaults whole, so every check is
   # restated here.
-  conform:
+  conformance:
     ratchet: hack/policy/conformance.jsonl
     exclude: ["libs/gopherbuzz/**"]
     checks:

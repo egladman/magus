@@ -127,11 +127,11 @@ var allChecks = []checkDef{
 		run:            (*runner).checkModelTierFit,
 	},
 	{
-		Name:           "conform-ratchet",
+		Name:           "conformance-ratchet",
 		Doc:            "committed conformance thresholds the code now measures tighter than, and known entries that no longer violate",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            (*runner).checkConformRatchet,
+		run:            (*runner).checkConformanceRatchet,
 	},
 	{
 		Name:           "unexplained-hotspots",

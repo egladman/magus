@@ -24,18 +24,18 @@ type PrecedentOptions struct {
 	// Generated holds the workspace-relative paths that are generated output. Generated and
 	// test code is never counted.
 	Generated map[string]bool
-	// Conform supplies the dep-fanout ceilings and the gates that make a row established,
+	// Conformance supplies the dep-fanout ceilings and the gates that make a row established,
 	// taken as given. A layer with no configured or committed dep-fanout value gets no fan-out
 	// row.
-	Conform types.ConformOptions
+	Conformance types.ConformanceOptions
 }
 
 // Precedents mines the precedents g's cases establish; g must carry its symbols. Rows come
 // back ordered by family, scope and key, so two runs over one graph agree byte for byte. A graph
 // with no symbols yields no rows, never an error.
 func (g *Graph) Precedents(o PrecedentOptions) []types.Precedent {
-	x := newNamingIndex(g, ConformanceChange{Generated: o.Generated, Conform: o.Conform})
-	m := precedentMiner{g: g, x: x, conform: o.Conform, fileNS: g.fileNamespaces()}
+	x := newNamingIndex(g, ConformanceChange{Generated: o.Generated, Conformance: o.Conformance})
+	m := precedentMiner{g: g, x: x, conformance: o.Conformance, fileNS: g.fileNamespaces()}
 	pk := m.packages()
 	rows := slices.Concat(m.depDirection(pk), m.depFanout(pk), m.errSentinelName(), m.testPackageName(pk),
 		m.paramNameByType(), m.paramOrder(), m.ctxFirst(), m.errorLast())
@@ -62,10 +62,10 @@ func (g *Graph) Precedents(o PrecedentOptions) []types.Precedent {
 }
 
 type precedentMiner struct {
-	g       *Graph
-	x       *namingIndex
-	conform types.ConformOptions
-	fileNS  map[string][]string
+	g           *Graph
+	x           *namingIndex
+	conformance types.ConformanceOptions
+	fileNS      map[string][]string
 }
 
 // precedentPackages places each workspace package: its directory and the top-level directory
@@ -211,7 +211,7 @@ func (m precedentMiner) depFanout(pk precedentPackages) []types.Precedent {
 		dirs := slices.SortedFunc(maps.Keys(byDir), func(a, b string) int {
 			return cmp.Or(cmp.Compare(len(byDir[b]), len(byDir[a])), cmp.Compare(a, b))
 		})
-		bound, src := m.conform.Effective(types.ConformKey{Metric: types.ConformDepFanout, Population: types.ConformPopSource, Scope: layer})
+		bound, src := m.conformance.Effective(types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: layer})
 		if src == "" {
 			continue
 		}

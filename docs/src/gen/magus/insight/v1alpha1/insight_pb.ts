@@ -15,8 +15,8 @@
 // this wire lives in the handler, so the domain type stays free of protobuf. buf-breaking
 // gates this file.
 //
-// It carries one knowledge-graph lens, conform, and no other (types.InsightReport's graph_stats,
-// unreferenced and duplication stay out): conform is the one that proposes a value for a
+// It carries one knowledge-graph lens, conformance, and no other (types.InsightReport's graph_stats,
+// unreferenced and duplication stay out): conformance is the one that proposes a value for a
 // person to commit, so the dashboard shows it beside the history it is judged against. The
 // server computes it with the cached scan, so a burst of polls pays for one graph load.
 
@@ -32,7 +32,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/insight/v1alpha1/insight.proto.
  */
 export const file_magus_insight_v1alpha1_insight: GenFile = /*@__PURE__*/
-  fileDesc("CiRtYWd1cy9pbnNpZ2h0L3YxYWxwaGExL2luc2lnaHQucHJvdG8SFm1hZ3VzLmluc2lnaHQudjFhbHBoYTEiEwoRR2V0SW5zaWdodFJlcXVlc3QioAMKB0luc2lnaHQSNwoIaG90c3BvdHMYASABKAsyJS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkhvdHNwb3RPdXRwdXQSOAoIYWZmaW5pdHkYAiABKAsyJi5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkFmZmluaXR5T3V0cHV0EjoKCW93bmVyc2hpcBgDIAEoCzInLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuT3duZXJzaGlwT3V0cHV0EjIKBXRyZW5kGAQgASgLMiMubWFndXMuaW5zaWdodC52MWFscGhhMS5UcmVuZE91dHB1dBI8Cgp2b2xhdGlsaXR5GAUgASgLMigubWFndXMuaW5zaWdodC52MWFscGhhMS5Wb2xhdGlsaXR5UmVwb3J0EjwKC21vZGVsX3RpZXJzGAYgASgLMicubWFndXMuaW5zaWdodC52MWFscGhhMS5Nb2RlbFRpZXJPdXRwdXQSNgoHY29uZm9ybRgHIAEoCzIlLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuQ29uZm9ybU91dHB1dCKrAQoNSG90c3BvdE91dHB1dBISCgpkZWZpbml0aW9uGAEgASgJEg8KB2NvbW1pdHMYAiABKAUSDQoFc2luY2UYAyABKAkSMgoFbm9kZXMYBCADKAsyIy5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLlByb2plY3ROb2RlEjIKBWZpbGVzGAUgAygLMiMubWFndXMuaW5zaWdodC52MWFscGhhMS5GaWxlSG90c3BvdCLuAQoLUHJvamVjdE5vZGUSDAoEcGF0aBgBIAEoCRIMCgRuYW1lGAIgASgJEhIKCnNwZWxsX25hbWUYAyABKAkSEAoIY2hpbGRyZW4YBCADKAkSCwoDZGlyGAUgASgJEhQKDGJsYXN0X3JhZGl1cxgHIAEoBRITCgtkdXJhdGlvbl9tcxgIIAEoAxINCgVjaHVybhgJIAEoBRIPCgdhdXRob3JzGAogASgFEjQKEGxhc3RfY29tbWl0X3RpbWUYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSgQIBhAHUglleGNsdXNpdmUipQEKC0ZpbGVIb3RzcG90EgwKBHBhdGgYASABKAkSDwoHY29tbWl0cxgCIAEoBRISCgpjb21wbGV4aXR5GAMgASgFEg0KBXNjb3JlGAQgASgFEg8KB2F1dGhvcnMYBSABKAUSNAoQbGFzdF9jb21taXRfdGltZRgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDQoFbW92ZXMYByABKAUidQoOQWZmaW5pdHlPdXRwdXQSEgoKZGVmaW5pdGlvbhgBIAEoCRIPCgdjb21taXRzGAIgASgFEg0KBXNpbmNlGAMgASgJEi8KBXBhaXJzGAQgAygLMiAubWFndXMuaW5zaWdodC52MWFscGhhMS5Db0NoYW5nZSJfCghDb0NoYW5nZRIJCgFhGAEgASgJEg4KBmFfbmFtZRgCIAEoCRIJCgFiGAMgASgJEg4KBmJfbmFtZRgEIAEoCRINCgVjb3VudBgFIAEoBRIOCgZoaWRkZW4YBiABKAgiegoPT3duZXJzaGlwT3V0cHV0EhIKCmRlZmluaXRpb24YASABKAkSDwoHY29tbWl0cxgCIAEoBRINCgVzaW5jZRgDIAEoCRIzCghwcm9qZWN0cxgEIAMoCzIhLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuT3duZXJzaGlwIswBCglPd25lcnNoaXASDAoEcGF0aBgBIAEoCRIMCgRuYW1lGAIgASgJEg8KB2NvbW1pdHMYAyABKAUSDwoHYXV0aG9ycxgEIAEoBRIPCgdwcmltYXJ5GAUgASgJEhUKDXByaW1hcnlfc2hhcmUYBiABKAUSFAoMYnVzX2ZhY3Rvcl8xGAcgASgIEg0KBXN0YWxlGAggASgIEjQKEGxhc3RfY29tbWl0X3RpbWUYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wInIKC1RyZW5kT3V0cHV0EhIKCmRlZmluaXRpb24YASABKAkSDwoHY29tbWl0cxgCIAEoBRINCgVzaW5jZRgDIAEoCRIvCghwcm9qZWN0cxgEIAMoCzIdLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuVHJlbmQiUwoFVHJlbmQSDAoEcGF0aBgBIAEoCRIMCgRuYW1lGAIgASgJEg4KBnJlY2VudBgDIAEoBRIPCgdlYXJsaWVyGAQgASgFEg0KBWRlbHRhGAUgASgFImAKEFZvbGF0aWxpdHlSZXBvcnQSEQoJdGhyZXNob2xkGAEgASgBEjkKB3RhcmdldHMYAiADKAsyKC5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLlZvbGF0aWxpdHlUYXJnZXQizQEKEFZvbGF0aWxpdHlUYXJnZXQSDwoHcHJvamVjdBgBIAEoCRIOCgZ0YXJnZXQYAiABKAkSDQoFc2NvcmUYAyABKAESEAoIdm9sYXRpbGUYBCABKAgSDAoEcGFzcxgFIAEoBRIMCgRmYWlsGAYgASgFEhYKDnZvbGF0aWxlX2NvdW50GAcgASgFEg8KB3NhbXBsZXMYCCABKAUSMgoObGFzdF9wYXNzX3RpbWUYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlwKD01vZGVsVGllck91dHB1dBISCgpkZWZpbml0aW9uGAEgASgJEjUKBHJvd3MYAiADKAsyJy5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLk1vZGVsVGllclJlY29yZCL+AgoPTW9kZWxUaWVyUmVjb3JkEgwKBHJhbmsYASABKAUSEgoKbW9kZWxfdGllchgCIAEoCRIMCgRraW5kGAMgASgJEgwKBGpvYnMYBCABKAUSDAoEcGFzcxgFIAEoBRIMCgRmYWlsGAYgASgFEhEKCW5vX3JldHVybhgHIAEoBRISCgpwYXNzX2xvd2VyGAggASgBEhYKDmNoZWNrc19wZXJfam9iGAkgASgBEhQKDGZvcmtzX3Blcl9pZBgKIAEoARIWCg5yZXdvcmtfcGVyX2pvYhgLIAEoARIZChF3aWRlbmluZ3NfcGVyX2pvYhgMIAEoARIVCg1tZWFuX2Nvc3RfdXNkGA0gASgBEhUKDW1lZGlhbl90b2tlbnMYDiABKAMSFgoOZmlyc3RfYXR0ZW1wdHMYDyABKAUSEgoKZmlyc3RfcGFzcxgQIAEoBRIYChBmaXJzdF9wYXNzX2xvd2VyGBEgASgBEhUKDW5vdF9yZXRyeWFibGUYEiABKAUiygEKDUNvbmZvcm1PdXRwdXQSEgoKZGVmaW5pdGlvbhgBIAEoCRIwCgRyb3dzGAIgAygLMiIubWFndXMuaW5zaWdodC52MWFscGhhMS5Db25mb3JtUm93EjMKBXN0YWxlGAMgAygLMiQubWFndXMuaW5zaWdodC52MWFscGhhMS5Db25mb3JtS25vd24SEAoIZXhjbHVkZWQYBCABKAUSLAoGYW5zd2VyGAUgASgLMhwubWFndXMuZ3JhcGgudjFhbHBoYTEuQW5zd2VyIj8KCkNvbmZvcm1LZXkSDgoGbWV0cmljGAEgASgJEhIKCnBvcHVsYXRpb24YAiABKAkSDQoFc2NvcGUYAyABKAkikgIKCkNvbmZvcm1Sb3cSLwoDa2V5GAEgASgLMiIubWFndXMuaW5zaWdodC52MWFscGhhMS5Db25mb3JtS2V5EgkKAW4YAiABKAUSCwoDcDUwGAMgASgFEgsKA3A5MBgEIAEoBRILCgNwOTUYBSABKAUSCwoDcDk5GAYgASgFEgwKBGxpdmUYByABKAUSDQoFdmFsdWUYCCABKAUSDgoGYW5jaG9yGAkgASgFEg8KB3Byb3Bvc2UYCiABKAUSDQoFa25vd24YCyABKAUSDgoGc291cmNlGAwgASgJEjcKCnZpb2xhdGlvbnMYDSADKAsyIy5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkNvbmZvcm1JdGVtIjoKC0NvbmZvcm1JdGVtEgoKAmlkGAEgASgJEg4KBnNvdXJjZRgCIAEoCRIPCgdtZWFzdXJlGAMgASgFIj0KDENvbmZvcm1Lbm93bhIOCgZtZXRyaWMYASABKAkSDQoFaXRlbXMYAiADKAkSDgoGcmVhc29uGAMgASgJMmoKDkluc2lnaHRTZXJ2aWNlElgKCkdldEluc2lnaHQSKS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkdldEluc2lnaHRSZXF1ZXN0Gh8ubWFndXMuaW5zaWdodC52MWFscGhhMS5JbnNpZ2h0QvMBChpjb20ubWFndXMuaW5zaWdodC52MWFscGhhMUIMSW5zaWdodFByb3RvUAFaTWdpdGh1Yi5jb20vZWdsYWRtYW4vbWFndXMvcHJvdG8vZ2VuL2dvL21hZ3VzL2luc2lnaHQvdjFhbHBoYTE7aW5zaWdodHYxYWxwaGExogIDTUlYqgIWTWFndXMuSW5zaWdodC5WMWFscGhhMcoCFk1hZ3VzXEluc2lnaHRcVjFhbHBoYTHiAiJNYWd1c1xJbnNpZ2h0XFYxYWxwaGExXEdQQk1ldGFkYXRh6gIYTWFndXM6Okluc2lnaHQ6OlYxYWxwaGExYgZwcm90bzM", [file_google_protobuf_timestamp, file_magus_graph_v1alpha1_graph]);
+  fileDesc("CiRtYWd1cy9pbnNpZ2h0L3YxYWxwaGExL2luc2lnaHQucHJvdG8SFm1hZ3VzLmluc2lnaHQudjFhbHBoYTEiEwoRR2V0SW5zaWdodFJlcXVlc3QiqAMKB0luc2lnaHQSNwoIaG90c3BvdHMYASABKAsyJS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkhvdHNwb3RPdXRwdXQSOAoIYWZmaW5pdHkYAiABKAsyJi5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkFmZmluaXR5T3V0cHV0EjoKCW93bmVyc2hpcBgDIAEoCzInLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuT3duZXJzaGlwT3V0cHV0EjIKBXRyZW5kGAQgASgLMiMubWFndXMuaW5zaWdodC52MWFscGhhMS5UcmVuZE91dHB1dBI8Cgp2b2xhdGlsaXR5GAUgASgLMigubWFndXMuaW5zaWdodC52MWFscGhhMS5Wb2xhdGlsaXR5UmVwb3J0EjwKC21vZGVsX3RpZXJzGAYgASgLMicubWFndXMuaW5zaWdodC52MWFscGhhMS5Nb2RlbFRpZXJPdXRwdXQSPgoLY29uZm9ybWFuY2UYByABKAsyKS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkNvbmZvcm1hbmNlT3V0cHV0IqsBCg1Ib3RzcG90T3V0cHV0EhIKCmRlZmluaXRpb24YASABKAkSDwoHY29tbWl0cxgCIAEoBRINCgVzaW5jZRgDIAEoCRIyCgVub2RlcxgEIAMoCzIjLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuUHJvamVjdE5vZGUSMgoFZmlsZXMYBSADKAsyIy5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkZpbGVIb3RzcG90Iu4BCgtQcm9qZWN0Tm9kZRIMCgRwYXRoGAEgASgJEgwKBG5hbWUYAiABKAkSEgoKc3BlbGxfbmFtZRgDIAEoCRIQCghjaGlsZHJlbhgEIAMoCRILCgNkaXIYBSABKAkSFAoMYmxhc3RfcmFkaXVzGAcgASgFEhMKC2R1cmF0aW9uX21zGAggASgDEg0KBWNodXJuGAkgASgFEg8KB2F1dGhvcnMYCiABKAUSNAoQbGFzdF9jb21taXRfdGltZRgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBKBAgGEAdSCWV4Y2x1c2l2ZSKlAQoLRmlsZUhvdHNwb3QSDAoEcGF0aBgBIAEoCRIPCgdjb21taXRzGAIgASgFEhIKCmNvbXBsZXhpdHkYAyABKAUSDQoFc2NvcmUYBCABKAUSDwoHYXV0aG9ycxgFIAEoBRI0ChBsYXN0X2NvbW1pdF90aW1lGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBINCgVtb3ZlcxgHIAEoBSJ1Cg5BZmZpbml0eU91dHB1dBISCgpkZWZpbml0aW9uGAEgASgJEg8KB2NvbW1pdHMYAiABKAUSDQoFc2luY2UYAyABKAkSLwoFcGFpcnMYBCADKAsyIC5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkNvQ2hhbmdlIl8KCENvQ2hhbmdlEgkKAWEYASABKAkSDgoGYV9uYW1lGAIgASgJEgkKAWIYAyABKAkSDgoGYl9uYW1lGAQgASgJEg0KBWNvdW50GAUgASgFEg4KBmhpZGRlbhgGIAEoCCJ6Cg9Pd25lcnNoaXBPdXRwdXQSEgoKZGVmaW5pdGlvbhgBIAEoCRIPCgdjb21taXRzGAIgASgFEg0KBXNpbmNlGAMgASgJEjMKCHByb2plY3RzGAQgAygLMiEubWFndXMuaW5zaWdodC52MWFscGhhMS5Pd25lcnNoaXAizAEKCU93bmVyc2hpcBIMCgRwYXRoGAEgASgJEgwKBG5hbWUYAiABKAkSDwoHY29tbWl0cxgDIAEoBRIPCgdhdXRob3JzGAQgASgFEg8KB3ByaW1hcnkYBSABKAkSFQoNcHJpbWFyeV9zaGFyZRgGIAEoBRIUCgxidXNfZmFjdG9yXzEYByABKAgSDQoFc3RhbGUYCCABKAgSNAoQbGFzdF9jb21taXRfdGltZRgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAicgoLVHJlbmRPdXRwdXQSEgoKZGVmaW5pdGlvbhgBIAEoCRIPCgdjb21taXRzGAIgASgFEg0KBXNpbmNlGAMgASgJEi8KCHByb2plY3RzGAQgAygLMh0ubWFndXMuaW5zaWdodC52MWFscGhhMS5UcmVuZCJTCgVUcmVuZBIMCgRwYXRoGAEgASgJEgwKBG5hbWUYAiABKAkSDgoGcmVjZW50GAMgASgFEg8KB2VhcmxpZXIYBCABKAUSDQoFZGVsdGEYBSABKAUiYAoQVm9sYXRpbGl0eVJlcG9ydBIRCgl0aHJlc2hvbGQYASABKAESOQoHdGFyZ2V0cxgCIAMoCzIoLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuVm9sYXRpbGl0eVRhcmdldCLNAQoQVm9sYXRpbGl0eVRhcmdldBIPCgdwcm9qZWN0GAEgASgJEg4KBnRhcmdldBgCIAEoCRINCgVzY29yZRgDIAEoARIQCgh2b2xhdGlsZRgEIAEoCBIMCgRwYXNzGAUgASgFEgwKBGZhaWwYBiABKAUSFgoOdm9sYXRpbGVfY291bnQYByABKAUSDwoHc2FtcGxlcxgIIAEoBRIyCg5sYXN0X3Bhc3NfdGltZRgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiXAoPTW9kZWxUaWVyT3V0cHV0EhIKCmRlZmluaXRpb24YASABKAkSNQoEcm93cxgCIAMoCzInLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuTW9kZWxUaWVyUmVjb3JkIv4CCg9Nb2RlbFRpZXJSZWNvcmQSDAoEcmFuaxgBIAEoBRISCgptb2RlbF90aWVyGAIgASgJEgwKBGtpbmQYAyABKAkSDAoEam9icxgEIAEoBRIMCgRwYXNzGAUgASgFEgwKBGZhaWwYBiABKAUSEQoJbm9fcmV0dXJuGAcgASgFEhIKCnBhc3NfbG93ZXIYCCABKAESFgoOY2hlY2tzX3Blcl9qb2IYCSABKAESFAoMZm9ya3NfcGVyX2lkGAogASgBEhYKDnJld29ya19wZXJfam9iGAsgASgBEhkKEXdpZGVuaW5nc19wZXJfam9iGAwgASgBEhUKDW1lYW5fY29zdF91c2QYDSABKAESFQoNbWVkaWFuX3Rva2VucxgOIAEoAxIWCg5maXJzdF9hdHRlbXB0cxgPIAEoBRISCgpmaXJzdF9wYXNzGBAgASgFEhgKEGZpcnN0X3Bhc3NfbG93ZXIYESABKAESFQoNbm90X3JldHJ5YWJsZRgSIAEoBSLWAQoRQ29uZm9ybWFuY2VPdXRwdXQSEgoKZGVmaW5pdGlvbhgBIAEoCRI0CgRyb3dzGAIgAygLMiYubWFndXMuaW5zaWdodC52MWFscGhhMS5Db25mb3JtYW5jZVJvdxI3CgVzdGFsZRgDIAMoCzIoLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuQ29uZm9ybWFuY2VLbm93bhIQCghleGNsdWRlZBgEIAEoBRIsCgZhbnN3ZXIYBSABKAsyHC5tYWd1cy5ncmFwaC52MWFscGhhMS5BbnN3ZXIiQwoOQ29uZm9ybWFuY2VLZXkSDgoGbWV0cmljGAEgASgJEhIKCnBvcHVsYXRpb24YAiABKAkSDQoFc2NvcGUYAyABKAkingIKDkNvbmZvcm1hbmNlUm93EjMKA2tleRgBIAEoCzImLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuQ29uZm9ybWFuY2VLZXkSCQoBbhgCIAEoBRILCgNwNTAYAyABKAUSCwoDcDkwGAQgASgFEgsKA3A5NRgFIAEoBRILCgNwOTkYBiABKAUSDAoEbGl2ZRgHIAEoBRINCgV2YWx1ZRgIIAEoBRIOCgZhbmNob3IYCSABKAUSDwoHcHJvcG9zZRgKIAEoBRINCgVrbm93bhgLIAEoBRIOCgZzb3VyY2UYDCABKAkSOwoKdmlvbGF0aW9ucxgNIAMoCzInLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuQ29uZm9ybWFuY2VJdGVtIj4KD0NvbmZvcm1hbmNlSXRlbRIKCgJpZBgBIAEoCRIOCgZzb3VyY2UYAiABKAkSDwoHbWVhc3VyZRgDIAEoBSJBChBDb25mb3JtYW5jZUtub3duEg4KBm1ldHJpYxgBIAEoCRINCgVpdGVtcxgCIAMoCRIOCgZyZWFzb24YAyABKAkyagoOSW5zaWdodFNlcnZpY2USWAoKR2V0SW5zaWdodBIpLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuR2V0SW5zaWdodFJlcXVlc3QaHy5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkluc2lnaHRC8wEKGmNvbS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExQgxJbnNpZ2h0UHJvdG9QAVpNZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvaW5zaWdodC92MWFscGhhMTtpbnNpZ2h0djFhbHBoYTGiAgNNSViqAhZNYWd1cy5JbnNpZ2h0LlYxYWxwaGExygIWTWFndXNcSW5zaWdodFxWMWFscGhhMeICIk1hZ3VzXEluc2lnaHRcVjFhbHBoYTFcR1BCTWV0YWRhdGHqAhhNYWd1czo6SW5zaWdodDo6VjFhbHBoYTFiBnByb3RvMw", [file_google_protobuf_timestamp, file_magus_graph_v1alpha1_graph]);
 
 /**
  * @generated from message magus.insight.v1alpha1.GetInsightRequest
@@ -51,7 +51,7 @@ export const GetInsightRequestSchema: GenMessage<GetInsightRequest> = /*@__PURE_
  * Insight bundles the six lenses. volatility is absent (not an empty report) when the
  * workspace has no run-outcome history to score - the distinction matters to a reader, which
  * renders "no runs recorded yet" rather than "no volatile targets". model_tiers is absent
- * for the same reason when no job outcome was ever recorded. conform is absent when the
+ * for the same reason when no job outcome was ever recorded. conformance is absent when the
  * server holds no workspace to read; a workspace without a symbol index sends it with an
  * unknown answer.
  *
@@ -89,9 +89,9 @@ export type Insight = Message<"magus.insight.v1alpha1.Insight"> & {
   modelTiers?: ModelTierOutput;
 
   /**
-   * @generated from field: magus.insight.v1alpha1.ConformOutput conform = 7;
+   * @generated from field: magus.insight.v1alpha1.ConformanceOutput conformance = 7;
    */
-  conform?: ConformOutput;
+  conformance?: ConformanceOutput;
 };
 
 /**
@@ -773,29 +773,29 @@ export const ModelTierRecordSchema: GenMessage<ModelTierRecord> = /*@__PURE__*/
   messageDesc(file_magus_insight_v1alpha1_insight, 14);
 
 /**
- * ConformOutput is the code-shape lens: one row per metric and population, judged against the
+ * ConformanceOutput is the code-shape lens: one row per metric and population, judged against the
  * value a check enforces. It reads the symbol graph, not git. It reports and proposes; a
  * person commits a proposed value to the ratchet record, and nothing here sets one. answer is
  * unknown, never a pass, when a symbol index is missing. excluded counts the files the
  * configured exclusions hid, so a widened exclusion stays visible.
  *
- * @generated from message magus.insight.v1alpha1.ConformOutput
+ * @generated from message magus.insight.v1alpha1.ConformanceOutput
  */
-export type ConformOutput = Message<"magus.insight.v1alpha1.ConformOutput"> & {
+export type ConformanceOutput = Message<"magus.insight.v1alpha1.ConformanceOutput"> & {
   /**
    * @generated from field: string definition = 1;
    */
   definition: string;
 
   /**
-   * @generated from field: repeated magus.insight.v1alpha1.ConformRow rows = 2;
+   * @generated from field: repeated magus.insight.v1alpha1.ConformanceRow rows = 2;
    */
-  rows: ConformRow[];
+  rows: ConformanceRow[];
 
   /**
-   * @generated from field: repeated magus.insight.v1alpha1.ConformKnown stale = 3;
+   * @generated from field: repeated magus.insight.v1alpha1.ConformanceKnown stale = 3;
    */
-  stale: ConformKnown[];
+  stale: ConformanceKnown[];
 
   /**
    * @generated from field: int32 excluded = 4;
@@ -809,20 +809,20 @@ export type ConformOutput = Message<"magus.insight.v1alpha1.ConformOutput"> & {
 };
 
 /**
- * Describes the message magus.insight.v1alpha1.ConformOutput.
- * Use `create(ConformOutputSchema)` to create a new message.
+ * Describes the message magus.insight.v1alpha1.ConformanceOutput.
+ * Use `create(ConformanceOutputSchema)` to create a new message.
  */
-export const ConformOutputSchema: GenMessage<ConformOutput> = /*@__PURE__*/
+export const ConformanceOutputSchema: GenMessage<ConformanceOutput> = /*@__PURE__*/
   messageDesc(file_magus_insight_v1alpha1_insight, 15);
 
 /**
- * ConformKey names one threshold: metric (file-lines, func-lines, type-methods, file-symbols,
+ * ConformanceKey names one threshold: metric (file-lines, func-lines, type-methods, file-symbols,
  * dep-fanout, clone-tokens or export-scope), population (source, main or test) and, for
  * dep-fanout, the layer or package directory it covers.
  *
- * @generated from message magus.insight.v1alpha1.ConformKey
+ * @generated from message magus.insight.v1alpha1.ConformanceKey
  */
-export type ConformKey = Message<"magus.insight.v1alpha1.ConformKey"> & {
+export type ConformanceKey = Message<"magus.insight.v1alpha1.ConformanceKey"> & {
   /**
    * @generated from field: string metric = 1;
    */
@@ -840,26 +840,26 @@ export type ConformKey = Message<"magus.insight.v1alpha1.ConformKey"> & {
 };
 
 /**
- * Describes the message magus.insight.v1alpha1.ConformKey.
- * Use `create(ConformKeySchema)` to create a new message.
+ * Describes the message magus.insight.v1alpha1.ConformanceKey.
+ * Use `create(ConformanceKeySchema)` to create a new message.
  */
-export const ConformKeySchema: GenMessage<ConformKey> = /*@__PURE__*/
+export const ConformanceKeySchema: GenMessage<ConformanceKey> = /*@__PURE__*/
   messageDesc(file_magus_insight_v1alpha1_insight, 16);
 
 /**
- * ConformRow is one key's distribution and verdict. live is the configured percentile today;
+ * ConformanceRow is one key's distribution and verdict. live is the configured percentile today;
  * value and source (ratchet or anchor) are what a check enforces, and anchor is the shipped
  * bound no committed value may exceed. propose is zero, or a tighter value to commit; it is
  * never looser than value. known counts the accepted items past value, and violations are the
  * rest.
  *
- * @generated from message magus.insight.v1alpha1.ConformRow
+ * @generated from message magus.insight.v1alpha1.ConformanceRow
  */
-export type ConformRow = Message<"magus.insight.v1alpha1.ConformRow"> & {
+export type ConformanceRow = Message<"magus.insight.v1alpha1.ConformanceRow"> & {
   /**
-   * @generated from field: magus.insight.v1alpha1.ConformKey key = 1;
+   * @generated from field: magus.insight.v1alpha1.ConformanceKey key = 1;
    */
-  key?: ConformKey;
+  key?: ConformanceKey;
 
   /**
    * @generated from field: int32 n = 2;
@@ -917,25 +917,25 @@ export type ConformRow = Message<"magus.insight.v1alpha1.ConformRow"> & {
   source: string;
 
   /**
-   * @generated from field: repeated magus.insight.v1alpha1.ConformItem violations = 13;
+   * @generated from field: repeated magus.insight.v1alpha1.ConformanceItem violations = 13;
    */
-  violations: ConformItem[];
+  violations: ConformanceItem[];
 };
 
 /**
- * Describes the message magus.insight.v1alpha1.ConformRow.
- * Use `create(ConformRowSchema)` to create a new message.
+ * Describes the message magus.insight.v1alpha1.ConformanceRow.
+ * Use `create(ConformanceRowSchema)` to create a new message.
  */
-export const ConformRowSchema: GenMessage<ConformRow> = /*@__PURE__*/
+export const ConformanceRowSchema: GenMessage<ConformanceRow> = /*@__PURE__*/
   messageDesc(file_magus_insight_v1alpha1_insight, 17);
 
 /**
- * ConformItem is one file, symbol, package or clone group past its row's value and not known.
+ * ConformanceItem is one file, symbol, package or clone group past its row's value and not known.
  * source is its path:line.
  *
- * @generated from message magus.insight.v1alpha1.ConformItem
+ * @generated from message magus.insight.v1alpha1.ConformanceItem
  */
-export type ConformItem = Message<"magus.insight.v1alpha1.ConformItem"> & {
+export type ConformanceItem = Message<"magus.insight.v1alpha1.ConformanceItem"> & {
   /**
    * @generated from field: string id = 1;
    */
@@ -953,19 +953,19 @@ export type ConformItem = Message<"magus.insight.v1alpha1.ConformItem"> & {
 };
 
 /**
- * Describes the message magus.insight.v1alpha1.ConformItem.
- * Use `create(ConformItemSchema)` to create a new message.
+ * Describes the message magus.insight.v1alpha1.ConformanceItem.
+ * Use `create(ConformanceItemSchema)` to create a new message.
  */
-export const ConformItemSchema: GenMessage<ConformItem> = /*@__PURE__*/
+export const ConformanceItemSchema: GenMessage<ConformanceItem> = /*@__PURE__*/
   messageDesc(file_magus_insight_v1alpha1_insight, 18);
 
 /**
- * ConformKnown is a list of items already past a metric's value and accepted for a reason.
- * In ConformOutput.stale it names the entries that no longer violate and should be deleted.
+ * ConformanceKnown is a list of items already past a metric's value and accepted for a reason.
+ * In ConformanceOutput.stale it names the entries that no longer violate and should be deleted.
  *
- * @generated from message magus.insight.v1alpha1.ConformKnown
+ * @generated from message magus.insight.v1alpha1.ConformanceKnown
  */
-export type ConformKnown = Message<"magus.insight.v1alpha1.ConformKnown"> & {
+export type ConformanceKnown = Message<"magus.insight.v1alpha1.ConformanceKnown"> & {
   /**
    * @generated from field: string metric = 1;
    */
@@ -983,10 +983,10 @@ export type ConformKnown = Message<"magus.insight.v1alpha1.ConformKnown"> & {
 };
 
 /**
- * Describes the message magus.insight.v1alpha1.ConformKnown.
- * Use `create(ConformKnownSchema)` to create a new message.
+ * Describes the message magus.insight.v1alpha1.ConformanceKnown.
+ * Use `create(ConformanceKnownSchema)` to create a new message.
  */
-export const ConformKnownSchema: GenMessage<ConformKnown> = /*@__PURE__*/
+export const ConformanceKnownSchema: GenMessage<ConformanceKnown> = /*@__PURE__*/
   messageDesc(file_magus_insight_v1alpha1_insight, 19);
 
 /**

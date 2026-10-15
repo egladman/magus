@@ -39,13 +39,13 @@ func (couplingCheck) run(x *namingIndex) []finding {
 	if len(only) == 0 {
 		return nil
 	}
-	o := x.change.Conform
+	o := x.change.Conformance
 	uses := map[string]sharedUse{}
 	for _, u := range x.g.sharedUses(o, only) {
 		uses[u.ID] = u
 	}
-	known := conformKnownItems(o.Ratchet.Known)[types.ConformModeKnobs]
-	var ci *conformIndex
+	known := conformanceKnownItems(o.Ratchet.Known)[types.ConformanceModeKnobs]
+	var ci *conformanceIndex
 	var out []finding
 	for _, s := range x.subjects {
 		item, ok := thresholdItemID(s)
@@ -68,7 +68,7 @@ func (couplingCheck) run(x *namingIndex) []finding {
 			continue
 		}
 		if ci == nil {
-			ci = newConformIndex(x.g, o)
+			ci = newConformanceIndex(x.g, o)
 		}
 		files := ci.callerFiles(s.id)
 		knobs := u.Knobs
@@ -94,9 +94,9 @@ func overSharedMessage(label string, u sharedUse) string {
 }
 
 // couplingDetails names every caller, then each value the rule read and where it came from.
-func couplingDetails(o types.ConformOptions, u sharedUse) []string {
+func couplingDetails(o types.ConformanceOptions, u sharedUse) []string {
 	details := []string{"callers: " + strings.Join(u.Callers, ", ")}
-	for _, m := range []types.ConformMetric{types.ConformSharedBody, types.ConformCallerSpread, types.ConformSharedReach} {
+	for _, m := range []types.ConformanceMetric{types.ConformanceSharedBody, types.ConformanceCallerSpread, types.ConformanceSharedReach} {
 		v, src := o.Effective(couplingKey(m))
 		details = append(details, fmt.Sprintf("%s source: %d, the %s", m, v, thresholdSource(src)))
 	}

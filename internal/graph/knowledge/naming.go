@@ -38,17 +38,17 @@ type ConformanceChange struct {
 	// Read returns a workspace file's text as the change leaves it. nil skips the one check that
 	// searches text, for a renamed symbol's former name.
 	Read func(path string) (string, bool)
-	// Conform is knowledge.conform as this run applies it. Its Gates are the silence gates and
+	// Conformance is knowledge.conformance as this run applies it. Its Gates are the silence gates and
 	// the report bar and cap, taken as given: a zero gate is zero, never a default. The
 	// threshold check judges subjects against its policy and is silent with no RatchetPath.
-	Conform types.ConformOptions
+	Conformance types.ConformanceOptions
 	// RatchetBase is the ratchet record at the diff's base, nil when the base has none. The
-	// threshold check compares it with Conform.Ratchet to see what the change moves.
-	RatchetBase *types.ConformRatchet
+	// threshold check compares it with Conformance.Ratchet to see what the change moves.
+	RatchetBase *types.ConformanceRatchet
 }
 
-// Conformance runs every conformance check over the change and returns what clears the bar,
-// keyed by the subject each finding is about. At most Conform.Gates.MaxFindings are returned
+// ConformanceChecks runs every conformance check over the change and returns what clears the bar,
+// keyed by the subject each finding is about. At most Conformance.Gates.MaxFindings are returned
 // across the change, strongest first, ties broken by check name, message and subject so two runs
 // over one graph agree byte for byte.
 //
@@ -56,7 +56,7 @@ type ConformanceChange struct {
 // index, never a rule. It reads only language-neutral facts (name, kind, scope, calls,
 // references, and the declaration shape a language's reader reports), reads a file only through
 // ConformanceChange.Read, and never fails: a symbol it cannot place is skipped.
-func (g *Graph) Conformance(c ConformanceChange) map[string][]types.Check {
+func (g *Graph) ConformanceChecks(c ConformanceChange) map[string][]types.Check {
 	if len(c.Subjects) == 0 {
 		return nil
 	}
@@ -154,7 +154,7 @@ func (d *namingDecl) file() string {
 type namingIndex struct {
 	g        *Graph
 	change   ConformanceChange
-	gates    types.ConformGates
+	gates    types.ConformanceGates
 	cohort   int
 	share    float64
 	byID     map[string]*namingDecl
@@ -167,7 +167,7 @@ type namingIndex struct {
 }
 
 func newNamingIndex(g *Graph, c ConformanceChange) *namingIndex {
-	gates := c.Conform.Gates
+	gates := c.Conformance.Gates
 	x := &namingIndex{
 		g:      g,
 		change: c,

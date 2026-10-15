@@ -162,24 +162,24 @@ func (v ModelTierSource) Values() []string { return modelTierSources.Strings() }
 func (v ModelTierSource) Valid() bool      { return modelTierSources.Valid(v) }
 func (v ModelTierSource) String() string   { return enum.String(v) }
 
-var conformMetrics = enum.Set[ConformMetric]{
-	ConformFileLines, ConformFuncLines, ConformTypeMethods, ConformFileSymbols, ConformDepFanout,
-	ConformCloneTokens, ConformExportScope, ConformCallSequence, ConformSharedBody, ConformSharedReach,
-	ConformCallerSpread, ConformModeKnobs, ConformAliasShare, ConformNameClash,
+var conformanceMetrics = enum.Set[ConformanceMetric]{
+	ConformanceFileLines, ConformanceFuncLines, ConformanceTypeMethods, ConformanceFileSymbols, ConformanceDepFanout,
+	ConformanceCloneTokens, ConformanceExportScope, ConformanceCallSequence, ConformanceSharedBody, ConformanceSharedReach,
+	ConformanceCallerSpread, ConformanceModeKnobs, ConformanceAliasShare, ConformanceNameClash,
 }
 
-func (v ConformMetric) Values() []string { return conformMetrics.Strings() }
-func (v ConformMetric) Valid() bool      { return conformMetrics.Valid(v) }
-func (v ConformMetric) String() string   { return enum.String(v) }
+func (v ConformanceMetric) Values() []string { return conformanceMetrics.Strings() }
+func (v ConformanceMetric) Valid() bool      { return conformanceMetrics.Valid(v) }
+func (v ConformanceMetric) String() string   { return enum.String(v) }
 
-var conformPopulations = enum.Set[ConformPopulation]{ConformPopSource, ConformPopMain, ConformPopTest}
+var conformancePopulations = enum.Set[ConformancePopulation]{ConformancePopSource, ConformancePopMain, ConformancePopTest}
 
-func (v ConformPopulation) Values() []string { return conformPopulations.Strings() }
-func (v ConformPopulation) Valid() bool      { return conformPopulations.Valid(v) }
-func (v ConformPopulation) String() string   { return enum.String(v) }
+func (v ConformancePopulation) Values() []string { return conformancePopulations.Strings() }
+func (v ConformancePopulation) Valid() bool      { return conformancePopulations.Valid(v) }
+func (v ConformancePopulation) String() string   { return enum.String(v) }
 
-var conformSources = enum.Set[ConformSource]{ConformFromRatchet, ConformFromAnchor}
+var conformanceSources = enum.Set[ConformanceSource]{ConformanceFromRatchet, ConformanceFromAnchor}
 
-func (v ConformSource) Values() []string { return conformSources.Strings() }
-func (v ConformSource) Valid() bool      { return conformSources.Valid(v) }
-func (v ConformSource) String() string   { return enum.String(v) }
+func (v ConformanceSource) Values() []string { return conformanceSources.Strings() }
+func (v ConformanceSource) Valid() bool      { return conformanceSources.Valid(v) }
+func (v ConformanceSource) String() string   { return enum.String(v) }

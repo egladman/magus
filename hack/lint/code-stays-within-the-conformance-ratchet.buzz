@@ -1,4 +1,4 @@
-namespace conformratchet;
+namespace conformanceratchet;
 
 import "assert";
 import "std";
@@ -10,7 +10,7 @@ import "magus/lint";
 // shape chosen on purpose.
 export final ENFORCED = ["file-lines", "clone-tokens", "export-scope", "dep-fanout"];
 
-// RATCHET is the committed record knowledge.conform.ratchet names in magus.yaml.
+// RATCHET is the committed record knowledge.conformance.ratchet names in magus.yaml.
 final RATCHET = "hack/policy/conformance.jsonl";
 
 // reads keys lint-rules on every Go source the lens measures, the ratchet and the policy
@@ -24,14 +24,14 @@ export fun reads() > [str] {
 // check fails each violation of an ENFORCED metric, each known entry that no longer
 // violates, and an index the lens could not vouch for, and prints the rest as advice.
 export fun check(files: [Path]) > [Finding] !> any {
-    final report = magus\conform();
+    final report = magus\conformance();
     foreach (line in advice(report)) {
         std\print(line);
     }
     return judge(report);
 }
 
-// judge is check's verdict over a magus\conform report.
+// judge is check's verdict over a magus\conformance report.
 export fun judge(report: {str: any}) > [Finding] !> any {
     final found = mut [<Finding>];
     final indexes: [any] = report["indexes"] ?? [<any>];
@@ -48,7 +48,7 @@ export fun judge(report: {str: any}) > [Finding] !> any {
     final answer: {str: any} = report["answer"] ?? {<str: any>};
     if (answer["verdict"] == "unknown") {
         final reason: str = answer["reason"] ?? "no reason given";
-        found.append(Finding{ path = ".", message = "magus\\conform answered unknown ({reason}), so nothing was judged",
+        found.append(Finding{ path = ".", message = "magus\\conformance answered unknown ({reason}), so nothing was judged",
             fix = "Rebuild the index with `magus graph build`, then rerun lint." });
     }
     if (found.len() > 0) {
@@ -148,7 +148,7 @@ fun violation(id: str, source: str, measure: double) > {str: any} {
     return {"id": id, "source": source, "measure": measure};
 }
 
-fun conformRow(metric: str, violations: [any]) > {str: any} {
+fun conformanceRow(metric: str, violations: [any]) > {str: any} {
     return {"key": {"metric": metric, "population": "source"}, "value": 938.0, "source": "ratchet",
         "violations": violations};
 }
@@ -159,8 +159,8 @@ fun report(indexes: [any], rows: [any], stale: [any]) > {str: any} {
 
 test "a violation of an enforced metric fails at its line and an advice metric does not" {
     final rows: [any] = [
-        conformRow("file-lines", violations: [violation("file:vcs/git.go", source: "vcs/git.go:1", measure: 4174.0)]),
-        conformRow("func-lines", violations: [violation("symbol:x/Judge().", source: "internal/guard/guard.go:654", measure: 771.0)]),
+        conformanceRow("file-lines", violations: [violation("file:vcs/git.go", source: "vcs/git.go:1", measure: 4174.0)]),
+        conformanceRow("func-lines", violations: [violation("symbol:x/Judge().", source: "internal/guard/guard.go:654", measure: 771.0)]),
     ];
     final r = report([fresh()], rows: rows, stale: [<any>]);
     final got = judge(r);

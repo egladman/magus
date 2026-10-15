@@ -32,10 +32,10 @@ func TestAllChecksAreNamedAndDocumented(t *testing.T) {
 	}
 }
 
-func TestConformRatchetIsRegisteredOnce(t *testing.T) {
+func TestConformanceRatchetIsRegisteredOnce(t *testing.T) {
 	var n int
 	for _, def := range allChecks {
-		if def.Name == "conform-ratchet" {
+		if def.Name == "conformance-ratchet" {
 			n++
 			assert.True(t, def.NeedsWorkspace)
 			assert.Equal(t, types.EvidenceMeasured, def.Evidence)

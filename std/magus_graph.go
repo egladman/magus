@@ -256,13 +256,13 @@ func MagusImportGraph(ctx context.Context) (types.ImportGraph, error) {
 
 // precedentWorkspace is the part of *magus.Magus magus\precedents and magus\symbols read beside
 // the graph: a freshen of every index, the freshness verdict `magus status` prints, which
-// files are declared outputs, and knowledge.conform, whose gates and dep-fanout ceilings the
+// files are declared outputs, and knowledge.conformance, whose gates and dep-fanout ceilings the
 // precedents are judged by.
 type precedentWorkspace interface {
 	FreshenSymbolIndexes(ctx context.Context) error
 	SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolIndexStatus
 	ClassifyFiles(ctx context.Context, paths []string) ([]types.FileEntry, error)
-	ConformOptions() (types.ConformOptions, error)
+	ConformanceOptions() (types.ConformanceOptions, error)
 }
 
 // indexedGraph is what a member judging the symbol indexes reads: the workspace, the graph
@@ -339,7 +339,7 @@ func reportMap(report any) (map[string]any, error) {
 }
 
 // MagusPrecedents backs magus\precedents: the precedents the merged symbol indexes establish
-// under knowledge.conform's gates and dep-fanout ceilings, and each declared index's
+// under knowledge.conformance's gates and dep-fanout ceilings, and each declared index's
 // freshness, judged as judgedGraph describes. Generated files are never counted. The answer
 // is a PrecedentReport as a map.
 func MagusPrecedents(ctx context.Context) (map[string]any, error) {
@@ -347,45 +347,45 @@ func MagusPrecedents(ctx context.Context) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	conform, err := ig.ws.ConformOptions()
+	conformance, err := ig.ws.ConformanceOptions()
 	if err != nil {
 		return nil, fmt.Errorf("magus\\precedents: %w", err)
 	}
-	conform.Generated = ig.generated
+	conformance.Generated = ig.generated
 	return reportMap(types.PrecedentReport{
-		Precedents: ig.kg.Precedents(knowledge.PrecedentOptions{Generated: ig.generated, Conform: conform}),
+		Precedents: ig.kg.Precedents(knowledge.PrecedentOptions{Generated: ig.generated, Conformance: conformance}),
 		Indexes:    ig.indexes,
 	})
 }
 
-// conformReport is magus\conform's answer: the lens beside the freshness of the indexes it
+// conformanceReport is magus\conformance's answer: the lens beside the freshness of the indexes it
 // was drawn from, flattened so a script reads both as one map.
-type conformReport struct {
-	types.ConformOutput
+type conformanceReport struct {
+	types.ConformanceOutput
 	Indexes []types.SymbolIndexStatus `json:"indexes"`
 }
 
-// MagusConform backs magus\conform: the conform lens over the merged symbol indexes under
-// knowledge.conform, and each declared index's freshness, judged as judgedGraph describes.
+// MagusConformance backs magus\conformance: the conformance lens over the merged symbol indexes under
+// knowledge.conformance, and each declared index's freshness, judged as judgedGraph describes.
 // Generated files are never counted. It reports and writes nothing: a person commits a
 // proposed value. A ratchet record that is missing, malformed or looser than its anchor is an
-// error. The answer is a ConformOutput with an indexes list, as a map.
-func MagusConform(ctx context.Context) (map[string]any, error) {
-	ig, err := judgedGraph(ctx, "conform")
+// error. The answer is a ConformanceOutput with an indexes list, as a map.
+func MagusConformance(ctx context.Context) (map[string]any, error) {
+	ig, err := judgedGraph(ctx, "conformance")
 	if err != nil {
 		return nil, err
 	}
-	opts, err := ig.ws.ConformOptions()
+	opts, err := ig.ws.ConformanceOptions()
 	if err != nil {
-		return nil, fmt.Errorf("magus\\conform: %w", err)
+		return nil, fmt.Errorf("magus\\conformance: %w", err)
 	}
 	opts.Generated = ig.generated
 	if err := opts.Validate(); err != nil {
-		return nil, fmt.Errorf("magus\\conform: %w", err)
+		return nil, fmt.Errorf("magus\\conformance: %w", err)
 	}
-	out := ig.kg.Conform(opts)
-	out.Definition = types.ConformDefinition
-	return reportMap(conformReport{ConformOutput: out, Indexes: ig.indexes})
+	out := ig.kg.Conformance(opts)
+	out.Definition = types.ConformanceDefinition
+	return reportMap(conformanceReport{ConformanceOutput: out, Indexes: ig.indexes})
 }
 
 // MagusSymbols backs magus\symbols: every declaration in the merged symbol indexes with its

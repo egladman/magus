@@ -1821,18 +1821,18 @@ func (m *Magus) conformance(ctx context.Context, out *types.Diff, byPath map[str
 		b, err := os.ReadFile(filepath.Join(m.ws.Root, filepath.FromSlash(path)))
 		return string(b), err == nil
 	}
-	conform, base, note, err := diffConform(m.cfg.Knowledge.Conform.Options(), cfg, in.patch, generated, in.read)
+	conformance, base, note, err := diffConformance(m.cfg.Knowledge.Conformance.Options(), cfg, in.patch, generated, in.read)
 	if err != nil {
-		fail("knowledge.conform could not be read", err)
+		fail("knowledge.conformance could not be read", err)
 		return
 	}
-	if patchErr != nil && conform.RatchetPath != "" {
-		base, note = nil, "conform: the patch could not be read, so what the change did to "+conform.RatchetPath+" is unknown"
+	if patchErr != nil && conformance.RatchetPath != "" {
+		base, note = nil, "conformance: the patch could not be read, so what the change did to "+conformance.RatchetPath+" is unknown"
 	}
 	if note != "" {
 		out.Notes = append(out.Notes, note)
 	}
-	in.conform, in.ratchetBase = conform, base
+	in.conformance, in.ratchetBase = conformance, base
 	attachConformance(byPath, graph, in)
 }
 

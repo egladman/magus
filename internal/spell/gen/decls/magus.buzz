@@ -608,20 +608,20 @@ export object Duplication {
     answer: KnowledgeAnswer = KnowledgeAnswer{},
 }
 
-export object ConformKey {
+export object ConformanceKey {
     metric: str = "",
     population: str = "",
     scope: str = "",
 }
 
-export object ConformItem {
+export object ConformanceItem {
     id: str = "",
     source: str = "",
     measure: int = 0,
 }
 
-export object ConformRow {
-    key: ConformKey = ConformKey{},
+export object ConformanceRow {
+    key: ConformanceKey = ConformanceKey{},
     n: int = 0,
     p50: int = 0,
     p90: int = 0,
@@ -633,19 +633,19 @@ export object ConformRow {
     propose: int = 0,
     known: int = 0,
     source: str = "",
-    violations: [ConformItem] = [],
+    violations: [ConformanceItem] = [],
 }
 
-export object ConformKnown {
+export object ConformanceKnown {
     metric: str = "",
     items: [str] = [],
     reason: str = "",
 }
 
-export object Conform {
+export object Conformance {
     definition: str = "",
-    rows: [ConformRow] = [],
-    stale: [ConformKnown] = [],
+    rows: [ConformanceRow] = [],
+    stale: [ConformanceKnown] = [],
     excluded: int = 0,
     answer: KnowledgeAnswer = KnowledgeAnswer{},
 }
@@ -684,7 +684,7 @@ export object InsightReport {
     volatility: Volatility = Volatility{},
     unreferenced: Unreferenced = Unreferenced{},
     duplication: Duplication = Duplication{},
-    conform: Conform = Conform{},
+    conformance: Conformance = Conformance{},
     modelTiers: ModelTierOutput = ModelTierOutput{},
 }
 
@@ -1792,7 +1792,7 @@ export extern fun bustCache(project_path: str = "") > void !> any;
 export extern fun canonicalName(name: str) > str;
 export extern fun clean(args: [str], opts: {str: any} = {<str: any>}) > CleanReport !> any;
 export extern fun cmd(sub: str, args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
-export extern fun conform() > {str: any} !> any;
+export extern fun conformance() > {str: any} !> any;
 export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
 export extern fun diff(opts: {str: any} = {<str: any>}) > Diff !> any;
 export extern fun dir(path: str) > Dir !> any;

@@ -55,9 +55,9 @@ Source: [insight.proto](https://github.com/egladman/magus/blob/main/proto/magus/
 
 Used by: [GetInsight (response)](insight.md#getinsight).
 
-### ConformItem
+### ConformanceItem
 
-ConformItem is one file, symbol, package or clone group past its row's value and not known. source is its path:line.
+ConformanceItem is one file, symbol, package or clone group past its row's value and not known. source is its path:line.
 
 Source: [insight.proto](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto).
 
@@ -69,9 +69,9 @@ Source: [insight.proto](https://github.com/egladman/magus/blob/main/proto/magus/
 
 Used by: [GetInsight (response)](insight.md#getinsight).
 
-### ConformKey
+### ConformanceKey
 
-ConformKey names one threshold: metric (file-lines, func-lines, type-methods, file-symbols, dep-fanout, clone-tokens or export-scope), population (source, main or test) and, for dep-fanout, the layer or package directory it covers.
+ConformanceKey names one threshold: metric (file-lines, func-lines, type-methods, file-symbols, dep-fanout, clone-tokens or export-scope), population (source, main or test) and, for dep-fanout, the layer or package directory it covers.
 
 Source: [insight.proto](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto).
 
@@ -83,9 +83,9 @@ Source: [insight.proto](https://github.com/egladman/magus/blob/main/proto/magus/
 
 Used by: [GetInsight (response)](insight.md#getinsight).
 
-### ConformKnown
+### ConformanceKnown
 
-ConformKnown is a list of items already past a metric's value and accepted for a reason. In ConformOutput.stale it names the entries that no longer violate and should be deleted.
+ConformanceKnown is a list of items already past a metric's value and accepted for a reason. In ConformanceOutput.stale it names the entries that no longer violate and should be deleted.
 
 Source: [insight.proto](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto).
 
@@ -97,43 +97,43 @@ Source: [insight.proto](https://github.com/egladman/magus/blob/main/proto/magus/
 
 Used by: [GetInsight (response)](insight.md#getinsight).
 
-### ConformOutput
+### ConformanceOutput
 
-ConformOutput is the code-shape lens: one row per metric and population, judged against the value a check enforces. It reads the symbol graph, not git. It reports and proposes; a person commits a proposed value to the ratchet record, and nothing here sets one. answer is unknown, never a pass, when a symbol index is missing. excluded counts the files the configured exclusions hid, so a widened exclusion stays visible.
+ConformanceOutput is the code-shape lens: one row per metric and population, judged against the value a check enforces. It reads the symbol graph, not git. It reports and proposes; a person commits a proposed value to the ratchet record, and nothing here sets one. answer is unknown, never a pass, when a symbol index is missing. excluded counts the files the configured exclusions hid, so a widened exclusion stays visible.
 
 Source: [insight.proto](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto).
 
 | Field        | Type                                           | # | Description |
 | ------------ | ---------------------------------------------- | - | ----------- |
 | `definition` | string                                         | 1 |             |
-| `rows`       | [repeated ConformRow](#conformrow)             | 2 |             |
-| `stale`      | [repeated ConformKnown](#conformknown)         | 3 |             |
+| `rows`       | [repeated ConformanceRow](#conformancerow)     | 2 |             |
+| `stale`      | [repeated ConformanceKnown](#conformanceknown) | 3 |             |
 | `excluded`   | int32                                          | 4 |             |
 | `answer`     | [Answer](../../graph/v1alpha1/graph.md#answer) | 5 |             |
 
 Used by: [GetInsight (response)](insight.md#getinsight).
 
-### ConformRow
+### ConformanceRow
 
-ConformRow is one key's distribution and verdict. live is the configured percentile today; value and source (ratchet or anchor) are what a check enforces, and anchor is the shipped bound no committed value may exceed. propose is zero, or a tighter value to commit; it is never looser than value. known counts the accepted items past value, and violations are the rest.
+ConformanceRow is one key's distribution and verdict. live is the configured percentile today; value and source (ratchet or anchor) are what a check enforces, and anchor is the shipped bound no committed value may exceed. propose is zero, or a tighter value to commit; it is never looser than value. known counts the accepted items past value, and violations are the rest.
 
 Source: [insight.proto](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto).
 
-| Field        | Type                                 | #  | Description |
-| ------------ | ------------------------------------ | -- | ----------- |
-| `key`        | [ConformKey](#conformkey)            | 1  |             |
-| `n`          | int32                                | 2  |             |
-| `p50`        | int32                                | 3  |             |
-| `p90`        | int32                                | 4  |             |
-| `p95`        | int32                                | 5  |             |
-| `p99`        | int32                                | 6  |             |
-| `live`       | int32                                | 7  |             |
-| `value`      | int32                                | 8  |             |
-| `anchor`     | int32                                | 9  |             |
-| `propose`    | int32                                | 10 |             |
-| `known`      | int32                                | 11 |             |
-| `source`     | string                               | 12 |             |
-| `violations` | [repeated ConformItem](#conformitem) | 13 |             |
+| Field        | Type                                         | #  | Description |
+| ------------ | -------------------------------------------- | -- | ----------- |
+| `key`        | [ConformanceKey](#conformancekey)            | 1  |             |
+| `n`          | int32                                        | 2  |             |
+| `p50`        | int32                                        | 3  |             |
+| `p90`        | int32                                        | 4  |             |
+| `p95`        | int32                                        | 5  |             |
+| `p99`        | int32                                        | 6  |             |
+| `live`       | int32                                        | 7  |             |
+| `value`      | int32                                        | 8  |             |
+| `anchor`     | int32                                        | 9  |             |
+| `propose`    | int32                                        | 10 |             |
+| `known`      | int32                                        | 11 |             |
+| `source`     | string                                       | 12 |             |
+| `violations` | [repeated ConformanceItem](#conformanceitem) | 13 |             |
 
 Used by: [GetInsight (response)](insight.md#getinsight).
 
@@ -181,19 +181,19 @@ Used by: [GetInsight (response)](insight.md#getinsight).
 
 ### Insight
 
-Insight bundles the six lenses. volatility is absent (not an empty report) when the workspace has no run-outcome history to score - the distinction matters to a reader, which renders "no runs recorded yet" rather than "no volatile targets". model\_tiers is absent for the same reason when no job outcome was ever recorded. conform is absent when the server holds no workspace to read; a workspace without a symbol index sends it with an unknown answer.
+Insight bundles the six lenses. volatility is absent (not an empty report) when the workspace has no run-outcome history to score - the distinction matters to a reader, which renders "no runs recorded yet" rather than "no volatile targets". model\_tiers is absent for the same reason when no job outcome was ever recorded. conformance is absent when the server holds no workspace to read; a workspace without a symbol index sends it with an unknown answer.
 
 Source: [insight.proto](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto).
 
-| Field         | Type                                  | # | Description |
-| ------------- | ------------------------------------- | - | ----------- |
-| `hotspots`    | [HotspotOutput](#hotspotoutput)       | 1 |             |
-| `affinity`    | [AffinityOutput](#affinityoutput)     | 2 |             |
-| `ownership`   | [OwnershipOutput](#ownershipoutput)   | 3 |             |
-| `trend`       | [TrendOutput](#trendoutput)           | 4 |             |
-| `volatility`  | [VolatilityReport](#volatilityreport) | 5 |             |
-| `model_tiers` | [ModelTierOutput](#modeltieroutput)   | 6 |             |
-| `conform`     | [ConformOutput](#conformoutput)       | 7 |             |
+| Field         | Type                                    | # | Description |
+| ------------- | --------------------------------------- | - | ----------- |
+| `hotspots`    | [HotspotOutput](#hotspotoutput)         | 1 |             |
+| `affinity`    | [AffinityOutput](#affinityoutput)       | 2 |             |
+| `ownership`   | [OwnershipOutput](#ownershipoutput)     | 3 |             |
+| `trend`       | [TrendOutput](#trendoutput)             | 4 |             |
+| `volatility`  | [VolatilityReport](#volatilityreport)   | 5 |             |
+| `model_tiers` | [ModelTierOutput](#modeltieroutput)     | 6 |             |
+| `conformance` | [ConformanceOutput](#conformanceoutput) | 7 |             |
 
 Used by: [GetInsight (response)](insight.md#getinsight).
 

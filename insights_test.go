@@ -161,11 +161,11 @@ func TestDuplicationHistoryCountsFilesChangingTogether(t *testing.T) {
 	assert.Nil(t, duplicationHistory(sameFile, scan))
 }
 
-// TestConformLensWithoutAnIndexIsUnknownAndMisconfigurationIsAnError pins both ends of the
+// TestConformanceLensWithoutAnIndexIsUnknownAndMisconfigurationIsAnError pins both ends of the
 // lens: a workspace with no symbol index answers unknown with the lens's definition, never an
 // empty pass, and a ratchet record the configuration names but the tree lacks is an error
 // that names it, never a lens that quietly falls back to the anchors.
-func TestConformLensWithoutAnIndexIsUnknownAndMisconfigurationIsAnError(t *testing.T) {
+func TestConformanceLensWithoutAnIndexIsUnknownAndMisconfigurationIsAnError(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("// root\n"), 0o644))
 	reg := NewWorkspaceRegistry()
@@ -177,16 +177,16 @@ func TestConformLensWithoutAnIndexIsUnknownAndMisconfigurationIsAnError(t *testi
 		return ws.(*Magus)
 	}
 
-	out, err := open(config.Defaults()).Conform(t.Context())
+	out, err := open(config.Defaults()).Conformance(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, types.ConformDefinition, out.Definition)
+	assert.Equal(t, types.ConformanceDefinition, out.Definition)
 	wantAnswer := out.Answer
 	wantAnswer.Verdict, wantAnswer.Reason = types.VerdictUnknown, types.ReasonSymbolIndexMissing
 	assert.Equal(t, wantAnswer, out.Answer, "no index means unknown, never a pass")
 
 	cfg := config.Defaults()
-	cfg.Knowledge.Conform.Ratchet = "hack/policy/conformance.jsonl"
-	_, err = open(cfg).Conform(t.Context())
+	cfg.Knowledge.Conformance.Ratchet = "hack/policy/conformance.jsonl"
+	_, err = open(cfg).Conformance(t.Context())
 	assert.ErrorContains(t, err, "hack/policy/conformance.jsonl")
 }
 

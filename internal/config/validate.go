@@ -90,7 +90,7 @@ func Validate(cfg Config) error {
 	failures = append(failures, spellImportFailures(cfg.Spells.Imports)...)
 	failures = append(failures, cacheWriteFailures(cfg.Cache)...)
 	failures = append(failures, mcpHTTPFailures(cfg.MCP)...)
-	failures = append(failures, conformFailures(cfg.Knowledge.Conform)...)
+	failures = append(failures, conformanceFailures(cfg.Knowledge.Conformance)...)
 	if !cfg.Broker.Valid() {
 		failures = append(failures, FieldFailure{Field: "broker", Tag: "oneof",
 			Param: strings.Join(cfg.Broker.Values(), " "), Value: string(cfg.Broker)})
@@ -181,14 +181,14 @@ func mcpHTTPFailures(m MCP) []FieldFailure {
 	return []FieldFailure{{Field: "mcp.http", Tag: "mcp_enabled_required", Value: "true"}}
 }
 
-// conformFailures checks what no tag can: the ratchet path, the exclusions, and the
-// metric, population and scope keys of knowledge.conform.checks. An unknown key is named,
+// conformanceFailures checks what no tag can: the ratchet path, the exclusions, and the
+// metric, population and scope keys of knowledge.conformance.checks. An unknown key is named,
 // since a check that is never read would pass without anyone noticing.
-func conformFailures(c ConformConfig) []FieldFailure {
-	const root = "knowledge.conform"
+func conformanceFailures(c ConformanceConfig) []FieldFailure {
+	const root = "knowledge.conformance"
 	var out []FieldFailure
 	if c.Ratchet != "" && !filepath.IsLocal(filepath.FromSlash(c.Ratchet)) {
-		out = append(out, FieldFailure{Field: root + ".ratchet", Tag: "conform_ratchet_path", Value: c.Ratchet})
+		out = append(out, FieldFailure{Field: root + ".ratchet", Tag: "conformance_ratchet_path", Value: c.Ratchet})
 	}
 	for i, pattern := range c.Exclude {
 		field := fmt.Sprintf("%s.exclude[%d]", root, i)
@@ -196,34 +196,34 @@ func conformFailures(c ConformConfig) []FieldFailure {
 		case pattern == "":
 			out = append(out, FieldFailure{Field: field, Tag: "required"})
 		case !doublestar.ValidatePattern(pattern):
-			out = append(out, FieldFailure{Field: field, Tag: "conform_exclude_glob", Value: pattern})
+			out = append(out, FieldFailure{Field: field, Tag: "conformance_exclude_glob", Value: pattern})
 		}
 	}
 	for _, metric := range slices.Sorted(maps.Keys(c.Checks)) {
 		field := root + ".checks." + string(metric)
 		if !metric.Valid() {
-			out = append(out, FieldFailure{Field: field, Tag: "conform_metric", Param: strings.Join(metric.Values(), " "), Value: string(metric)})
+			out = append(out, FieldFailure{Field: field, Tag: "conformance_metric", Param: strings.Join(metric.Values(), " "), Value: string(metric)})
 			continue
 		}
 		pops := c.Checks[metric]
 		for _, pop := range slices.Sorted(maps.Keys(pops)) {
 			field := field + "." + string(pop)
 			if !pop.Valid() {
-				out = append(out, FieldFailure{Field: field, Tag: "conform_population", Param: strings.Join(pop.Values(), " "), Value: string(pop)})
+				out = append(out, FieldFailure{Field: field, Tag: "conformance_population", Param: strings.Join(pop.Values(), " "), Value: string(pop)})
 				continue
 			}
-			out = append(out, conformLimitFailures(field, metric, pops[pop])...)
+			out = append(out, conformanceLimitFailures(field, metric, pops[pop])...)
 		}
 	}
 	return out
 }
 
-func conformLimitFailures(field string, metric types.ConformMetric, l ConformLimitConfig) []FieldFailure {
+func conformanceLimitFailures(field string, metric types.ConformanceMetric, l ConformanceLimitConfig) []FieldFailure {
 	var out []FieldFailure
 	// mode-knobs and export-scope are lists, not distributions: anchor 0 names every function
 	// shared past the coupling rule or every export nothing outside its package uses, and
 	// percentile 0 measures no proposal.
-	list := metric == types.ConformModeKnobs || metric == types.ConformExportScope
+	list := metric == types.ConformanceModeKnobs || metric == types.ConformanceExportScope
 	switch {
 	case list && l.Percentile < 0:
 		out = append(out, FieldFailure{Field: field + ".percentile", Tag: "gte", Param: "0", Value: fmt.Sprint(l.Percentile)})
@@ -242,10 +242,10 @@ func conformLimitFailures(field string, metric types.ConformMetric, l ConformLim
 	for _, scope := range slices.Sorted(maps.Keys(l.Scopes)) {
 		scoped := field + ".scopes." + scope
 		switch {
-		case metric != types.ConformDepFanout:
-			out = append(out, FieldFailure{Field: scoped, Tag: "conform_scope_metric", Param: string(types.ConformDepFanout), Value: scope})
+		case metric != types.ConformanceDepFanout:
+			out = append(out, FieldFailure{Field: scoped, Tag: "conformance_scope_metric", Param: string(types.ConformanceDepFanout), Value: scope})
 		case !filepath.IsLocal(filepath.FromSlash(scope)) || path.Clean(scope) != scope:
-			out = append(out, FieldFailure{Field: scoped, Tag: "conform_scope_path", Value: scope})
+			out = append(out, FieldFailure{Field: scoped, Tag: "conformance_scope_path", Value: scope})
 		}
 		if l.Scopes[scope] < 1 {
 			out = append(out, FieldFailure{Field: scoped, Tag: "gte", Param: "1", Value: fmt.Sprint(l.Scopes[scope])})
@@ -300,17 +300,17 @@ func humanReason(f FieldFailure) string {
 		return fmt.Sprintf("must be > %s (got %s)", f.Param, f.Value)
 	case "lt":
 		return fmt.Sprintf("must be < %s (got %s)", f.Param, f.Value)
-	case "conform_ratchet_path":
+	case "conformance_ratchet_path":
 		return fmt.Sprintf("must be a file inside the workspace, relative to magus.yaml (got %q)", f.Value)
-	case "conform_exclude_glob":
+	case "conformance_exclude_glob":
 		return fmt.Sprintf("is not a valid glob, so it would exclude nothing (got %q)", f.Value)
-	case "conform_metric":
+	case "conformance_metric":
 		return fmt.Sprintf("is not a metric magus measures; want one of: %s (got %q)", strings.Join(strings.Fields(f.Param), ", "), f.Value)
-	case "conform_population":
+	case "conformance_population":
 		return fmt.Sprintf("is not a population magus measures; want one of: %s (got %q)", strings.Join(strings.Fields(f.Param), ", "), f.Value)
-	case "conform_scope_metric":
+	case "conformance_scope_metric":
 		return fmt.Sprintf("a scope applies to %s only (got %q)", f.Param, f.Value)
-	case "conform_scope_path":
+	case "conformance_scope_path":
 		return fmt.Sprintf("must be a clean directory inside the workspace, relative to magus.yaml (got %q)", f.Value)
 	case "shard_count":
 		return fmt.Sprintf("must be -1 or in [1, 256] (got %s)", f.Value)

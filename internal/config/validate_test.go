@@ -12,7 +12,7 @@ import (
 
 func TestValidate_ValidMinimal(t *testing.T) {
 	// ci.max_shards must be -1 (unlimited) or in [1,256]; use -1 for a minimal valid config.
-	// The duplication and conform thresholds have no valid zero, so they carry their defaults.
+	// The duplication and conformance thresholds have no valid zero, so they carry their defaults.
 	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge}
 	require.NoError(t, Validate(cfg), "Validate(minimal valid Config)")
 }
@@ -237,97 +237,97 @@ func TestSpellsConfigRegistry(t *testing.T) {
 	assert.False(t, ok)
 }
 
-// A knowledge.conform value magus could not honor fails at load: a check keyed by a
+// A knowledge.conformance value magus could not honor fails at load: a check keyed by a
 // metric nothing measures would pass without anyone noticing.
-func TestValidate_Conform(t *testing.T) {
+func TestValidate_Conformance(t *testing.T) {
 	valid := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge}
 	require.NoError(t, Validate(valid))
 
 	for name, tc := range map[string]struct {
-		edit func(*ConformConfig)
+		edit func(*ConformanceConfig)
 		want FieldFailure
 	}{
 		"ratchet outside the workspace": {
-			edit: func(c *ConformConfig) { c.Ratchet = "../conform.json" },
-			want: FieldFailure{Field: "knowledge.conform.ratchet", Tag: "conform_ratchet_path", Value: "../conform.json"},
+			edit: func(c *ConformanceConfig) { c.Ratchet = "../conformance.json" },
+			want: FieldFailure{Field: "knowledge.conformance.ratchet", Tag: "conformance_ratchet_path", Value: "../conformance.json"},
 		},
 		"absolute ratchet": {
-			edit: func(c *ConformConfig) { c.Ratchet = "/etc/conform.json" },
-			want: FieldFailure{Field: "knowledge.conform.ratchet", Tag: "conform_ratchet_path", Value: "/etc/conform.json"},
+			edit: func(c *ConformanceConfig) { c.Ratchet = "/etc/conformance.json" },
+			want: FieldFailure{Field: "knowledge.conformance.ratchet", Tag: "conformance_ratchet_path", Value: "/etc/conformance.json"},
 		},
 		"empty exclude pattern": {
-			edit: func(c *ConformConfig) { c.Exclude = []string{""} },
-			want: FieldFailure{Field: "knowledge.conform.exclude[0]", Tag: "required"},
+			edit: func(c *ConformanceConfig) { c.Exclude = []string{""} },
+			want: FieldFailure{Field: "knowledge.conformance.exclude[0]", Tag: "required"},
 		},
 		"malformed exclude glob": {
-			edit: func(c *ConformConfig) { c.Exclude = []string{"vendor/**", "third/[a-"} },
-			want: FieldFailure{Field: "knowledge.conform.exclude[1]", Tag: "conform_exclude_glob", Value: "third/[a-"},
+			edit: func(c *ConformanceConfig) { c.Exclude = []string{"vendor/**", "third/[a-"} },
+			want: FieldFailure{Field: "knowledge.conformance.exclude[1]", Tag: "conformance_exclude_glob", Value: "third/[a-"},
 		},
 		"unknown metric": {
-			edit: func(c *ConformConfig) {
-				c.Checks["file-line"] = map[types.ConformPopulation]ConformLimitConfig{types.ConformPopSource: {Percentile: 95, Anchor: 1}}
+			edit: func(c *ConformanceConfig) {
+				c.Checks["file-line"] = map[types.ConformancePopulation]ConformanceLimitConfig{types.ConformancePopSource: {Percentile: 95, Anchor: 1}}
 			},
-			want: FieldFailure{Field: "knowledge.conform.checks.file-line", Tag: "conform_metric", Param: strings.Join(types.ConformFileLines.Values(), " "), Value: "file-line"},
+			want: FieldFailure{Field: "knowledge.conformance.checks.file-line", Tag: "conformance_metric", Param: strings.Join(types.ConformanceFileLines.Values(), " "), Value: "file-line"},
 		},
 		"unknown population": {
-			edit: func(c *ConformConfig) {
-				c.Checks[types.ConformFileLines]["tests"] = ConformLimitConfig{Percentile: 95, Anchor: 1}
+			edit: func(c *ConformanceConfig) {
+				c.Checks[types.ConformanceFileLines]["tests"] = ConformanceLimitConfig{Percentile: 95, Anchor: 1}
 			},
-			want: FieldFailure{Field: "knowledge.conform.checks.file-lines.tests", Tag: "conform_population", Param: strings.Join(types.ConformPopSource.Values(), " "), Value: "tests"},
+			want: FieldFailure{Field: "knowledge.conformance.checks.file-lines.tests", Tag: "conformance_population", Param: strings.Join(types.ConformancePopSource.Values(), " "), Value: "tests"},
 		},
 		"zero percentile": {
-			edit: func(c *ConformConfig) {
-				c.Checks[types.ConformFileLines][types.ConformPopSource] = ConformLimitConfig{Anchor: 2200}
+			edit: func(c *ConformanceConfig) {
+				c.Checks[types.ConformanceFileLines][types.ConformancePopSource] = ConformanceLimitConfig{Anchor: 2200}
 			},
-			want: FieldFailure{Field: "knowledge.conform.checks.file-lines.source.percentile", Tag: "gt", Param: "0", Value: "0"},
+			want: FieldFailure{Field: "knowledge.conformance.checks.file-lines.source.percentile", Tag: "gt", Param: "0", Value: "0"},
 		},
 		"percentile past 100": {
-			edit: func(c *ConformConfig) {
-				c.Checks[types.ConformFileLines][types.ConformPopSource] = ConformLimitConfig{Percentile: 101, Anchor: 2200}
+			edit: func(c *ConformanceConfig) {
+				c.Checks[types.ConformanceFileLines][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 101, Anchor: 2200}
 			},
-			want: FieldFailure{Field: "knowledge.conform.checks.file-lines.source.percentile", Tag: "lte", Param: "100", Value: "101"},
+			want: FieldFailure{Field: "knowledge.conformance.checks.file-lines.source.percentile", Tag: "lte", Param: "100", Value: "101"},
 		},
 		"zero anchor": {
-			edit: func(c *ConformConfig) {
-				c.Checks[types.ConformFileLines][types.ConformPopSource] = ConformLimitConfig{Percentile: 95}
+			edit: func(c *ConformanceConfig) {
+				c.Checks[types.ConformanceFileLines][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 95}
 			},
-			want: FieldFailure{Field: "knowledge.conform.checks.file-lines.source.anchor", Tag: "gte", Param: "1", Value: "0"},
+			want: FieldFailure{Field: "knowledge.conformance.checks.file-lines.source.anchor", Tag: "gte", Param: "1", Value: "0"},
 		},
 		"mode-knobs below a zero anchor": {
-			edit: func(c *ConformConfig) {
-				c.Checks[types.ConformModeKnobs][types.ConformPopSource] = ConformLimitConfig{Anchor: -1}
+			edit: func(c *ConformanceConfig) {
+				c.Checks[types.ConformanceModeKnobs][types.ConformancePopSource] = ConformanceLimitConfig{Anchor: -1}
 			},
-			want: FieldFailure{Field: "knowledge.conform.checks.mode-knobs.source.anchor", Tag: "gte", Param: "0", Value: "-1"},
+			want: FieldFailure{Field: "knowledge.conformance.checks.mode-knobs.source.anchor", Tag: "gte", Param: "0", Value: "-1"},
 		},
 		"export-scope below a zero anchor": {
-			edit: func(c *ConformConfig) {
-				c.Checks[types.ConformExportScope] = map[types.ConformPopulation]ConformLimitConfig{types.ConformPopMain: {Anchor: -1}}
+			edit: func(c *ConformanceConfig) {
+				c.Checks[types.ConformanceExportScope] = map[types.ConformancePopulation]ConformanceLimitConfig{types.ConformancePopMain: {Anchor: -1}}
 			},
-			want: FieldFailure{Field: "knowledge.conform.checks.export-scope.main.anchor", Tag: "gte", Param: "0", Value: "-1"},
+			want: FieldFailure{Field: "knowledge.conformance.checks.export-scope.main.anchor", Tag: "gte", Param: "0", Value: "-1"},
 		},
 		"scope on a metric without scopes": {
-			edit: func(c *ConformConfig) {
-				c.Checks[types.ConformFileLines][types.ConformPopSource] = ConformLimitConfig{Percentile: 95, Anchor: 2200, Scopes: map[string]int{"cmd": 3000}}
+			edit: func(c *ConformanceConfig) {
+				c.Checks[types.ConformanceFileLines][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 95, Anchor: 2200, Scopes: map[string]int{"cmd": 3000}}
 			},
-			want: FieldFailure{Field: "knowledge.conform.checks.file-lines.source.scopes.cmd", Tag: "conform_scope_metric", Param: "dep-fanout", Value: "cmd"},
+			want: FieldFailure{Field: "knowledge.conformance.checks.file-lines.source.scopes.cmd", Tag: "conformance_scope_metric", Param: "dep-fanout", Value: "cmd"},
 		},
 		"scope outside the workspace": {
-			edit: func(c *ConformConfig) {
-				c.Checks[types.ConformDepFanout][types.ConformPopSource] = ConformLimitConfig{Percentile: 95, Anchor: 62, Scopes: map[string]int{"../x": 89}}
+			edit: func(c *ConformanceConfig) {
+				c.Checks[types.ConformanceDepFanout][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 95, Anchor: 62, Scopes: map[string]int{"../x": 89}}
 			},
-			want: FieldFailure{Field: "knowledge.conform.checks.dep-fanout.source.scopes.../x", Tag: "conform_scope_path", Value: "../x"},
+			want: FieldFailure{Field: "knowledge.conformance.checks.dep-fanout.source.scopes.../x", Tag: "conformance_scope_path", Value: "../x"},
 		},
 		"scope with a zero anchor": {
-			edit: func(c *ConformConfig) {
-				c.Checks[types.ConformDepFanout][types.ConformPopSource] = ConformLimitConfig{Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 0}}
+			edit: func(c *ConformanceConfig) {
+				c.Checks[types.ConformanceDepFanout][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 0}}
 			},
-			want: FieldFailure{Field: "knowledge.conform.checks.dep-fanout.source.scopes.cmd/magus", Tag: "gte", Param: "1", Value: "0"},
+			want: FieldFailure{Field: "knowledge.conformance.checks.dep-fanout.source.scopes.cmd/magus", Tag: "gte", Param: "1", Value: "0"},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			cfg := valid
-			cfg.Knowledge.Conform = conformDefaults()
-			tc.edit(&cfg.Knowledge.Conform)
+			cfg.Knowledge.Conformance = conformanceDefaults()
+			tc.edit(&cfg.Knowledge.Conformance)
 			var ve *ValidationError
 			require.ErrorAs(t, Validate(cfg), &ve)
 			require.Len(t, ve.Failures, 1)
@@ -337,27 +337,27 @@ func TestValidate_Conform(t *testing.T) {
 }
 
 // The scalar knobs are graded by struct tag, so the failure names the yaml path.
-func TestValidate_ConformScalars(t *testing.T) {
+func TestValidate_ConformanceScalars(t *testing.T) {
 	for name, tc := range map[string]struct {
-		edit  func(*ConformConfig)
+		edit  func(*ConformanceConfig)
 		field string
 	}{
-		"min_sample":       {func(c *ConformConfig) { c.MinSample = 0 }, "min_sample"},
-		"step zero":        {func(c *ConformConfig) { c.Step = 0 }, "step"},
-		"step one":         {func(c *ConformConfig) { c.Step = 1 }, "step"},
-		"gates.min_cohort": {func(c *ConformConfig) { c.Gates.MinCohort = 0 }, "min_cohort"},
-		"gates.min_share":  {func(c *ConformConfig) { c.Gates.MinShare = 1.5 }, "min_share"},
-		"gates.bar":        {func(c *ConformConfig) { c.Gates.Bar = -0.1 }, "bar"},
-		"gates.max":        {func(c *ConformConfig) { c.Gates.MaxFindings = 0 }, "max_findings"},
+		"min_sample":       {func(c *ConformanceConfig) { c.MinSample = 0 }, "min_sample"},
+		"step zero":        {func(c *ConformanceConfig) { c.Step = 0 }, "step"},
+		"step one":         {func(c *ConformanceConfig) { c.Step = 1 }, "step"},
+		"gates.min_cohort": {func(c *ConformanceConfig) { c.Gates.MinCohort = 0 }, "min_cohort"},
+		"gates.min_share":  {func(c *ConformanceConfig) { c.Gates.MinShare = 1.5 }, "min_share"},
+		"gates.bar":        {func(c *ConformanceConfig) { c.Gates.Bar = -0.1 }, "bar"},
+		"gates.max":        {func(c *ConformanceConfig) { c.Gates.MaxFindings = 0 }, "max_findings"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge}
-			cfg.Knowledge.Conform = conformDefaults()
-			tc.edit(&cfg.Knowledge.Conform)
+			cfg.Knowledge.Conformance = conformanceDefaults()
+			tc.edit(&cfg.Knowledge.Conformance)
 			var ve *ValidationError
 			require.ErrorAs(t, Validate(cfg), &ve)
 			require.Len(t, ve.Failures, 1)
-			assert.Contains(t, ve.Failures[0].Field, "conform")
+			assert.Contains(t, ve.Failures[0].Field, "conformance")
 			assert.Contains(t, ve.Failures[0].Field, tc.field)
 		})
 	}

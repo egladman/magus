@@ -21,7 +21,7 @@ const (
 // aliasCheck reads an import that must be aliased as advice that a package name is wrong. It
 // reports two cases. One is an aliased import, in a file holding a symbol the change adds,
 // renames or re-signs, of a package past the alias-share or name-clash value
-// [types.ConformOptions.Effective] enforces and listed in no known entry of that metric.
+// [types.ConformanceOptions.Effective] enforces and listed in no known entry of that metric.
 // The other is a package the change introduces, every declaration of it new, whose package
 // clause an existing non-generated package already declares: the cheapest moment to rename it. The
 // index holds no base, so an aliased import already in the file is reported as well as one
@@ -35,22 +35,22 @@ func (aliasCheck) run(x *namingIndex) []finding {
 	if len(x.subjects) == 0 {
 		return nil
 	}
-	o := x.change.Conform
-	skip := func(file string) bool { return conformGenerated(x.g, o, file) || conformExcludes(o, file) }
+	o := x.change.Conformance
+	skip := func(file string) bool { return conformanceGenerated(x.g, o, file) || conformanceExcludes(o, file) }
 	pkgs := map[string]*aliasPackage{}
 	byName := map[string][]*aliasPackage{}
 	for _, p := range importAliases(x.g, skip) {
 		pkgs[p.ns] = p
 		byName[p.name] = append(byName[p.name], p)
 	}
-	measured := map[types.ConformMetric]map[string]int{}
+	measured := map[types.ConformanceMetric]map[string]int{}
 	for k, items := range aliasSamples(x.g, o) {
 		measured[k.Metric] = map[string]int{}
 		for _, it := range items {
 			measured[k.Metric][it.ID] = it.Measure
 		}
 	}
-	known := conformKnownItems(o.Ratchet.Known)
+	known := conformanceKnownItems(o.Ratchet.Known)
 	introduced := x.introducedPackages()
 
 	byFile := map[string]*namingDecl{}
@@ -67,7 +67,7 @@ func (aliasCheck) run(x *namingIndex) []finding {
 				continue
 			}
 			var past []string
-			for _, m := range []types.ConformMetric{types.ConformNameClash, types.ConformAliasShare} {
+			for _, m := range []types.ConformanceMetric{types.ConformanceNameClash, types.ConformanceAliasShare} {
 				value, src := o.Effective(couplingKey(m))
 				if v, ok := measured[m][p.dir]; ok && src != "" && v > value && !known[m][p.dir] {
 					past = append(past, fmt.Sprintf("%s source: %d, past the %s of %d", m, v, thresholdSource(src), value))

@@ -28,7 +28,7 @@ type diffConfig struct {
 	baselineLabel string
 	patch         string
 	patchGiven    bool
-	// minCohort and minShare override knowledge.conform.gates for this review; zero keeps
+	// minCohort and minShare override knowledge.conformance.gates for this review; zero keeps
 	// the configured gate.
 	minCohort int
 	minShare  float64
@@ -49,7 +49,7 @@ func (m *Magus) DiffAgainst(ctx context.Context, paths []string, base types.Know
 
 // DiffWith is [Magus.Diff] with the options [types.DiffOptions] describes: the changeset's own
 // patch, a baseline to compare against, and the conformance checks' silence gates, which
-// default to knowledge.conform.gates and which opts overrides for the one call. A review of
+// default to knowledge.conformance.gates and which opts overrides for the one call. A review of
 // anything but the working tree passes its patch, since without a baseline the patch is what
 // says which symbols the change adds; with neither, the working tree's patch is read.
 func (m *Magus) DiffWith(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error) {
@@ -237,10 +237,10 @@ type conformanceInput struct {
 	patch     string
 	generated map[string]bool
 	read      func(path string) (string, bool)
-	// conform and ratchetBase are what diffConform answers: the policy with its gates, and
+	// conformance and ratchetBase are what diffConformance answers: the policy with its gates, and
 	// the ratchet record at the change's base.
-	conform     types.ConformOptions
-	ratchetBase *types.ConformRatchet
+	conformance types.ConformanceOptions
+	ratchetBase *types.ConformanceRatchet
 }
 
 // attachConformance runs the conformance checks over the symbols the change adds, renames or
@@ -292,9 +292,9 @@ func attachConformance(byPath map[string]*types.DiffFile, head *knowledge.Graph,
 	if in.changes != nil {
 		pairRenames(defs, in.changes, in.removed, renamed)
 	}
-	found := head.Conformance(knowledge.ConformanceChange{
+	found := head.ConformanceChecks(knowledge.ConformanceChange{
 		Subjects: subjects, Introduced: introduced, Generated: in.generated, Renamed: renamed,
-		Read: in.read, Conform: in.conform, RatchetBase: in.ratchetBase,
+		Read: in.read, Conformance: in.conformance, RatchetBase: in.ratchetBase,
 	})
 	for _, id := range slices.Sorted(maps.Keys(found)) {
 		def, ok := defs[id]
@@ -318,18 +318,18 @@ func attachConformance(byPath map[string]*types.DiffFile, head *knowledge.Graph,
 	}
 }
 
-// diffConform is knowledge.conform as one review applies it: o with the review's gate
+// diffConformance is knowledge.conformance as one review applies it: o with the review's gate
 // overrides, generated as its generated paths, and the ratchet record o.RatchetPath names, read
 // through read. base is that record before the change, rebuilt from patch: the head record when
 // the patch leaves the file alone, and nil when the patch adds it. A configured record that is
-// missing, does not parse or fails [types.ConformOptions.Validate] is an error. A base record
+// missing, does not parse or fails [types.ConformanceOptions.Validate] is an error. A base record
 // that does not parse is returned as note, and the change is then judged by its head alone.
-func diffConform(o types.ConformOptions, cfg diffConfig, patch string, generated map[string]bool,
+func diffConformance(o types.ConformanceOptions, cfg diffConfig, patch string, generated map[string]bool,
 	read func(path string) (string, bool),
-) (conform types.ConformOptions, base *types.ConformRatchet, note string, err error) {
+) (conformance types.ConformanceOptions, base *types.ConformanceRatchet, note string, err error) {
 	o.Gates = o.Gates.Override(cfg.minCohort, cfg.minShare)
 	o.Generated = generated
-	o, head, err := loadConform(o, read)
+	o, head, err := loadConformance(o, read)
 	if err != nil || o.RatchetPath == "" {
 		return o, nil, "", err
 	}
@@ -337,37 +337,37 @@ func diffConform(o types.ConformOptions, cfg diffConfig, patch string, generated
 	if !existed {
 		return o, nil, "", nil
 	}
-	r, err := types.ReadConformRatchet(o.RatchetPath, []byte(before))
+	r, err := types.ReadConformanceRatchet(o.RatchetPath, []byte(before))
 	if err != nil {
-		return o, nil, fmt.Sprintf("conform: the ratchet before this change does not parse, so what the change moved in it is not judged: %v",
+		return o, nil, fmt.Sprintf("conformance: the ratchet before this change does not parse, so what the change moved in it is not judged: %v",
 			err), nil
 	}
 	return o, &r, "", nil
 }
 
-// ConformOptions is the workspace's knowledge.conform as the graph reads it, with the ratchet
-// record knowledge.conform.ratchet names read from the working tree. Generated is left for the
+// ConformanceOptions is the workspace's knowledge.conformance as the graph reads it, with the ratchet
+// record knowledge.conformance.ratchet names read from the working tree. Generated is left for the
 // caller. A configured record that is missing, does not parse or fails
-// [types.ConformOptions.Validate] is an error.
-func (m *Magus) ConformOptions() (types.ConformOptions, error) {
-	o, _, err := loadConform(m.cfg.Knowledge.Conform.Options(), func(path string) (string, bool) {
+// [types.ConformanceOptions.Validate] is an error.
+func (m *Magus) ConformanceOptions() (types.ConformanceOptions, error) {
+	o, _, err := loadConformance(m.cfg.Knowledge.Conformance.Options(), func(path string) (string, bool) {
 		b, err := os.ReadFile(filepath.Join(m.ws.Root, filepath.FromSlash(path)))
 		return string(b), err == nil
 	})
 	return o, err
 }
 
-// loadConform fills o.Ratchet from the record o.RatchetPath names, read through read, and
+// loadConformance fills o.Ratchet from the record o.RatchetPath names, read through read, and
 // validates the result; head is the record's text. With no RatchetPath it reads nothing.
-func loadConform(o types.ConformOptions, read func(path string) (string, bool)) (_ types.ConformOptions, head string, err error) {
+func loadConformance(o types.ConformanceOptions, read func(path string) (string, bool)) (_ types.ConformanceOptions, head string, err error) {
 	if o.RatchetPath == "" {
 		return o, "", nil
 	}
 	head, ok := read(o.RatchetPath)
 	if !ok {
-		return o, "", fmt.Errorf("%s: knowledge.conform.ratchet names it, and the tree has no such file", o.RatchetPath)
+		return o, "", fmt.Errorf("%s: knowledge.conformance.ratchet names it, and the tree has no such file", o.RatchetPath)
 	}
-	if o.Ratchet, err = types.ReadConformRatchet(o.RatchetPath, []byte(head)); err != nil {
+	if o.Ratchet, err = types.ReadConformanceRatchet(o.RatchetPath, []byte(head)); err != nil {
 		return o, "", err
 	}
 	if verr := o.Validate(); verr != nil {

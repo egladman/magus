@@ -99,8 +99,8 @@ github.com/egladman/magus.Magus.CleanOutputs method(ptr) func(ctx context.Contex
 github.com/egladman/magus.Magus.Close method(ptr) func() error
 github.com/egladman/magus.Magus.ComputeTargetKey method(ptr) func(ctx context.Context, projectPath string, target string, charms []string) (key string, lines []string, err error)
 github.com/egladman/magus.Magus.ConcurrencyNudge method(ptr) func() string
-github.com/egladman/magus.Magus.Conform method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.ConformOutput, error)
-github.com/egladman/magus.Magus.ConformOptions method(ptr) func() (github.com/egladman/magus/types.ConformOptions, error)
+github.com/egladman/magus.Magus.Conformance method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.ConformanceOutput, error)
+github.com/egladman/magus.Magus.ConformanceOptions method(ptr) func() (github.com/egladman/magus/types.ConformanceOptions, error)
 github.com/egladman/magus.Magus.ContextWithSecrets method(ptr) func(ctx context.Context) context.Context
 github.com/egladman/magus.Magus.CurrentRevision method(ptr) func(ctx context.Context) (name string, revision string, dirty bool)
 github.com/egladman/magus.Magus.Diff method(ptr) func(ctx context.Context, paths []string) (github.com/egladman/magus/types.Diff, error)
@@ -492,7 +492,7 @@ github.com/egladman/magus/std.MagusBustCache func(ctx context.Context, projectPa
 github.com/egladman/magus/std.MagusClean func(ctx context.Context, args []string, opts map[string]any) (github.com/egladman/magus/types.CleanReport, error)
 github.com/egladman/magus/std.MagusClearJob func(ctx context.Context) (int, error)
 github.com/egladman/magus/std.MagusCmd func(ctx context.Context, sub string, args []string, opts map[string]any) (github.com/egladman/magus/types.ExecResult, error)
-github.com/egladman/magus/std.MagusConform func(ctx context.Context) (map[string]any, error)
+github.com/egladman/magus/std.MagusConformance func(ctx context.Context) (map[string]any, error)
 github.com/egladman/magus/std.MagusDescribeCharm func(ctx context.Context, name string, opts map[string]any) ([]github.com/egladman/magus/types.CharmEntry, error)
 github.com/egladman/magus/std.MagusDescribeEvaluatedProject func(ctx context.Context, path string, opts map[string]any) ([]github.com/egladman/magus/types.EvaluatedProject, error)
 github.com/egladman/magus/std.MagusDescribeEvaluatedTarget func(ctx context.Context, ref string, opts map[string]any) ([]github.com/egladman/magus/types.EvaluatedTarget, error)
@@ -1183,107 +1183,107 @@ github.com/egladman/magus/types.ConflictResolver.IgnoredPaths imethod func(ctx c
 github.com/egladman/magus/types.ConflictResolver.KeepIncoming imethod func(ctx context.Context, root string, paths []string) error
 github.com/egladman/magus/types.ConflictResolver.MarkResolved imethod func(ctx context.Context, root string, paths []string) error
 github.com/egladman/magus/types.ConflictResolver.RemoveConflicts imethod func(ctx context.Context, root string, paths []string) error
-github.com/egladman/magus/types.ConformAliasShare const ConformMetric = "alias-share"
-github.com/egladman/magus/types.ConformCallSequence const ConformMetric = "call-sequence"
-github.com/egladman/magus/types.ConformCallerSpread const ConformMetric = "caller-spread"
-github.com/egladman/magus/types.ConformCloneTokens const ConformMetric = "clone-tokens"
-github.com/egladman/magus/types.ConformDefinition const untyped string = "Conform measures how big and how coupled the workspace's code is, one row per metric and population: file lines, function lines, methods per type, top-level declarations per file, workspace imports per package, token count of bodies that share a shape, and exported symbols nothing outside their package uses. Each row gives the live percentiles, the value a check enforces (the committed ratchet value, else the configured anchor) and where that value came from, and the files, symbols or clone groups past it that no known entry accepts. Propose is the live percentile when it has fallen at least the configured step below the enforced value on a large enough sample, and never otherwise: nothing here enforces a live percentile, since a threshold that follows the code loosens as the code grows. The lens proposes; a person commits the value to the ratchet record the row names, and nothing here edits it. Generated and excluded files belong to no population, and excluded counts the files the configured exclusions hid. An index that is missing or stale answers unknown, never a pass."
-github.com/egladman/magus/types.ConformDepFanout const ConformMetric = "dep-fanout"
-github.com/egladman/magus/types.ConformExportScope const ConformMetric = "export-scope"
-github.com/egladman/magus/types.ConformFileLines const ConformMetric = "file-lines"
-github.com/egladman/magus/types.ConformFileSymbols const ConformMetric = "file-symbols"
-github.com/egladman/magus/types.ConformFromAnchor const ConformSource = "anchor"
-github.com/egladman/magus/types.ConformFromRatchet const ConformSource = "ratchet"
-github.com/egladman/magus/types.ConformFuncLines const ConformMetric = "func-lines"
-github.com/egladman/magus/types.ConformGates type struct
-github.com/egladman/magus/types.ConformGates.Bar field float64
-github.com/egladman/magus/types.ConformGates.MaxFindings field int
-github.com/egladman/magus/types.ConformGates.MinCohort field int
-github.com/egladman/magus/types.ConformGates.MinShare field float64
-github.com/egladman/magus/types.ConformGates.Override method func(minCohort int, minShare float64) ConformGates
-github.com/egladman/magus/types.ConformItem type struct
-github.com/egladman/magus/types.ConformItem.ID field string "json:\"id\"      yaml:\"id\""
-github.com/egladman/magus/types.ConformItem.Measure field int "json:\"measure\" yaml:\"measure\""
-github.com/egladman/magus/types.ConformItem.Source field string "json:\"source\"  yaml:\"source\""
-github.com/egladman/magus/types.ConformKey type struct
-github.com/egladman/magus/types.ConformKey.Metric field ConformMetric "json:\"metric\"          yaml:\"metric\""
-github.com/egladman/magus/types.ConformKey.Population field ConformPopulation "json:\"population\"      yaml:\"population\""
-github.com/egladman/magus/types.ConformKey.Scope field string "json:\"scope,omitempty\" yaml:\"scope,omitempty\""
-github.com/egladman/magus/types.ConformKnown type struct
-github.com/egladman/magus/types.ConformKnown.Items field []string "json:\"items\"  yaml:\"items\""
-github.com/egladman/magus/types.ConformKnown.Line field int "json:\"-\"      yaml:\"-\"      buzz:\"-\""
-github.com/egladman/magus/types.ConformKnown.Metric field ConformMetric "json:\"metric\" yaml:\"metric\""
-github.com/egladman/magus/types.ConformKnown.Reason field string "json:\"reason\" yaml:\"reason\""
-github.com/egladman/magus/types.ConformLimit type struct
-github.com/egladman/magus/types.ConformLimit.Anchor field int
-github.com/egladman/magus/types.ConformLimit.MinSubject field int
-github.com/egladman/magus/types.ConformLimit.Percentile field float64
-github.com/egladman/magus/types.ConformMetric type string
-github.com/egladman/magus/types.ConformMetric.String method func() string
-github.com/egladman/magus/types.ConformMetric.Valid method func() bool
-github.com/egladman/magus/types.ConformMetric.Values method func() []string
-github.com/egladman/magus/types.ConformModeKnobs const ConformMetric = "mode-knobs"
-github.com/egladman/magus/types.ConformNameClash const ConformMetric = "name-clash"
-github.com/egladman/magus/types.ConformOptions type struct
-github.com/egladman/magus/types.ConformOptions.Effective method func(k ConformKey) (value int, src ConformSource)
-github.com/egladman/magus/types.ConformOptions.Exclude field []string
-github.com/egladman/magus/types.ConformOptions.Gates field ConformGates
-github.com/egladman/magus/types.ConformOptions.Generated field map[string]bool
-github.com/egladman/magus/types.ConformOptions.Limits field map[ConformKey]ConformLimit
-github.com/egladman/magus/types.ConformOptions.MinSample field int
-github.com/egladman/magus/types.ConformOptions.Ratchet field ConformRatchet
-github.com/egladman/magus/types.ConformOptions.RatchetPath field string
-github.com/egladman/magus/types.ConformOptions.Step field float64
-github.com/egladman/magus/types.ConformOptions.Validate method func() error
-github.com/egladman/magus/types.ConformOutput type struct
-github.com/egladman/magus/types.ConformOutput.Answer field KnowledgeAnswer "json:\"answer\"     yaml:\"answer\""
-github.com/egladman/magus/types.ConformOutput.Definition field string "json:\"definition\" yaml:\"definition\""
-github.com/egladman/magus/types.ConformOutput.Excluded field int "json:\"excluded\"   yaml:\"excluded\""
-github.com/egladman/magus/types.ConformOutput.Rows field []ConformRow "json:\"rows\"       yaml:\"rows\""
-github.com/egladman/magus/types.ConformOutput.Stale field []ConformKnown "json:\"stale\"      yaml:\"stale\""
-github.com/egladman/magus/types.ConformPopMain const ConformPopulation = "main"
-github.com/egladman/magus/types.ConformPopSource const ConformPopulation = "source"
-github.com/egladman/magus/types.ConformPopTest const ConformPopulation = "test"
-github.com/egladman/magus/types.ConformPopulation type string
-github.com/egladman/magus/types.ConformPopulation.String method func() string
-github.com/egladman/magus/types.ConformPopulation.Valid method func() bool
-github.com/egladman/magus/types.ConformPopulation.Values method func() []string
-github.com/egladman/magus/types.ConformProvenance type struct
-github.com/egladman/magus/types.ConformProvenance.Date field string "json:\"date\""
-github.com/egladman/magus/types.ConformProvenance.Rev field string "json:\"rev\""
-github.com/egladman/magus/types.ConformRatchet type struct
-github.com/egladman/magus/types.ConformRatchet.Known field []ConformKnown
-github.com/egladman/magus/types.ConformRatchet.Measured field ConformProvenance
-github.com/egladman/magus/types.ConformRatchet.Schema field int
-github.com/egladman/magus/types.ConformRatchet.Thresholds field []ConformThreshold
-github.com/egladman/magus/types.ConformRow type struct
-github.com/egladman/magus/types.ConformRow.Anchor field int "json:\"anchor\"     yaml:\"anchor\""
-github.com/egladman/magus/types.ConformRow.Key field ConformKey "json:\"key\"        yaml:\"key\""
-github.com/egladman/magus/types.ConformRow.Known field int "json:\"known\"      yaml:\"known\""
-github.com/egladman/magus/types.ConformRow.Live field int "json:\"live\"       yaml:\"live\""
-github.com/egladman/magus/types.ConformRow.N field int "json:\"n\"          yaml:\"n\""
-github.com/egladman/magus/types.ConformRow.P50 field int "json:\"p50\"        yaml:\"p50\""
-github.com/egladman/magus/types.ConformRow.P90 field int "json:\"p90\"        yaml:\"p90\""
-github.com/egladman/magus/types.ConformRow.P95 field int "json:\"p95\"        yaml:\"p95\""
-github.com/egladman/magus/types.ConformRow.P99 field int "json:\"p99\"        yaml:\"p99\""
-github.com/egladman/magus/types.ConformRow.Propose field int "json:\"propose\"    yaml:\"propose\""
-github.com/egladman/magus/types.ConformRow.Source field ConformSource "json:\"source\"     yaml:\"source\""
-github.com/egladman/magus/types.ConformRow.Value field int "json:\"value\"      yaml:\"value\""
-github.com/egladman/magus/types.ConformRow.Violations field []ConformItem "json:\"violations\" yaml:\"violations\""
-github.com/egladman/magus/types.ConformSharedBody const ConformMetric = "shared-body"
-github.com/egladman/magus/types.ConformSharedReach const ConformMetric = "shared-reach"
-github.com/egladman/magus/types.ConformSource type string
-github.com/egladman/magus/types.ConformSource.String method func() string
-github.com/egladman/magus/types.ConformSource.Valid method func() bool
-github.com/egladman/magus/types.ConformSource.Values method func() []string
-github.com/egladman/magus/types.ConformThreshold type struct
-github.com/egladman/magus/types.ConformThreshold.ConformKey embedded ConformKey
-github.com/egladman/magus/types.ConformThreshold.Line field int "json:\"-\""
-github.com/egladman/magus/types.ConformThreshold.N field int "json:\"n\""
-github.com/egladman/magus/types.ConformThreshold.Percentile field float64 "json:\"percentile\""
-github.com/egladman/magus/types.ConformThreshold.Value field int "json:\"value\""
-github.com/egladman/magus/types.ConformThreshold.Why field string "json:\"why,omitempty\""
-github.com/egladman/magus/types.ConformTypeMethods const ConformMetric = "type-methods"
+github.com/egladman/magus/types.ConformanceAliasShare const ConformanceMetric = "alias-share"
+github.com/egladman/magus/types.ConformanceCallSequence const ConformanceMetric = "call-sequence"
+github.com/egladman/magus/types.ConformanceCallerSpread const ConformanceMetric = "caller-spread"
+github.com/egladman/magus/types.ConformanceCloneTokens const ConformanceMetric = "clone-tokens"
+github.com/egladman/magus/types.ConformanceDefinition const untyped string = "Conformance measures how big and how coupled the workspace's code is, one row per metric and population: file lines, function lines, methods per type, top-level declarations per file, workspace imports per package, token count of bodies that share a shape, and exported symbols nothing outside their package uses. Each row gives the live percentiles, the value a check enforces (the committed ratchet value, else the configured anchor) and where that value came from, and the files, symbols or clone groups past it that no known entry accepts. Propose is the live percentile when it has fallen at least the configured step below the enforced value on a large enough sample, and never otherwise: nothing here enforces a live percentile, since a threshold that follows the code loosens as the code grows. The lens proposes; a person commits the value to the ratchet record the row names, and nothing here edits it. Generated and excluded files belong to no population, and excluded counts the files the configured exclusions hid. An index that is missing or stale answers unknown, never a pass."
+github.com/egladman/magus/types.ConformanceDepFanout const ConformanceMetric = "dep-fanout"
+github.com/egladman/magus/types.ConformanceExportScope const ConformanceMetric = "export-scope"
+github.com/egladman/magus/types.ConformanceFileLines const ConformanceMetric = "file-lines"
+github.com/egladman/magus/types.ConformanceFileSymbols const ConformanceMetric = "file-symbols"
+github.com/egladman/magus/types.ConformanceFromAnchor const ConformanceSource = "anchor"
+github.com/egladman/magus/types.ConformanceFromRatchet const ConformanceSource = "ratchet"
+github.com/egladman/magus/types.ConformanceFuncLines const ConformanceMetric = "func-lines"
+github.com/egladman/magus/types.ConformanceGates type struct
+github.com/egladman/magus/types.ConformanceGates.Bar field float64
+github.com/egladman/magus/types.ConformanceGates.MaxFindings field int
+github.com/egladman/magus/types.ConformanceGates.MinCohort field int
+github.com/egladman/magus/types.ConformanceGates.MinShare field float64
+github.com/egladman/magus/types.ConformanceGates.Override method func(minCohort int, minShare float64) ConformanceGates
+github.com/egladman/magus/types.ConformanceItem type struct
+github.com/egladman/magus/types.ConformanceItem.ID field string "json:\"id\"      yaml:\"id\""
+github.com/egladman/magus/types.ConformanceItem.Measure field int "json:\"measure\" yaml:\"measure\""
+github.com/egladman/magus/types.ConformanceItem.Source field string "json:\"source\"  yaml:\"source\""
+github.com/egladman/magus/types.ConformanceKey type struct
+github.com/egladman/magus/types.ConformanceKey.Metric field ConformanceMetric "json:\"metric\"          yaml:\"metric\""
+github.com/egladman/magus/types.ConformanceKey.Population field ConformancePopulation "json:\"population\"      yaml:\"population\""
+github.com/egladman/magus/types.ConformanceKey.Scope field string "json:\"scope,omitempty\" yaml:\"scope,omitempty\""
+github.com/egladman/magus/types.ConformanceKnown type struct
+github.com/egladman/magus/types.ConformanceKnown.Items field []string "json:\"items\"  yaml:\"items\""
+github.com/egladman/magus/types.ConformanceKnown.Line field int "json:\"-\"      yaml:\"-\"      buzz:\"-\""
+github.com/egladman/magus/types.ConformanceKnown.Metric field ConformanceMetric "json:\"metric\" yaml:\"metric\""
+github.com/egladman/magus/types.ConformanceKnown.Reason field string "json:\"reason\" yaml:\"reason\""
+github.com/egladman/magus/types.ConformanceLimit type struct
+github.com/egladman/magus/types.ConformanceLimit.Anchor field int
+github.com/egladman/magus/types.ConformanceLimit.MinSubject field int
+github.com/egladman/magus/types.ConformanceLimit.Percentile field float64
+github.com/egladman/magus/types.ConformanceMetric type string
+github.com/egladman/magus/types.ConformanceMetric.String method func() string
+github.com/egladman/magus/types.ConformanceMetric.Valid method func() bool
+github.com/egladman/magus/types.ConformanceMetric.Values method func() []string
+github.com/egladman/magus/types.ConformanceModeKnobs const ConformanceMetric = "mode-knobs"
+github.com/egladman/magus/types.ConformanceNameClash const ConformanceMetric = "name-clash"
+github.com/egladman/magus/types.ConformanceOptions type struct
+github.com/egladman/magus/types.ConformanceOptions.Effective method func(k ConformanceKey) (value int, src ConformanceSource)
+github.com/egladman/magus/types.ConformanceOptions.Exclude field []string
+github.com/egladman/magus/types.ConformanceOptions.Gates field ConformanceGates
+github.com/egladman/magus/types.ConformanceOptions.Generated field map[string]bool
+github.com/egladman/magus/types.ConformanceOptions.Limits field map[ConformanceKey]ConformanceLimit
+github.com/egladman/magus/types.ConformanceOptions.MinSample field int
+github.com/egladman/magus/types.ConformanceOptions.Ratchet field ConformanceRatchet
+github.com/egladman/magus/types.ConformanceOptions.RatchetPath field string
+github.com/egladman/magus/types.ConformanceOptions.Step field float64
+github.com/egladman/magus/types.ConformanceOptions.Validate method func() error
+github.com/egladman/magus/types.ConformanceOutput type struct
+github.com/egladman/magus/types.ConformanceOutput.Answer field KnowledgeAnswer "json:\"answer\"     yaml:\"answer\""
+github.com/egladman/magus/types.ConformanceOutput.Definition field string "json:\"definition\" yaml:\"definition\""
+github.com/egladman/magus/types.ConformanceOutput.Excluded field int "json:\"excluded\"   yaml:\"excluded\""
+github.com/egladman/magus/types.ConformanceOutput.Rows field []ConformanceRow "json:\"rows\"       yaml:\"rows\""
+github.com/egladman/magus/types.ConformanceOutput.Stale field []ConformanceKnown "json:\"stale\"      yaml:\"stale\""
+github.com/egladman/magus/types.ConformancePopMain const ConformancePopulation = "main"
+github.com/egladman/magus/types.ConformancePopSource const ConformancePopulation = "source"
+github.com/egladman/magus/types.ConformancePopTest const ConformancePopulation = "test"
+github.com/egladman/magus/types.ConformancePopulation type string
+github.com/egladman/magus/types.ConformancePopulation.String method func() string
+github.com/egladman/magus/types.ConformancePopulation.Valid method func() bool
+github.com/egladman/magus/types.ConformancePopulation.Values method func() []string
+github.com/egladman/magus/types.ConformanceProvenance type struct
+github.com/egladman/magus/types.ConformanceProvenance.Date field string "json:\"date\""
+github.com/egladman/magus/types.ConformanceProvenance.Rev field string "json:\"rev\""
+github.com/egladman/magus/types.ConformanceRatchet type struct
+github.com/egladman/magus/types.ConformanceRatchet.Known field []ConformanceKnown
+github.com/egladman/magus/types.ConformanceRatchet.Measured field ConformanceProvenance
+github.com/egladman/magus/types.ConformanceRatchet.Schema field int
+github.com/egladman/magus/types.ConformanceRatchet.Thresholds field []ConformanceThreshold
+github.com/egladman/magus/types.ConformanceRow type struct
+github.com/egladman/magus/types.ConformanceRow.Anchor field int "json:\"anchor\"     yaml:\"anchor\""
+github.com/egladman/magus/types.ConformanceRow.Key field ConformanceKey "json:\"key\"        yaml:\"key\""
+github.com/egladman/magus/types.ConformanceRow.Known field int "json:\"known\"      yaml:\"known\""
+github.com/egladman/magus/types.ConformanceRow.Live field int "json:\"live\"       yaml:\"live\""
+github.com/egladman/magus/types.ConformanceRow.N field int "json:\"n\"          yaml:\"n\""
+github.com/egladman/magus/types.ConformanceRow.P50 field int "json:\"p50\"        yaml:\"p50\""
+github.com/egladman/magus/types.ConformanceRow.P90 field int "json:\"p90\"        yaml:\"p90\""
+github.com/egladman/magus/types.ConformanceRow.P95 field int "json:\"p95\"        yaml:\"p95\""
+github.com/egladman/magus/types.ConformanceRow.P99 field int "json:\"p99\"        yaml:\"p99\""
+github.com/egladman/magus/types.ConformanceRow.Propose field int "json:\"propose\"    yaml:\"propose\""
+github.com/egladman/magus/types.ConformanceRow.Source field ConformanceSource "json:\"source\"     yaml:\"source\""
+github.com/egladman/magus/types.ConformanceRow.Value field int "json:\"value\"      yaml:\"value\""
+github.com/egladman/magus/types.ConformanceRow.Violations field []ConformanceItem "json:\"violations\" yaml:\"violations\""
+github.com/egladman/magus/types.ConformanceSharedBody const ConformanceMetric = "shared-body"
+github.com/egladman/magus/types.ConformanceSharedReach const ConformanceMetric = "shared-reach"
+github.com/egladman/magus/types.ConformanceSource type string
+github.com/egladman/magus/types.ConformanceSource.String method func() string
+github.com/egladman/magus/types.ConformanceSource.Valid method func() bool
+github.com/egladman/magus/types.ConformanceSource.Values method func() []string
+github.com/egladman/magus/types.ConformanceThreshold type struct
+github.com/egladman/magus/types.ConformanceThreshold.ConformanceKey embedded ConformanceKey
+github.com/egladman/magus/types.ConformanceThreshold.Line field int "json:\"-\""
+github.com/egladman/magus/types.ConformanceThreshold.N field int "json:\"n\""
+github.com/egladman/magus/types.ConformanceThreshold.Percentile field float64 "json:\"percentile\""
+github.com/egladman/magus/types.ConformanceThreshold.Value field int "json:\"value\""
+github.com/egladman/magus/types.ConformanceThreshold.Why field string "json:\"why,omitempty\""
+github.com/egladman/magus/types.ConformanceTypeMethods const ConformanceMetric = "type-methods"
 github.com/egladman/magus/types.ConsoleFileWithheld const DiagnosticCode = "MGS9010"
 github.com/egladman/magus/types.ConsoleNotBuilt const DiagnosticCode = "MGS9013"
 github.com/egladman/magus/types.ConsoleStatus type struct
@@ -2291,7 +2291,7 @@ github.com/egladman/magus/types.InputRef.Rooted method func(projectPath string) 
 github.com/egladman/magus/types.InsecureTokenPermissions const DiagnosticCode = "MGS9002"
 github.com/egladman/magus/types.InsightAnalyzer type interface
 github.com/egladman/magus/types.InsightAnalyzer.Affinity imethod func(ctx context.Context, opts InsightOptions) (AffinityOutput, error)
-github.com/egladman/magus/types.InsightAnalyzer.Conform imethod func(ctx context.Context) (ConformOutput, error)
+github.com/egladman/magus/types.InsightAnalyzer.Conformance imethod func(ctx context.Context) (ConformanceOutput, error)
 github.com/egladman/magus/types.InsightAnalyzer.Duplication imethod func(ctx context.Context) (DuplicationOutput, error)
 github.com/egladman/magus/types.InsightAnalyzer.Hotspots imethod func(ctx context.Context, opts InsightOptions) (HotspotOutput, error)
 github.com/egladman/magus/types.InsightAnalyzer.ModelTierLens imethod func(ctx context.Context) (ModelTierOutput, error)
@@ -2307,7 +2307,7 @@ github.com/egladman/magus/types.InsightOptions.Files field bool
 github.com/egladman/magus/types.InsightOptions.Since field string
 github.com/egladman/magus/types.InsightReport type struct
 github.com/egladman/magus/types.InsightReport.Affinity field AffinityOutput "json:\"affinity\"    yaml:\"affinity\""
-github.com/egladman/magus/types.InsightReport.Conform field ConformOutput "json:\"conform\" yaml:\"conform\""
+github.com/egladman/magus/types.InsightReport.Conformance field ConformanceOutput "json:\"conformance\" yaml:\"conformance\""
 github.com/egladman/magus/types.InsightReport.Duplication field DuplicationOutput "json:\"duplication\" yaml:\"duplication\""
 github.com/egladman/magus/types.InsightReport.Hotspots field HotspotOutput "json:\"hotspots\"    yaml:\"hotspots\""
 github.com/egladman/magus/types.InsightReport.ModelTiers field ModelTierOutput "json:\"model_tiers\" yaml:\"model_tiers\""
@@ -2317,7 +2317,7 @@ github.com/egladman/magus/types.InsightReport.Unreferenced field UnreferencedOut
 github.com/egladman/magus/types.InsightReport.Volatility field VolatilityReport "json:\"volatility\"  yaml:\"volatility\""
 github.com/egladman/magus/types.InsightView type struct
 github.com/egladman/magus/types.InsightView.Affinity field AffinityOutput "json:\"affinity\"   yaml:\"affinity\""
-github.com/egladman/magus/types.InsightView.Conform field *ConformOutput "json:\"conform\" yaml:\"conform\""
+github.com/egladman/magus/types.InsightView.Conformance field *ConformanceOutput "json:\"conformance\" yaml:\"conformance\""
 github.com/egladman/magus/types.InsightView.Hotspots field HotspotOutput "json:\"hotspots\"   yaml:\"hotspots\""
 github.com/egladman/magus/types.InsightView.ModelTiers field *ModelTierOutput "json:\"model_tiers\" yaml:\"model_tiers\""
 github.com/egladman/magus/types.InsightView.Ownership field OwnershipOutput "json:\"ownership\"  yaml:\"ownership\""
@@ -3648,7 +3648,7 @@ github.com/egladman/magus/types.RangeReporter type interface
 github.com/egladman/magus/types.RangeReporter.RangeCommits imethod func(ctx context.Context, dir string, base string, head string, paths []string) ([]Commit, error)
 github.com/egladman/magus/types.RangeReporter.RangeDiff imethod func(ctx context.Context, dir string, base string, head string, paths []string) (string, error)
 github.com/egladman/magus/types.RangeReporter.RangeFiles imethod func(ctx context.Context, dir string, base string, head string, paths []string) ([]string, error)
-github.com/egladman/magus/types.ReadConformRatchet func(path string, data []byte) (ConformRatchet, error)
+github.com/egladman/magus/types.ReadConformanceRatchet func(path string, data []byte) (ConformanceRatchet, error)
 github.com/egladman/magus/types.ReadinessComponent type struct
 github.com/egladman/magus/types.ReadinessComponent.Detail field string "json:\"detail\""
 github.com/egladman/magus/types.ReadinessComponent.Name field ReadinessName "json:\"name\""

@@ -36,11 +36,13 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Commit", Zero: types.CommitRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCommitRecord(v.(types.CommitRecord)) }},
 	{Name: "CommitAuthor", Zero: types.CommitAuthor{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCommitAuthor(v.(types.CommitAuthor)) }},
 	{Name: "CompressResult", Zero: types.CompressResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCompressResult(v.(types.CompressResult)) }},
-	{Name: "Conform", Zero: types.ConformOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformOutput(v.(types.ConformOutput), enums) }},
-	{Name: "ConformItem", Zero: types.ConformItem{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformItem(v.(types.ConformItem)) }},
-	{Name: "ConformKey", Zero: types.ConformKey{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformKey(v.(types.ConformKey)) }},
-	{Name: "ConformKnown", Zero: types.ConformKnown{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformKnown(v.(types.ConformKnown)) }},
-	{Name: "ConformRow", Zero: types.ConformRow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformRow(v.(types.ConformRow)) }},
+	{Name: "Conformance", Zero: types.ConformanceOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectConformanceOutput(v.(types.ConformanceOutput), enums)
+	}},
+	{Name: "ConformanceItem", Zero: types.ConformanceItem{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformanceItem(v.(types.ConformanceItem)) }},
+	{Name: "ConformanceKey", Zero: types.ConformanceKey{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformanceKey(v.(types.ConformanceKey)) }},
+	{Name: "ConformanceKnown", Zero: types.ConformanceKnown{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformanceKnown(v.(types.ConformanceKnown)) }},
+	{Name: "ConformanceRow", Zero: types.ConformanceRow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformanceRow(v.(types.ConformanceRow)) }},
 	{Name: "ContextWindow", Zero: types.ContextWindow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectContextWindow(v.(types.ContextWindow)) }},
 	{Name: "Credential", Zero: types.Credential{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCredential(v.(types.Credential)) }},
 	{Name: "CrossTargetRef", Zero: types.CrossTargetRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCrossTargetRef(v.(types.CrossTargetRef)) }},

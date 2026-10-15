@@ -9,218 +9,220 @@ import (
 )
 
 var (
-	fileLinesSource = ConformKey{Metric: ConformFileLines, Population: ConformPopSource}
-	depFanoutSource = ConformKey{Metric: ConformDepFanout, Population: ConformPopSource}
+	fileLinesSource = ConformanceKey{Metric: ConformanceFileLines, Population: ConformancePopSource}
+	depFanoutSource = ConformanceKey{Metric: ConformanceDepFanout, Population: ConformancePopSource}
 )
 
-func conformOptions() ConformOptions {
-	return ConformOptions{
-		Limits: map[ConformKey]ConformLimit{
+func conformanceOptions() ConformanceOptions {
+	return ConformanceOptions{
+		Limits: map[ConformanceKey]ConformanceLimit{
 			fileLinesSource: {Percentile: 95, Anchor: 2200},
 			depFanoutSource: {Percentile: 95, Anchor: 62},
 		},
-		Ratchet: ConformRatchet{
+		Ratchet: ConformanceRatchet{
 			Schema:     1,
-			Thresholds: []ConformThreshold{{ConformKey: fileLinesSource, Value: 938, N: 1130, Percentile: 95, Line: 4}},
-			Known:      []ConformKnown{{Metric: ConformCloneTokens, Items: []string{"a.go#F", "b.go#F"}, Reason: "twins", Line: 12}},
+			Thresholds: []ConformanceThreshold{{ConformanceKey: fileLinesSource, Value: 938, N: 1130, Percentile: 95, Line: 4}},
+			Known:      []ConformanceKnown{{Metric: ConformanceCloneTokens, Items: []string{"a.go#F", "b.go#F"}, Reason: "twins", Line: 12}},
 		},
 		RatchetPath: "hack/policy/conformance.jsonl",
 		MinSample:   30,
 		Step:        0.05,
-		Gates:       ConformGates{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
+		Gates:       ConformanceGates{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
 	}
 }
 
-func TestConformEffective(t *testing.T) {
+func TestConformanceEffective(t *testing.T) {
 	t.Parallel()
 
-	o := conformOptions()
-	scoped := ConformKey{Metric: ConformDepFanout, Population: ConformPopSource, Scope: "cmd/magus"}
-	layer := ConformKey{Metric: ConformDepFanout, Population: ConformPopSource, Scope: "internal"}
-	o.Ratchet.Thresholds = append(o.Ratchet.Thresholds, ConformThreshold{ConformKey: scoped, Value: 40})
+	o := conformanceOptions()
+	scoped := ConformanceKey{Metric: ConformanceDepFanout, Population: ConformancePopSource, Scope: "cmd/magus"}
+	layer := ConformanceKey{Metric: ConformanceDepFanout, Population: ConformancePopSource, Scope: "internal"}
+	o.Ratchet.Thresholds = append(o.Ratchet.Thresholds, ConformanceThreshold{ConformanceKey: scoped, Value: 40})
 
 	type got struct {
 		Value  int
-		Source ConformSource
+		Source ConformanceSource
 	}
-	effective := func(k ConformKey) got {
+	effective := func(k ConformanceKey) got {
 		v, src := o.Effective(k)
 		return got{v, src}
 	}
-	assert.Equal(t, got{938, ConformFromRatchet}, effective(fileLinesSource), "a committed value beats the anchor")
-	assert.Equal(t, got{62, ConformFromAnchor}, effective(depFanoutSource), "nothing committed: the anchor")
-	assert.Equal(t, got{40, ConformFromRatchet}, effective(scoped), "the scope's own committed value")
-	assert.Equal(t, got{62, ConformFromAnchor}, effective(layer), "a scope with nothing of its own falls back to the unscoped key")
-	assert.Equal(t, got{}, effective(ConformKey{Metric: ConformTypeMethods, Population: ConformPopTest}), "neither is configured")
+	assert.Equal(t, got{938, ConformanceFromRatchet}, effective(fileLinesSource), "a committed value beats the anchor")
+	assert.Equal(t, got{62, ConformanceFromAnchor}, effective(depFanoutSource), "nothing committed: the anchor")
+	assert.Equal(t, got{40, ConformanceFromRatchet}, effective(scoped), "the scope's own committed value")
+	assert.Equal(t, got{62, ConformanceFromAnchor}, effective(layer), "a scope with nothing of its own falls back to the unscoped key")
+	assert.Equal(t, got{}, effective(ConformanceKey{Metric: ConformanceTypeMethods, Population: ConformancePopTest}), "neither is configured")
 
-	o.Limits[layer] = ConformLimit{Anchor: 30}
-	o.Ratchet.Thresholds = append(o.Ratchet.Thresholds, ConformThreshold{ConformKey: depFanoutSource, Value: 17})
-	assert.Equal(t, got{30, ConformFromAnchor}, effective(layer), "the scope's own anchor beats the unscoped committed value")
-	assert.Equal(t, got{17, ConformFromRatchet}, effective(ConformKey{Metric: ConformDepFanout, Population: ConformPopSource, Scope: "std"}))
+	o.Limits[layer] = ConformanceLimit{Anchor: 30}
+	o.Ratchet.Thresholds = append(o.Ratchet.Thresholds, ConformanceThreshold{ConformanceKey: depFanoutSource, Value: 17})
+	assert.Equal(t, got{30, ConformanceFromAnchor}, effective(layer), "the scope's own anchor beats the unscoped committed value")
+	assert.Equal(t, got{17, ConformanceFromRatchet}, effective(ConformanceKey{Metric: ConformanceDepFanout, Population: ConformancePopSource, Scope: "std"}))
 }
 
-func TestConformValidateAcceptsAConfiguredPolicy(t *testing.T) {
+func TestConformanceValidateAcceptsAConfiguredPolicy(t *testing.T) {
 	t.Parallel()
 
-	require.NoError(t, conformOptions().Validate())
+	require.NoError(t, conformanceOptions().Validate())
 
-	o := conformOptions()
-	o.RatchetPath, o.Ratchet = "", ConformRatchet{}
+	o := conformanceOptions()
+	o.RatchetPath, o.Ratchet = "", ConformanceRatchet{}
 	require.NoError(t, o.Validate(), "no ratchet configured: anchors only, and no schema to check")
 
-	o = conformOptions()
+	o = conformanceOptions()
 	o.Ratchet.Thresholds[0].Value = 2200
 	assert.NoError(t, o.Validate(), "a committed value equal to its anchor is not looser")
 }
 
-func TestConformValidateRefuses(t *testing.T) {
+func TestConformanceValidateRefuses(t *testing.T) {
 	t.Parallel()
 
 	metrics := "[file-lines func-lines type-methods file-symbols dep-fanout clone-tokens export-scope " +
 		"call-sequence shared-body shared-reach caller-spread mode-knobs alias-share name-clash]"
 	for name, tc := range map[string]struct {
-		edit func(*ConformOptions)
+		edit func(*ConformanceOptions)
 		want string
 	}{
 		"looser than its anchor": {
-			func(o *ConformOptions) { o.Ratchet.Thresholds[0].Value = 2201 },
+			func(o *ConformanceOptions) { o.Ratchet.Thresholds[0].Value = 2201 },
 			"hack/policy/conformance.jsonl:4: file-lines source: committed 2201 is looser than its anchor 2200",
 		},
 		"a scoped value looser than the unscoped anchor": {
-			func(o *ConformOptions) {
-				o.Ratchet.Thresholds = append(o.Ratchet.Thresholds, ConformThreshold{
-					ConformKey: ConformKey{Metric: ConformDepFanout, Population: ConformPopSource, Scope: "cmd/magus"}, Value: 89, Line: 5,
+			func(o *ConformanceOptions) {
+				o.Ratchet.Thresholds = append(o.Ratchet.Thresholds, ConformanceThreshold{
+					ConformanceKey: ConformanceKey{Metric: ConformanceDepFanout, Population: ConformancePopSource, Scope: "cmd/magus"}, Value: 89, Line: 5,
 				})
 			},
 			"hack/policy/conformance.jsonl:5: dep-fanout source cmd/magus: committed 89 is looser than its anchor 62",
 		},
 		"no anchor to bound it": {
-			func(o *ConformOptions) {
-				o.Ratchet.Thresholds[0].ConformKey = ConformKey{Metric: ConformTypeMethods, Population: ConformPopSource}
+			func(o *ConformanceOptions) {
+				o.Ratchet.Thresholds[0].ConformanceKey = ConformanceKey{Metric: ConformanceTypeMethods, Population: ConformancePopSource}
 			},
 			"hack/policy/conformance.jsonl:4: type-methods source: no anchor is configured to bound the committed 938",
 		},
 		"unknown metric": {
-			func(o *ConformOptions) { o.Ratchet.Thresholds[0].Metric = "lines" },
+			func(o *ConformanceOptions) { o.Ratchet.Thresholds[0].Metric = "lines" },
 			"hack/policy/conformance.jsonl:4: lines source: metric lines: want one of " + metrics,
 		},
 		"no metric": {
-			func(o *ConformOptions) { o.Ratchet.Thresholds[0].Metric = "" },
+			func(o *ConformanceOptions) { o.Ratchet.Thresholds[0].Metric = "" },
 			"hack/policy/conformance.jsonl:4:  source: metric unset: want one of " + metrics,
 		},
 		"unknown population": {
-			func(o *ConformOptions) { o.Ratchet.Thresholds[0].Population = "vendor" },
+			func(o *ConformanceOptions) { o.Ratchet.Thresholds[0].Population = "vendor" },
 			"hack/policy/conformance.jsonl:4: file-lines vendor: population vendor: want one of [source main test]",
 		},
 		"committed twice": {
-			func(o *ConformOptions) {
-				o.Ratchet.Thresholds = append(o.Ratchet.Thresholds, ConformThreshold{ConformKey: fileLinesSource, Value: 900, Line: 9})
+			func(o *ConformanceOptions) {
+				o.Ratchet.Thresholds = append(o.Ratchet.Thresholds, ConformanceThreshold{ConformanceKey: fileLinesSource, Value: 900, Line: 9})
 			},
 			"hack/policy/conformance.jsonl:9: file-lines source: committed twice, first at line 4",
 		},
 		"negative value": {
-			func(o *ConformOptions) { o.Ratchet.Thresholds[0].Value = -1 },
+			func(o *ConformanceOptions) { o.Ratchet.Thresholds[0].Value = -1 },
 			"hack/policy/conformance.jsonl:4: file-lines source: value -1: want at least 0",
 		},
 		"schema other than 1": {
-			func(o *ConformOptions) { o.Ratchet.Schema = 2 },
+			func(o *ConformanceOptions) { o.Ratchet.Schema = 2 },
 			"hack/policy/conformance.jsonl: schema 2: want 1",
 		},
 		"a configured ratchet with no schema": {
-			func(o *ConformOptions) { o.Ratchet = ConformRatchet{} },
+			func(o *ConformanceOptions) { o.Ratchet = ConformanceRatchet{} },
 			"hack/policy/conformance.jsonl: schema 0: want 1",
 		},
 		"known with an unknown metric": {
-			func(o *ConformOptions) { o.Ratchet.Known[0].Metric = "clones" },
+			func(o *ConformanceOptions) { o.Ratchet.Known[0].Metric = "clones" },
 			"hack/policy/conformance.jsonl:12: known: metric clones: want one of " + metrics,
 		},
 		"known with no items": {
-			func(o *ConformOptions) { o.Ratchet.Known[0].Items = nil },
+			func(o *ConformanceOptions) { o.Ratchet.Known[0].Items = nil },
 			"hack/policy/conformance.jsonl:12: known clone-tokens: no items",
 		},
 		"known with no reason": {
-			func(o *ConformOptions) { o.Ratchet.Known[0].Reason = "" },
+			func(o *ConformanceOptions) { o.Ratchet.Known[0].Reason = "" },
 			"hack/policy/conformance.jsonl:12: known clone-tokens: no reason",
 		},
 		"limit with an unknown metric": {
-			func(o *ConformOptions) {
-				o.Limits[ConformKey{Metric: "bogus", Population: ConformPopSource}] = ConformLimit{Anchor: 1}
+			func(o *ConformanceOptions) {
+				o.Limits[ConformanceKey{Metric: "bogus", Population: ConformancePopSource}] = ConformanceLimit{Anchor: 1}
 			},
 			"limit bogus source: metric bogus: want one of " + metrics,
 		},
 		"limit with an unknown population": {
-			func(o *ConformOptions) {
-				o.Limits[ConformKey{Metric: ConformFileLines, Population: "bogus"}] = ConformLimit{Anchor: 1}
+			func(o *ConformanceOptions) {
+				o.Limits[ConformanceKey{Metric: ConformanceFileLines, Population: "bogus"}] = ConformanceLimit{Anchor: 1}
 			},
 			"limit file-lines bogus: population bogus: want one of [source main test]",
 		},
 		"percentile past 100": {
-			func(o *ConformOptions) { o.Limits[fileLinesSource] = ConformLimit{Percentile: 101, Anchor: 2200} },
+			func(o *ConformanceOptions) {
+				o.Limits[fileLinesSource] = ConformanceLimit{Percentile: 101, Anchor: 2200}
+			},
 			"limit file-lines source: percentile 101: want 0 through 100",
 		},
 		"negative anchor": {
-			func(o *ConformOptions) {
-				o.Limits[depFanoutSource] = ConformLimit{Percentile: 95, Anchor: -1}
+			func(o *ConformanceOptions) {
+				o.Limits[depFanoutSource] = ConformanceLimit{Percentile: 95, Anchor: -1}
 			},
 			"limit dep-fanout source: anchor -1: want at least 0",
 		},
 		"min_sample below 1": {
-			func(o *ConformOptions) { o.MinSample = 0 },
+			func(o *ConformanceOptions) { o.MinSample = 0 },
 			"min_sample 0: want at least 1",
 		},
 		"step of 1": {
-			func(o *ConformOptions) { o.Step = 1 },
+			func(o *ConformanceOptions) { o.Step = 1 },
 			"step 1: want at least 0 and below 1",
 		},
 		"negative step": {
-			func(o *ConformOptions) { o.Step = -0.05 },
+			func(o *ConformanceOptions) { o.Step = -0.05 },
 			"step -0.05: want at least 0 and below 1",
 		},
 		"min_cohort below 1": {
-			func(o *ConformOptions) { o.Gates.MinCohort = 0 },
+			func(o *ConformanceOptions) { o.Gates.MinCohort = 0 },
 			"gates.min_cohort 0: want at least 1",
 		},
 		"min_share past 1": {
-			func(o *ConformOptions) { o.Gates.MinShare = 80 },
+			func(o *ConformanceOptions) { o.Gates.MinShare = 80 },
 			"gates.min_share 80: want 0 through 1",
 		},
 		"negative bar": {
-			func(o *ConformOptions) { o.Gates.Bar = -0.5 },
+			func(o *ConformanceOptions) { o.Gates.Bar = -0.5 },
 			"gates.bar -0.5: want 0 through 1",
 		},
 		"negative max_findings": {
-			func(o *ConformOptions) { o.Gates.MaxFindings = -1 },
+			func(o *ConformanceOptions) { o.Gates.MaxFindings = -1 },
 			"gates.max_findings -1: want at least 0",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			o := conformOptions()
+			o := conformanceOptions()
 			tc.edit(&o)
 			assert.EqualError(t, o.Validate(), tc.want)
 		})
 	}
 }
 
-func TestConformValidateReportsEveryProblem(t *testing.T) {
+func TestConformanceValidateReportsEveryProblem(t *testing.T) {
 	t.Parallel()
 
-	o := conformOptions()
+	o := conformanceOptions()
 	o.MinSample = 0
 	o.Ratchet.Thresholds[0].Value = 3000
 	assert.EqualError(t, o.Validate(), "min_sample 0: want at least 1\n"+
 		"hack/policy/conformance.jsonl:4: file-lines source: committed 3000 is looser than its anchor 2200")
 }
 
-// conformRecord is a ratchet file from lines given as JSON objects, one per line.
-func conformRecord(lines ...string) []byte {
+// conformanceRecord is a ratchet file from lines given as JSON objects, one per line.
+func conformanceRecord(lines ...string) []byte {
 	return []byte(strings.Join(lines, "\n") + "\n")
 }
 
-func TestReadConformRatchet(t *testing.T) {
+func TestReadConformanceRatchet(t *testing.T) {
 	t.Parallel()
 
-	r, err := ReadConformRatchet("r.jsonl", conformRecord(
+	r, err := ReadConformanceRatchet("r.jsonl", conformanceRecord(
 		`{"kind":"schema","schema":1}`,
 		`{"kind":"measured","rev":"abc123","date":"2026-10-14"}`,
 		"",
@@ -229,24 +231,24 @@ func TestReadConformRatchet(t *testing.T) {
 		`{"kind":"known","metric":"clone-tokens","reason":"driver twins","items":["vcs/hg.go#hgVCS.Bisect","vcs/sapling.go#saplingVCS.Bisect"]}`,
 	))
 	require.NoError(t, err)
-	assert.Equal(t, ConformRatchet{
+	assert.Equal(t, ConformanceRatchet{
 		Schema:   1,
-		Measured: ConformProvenance{Rev: "abc123", Date: "2026-10-14"},
-		Thresholds: []ConformThreshold{
-			{ConformKey: fileLinesSource, Value: 938, N: 1130, Percentile: 95, Why: "p95 at abc123", Line: 4},
+		Measured: ConformanceProvenance{Rev: "abc123", Date: "2026-10-14"},
+		Thresholds: []ConformanceThreshold{
+			{ConformanceKey: fileLinesSource, Value: 938, N: 1130, Percentile: 95, Why: "p95 at abc123", Line: 4},
 			{
-				ConformKey: ConformKey{Metric: ConformDepFanout, Population: ConformPopSource, Scope: "cmd/magus"},
-				Value:      89, N: 1, Line: 5,
+				ConformanceKey: ConformanceKey{Metric: ConformanceDepFanout, Population: ConformancePopSource, Scope: "cmd/magus"},
+				Value:          89, N: 1, Line: 5,
 			},
 		},
-		Known: []ConformKnown{{
-			Metric: ConformCloneTokens, Items: []string{"vcs/hg.go#hgVCS.Bisect", "vcs/sapling.go#saplingVCS.Bisect"},
+		Known: []ConformanceKnown{{
+			Metric: ConformanceCloneTokens, Items: []string{"vcs/hg.go#hgVCS.Bisect", "vcs/sapling.go#saplingVCS.Bisect"},
 			Reason: "driver twins", Line: 6,
 		}},
 	}, r)
 }
 
-func TestReadConformRatchetIsStrict(t *testing.T) {
+func TestReadConformanceRatchetIsStrict(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -349,16 +351,16 @@ func TestReadConformRatchetIsStrict(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			_, err := ReadConformRatchet("r.jsonl", []byte(tc.in))
+			_, err := ReadConformanceRatchet("r.jsonl", []byte(tc.in))
 			require.Error(t, err)
 			assert.ErrorContains(t, err, tc.want)
 		})
 	}
 }
 
-func TestReadConformRatchetRefusesASecondSchema(t *testing.T) {
+func TestReadConformanceRatchetRefusesASecondSchema(t *testing.T) {
 	t.Parallel()
 
-	_, err := ReadConformRatchet("r.jsonl", conformRecord(`{"kind":"schema","schema":1}`, `{"kind":"schema", "schema":1}`))
+	_, err := ReadConformanceRatchet("r.jsonl", conformanceRecord(`{"kind":"schema","schema":1}`, `{"kind":"schema", "schema":1}`))
 	assert.EqualError(t, err, "r.jsonl:2: schema: given twice, first at line 1")
 }

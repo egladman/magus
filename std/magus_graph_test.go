@@ -258,35 +258,35 @@ func TestRefsMemoizesPerSymbolScope(t *testing.T) {
 
 // precedentGraphs is a workspace whose indexes have the given freshness and whose declared
 // outputs are the given paths. Its freshen fails with freshenErr and records whether it ran
-// before the freshness was read. Its knowledge.conform is the shipped one unless conform
-// names another, and conformErr fails reading it.
+// before the freshness was read. Its knowledge.conformance is the shipped one unless conformance
+// names another, and conformanceErr fails reading it.
 type precedentGraphs struct {
 	*builtGraphWorkspace
-	indexes    []types.SymbolIndexStatus
-	outputs    map[string]bool
-	freshenErr error
-	freshened  bool
-	readAfter  bool
-	conform    *types.ConformOptions
-	conformErr error
+	indexes        []types.SymbolIndexStatus
+	outputs        map[string]bool
+	freshenErr     error
+	freshened      bool
+	readAfter      bool
+	conformance    *types.ConformanceOptions
+	conformanceErr error
 }
 
-func (p *precedentGraphs) ConformOptions() (types.ConformOptions, error) {
-	if p.conform != nil {
-		return *p.conform, p.conformErr
+func (p *precedentGraphs) ConformanceOptions() (types.ConformanceOptions, error) {
+	if p.conformance != nil {
+		return *p.conformance, p.conformanceErr
 	}
-	return config.Defaults().Knowledge.Conform.Options(), p.conformErr
+	return config.Defaults().Knowledge.Conformance.Options(), p.conformanceErr
 }
 
-func TestPrecedentsAreJudgedByTheWorkspacesConform(t *testing.T) {
+func TestPrecedentsAreJudgedByTheWorkspacesConformance(t *testing.T) {
 	t.Parallel()
 	g := knowledge.NewGraph()
 	for i, name := range []string{"ErrA", "ErrB", "ErrC", "ErrD", "ErrE", "ErrF"} {
 		errValue(g, fmt.Sprintf("internal/a/e%d.go", i), 3, name)
 	}
-	raised := config.Defaults().Knowledge.Conform.Options()
+	raised := config.Defaults().Knowledge.Conformance.Options()
 	raised.Gates.MinCohort = 7
-	ws := &precedentGraphs{builtGraphWorkspace: &builtGraphWorkspace{g: g, cacheDir: t.TempDir()}, conform: &raised}
+	ws := &precedentGraphs{builtGraphWorkspace: &builtGraphWorkspace{g: g, cacheDir: t.TempDir()}, conformance: &raised}
 
 	got, err := MagusPrecedents(types.WithWorkspace(t.Context(), ws))
 	require.NoError(t, err)
@@ -297,7 +297,7 @@ func TestPrecedentsAreJudgedByTheWorkspacesConform(t *testing.T) {
 	require.Len(t, report.Precedents, 1)
 	assert.False(t, report.Precedents[0].Established, "six cases are under the workspace's cohort gate of seven")
 
-	ws.conformErr = errors.New("conform.json: line 1: schema 2: want 1")
+	ws.conformanceErr = errors.New("conformance.json: line 1: schema 2: want 1")
 	_, err = MagusPrecedents(types.WithWorkspace(t.Context(), ws))
 	assert.ErrorContains(t, err, "schema 2", "a record that cannot be read is an error, never the shipped gates")
 }
@@ -456,24 +456,24 @@ func sizedGoFile(g *knowledge.Graph, file string, lines int) {
 		Attrs: map[string]string{types.AttrLanguage: "go", knowledge.AttrLines: fmt.Sprint(lines)}})
 }
 
-// conformAtAnchor is the shipped knowledge.conform with source files held to an anchor of 100 lines.
-func conformAtAnchor() *types.ConformOptions {
-	o := config.Defaults().Knowledge.Conform.Options()
-	o.Limits[types.ConformKey{Metric: types.ConformFileLines, Population: types.ConformPopSource}] =
-		types.ConformLimit{Percentile: 95, Anchor: 100}
+// conformanceAtAnchor is the shipped knowledge.conformance with source files held to an anchor of 100 lines.
+func conformanceAtAnchor() *types.ConformanceOptions {
+	o := config.Defaults().Knowledge.Conformance.Options()
+	o.Limits[types.ConformanceKey{Metric: types.ConformanceFileLines, Population: types.ConformancePopSource}] =
+		types.ConformanceLimit{Percentile: 95, Anchor: 100}
 	return &o
 }
 
-func conformReportOf(t *testing.T, got map[string]any) conformReport {
+func conformanceReportOf(t *testing.T, got map[string]any) conformanceReport {
 	t.Helper()
 	b, err := json.Marshal(got)
 	require.NoError(t, err)
-	var report conformReport
+	var report conformanceReport
 	require.NoError(t, json.Unmarshal(b, &report))
 	return report
 }
 
-func TestConformReportsRowsBesideIndexFreshness(t *testing.T) {
+func TestConformanceReportsRowsBesideIndexFreshness(t *testing.T) {
 	t.Parallel()
 	g := knowledge.NewGraph()
 	errValue(g, "internal/a/e0.go", 3, "ErrA")
@@ -485,54 +485,54 @@ func TestConformReportsRowsBesideIndexFreshness(t *testing.T) {
 		builtGraphWorkspace: &builtGraphWorkspace{g: g, cacheDir: t.TempDir()},
 		indexes:             []types.SymbolIndexStatus{stale},
 		outputs:             map[string]bool{"internal/a/gen.go": true},
-		conform:             conformAtAnchor(),
+		conformance:         conformanceAtAnchor(),
 	}
 
-	got, err := MagusConform(types.WithWorkspace(t.Context(), ws))
+	got, err := MagusConformance(types.WithWorkspace(t.Context(), ws))
 	require.NoError(t, err)
-	report := conformReportOf(t, got)
+	report := conformanceReportOf(t, got)
 	wantReport := report
-	wantReport.Definition = types.ConformDefinition
+	wantReport.Definition = types.ConformanceDefinition
 	wantReport.Indexes = []types.SymbolIndexStatus{stale} // the index verdict rides beside the rows
 	assert.Equal(t, wantReport, report)
 	assert.True(t, ws.readAfter, "freshness is read after the freshen")
-	lines := types.ConformKey{Metric: types.ConformFileLines, Population: types.ConformPopSource}
-	i := slices.IndexFunc(report.Rows, func(r types.ConformRow) bool { return r.Key == lines })
+	lines := types.ConformanceKey{Metric: types.ConformanceFileLines, Population: types.ConformancePopSource}
+	i := slices.IndexFunc(report.Rows, func(r types.ConformanceRow) bool { return r.Key == lines })
 	require.GreaterOrEqual(t, i, 0, "rows: %v", report.Rows)
 	row := report.Rows[i]
 	wantRow := row
 	wantRow.N = 2 // a declared output is never counted
-	wantRow.Value, wantRow.Source = 100, types.ConformFromAnchor
-	wantRow.Violations = []types.ConformItem{{ID: "internal/a/big.go", Source: "internal/a/big.go:1", Measure: 300}}
+	wantRow.Value, wantRow.Source = 100, types.ConformanceFromAnchor
+	wantRow.Violations = []types.ConformanceItem{{ID: "internal/a/big.go", Source: "internal/a/big.go:1", Measure: 300}}
 	assert.Equal(t, wantRow, row)
 	assert.Zero(t, row.Propose, "a live percentile above the enforced value is never proposed")
 }
 
-func TestConformWithoutSymbolsIsUnknownNotAPass(t *testing.T) {
+func TestConformanceWithoutSymbolsIsUnknownNotAPass(t *testing.T) {
 	t.Parallel()
 	ws := &precedentGraphs{builtGraphWorkspace: &builtGraphWorkspace{g: knowledge.NewGraph(), cacheDir: t.TempDir()}}
-	got, err := MagusConform(types.WithWorkspace(t.Context(), ws))
+	got, err := MagusConformance(types.WithWorkspace(t.Context(), ws))
 	require.NoError(t, err)
-	answer := conformReportOf(t, got).Answer
+	answer := conformanceReportOf(t, got).Answer
 	wantAnswer := answer
 	wantAnswer.Verdict, wantAnswer.Reason = types.VerdictUnknown, types.ReasonSymbolIndexMissing
 	assert.Equal(t, wantAnswer, answer)
 }
 
-func TestConformMisconfigurationIsAnError(t *testing.T) {
+func TestConformanceMisconfigurationIsAnError(t *testing.T) {
 	t.Parallel()
 	g := knowledge.NewGraph()
 	errValue(g, "internal/a/e0.go", 3, "ErrA")
 	ws := &precedentGraphs{builtGraphWorkspace: &builtGraphWorkspace{g: g, cacheDir: t.TempDir()}}
 
-	ws.conformErr = errors.New("conform.json: line 1: schema 2: want 1")
-	_, err := MagusConform(types.WithWorkspace(t.Context(), ws))
+	ws.conformanceErr = errors.New("conformance.json: line 1: schema 2: want 1")
+	_, err := MagusConformance(types.WithWorkspace(t.Context(), ws))
 	assert.ErrorContains(t, err, "schema 2", "a record that cannot be read is an error")
 
-	ws.conformErr = nil
-	bad := conformAtAnchor()
+	ws.conformanceErr = nil
+	bad := conformanceAtAnchor()
 	bad.MinSample = 0
-	ws.conform = bad
-	_, err = MagusConform(types.WithWorkspace(t.Context(), ws))
+	ws.conformance = bad
+	_, err = MagusConformance(types.WithWorkspace(t.Context(), ws))
 	assert.ErrorContains(t, err, "min_sample", "a policy that fails validation is an error even with no record to read")
 }

@@ -60,8 +60,8 @@ const DuplicationDefinition = "Duplication ranks pairs of functions that call th
 	"both functions with empty call sets and is invisible here. A measurement, not a verdict - two " +
 	"functions can share a shape on purpose, so read both before folding them."
 
-// ConformDefinition is the lens's contract, stated where a reader of the output meets it.
-const ConformDefinition = "Conform measures how big and how coupled the workspace's code is, one row per " +
+// ConformanceDefinition is the lens's contract, stated where a reader of the output meets it.
+const ConformanceDefinition = "Conformance measures how big and how coupled the workspace's code is, one row per " +
 	"metric and population: file lines, function lines, methods per type, top-level declarations per file, " +
 	"workspace imports per package, token count of bodies that share a shape, and exported symbols nothing " +
 	"outside their package uses. Each row gives the live percentiles, the value a check enforces (the " +
@@ -338,7 +338,7 @@ type TrendEntry struct {
 func (t TrendEntry) Label() string { return ProjectDisplayName(t.Path, t.Name, "") }
 
 // InsightView bundles the four VCS-history lenses plus the run-outcome volatility lens,
-// the model-tier lens and the conform lens, the one knowledge-graph axis it carries. It is what the console serves at GET /api/v1/insight:
+// the model-tier lens and the conformance lens, the one knowledge-graph axis it carries. It is what the console serves at GET /api/v1/insight:
 // the same per-lens outputs the CLI produces. The four git lenses come from one bounded
 // git-log scan (cached by the service); Volatility is a fresh runtime-history file read
 // folded into the same response, so the dashboard reads one endpoint for every lens.
@@ -359,10 +359,10 @@ type InsightView struct {
 	// ModelTiers is a pointer for the reason Volatility is: nil means no job outcome was
 	// ever recorded, an empty list means none of them ran at a tier.
 	ModelTiers *ModelTierOutput `json:"model_tiers" yaml:"model_tiers"`
-	// Conform is a pointer because the console serves it from a server that may hold no
+	// Conformance is a pointer because the console serves it from a server that may hold no
 	// workspace: nil means the lens was not read, and the lens itself answers unknown when
 	// it was read without a symbol index.
-	Conform *ConformOutput `json:"conform" yaml:"conform"`
+	Conformance *ConformanceOutput `json:"conformance" yaml:"conformance"`
 }
 
 // InsightReport bundles every lens for the combined report (the committable
@@ -386,9 +386,9 @@ type InsightReport struct {
 	Unreferenced UnreferencedOutput `json:"unreferenced" yaml:"unreferenced"`
 	// Duplication is the other knowledge-graph axis, a value for the same reason.
 	Duplication DuplicationOutput `json:"duplication" yaml:"duplication"`
-	// Conform is the third knowledge-graph axis, a value for the same reason: a workspace
+	// Conformance is the third knowledge-graph axis, a value for the same reason: a workspace
 	// whose index is missing still renders the section, with an unknown answer.
-	Conform ConformOutput `json:"conform" yaml:"conform"`
+	Conformance ConformanceOutput `json:"conformance" yaml:"conformance"`
 	// ModelTiers is the job-history axis, a value like the rest: no recorded outcome is an
 	// empty list carrying the definition.
 	ModelTiers ModelTierOutput `json:"model_tiers" yaml:"model_tiers"`
@@ -412,7 +412,7 @@ type ModelTierOutput struct {
 // forked a whole magus (a process spawn, a second workspace load, a JSON encode and
 // a Buzz-side parse) to reach methods the calling process already had.
 //
-// Volatility, ModelTierLens, Unreferenced and Conform take no options because they read
+// Volatility, ModelTierLens, Unreferenced and Conformance take no options because they read
 // their whole source workspace-wide: the run-history file and the symbol index have no
 // commit window to narrow, which is the distinction the lens docs draw for a reader too.
 type InsightAnalyzer interface {
@@ -423,6 +423,6 @@ type InsightAnalyzer interface {
 	Volatility(ctx context.Context) (VolatilityReport, error)
 	Unreferenced(ctx context.Context) (UnreferencedOutput, error)
 	Duplication(ctx context.Context) (DuplicationOutput, error)
-	Conform(ctx context.Context) (ConformOutput, error)
+	Conformance(ctx context.Context) (ConformanceOutput, error)
 	ModelTierLens(ctx context.Context) (ModelTierOutput, error)
 }

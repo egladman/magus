@@ -195,10 +195,10 @@ deliberately rebase it. Additive policy that is not host-shaped stays in
 
 ## Tightening a conformance threshold
 
-A workspace that commits a conformance ratchet (`knowledge.conform.ratchet`) enforces the
+A workspace that commits a conformance ratchet (`knowledge.conformance.ratchet`) enforces the
 committed value, and the code usually drifts tighter than it. Two readings name the slack:
-the rows of `{{buzz "conform"}}()` with `propose` above zero, and `{{cmd "doctor"}}`'s
-`conform-ratchet` check, which gives each row's ratchet `path:line`.
+the rows of `{{buzz "conformance"}}()` with `propose` above zero, and `{{cmd "doctor"}}`'s
+`conformance-ratchet` check, which gives each row's ratchet `path:line`.
 
 1. Edit only the line doctor names. Copy the proposed `value`, the row's `n` and the
    percentile, and put the measuring revision in `why`.

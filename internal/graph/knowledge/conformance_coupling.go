@@ -25,7 +25,7 @@ const (
 	knobOption = "option"
 )
 
-// sharedUse is one function other packages call. ID is its conform item ID; Body its lines;
+// sharedUse is one function other packages call. ID is its conformance item ID; Body its lines;
 // Callers the package directories outside its own that reference it, sorted; Spread the most
 // import hops between two of them (zero for one caller); Knobs what bends it per caller,
 // read only for two or more callers.
@@ -48,11 +48,11 @@ type modeKnob struct {
 // a package other than its own references, in symbol ID order. Callers are read from the
 // non-test files the population counts, so generated and excluded code calls nothing. It is
 // empty with no symbol index.
-func (g *Graph) sharedUses(o types.ConformOptions, only map[string]bool) []sharedUse {
+func (g *Graph) sharedUses(o types.ConformanceOptions, only map[string]bool) []sharedUse {
 	if !g.HasSymbols() {
 		return nil
 	}
-	x := newConformIndex(g, o)
+	x := newConformanceIndex(g, o)
 	ids := slices.Sorted(maps.Keys(x.local))
 	if only != nil {
 		ids = slices.Sorted(maps.Keys(only))
@@ -69,7 +69,7 @@ func (g *Graph) sharedUses(o types.ConformOptions, only map[string]bool) []share
 		if !ok {
 			continue
 		}
-		if pop, ok := x.population(file); !ok || pop == types.ConformPopTest {
+		if pop, ok := x.population(file); !ok || pop == types.ConformancePopTest {
 			continue
 		}
 		definer := path.Dir(file)
@@ -96,14 +96,14 @@ func (g *Graph) sharedUses(o types.ConformOptions, only map[string]bool) []share
 }
 
 // callerFiles is every measured non-test file that references id, sorted.
-func (x *conformIndex) callerFiles(id string) []string {
+func (x *conformanceIndex) callerFiles(id string) []string {
 	var out []string
 	for _, e := range x.g.in[id] {
 		file, ok := strings.CutPrefix(e.Source, types.KindFile+":")
 		if e.Relation != types.RelationReferences || !ok {
 			continue
 		}
-		if pop, ok := x.population(file); ok && pop != types.ConformPopTest && !slices.Contains(out, file) {
+		if pop, ok := x.population(file); ok && pop != types.ConformancePopTest && !slices.Contains(out, file) {
 			out = append(out, file)
 		}
 	}
@@ -258,10 +258,10 @@ func namespaceMembers(g *Graph, ns string) []string {
 // Each conjunct alone fires on what is kept on purpose: far callers alone are a utility, a
 // knob alone an edge flag, size alone a parser. With any of the three unconfigured it holds
 // no verdict and reports false.
-func (u sharedUse) overShared(o types.ConformOptions) bool {
-	body, bodySrc := o.Effective(couplingKey(types.ConformSharedBody))
-	spread, spreadSrc := o.Effective(couplingKey(types.ConformCallerSpread))
-	reach, reachSrc := o.Effective(couplingKey(types.ConformSharedReach))
+func (u sharedUse) overShared(o types.ConformanceOptions) bool {
+	body, bodySrc := o.Effective(couplingKey(types.ConformanceSharedBody))
+	spread, spreadSrc := o.Effective(couplingKey(types.ConformanceCallerSpread))
+	reach, reachSrc := o.Effective(couplingKey(types.ConformanceSharedReach))
 	if bodySrc == "" || spreadSrc == "" || reachSrc == "" {
 		return false
 	}
@@ -269,32 +269,32 @@ func (u sharedUse) overShared(o types.ConformOptions) bool {
 }
 
 // couplingKey is m's key: the coupling metrics pool source and main code as source.
-func couplingKey(m types.ConformMetric) types.ConformKey {
-	return types.ConformKey{Metric: m, Population: types.ConformPopSource}
+func couplingKey(m types.ConformanceMetric) types.ConformanceKey {
+	return types.ConformanceKey{Metric: m, Population: types.ConformancePopSource}
 }
 
 // sharedLoops measures every shared function: its reach into shared-reach, and for two or
 // more callers its body into shared-body and its spread into caller-spread, each list in ID
 // order. violations are the functions overShared holds, each measured by its knob count, in
 // ID order: the mode-knobs list.
-func sharedLoops(g *Graph, o types.ConformOptions) (samples map[types.ConformKey][]types.ConformItem, violations []types.ConformItem) {
-	samples = map[types.ConformKey][]types.ConformItem{}
-	add := func(m types.ConformMetric, u sharedUse, measure int) {
+func sharedLoops(g *Graph, o types.ConformanceOptions) (samples map[types.ConformanceKey][]types.ConformanceItem, violations []types.ConformanceItem) {
+	samples = map[types.ConformanceKey][]types.ConformanceItem{}
+	add := func(m types.ConformanceMetric, u sharedUse, measure int) {
 		k := couplingKey(m)
-		samples[k] = append(samples[k], types.ConformItem{ID: u.ID, Source: u.Source, Measure: measure})
+		samples[k] = append(samples[k], types.ConformanceItem{ID: u.ID, Source: u.Source, Measure: measure})
 	}
 	for _, u := range g.sharedUses(o, nil) {
-		add(types.ConformSharedReach, u, len(u.Callers))
+		add(types.ConformanceSharedReach, u, len(u.Callers))
 		if len(u.Callers) < 2 {
 			continue
 		}
-		add(types.ConformSharedBody, u, u.Body)
-		add(types.ConformCallerSpread, u, u.Spread)
+		add(types.ConformanceSharedBody, u, u.Body)
+		add(types.ConformanceCallerSpread, u, u.Spread)
 		if u.overShared(o) {
-			violations = append(violations, types.ConformItem{ID: u.ID, Source: u.Source, Measure: len(u.Knobs)})
+			violations = append(violations, types.ConformanceItem{ID: u.ID, Source: u.Source, Measure: len(u.Knobs)})
 		}
 	}
-	byID := func(a, b types.ConformItem) int { return cmp.Compare(a.ID, b.ID) }
+	byID := func(a, b types.ConformanceItem) int { return cmp.Compare(a.ID, b.ID) }
 	for _, items := range samples {
 		slices.SortFunc(items, byID)
 	}

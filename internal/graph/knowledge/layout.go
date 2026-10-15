@@ -27,9 +27,9 @@ type LayoutChange struct {
 	// Generated holds the workspace-relative paths that are generated output. A generated file
 	// is neither counted nor able to make a directory old.
 	Generated map[string]bool
-	// Gates are knowledge.conform.gates as this run applies them, taken as given like
+	// Gates are knowledge.conformance.gates as this run applies them, taken as given like
 	// [ConformanceChange]'s.
-	Gates types.ConformGates
+	Gates types.ConformanceGates
 }
 
 // layoutLanguage is what the lens knows about one language: the name a finding uses for it and

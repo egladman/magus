@@ -65,22 +65,22 @@ Each lens is a field on the report:
   so without it the lens would be most reassuring exactly where it knows least.
   Alongside them the report carries the knowledge graph's shape, the same numbers
   [`magus graph stats`](../../reference/manpage/magus-graph.md) prints.
-- `conform`: how large and how coupled the code is, measured over the same graph, one
+- `conformance`: how large and how coupled the code is, measured over the same graph, one
   row per metric and population. Like `unreferenced` it takes no window, and a missing or
   stale symbol index answers `unknown`, never a pass. Read it through the report or
-  `magus\conform()`, which also returns each symbol index's freshness.
+  `magus\conformance()`, which also returns each symbol index's freshness.
 
   A row has a metric: file lines, function lines, methods per type, top-level
   declarations per file, workspace imports per package, tokens in a body whose shape
   another body shares, or exported symbols nothing outside their package uses. It has a
   population too: `source`, `main` (Go's `package main`) or `test`, measured apart so
   moving code into tests cannot shift the source numbers. Generated files and the globs
-  in `knowledge.conform.exclude` belong to none; `excluded` counts what the globs hid, so
+  in `knowledge.conformance.exclude` belong to none; `excluded` counts what the globs hid, so
   a widened exclusion shows.
 
   Each row sets two values side by side. `live` is the configured percentile of the code
   today. `value` is what a check enforces, and `source` says where it came from: `ratchet`
-  when a person committed it to the record `knowledge.conform.ratchet` names, `anchor`
+  when a person committed it to the record `knowledge.conformance.ratchet` names, `anchor`
   when nothing is committed and the configured bound applies. They differ on purpose.
   Nothing enforces a live percentile, because a threshold that follows the code loosens
   as the code grows. `violations` lists what sits past `value`, apart from the `known`

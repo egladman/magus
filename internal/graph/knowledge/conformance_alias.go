@@ -24,7 +24,7 @@ func (g *Graph) ImportAliases() types.ImportAliasReport {
 	if !out.Indexed {
 		return out
 	}
-	for _, p := range importAliases(g, func(file string) bool { return conformGenerated(g, types.ConformOptions{}, file) }) {
+	for _, p := range importAliases(g, func(file string) bool { return conformanceGenerated(g, types.ConformanceOptions{}, file) }) {
 		if p.facts.Importers > 0 {
 			out.Packages = append(out.Packages, p.facts)
 		}
@@ -171,27 +171,27 @@ func externalPackageName(pkgPath string) string {
 // a package blamed for a clash, with the most percent of its importers that also import a
 // package of its name. A clash blames the package with fewer importers, both on a tie, and
 // ours when the partner is outside the workspace. Items are package directories in order.
-func aliasSamples(g *Graph, o types.ConformOptions) map[types.ConformKey][]types.ConformItem {
-	out := map[types.ConformKey][]types.ConformItem{}
+func aliasSamples(g *Graph, o types.ConformanceOptions) map[types.ConformanceKey][]types.ConformanceItem {
+	out := map[types.ConformanceKey][]types.ConformanceItem{}
 	if !g.HasSymbols() {
 		return out
 	}
-	shareKey, clashKey := couplingKey(types.ConformAliasShare), couplingKey(types.ConformNameClash)
-	shareLimit, _ := conformLimit(o, shareKey)
-	clashLimit, _ := conformLimit(o, clashKey)
-	for _, p := range importAliases(g, func(file string) bool { return conformGenerated(g, o, file) || conformExcludes(o, file) }) {
-		if !slices.ContainsFunc(p.files, func(f string) bool { return !conformGenerated(g, o, f) && !conformExcludes(o, f) }) {
+	shareKey, clashKey := couplingKey(types.ConformanceAliasShare), couplingKey(types.ConformanceNameClash)
+	shareLimit, _ := conformanceLimit(o, shareKey)
+	clashLimit, _ := conformanceLimit(o, clashKey)
+	for _, p := range importAliases(g, func(file string) bool { return conformanceGenerated(g, o, file) || conformanceExcludes(o, file) }) {
+		if !slices.ContainsFunc(p.files, func(f string) bool { return !conformanceGenerated(g, o, f) && !conformanceExcludes(o, f) }) {
 			continue
 		}
 		f := p.facts
 		if f.Importers >= max(1, shareLimit.MinSubject) {
-			out[shareKey] = append(out[shareKey], types.ConformItem{ID: f.Dir, Source: p.source, Measure: percent(f.Needed, f.Importers)})
+			out[shareKey] = append(out[shareKey], types.ConformanceItem{ID: f.Dir, Source: p.source, Measure: percent(f.Needed, f.Importers)})
 		}
 		if f.Importers < max(1, clashLimit.MinSubject) {
 			continue
 		}
 		if share, blamed := clashShare(f); blamed {
-			out[clashKey] = append(out[clashKey], types.ConformItem{ID: f.Dir, Source: p.source, Measure: share})
+			out[clashKey] = append(out[clashKey], types.ConformanceItem{ID: f.Dir, Source: p.source, Measure: share})
 		}
 	}
 	return out

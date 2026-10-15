@@ -17,8 +17,8 @@
 // this wire lives in the handler, so the domain type stays free of protobuf. buf-breaking
 // gates this file.
 //
-// It carries one knowledge-graph lens, conform, and no other (types.InsightReport's graph_stats,
-// unreferenced and duplication stay out): conform is the one that proposes a value for a
+// It carries one knowledge-graph lens, conformance, and no other (types.InsightReport's graph_stats,
+// unreferenced and duplication stay out): conformance is the one that proposes a value for a
 // person to commit, so the dashboard shows it beside the history it is judged against. The
 // server computes it with the cached scan, so a burst of polls pays for one graph load.
 
@@ -80,7 +80,7 @@ func (*GetInsightRequest) Descriptor() ([]byte, []int) {
 // Insight bundles the six lenses. volatility is absent (not an empty report) when the
 // workspace has no run-outcome history to score - the distinction matters to a reader, which
 // renders "no runs recorded yet" rather than "no volatile targets". model_tiers is absent
-// for the same reason when no job outcome was ever recorded. conform is absent when the
+// for the same reason when no job outcome was ever recorded. conformance is absent when the
 // server holds no workspace to read; a workspace without a symbol index sends it with an
 // unknown answer.
 type Insight struct {
@@ -91,7 +91,7 @@ type Insight struct {
 	Trend         *TrendOutput           `protobuf:"bytes,4,opt,name=trend,proto3" json:"trend,omitempty"`
 	Volatility    *VolatilityReport      `protobuf:"bytes,5,opt,name=volatility,proto3" json:"volatility,omitempty"`
 	ModelTiers    *ModelTierOutput       `protobuf:"bytes,6,opt,name=model_tiers,json=modelTiers,proto3" json:"model_tiers,omitempty"`
-	Conform       *ConformOutput         `protobuf:"bytes,7,opt,name=conform,proto3" json:"conform,omitempty"`
+	Conformance   *ConformanceOutput     `protobuf:"bytes,7,opt,name=conformance,proto3" json:"conformance,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -168,9 +168,9 @@ func (x *Insight) GetModelTiers() *ModelTierOutput {
 	return nil
 }
 
-func (x *Insight) GetConform() *ConformOutput {
+func (x *Insight) GetConformance() *ConformanceOutput {
 	if x != nil {
-		return x.Conform
+		return x.Conformance
 	}
 	return nil
 }
@@ -1379,36 +1379,36 @@ func (x *ModelTierRecord) GetNotRetryable() int32 {
 	return 0
 }
 
-// ConformOutput is the code-shape lens: one row per metric and population, judged against the
+// ConformanceOutput is the code-shape lens: one row per metric and population, judged against the
 // value a check enforces. It reads the symbol graph, not git. It reports and proposes; a
 // person commits a proposed value to the ratchet record, and nothing here sets one. answer is
 // unknown, never a pass, when a symbol index is missing. excluded counts the files the
 // configured exclusions hid, so a widened exclusion stays visible.
-type ConformOutput struct {
+type ConformanceOutput struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Definition    string                 `protobuf:"bytes,1,opt,name=definition,proto3" json:"definition,omitempty"`
-	Rows          []*ConformRow          `protobuf:"bytes,2,rep,name=rows,proto3" json:"rows,omitempty"`
-	Stale         []*ConformKnown        `protobuf:"bytes,3,rep,name=stale,proto3" json:"stale,omitempty"`
+	Rows          []*ConformanceRow      `protobuf:"bytes,2,rep,name=rows,proto3" json:"rows,omitempty"`
+	Stale         []*ConformanceKnown    `protobuf:"bytes,3,rep,name=stale,proto3" json:"stale,omitempty"`
 	Excluded      int32                  `protobuf:"varint,4,opt,name=excluded,proto3" json:"excluded,omitempty"`
 	Answer        *v1alpha1.Answer       `protobuf:"bytes,5,opt,name=answer,proto3" json:"answer,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ConformOutput) Reset() {
-	*x = ConformOutput{}
+func (x *ConformanceOutput) Reset() {
+	*x = ConformanceOutput{}
 	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ConformOutput) String() string {
+func (x *ConformanceOutput) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ConformOutput) ProtoMessage() {}
+func (*ConformanceOutput) ProtoMessage() {}
 
-func (x *ConformOutput) ProtoReflect() protoreflect.Message {
+func (x *ConformanceOutput) ProtoReflect() protoreflect.Message {
 	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1420,50 +1420,50 @@ func (x *ConformOutput) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ConformOutput.ProtoReflect.Descriptor instead.
-func (*ConformOutput) Descriptor() ([]byte, []int) {
+// Deprecated: Use ConformanceOutput.ProtoReflect.Descriptor instead.
+func (*ConformanceOutput) Descriptor() ([]byte, []int) {
 	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{15}
 }
 
-func (x *ConformOutput) GetDefinition() string {
+func (x *ConformanceOutput) GetDefinition() string {
 	if x != nil {
 		return x.Definition
 	}
 	return ""
 }
 
-func (x *ConformOutput) GetRows() []*ConformRow {
+func (x *ConformanceOutput) GetRows() []*ConformanceRow {
 	if x != nil {
 		return x.Rows
 	}
 	return nil
 }
 
-func (x *ConformOutput) GetStale() []*ConformKnown {
+func (x *ConformanceOutput) GetStale() []*ConformanceKnown {
 	if x != nil {
 		return x.Stale
 	}
 	return nil
 }
 
-func (x *ConformOutput) GetExcluded() int32 {
+func (x *ConformanceOutput) GetExcluded() int32 {
 	if x != nil {
 		return x.Excluded
 	}
 	return 0
 }
 
-func (x *ConformOutput) GetAnswer() *v1alpha1.Answer {
+func (x *ConformanceOutput) GetAnswer() *v1alpha1.Answer {
 	if x != nil {
 		return x.Answer
 	}
 	return nil
 }
 
-// ConformKey names one threshold: metric (file-lines, func-lines, type-methods, file-symbols,
+// ConformanceKey names one threshold: metric (file-lines, func-lines, type-methods, file-symbols,
 // dep-fanout, clone-tokens or export-scope), population (source, main or test) and, for
 // dep-fanout, the layer or package directory it covers.
-type ConformKey struct {
+type ConformanceKey struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Metric        string                 `protobuf:"bytes,1,opt,name=metric,proto3" json:"metric,omitempty"`
 	Population    string                 `protobuf:"bytes,2,opt,name=population,proto3" json:"population,omitempty"`
@@ -1472,20 +1472,20 @@ type ConformKey struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ConformKey) Reset() {
-	*x = ConformKey{}
+func (x *ConformanceKey) Reset() {
+	*x = ConformanceKey{}
 	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ConformKey) String() string {
+func (x *ConformanceKey) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ConformKey) ProtoMessage() {}
+func (*ConformanceKey) ProtoMessage() {}
 
-func (x *ConformKey) ProtoReflect() protoreflect.Message {
+func (x *ConformanceKey) ProtoReflect() protoreflect.Message {
 	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1497,40 +1497,40 @@ func (x *ConformKey) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ConformKey.ProtoReflect.Descriptor instead.
-func (*ConformKey) Descriptor() ([]byte, []int) {
+// Deprecated: Use ConformanceKey.ProtoReflect.Descriptor instead.
+func (*ConformanceKey) Descriptor() ([]byte, []int) {
 	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{16}
 }
 
-func (x *ConformKey) GetMetric() string {
+func (x *ConformanceKey) GetMetric() string {
 	if x != nil {
 		return x.Metric
 	}
 	return ""
 }
 
-func (x *ConformKey) GetPopulation() string {
+func (x *ConformanceKey) GetPopulation() string {
 	if x != nil {
 		return x.Population
 	}
 	return ""
 }
 
-func (x *ConformKey) GetScope() string {
+func (x *ConformanceKey) GetScope() string {
 	if x != nil {
 		return x.Scope
 	}
 	return ""
 }
 
-// ConformRow is one key's distribution and verdict. live is the configured percentile today;
+// ConformanceRow is one key's distribution and verdict. live is the configured percentile today;
 // value and source (ratchet or anchor) are what a check enforces, and anchor is the shipped
 // bound no committed value may exceed. propose is zero, or a tighter value to commit; it is
 // never looser than value. known counts the accepted items past value, and violations are the
 // rest.
-type ConformRow struct {
+type ConformanceRow struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           *ConformKey            `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Key           *ConformanceKey        `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	N             int32                  `protobuf:"varint,2,opt,name=n,proto3" json:"n,omitempty"`
 	P50           int32                  `protobuf:"varint,3,opt,name=p50,proto3" json:"p50,omitempty"`
 	P90           int32                  `protobuf:"varint,4,opt,name=p90,proto3" json:"p90,omitempty"`
@@ -1542,25 +1542,25 @@ type ConformRow struct {
 	Propose       int32                  `protobuf:"varint,10,opt,name=propose,proto3" json:"propose,omitempty"`
 	Known         int32                  `protobuf:"varint,11,opt,name=known,proto3" json:"known,omitempty"`
 	Source        string                 `protobuf:"bytes,12,opt,name=source,proto3" json:"source,omitempty"`
-	Violations    []*ConformItem         `protobuf:"bytes,13,rep,name=violations,proto3" json:"violations,omitempty"`
+	Violations    []*ConformanceItem     `protobuf:"bytes,13,rep,name=violations,proto3" json:"violations,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ConformRow) Reset() {
-	*x = ConformRow{}
+func (x *ConformanceRow) Reset() {
+	*x = ConformanceRow{}
 	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ConformRow) String() string {
+func (x *ConformanceRow) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ConformRow) ProtoMessage() {}
+func (*ConformanceRow) ProtoMessage() {}
 
-func (x *ConformRow) ProtoReflect() protoreflect.Message {
+func (x *ConformanceRow) ProtoReflect() protoreflect.Message {
 	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1572,105 +1572,105 @@ func (x *ConformRow) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ConformRow.ProtoReflect.Descriptor instead.
-func (*ConformRow) Descriptor() ([]byte, []int) {
+// Deprecated: Use ConformanceRow.ProtoReflect.Descriptor instead.
+func (*ConformanceRow) Descriptor() ([]byte, []int) {
 	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{17}
 }
 
-func (x *ConformRow) GetKey() *ConformKey {
+func (x *ConformanceRow) GetKey() *ConformanceKey {
 	if x != nil {
 		return x.Key
 	}
 	return nil
 }
 
-func (x *ConformRow) GetN() int32 {
+func (x *ConformanceRow) GetN() int32 {
 	if x != nil {
 		return x.N
 	}
 	return 0
 }
 
-func (x *ConformRow) GetP50() int32 {
+func (x *ConformanceRow) GetP50() int32 {
 	if x != nil {
 		return x.P50
 	}
 	return 0
 }
 
-func (x *ConformRow) GetP90() int32 {
+func (x *ConformanceRow) GetP90() int32 {
 	if x != nil {
 		return x.P90
 	}
 	return 0
 }
 
-func (x *ConformRow) GetP95() int32 {
+func (x *ConformanceRow) GetP95() int32 {
 	if x != nil {
 		return x.P95
 	}
 	return 0
 }
 
-func (x *ConformRow) GetP99() int32 {
+func (x *ConformanceRow) GetP99() int32 {
 	if x != nil {
 		return x.P99
 	}
 	return 0
 }
 
-func (x *ConformRow) GetLive() int32 {
+func (x *ConformanceRow) GetLive() int32 {
 	if x != nil {
 		return x.Live
 	}
 	return 0
 }
 
-func (x *ConformRow) GetValue() int32 {
+func (x *ConformanceRow) GetValue() int32 {
 	if x != nil {
 		return x.Value
 	}
 	return 0
 }
 
-func (x *ConformRow) GetAnchor() int32 {
+func (x *ConformanceRow) GetAnchor() int32 {
 	if x != nil {
 		return x.Anchor
 	}
 	return 0
 }
 
-func (x *ConformRow) GetPropose() int32 {
+func (x *ConformanceRow) GetPropose() int32 {
 	if x != nil {
 		return x.Propose
 	}
 	return 0
 }
 
-func (x *ConformRow) GetKnown() int32 {
+func (x *ConformanceRow) GetKnown() int32 {
 	if x != nil {
 		return x.Known
 	}
 	return 0
 }
 
-func (x *ConformRow) GetSource() string {
+func (x *ConformanceRow) GetSource() string {
 	if x != nil {
 		return x.Source
 	}
 	return ""
 }
 
-func (x *ConformRow) GetViolations() []*ConformItem {
+func (x *ConformanceRow) GetViolations() []*ConformanceItem {
 	if x != nil {
 		return x.Violations
 	}
 	return nil
 }
 
-// ConformItem is one file, symbol, package or clone group past its row's value and not known.
+// ConformanceItem is one file, symbol, package or clone group past its row's value and not known.
 // source is its path:line.
-type ConformItem struct {
+type ConformanceItem struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Source        string                 `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
@@ -1679,20 +1679,20 @@ type ConformItem struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ConformItem) Reset() {
-	*x = ConformItem{}
+func (x *ConformanceItem) Reset() {
+	*x = ConformanceItem{}
 	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ConformItem) String() string {
+func (x *ConformanceItem) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ConformItem) ProtoMessage() {}
+func (*ConformanceItem) ProtoMessage() {}
 
-func (x *ConformItem) ProtoReflect() protoreflect.Message {
+func (x *ConformanceItem) ProtoReflect() protoreflect.Message {
 	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1704,35 +1704,35 @@ func (x *ConformItem) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ConformItem.ProtoReflect.Descriptor instead.
-func (*ConformItem) Descriptor() ([]byte, []int) {
+// Deprecated: Use ConformanceItem.ProtoReflect.Descriptor instead.
+func (*ConformanceItem) Descriptor() ([]byte, []int) {
 	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{18}
 }
 
-func (x *ConformItem) GetId() string {
+func (x *ConformanceItem) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *ConformItem) GetSource() string {
+func (x *ConformanceItem) GetSource() string {
 	if x != nil {
 		return x.Source
 	}
 	return ""
 }
 
-func (x *ConformItem) GetMeasure() int32 {
+func (x *ConformanceItem) GetMeasure() int32 {
 	if x != nil {
 		return x.Measure
 	}
 	return 0
 }
 
-// ConformKnown is a list of items already past a metric's value and accepted for a reason.
-// In ConformOutput.stale it names the entries that no longer violate and should be deleted.
-type ConformKnown struct {
+// ConformanceKnown is a list of items already past a metric's value and accepted for a reason.
+// In ConformanceOutput.stale it names the entries that no longer violate and should be deleted.
+type ConformanceKnown struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Metric        string                 `protobuf:"bytes,1,opt,name=metric,proto3" json:"metric,omitempty"`
 	Items         []string               `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
@@ -1741,20 +1741,20 @@ type ConformKnown struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ConformKnown) Reset() {
-	*x = ConformKnown{}
+func (x *ConformanceKnown) Reset() {
+	*x = ConformanceKnown{}
 	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ConformKnown) String() string {
+func (x *ConformanceKnown) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ConformKnown) ProtoMessage() {}
+func (*ConformanceKnown) ProtoMessage() {}
 
-func (x *ConformKnown) ProtoReflect() protoreflect.Message {
+func (x *ConformanceKnown) ProtoReflect() protoreflect.Message {
 	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1766,26 +1766,26 @@ func (x *ConformKnown) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ConformKnown.ProtoReflect.Descriptor instead.
-func (*ConformKnown) Descriptor() ([]byte, []int) {
+// Deprecated: Use ConformanceKnown.ProtoReflect.Descriptor instead.
+func (*ConformanceKnown) Descriptor() ([]byte, []int) {
 	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{19}
 }
 
-func (x *ConformKnown) GetMetric() string {
+func (x *ConformanceKnown) GetMetric() string {
 	if x != nil {
 		return x.Metric
 	}
 	return ""
 }
 
-func (x *ConformKnown) GetItems() []string {
+func (x *ConformanceKnown) GetItems() []string {
 	if x != nil {
 		return x.Items
 	}
 	return nil
 }
 
-func (x *ConformKnown) GetReason() string {
+func (x *ConformanceKnown) GetReason() string {
 	if x != nil {
 		return x.Reason
 	}
@@ -1797,7 +1797,7 @@ var File_magus_insight_v1alpha1_insight_proto protoreflect.FileDescriptor
 const file_magus_insight_v1alpha1_insight_proto_rawDesc = "" +
 	"\n" +
 	"$magus/insight/v1alpha1/insight.proto\x12\x16magus.insight.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a magus/graph/v1alpha1/graph.proto\"\x13\n" +
-	"\x11GetInsightRequest\"\xe7\x03\n" +
+	"\x11GetInsightRequest\"\xf3\x03\n" +
 	"\aInsight\x12A\n" +
 	"\bhotspots\x18\x01 \x01(\v2%.magus.insight.v1alpha1.HotspotOutputR\bhotspots\x12B\n" +
 	"\baffinity\x18\x02 \x01(\v2&.magus.insight.v1alpha1.AffinityOutputR\baffinity\x12E\n" +
@@ -1807,8 +1807,8 @@ const file_magus_insight_v1alpha1_insight_proto_rawDesc = "" +
 	"volatility\x18\x05 \x01(\v2(.magus.insight.v1alpha1.VolatilityReportR\n" +
 	"volatility\x12H\n" +
 	"\vmodel_tiers\x18\x06 \x01(\v2'.magus.insight.v1alpha1.ModelTierOutputR\n" +
-	"modelTiers\x12?\n" +
-	"\aconform\x18\a \x01(\v2%.magus.insight.v1alpha1.ConformOutputR\aconform\"\xd5\x01\n" +
+	"modelTiers\x12K\n" +
+	"\vconformance\x18\a \x01(\v2).magus.insight.v1alpha1.ConformanceOutputR\vconformance\"\xd5\x01\n" +
 	"\rHotspotOutput\x12\x1e\n" +
 	"\n" +
 	"definition\x18\x01 \x01(\tR\n" +
@@ -1927,25 +1927,23 @@ const file_magus_insight_v1alpha1_insight_proto_rawDesc = "" +
 	"\n" +
 	"first_pass\x18\x10 \x01(\x05R\tfirstPass\x12(\n" +
 	"\x10first_pass_lower\x18\x11 \x01(\x01R\x0efirstPassLower\x12#\n" +
-	"\rnot_retryable\x18\x12 \x01(\x05R\fnotRetryable\"\xf5\x01\n" +
-	"\rConformOutput\x12\x1e\n" +
+	"\rnot_retryable\x18\x12 \x01(\x05R\fnotRetryable\"\x81\x02\n" +
+	"\x11ConformanceOutput\x12\x1e\n" +
 	"\n" +
 	"definition\x18\x01 \x01(\tR\n" +
-	"definition\x126\n" +
-	"\x04rows\x18\x02 \x03(\v2\".magus.insight.v1alpha1.ConformRowR\x04rows\x12:\n" +
-	"\x05stale\x18\x03 \x03(\v2$.magus.insight.v1alpha1.ConformKnownR\x05stale\x12\x1a\n" +
+	"definition\x12:\n" +
+	"\x04rows\x18\x02 \x03(\v2&.magus.insight.v1alpha1.ConformanceRowR\x04rows\x12>\n" +
+	"\x05stale\x18\x03 \x03(\v2(.magus.insight.v1alpha1.ConformanceKnownR\x05stale\x12\x1a\n" +
 	"\bexcluded\x18\x04 \x01(\x05R\bexcluded\x124\n" +
-	"\x06answer\x18\x05 \x01(\v2\x1c.magus.graph.v1alpha1.AnswerR\x06answer\"Z\n" +
-	"\n" +
-	"ConformKey\x12\x16\n" +
+	"\x06answer\x18\x05 \x01(\v2\x1c.magus.graph.v1alpha1.AnswerR\x06answer\"^\n" +
+	"\x0eConformanceKey\x12\x16\n" +
 	"\x06metric\x18\x01 \x01(\tR\x06metric\x12\x1e\n" +
 	"\n" +
 	"population\x18\x02 \x01(\tR\n" +
 	"population\x12\x14\n" +
-	"\x05scope\x18\x03 \x01(\tR\x05scope\"\xe7\x02\n" +
-	"\n" +
-	"ConformRow\x124\n" +
-	"\x03key\x18\x01 \x01(\v2\".magus.insight.v1alpha1.ConformKeyR\x03key\x12\f\n" +
+	"\x05scope\x18\x03 \x01(\tR\x05scope\"\xf3\x02\n" +
+	"\x0eConformanceRow\x128\n" +
+	"\x03key\x18\x01 \x01(\v2&.magus.insight.v1alpha1.ConformanceKeyR\x03key\x12\f\n" +
 	"\x01n\x18\x02 \x01(\x05R\x01n\x12\x10\n" +
 	"\x03p50\x18\x03 \x01(\x05R\x03p50\x12\x10\n" +
 	"\x03p90\x18\x04 \x01(\x05R\x03p90\x12\x10\n" +
@@ -1957,15 +1955,15 @@ const file_magus_insight_v1alpha1_insight_proto_rawDesc = "" +
 	"\apropose\x18\n" +
 	" \x01(\x05R\apropose\x12\x14\n" +
 	"\x05known\x18\v \x01(\x05R\x05known\x12\x16\n" +
-	"\x06source\x18\f \x01(\tR\x06source\x12C\n" +
+	"\x06source\x18\f \x01(\tR\x06source\x12G\n" +
 	"\n" +
-	"violations\x18\r \x03(\v2#.magus.insight.v1alpha1.ConformItemR\n" +
-	"violations\"O\n" +
-	"\vConformItem\x12\x0e\n" +
+	"violations\x18\r \x03(\v2'.magus.insight.v1alpha1.ConformanceItemR\n" +
+	"violations\"S\n" +
+	"\x0fConformanceItem\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\x12\x18\n" +
-	"\ameasure\x18\x03 \x01(\x05R\ameasure\"T\n" +
-	"\fConformKnown\x12\x16\n" +
+	"\ameasure\x18\x03 \x01(\x05R\ameasure\"X\n" +
+	"\x10ConformanceKnown\x12\x16\n" +
 	"\x06metric\x18\x01 \x01(\tR\x06metric\x12\x14\n" +
 	"\x05items\x18\x02 \x03(\tR\x05items\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason2j\n" +
@@ -2003,11 +2001,11 @@ var file_magus_insight_v1alpha1_insight_proto_goTypes = []any{
 	(*VolatilityTarget)(nil),      // 12: magus.insight.v1alpha1.VolatilityTarget
 	(*ModelTierOutput)(nil),       // 13: magus.insight.v1alpha1.ModelTierOutput
 	(*ModelTierRecord)(nil),       // 14: magus.insight.v1alpha1.ModelTierRecord
-	(*ConformOutput)(nil),         // 15: magus.insight.v1alpha1.ConformOutput
-	(*ConformKey)(nil),            // 16: magus.insight.v1alpha1.ConformKey
-	(*ConformRow)(nil),            // 17: magus.insight.v1alpha1.ConformRow
-	(*ConformItem)(nil),           // 18: magus.insight.v1alpha1.ConformItem
-	(*ConformKnown)(nil),          // 19: magus.insight.v1alpha1.ConformKnown
+	(*ConformanceOutput)(nil),     // 15: magus.insight.v1alpha1.ConformanceOutput
+	(*ConformanceKey)(nil),        // 16: magus.insight.v1alpha1.ConformanceKey
+	(*ConformanceRow)(nil),        // 17: magus.insight.v1alpha1.ConformanceRow
+	(*ConformanceItem)(nil),       // 18: magus.insight.v1alpha1.ConformanceItem
+	(*ConformanceKnown)(nil),      // 19: magus.insight.v1alpha1.ConformanceKnown
 	(*timestamppb.Timestamp)(nil), // 20: google.protobuf.Timestamp
 	(*v1alpha1.Answer)(nil),       // 21: magus.graph.v1alpha1.Answer
 }
@@ -2018,7 +2016,7 @@ var file_magus_insight_v1alpha1_insight_proto_depIdxs = []int32{
 	9,  // 3: magus.insight.v1alpha1.Insight.trend:type_name -> magus.insight.v1alpha1.TrendOutput
 	11, // 4: magus.insight.v1alpha1.Insight.volatility:type_name -> magus.insight.v1alpha1.VolatilityReport
 	13, // 5: magus.insight.v1alpha1.Insight.model_tiers:type_name -> magus.insight.v1alpha1.ModelTierOutput
-	15, // 6: magus.insight.v1alpha1.Insight.conform:type_name -> magus.insight.v1alpha1.ConformOutput
+	15, // 6: magus.insight.v1alpha1.Insight.conformance:type_name -> magus.insight.v1alpha1.ConformanceOutput
 	3,  // 7: magus.insight.v1alpha1.HotspotOutput.nodes:type_name -> magus.insight.v1alpha1.ProjectNode
 	4,  // 8: magus.insight.v1alpha1.HotspotOutput.files:type_name -> magus.insight.v1alpha1.FileHotspot
 	20, // 9: magus.insight.v1alpha1.ProjectNode.last_commit_time:type_name -> google.protobuf.Timestamp
@@ -2030,11 +2028,11 @@ var file_magus_insight_v1alpha1_insight_proto_depIdxs = []int32{
 	12, // 15: magus.insight.v1alpha1.VolatilityReport.targets:type_name -> magus.insight.v1alpha1.VolatilityTarget
 	20, // 16: magus.insight.v1alpha1.VolatilityTarget.last_pass_time:type_name -> google.protobuf.Timestamp
 	14, // 17: magus.insight.v1alpha1.ModelTierOutput.rows:type_name -> magus.insight.v1alpha1.ModelTierRecord
-	17, // 18: magus.insight.v1alpha1.ConformOutput.rows:type_name -> magus.insight.v1alpha1.ConformRow
-	19, // 19: magus.insight.v1alpha1.ConformOutput.stale:type_name -> magus.insight.v1alpha1.ConformKnown
-	21, // 20: magus.insight.v1alpha1.ConformOutput.answer:type_name -> magus.graph.v1alpha1.Answer
-	16, // 21: magus.insight.v1alpha1.ConformRow.key:type_name -> magus.insight.v1alpha1.ConformKey
-	18, // 22: magus.insight.v1alpha1.ConformRow.violations:type_name -> magus.insight.v1alpha1.ConformItem
+	17, // 18: magus.insight.v1alpha1.ConformanceOutput.rows:type_name -> magus.insight.v1alpha1.ConformanceRow
+	19, // 19: magus.insight.v1alpha1.ConformanceOutput.stale:type_name -> magus.insight.v1alpha1.ConformanceKnown
+	21, // 20: magus.insight.v1alpha1.ConformanceOutput.answer:type_name -> magus.graph.v1alpha1.Answer
+	16, // 21: magus.insight.v1alpha1.ConformanceRow.key:type_name -> magus.insight.v1alpha1.ConformanceKey
+	18, // 22: magus.insight.v1alpha1.ConformanceRow.violations:type_name -> magus.insight.v1alpha1.ConformanceItem
 	0,  // 23: magus.insight.v1alpha1.InsightService.GetInsight:input_type -> magus.insight.v1alpha1.GetInsightRequest
 	1,  // 24: magus.insight.v1alpha1.InsightService.GetInsight:output_type -> magus.insight.v1alpha1.Insight
 	24, // [24:25] is the sub-list for method output_type

@@ -402,7 +402,10 @@ import (
 // loop, never a runtime or a model router.
 //
 // 134: magus-sdk fakes a types role by embedding it; the types mocks are internal now.
-const SkillVersion = 134
+//
+// 135: magus-workspace-rules names knowledge.conformance, magus\conformance and the
+// conformance-ratchet doctor check; the conform spellings are gone.
+const SkillVersion = 135
 
 const skillLicense = "GPL-3.0-or-later"
 

@@ -211,7 +211,7 @@ type DiffOptions struct {
 	// which fills DiffSymbol.Change and Diff.API; BaselineLabel names it for the reader.
 	Baseline      *KnowledgeGraphOutput `json:"-" yaml:"-"`
 	BaselineLabel string                `json:"-" yaml:"-"`
-	// MinCohort and MinShare override knowledge.conform.gates' silence gates for this review:
+	// MinCohort and MinShare override knowledge.conformance.gates' silence gates for this review:
 	// how many declarations a norm needs, and the share that must agree. Zero keeps the
 	// configured gate.
 	MinCohort int     `json:"-" yaml:"-"`
@@ -237,7 +237,7 @@ const (
 	// functions in its scope that take both do.
 	CheckParamOrder = "param-order"
 	// CheckCallSequence is a function calling the same workspace functions in the same order
-	// as another, past the call-sequence value knowledge.conform enforces.
+	// as another, past the call-sequence value knowledge.conformance enforces.
 	CheckCallSequence = "call-sequence"
 	// CheckSiblingSprawl is a method or function joining a family of siblings whose names
 	// differ in one complementary word (Hit, Miss, Error).
@@ -246,7 +246,7 @@ const (
 	// caller's branch or option bends a body the rest also run.
 	CheckSharedLoop = "shared-loop"
 	// CheckImportAlias is an aliased import of a package its importers rename past what
-	// knowledge.conform enforces, or a new package taking the name of an existing one.
+	// knowledge.conformance enforces, or a new package taking the name of an existing one.
 	CheckImportAlias = "import-alias"
 	// CheckPackageFiles is a new directory holding one source file where most directories of
 	// its language beside it hold more.

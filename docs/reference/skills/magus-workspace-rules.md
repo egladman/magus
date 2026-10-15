@@ -3,8 +3,8 @@ title: magus-workspace-rules
 generated_from: internal/agent/skills/magus-workspace-rules/SKILL.md
 description: "Adapt magus's installed agent integration to THIS workspace without breaking it."
 tags: [agents, skills, magus-workspace-rules]
-skill_full_bytes: 12512
-skill_short_bytes: 9711
+skill_full_bytes: 12524
+skill_short_bytes: 9723
 ---
 
 # magus-workspace-rules
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `134` |
+| `agent-skill-version` | `135` |
 | `knowledge-schema-version` | `21` |
-| `skill-content` | `ccf54c628e03` |
+| `skill-content` | `7ae8bd30e202` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -222,10 +222,10 @@ To adapt one, declare an override; change no import and no provider call.
 
 ## Tightening a conformance threshold
 
-A workspace that commits a conformance ratchet (`knowledge.conform.ratchet`) enforces the
+A workspace that commits a conformance ratchet (`knowledge.conformance.ratchet`) enforces the
 committed value, and the code usually drifts tighter than it. Two readings name the slack:
-the rows of `magus\conform()` with `propose` above zero, and `magus doctor`'s
-`conform-ratchet` check, which gives each row's ratchet `path:line`.
+the rows of `magus\conformance()` with `propose` above zero, and `magus doctor`'s
+`conformance-ratchet` check, which gives each row's ratchet `path:line`.
 
 1. Edit only the line doctor names. Copy the proposed `value`, the row's `n` and the
    percentile, and put the measuring revision in `why`.
@@ -466,10 +466,10 @@ deliberately rebase it. Additive policy that is not host-shaped stays in
 
 ## Tightening a conformance threshold
 
-A workspace that commits a conformance ratchet (`knowledge.conform.ratchet`) enforces the
+A workspace that commits a conformance ratchet (`knowledge.conformance.ratchet`) enforces the
 committed value, and the code usually drifts tighter than it. Two readings name the slack:
-the rows of `magus\conform()` with `propose` above zero, and `magus doctor`'s
-`conform-ratchet` check, which gives each row's ratchet `path:line`.
+the rows of `magus\conformance()` with `propose` above zero, and `magus doctor`'s
+`conformance-ratchet` check, which gives each row's ratchet `path:line`.
 
 1. Edit only the line doctor names. Copy the proposed `value`, the row's `n` and the
    percentile, and put the measuring revision in `why`.
