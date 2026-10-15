@@ -13,7 +13,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/egladman/magus/libs/proofread/internal/conllu"
 	"github.com/egladman/magus/libs/proofread/internal/wordclass"
 )
 
@@ -46,7 +45,7 @@ func Run(w io.Writer, o Options) error {
 		return fmt.Errorf("train needs at least 1 iteration and 1 level, got %d and %d", o.Iterations, o.Levels)
 	}
 
-	splits := map[string][]conllu.Sentence{}
+	splits := map[string][]sentence{}
 
 	var testRaw []byte
 
@@ -60,7 +59,7 @@ func Run(w io.Writer, o Options) error {
 			testRaw = raw
 		}
 
-		if splits[split], err = conllu.Read(bytes.NewReader(raw)); err != nil {
+		if splits[split], err = readSentences(bytes.NewReader(raw)); err != nil {
 			return fmt.Errorf("%s: %w", split, err)
 		}
 	}
@@ -141,23 +140,23 @@ const (
 	dictMinShare = 0.97
 )
 
-func newTrainer(train []conllu.Sentence) *trainer {
+func newTrainer(train []sentence) *trainer {
 	t := &trainer{index: map[class]uint16{}, dict: map[string]uint16{}, p: newPerceptron()}
 	counts := map[string]map[class]int{}
 
 	for _, s := range train {
-		for _, tok := range s.Words {
-			c := class{xpos: tok.XPOS, upos: tok.UPOS}
+		for _, tok := range s.words {
+			c := class{xpos: tok.xpos, upos: tok.upos}
 			if _, ok := t.index[c]; !ok {
 				t.index[c] = 0
 				t.classes = append(t.classes, c)
 			}
 
-			if counts[tok.Form] == nil {
-				counts[tok.Form] = map[class]int{}
+			if counts[tok.form] == nil {
+				counts[tok.form] = map[class]int{}
 			}
 
-			counts[tok.Form][c]++
+			counts[tok.form][c]++
 		}
 	}
 
@@ -189,7 +188,7 @@ func newTrainer(train []conllu.Sentence) *trainer {
 
 // train conditions each word on the tags it predicted for the words before
 // it, as tagging will, not on the gold tags.
-func (t *trainer) train(train []conllu.Sentence, iterations int, seed uint64) {
+func (t *trainer) train(train []sentence, iterations int, seed uint64) {
 	order := slices.Clone(train)
 	rng := rand.New(rand.NewPCG(seed, seed))
 	scores := make([]int64, len(t.classes))
@@ -200,15 +199,15 @@ func (t *trainer) train(train []conllu.Sentence, iterations int, seed uint64) {
 		rng.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
 
 		for _, s := range order {
-			padded := wordclass.Pad(s.Forms())
+			padded := wordclass.Pad(s.forms())
 			prev, prev2 := wordclass.SentenceStart, wordclass.SentenceStart2
 
-			for i, tok := range s.Words {
-				guess, ok := t.dict[tok.Form]
+			for i, tok := range s.words {
+				guess, ok := t.dict[tok.form]
 				if !ok {
-					feats = wordclass.AppendFeatures(feats[:0], padded, i, tok.Form, prev, prev2)
+					feats = wordclass.AppendFeatures(feats[:0], padded, i, tok.form, prev, prev2)
 					guess = t.p.predict(feats, scores)
-					t.p.update(t.index[class{xpos: tok.XPOS, upos: tok.UPOS}], guess, feats)
+					t.p.update(t.index[class{xpos: tok.xpos, upos: tok.upos}], guess, feats)
 				}
 
 				prev, prev2 = guess, prev
@@ -219,16 +218,16 @@ func (t *trainer) train(train []conllu.Sentence, iterations int, seed uint64) {
 
 // evaluate tags each sentence with m and counts the words, the UPOS matches
 // and the XPOS matches.
-func evaluate(m *wordclass.Model, sentences []conllu.Sentence) (a wordclass.Accuracy) {
+func evaluate(m *wordclass.Model, sentences []sentence) (a wordclass.Accuracy) {
 	for _, s := range sentences {
-		for i, got := range m.Tag(s.Forms()) {
+		for i, got := range m.Tag(s.forms()) {
 			a.Words++
 
-			if got.Class.String() == s.Words[i].UPOS {
+			if got.Class.String() == s.words[i].upos {
 				a.UPOS++
 			}
 
-			if got.Penn == s.Words[i].XPOS {
+			if got.Penn == s.words[i].xpos {
 				a.XPOS++
 			}
 		}

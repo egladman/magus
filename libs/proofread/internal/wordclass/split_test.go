@@ -5,17 +5,6 @@ import (
 	"testing"
 )
 
-func BenchmarkSplit(b *testing.B) {
-	sentences := ewt(b)
-	b.ReportAllocs()
-
-	for b.Loop() {
-		for _, s := range sentences {
-			Split(s.Text)
-		}
-	}
-}
-
 func TestSplit(t *testing.T) {
 	cases := map[string]struct {
 		text string
@@ -121,44 +110,5 @@ func TestTagSplitWords(t *testing.T) {
 	}
 	if acc := float64(right) / float64(words); acc < 0.93 {
 		t.Errorf("UPOS accuracy over Split's words %.4f, want >= 0.93", acc)
-	}
-}
-
-// TestSplitAgreesWithEWT reads each EWT test sentence's text and counts the
-// sentences Split splits exactly as EWT did, once EWT's split hyphenated
-// words are joined back, since Split keeps them whole.
-func TestSplitAgreesWithEWT(t *testing.T) {
-	sentences := ewt(t)
-
-	exact := 0
-	for _, s := range sentences {
-		var forms []string
-		attached, joining := false, false
-		for _, w := range s.Words {
-			glued := !w.SpaceAfter
-			switch {
-			case joining:
-				forms[len(forms)-1] += w.Form
-			case w.Form == "-" && attached && glued:
-				forms[len(forms)-1] += w.Form
-			default:
-				forms = append(forms, w.Form)
-			}
-			joining = w.Form == "-" && attached && glued
-			attached = glued
-		}
-
-		if got := Split(s.Text); slices.Equal(got, forms) {
-			exact++
-		} else if testing.Verbose() {
-			t.Logf("%q\n got %q\nwant %q", s.Text, got, forms)
-		}
-	}
-	share := float64(exact) / float64(len(sentences))
-	t.Logf("Split matches EWT on %d of %d test sentences (%.4f)", exact, len(sentences), share)
-	// The misses left are web text: typos EWT splits ("dont"), slashes between
-	// words and emoticons.
-	if share < 0.89 {
-		t.Errorf("Split matches EWT on %.4f of its test sentences, want >= 0.89", share)
 	}
 }

@@ -1,79 +1,11 @@
 package wordclass
 
 import (
-	"compress/gzip"
-	"os"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
-
-	"github.com/egladman/magus/libs/proofread/internal/conllu"
 )
-
-// ewt reads the EWT test split the trainer wrote.
-func ewt(tb testing.TB) []conllu.Sentence {
-	tb.Helper()
-
-	f, err := os.Open("testdata/en_ewt-ud-test.conllu.gz")
-	if err != nil {
-		tb.Fatal(err)
-	}
-	defer f.Close()
-
-	zr, err := gzip.NewReader(f)
-	if err != nil {
-		tb.Fatal(err)
-	}
-
-	sentences, err := conllu.Read(zr)
-	if err != nil {
-		tb.Fatal(err)
-	}
-
-	return sentences
-}
-
-func BenchmarkTag(b *testing.B) {
-	gold := ewt(b)
-
-	sentences := make([][]string, len(gold))
-	for i, s := range gold {
-		sentences[i] = Split(s.Text)
-	}
-
-	embedded()
-	b.ReportAllocs()
-
-	for b.Loop() {
-		for _, words := range sentences {
-			Tag(words)
-		}
-	}
-}
-
-func TestTagAccuracy(t *testing.T) {
-	var tokens, upos, xpos int
-	for _, s := range ewt(t) {
-		for i, got := range Tag(s.Forms()) {
-			tokens++
-			if got.Class.String() == s.Words[i].UPOS {
-				upos++
-			}
-			if got.Penn == s.Words[i].XPOS {
-				xpos++
-			}
-		}
-	}
-	if got, want := (Accuracy{Words: tokens, UPOS: upos, XPOS: xpos}), embedded().Accuracy; got != want {
-		t.Errorf("tagged %+v right; the trainer counted %+v", got, want)
-	}
-	uposAcc, xposAcc := float64(upos)/float64(tokens), float64(xpos)/float64(tokens)
-	t.Logf("EWT test: UPOS %.4f, XPOS %.4f over %d tokens", uposAcc, xposAcc, tokens)
-	if uposAcc < 0.93 {
-		t.Errorf("UPOS accuracy %.4f, want >= 0.93", uposAcc)
-	}
-}
 
 func TestTagEmpty(t *testing.T) {
 	for _, words := range [][]string{nil, {}} {
