@@ -40,7 +40,13 @@ import (
 
 // Cache is an on-disk content-addressed build cache handle.
 type Cache struct {
+	// dir holds what one checkout keeps: its output store, run journals, mtime memo,
+	// in-flight records and live build logs.
 	dir string
+	// store holds the content-addressed entries (cas/, manifests/, logs/), which name no
+	// checkout and so may be shared by every checkout of a repository. dir unless
+	// WithStoreDir names another.
+	store string
 	// inflight records running targets on disk so a killed run can be reported by the
 	// next one; nil when the cache has no directory to write into.
 	inflight *inflight
@@ -369,6 +375,11 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	}
 	for _, o := range opts {
 		o(c)
+	}
+	if c.store == "" {
+		c.store = dir
+	} else if err := os.MkdirAll(c.store, 0o755); err != nil {
+		return nil, fmt.Errorf("magus/cache: mkdir %q: %w", c.store, err)
 	}
 	// After the options, so its warnings reach the logger the caller chose.
 	c.mtimes = newMtimeStore(dir, c.log)
@@ -733,7 +744,7 @@ func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, 
 	}
 	// A hit in the local store is a use, whether it was already there or just promoted,
 	// so it is the last thing eviction reaches.
-	if e.root == c.dir && c.local.writes() {
+	if e.root == c.store && c.local.writes() {
 		c.markUsed(s.ProjectPath, hash)
 	}
 	if e.promoted {
@@ -1641,13 +1652,14 @@ func (c *Cache) Delete(ctx context.Context, projectPaths ...string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	manifestsDir := filepath.Join(c.dir, "manifests")
-	logsDir := filepath.Join(c.dir, "logs")
+	manifestsDir := filepath.Join(c.store, "manifests")
+	// The entries' logs and, in a checkout whose store is shared, the live logs its runs wrote.
+	logsDirs := slices.Compact([]string{filepath.Join(c.store, "logs"), filepath.Join(c.dir, "logs")})
 	outputsDir := filepath.Join(c.dir, "outputs")
 
 	if len(projectPaths) == 0 {
 		// Clean everything.
-		for _, sub := range []string{manifestsDir, logsDir, outputsDir} {
+		for _, sub := range slices.Concat([]string{manifestsDir, outputsDir}, logsDirs) {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
@@ -1673,7 +1685,7 @@ func (c *Cache) Delete(ctx context.Context, projectPaths ...string) error {
 				return err
 			}
 			flat := flattenPath(path)
-			for _, sub := range []string{manifestsDir, logsDir} {
+			for _, sub := range append([]string{manifestsDir}, logsDirs...) {
 				if err := os.RemoveAll(filepath.Join(sub, flat)); err != nil {
 					return fmt.Errorf("magus/cache: clean remove %s: %w", path, err)
 				}
@@ -1744,54 +1756,31 @@ func (c *Cache) Export(ctx context.Context, w io.Writer) error {
 	gz := gzip.NewWriter(w)
 	tw := tar.NewWriter(gz)
 
-	err := filepath.WalkDir(c.dir, func(path string, d os.DirEntry, werr error) error {
-		if werr != nil {
-			return werr
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(c.dir, path)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
-		if d.IsDir() {
-			if rel == "." {
-				return nil
+	// One archive, laid out as one cache dir: a shared store's entries first, then this
+	// checkout's own files, whose live logs would collide with the entries' logs.
+	walk := func(root string) error {
+		return filepath.WalkDir(root, func(path string, d os.DirEntry, werr error) error {
+			if werr != nil {
+				return werr
 			}
-			if rel == spellCachesDir {
-				return filepath.SkipDir
+			if err := ctx.Err(); err != nil {
+				return err
 			}
-			return tw.WriteHeader(&tar.Header{
-				Typeflag: tar.TypeDir,
-				Name:     rel + "/",
-				Mode:     0o755,
-			})
-		}
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		if err := tw.WriteHeader(&tar.Header{
-			Typeflag: tar.TypeReg,
-			Name:     rel,
-			Size:     info.Size(),
-			Mode:     0o644,
-			ModTime:  info.ModTime(),
-		}); err != nil {
-			return err
-		}
-		return func() error {
-			f, err := os.Open(path)
+			rel, err := filepath.Rel(root, path)
 			if err != nil {
 				return err
 			}
-			defer f.Close()
-			_, err = io.Copy(tw, f)
-			return err
-		}()
-	})
+			rel = filepath.ToSlash(rel)
+			if root != c.store && d.IsDir() && storeOwned(rel) {
+				return filepath.SkipDir
+			}
+			return exportEntry(tw, path, rel, d)
+		})
+	}
+	err := walk(c.store)
+	if err == nil && c.dir != c.store {
+		err = walk(c.dir)
+	}
 	if err != nil {
 		return fmt.Errorf("magus/cache: export walk: %w", err)
 	}
@@ -1802,6 +1791,51 @@ func (c *Cache) Export(ctx context.Context, w io.Writer) error {
 		return fmt.Errorf("magus/cache: export gzip close: %w", err)
 	}
 	return nil
+}
+
+// storeOwned reports whether rel, slash-separated and relative to a cache dir, lies in
+// the part a shared store holds: cas/, manifests/ or logs/.
+func storeOwned(rel string) bool {
+	top, _, _ := strings.Cut(rel, "/")
+	return top == "cas" || top == "manifests" || top == "logs"
+}
+
+// exportEntry writes path, rel within its cache dir, to tw. The cache dir itself and a
+// spell's caches write nothing.
+func exportEntry(tw *tar.Writer, path, rel string, d os.DirEntry) error {
+	if d.IsDir() {
+		if rel == "." {
+			return nil
+		}
+		if rel == spellCachesDir {
+			return filepath.SkipDir
+		}
+		return tw.WriteHeader(&tar.Header{
+			Typeflag: tar.TypeDir,
+			Name:     rel + "/",
+			Mode:     0o755,
+		})
+	}
+	info, err := d.Info()
+	if err != nil {
+		return err
+	}
+	if err := tw.WriteHeader(&tar.Header{
+		Typeflag: tar.TypeReg,
+		Name:     rel,
+		Size:     info.Size(),
+		Mode:     0o644,
+		ModTime:  info.ModTime(),
+	}); err != nil {
+		return err
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = io.Copy(tw, f)
+	return err
 }
 
 // Import extracts a gzip-compressed tar archive produced by Export into the cache directory.
@@ -1831,7 +1865,11 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 			return fmt.Errorf("magus/cache: import tar: %w", err)
 		}
 
-		clean, err := safePathIn(c.dir, hdr.Name)
+		root := c.dir
+		if storeOwned(path.Clean(hdr.Name)) {
+			root = c.store
+		}
+		clean, err := safePathIn(root, hdr.Name)
 		if err != nil {
 			return err
 		}
@@ -1860,7 +1898,7 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 			// explicit operator action (the operator vouches for the archive by running
 			// it), and replay-side path containment bounds where any imported manifest
 			// can write. The size cap is per member, as the archive is the operator's.
-			rel, err := filepath.Rel(c.dir, clean)
+			rel, err := filepath.Rel(root, clean)
 			if err != nil {
 				return fmt.Errorf("magus/cache: import rel %q: %w", clean, err)
 			}
@@ -1887,8 +1925,8 @@ func (c *Cache) Evict(ctx context.Context) error {
 
 // gcBlobs removes CAS blobs not referenced by any surviving manifest.
 func (c *Cache) gcBlobs(ctx context.Context) error {
-	casDir := filepath.Join(c.dir, "cas")
-	manifestsDir := filepath.Join(c.dir, "manifests")
+	casDir := filepath.Join(c.store, "cas")
+	manifestsDir := filepath.Join(c.store, "manifests")
 
 	referenced := map[string]struct{}{}
 	if err := filepath.WalkDir(manifestsDir, func(p string, d os.DirEntry, err error) error {
@@ -1898,7 +1936,7 @@ func (c *Cache) gcBlobs(ctx context.Context) error {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
-		data, err := os.ReadFile(p) // p is always under c.dir; symlink escapes are not a concern for a local cache
+		data, err := os.ReadFile(p) // p is always under c.store; symlink escapes are not a concern for a local cache
 		if err != nil {
 			c.log.WarnContext(ctx, "cache.warn", slog.String("msg", fmt.Sprintf("gc: read %s: %v", p, err)))
 			return nil
@@ -1927,7 +1965,7 @@ func (c *Cache) gcBlobs(ctx context.Context) error {
 		}
 		blob := filepath.Base(p)
 		if _, ok := referenced[blob]; !ok {
-			_ = os.Remove(p) // p is always under c.dir; symlink escapes are not a concern for a local cache
+			_ = os.Remove(p) // p is always under c.store; symlink escapes are not a concern for a local cache
 		}
 		return nil
 	}); err != nil && !errors.Is(err, os.ErrNotExist) {

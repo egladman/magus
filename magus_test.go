@@ -828,7 +828,7 @@ func TestOpenRemoteBackendThatDidNotStart(t *testing.T) {
 
 	c, err := cache.Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), opt)
 	require.NoError(t, err)
-	tier, mode := (&Magus{cache: c}).CacheDescription()
+	tier, mode, _ := (&Magus{cache: c}).CacheDescription()
 	assert.True(t, strings.HasPrefix(tier, `local (remote github unavailable: spell "github" is not registered`), tier)
 	assert.Equal(t, "read+write", mode)
 }

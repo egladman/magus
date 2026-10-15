@@ -269,8 +269,8 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		charms = magus.CharmsForCI(charms)
 	}
 	sink.EmitCharms(ctx, strings.Join(charms, ","))
-	tier, mode := m.CacheDescription()
-	sink.EmitCache(ctx, tier, mode)
+	tier, mode, dir := m.CacheDescription()
+	sink.EmitCache(ctx, tier, mode, dir)
 	if len(targets) == 0 {
 		slog.With(attr.Component("affected")).InfoContext(ctx, "no projects affected", slog.String("target", target))
 		return nil

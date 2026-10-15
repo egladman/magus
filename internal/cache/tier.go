@@ -92,13 +92,17 @@ func (t *localTier) lookup(ctx context.Context, s *Step, hash string) (*entry, e
 	if t.c.treeMoved(ctx, s, m) {
 		return nil, errTierMiss
 	}
-	return &entry{manifest: m, root: t.c.dir}, nil
+	return &entry{manifest: m, root: t.c.store}, nil
 }
 
 func (t *localTier) store(_ context.Context, s *Step, snap *Manifest) error {
 	data, err := json.MarshalIndent(snap, "", "  ")
 	if err != nil {
 		return err
+	}
+	// Before the manifest, so a reader that finds the entry finds its log.
+	if err := t.c.publishLog(s.ProjectPath, snap.Hash); err != nil {
+		return fmt.Errorf("magus/cache: store %q: %w", s.ProjectPath, err)
 	}
 	if err := writeAtomic(t.c.manifestPath(s.ProjectPath, snap.Hash), data); err != nil {
 		return fmt.Errorf("magus/cache: store %q: %w", s.ProjectPath, err)
@@ -208,7 +212,7 @@ func (t *remoteTier) lookup(ctx context.Context, s *Step, hash string) (*entry, 
 	}
 	return &entry{
 		manifest: m, root: root, remote: t.name(), bytes: counted.N,
-		promoted: root == t.c.dir, release: release,
+		promoted: root == t.c.store, release: release,
 	}, nil
 }
 
@@ -311,7 +315,7 @@ func (t *remoteTier) backfill(ctx context.Context, s Step, hash string) {
 // may write it, else a staging directory the returned release removes.
 func (c *Cache) promotionRoot() (string, func(), error) {
 	if c.local.write {
-		return c.dir, func() {}, nil
+		return c.store, func() {}, nil
 	}
 	dir, err := os.MkdirTemp(c.dir, stagingPrefix)
 	if err != nil {

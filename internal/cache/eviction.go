@@ -114,7 +114,7 @@ func (c *Cache) DiskBytes() int64 {
 	}
 	var total int64
 	for _, sub := range []string{"cas", "manifests"} {
-		_ = filepath.WalkDir(filepath.Join(c.dir, sub), func(_ string, d os.DirEntry, err error) error {
+		_ = filepath.WalkDir(filepath.Join(c.store, sub), func(_ string, d os.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return err
 			}
@@ -134,7 +134,7 @@ func (c *Cache) scanManifests() (int64, []manifestEntry) {
 	var total int64
 	var entries []manifestEntry
 
-	casDir := filepath.Join(c.dir, "cas")
+	casDir := filepath.Join(c.store, "cas")
 	_ = filepath.WalkDir(casDir, func(_ string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
@@ -151,7 +151,7 @@ func (c *Cache) scanManifests() (int64, []manifestEntry) {
 	// its entry below, so evicting an entry reclaims its outputs with it.
 	total += c.outputsBytes()
 
-	manifestsDir := filepath.Join(c.dir, "manifests")
+	manifestsDir := filepath.Join(c.store, "manifests")
 	_ = filepath.WalkDir(manifestsDir, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
@@ -164,7 +164,7 @@ func (c *Cache) scanManifests() (int64, []manifestEntry) {
 			return nil //nolint:nilerr // skip unreadable entries; abort would leave GC incomplete
 		}
 		total += info.Size()
-		data, e := os.ReadFile(p) // p is always under c.dir; symlink escapes are not a concern for a local cache
+		data, e := os.ReadFile(p) // p is always under c.store; symlink escapes are not a concern for a local cache
 		if e != nil {
 			return nil //nolint:nilerr // skip unreadable entries; abort would leave GC incomplete
 		}

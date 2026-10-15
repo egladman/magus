@@ -19,8 +19,8 @@ aliases: [concepts/remote-cache]
 
 magus's [build cache](../../../README.md#build-model) is content-addressed: a target's
 output is keyed by the SHA-256 of its inputs, so an unchanged target replays its
-previous output instead of rebuilding. That cache lives on disk (`.magus/` in the
-workspace root) and is **local** to one machine.
+previous output instead of rebuilding. That cache lives on disk, in one store every
+checkout of the repository shares, and is **local** to one machine.
 
 A **remote cache** shares those artifacts across **CI runners**, machine to
 machine. When the local cache misses, magus asks the remote provider for the

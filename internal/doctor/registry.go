@@ -84,7 +84,7 @@ var allChecks = []checkDef{
 	},
 	{
 		Name:           "cache-writable",
-		Doc:            "the cache directory exists and this user can write it",
+		Doc:            "the cache directory and the entry store every checkout shares exist, and this user can write them",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
 		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkCacheWritable() },

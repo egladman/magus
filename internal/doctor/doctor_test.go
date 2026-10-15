@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -700,12 +701,20 @@ func TestCheckConfigFile(t *testing.T) {
 func TestCheckCacheWritable(t *testing.T) {
 	t.Run("writable dir", func(t *testing.T) {
 		root := t.TempDir()
+		userCache := t.TempDir()
+		t.Setenv("XDG_CACHE_HOME", userCache)
 		r := &runner{root: root, opts: options{cfg: config.Config{}}}
 		got := r.checkCacheWritable()
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 		assert.Contains(t, got.Message, root)
 		_, err := os.Stat(filepath.Join(root, ".magus"))
 		require.NoError(t, err, "cache dir not created")
+		store, err := workspace.StoreDir(root, config.Config{})
+		require.NoError(t, err)
+		assert.True(t, strings.HasPrefix(store, userCache), "the shared store lives in the user cache: %s", store)
+		assert.Contains(t, got.Message, store, "the check names the store every checkout shares")
+		_, err = os.Stat(store)
+		require.NoError(t, err, "store not created")
 	})
 
 	t.Run("absolute cache dir override", func(t *testing.T) {

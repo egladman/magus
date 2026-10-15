@@ -267,7 +267,7 @@ func ownsRecord(s Step, rel string) bool {
 
 // replay restores a manifest's outputs from the local store.
 func (c *Cache) replay(ctx context.Context, m *Manifest, root string) ([]string, error) {
-	return c.replayFrom(ctx, m, root, c.dir)
+	return c.replayFrom(ctx, m, root, c.store)
 }
 
 // replayFrom restores a manifest's outputs into root from the blobs under store (the

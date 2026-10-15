@@ -24,11 +24,13 @@ import (
 )
 
 // CacheDescription returns the cache header's facts, for [Sink.EmitCache]: which tiers
-// a run can reach ("local", or "<remote> + local") and whether it may write to them
-// ("read-only" or "read+write"). Empty on an Inspect workspace, which has no cache.
-func (m *Magus) CacheDescription() (tier, mode string) {
+// a run can reach ("local", or "<remote> + local"), whether it may write to them
+// ("read-only" or "read+write"), and the directory holding the local tier's entries,
+// shared by every checkout of the repository unless cache.dir moves it. Empty on an
+// Inspect workspace, which has no cache.
+func (m *Magus) CacheDescription() (tier, mode, dir string) {
 	if m.cache == nil {
-		return "", ""
+		return "", "", ""
 	}
 	return m.cache.Description()
 }

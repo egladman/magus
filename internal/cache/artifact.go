@@ -173,7 +173,7 @@ type storedManifest struct {
 // read: this is a cache, and one corrupt entry should not make an artifact's history
 // unavailable. The cost is that an I/O fault looks like a shorter history.
 func (c *Cache) projectManifests(ctx context.Context, projectPath string) ([]storedManifest, error) {
-	dir := filepath.Join(c.dir, "manifests", flattenPath(projectPath))
+	dir := filepath.Join(c.store, "manifests", flattenPath(projectPath))
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("cache: no entries for %q: %w", projectPath, fs.ErrNotExist)

@@ -1,7 +1,7 @@
 ---
 title: Cache model
 order: 7
-description: How magus computes a content-addressed cache key from a target's declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.
+description: How magus computes a content-addressed cache key from a target's declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files every checkout of the repository shares.
 tags:
   [
     cache,
@@ -39,7 +39,7 @@ it once here and link there for the distributed story.
   emits the result event; the target's `export fun` never executes. The saved work
   _is_ the point.
 - **The cache is a set of files.** The store is a directory of blobs, JSON manifests, and
-  captured logs under `.magus/`. There is no database and no server in the read
+  captured logs, one per repository. There is no database and no server in the read
   path. You can `ls` it, `cat` a manifest, and reason about a hit or miss with
   ordinary tools.
 
@@ -892,21 +892,39 @@ by construction. Rendering that committed capture IS pure, so
 
 ## On disk: just files
 
-The cache lives at **`.magus/`** in the workspace root (override with
-`MAGUS_CACHE_DIR`, or `cache.dir` in `magus.yaml`). Three directories plus a hash
-memo carry a cache hit; `.magus/` holds more beside them, including the lock
-files, the run journals, the knowledge shards and the symbol index:
+The cache's entries live in one store per repository, shared by every worktree and
+clone of it: **`<user cache>/magus/cache/<repo>-<hash>/`**, where the user cache is
+`$XDG_CACHE_HOME` (`~/.cache` when unset) and the repository is named the way
+magus's other per-repository stores name it, by its default remote, or by its main
+checkout when it has none. A key holds no absolute path, so a target one worktree
+ran replays in another at the same content. The run header and `magus doctor` name
+the store:
 
 ```text
-.magus/
+cache: local (read+write) in /home/me/.cache/magus/cache/api-3f2a9c01b7de
+```
+
+Each checkout keeps what is its own in **`.magus/`** in the workspace root: the
+lock files, the run journals, the per-run output records behind each ref, the
+mtime memo, the knowledge shards and the symbol index. golangci-lint's own cache
+stays there too, since it records absolute paths. `cache.dir` in `magus.yaml` (or
+`MAGUS_CACHE_DIR`) puts the entries back in that one directory with everything else.
+
+```text
+<user cache>/magus/cache/<repo>-<hash>/
 ├── cas/         content-addressed blobs, sharded by the first two hex chars
 │   └── ab/ab34...f0      one file per unique output content (deduplicated)
 ├── manifests/   one JSON manifest per cache entry
 │   └── api/<key>.json     project path flattened; file named by cache key
-├── logs/        captured build output, replayed on a hit
-│   └── api/<key>.log
-└── mtimes/      the per-file hash fast-path memo
+└── logs/        captured build output, replayed on a hit
+    └── api/<key>.log
+.magus/
+└── mtimes/      the per-file hash fast-path memo, beside the checkout's other files
 ```
+
+Two checkouts writing the store at once stay safe: a blob, a manifest and a log are
+each written to a temporary file and renamed into place, so a reader sees a whole
+file or none, and of two runs of one key the later whole entry replaces the earlier.
 
 A **manifest** is plain JSON you can read directly. It records the project path, the
 cache key, the target, and one record per output: path, content-address (`blob`),
@@ -963,7 +981,7 @@ on.
 
 ### Cache tiers
 
-The cache is two tiers: the **local tier** (L1, `.magus/`) and, once a remote backend
+The cache is two tiers: the **local tier** (L1, the store above) and, once a remote backend
 is wired, the **remote tier** (L2). The run header names them, `cache: local
 (read+write)` or `cache: github-actions + local (read+write)`. They follow standard
 two-tier semantics:
@@ -1018,7 +1036,7 @@ in, and never written by a run that may not write the remote tier.
 | **Replay**            | Restoring a manifest's outputs on a hit (reflink then copy) without running the target body.                                      |
 | **Snapshot**          | Recording a miss's outputs into the store and writing its manifest.                                                               |
 | **run.target.result** | The emitted report event for one target run (`{project, target, status, cache_hit, duration_ms}`); fires on both hits and misses. |
-| **`.magus/`**         | The on-disk cache in the workspace root: `cas/` + `manifests/` + `logs/` + the mtime memo.                                        |
+| **`.magus/`**         | Each checkout's own files in the workspace root: journals, output records, the mtime memo.                                        |
 
 ## See also
 

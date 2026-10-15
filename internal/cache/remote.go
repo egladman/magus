@@ -251,7 +251,7 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(c.dir, absPath)
+		rel, err := filepath.Rel(c.store, absPath)
 		if err != nil {
 			return err
 		}
@@ -300,7 +300,7 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 		return fmt.Errorf("exportArtifact: read manifest: %w", err)
 	}
 	manifestBytes = secret.Redact(ctx, manifestBytes)
-	manifestRel, err := filepath.Rel(c.dir, c.manifestPath(projectPath, hash))
+	manifestRel, err := filepath.Rel(c.store, c.manifestPath(projectPath, hash))
 	if err != nil {
 		return fmt.Errorf("exportArtifact: manifest path: %w", err)
 	}
@@ -325,8 +325,8 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 	// The build log, redacted like the manifest because it crosses the same trust
 	// boundary. Absent is fine (a quiet target captures nothing); a read error is not
 	// worth failing a push over.
-	if logBytes, err := os.ReadFile(c.logPath(projectPath, hash)); err == nil {
-		rel, relErr := filepath.Rel(c.dir, c.logPath(projectPath, hash))
+	if logBytes, err := os.ReadFile(c.entryLogPath(projectPath, hash)); err == nil {
+		rel, relErr := filepath.Rel(c.store, c.entryLogPath(projectPath, hash))
 		if relErr != nil {
 			return fmt.Errorf("exportArtifact: log path: %w", relErr)
 		}

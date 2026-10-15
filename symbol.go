@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/retry"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -598,7 +599,12 @@ func (m *Magus) freshnessCache(ctx context.Context) *cache.Cache {
 		return m.cache
 	}
 	m.probeCacheOnce.Do(func() {
-		c, err := cache.Open(ctx, resolveCacheDir(m.Root(), m.cfg))
+		storeDir, err := workspace.StoreDir(m.Root(), m.cfg)
+		if err != nil {
+			slog.With(attr.Component("magus")).WarnContext(ctx, "cannot open the cache to probe symbol index freshness", attr.Error(err))
+			return
+		}
+		c, err := cache.Open(ctx, resolveCacheDir(m.Root(), m.cfg), cache.WithStoreDir(storeDir))
 		if err != nil {
 			slog.With(attr.Component("magus")).WarnContext(ctx, "cannot open the cache to probe symbol index freshness", attr.Error(err))
 			return

@@ -207,10 +207,12 @@ type RunCharms struct {
 }
 
 // RunCache reports which cache tiers a run can reach and whether it may write to
-// them, the "cache: ..." header.
+// them, the "cache: ..." header. Dir is where the local tier's entries live: by
+// default one directory every checkout of the repository shares.
 type RunCache struct {
 	Tier string `json:"tier"`
 	Mode string `json:"mode"`
+	Dir  string `json:"dir,omitempty"`
 }
 
 // RunBase reports what an affected run's change set was compared against, the

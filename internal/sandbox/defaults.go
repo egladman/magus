@@ -24,6 +24,7 @@ type PolicyOptions struct {
 	Mode       types.SandboxMode // becomes Policy.Mode
 	Workspace  string            // workspace root: read, write, exec
 	CacheDir   string            // magus's cache: read, write
+	StoreDir   string            // the cache's entries, which a nested magus stores to: read, write
 	TempDir    string            // private temp dir the caller created: read, write, exec, and children's TMPDIR
 	Executable string            // the running magus binary: read, exec
 	// GitDir is the checkout's own git directory and GitCommonDir the repository's
@@ -90,7 +91,7 @@ func BuildPolicy(o PolicyOptions) *Policy {
 		pathHome = o.Tools.Home
 	}
 	rules := []filesystem.Rule{
-		rwx(o.Workspace), rw(o.CacheDir), rwx(o.TempDir), rx(o.Executable),
+		rwx(o.Workspace), rw(o.CacheDir), rw(o.StoreDir), rwx(o.TempDir), rx(o.Executable),
 		rw(o.GitDir), ro(o.GitCommonDir), rw(join(o.GitCommonDir, "objects")),
 	}
 	rules = append(rules, systemRules...)

@@ -604,7 +604,7 @@ func TestRemoteStoresNothingWithoutASigningKey(t *testing.T) {
 	pub, _ := genKeypair(t)
 
 	root, c := openSigned(t, remote, nil, [][]byte{pub})
-	_, mode := c.Description()
+	_, mode, _ := c.Description()
 	assert.Equal(t, "read+write local, read-only remote; no signing key", mode)
 	_, ran, stats := buildWithStats(t, root, c)
 	require.True(t, ran, "expected a local build")
@@ -629,7 +629,7 @@ func TestRemoteTierWriteOffStillWritesTheLocalTier(t *testing.T) {
 		WithRemoteBackend(remote), WithSigningKey(seed), WithTrustedKeys([][]byte{pub}),
 		WithRemoteWrite(false))
 	require.NoError(t, err, "cache.Open")
-	_, mode := c.Description()
+	_, mode, _ := c.Description()
 	assert.Equal(t, "read+write local, read-only remote; remote writes are off", mode)
 
 	_, ran, stats := buildWithStats(t, root, c)

@@ -317,8 +317,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		charms = magus.CharmsForCI(charms)
 	}
 	sink.EmitCharms(ctx, strings.Join(charms, ","))
-	tier, mode := m.CacheDescription()
-	sink.EmitCache(ctx, tier, mode)
+	tier, mode, dir := m.CacheDescription()
+	sink.EmitCache(ctx, tier, mode, dir)
 	if len(targets) == 0 {
 		// Zero targets here means the fan-out found no projects at all in the resolved
 		// workspace: a degenerate or wrong-workspace resolution, not "nothing to do".

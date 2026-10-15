@@ -26,8 +26,8 @@ func TestCacheOperationsWithoutOpenCache(t *testing.T) {
 	require.NoError(t, err)
 	inspected := m.(*Magus)
 
-	tier, mode := inspected.CacheDescription()
-	assert.Empty(t, tier+mode, "an Inspect workspace has no cache to describe")
+	tier, mode, dir := inspected.CacheDescription()
+	assert.Empty(t, tier+mode+dir, "an Inspect workspace has no cache to describe")
 	_, _, err = inspected.PruneCache(context.Background(), time.Now(), false)
 	assert.ErrorIs(t, err, types.ErrNoCache)
 	assert.ErrorIs(t, inspected.PruneRemoteCache(context.Background(), time.Hour, 1, false), types.ErrNoCache)
@@ -84,6 +84,46 @@ func TestCacheDirIsUnderTheWorkspaceRoot(t *testing.T) {
 	m, _ := openTempWorkspace(t, "api", nil)
 	assert.Equal(t, filepath.Join(m.Root(), ".magus"), m.CacheDir(),
 		"the journal run logs and the per-ref output store hang off this one root")
+}
+
+// TestWorktreesOfOneRepositoryShareTheCache pins one cache per repository: a key names no
+// checkout, so a target another worktree already ran at the same content replays here,
+// while each checkout keeps its own journals and output records. A real input change
+// still misses.
+func TestWorktreesOfOneRepositoryShareTheCache(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	const mf = `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles("in.txt");
+}
+`
+	repo := testkit.NewRepo(t, map[string]string{"magusfile.buzz": mf, "in.txt": "one"})
+	wt := repo.AddWorktree("sibling")
+
+	storeA, err := workspace.StoreDir(repo.Root(), config.Config{})
+	require.NoError(t, err)
+	storeB, err := workspace.StoreDir(wt.Root(), config.Config{})
+	require.NoError(t, err)
+	assert.Equal(t, storeA, storeB, "every worktree of one repository resolves one store")
+
+	run := func(root string) CacheStats {
+		t.Helper()
+		m, err := Open(t.Context(), root, WithSpawnRule(TierCeiling))
+		require.NoError(t, err, "Open %s", root)
+		t.Cleanup(func() { _ = m.Close() })
+		assert.NotEqual(t, storeA, m.CacheDir(), "journals and output records stay in the checkout")
+		_, _, dir := m.CacheDescription()
+		assert.Equal(t, storeA, dir, "the run header names the shared store")
+		require.NoError(t, m.Run(t.Context(), []types.Target{{Path: ".", Name: "build"}}))
+		return m.CacheStats()
+	}
+	assert.Positive(t, run(repo.Root()).Miss, "the first checkout runs it")
+	sibling := run(wt.Root())
+	assert.Zero(t, sibling.Miss, "the sibling runs nothing the first stored")
+	assert.Positive(t, sibling.Hit, "the sibling replays the entry the first stored")
+
+	wt.Write("in.txt", "two")
+	assert.Positive(t, run(wt.Root()).Miss, "a changed input still misses")
 }
 
 // TestCacheStatsAndDiskBytesOnAnOpenWorkspace: a freshly opened cache has served

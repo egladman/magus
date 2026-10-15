@@ -372,7 +372,7 @@ func (l Log) SlogLevel() slog.Level {
 
 // Cache controls the content-addressed build cache.
 type Cache struct {
-	Dir string `json:"dir" yaml:"dir"` // override default cache location (.magus/ in workspace root)
+	Dir string `json:"dir" yaml:"dir"` // one dir for the entries and the checkout's own files (default: entries shared per repository, the rest in .magus/)
 	// Write gates producing entries. It replaces a cache.immutable flag that named the
 	// absence of the behavior: answering "can this run write?" meant parsing a double
 	// negative, and the CI snippet that used it read inverted from its own intent.

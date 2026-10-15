@@ -290,7 +290,7 @@ func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 	granted := t.TempDir()
 	probe := filepath.Join(granted, "stat")
 
-	base, err := sandbox.FromConfig(root, "", config.SandboxConfig{}, nil)
+	base, err := sandbox.FromConfig(root, "", "", config.SandboxConfig{}, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(base.TempDir) })
 	require.Error(t, base.CheckRead(t.Context(), probe), "the grant must be the test's alone to prove")

@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/serviceaudit"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/project"
@@ -416,15 +417,7 @@ func firstExistingConfig(dir string) string {
 
 // cacheDir resolves the workspace's cache directory, honoring an absolute or
 // root-relative cache.dir override.
-func (r *runner) cacheDir() string {
-	if d := r.opts.cfg.Cache.Dir; d != "" {
-		if filepath.IsAbs(d) {
-			return filepath.Clean(d)
-		}
-		return filepath.Join(r.root, d)
-	}
-	return filepath.Join(r.root, ".magus")
-}
+func (r *runner) cacheDir() string { return workspace.CacheDir(r.root, r.opts.cfg) }
 
 // checkCacheYield surfaces the same finding the run path emits as a hint, so `magus
 // doctor` gives the whole picture rather than only the target you happened to run.
@@ -497,28 +490,36 @@ func (r *runner) checkCacheYield(projects []*types.Project) types.Check {
 	}
 }
 
+// checkCacheWritable checks the cache dir and, when it is elsewhere, the store of entries
+// every checkout of the repository shares, and names both: a hit in one worktree replays
+// what another stored, which nothing else on screen says.
 func (r *runner) checkCacheWritable() types.Check {
+	const name = "cache-writable"
 	cacheDir := r.cacheDir()
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		return types.Check{
-			Name:    "cache-writable",
-			Status:  types.CheckFail,
-			Message: fmt.Sprintf("cannot create cache dir: %v", err),
-			Details: []string{cacheDir},
-		}
-	}
-	tmp, err := os.CreateTemp(cacheDir, ".magus-doctor-*")
+	store, err := workspace.StoreDir(r.root, r.opts.cfg)
 	if err != nil {
-		return types.Check{
-			Name:    "cache-writable",
-			Status:  types.CheckFail,
-			Message: fmt.Sprintf("cache dir not writable: %v", err),
-			Details: []string{cacheDir},
-		}
+		return types.Check{Name: name, Status: types.CheckFail, Message: err.Error()}
 	}
-	_ = tmp.Close()
-	_ = os.Remove(tmp.Name())
-	return types.Check{Name: "cache-writable", Status: types.CheckOK, Message: cacheDir}
+	dirs := []string{cacheDir}
+	if store != cacheDir {
+		dirs = append(dirs, store)
+	}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return types.Check{Name: name, Status: types.CheckFail, Message: fmt.Sprintf("cannot create cache dir: %v", err), Details: []string{dir}}
+		}
+		tmp, err := os.CreateTemp(dir, ".magus-doctor-*")
+		if err != nil {
+			return types.Check{Name: name, Status: types.CheckFail, Message: fmt.Sprintf("cache dir not writable: %v", err), Details: []string{dir}}
+		}
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
+	}
+	if store == cacheDir {
+		return types.Check{Name: name, Status: types.CheckOK, Message: cacheDir}
+	}
+	return types.Check{Name: name, Status: types.CheckOK,
+		Message: fmt.Sprintf("%s; entries in %s, shared by every checkout of this repository", cacheDir, store)}
 }
 
 func (r *runner) checkVCSBaseRef() types.Check {

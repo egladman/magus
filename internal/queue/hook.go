@@ -253,7 +253,7 @@ func (c hookCommand) policy() (*sandbox.Policy, error) {
 		cfg.Mode = magustypes.SandboxModeBestEffort
 	}
 	if c.Home == "" {
-		return sandbox.FromConfig(c.Dir, "", cfg, c.Spells)
+		return sandbox.FromConfig(c.Dir, "", "", cfg, c.Spells)
 	}
 	for _, dir := range []string{c.Home, c.TempDir} {
 		if err := privateDir(dir); err != nil {

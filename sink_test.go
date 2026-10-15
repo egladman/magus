@@ -131,7 +131,7 @@ func TestAFormatIsOneEncoder(t *testing.T) {
 	ctx := t.Context()
 	s.EmitScope(ctx, "api", "magusfile", []string{"api"})
 	s.EmitCharms(ctx, "rw")
-	s.EmitCache(ctx, "local", "read+write")
+	s.EmitCache(ctx, "local", "read+write", "")
 	s.EmitBase(ctx, "git diff vs main")
 	s.EmitNotice(ctx, slog.LevelWarn, types.AffectedSetUncomputable, "full build")
 	s.EmitDiagnostic(ctx, "api", types.UndeclaredSeedingFile, "seeded by LICENSE")
@@ -197,6 +197,7 @@ func TestTextSinkProse(t *testing.T) {
 		{report.RunCharms{Charms: "rw"}, "charms: rw\n"},
 		{report.RunCharms{}, "charms: (none)\n"},
 		{report.RunCache{Tier: "gha + local", Mode: "read-only"}, "cache: gha + local (read-only)\n"},
+		{report.RunCache{Tier: "local", Mode: "read+write", Dir: "/c/magus/cache/repo-1"}, "cache: local (read+write) in /c/magus/cache/repo-1\n"},
 		{report.RunCache{}, ""},
 		{report.RunBase{Base: "git diff vs main"}, "base: git diff vs main\n"},
 		{report.RunBase{}, ""},

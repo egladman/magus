@@ -219,7 +219,9 @@ func TestCleanCacheKeepsTrackedOutputs(t *testing.T) {
 			_, err = m.internals().LastRecordedRun(t.Context(), ".", "generate")
 			assert.ErrorIs(t, err, fs.ErrNotExist, "clean --cache must drop the manifests")
 			var blobs []string
-			_ = filepath.WalkDir(filepath.Join(m.CacheDir(), "cas"), func(path string, d fs.DirEntry, err error) error {
+			_, _, store := m.CacheDescription()
+			require.NotEmpty(t, store)
+			_ = filepath.WalkDir(filepath.Join(store, "cas"), func(path string, d fs.DirEntry, err error) error {
 				if err == nil && !d.IsDir() {
 					blobs = append(blobs, path)
 				}

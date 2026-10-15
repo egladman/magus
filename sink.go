@@ -200,12 +200,13 @@ func (s *Sink) EmitCharms(ctx context.Context, charms string) {
 	s.emit(ctx, report.RunCharms{Charms: charms})
 }
 
-// EmitCache emits which cache tiers the run can reach and whether it may write to them,
-// as [Magus.CacheDescription] reports them. Text prints the boring case too: a pull
-// request reads the shared cache but must not publish to it, which is invisible unless
+// EmitCache emits which cache tiers the run can reach, whether it may write to them, and
+// where the local tier's entries live, as [Magus.CacheDescription] reports them. Text
+// prints the boring case too: a pull request reads the shared cache but must not publish
+// to it, and a checkout replays what its sibling worktrees stored, both invisible unless
 // something says so. An empty tier, a workspace with no cache, prints nothing.
-func (s *Sink) EmitCache(ctx context.Context, tier, mode string) {
-	s.emit(ctx, report.RunCache{Tier: tier, Mode: mode})
+func (s *Sink) EmitCache(ctx context.Context, tier, mode, dir string) {
+	s.emit(ctx, report.RunCache{Tier: tier, Mode: mode, Dir: dir})
 }
 
 // EmitBase emits what an affected run's change set was compared against, the third
@@ -413,7 +414,11 @@ func (t textEncoder) encode(ctx context.Context, e any) {
 		t.info(ctx, "charms: %s\n", charms)
 	case report.RunCache:
 		if e.Tier != "" {
-			t.info(ctx, "cache: %s (%s)\n", e.Tier, e.Mode)
+			where := ""
+			if e.Dir != "" {
+				where = " in " + e.Dir
+			}
+			t.info(ctx, "cache: %s (%s)%s\n", e.Tier, e.Mode, where)
 		}
 	case report.RunBase:
 		if e.Base != "" {

@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"log/slog"
+	"path/filepath"
 
 	"github.com/egladman/magus/types"
 )
@@ -48,6 +49,13 @@ func WithTrustedKeys(pubkeys [][]byte) Option {
 // never for a shared cache that an untrusted party could write.
 func WithInsecureRemote() Option {
 	return func(c *Cache) { c.insecureRemote = true }
+}
+
+// WithStoreDir puts the content-addressed entries (cas/, manifests/, logs/) in dir rather
+// than the directory Open was given. Several caches may share one: every write there is
+// a temp file renamed into place, and a key names no checkout.
+func WithStoreDir(dir string) Option {
+	return func(c *Cache) { c.store = filepath.Clean(dir) }
 }
 
 // WithSizeMB caps cache disk usage to n MiB. 0 means unlimited.
