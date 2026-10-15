@@ -157,3 +157,23 @@ func TestThresholdCheckHonorsTheFindingCap(t *testing.T) {
 
 	assert.Equal(t, []string{pastLines}, thresholdMessages(t, got[id["Frobnicate"]]))
 }
+
+func TestThresholdPastLeavesAMetricWithItsOwnCheckToThatCheck(t *testing.T) {
+	const item = thresholdFile + "#Frobnicate"
+	row := func(m types.ConformMetric) types.ConformRow {
+		return types.ConformRow{
+			Key:        types.ConformKey{Metric: m, Population: types.ConformPopSource},
+			Value:      1,
+			Violations: []types.ConformItem{{ID: item, Measure: 9}},
+		}
+	}
+	out := types.ConformOutput{Rows: []types.ConformRow{row(types.ConformFuncLines)}}
+	for m := range ownCheck {
+		out.Rows = append(out.Rows, row(m))
+	}
+
+	hits := thresholdPast(out, map[string]*namingDecl{item: {id: "frob", label: "Frobnicate"}})
+
+	require.Len(t, hits, 1)
+	assert.Equal(t, types.ConformFuncLines, hits[0].key.Metric)
+}

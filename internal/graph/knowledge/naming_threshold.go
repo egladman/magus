@@ -82,11 +82,28 @@ type thresholdHit struct {
 	source  types.ConformSource
 }
 
-// thresholdPast finds the subjects among the violations of out. A clone group is one violation
-// naming its members, so a subject in a group is past the clone-tokens value.
+// ownCheck holds the metrics another check reports with its own evidence, so a subject past
+// one is named once. The coupling metrics are conjuncts of shared-loop: past any one alone is
+// what a codebase keeps on purpose.
+var ownCheck = map[types.ConformMetric]string{
+	types.ConformCallSequence: types.CheckCallSequence,
+	types.ConformSharedBody:   types.CheckSharedLoop,
+	types.ConformSharedReach:  types.CheckSharedLoop,
+	types.ConformCallerSpread: types.CheckSharedLoop,
+	types.ConformModeKnobs:    types.CheckSharedLoop,
+	types.ConformAliasShare:   types.CheckImportAlias,
+	types.ConformNameClash:    types.CheckImportAlias,
+}
+
+// thresholdPast finds the subjects among the violations of out, past a metric no other check
+// owns. A clone group is one violation naming its members, so a subject in a group is past the
+// clone-tokens value.
 func thresholdPast(out types.ConformOutput, byItem map[string]*namingDecl) []thresholdHit {
 	var hits []thresholdHit
 	for _, row := range out.Rows {
+		if _, owned := ownCheck[row.Key.Metric]; owned {
+			continue
+		}
 		for _, v := range row.Violations {
 			ids := []string{v.ID}
 			if row.Key.Metric == types.ConformCloneTokens {
