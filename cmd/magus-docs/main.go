@@ -22,16 +22,8 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-// repoBlob is the GitHub source base for inline type links. Pinned to the default
-// branch rather than a commit hash: the committed docs embed these links, so a raw
-// HEAD hash would rewrite on every commit and trip the `generate` drift gate
-// (regenerated docs would never match the tree). No release tags to pin to yet;
-// when there are, this can point at the tag.
-const repoBlob = "https://github.com/egladman/magus/blob/main"
-
-// callbackURL is the source link for the Callback type. It names the file only: a
-// line anchor would rewrite the committed docs whenever the declaration moved.
-const callbackURL = repoBlob + "/std/module.go"
+// callbackURL is the source link for the Callback type.
+var callbackURL = docs.SourceURL("std/module.go")
 
 // repoRoot is the module root. It is a package var initializer rather than set in
 // main() so the docs the tests generate via renderModule match the ones `go run`
@@ -176,11 +168,11 @@ func typeMarkdown(t std.TypeTag) string {
 // the Signature line, not the heading: a link in the heading would fold into the
 // auto-generated slug and break the in-page #method anchors.
 func methodSourceLink(meth std.Method) string {
-	src, _ := std.MethodSource(meth, repoRoot)
+	src := std.MethodSource(meth, repoRoot)
 	if src == "" {
 		return ""
 	}
-	return fmt.Sprintf(" - [source](%s/%s)", repoBlob, src)
+	return fmt.Sprintf(" - [source](%s)", docs.SourceURL(src))
 }
 
 func writeModule(dir string, m std.Module) error {

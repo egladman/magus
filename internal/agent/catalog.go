@@ -394,7 +394,10 @@ import (
 // `magus doctor` proposes to the ratchet, and delete the known entries it names stale.
 //
 // 131: magus-multi-agent tells a worker never to exit its row while it waits on a reply.
-const SkillVersion = 131
+//
+// 132: magus-diagram says a figure receipt carries the figure id, the stamp, the claim
+// counts and the findings, and no index digest.
+const SkillVersion = 132
 
 const skillLicense = "GPL-3.0-or-later"
 
