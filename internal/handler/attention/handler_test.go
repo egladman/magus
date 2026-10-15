@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/egladman/magus/internal/handler"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability/gen/mocks"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/testkit"

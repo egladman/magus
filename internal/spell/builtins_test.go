@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/libs/testkit"

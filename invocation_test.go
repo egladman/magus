@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/journal"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"

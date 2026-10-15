@@ -29,7 +29,7 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 
 	"github.com/egladman/magus/internal/docs"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/spells"

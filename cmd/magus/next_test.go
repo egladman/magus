@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

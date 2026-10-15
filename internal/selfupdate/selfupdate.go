@@ -35,7 +35,7 @@ import (
 	"net/netip"
 	"net/url"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"os"
 	"path/filepath"
 	"runtime"

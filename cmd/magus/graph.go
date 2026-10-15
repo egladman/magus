@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	magus "github.com/egladman/magus"
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
@@ -25,7 +25,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interactive"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/proc"

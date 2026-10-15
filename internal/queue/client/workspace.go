@@ -7,7 +7,7 @@ import (
 	"slices"
 	"sync"
 
-	magus "github.com/egladman/magus"
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/risk"
 	"github.com/egladman/magus/spells"

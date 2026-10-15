@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/egladman/magus/internal/handler"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"

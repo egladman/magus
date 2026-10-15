@@ -28,7 +28,7 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/token"
-	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )

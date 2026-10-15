@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/file"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 )
 
 // foldCachePath is the file under a store that keeps one kind's records between reads.

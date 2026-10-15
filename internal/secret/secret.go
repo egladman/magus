@@ -36,7 +36,7 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 

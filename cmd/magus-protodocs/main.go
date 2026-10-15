@@ -39,7 +39,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	validate "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 
 	"github.com/egladman/magus/internal/docs"
 	"github.com/egladman/magus/internal/render/md"

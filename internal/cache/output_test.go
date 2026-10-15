@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	runPkg "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"

@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 )
 
 // GHA emulates the GitHub Actions Cache service v2 that spells/github/actions calls:

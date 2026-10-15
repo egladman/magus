@@ -16,7 +16,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/cache"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )

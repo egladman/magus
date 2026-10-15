@@ -19,7 +19,7 @@ import (
 	"strings"
 	"sync"
 
-	pgzip "github.com/klauspost/pgzip"
+	"github.com/klauspost/pgzip"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/compress"

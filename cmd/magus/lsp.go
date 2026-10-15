@@ -13,7 +13,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/langservice"
 	"github.com/egladman/magus/internal/log/attr"
 )

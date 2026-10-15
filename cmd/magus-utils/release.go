@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/egladman/magus/types"
 	"golang.org/x/mod/semver"

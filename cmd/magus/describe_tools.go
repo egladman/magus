@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	magus "github.com/egladman/magus"
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )

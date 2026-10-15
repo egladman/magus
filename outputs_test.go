@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/cache"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"

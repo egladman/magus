@@ -9,7 +9,7 @@ import (
 	"slices"
 	"sync"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 )
 
 // eventAttr is the slog attribute key that carries the whole [Event] value through a

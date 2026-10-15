@@ -21,7 +21,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/auth"
-	mcp "github.com/egladman/magus/internal/handler/mcp"
+	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"

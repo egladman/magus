@@ -8,7 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
-	run "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/run"
 	"log/slog"
 	"maps"
 	"os"

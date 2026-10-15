@@ -13,7 +13,7 @@ import (
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/hint"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )

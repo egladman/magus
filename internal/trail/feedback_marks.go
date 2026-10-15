@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )

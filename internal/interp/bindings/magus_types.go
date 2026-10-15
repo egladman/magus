@@ -3,7 +3,7 @@ package bindings
 import (
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
-	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
 // DeclareMagusTypes declares every magus\ type into sess, externs included, and binds

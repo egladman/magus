@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/interp/bindings"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/rpcerr"

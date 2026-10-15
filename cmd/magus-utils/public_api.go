@@ -19,7 +19,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/generate/emit"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 )
 
 // publicGoPackages is the one list of packages whose exported Go API is locked.

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 )
 
 //go:embed release-keys.json

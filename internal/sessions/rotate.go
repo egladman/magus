@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 )
 
 // DefaultRetention is how long an invocation file outlives its newest fact. [Open]

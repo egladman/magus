@@ -8,7 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"

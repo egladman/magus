@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	server "github.com/mark3labs/mcp-go/server"
+	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/handler/mcp/origin"

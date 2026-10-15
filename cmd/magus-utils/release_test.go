@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

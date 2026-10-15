@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/cmd/magus/gen"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
