@@ -389,7 +389,10 @@ import (
 //
 // 129: magus-multi-agent names the integrator by role: a subagent spawned
 // `<parent>/integrate <job>` in the landing checkout, whose check is never the gate.
-const SkillVersion = 129
+//
+// 130: magus-workspace-rules teaches tightening a conformance threshold: commit the value
+// `magus doctor` proposes to the ratchet, and delete the known entries it names stale.
+const SkillVersion = 130
 
 const skillLicense = "GPL-3.0-or-later"
 
