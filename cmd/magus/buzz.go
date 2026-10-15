@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/diagnostics"
@@ -275,8 +276,8 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 		started := time.Now()
 		defer func() { recordBuzzRun(ctx, root, name, code, scriptArgs, recorded.Bytes(), started, retErr) }()
 	}
-	in, upstream := pipeRecordsIn(ctx)
-	ctx = std.WithPipe(ctx, std.PipeIO{In: in, Upstream: upstream, Out: records, Prose: scriptOut})
+	in, _ := pipeRecordsIn(ctx)
+	ctx = report.WithStage(ctx, report.Stage{In: in, Out: records, Prose: scriptOut})
 
 	// Default is strict (upstream Buzz parity, what the buzz spell's `run` op forks).
 	// --embedded opts into the relaxations the magusfile engine uses, so a magus

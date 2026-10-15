@@ -192,3 +192,25 @@ func (r *Reader) All(ctx context.Context) ([]Line, error) {
 	defer r.mu.Unlock()
 	return append([]Line(nil), r.lines...), r.err
 }
+
+// Stage is the record stream a `magus buzz` stage reads and writes. In is nil when no
+// magus stage writing records feeds the script; Out receives what it emits, and Prose
+// what it shows a person, which is stderr while a magus reads Out.
+type Stage struct {
+	In    *Reader
+	Out   io.Writer
+	Prose io.Writer
+}
+
+type stageKey struct{}
+
+// WithStage carries the stage's record stream on ctx for the pipe module.
+func WithStage(ctx context.Context, s Stage) context.Context {
+	return context.WithValue(ctx, stageKey{}, s)
+}
+
+// StageFrom returns the stream WithStage carried, or the zero Stage when ctx carries none.
+func StageFrom(ctx context.Context) Stage {
+	s, _ := ctx.Value(stageKey{}).(Stage)
+	return s
+}

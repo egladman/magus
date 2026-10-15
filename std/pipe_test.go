@@ -23,7 +23,7 @@ const (
 func pipeCtx(t *testing.T, upstream string) (context.Context, *bytes.Buffer) {
 	t.Helper()
 	var out bytes.Buffer
-	return WithPipe(t.Context(), PipeIO{In: report.NewReader(strings.NewReader(upstream), nil), Upstream: 42, Out: &out}), &out
+	return report.WithStage(t.Context(), report.Stage{In: report.NewReader(strings.NewReader(upstream), nil), Out: &out}), &out
 }
 
 // A script reads the upstream's records in order as typed values, with the fields it
@@ -55,7 +55,7 @@ func TestPipeReadsRecordsInOrder(t *testing.T) {
 // Reading from a script no record stage feeds is an error, never an empty stream that
 // passes for "nothing failed".
 func TestPipeWithoutAnUpstreamRaises(t *testing.T) {
-	ctx := WithPipe(t.Context(), PipeIO{Out: &bytes.Buffer{}})
+	ctx := report.WithStage(t.Context(), report.Stage{Out: &bytes.Buffer{}})
 	_, err := PipeMore(ctx)
 	assert.ErrorContains(t, err, "no magus stage writing records feeds")
 	_, err = PipeNext(ctx)
