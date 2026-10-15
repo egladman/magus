@@ -43,6 +43,36 @@ func TestSessionEnumsAnswersNullForAnEmptyValue(t *testing.T) {
 	assert.True(t, enums.Case("Shade", "").IsNull())
 }
 
+// A script run by `magus buzz` has the strict session, which rejects a top-level
+// return, so reading an enum's cases must not need one.
+func TestSessionEnumsReadsFromAStrictSession(t *testing.T) {
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx)
+	t.Cleanup(func() { _ = sess.Close() })
+	sess.SetNativeModule("paint/shades", vm.NewMap())
+	sess.SetModuleDecls("paint/shades", `export enum<str> Shade { none = "", light = "light", dark = "dark-ish" }`)
+
+	got := SessionEnums(ctx, sess, "paint/shades").Case("Shade", "dark-ish")
+
+	_, name, ok := got.EnumCase()
+	require.True(t, ok, "got %s, not an enum case", got.Kind())
+	assert.Equal(t, "dark", name)
+}
+
+// Two readers over one session each read the same enum, and the second must not fail on
+// what the first left in the session.
+func TestSessionEnumsReadsTwiceOverOneSession(t *testing.T) {
+	ctx := context.Background()
+	sess := shadeSession(t)
+
+	SessionEnums(ctx, sess, "paint/shades").Case("Shade", "light")
+	got := SessionEnums(ctx, sess, "paint/shades").Case("Shade", "light")
+
+	_, name, ok := got.EnumCase()
+	require.True(t, ok, "got %s, not an enum case", got.Kind())
+	assert.Equal(t, "light", name)
+}
+
 // A value outside the enum is a Go-side bug, and it must not cross as anything.
 func TestSessionEnumsPanicsOnAValueOutsideTheEnum(t *testing.T) {
 	enums := SessionEnums(context.Background(), shadeSession(t), "paint/shades")

@@ -86,8 +86,7 @@ func (s *sessionEnums) qualify(enum string) string {
 // read evaluates the enum's cases in the session, since only the VM that holds a
 // definition can intern its cases.
 func (s *sessionEnums) read(enum string) (map[string]vm.Value, error) {
-	imp := fmt.Sprintf("import %q; ", s.module)
-	def, err := s.sess.Eval(s.ctx, imp+"return "+s.qualify(enum)+";")
+	def, err := s.value("def", enum, s.qualify(enum))
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +98,7 @@ func (s *sessionEnums) read(enum string) (map[string]vm.Value, error) {
 	for i, name := range names {
 		refs[i] = s.qualify(enum) + "." + name
 	}
-	list, err := s.sess.Eval(s.ctx, imp+"return ["+strings.Join(refs, ", ")+"];")
+	list, err := s.value("cases", enum, "["+strings.Join(refs, ", ")+"]")
 	if err != nil {
 		return nil, err
 	}
@@ -112,6 +111,19 @@ func (s *sessionEnums) read(enum string) (map[string]vm.Value, error) {
 		out[backing.AsString()] = c
 	}
 	return out, nil
+}
+
+// value evaluates expr after importing the module and returns what it is. It goes
+// through a function because a strict session, the kind `magus buzz` runs a script in,
+// rejects a top-level return. Redeclaring the function for a second reader of the same
+// session replaces the first, which is what the same expression asks for.
+func (s *sessionEnums) value(part, enum, expr string) (vm.Value, error) {
+	name := "__enum_" + part + "_" + enum
+	decl := fmt.Sprintf("import %q; fun %s() > any { return %s; }", s.module, name, expr)
+	if _, err := s.sess.Eval(s.ctx, decl); err != nil {
+		return vm.Null, err
+	}
+	return s.sess.CallValue(s.ctx, s.sess.GetGlobal(name), nil)
 }
 
 func describeCase(v vm.Value) string {
