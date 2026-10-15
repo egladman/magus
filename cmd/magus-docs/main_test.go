@@ -31,3 +31,11 @@ func TestPruneRemovesOnlyStaleModulePages(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(out, "index 3.md"))
 	assert.FileExists(t, filepath.Join(out, "authored.md"))
 }
+
+func TestSourceLinksNameTheFileNotTheLine(t *testing.T) {
+	file, _ := std.MethodSource(std.Method{Impl: std.FsGlob}, repoRoot)
+	require.NotEmpty(t, file)
+	assert.Equal(t, " - [source]("+repoBlob+"/"+file+")", methodSourceLink(std.Method{Impl: std.FsGlob}))
+
+	assert.Equal(t, "[`Callback`]("+repoBlob+"/std/module.go)", typeMarkdown(std.TypeFunc))
+}
