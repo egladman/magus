@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `130` |
+| `agent-skill-version` | `131` |
 | `knowledge-schema-version` | `21` |
-| `skill-content` | `7f130e22132a` |
+| `skill-content` | `9625888de030` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -383,8 +383,7 @@ down. Two renders of one
 row are byte-identical, which hand-typed prompts are not.
 
 The guard grades every command a brief presents in a shell fence or a code span. One
-it would deny refuses the spawn. A line that names a command to forbid it ("never ...") is not
-graded.
+it would deny refuses the spawn. A line that names a command to forbid it ("never ...") is not graded.
 
 Every worker prompt includes its row, its JOB ID, relevant graph evidence, and
 any cap the user set for the tree. Require the worker to:
@@ -884,8 +883,7 @@ them disagreed about a dedup key and every one ended with the gate.
 
 The guard grades every command a brief presents in a shell fence or a code span. One
 it would deny refuses the spawn, since the worker runs a brief's
-commands as written. A line that names a command to forbid it ("never ...") is not
-graded.
+commands as written. A line that names a command to forbid it ("never ...") is not graded.
 
 Every worker prompt includes its row, its JOB ID, relevant graph evidence, and
 any cap the user set for the tree. Require the worker to:

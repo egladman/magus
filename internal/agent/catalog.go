@@ -392,7 +392,9 @@ import (
 //
 // 130: magus-workspace-rules teaches tightening a conformance threshold: commit the value
 // `magus doctor` proposes to the ratchet, and delete the known entries it names stale.
-const SkillVersion = 130
+//
+// 131: magus-multi-agent tells a worker never to exit its row while it waits on a reply.
+const SkillVersion = 131
 
 const skillLicense = "GPL-3.0-or-later"
 

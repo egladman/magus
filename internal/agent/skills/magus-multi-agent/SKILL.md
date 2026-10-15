@@ -389,8 +389,7 @@ them disagreed about a dedup key and every one ended with the gate{{end}}.
 
 The guard grades every command a brief presents in a shell fence or a code span. One
 it would deny refuses the spawn{{if .Full}}, since the worker runs a brief's
-commands as written{{end}}. A line that names a command to forbid it ("never ...") is not
-graded.
+commands as written{{end}}. A line that names a command to forbid it ("never ...") is not graded.
 
 Every worker prompt includes its row, its JOB ID, relevant graph evidence, and
 any cap the user set for the tree. Require the worker to:
