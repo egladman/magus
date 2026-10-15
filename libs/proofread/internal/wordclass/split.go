@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 )
 
-// Tokenize splits one sentence's text into the words [Tag] reads, as UD
+// Split splits one sentence's text into the words [Tag] reads, as UD
 // English EWT tokenizes them: punctuation is a word of its own, a clitic is
 // split from its host ("don't" is "do" "n't", "it's" is "it" "'s", "can't" is
 // "ca" "n't", "cannot" is "can" "not"), and a run of "...", "?!" or "!!" is
@@ -18,7 +18,7 @@ import (
 // EWT splits most hyphenated compounds ("full-fledged" is "full" "-"
 // "fledged"); keeping them whole costs little, since the tagger reads an
 // unknown word by its suffix.
-func Tokenize(sentence string) []string {
+func Split(sentence string) []string {
 	var out []string
 
 	for _, field := range strings.Fields(sentence) {
@@ -55,7 +55,7 @@ var clitics = []string{"n't", "'re", "'ve", "'ll", "'s", "'d", "'m"}
 var fused = map[string]int{"cannot": 3, "gonna": 3, "wanna": 3, "gotta": 3}
 
 // keptWhole reports whether field is a URL, path or email address, which
-// Tokenize keeps as one word.
+// Split keeps as one word.
 func keptWhole(field string) bool {
 	field = strings.TrimLeft(field, openingMarks)
 

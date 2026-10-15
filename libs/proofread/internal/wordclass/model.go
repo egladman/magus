@@ -37,9 +37,10 @@ type Weight struct {
 // TestTagAccuracy can demand the same counts from the embedded model.
 type Accuracy struct{ Words, UPOS, XPOS int }
 
-type class struct {
-	upos UPOS
-	xpos XPOS
+// pair is a Label as the tagger reads it.
+type pair struct {
+	class Class
+	penn  string
 }
 
 type span struct{ start, end uint32 }
@@ -50,9 +51,9 @@ type span struct{ start, end uint32 }
 type Model struct {
 	Accuracy Accuracy
 
-	classes []class
+	classes []pair
 	dict    map[string]uint16
-	feats   map[Hash]span
+	feats   map[Feature]span
 	// weights holds every feature's weights back to back in hash order; a span
 	// indexes one feature's run.
 	weights []Weight
@@ -87,20 +88,20 @@ func unzip(gz []byte) (*Model, error) {
 // index in labels it is always tagged with; weights holds each feature's
 // weights in ascending class order. It fails on a label whose UPOS is not
 // one of the constants and on a class index past labels.
-func NewModel(labels []Label, dict map[string]uint16, weights map[Hash][]Weight) (*Model, error) {
+func NewModel(labels []Label, dict map[string]uint16, weights map[Feature][]Weight) (*Model, error) {
 	m := &Model{
-		classes: make([]class, len(labels)),
+		classes: make([]pair, len(labels)),
 		dict:    make(map[string]uint16, len(dict)),
-		feats:   make(map[Hash]span, len(weights)),
+		feats:   make(map[Feature]span, len(weights)),
 	}
 
 	for i, l := range labels {
-		u, ok := parseUPOS(l.UPOS)
+		c, ok := parseClass(l.UPOS)
 		if !ok {
 			return nil, fmt.Errorf("class %d: unknown UPOS %q", i, l.UPOS)
 		}
 
-		m.classes[i] = class{upos: u, xpos: XPOS(l.XPOS)}
+		m.classes[i] = pair{class: c, penn: l.XPOS}
 	}
 
 	for w, c := range dict {
@@ -143,8 +144,8 @@ func (m *Model) MarshalBinary() ([]byte, error) {
 	b = binary.AppendUvarint(b, uint64(len(m.classes)))
 
 	for _, c := range m.classes {
-		str(string(c.xpos))
-		str(c.upos.String())
+		str(c.penn)
+		str(c.class.String())
 	}
 
 	words := slices.Sorted(maps.Keys(m.dict))
@@ -158,7 +159,7 @@ func (m *Model) MarshalBinary() ([]byte, error) {
 	hashes := slices.Sorted(maps.Keys(m.feats))
 	b = binary.AppendUvarint(b, uint64(len(hashes)))
 
-	var last Hash
+	var last Feature
 
 	for _, h := range hashes {
 		b = binary.AppendUvarint(b, uint64(h-last))
@@ -196,16 +197,16 @@ func (m *Model) UnmarshalBinary(data []byte) error {
 		return r.err
 	}
 
-	out.classes = make([]class, nClasses)
+	out.classes = make([]pair, nClasses)
 	for i := range out.classes {
-		xpos, name := r.str(), r.str()
+		penn, name := r.str(), r.str()
 
-		u, ok := parseUPOS(name)
+		c, ok := parseClass(name)
 		if r.err == nil && !ok {
 			return fmt.Errorf("class %d: unknown UPOS %q", i, name)
 		}
 
-		out.classes[i] = class{upos: u, xpos: XPOS(xpos)}
+		out.classes[i] = pair{class: c, penn: penn}
 	}
 
 	nWords := r.count()
@@ -224,7 +225,7 @@ func (m *Model) UnmarshalBinary(data []byte) error {
 		return r.err
 	}
 
-	out.feats = make(map[Hash]span, nFeats)
+	out.feats = make(map[Feature]span, nFeats)
 
 	var h uint64
 	for range nFeats {
@@ -238,7 +239,7 @@ func (m *Model) UnmarshalBinary(data []byte) error {
 		}
 
 		s.end = uint32(len(out.weights))
-		out.feats[Hash(h)] = s
+		out.feats[Feature(h)] = s
 
 		if r.err != nil {
 			break
@@ -340,7 +341,7 @@ func (r *modelReader) class(n int) uint16 {
 }
 
 // predict returns the highest-scoring class, the lowest index on a tie.
-func (m *Model) predict(feats []Hash, scores []int32) uint16 {
+func (m *Model) predict(feats []Feature, scores []int32) uint16 {
 	clear(scores)
 
 	for _, f := range feats {

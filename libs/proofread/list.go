@@ -422,7 +422,7 @@ func parallelFinding(item paragraph, o opener, common majority, openers []opener
 }
 
 // itemOpener tags the first sentence of an item past any bold label and
-// returns the class of its first token as [wordclass.Tokenize] splits it, so
+// returns the class of its first token as [wordclass.Split] splits it, so
 // "Don't" opens with "Do" and "Re-run" stays one word. An item opening with
 // code, a link or punctuation, or with a word of no class judged here (an
 // adverb, a preposition, a conjunction), has none.
@@ -444,7 +444,7 @@ func itemOpener(text string) (opener, bool) {
 	s := tagSentence(sentences[0])
 
 	for i, t := range s.tags {
-		if t.UPOS == wordclass.PUNCT || t.UPOS == wordclass.SYM {
+		if t.Class == wordclass.Punctuation || t.Class == wordclass.Symbol {
 			continue
 		}
 
@@ -453,10 +453,11 @@ func itemOpener(text string) (opener, bool) {
 			return opener{}, false
 		}
 
-		switch t.UPOS {
-		case wordclass.VERB, wordclass.AUX:
-			return opener{word: word, class: classVerb, tense: verbTense(string(t.XPOS))}, true
-		case wordclass.NOUN, wordclass.PROPN, wordclass.PRON, wordclass.DET, wordclass.NUM, wordclass.ADJ:
+		switch t.Class {
+		case wordclass.Verb, wordclass.Auxiliary:
+			return opener{word: word, class: classVerb, tense: verbTense(t.Penn)}, true
+		case wordclass.Noun, wordclass.ProperNoun, wordclass.Pronoun, wordclass.Determiner, wordclass.Numeral,
+			wordclass.Adjective:
 			return opener{word: word, class: classNoun}, true
 		}
 

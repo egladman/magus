@@ -194,19 +194,19 @@ func (t *trainer) train(train []conllu.Sentence, iterations int, seed uint64) {
 	rng := rand.New(rand.NewPCG(seed, seed))
 	scores := make([]int64, len(t.classes))
 
-	var feats []wordclass.Hash
+	var feats []wordclass.Feature
 
 	for range iterations {
 		rng.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
 
 		for _, s := range order {
-			context := wordclass.Padded(s.Forms())
-			prev, prev2 := wordclass.Start, wordclass.Start2
+			padded := wordclass.Pad(s.Forms())
+			prev, prev2 := wordclass.SentenceStart, wordclass.SentenceStart2
 
 			for i, tok := range s.Words {
 				guess, ok := t.dict[tok.Form]
 				if !ok {
-					feats = wordclass.Extract(feats[:0], context, i, tok.Form, prev, prev2)
+					feats = wordclass.AppendFeatures(feats[:0], padded, i, tok.Form, prev, prev2)
 					guess = t.p.predict(feats, scores)
 					t.p.update(t.index[class{xpos: tok.XPOS, upos: tok.UPOS}], guess, feats)
 				}
@@ -224,11 +224,11 @@ func evaluate(m *wordclass.Model, sentences []conllu.Sentence) (a wordclass.Accu
 		for i, got := range m.Tag(s.Forms()) {
 			a.Words++
 
-			if got.UPOS.String() == s.Words[i].UPOS {
+			if got.Class.String() == s.Words[i].UPOS {
 				a.UPOS++
 			}
 
-			if string(got.XPOS) == s.Words[i].XPOS {
+			if got.Penn == s.Words[i].XPOS {
 				a.XPOS++
 			}
 		}

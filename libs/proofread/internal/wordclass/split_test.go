@@ -5,18 +5,18 @@ import (
 	"testing"
 )
 
-func BenchmarkTokenize(b *testing.B) {
+func BenchmarkSplit(b *testing.B) {
 	sentences := ewt(b)
 	b.ReportAllocs()
 
 	for b.Loop() {
 		for _, s := range sentences {
-			Tokenize(s.Text)
+			Split(s.Text)
 		}
 	}
 }
 
-func TestTokenize(t *testing.T) {
+func TestSplit(t *testing.T) {
 	cases := map[string]struct {
 		text string
 		want []string
@@ -61,67 +61,73 @@ func TestTokenize(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			if got := Tokenize(tc.text); !slices.Equal(got, tc.want) {
-				t.Errorf("Tokenize(%q)\n got %q\nwant %q", tc.text, got, tc.want)
+			if got := Split(tc.text); !slices.Equal(got, tc.want) {
+				t.Errorf("Split(%q)\n got %q\nwant %q", tc.text, got, tc.want)
 			}
 		})
 	}
 }
 
-// TestTagTokenized checks the tagger over Tokenize's words against tags
+// TestTagSplitWords checks the tagger over Split's words against classes
 // checked by hand, so a tokenization the model was not trained on shows.
-func TestTagTokenized(t *testing.T) {
+func TestTagSplitWords(t *testing.T) {
+	const (
+		adj, adp, adv, aux, cconj, det = Adjective, Adposition, Adverb, Auxiliary, CoordinatingConjunction, Determiner
+		noun, num, part, pron, propn   = Noun, Numeral, Particle, Pronoun, ProperNoun
+		punct, sconj, verb, x          = Punctuation, SubordinatingConjunction, Verb, Other
+	)
+
 	cases := []struct {
 		text string
-		want []UPOS
+		want []Class
 	}{
-		{"I don't think it's ready.", []UPOS{PRON, AUX, PART, VERB, PRON, AUX, ADJ, PUNCT}},
+		{"I don't think it's ready.", []Class{pron, aux, part, verb, pron, aux, adj, punct}},
 		{
 			"The report, written by the team, wasn't reviewed.",
-			[]UPOS{DET, NOUN, PUNCT, VERB, ADP, DET, NOUN, PUNCT, AUX, PART, VERB, PUNCT},
+			[]Class{det, noun, punct, verb, adp, det, noun, punct, aux, part, verb, punct},
 		},
 		{
 			"Running the tests takes time, though it's worth it.",
-			[]UPOS{VERB, DET, NOUN, VERB, NOUN, PUNCT, SCONJ, PRON, AUX, ADJ, PRON, PUNCT},
+			[]Class{verb, det, noun, verb, noun, punct, sconj, pron, aux, adj, pron, punct},
 		},
 		{
 			"We'll ship the well-known fix (see https://example.com) today.",
-			[]UPOS{PRON, AUX, VERB, DET, ADJ, NOUN, PUNCT, VERB, X, PUNCT, NOUN, PUNCT},
+			[]Class{pron, aux, verb, det, adj, noun, punct, verb, x, punct, noun, punct},
 		},
 		{
 			"She can't find the file and the directory it named.",
-			[]UPOS{PRON, AUX, PART, VERB, DET, NOUN, CCONJ, DET, NOUN, PRON, VERB, PUNCT},
+			[]Class{pron, aux, part, verb, det, noun, cconj, det, noun, pron, verb, punct},
 		},
 		{
 			"Dr. Lee measured 3.5 seconds, nearly twice the old time!",
-			[]UPOS{PROPN, PROPN, VERB, NUM, NOUN, PUNCT, ADV, ADV, DET, ADJ, NOUN, PUNCT},
+			[]Class{propn, propn, verb, num, noun, punct, adv, adv, det, adj, noun, punct},
 		},
 	}
 
 	var words, right int
 	for _, tc := range cases {
-		tokens := Tokenize(tc.text)
+		tokens := Split(tc.text)
 		if len(tokens) != len(tc.want) {
-			t.Fatalf("Tokenize(%q) = %q, want %d words", tc.text, tokens, len(tc.want))
+			t.Fatalf("Split(%q) = %q, want %d words", tc.text, tokens, len(tc.want))
 		}
 		for i, got := range Tag(tokens) {
 			words++
-			if got.UPOS == tc.want[i] {
+			if got.Class == tc.want[i] {
 				right++
 			} else {
-				t.Logf("%q: %q is %v, want %v", tc.text, tokens[i], got.UPOS, tc.want[i])
+				t.Logf("%q: %q is %v, want %v", tc.text, tokens[i], got.Class, tc.want[i])
 			}
 		}
 	}
 	if acc := float64(right) / float64(words); acc < 0.93 {
-		t.Errorf("UPOS accuracy over Tokenize's words %.4f, want >= 0.93", acc)
+		t.Errorf("UPOS accuracy over Split's words %.4f, want >= 0.93", acc)
 	}
 }
 
-// TestTokenizeAgreesWithEWT reads each EWT test sentence's text and counts the
-// sentences Tokenize splits exactly as EWT did, once EWT's split hyphenated
-// words are joined back, since Tokenize keeps them whole.
-func TestTokenizeAgreesWithEWT(t *testing.T) {
+// TestSplitAgreesWithEWT reads each EWT test sentence's text and counts the
+// sentences Split splits exactly as EWT did, once EWT's split hyphenated
+// words are joined back, since Split keeps them whole.
+func TestSplitAgreesWithEWT(t *testing.T) {
 	sentences := ewt(t)
 
 	exact := 0
@@ -142,17 +148,17 @@ func TestTokenizeAgreesWithEWT(t *testing.T) {
 			attached = glued
 		}
 
-		if got := Tokenize(s.Text); slices.Equal(got, forms) {
+		if got := Split(s.Text); slices.Equal(got, forms) {
 			exact++
 		} else if testing.Verbose() {
 			t.Logf("%q\n got %q\nwant %q", s.Text, got, forms)
 		}
 	}
 	share := float64(exact) / float64(len(sentences))
-	t.Logf("Tokenize matches EWT on %d of %d test sentences (%.4f)", exact, len(sentences), share)
+	t.Logf("Split matches EWT on %d of %d test sentences (%.4f)", exact, len(sentences), share)
 	// The misses left are web text: typos EWT splits ("dont"), slashes between
 	// words and emoticons.
 	if share < 0.89 {
-		t.Errorf("Tokenize matches EWT on %.4f of its test sentences, want >= 0.89", share)
+		t.Errorf("Split matches EWT on %.4f of its test sentences, want >= 0.89", share)
 	}
 }

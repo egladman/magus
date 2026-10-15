@@ -6,10 +6,11 @@ import (
 	"unicode/utf8"
 )
 
-// Start and Start2 are the tags assumed before a sentence's first word.
+// SentenceStart and SentenceStart2 are the classes assumed before a
+// sentence's first word.
 const (
-	Start  uint16 = 0xffff
-	Start2 uint16 = 0xfffe
+	SentenceStart  uint16 = 0xffff
+	SentenceStart2 uint16 = 0xfffe
 )
 
 const (
@@ -44,25 +45,25 @@ const (
 	fnvPrime  = 1099511628211
 )
 
-// Hash is one feature hashed with FNV-1a; the tagger and the trainer key
+// Feature is one context feature hashed with FNV-1a; the tagger and the trainer key
 // weights by it, so both must extract features through this package.
-type Hash uint64
+type Feature uint64
 
-func newFeature(template byte) Hash {
-	return (fnvOffset ^ Hash(template)) * fnvPrime
+func newFeature(template byte) Feature {
+	return (fnvOffset ^ Feature(template)) * fnvPrime
 }
 
 // 0xff never occurs in UTF-8, so it separates parts without escaping.
-func (h Hash) str(s string) Hash {
+func (h Feature) str(s string) Feature {
 	for i := 0; i < len(s); i++ {
-		h = (h ^ Hash(s[i])) * fnvPrime
+		h = (h ^ Feature(s[i])) * fnvPrime
 	}
 	return (h ^ 0xff) * fnvPrime
 }
 
-func (h Hash) tag(t uint16) Hash {
-	h = (h ^ Hash(t&0xff)) * fnvPrime
-	return (h ^ Hash(t>>8)) * fnvPrime
+func (h Feature) tag(t uint16) Feature {
+	h = (h ^ Feature(t&0xff)) * fnvPrime
+	return (h ^ Feature(t>>8)) * fnvPrime
 }
 
 // normalize folds the open classes that are rare as strings but regular as shapes.
@@ -135,21 +136,22 @@ func prefix(s string, n int) string {
 	return s
 }
 
-// Padded returns the normalized words with two sentinels on each side, so
-// context[i+2] is word i.
-func Padded(words []string) []string {
-	context := make([]string, 0, len(words)+4)
-	context = append(context, "-START-", "-START2-")
+// Pad returns the normalized words with two sentinels on each side, so
+// padded[i+2] is word i.
+func Pad(words []string) []string {
+	padded := make([]string, 0, len(words)+4)
+	padded = append(padded, "-START-", "-START2-")
 	for _, w := range words {
-		context = append(context, normalize(w))
+		padded = append(padded, normalize(w))
 	}
-	return append(context, "-END-", "-END2-")
+	return append(padded, "-END-", "-END2-")
 }
 
-// Extract appends the hashed features of word i, given the two tags before it.
-func Extract(dst []Hash, context []string, i int, word string, prev, prev2 uint16) []Hash {
+// AppendFeatures appends the features of word, the i-th word of the
+// sentence Pad made padded from, given the two classes before it.
+func AppendFeatures(dst []Feature, padded []string, i int, word string, prev, prev2 uint16) []Feature {
 	lower := strings.ToLower(word)
-	w := context[i+2]
+	w := padded[i+2]
 	sh := shape(word)
 	return append(dst,
 		newFeature(fBias),
@@ -166,14 +168,14 @@ func Extract(dst []Hash, context []string, i int, word string, prev, prev2 uint1
 		newFeature(fPrevTags).tag(prev).tag(prev2),
 		newFeature(fWord).str(w),
 		newFeature(fPrevTagWord).tag(prev).str(w),
-		newFeature(fPrevWord).str(context[i+1]),
-		newFeature(fPrevSuffix).str(suffix(context[i+1], 3)),
-		newFeature(fPrev2Word).str(context[i]),
-		newFeature(fNextWord).str(context[i+3]),
-		newFeature(fNextSuffix).str(suffix(context[i+3], 3)),
-		newFeature(fNext2Word).str(context[i+4]),
-		newFeature(fPrevWordWord).str(context[i+1]).str(w),
-		newFeature(fWordNextWord).str(w).str(context[i+3]),
+		newFeature(fPrevWord).str(padded[i+1]),
+		newFeature(fPrevSuffix).str(suffix(padded[i+1], 3)),
+		newFeature(fPrev2Word).str(padded[i]),
+		newFeature(fNextWord).str(padded[i+3]),
+		newFeature(fNextSuffix).str(suffix(padded[i+3], 3)),
+		newFeature(fNext2Word).str(padded[i+4]),
+		newFeature(fPrevWordWord).str(padded[i+1]).str(w),
+		newFeature(fWordNextWord).str(w).str(padded[i+3]),
 		newFeature(fPrevTagSuffix).tag(prev).str(suffix(lower, 3)),
 		newFeature(fShapePrevTag).str(sh).tag(prev),
 	)

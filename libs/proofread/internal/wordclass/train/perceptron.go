@@ -20,15 +20,15 @@ type param struct {
 // of Honnibal's 2013 tagger: a weight's running total is only brought up to
 // date when that weight changes.
 type perceptron struct {
-	params map[wordclass.Hash][]param
+	params map[wordclass.Feature][]param
 	step   int64
 }
 
 func newPerceptron() *perceptron {
-	return &perceptron{params: make(map[wordclass.Hash][]param)}
+	return &perceptron{params: make(map[wordclass.Feature][]param)}
 }
 
-func (p *perceptron) predict(feats []wordclass.Hash, scores []int64) uint16 {
+func (p *perceptron) predict(feats []wordclass.Feature, scores []int64) uint16 {
 	clear(scores)
 
 	for _, f := range feats {
@@ -40,7 +40,7 @@ func (p *perceptron) predict(feats []wordclass.Hash, scores []int64) uint16 {
 	return argmax(scores)
 }
 
-func (p *perceptron) update(truth, guess uint16, feats []wordclass.Hash) {
+func (p *perceptron) update(truth, guess uint16, feats []wordclass.Feature) {
 	p.step++
 	if truth == guess {
 		return
@@ -52,7 +52,7 @@ func (p *perceptron) update(truth, guess uint16, feats []wordclass.Hash) {
 	}
 }
 
-func (p *perceptron) bump(f wordclass.Hash, class uint16, delta int32) {
+func (p *perceptron) bump(f wordclass.Feature, class uint16, delta int32) {
 	ps := p.params[f]
 
 	i := slices.IndexFunc(ps, func(q param) bool { return q.class == class })
@@ -71,12 +71,12 @@ func (p *perceptron) bump(f wordclass.Hash, class uint16, delta int32) {
 // quantize averages every weight and rounds it onto a scale where the largest
 // magnitude is levels. Weights that round to zero are dropped. It fails when
 // no step ran or no weight ever moved, since there is nothing to scale by.
-func (p *perceptron) quantize(levels int) (map[wordclass.Hash][]wordclass.Weight, error) {
+func (p *perceptron) quantize(levels int) (map[wordclass.Feature][]wordclass.Weight, error) {
 	if p.step == 0 {
 		return nil, errors.New("quantize: no update steps ran, so train for at least one iteration")
 	}
 
-	avg := make(map[wordclass.Hash][]float64, len(p.params))
+	avg := make(map[wordclass.Feature][]float64, len(p.params))
 
 	var peak float64
 
@@ -95,7 +95,7 @@ func (p *perceptron) quantize(levels int) (map[wordclass.Hash][]wordclass.Weight
 		return nil, errors.New("quantize: no weight moved from zero, so the training split gave the perceptron nothing to learn")
 	}
 
-	weights := make(map[wordclass.Hash][]wordclass.Weight, len(p.params))
+	weights := make(map[wordclass.Feature][]wordclass.Weight, len(p.params))
 
 	for f, ps := range p.params {
 		var ws []wordclass.Weight

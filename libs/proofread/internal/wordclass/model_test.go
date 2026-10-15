@@ -37,7 +37,7 @@ func TestModelRoundTrip(t *testing.T) {
 func TestNewModel(t *testing.T) {
 	labels := []Label{{UPOS: "NOUN", XPOS: "NN"}, {UPOS: "VERB", XPOS: "VB"}}
 	dict := map[string]uint16{"the": 0}
-	weights := map[Hash][]Weight{9: {{Class: 0, Value: -2}, {Class: 1, Value: 3}}, 4: {{Class: 1, Value: 1}}}
+	weights := map[Feature][]Weight{9: {{Class: 0, Value: -2}, {Class: 1, Value: 3}}, 4: {{Class: 1, Value: 1}}}
 
 	m, err := NewModel(labels, dict, weights)
 	if err != nil {
@@ -63,11 +63,11 @@ func TestNewModel(t *testing.T) {
 	for name, args := range map[string]struct {
 		labels  []Label
 		dict    map[string]uint16
-		weights map[Hash][]Weight
+		weights map[Feature][]Weight
 	}{
 		"an unknown UPOS":                  {[]Label{{UPOS: "NN"}}, nil, nil},
 		"a word's class past the labels":   {labels, map[string]uint16{"x": 2}, nil},
-		"a weight's class past the labels": {labels, nil, map[Hash][]Weight{1: {{Class: 2}}}},
+		"a weight's class past the labels": {labels, nil, map[Feature][]Weight{1: {{Class: 2}}}},
 	} {
 		if _, err := NewModel(args.labels, args.dict, args.weights); err == nil {
 			t.Errorf("NewModel with %s: no error", name)

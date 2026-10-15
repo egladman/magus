@@ -108,16 +108,19 @@ func TestGrammarFeaturesAreNamedOnce(t *testing.T) {
 }
 
 func TestTemplateRate(t *testing.T) {
-	cycle := []wordclass.UPOS{wordclass.DET, wordclass.NOUN, wordclass.VERB, wordclass.PUNCT}
+	cycle := []wordclass.Class{wordclass.Determiner, wordclass.Noun, wordclass.Verb, wordclass.Punctuation}
 
 	cases := map[string]struct {
-		sequence []wordclass.UPOS
+		sequence []wordclass.Class
 		want     float64
 	}{
 		// Five 4-grams; the first and the last are both DET NOUN VERB PUNCT.
 		"one sentence shape twice": {slices.Concat(cycle, cycle), 0.4},
 		"no repeat": {
-			[]wordclass.UPOS{wordclass.DET, wordclass.NOUN, wordclass.VERB, wordclass.ADP, wordclass.DET, wordclass.ADJ, wordclass.NOUN}, 0,
+			[]wordclass.Class{
+				wordclass.Determiner, wordclass.Noun, wordclass.Verb, wordclass.Adposition,
+				wordclass.Determiner, wordclass.Adjective, wordclass.Noun,
+			}, 0,
 		},
 		"under one 4-gram": {cycle[:3], 0},
 	}
@@ -132,11 +135,11 @@ func TestTemplateRate(t *testing.T) {
 }
 
 func TestTagCompressionIsLowerForRepeatedSyntax(t *testing.T) {
-	var repeated, varied []wordclass.UPOS
+	var repeated, varied []wordclass.Class
 
 	for i := range 200 {
-		repeated = append(repeated, wordclass.UPOS(1+i%4))
-		varied = append(varied, wordclass.UPOS(1+(i*7+i*i/3)%17))
+		repeated = append(repeated, wordclass.Class(1+i%4))
+		varied = append(varied, wordclass.Class(1+(i*7+i*i/3)%17))
 	}
 
 	r, v := tagCompression(repeated), tagCompression(varied)
