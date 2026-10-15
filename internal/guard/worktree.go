@@ -186,11 +186,12 @@ func judgeWorktreeRemove(ctx context.Context, deps Dependencies, at location, ca
 		}
 	}
 	ownedLock := false
+	// The lock a fork takes is its owner's own, so only a host's worker lock asks for -f -f.
 	if co.Locked && !s.unlock {
 		switch owner := lockOwner(deps, rows, finished, co); {
 		case owner == "":
 			r.failed = append(r.failed, lockHeld(co))
-		case s.force < 2:
+		case s.force < 2 && co.LockReason != vcs.CheckoutLockReason:
 			r.failed = append(r.failed, "it is locked over the worker your session spawned for job "+owner+", which finished, and git removes a locked worktree only with -f -f")
 			ownedLock = true
 		}
@@ -224,10 +225,11 @@ func ownsCheckout(ctx context.Context, deps Dependencies, at location, root stri
 }
 
 // mayWorkIn reports whether the caller is row's holder or its root: the session holding row
-// or a job row descends from, or a caller holding no job that no session spawned.
+// or a job row descends from, a caller holding no job that no session spawned, or an agent
+// spawned for row whose binding the call does not carry yet.
 func mayWorkIn(deps Dependencies, rows []types.Job, row types.Job) bool {
 	if deps.lease == "" {
-		return deps.caller.Agent == ""
+		return deps.caller.Agent == "" || spawnedFor(deps.facts, rows, deps.caller.Agent, row.ID)
 	}
 	if deps.lease == row.ID {
 		return true

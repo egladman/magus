@@ -522,6 +522,28 @@ func TestSpawnRuleSeesTheRowsModelTier(t *testing.T) {
 	assert.Nil(t, probe.asked[1].ModelTier)
 }
 
+// A row that owns a checkout runs its worker there, so the spawn needs no host isolation.
+func TestSpawnRuleCountsARowsOwnCheckoutAsIsolation(t *testing.T) {
+	ctx := tierFixture(t, testModelTiers(t, "claude-code"),
+		types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared},
+		types.Job{ID: "other", ReadOnly: true, State: types.StateDeclared})
+	at, _ := ctx.Value(locationKey{}).(location)
+	store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+	_, err := store.RecordWorktree(ctx, "scout", types.JobWorktree{Root: t.TempDir(), Source: at.workspace})
+	require.NoError(t, err)
+
+	probe := &spawnRuleProbe{}
+	deps := Dependencies{SpawnRule: probe.rule()}
+	judgeSpawn(ctx, t, deps, "haiku")
+	Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
+		"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "Agent",
+		"tool_input": map[string]any{"description": "orchestrator/scout other", "prompt": "Read internal/job and report."},
+	})})
+	require.Len(t, probe.asked, 2)
+	assert.True(t, probe.asked[0].Isolated, "the title names a row with a checkout of its own")
+	assert.False(t, probe.asked[1].Isolated, "a row with none still needs the host's isolation")
+}
+
 // trailEvents returns matching events oldest-first: ReadRecent reports newest-first, and a
 // lineage assertion reads left-to-right as it happened.
 func trailEvents(t *testing.T, base string, kind trail.Kind) []trail.Event {

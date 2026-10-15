@@ -324,10 +324,34 @@ func TestWorktreeRemoveHoldsAJobsCheckoutToItsRoot(t *testing.T) {
 
 	root := Dependencies{caller: job.Caller{Host: "claude", Session: "s1"}}
 	assert.Equal(t, ShellVerdict{}, r.judgeWith(root, r.main, remove, row), "the forking session removes its ended job's checkout")
+	for _, plain := range []string{"git worktree remove " + wt, "git worktree remove -f " + wt} {
+		assert.Equal(t, ShellVerdict{}, r.judgeWith(root, r.main, plain, row), "the lock is the fork's own, so no forced remove is asked for: %q", plain)
+	}
 
 	foreign := Dependencies{caller: job.Caller{Host: "claude", Session: "s1", Agent: "agent-x"}, lease: "other"}
 	other := types.Job{ID: "other", State: types.StateRunning}
 	assertRemovalDenied(t, r.judgeWith(foreign, r.main, remove, row, other), "job w1's fork made it")
+}
+
+func TestOwnsCheckoutIsTheHoldersAndTheRoots(t *testing.T) {
+	r := newWorktreeRepo(t)
+	wt := r.add("owned")
+	row := types.Job{ID: "w1", State: types.StateRunning, CheckoutRoot: wt, Worktree: &types.JobWorktree{Root: wt, Source: r.main}}
+	other := types.Job{ID: "other", State: types.StateRunning}
+	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: []types.Job{row, other}})
+	at := location{cacheDir: t.TempDir(), workspace: r.main}
+	caller := job.Caller{Host: "claude", Session: "s1", Agent: "agent-a1b2c3"}
+
+	assert.True(t, ownsCheckout(ctx, Dependencies{caller: caller, lease: "w1"}, at, wt), "the bound worker")
+	assert.True(t, ownsCheckout(ctx, Dependencies{caller: job.Caller{Host: "claude", Session: "s1"}}, at, wt), "the root")
+	assert.False(t, ownsCheckout(ctx, Dependencies{caller: caller, lease: "other"}, at, wt), "another job's worker")
+
+	spawned := rootSession(t, spawnedW1)
+	spawned.caller = caller
+	assert.True(t, ownsCheckout(ctx, spawned, at, wt), "a worker the root spawned for the job, before its binding is read")
+	unspawned := rootSession(t, nil)
+	unspawned.caller = caller
+	assert.False(t, ownsCheckout(ctx, unspawned, at, wt), "an agent no spawn record attributes to the job")
 }
 
 func TestWorktreeRemovePassesCommitsYourCheckoutHoldsUnderNewHashes(t *testing.T) {

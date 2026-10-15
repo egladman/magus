@@ -89,6 +89,9 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	digest := recordPolicy(ctx, deps, at, true)
 	ctx = withJobStoreRows(ctx, at)
 	ctx = withOutputStore(ctx, at)
+	titled := spawnTitle(sync.OnceValues(func() (types.Job, bool) {
+		return spawnTitleJob(ctx, at, env.Spawn.Description)
+	}))
 
 	verdict := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 	decided := ""
@@ -113,7 +116,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	// A continuation carries a brief as much as a spawn does, so both are graded.
 	if verdict.Decision != decisionDeny {
 		deps.scope = scopeAt(at)
-		if v, refused := held.hold(deps, judgeBriefCommand(deps, briefInput{text: env.Value, title: env.Spawn.Description, isolated: env.IsSpawn && env.Spawn.Isolated})); refused {
+		if v, refused := held.hold(deps, judgeBriefCommand(deps, briefInput{text: env.Value, title: env.Spawn.Description, isolated: env.IsSpawn && spawnIsolated(env, titled)})); refused {
 			verdict = types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: v.Deny, Rule: v.RuleName()}
 			why, decided = v.Why, decidedByBuiltin
 		} else if v.Context != "" && verdict.Decision == decisionPass {
@@ -132,9 +135,6 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		}
 	}
 	actingLease, _ := resolveActingLease(who, at, req.Lease)
-	titled := spawnTitle(sync.OnceValues(func() (types.Job, bool) {
-		return spawnTitleJob(ctx, at, env.Spawn.Description)
-	}))
 	if verdict.Decision != decisionDeny {
 		verdict = gradeMainSpawn(deps, verdict, env, who, at, actingLease, titled)
 		verdict = gradeSpawnCeiling(deps, verdict, env, who, at, actingLease)
@@ -242,6 +242,17 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 	return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}, ""
 }
 
+// spawnIsolated reports whether the child runs outside this checkout: the spawn asked for
+// the host's isolation, or the row its title names owns a checkout of its own, where the
+// worker is taken.
+func spawnIsolated(env hookRequest, titled spawnTitle) bool {
+	if env.Spawn.Isolated {
+		return true
+	}
+	row, ok := titled()
+	return ok && row.Worktree.Standing()
+}
+
 // spawnRequest normalizes one spawn or continuation for the workspace rule. Every field is
 // read from the envelope or from what magus recorded; none is inferred from the host.
 func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at location, facts hint.Gate, explicitLease string, titled spawnTitle) types.SpawnRequest {
@@ -255,7 +266,7 @@ func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at 
 		Name:        env.Spawn.Name,
 		Prompt:      env.Value,
 		Background:  env.Spawn.Background,
-		Isolated:    env.Spawn.Isolated,
+		Isolated:    spawnIsolated(env, titled),
 		Agent:       who.Agent,
 		Parent:      spawnedAs(facts, who.Agent),
 	}
@@ -469,6 +480,17 @@ func spawnedJob(facts hint.Gate, rows []types.Job, job string) bool {
 		}
 	}
 	return false
+}
+
+// spawnedFor reports whether the spawn record filed under agentID attributed that agent to
+// job, as spawnedJob does for any agent of the session.
+func spawnedFor(facts hint.Gate, rows []types.Job, agentID, job string) bool {
+	rec, ok := readSpawnedRecord(facts, spawnedAgentKind(agentID))
+	if !ok || rec.UntrustedJob != "" {
+		return false
+	}
+	row, ok := spawnTitleRow(rows, rec.Description)
+	return ok && row.ID == job
 }
 
 // caller is who this call comes from, as the job store keys a binding.
