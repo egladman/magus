@@ -515,7 +515,7 @@ func TestServerGraphReadsSeeAnEditTheWatcherIgnores(t *testing.T) {
 	stopWatch, err := e.m.WatchKnowledgeGraph(ctx)
 	require.NoError(t, err)
 	t.Cleanup(stopWatch)
-	_, err = internalsOf(e.m).KnowledgeGraph(ctx, types.GraphRequest{})
+	_, err = viewInternals(e.m).KnowledgeGraph(ctx, types.GraphRequest{})
 	require.NoError(t, err, "warm the watched graph before the edit")
 	f.reg.release(e)
 

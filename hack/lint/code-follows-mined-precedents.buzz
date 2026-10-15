@@ -20,7 +20,8 @@ export final LANGUAGES = ["go"];
 // SANCTIONED holds each departure kept on purpose, by the node the row names, with why. An
 // entry whose case no longer departs is a finding, so the list only shrinks.
 export final SANCTIONED = {
-    "file:types/human_only_test.go": "types/gen/mocks imports types, so an in-package test cannot use the mocks",
+    "symbol:gomod github.com/egladman/magus `github.com/egladman/magus/cmd/magus`/magusErr.": "a lazy singleton's memoized open error beside its value, not a sentinel to compare against",
+    "symbol:gomod github.com/egladman/magus `github.com/egladman/magus/cmd/magus`/inspectErr.": "a lazy singleton's memoized open error beside its value, not a sentinel to compare against",
 };
 
 // THIS is where a finding sends a reader to sanction a departure.

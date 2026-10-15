@@ -51,8 +51,8 @@ func gradeSpawnCeiling(deps Dependencies, verdict types.GuardJudgment, env hookR
 	if at.models != nil {
 		rows = at.models()
 	}
-	child, childKnown := modelTierOf(set, host, env.DeclaredModel, rows)
-	parent, parentKnown := modelTierOf(set, host, spawner.model, rows)
+	child, childKnown := modelTierByExactID(set, host, env.DeclaredModel, rows)
+	parent, parentKnown := modelTierByExactID(set, host, spawner.model, rows)
 	if !childKnown || !parentKnown {
 		var unknown, missing []string
 		if !childKnown {
@@ -94,9 +94,9 @@ func gradeSpawnCeiling(deps Dependencies, verdict types.GuardJudgment, env hookR
 	}}, from)
 }
 
-// modelTierOf is model's tier: the case the declaration maps model to for host, else the
+// modelTierByExactID is model's tier: the case the declaration maps model to for host, else the
 // tier the harness_models row whose id is exactly model names. False for any other model.
-func modelTierOf(set *types.ModelTierSet, host types.HarnessKey, model string, rows []types.ModelPricing) (types.ModelTier, bool) {
+func modelTierByExactID(set *types.ModelTierSet, host types.HarnessKey, model string, rows []types.ModelPricing) (types.ModelTier, bool) {
 	if t, ok := set.Resolve(host, model); ok {
 		return t, true
 	}

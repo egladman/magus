@@ -317,7 +317,7 @@ func (s *Server) Serve(ctx context.Context) error {
 				Workspace: svc,
 				Root:      diffRoot,
 				CacheDir:  opts.Magus.CacheDir(),
-				Telemetry: internalsOf(opts.Magus).Telemetry(),
+				Telemetry: viewInternals(opts.Magus).Telemetry(),
 			}
 			diffReviewH := diffhandler.NewReviewHandler(diffOpts, log)
 			diffLookupH := diffhandler.NewReviewLookupHandler(svc, log)
@@ -339,7 +339,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// The attention queue: blocks agents raised that are waiting on a person. Read off
 			// the per-repository session store, which is keyed on repo identity rather than the
 			// checkout, so the console lists what `magus session attention` lists from any worktree.
-			attentionH := attentionhandler.NewHandler(opts.Magus.Root(), opts.Version, log, internalsOf(opts.Magus).Telemetry())
+			attentionH := attentionhandler.NewHandler(opts.Magus.Root(), opts.Version, log, viewInternals(opts.Magus).Telemetry())
 
 			// Every /api/v1 route is mounted on its own, behind the Need apiNeeds names for it,
 			// with rebind + CORS + header-only bearer auth. CORS sits outside the bearer guard so
@@ -569,7 +569,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// Audits READS (WithAuditReads) for the same reason memory does, sharpened by the
 			// private store: this is the only door that serves notes nothing else attributes.
 			notesAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), trail.KindNotes, trailrpc.WithAuditReads()))
-			notesPath, notesHandler := notesv1alpha1connect.NewNotesServiceHandler(noteshandler.NewService(internalsOf(opts.Magus), opts.Config), notesAudit, connectReadMax)
+			notesPath, notesHandler := notesv1alpha1connect.NewNotesServiceHandler(noteshandler.NewService(viewInternals(opts.Magus), opts.Config), notesAudit, connectReadMax)
 			f.service(notesPath, notesHandler)
 			bridgeLog.InfoContext(ctx, "notes service mounted", slog.String("path", notesPath))
 
@@ -584,7 +584,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// either: unlike notes and memory, nothing here is attributable to a person, and the
 			// same facts are already served unaudited over /api/v1/graph. The two doors onto that
 			// one body of data hold the same need, console=read.
-			graphPath, graphServiceHandler := graphv1alpha1connect.NewGraphServiceHandler(graphhandler.NewService(internalsOf(opts.Magus)), connectReadMax)
+			graphPath, graphServiceHandler := graphv1alpha1connect.NewGraphServiceHandler(graphhandler.NewService(viewInternals(opts.Magus)), connectReadMax)
 			f.service(graphPath, graphServiceHandler)
 			bridgeLog.InfoContext(ctx, "graph service mounted", slog.String("path", graphPath))
 
@@ -891,7 +891,7 @@ type magusInternals interface {
 	Telemetry() observability.Provider
 }
 
-func internalsOf(m *magus.Magus) magusInternals { return workspace.View(m).(magusInternals) }
+func viewInternals(m *magus.Magus) magusInternals { return workspace.View(m).(magusInternals) }
 
 // diagramWorkspace is the workspace plus the import graph the diagrams read.
 type diagramWorkspace struct{ *magus.Magus }
@@ -899,14 +899,14 @@ type diagramWorkspace struct{ *magus.Magus }
 // SymbolIndex reads the manifest's shard fingerprints instead of merging the shards into a
 // graph. The graph is built first so the manifest on disk is current.
 func (w diagramWorkspace) SymbolIndex(ctx context.Context) (types.SymbolIndexDigest, error) {
-	if _, err := internalsOf(w.Magus).KnowledgeGraph(ctx, types.GraphRequest{}); err != nil {
+	if _, err := viewInternals(w.Magus).KnowledgeGraph(ctx, types.GraphRequest{}); err != nil {
 		return types.SymbolIndexDigest{}, err
 	}
 	return knowledge.NewStore(w.CacheDir(), true, 0, nil, nil).SymbolIndexDigest()
 }
 
 func (w diagramWorkspace) ImportGraph(ctx context.Context) (types.ImportGraph, error) {
-	kg, err := internalsOf(w.Magus).KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
+	kg, err := viewInternals(w.Magus).KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return types.ImportGraph{}, err
 	}

@@ -719,7 +719,7 @@ func attachLayout(ctx context.Context, m *magus.Magus, rev *types.Diff, opts typ
 	fail := func(err error) {
 		rev.Notes = append(rev.Notes, "layout: the package checks could not run: "+err.Error())
 	}
-	graph, err := internalsOf(m).KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
+	graph, err := viewInternals(m).KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		fail(err)
 		return
@@ -2770,7 +2770,7 @@ func runLocalAdvisors(ctx context.Context, m *magus.Magus, base string, rev type
 	// The caller's already-loaded workspace is attached rather than loaded again:
 	// loadMagus is once-per-process and panics on a second call with a different root.
 	if m != nil {
-		ctx = types.WithWorkspace(ctx, internalsOf(m))
+		ctx = types.WithWorkspace(ctx, viewInternals(m))
 	}
 	return collectAdvice(ctx, dir, localAdvisors, base)
 }

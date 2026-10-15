@@ -448,7 +448,7 @@ type magusInternals interface {
 	Telemetry() observability.Provider
 }
 
-// internalsOf is m as workspace.View shows it to magus's own packages. It is also what a
+// viewInternals is m as workspace.View shows it to magus's own packages. It is also what a
 // context carries as the workspace (types.WithWorkspace), so std and the Buzz bindings
 // find the methods they assert for.
-func internalsOf(m *magus.Magus) magusInternals { return workspace.View(m).(magusInternals) }
+func viewInternals(m *magus.Magus) magusInternals { return workspace.View(m).(magusInternals) }

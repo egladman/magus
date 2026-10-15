@@ -1191,7 +1191,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 		// already dealt with it, and counting it here would count it twice.
 		return nil
 	}
-	if tel := internalsOf(m).Telemetry(); tel != nil {
+	if tel := viewInternals(m).Telemetry(); tel != nil {
 		tel.RecordReviewMergedWhileReading(ctx, reading.Elapsed(time.Now()).Seconds())
 		shutdownOneShotTelemetry(ctx, tel)
 	}

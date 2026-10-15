@@ -230,11 +230,11 @@ func envGetter(env []string) func(string) string {
 }
 
 // internal/workspace cannot import this package, so the view is registered from here.
-func init() { workspace.SetView(viewOf) }
+func init() { workspace.SetView(internalView) }
 
-// viewOf is workspace.View's answer: a *Magus as its internals, any other workspace
+// internalView is workspace.View's answer: a *Magus as its internals, any other workspace
 // unchanged.
-func viewOf(ws types.WorkspaceRepository) types.WorkspaceRepository {
+func internalView(ws types.WorkspaceRepository) types.WorkspaceRepository {
 	if m, ok := ws.(*Magus); ok {
 		return m.internals()
 	}

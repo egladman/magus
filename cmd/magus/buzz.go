@@ -113,7 +113,7 @@ func (c *lazyWorkspaceContext) attach() {
 	if m == nil {
 		return
 	}
-	c.workspace = internalsOf(m)
+	c.workspace = viewInternals(m)
 	c.trailBase = m.CacheDir()
 }
 
@@ -809,7 +809,7 @@ func buzzScriptContext(ctx context.Context, root string) (context.Context, error
 	if m == nil {
 		return ctx, nil
 	}
-	ctx = types.WithWorkspace(ctx, internalsOf(m))
+	ctx = types.WithWorkspace(ctx, viewInternals(m))
 	// Confined by the same policy a target run gets, lease narrowing included. A
 	// script is the shortest way around a boundary the sandbox enforces everywhere
 	// else: `magus buzz -e 'fs\write(...)'` writes through the same bindings a spell
