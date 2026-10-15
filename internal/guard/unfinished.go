@@ -69,7 +69,7 @@ func BeginJudgment(ctx context.Context, cacheDir func(root string) (string, erro
 	if filepath.IsAbs(req.Dir) {
 		at = hookContextAt(at, deps, req.Dir)
 	}
-	if env, ok := decodeHookEnvelope(req.Input); ok {
+	if env, ok := decodeHookEnvelope(req.Input, req.Tools); ok {
 		who.Session = cmp.Or(who.Session, env.Who.Session)
 		at = hookContextAt(at, deps, env.Cwd)
 	}

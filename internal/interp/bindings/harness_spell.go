@@ -119,6 +119,17 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessAgentsContract, err)
 		}
 	}
+	toolsResp, err := drv.Invoke(ctx, spells.InvokeRequest{Target: spells.HarnessToolsContract})
+	if err != nil {
+		if !isMissingHarnessOp(err) {
+			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessToolsContract, err)
+		}
+	} else if toolsResp.Data != nil {
+		d.Tools = &agent.HarnessTools{}
+		if err := decodeHarnessJSON(toolsResp.Data, d.Tools); err != nil {
+			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessToolsContract, err)
+		}
+	}
 	settingsResp, err := drv.Invoke(ctx, spells.InvokeRequest{Target: spells.HarnessSettingsContract})
 	if err != nil {
 		if !isMissingHarnessOp(err) {
@@ -280,7 +291,7 @@ func decodeHarnessModels(data any) ([]types.ModelPricing, error) {
 			return nil, fmt.Errorf("row %d (%s) sets one of price_step and step_factor without the other", i+1, r.ID)
 		}
 		out[i] = types.ModelPricing{
-			ID: r.ID, Window: r.Window, Input: types.USDPerMTok(r.Input), CacheWrite5m: types.USDPerMTok(r.CacheWrite5m),
+			ID: r.ID, Tier: r.Tier, Window: r.Window, Input: types.USDPerMTok(r.Input), CacheWrite5m: types.USDPerMTok(r.CacheWrite5m),
 			CacheWrite1h: types.USDPerMTok(r.CacheWrite1h), CacheRead: types.USDPerMTok(r.CacheRead), Output: types.USDPerMTok(r.Output),
 		}
 		if r.PriceStep > 0 {

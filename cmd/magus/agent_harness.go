@@ -75,6 +75,17 @@ func agentHarnessInstallCmd(ctx context.Context, rootOverride string, args []str
 				return err
 			}
 		}
+		changed, err := agent.InstallHarnessTools(ctx, root, harnessID, globalCfg.DryRun)
+		if err != nil {
+			return fmt.Errorf("magus agent harness install: %w", err)
+		}
+		verb := "wrote"
+		if globalCfg.DryRun {
+			verb = "would write"
+		}
+		for _, p := range changed {
+			fmt.Fprintf(os.Stdout, "%s %s tool rows: %s\n", verb, harnessID, p)
+		}
 	}
 	return nil
 }

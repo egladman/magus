@@ -74,7 +74,7 @@ func TestDecodeHookEnvelopeApplyPatch(t *testing.T) {
 				"tool_name": "apply_patch", "tool_input": map[string]any{field: multiFilePatch},
 			})
 			require.NoError(t, err)
-			req, ok := decodeHookEnvelope(string(body))
+			req, ok := decodeTestEnvelope(t,string(body))
 			require.True(t, ok)
 			assert.True(t, req.IsPath, "a patch is a write, not a shell line")
 			assert.Equal(t, "internal/guard/new.go", req.Value)
@@ -84,7 +84,7 @@ func TestDecodeHookEnvelopeApplyPatch(t *testing.T) {
 	}
 
 	t.Run("a patch that creates one file hands its text to the content rules", func(t *testing.T) {
-		req, ok := decodeHookEnvelope(`{"session_id":"s","hook_event_name":"PreToolUse","tool_name":"apply_patch",` +
+		req, ok := decodeTestEnvelope(t,`{"session_id":"s","hook_event_name":"PreToolUse","tool_name":"apply_patch",` +
 			`"tool_input":{"command":"*** Begin Patch\n*** Add File: hello.txt\n+hello\n*** End Patch\n"}}`)
 		require.True(t, ok)
 		assert.True(t, req.IsPath)
@@ -92,14 +92,14 @@ func TestDecodeHookEnvelopeApplyPatch(t *testing.T) {
 		assert.Equal(t, "hello\n", req.Write.Content)
 	})
 	t.Run("a patch naming no file has nothing to judge", func(t *testing.T) {
-		req, ok := decodeHookEnvelope(`{"session_id":"s","hook_event_name":"PreToolUse","tool_name":"apply_patch",` +
+		req, ok := decodeTestEnvelope(t,`{"session_id":"s","hook_event_name":"PreToolUse","tool_name":"apply_patch",` +
 			`"tool_input":{"command":"*** Begin Patch\n*** End Patch\n"}}`)
 		require.True(t, ok)
 		assert.True(t, req.NothingToJudge)
 		assert.False(t, req.IsPath)
 	})
 	t.Run("a denied command quoted in the patch is not judged as a shell line", func(t *testing.T) {
-		req, ok := decodeHookEnvelope(`{"session_id":"s","hook_event_name":"PreToolUse","tool_name":"apply_patch",` +
+		req, ok := decodeTestEnvelope(t,`{"session_id":"s","hook_event_name":"PreToolUse","tool_name":"apply_patch",` +
 			`"tool_input":{"command":"*** Begin Patch\n*** Add File: notes.md\n+never run git stash\n*** End Patch\n"}}`)
 		require.True(t, ok)
 		assert.True(t, req.IsPath)

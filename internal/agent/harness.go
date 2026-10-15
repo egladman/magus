@@ -76,6 +76,8 @@ type HarnessDescriptor struct {
 	Agents         []HarnessAgentFile `json:"agents,omitempty"`
 	Settings       []HarnessSetting   `json:"settings,omitempty"`
 	Limits         HarnessLimits      `json:"limits,omitzero"`
+	// Tools is the host's tool table, nil for a harness that declares none.
+	Tools *HarnessTools `json:"tools,omitempty"`
 	// Models are the rows of the models this host runs, as its harness_models op returns
 	// them; nil for a harness that publishes none. Never read from JSON: the op's rows
 	// are decoded separately, since types.ModelPricing carries no wire tags.
@@ -163,6 +165,9 @@ type HarnessVerification struct {
 	// Setting is whether the plain host settings the descriptor keeps are in place,
 	// zero when it keeps none.
 	Setting HarnessCheck `json:"setting,omitzero"`
+	// Tool is whether the tool rows directory matches the rows the spell declares, zero
+	// when it declares none.
+	Tool HarnessCheck `json:"tool,omitzero"`
 	// Plugin is whether each plugin the workspace enables through the
 	// descriptor's settings is installed for this person, zero when the descriptor enables
 	// none or the workspace has not turned it on. Uncovered names the install command.
@@ -326,6 +331,11 @@ func validateHarnessDescriptor(d HarnessDescriptor) error {
 			return fmt.Errorf("settings[%d]: %w", i, err)
 		}
 	}
+	if d.Tools != nil {
+		if err := validateHarnessTools(*d.Tools); err != nil {
+			return fmt.Errorf("tools: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -425,6 +435,15 @@ func PlanHarness(ctx context.Context, root, id string) (types.HarnessPlan, error
 			return plan, err
 		}
 		if err := addPlanFile(&plan, s.Path, file); err != nil {
+			return plan, err
+		}
+	}
+	for _, t := range d.toolFiles() {
+		file, err := planWholeFile(root, t.Path, t.Content)
+		if err != nil {
+			return plan, err
+		}
+		if err := addPlanFile(&plan, t.Path, file); err != nil {
 			return plan, err
 		}
 	}
@@ -593,6 +612,11 @@ func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, e
 		})
 		result.Setting = verifyEach(root, d.Settings, planHarnessSetting, func(s HarnessSetting) string {
 			return "missing " + settingLocation(s) + merge
+		})
+		result.Tool = verifyEach(root, d.toolFiles(), func(root string, f HarnessAgentFile) (types.HarnessFile, error) {
+			return planWholeFile(root, f.Path, f.Content)
+		}, func(f HarnessAgentFile) string {
+			return f.Path + " is missing or differs from the tool rows the spell declares, so the guard misreads its tools; run `magus agent harness install`"
 		})
 		verifyHarnessPlugins(root, d, &result)
 	}

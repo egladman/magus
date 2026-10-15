@@ -45,7 +45,20 @@ fun cursor_skills_paths() > [str] {
 // --reports-skills: Cursor loads a skill by reading its SKILL.md, and the preToolUse
 // matcher covers Read, so every load reaches the guard.
 fun cursor_guard_command() > str {
-    return "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name {mgs_getName()} --reports-skills";
+    return "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name {mgs_getName()} --reports-skills --tool-rows {cursor_tools_dir()}";
+}
+
+// Where `magus agent harness install` writes this host's tool rows, beside its hooks.
+fun cursor_tools_dir() > str { return ".cursor/magus/tools"; }
+
+// Every Cursor tool the guard should know whose input's shape does not say what it does; a
+// tool missing here is one the guard cannot judge (unjudged-tool).
+export fun harness_tools(target: Target, cb: fun(any)) > {str: any} {
+    return {"dir": cursor_tools_dir(), "rows": [
+        {"name": "Shell", "capability": "runs"},
+        {"name": "StrReplace", "capability": "writes"},
+        {"name": "Delete", "capability": "writes"},
+    ]};
 }
 
 fun cursor_event_names() > [str] {

@@ -68,4 +68,11 @@ const (
 	// free. Optional: a host that publishes no facts omits it. A person's agents.models
 	// overrides these row by row.
 	HarnessModelsContract = "harness_models"
+
+	// HarnessToolsContract returns the host's own tools as {dir, rows: [{name,
+	// capability}]}: capability is one of runs, reads, writes, spawns, network or inert, and
+	// dir the workspace-relative directory `magus agent harness install` writes the rows
+	// to, which the spell's hook wiring names to `magus shell --tool-rows`. Optional. A
+	// tool no row names is one the guard cannot judge (the unjudged-tool rule).
+	HarnessToolsContract = "harness_tools"
 )

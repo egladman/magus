@@ -2,15 +2,59 @@ package guard
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// testToolRows are the rows the tests' host declares: a subset of a real host's table.
+var testToolRows = []agent.HarnessTool{
+	{Name: "Bash", Capability: agent.ToolRuns},
+	{Name: "Monitor", Capability: agent.ToolRuns},
+	{Name: "Read", Capability: agent.ToolReads},
+	{Name: "Glob", Capability: agent.ToolReads},
+	{Name: "Grep", Capability: agent.ToolReads},
+	{Name: "LS", Capability: agent.ToolReads},
+	{Name: "Write", Capability: agent.ToolWrites},
+	{Name: "Edit", Capability: agent.ToolWrites},
+	{Name: "Delete", Capability: agent.ToolWrites},
+	{Name: "apply_patch", Capability: agent.ToolWrites},
+	{Name: "Agent", Capability: agent.ToolSpawns},
+	{Name: "Task", Capability: agent.ToolSpawns},
+	{Name: "spawn_agent", Capability: agent.ToolSpawns},
+	{Name: "mcp__browser__navigate", Capability: agent.ToolNetwork},
+	{Name: "TodoWrite", Capability: agent.ToolInert},
+	{Name: "WebFetch", Capability: agent.ToolInert},
+	{Name: "Skill", Capability: agent.ToolInert},
+}
+
+// testTools installs testToolRows the way `magus agent harness install` does and reads them
+// back the way `magus shell` does.
+func testTools(t testing.TB) agent.ToolRows {
+	t.Helper()
+	root := t.TempDir()
+	for _, f := range (agent.HarnessTools{Dir: "tools", Rows: testToolRows}).Files() {
+		path := filepath.Join(root, f.Path)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(f.Content), 0o644))
+	}
+	rows := agent.ReadToolRows(root, "tools")
+	require.NoError(t, rows.Err)
+	return rows
+}
+
+// decodeTestEnvelope is decodeHookEnvelope under testToolRows.
+func decodeTestEnvelope(t testing.TB, raw string) (hookRequest, bool) {
+	t.Helper()
+	return decodeHookEnvelope(raw, testTools(t))
+}
 
 // toolEnvelope is a PreToolUse event for tool, as a catch-all hook entry forwards it whole.
 func toolEnvelope(t *testing.T, session, cwd, tool string, input map[string]any) string {
@@ -45,11 +89,11 @@ func TestReadLineStandsForTheReadToolsWindow(t *testing.T) {
 }
 
 // A file path is a read or a write, and the shape cannot tell a delete from a read: the
-// known-tool table can. A tool it does not name keeps the write judgment, the stricter one.
-func TestKnownToolDecidesWhetherAPathIsReadOrWritten(t *testing.T) {
+// host's tool rows can. A tool they do not list keeps the write judgment, the stricter one.
+func TestToolRowsDecideWhetherAPathIsReadOrWritten(t *testing.T) {
 	t.Parallel()
 	decode := func(tool string, input map[string]any) hookRequest {
-		req, ok := decodeHookEnvelope(toolEnvelope(t, "s1", "/r", tool, input))
+		req, ok := decodeTestEnvelope(t, toolEnvelope(t, "s1", "/r", tool, input))
 		require.True(t, ok, tool)
 		return req
 	}
@@ -66,35 +110,57 @@ func TestKnownToolDecidesWhetherAPathIsReadOrWritten(t *testing.T) {
 	}
 }
 
-// Every tool now reaches the guard, so the table also says which carry nothing to judge on
+// Every tool reaches the guard, so the rows also say which carry nothing to judge on
 // purpose, and the shape of their fields cannot make them something else.
 func TestInertToolsCarryNothingToJudge(t *testing.T) {
 	t.Parallel()
-	fetch, ok := decodeHookEnvelope(toolEnvelope(t, "s1", "/r", "WebFetch", map[string]any{"url": "https://example.com", "prompt": "summarize"}))
+	fetch, ok := decodeTestEnvelope(t, toolEnvelope(t, "s1", "/r", "WebFetch", map[string]any{"url": "https://example.com", "prompt": "summarize"}))
 	require.True(t, ok)
 	assert.False(t, fetch.IsSpawn, "a web fetch's prompt is no spawn's brief")
 	assert.True(t, fetch.NothingToJudge)
 	assert.True(t, fetch.Inert, "the fast path answers it")
 	assert.Empty(t, fetch.UnjudgedTool)
 
-	skill, ok := decodeHookEnvelope(toolEnvelope(t, "s1", "/r", "Skill", map[string]any{"skill": "magus-run"}))
+	skill, ok := decodeTestEnvelope(t, toolEnvelope(t, "s1", "/r", "Skill", map[string]any{"skill": "magus-run"}))
 	require.True(t, ok)
 	assert.Equal(t, "magus-run", skill.LoadedSkill, "a skill load is still recorded")
 	assert.False(t, skill.Inert, "and so goes to Judge, which records it")
 
-	stranger, ok := decodeHookEnvelope(toolEnvelope(t, "s1", "/r", "mcp__browser__click", map[string]any{"ref": "e1"}))
+	stranger, ok := decodeTestEnvelope(t, toolEnvelope(t, "s1", "/r", "mcp__browser__click", map[string]any{"ref": "e1"}))
 	require.True(t, ok)
 	assert.True(t, stranger.NothingToJudge)
 	assert.Equal(t, "mcp__browser__click", stranger.UnjudgedTool)
 	assert.False(t, stranger.Inert)
 
-	listing, ok := decodeHookEnvelope(toolEnvelope(t, "s1", "/r", "LS", map[string]any{"directory": "/r"}))
+	browse, ok := decodeTestEnvelope(t, toolEnvelope(t, "s1", "/r", "mcp__browser__navigate", map[string]any{"url": "https://example.com"}))
+	require.True(t, ok)
+	assert.Empty(t, browse.UnjudgedTool, "a listed network tool is known")
+	assert.False(t, browse.Inert, "and only inert tools take the fast path")
+
+	listing, ok := decodeTestEnvelope(t, toolEnvelope(t, "s1", "/r", "LS", map[string]any{"directory": "/r"}))
 	require.True(t, ok)
 	assert.Empty(t, listing.UnjudgedTool, "a read changes nothing, so it is not named")
 
-	finished, ok := decodeHookEnvelope(`{"hook_event_name":"PostToolUse","session_id":"s1","tool_name":"mcp__browser__click","tool_input":{"ref":"e1"},"tool_response":"ok"}`)
+	finished, ok := decodeTestEnvelope(t, `{"hook_event_name":"PostToolUse","session_id":"s1","tool_name":"mcp__browser__click","tool_input":{"ref":"e1"},"tool_response":"ok"}`)
 	require.True(t, ok)
 	assert.Empty(t, finished.UnjudgedTool, "a finished call is past stopping")
+}
+
+// A wiring that names no rows directory, or one that was never installed, knows no tool:
+// nothing is inert, and the refusal names the install that writes the rows.
+func TestMissingToolRowsKnowNoToolAndSaySo(t *testing.T) {
+	t.Parallel()
+	for name, rows := range map[string]agent.ToolRows{
+		"no directory named": agent.ReadToolRows(t.TempDir(), ""),
+		"never installed":    agent.ReadToolRows(t.TempDir(), "tools"),
+	} {
+		require.Error(t, rows.Err, name)
+		req, ok := decodeHookEnvelope(toolEnvelope(t, "s1", "/r", "TodoWrite", map[string]any{"todos": []any{}}), rows)
+		require.True(t, ok, name)
+		assert.False(t, req.Inert, name)
+		assert.Equal(t, "TodoWrite", req.UnjudgedTool, name)
+		assert.Contains(t, denyUnjudgedTool("TodoWrite", rows).Say, "magus agent harness install", name)
+	}
 }
 
 // The coordinator's case: a worker refused a third window with `sed -n` retried the same
@@ -106,8 +172,9 @@ func TestPagedReadIsJudgedTheSameWhicheverToolReadsIt(t *testing.T) {
 	pagedFile(t, root)
 	abs := filepath.Join(root, "paged.go")
 	deps := withSetting(string(denyRuleReadPaging), builtin.Deny)
-	judge := func(agent, input string) types.GuardJudgment {
-		return Judge(ctx, deps, Request{Input: input, Session: "paging-tools", Agent: agent, Host: "claude-code", Dir: root})
+	tools := testTools(t)
+	judge := func(subagent, input string) types.GuardJudgment {
+		return Judge(ctx, deps, Request{Input: input, Session: "paging-tools", Agent: subagent, Host: "claude-code", Dir: root, Tools: tools})
 	}
 	bash := func(line string) string {
 		return toolEnvelope(t, "paging-tools", root, "Bash", map[string]any{"command": line})
@@ -134,8 +201,9 @@ func TestPagedReadIsJudgedTheSameWhicheverToolReadsIt(t *testing.T) {
 func TestUnjudgedToolAdvisesOnceAndDeniesWhereTheWorkspaceSaysSo(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	root := hookLocation(ctx, Dependencies{}).workspace
+	tools := testTools(t)
 	call := func(deps Dependencies, session, tool string) types.GuardJudgment {
-		return Judge(ctx, deps, Request{Input: toolEnvelope(t, session, root, tool, map[string]any{"ref": "e1"}), Host: "claude-code", Dir: root})
+		return Judge(ctx, deps, Request{Input: toolEnvelope(t, session, root, tool, map[string]any{"ref": "e1"}), Host: "claude-code", Dir: root, Tools: tools})
 	}
 
 	first := call(Dependencies{}, "unjudged-advise", "mcp__browser__click")
@@ -159,13 +227,14 @@ func TestUnjudgedToolAdvisesOnceAndDeniesWhereTheWorkspaceSaysSo(t *testing.T) {
 func TestJudgeWithinAnswersAnInertCallWithoutLoadingRules(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	root := hookLocation(ctx, Dependencies{}).workspace
+	tools := testTools(t)
 	judged := 0
 	judge := func(context.Context) types.GuardJudgment {
 		judged++
 		return types.GuardJudgment{Decision: decisionPass}
 	}
 	request := func(tool string, input map[string]any) Request {
-		return Request{Input: toolEnvelope(t, "fast", root, tool, input), Host: "claude-code", Form: "buzz", Session: "fast"}
+		return Request{Input: toolEnvelope(t, "fast", root, tool, input), Host: "claude-code", Form: "buzz", Session: "fast", Tools: tools}
 	}
 
 	v := JudgeWithin(ctx, Dependencies{}, request("TodoWrite", map[string]any{"todos": []any{}}), judge)
@@ -181,4 +250,9 @@ func TestJudgeWithinAnswersAnInertCallWithoutLoadingRules(t *testing.T) {
 	unnamed.Host = ""
 	JudgeWithin(ctx, Dependencies{}, unnamed, judge)
 	assert.Equal(t, 4, judged, "glue that names no host is left to Judge, which refuses it")
+
+	norows := request("TodoWrite", map[string]any{"todos": []any{}})
+	norows.Tools = agent.ToolRows{}
+	JudgeWithin(ctx, Dependencies{}, norows, judge)
+	assert.Equal(t, 5, judged, "with no rows nothing is known to be inert")
 }

@@ -218,6 +218,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		// Declared by the wiring, because only a host that reports skill loads can
 		// honestly say it does. See guard.denySpawnWithoutBrief.
 		ReportsSkills: sf.ReportsSkills,
+		Tools:         shellToolRows(sf.ToolRows),
 		// Declared by the wiring for the same reason: only a glue that renders the host's
 		// approval prompt can say so, and one that predates ask renders it as an allow.
 		RendersAsk: sf.RendersAsk,
@@ -453,6 +454,16 @@ func guardCacheDir(rootOverride string) func(root string) (string, error) {
 		}
 		return magus.ResolveCacheDir(found, workspace.WithLoadedConfig(globalCfg))
 	}
+}
+
+// shellToolRows reads the tool rows directory the wiring names, relative to the guard's
+// workspace, or to the cwd outside one, where no workspace rule applies anyway.
+func shellToolRows(dir string) agent.ToolRows {
+	root, err := guardRoot("")
+	if err != nil {
+		root = ""
+	}
+	return agent.ReadToolRows(root, dir)
 }
 
 // guardRoot finds the workspace whose rules the guard enforces, searching from override,

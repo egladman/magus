@@ -27,7 +27,7 @@ func monitorCall(t *testing.T, agent, command string) string {
 
 func TestEnvelopeWatchReadsAWatcherByShape(t *testing.T) {
 	t.Parallel()
-	req, ok := decodeHookEnvelope(monitorCall(t, "", "tail -f run.log"))
+	req, ok := decodeTestEnvelope(t,monitorCall(t, "", "tail -f run.log"))
 	require.True(t, ok)
 	wantReq := req
 	wantReq.IsWatch = true
@@ -36,7 +36,7 @@ func TestEnvelopeWatchReadsAWatcherByShape(t *testing.T) {
 	wantReq.Value = "tail -f run.log" // its command is judged as a shell line
 	assert.Equal(t, wantReq, req)
 
-	bash, ok := decodeHookEnvelope(hookJSON(t, map[string]any{"session_id": "s", "tool_name": "Bash",
+	bash, ok := decodeTestEnvelope(t,hookJSON(t, map[string]any{"session_id": "s", "tool_name": "Bash",
 		"tool_input": map[string]any{"command": "tail -f run.log", "description": "follow", "timeout": float64(600000)}}))
 	require.True(t, ok)
 	assert.False(t, bash.IsWatch, "a shell call with a timeout is not a watcher")

@@ -200,7 +200,7 @@ func TestDecodeHookEnvelopeSpawnCodex(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			req, ok := decodeHookEnvelope(fmt.Sprintf(envelope, tc.input))
+			req, ok := decodeTestEnvelope(t,fmt.Sprintf(envelope, tc.input))
 			require.True(t, ok)
 			tc.want.Cwd = "/Users/dev/repo"
 			tc.want.Who = hookAttribution{
@@ -213,7 +213,7 @@ func TestDecodeHookEnvelopeSpawnCodex(t *testing.T) {
 	}
 
 	t.Run("a bare message is not a spawn", func(t *testing.T) {
-		req, ok := decodeHookEnvelope(fmt.Sprintf(envelope, `{"message":"hello"}`))
+		req, ok := decodeTestEnvelope(t,fmt.Sprintf(envelope, `{"message":"hello"}`))
 		require.True(t, ok)
 		assert.False(t, req.IsSpawn)
 		assert.True(t, req.NothingToJudge)
@@ -233,7 +233,7 @@ func TestDecodeHookEnvelopeContinueTarget(t *testing.T) {
 		"to":            {`{"to":"brisk-heron","message":"Carry on."}`, "Carry on."},
 	} {
 		t.Run(name, func(t *testing.T) {
-			req, ok := decodeHookEnvelope(`{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"x","tool_input":` + tc.toolInput + `}`)
+			req, ok := decodeTestEnvelope(t,`{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"x","tool_input":` + tc.toolInput + `}`)
 			require.True(t, ok)
 			assert.True(t, req.IsContinue)
 			assert.False(t, req.IsSpawn)
@@ -243,7 +243,7 @@ func TestDecodeHookEnvelopeContinueTarget(t *testing.T) {
 	}
 
 	t.Run("a target with no message is not a continuation", func(t *testing.T) {
-		req, ok := decodeHookEnvelope(`{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"close_agent","tool_input":{"target":"/root/audit_guard"}}`)
+		req, ok := decodeTestEnvelope(t,`{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"close_agent","tool_input":{"target":"/root/audit_guard"}}`)
 		require.True(t, ok)
 		assert.False(t, req.IsContinue)
 		assert.True(t, req.NothingToJudge)
@@ -258,7 +258,7 @@ func TestDecodeHookEnvelopeSkillRead(t *testing.T) {
 	const skillPath = "/Users/dev/repo/.cursor/skills/magus-multi-agent/SKILL.md"
 	decode := func(t *testing.T, toolInput string) hookRequest {
 		t.Helper()
-		req, ok := decodeHookEnvelope(`{"conversation_id":"c1","session_id":"c1","hook_event_name":"preToolUse","tool_name":"Read","tool_input":` + toolInput + `}`)
+		req, ok := decodeTestEnvelope(t,`{"conversation_id":"c1","session_id":"c1","hook_event_name":"preToolUse","tool_name":"Read","tool_input":` + toolInput + `}`)
 		require.True(t, ok)
 		return req
 	}
@@ -324,7 +324,7 @@ func TestAScheduledPromptIsNoSpawn(t *testing.T) {
 		{"delaySeconds": float64(270), "prompt": "check the run", "reason": "waiting on CI"},
 		{"cron": "*/5 * * * *", "prompt": "check the run", "recurring": true},
 	} {
-		req, ok := decodeHookEnvelope(hookJSON(t, map[string]any{"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "ScheduleWakeup", "tool_input": input}))
+		req, ok := decodeTestEnvelope(t,hookJSON(t, map[string]any{"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "ScheduleWakeup", "tool_input": input}))
 		require.True(t, ok)
 		assert.False(t, req.IsSpawn, "%v", input)
 		assert.True(t, req.NothingToJudge, "%v", input)

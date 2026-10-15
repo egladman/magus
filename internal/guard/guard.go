@@ -532,6 +532,10 @@ type Request struct {
 	// False is the safe answer: rules that need it stand down, which is what keeps them
 	// from denying forever on a host that can never satisfy them.
 	ReportsSkills bool
+	// Tools is the host's own tool table, as the directory the wiring names reads back:
+	// what each tool can do where the shape of its input cannot say. Like ReportsSkills
+	// it comes from the wiring, never from Host.
+	Tools agent.ToolRows
 	// RendersAsk is the second capability: the wiring puts an ask verdict in front of the
 	// person through the host's own prompt. Without it an ask is returned as a deny,
 	// because a glue that predates the decision renders it as nothing and its host reads
@@ -626,7 +630,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
 	// a wrapper that passed them meant them.
-	env, isEnvelope := decodeHookEnvelope(input)
+	env, isEnvelope := decodeHookEnvelope(input, req.Tools)
 	if isEnvelope {
 		// Attribution is resolved BEFORE the nothing-to-judge arm below returns: a skill
 		// load is a nothing-to-judge envelope that still has to be recorded against the
@@ -666,7 +670,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			// A host envelope whose tool_input carries no command, path or prompt (a todo
 			// list, a search) has nothing any rule can read. Falling through judged the raw
 			// JSON as a shell line, so a denied command merely NAMED inside a todo blocked
-			// the tool call that wrote the todo. A call to a tool the known-tool table does not
+			// the tool call that wrote the todo. A call to a tool the host's tool rows do not
 			// list goes on to unjudged-tool instead.
 			if env.AgentTranscript != "" {
 				recordAgentUsage(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), who.Agent, env.AgentTranscript)
@@ -829,7 +833,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		// contribution. Running the write rules here would only ever manufacture a false
 		// advisory about editing a file the agent opened read-only.
 	case unjudged != "":
-		refuseWith(denyRuleUnjudgedTool, denyUnjudgedTool(unjudged))
+		refuseWith(denyRuleUnjudgedTool, denyUnjudgedTool(unjudged, req.Tools))
 		pending.speak(markers, &verdict, whys)
 	case isPath:
 		said := ""
@@ -1607,7 +1611,10 @@ const (
 //
 // Anything that is not an object with a usable tool_input is left alone and judged as the
 // literal text it is: the bare-command form keeps working exactly as before.
-func decodeHookEnvelope(raw string) (hookRequest, bool) {
+//
+// tools are the host's tool rows, which say what a tool does where the input's shape
+// cannot: a file path is a read or a write, and an inert tool has nothing to judge.
+func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 	if !strings.HasPrefix(raw, "{") {
 		return hookRequest{}, false
 	}
@@ -1635,7 +1642,7 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		// client and status among them, reaching no rule at all.
 		req.Value = buildCall(tool, env.ToolInput, env.Cwd)
 		req.MCPTool, req.ReadOnlyTool = tool, mcpReadsOnly(tool, env.ToolInput)
-	case capabilityOf(env.ToolName) == toolInert && envelopeString(env.ToolInput, "skill") == "":
+	case tools.Capability(env.ToolName) == agent.ToolInert && envelopeString(env.ToolInput, "skill") == "":
 		// Ahead of every shape: a web fetch's prompt is no spawn's brief, and a tool that
 		// touches nothing has nothing to judge whatever its fields are called.
 		req.NothingToJudge = true
@@ -1644,7 +1651,7 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		// because one host sends it as `command`, where it would be judged as a shell line.
 		if len(files) == 0 {
 			req.NothingToJudge = true
-			req.UnjudgedTool = unjudgedTool(env)
+			req.UnjudgedTool = unjudgedTool(env, tools)
 			break
 		}
 		req.Value, req.IsPath = files[0].Path, true
@@ -1669,7 +1676,7 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		// A host's own content or file search, judged as the shell line it stands for so
 		// the search rules hold on that channel too.
 		req.Value = nativeSearchLine(env.ToolInput)
-	case envelopeWritePath(env.ToolInput) != "" && capabilityOf(env.ToolName) == toolReads:
+	case envelopeWritePath(env.ToolInput) != "" && tools.Capability(env.ToolName) == agent.ToolReads:
 		// A file path is a read or a write, and only the tool knows which.
 		req.Value = envelopeWritePath(env.ToolInput)
 		req.Read = readLine(req.Value, env.ToolInput)
@@ -1757,7 +1764,7 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 			return hookRequest{}, false
 		}
 		req.NothingToJudge = true
-		req.UnjudgedTool = unjudgedTool(env)
+		req.UnjudgedTool = unjudgedTool(env, tools)
 		if env.AgentID != "" {
 			req.AgentTranscript = env.AgentTranscriptPath
 		}
@@ -1767,7 +1774,7 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 			req.ChildStarted = env.AgentID
 		}
 	}
-	req.Inert = req.NothingToJudge && capabilityOf(env.ToolName) == toolInert &&
+	req.Inert = req.NothingToJudge && tools.Capability(env.ToolName) == agent.ToolInert &&
 		req.LoadedSkill == "" && req.ChildStarted == "" && req.AgentTranscript == ""
 	return req, true
 }
@@ -1822,7 +1829,7 @@ type hookRequest struct {
 	// NothingToJudge is a recognized host envelope carrying no command, path or prompt.
 	// Distinct from "not an envelope", which is judged as the literal text it is.
 	NothingToJudge bool
-	// UnjudgedTool names the tool of a nothing-to-judge call the known-tool table does not
+	// UnjudgedTool names the tool of a nothing-to-judge call the host's tool rows do not
 	// know, "" for any other: the call no rule could read.
 	UnjudgedTool string
 	// Inert is a nothing-to-judge call to a tool the table calls inert, which records

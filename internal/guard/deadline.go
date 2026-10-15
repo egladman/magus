@@ -180,7 +180,7 @@ func boundedPhase[T any](ctx context.Context, phase string, call func(context.Co
 // base resolves the trail's location, names the judging binary and carries the spell
 // catalog when judge has not answered; judge loads the rest itself, inside the bound.
 //
-// A call to a tool the known-tool table calls inert, carrying nothing a rule reads, passes
+// A call to a tool the host's tool rows call inert, carrying nothing a rule reads, passes
 // without judge running at all: every tool reaches the guard, and loading the workspace's
 // rules for a todo list costs the host a hook's worth of waiting.
 func JudgeWithin(ctx context.Context, base Dependencies, req Request, judge func(context.Context) types.GuardJudgment) types.GuardJudgment {
@@ -272,7 +272,7 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 	}
 	call := judgedCall{seam: seamCommand, what: "this command", lease: req.Lease}
 	readOnly := false
-	env, isEnvelope := decodeHookEnvelope(req.Input)
+	env, isEnvelope := decodeHookEnvelope(req.Input, req.Tools)
 	if isEnvelope {
 		ctx = hookContextAt(ctx, base, env.Cwd)
 		if callDir == "" && filepath.IsAbs(env.Cwd) {
@@ -301,7 +301,7 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 		call = judgedCall{seam: seamSpawn, changes: true, what: "a subagent spawn", lease: req.Lease}
 	default:
 		d := effectiveDialect(base.ShellDialect)
-		call.changes = !readOnly && !readOnlyLine(input, d) && !recoveryLine(input, d, req.Lease)
+		call.changes = !readOnly && !readOnlyLine(input, d) && !recoveryLine(input, d, req.Lease, req.Lease == "")
 		cmds, _ := ParseCommandsDialect(input, d)
 		pushes = slices.ContainsFunc(cmds, isPush)
 	}

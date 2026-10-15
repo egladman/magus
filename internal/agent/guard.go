@@ -217,7 +217,13 @@ var guardInputs = []string{"command", "path", "mcp"}
 // background tasks left running refuse a stop, and cursor-hook.buzz no longer rewrites the
 // shell command. Under a config written for 26, a 25 copy leaves those stops unanswered and
 // still prepends its stdin and quiet-output prefix to every Cursor command.
-const GuardTemplateVersion = 28
+//
+// 29: every tool reaches magus-command.buzz through one catch-all entry, which forwards the
+// whole event, and magus-command.buzz, cursor-hook.buzz and the OpenCode plugin forward
+// --tool-rows, the directory the host's tool rows are installed in. Under a config written
+// for 29, a 28 copy reports --tool-rows as unsupported, so the guard knows no tool and
+// refuses every call whose input names no command or path.
+const GuardTemplateVersion = 29
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

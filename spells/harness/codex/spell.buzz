@@ -49,7 +49,21 @@ fun codex_named_command(script: str) > str {
 // One command serves every entry that judges: each event reaches `magus shell` whole, and
 // magus reads off it what the call is, a command, a patch, an MCP call or a spawn.
 fun codex_guard_command() > str {
-    return codex_named_command("magus-command");
+    return codex_buzz_command("magus-command", flags: ["--agent-name", mgs_getName(), "--tool-rows", codex_tools_dir()]);
+}
+
+// Where `magus agent harness install` writes this host's tool rows, beside its hooks.
+fun codex_tools_dir() > str { return ".codex/magus/tools"; }
+
+// Every Codex tool the guard should know whose input's shape does not say what it does. A
+// shell call carries its command and is judged by it; a tool missing here is one the guard
+// cannot judge (unjudged-tool).
+export fun harness_tools(target: Target, cb: fun(any)) > {str: any} {
+    final rows = mut [<any>];
+    rows.append({"name": "apply_patch", "capability": "writes"});
+    foreach (name in ["spawn_agent", "collaborationspawn_agent"]) { rows.append({"name": name, "capability": "spawns"}); }
+    foreach (name in ["close_agent", "update_plan", "view_image", "web_search"]) { rows.append({"name": name, "capability": "inert"}); }
+    return {"dir": codex_tools_dir(), "rows": rows};
 }
 
 // Codex parses a SessionStart or SubagentStart hook's stdout as a reply, so the brief has

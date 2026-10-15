@@ -117,9 +117,12 @@ claude-code` prints it, in the place it lands in `.claude/settings.json`:
 
 The glue forwards the whole event, and magus judges the call by its tool and the shape
 of its input: a command line, a file read or write, a search, a spawn, a skill load,
-an MCP call. A tool its known-tool table lists as touching nothing (a todo list, a
-plan, a web lookup) passes before any rule loads; a tool whose input has none of those
-shapes is named by the unjudged-tool rule rather than run unseen. See
+an MCP call. The spell's tool rows say what each Claude Code tool does where the shape
+cannot; `magus agent harness install` writes them to `.claude/magus/tools`, one file per
+capability with one tool name per line, and the catch-all entry names that directory with
+`--tool-rows`. A tool the rows list as touching nothing (a todo list, a plan, a web lookup)
+passes before any rule loads; a tool whose input has none of those shapes and that no row
+lists is named by the unjudged-tool rule rather than run unseen. See
 [Every tool reaches the guard](guard.md#every-tool-reaches-the-guard).
 
 This repository's own `.claude/settings.json` holds exactly what the spell prints,
@@ -228,8 +231,10 @@ command that changes state, and the magus MCP tools that write: `client`, which 
 script, and `diff` with an `op` other than `state` or `thread`. The tools that only read
 (`status`, `config`, `console`, `buzz`, `diff` with no `op`, `op=state` or `op=thread`)
 still answer. Reads, `git status`, `magus affected --explain` and the fix still run, and
-so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`.
-The denial names the cause and the one likeliest fix; the fallbacks sit behind its `full
+so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`,
+and the lines that get a tree left mid-pick back to one a binary can be built from
+(`git cherry-pick`, `git merge`, `git rebase` or `git revert` with `--abort` or
+`--continue`, and `git worktree add`). The denial names the cause and the one likeliest fix; the fallbacks sit behind its `full
 verdict:` ref. The workspace needs only to show a guard rule in its magusfile for this,
 so a fresh worktree is covered before any policy has loaded in its cache.
 

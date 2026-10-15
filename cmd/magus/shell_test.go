@@ -773,9 +773,13 @@ func TestHookCmd_EnvelopeWithNothingToJudge(t *testing.T) {
 		`"tool_input":{"todos":[{"content":"never use sed -i here"}]}}`
 
 	global = globalFlags{}
+	tools := t.TempDir()
+	for _, f := range (agent.HarnessTools{Dir: ".", Rows: []agent.HarnessTool{{Name: "TodoWrite", Capability: agent.ToolInert}}}).Files() {
+		require.NoError(t, os.WriteFile(filepath.Join(tools, f.Path), []byte(f.Content), 0o644))
+	}
 	var out bytes.Buffer
 	ctx := guard.WithLocation(context.Background(), t.TempDir(), "/repo/magus", "")
-	require.NoError(t, shellStdin(ctx, strings.NewReader(payload), &out, []string{"-o", "name"}))
+	require.NoError(t, shellStdin(ctx, strings.NewReader(payload), &out, []string{"-o", "name", "--tool-rows", tools}))
 	assert.Equal(t, "pass\n", out.String())
 }
 

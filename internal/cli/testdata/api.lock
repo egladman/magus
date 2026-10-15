@@ -231,6 +231,7 @@ flag shell/path
 flag shell/renders-ask
 flag shell/reports-skills
 flag shell/session
+flag shell/tool-rows
 flag shell/transcript
 flag shell/transport
 flag status/W

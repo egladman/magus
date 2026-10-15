@@ -99,7 +99,69 @@ fun claude_call_command() > str {
         REPORTS_SKILLS,
         "--foreground-default-ms", "{FOREGROUND_DEFAULT_MS}",
         "--foreground-max-ms", "{FOREGROUND_MAX_MS}",
+        "--tool-rows", claude_tools_dir(),
     ]);
+}
+
+// Where `magus agent harness install` writes this host's tool rows, beside its settings.
+fun claude_tools_dir() > str { return ".claude/magus/tools"; }
+
+// claude_tool is one row of the table below.
+fun claude_tool(name: str, capability: str) > {str: str} {
+    return {"name": name, "capability": capability};
+}
+
+// Every tool this host offers that the guard should know, by Claude Code's own name and
+// what it can do. A tool missing here is one the guard cannot judge (unjudged-tool), so a
+// new tool stays refused where that rule denies until a row is added.
+fun claude_tools() > [any] {
+    final rows = mut [<any>];
+    foreach (name in ["Bash", "Monitor"]) { rows.append(claude_tool(name, capability: "runs")); }
+    foreach (name in ["Read", "NotebookRead", "Glob", "Grep", "LS"]) { rows.append(claude_tool(name, capability: "reads")); }
+    foreach (name in ["Write", "Edit", "MultiEdit", "NotebookEdit"]) { rows.append(claude_tool(name, capability: "writes")); }
+    foreach (name in ["Agent", "Task", "SendMessage"]) { rows.append(claude_tool(name, capability: "spawns")); }
+    foreach (name in [
+        "BashOutput", "KillShell", "TaskOutput", "TaskStop", "TodoWrite", "WebFetch", "WebSearch",
+        "ExitPlanMode", "EnterPlanMode", "AskUserQuestion", "Skill", "ToolSearch", "ScheduleWakeup",
+        "CronCreate", "ListMcpResourcesTool", "ReadMcpResourceTool", "SubagentHandback", "ListAgents",
+        "ListSkills", "SearchSkills", "ListPlugins", "SearchPlugins", "Artifact",
+    ]) { rows.append(claude_tool(name, capability: "inert")); }
+    // The desktop app's in-app browser.
+    foreach (tool in [
+        "browser_batch", "computer", "find", "form_input", "get_page_text", "javascript_tool", "navigate",
+        "preview_list", "preview_logs", "preview_start", "preview_stop", "read_console_messages",
+        "read_network_requests", "read_page", "resize_window", "tabs_close", "tabs_context", "tabs_create", "tabs_select",
+    ]) { rows.append(claude_tool("mcp__Claude_Browser__{tool}", capability: "network")); }
+    // The desktop app's terminal panel: run_in_terminal carries a command, judged as one.
+    foreach (tool in ["run_in_terminal", "read_terminal", "list_terminal_tabs", "open_terminal_tab", "stop_terminal_tab"]) {
+        rows.append(claude_tool("mcp__terminal__{tool}", capability: "runs"));
+    }
+    // The desktop app's own session, view, sidebar, settings and window controls.
+    foreach (tool in ["mark_chapter", "spawn_task", "dismiss_task", "read_widget_context"]) {
+        rows.append(claude_tool("mcp__ccd_session__{tool}", capability: "inert"));
+    }
+    foreach (tool in [
+        "archive_session", "clear_session", "delete_session", "detach_session", "export_transcript", "get_session",
+        "get_usage", "list_events", "list_sessions", "search_session_transcripts", "send_message", "set_remote_control",
+        "set_session_effort", "set_session_fast_mode", "set_session_model", "set_session_output_style",
+        "set_session_permission_mode", "set_session_title", "stop_session", "unarchive_session",
+    ]) { rows.append(claude_tool("mcp__ccd_session_mgmt__{tool}", capability: "inert")); }
+    foreach (tool in ["close_pane", "get_layout", "set_transcript_view", "show_pane"]) {
+        rows.append(claude_tool("mcp__ccd_view__{tool}", capability: "inert"));
+    }
+    foreach (tool in [
+        "create_group", "create_section", "delete_group", "delete_section", "list_groups", "list_sections",
+        "mark_completed", "move_sessions", "rename_group", "rename_section", "set_pinned", "set_unread", "set_view",
+    ]) { rows.append(claude_tool("mcp__ccd_sidebar__{tool}", capability: "inert")); }
+    foreach (tool in ["get_settings", "set_setting"]) { rows.append(claude_tool("mcp__ccd_settings__{tool}", capability: "inert")); }
+    foreach (tool in ["close_split", "get_window_layout", "open_session_in", "set_sidebar_collapsed"]) {
+        rows.append(claude_tool("mcp__ccd_window__{tool}", capability: "inert"));
+    }
+    return rows;
+}
+
+export fun harness_tools(target: Target, cb: fun(any)) > {str: any} {
+    return {"dir": claude_tools_dir(), "rows": claude_tools()};
 }
 
 // How long Claude Code waits on each hook this wiring writes before it stops waiting and
@@ -535,13 +597,30 @@ test "the one per-entry flag rides after the argv separator" {
         "the guard entry is the named glue command plus one forwarded flag");
 }
 
+test "harness_tools names each tool once, by a capability the guard reads" {
+    final noTarget = null;
+    final cb = fun(_: any) > void {};
+    final tools = harness_tools(noTarget, cb);
+    assert\equal("{tools["dir"]}", ".claude/magus/tools", "beside the settings");
+    final seen = mut {<str: bool>};
+    foreach (row in tools["rows"] as [any]) {
+        final name = "{row["name"]}";
+        assert\isTrue(seen[name] == null, "{name} has one row");
+        seen[name] = true;
+        assert\isTrue(["runs", "reads", "writes", "spawns", "network", "inert"].indexOf("{row["capability"]}") != null,
+            "{name} has a known capability");
+    }
+    assert\isTrue(seen["Read"] ?? false, "the read tool is known");
+    assert\isTrue(seen["mcp__terminal__run_in_terminal"] ?? false, "the terminal panel is known");
+}
+
 test "only the catch-all entry declares the foreground limits, from the constants harness_limits returns" {
     final limits = claude_limits();
     assert\equal("{limits["foreground_default_ms"]}", "120000", "the Bash tool's default timeout");
     assert\equal("{limits["foreground_max_ms"]}", "600000", "the longest timeout the Bash tool takes");
     assert\equal(claude_call_command(),
-        claude_guard_command() + " --foreground-default-ms {FOREGROUND_DEFAULT_MS} --foreground-max-ms {FOREGROUND_MAX_MS}",
-        "the guard command plus the two limits");
+        claude_guard_command() + " --foreground-default-ms {FOREGROUND_DEFAULT_MS} --foreground-max-ms {FOREGROUND_MAX_MS} --tool-rows {claude_tools_dir()}",
+        "the guard command plus the two limits and the tool rows");
     foreach (block in claude_entries()) {
         final event = (block["path"] as [str])[1];
         foreach (entry in block["entries"] as [any]) {

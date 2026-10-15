@@ -56,7 +56,7 @@
 // session --brief` has been measured (MAGUS_PPROF=mem, buzz --profile) at tens of MB of
 // workspace Buzz load on this tree, so a brief over SESSION_BRIEF_MAX_BYTES is dropped.
 //
-// magus-guard-template: 28
+// magus-guard-template: 29
 // magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=model pass=none ask=human
@@ -90,6 +90,8 @@ final UNNAMED = "[MGS3024] this hook was not given --agent-name, so nothing was 
 
 final AGENT_NAME = "--agent-name";
 final REPORTS_SKILLS = "--reports-skills";
+// The tool rows directory the harness spell declares, forwarded to every judgment.
+final TOOL_ROWS = "--tool-rows";
 
 // How Cursor names an MCP call on preToolUse and postToolUse.
 final MCP_TOOL_PREFIX = "MCP:";
@@ -119,6 +121,8 @@ object Scope {
     session: str,
     transcript: str,
     reportsSkills: bool,
+    // toolRows is the tool rows directory the entry declares, "" for none.
+    toolRows: str,
 }
 
 fun firstField(node: any?, keys: [str]) > str {
@@ -154,15 +158,20 @@ fun warn(message: str) > void {
 object Entry {
     agent: str,
     reportsSkills: bool,
+    toolRows: str,
 }
 
 fun readArgs(args: [str]) > Entry {
-    final parsed = flags\parse(args, switches: [REPORTS_SKILLS], valued: [AGENT_NAME]) catch null;
-    if (parsed == null) { return Entry{ agent = "", reportsSkills = false }; }
+    final parsed = flags\parse(args, switches: [REPORTS_SKILLS], valued: [AGENT_NAME, TOOL_ROWS]) catch null;
+    if (parsed == null) { return Entry{ agent = "", reportsSkills = false, toolRows = "" }; }
     foreach (word in parsed!.unknown) {
         warn("unsupported argument {word}; this call was judged WITHOUT it");
     }
-    return Entry{ agent = parsed!.values[AGENT_NAME] ?? "", reportsSkills = parsed!.values[REPORTS_SKILLS] != null };
+    return Entry{
+        agent = parsed!.values[AGENT_NAME] ?? "",
+        reportsSkills = parsed!.values[REPORTS_SKILLS] != null,
+        toolRows = parsed!.values[TOOL_ROWS] ?? "",
+    };
 }
 
 fun unavailableNotice(text: str) > str {
@@ -402,6 +411,10 @@ fun shellArgs(scope: Scope, asPath: bool, ask: bool) > [str] {
     if (asPath) { extra.append("--path"); }
     if (ask) { extra.append("--renders-ask"); }
     if (scope.reportsSkills) { extra.append(REPORTS_SKILLS); }
+    if (scope.toolRows != "") {
+        extra.append(TOOL_ROWS);
+        extra.append(scope.toolRows);
+    }
     foreach (word in ["-o", "json", AGENT_NAME, scope.agent, "--transport", "buzz", "--session", scope.session, "--transcript", scope.transcript]) {
         extra.append(word);
     }
@@ -804,6 +817,7 @@ fun main(args: [str]) > void {
         session = readSession(event),
         transcript = hook\field(event, dotPath: "transcript_path"),
         reportsSkills = entry.reportsSkills,
+        toolRows = entry.toolRows,
     };
     io\stdout.write(dispatch(event, eventName: eventName, scope: scope)) catch void;
 }

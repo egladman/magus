@@ -18,7 +18,13 @@
 ### Added
 
 - **The `unjudged-tool` rule** names a call whose input carries nothing any rule reads, from
-  a tool the guard's known-tool table does not list, such as another MCP server's tool. It
+  a tool the host's tool rows do not list, such as another MCP server's tool. It
   advises once per session by default; set it to `deny` in `magus\guard.builtins` to have
-  every call judged. A tool the table lists as touching nothing (a todo list, a plan, a web
+  every call judged. A tool the rows list as touching nothing (a todo list, a plan, a web
   lookup) passes before any rule loads.
+- **Each harness spell declares its host's tool rows** (`harness_tools`): every tool by the
+  host's own name and what it does (runs, reads, writes, spawns, network, inert).
+  `magus agent harness install` writes them beside the host's config, one file per
+  capability with one tool name per line and a version file, and the hook names the
+  directory to `magus shell --tool-rows`. With no rows to read, no tool is known and the
+  refusal names the install; `magus doctor` reports rows that differ from the spell.

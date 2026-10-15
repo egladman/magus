@@ -104,12 +104,12 @@ func testDependencies() Dependencies {
 // envelope the guard already evaluated can start skipping the guard because a prompt appeared
 // beside it.
 func TestDecodeHookEnvelope_CommandStillWinsOverPrompt(t *testing.T) {
-	req, ok := decodeHookEnvelope(`{"tool_input":{"command":"git stash","prompt":"delegate this"}}`)
+	req, ok := decodeTestEnvelope(t,`{"tool_input":{"command":"git stash","prompt":"delegate this"}}`)
 	require.True(t, ok)
 	assert.Equal(t, "git stash", req.Value)
 	assert.False(t, req.IsSpawn)
 
-	req, ok = decodeHookEnvelope(`{"tool_input":{"file_path":"MAGUS.md","prompt":"delegate this"}}`)
+	req, ok = decodeTestEnvelope(t,`{"tool_input":{"file_path":"MAGUS.md","prompt":"delegate this"}}`)
 	require.True(t, ok)
 	assert.Equal(t, "MAGUS.md", req.Value)
 	assert.True(t, req.IsPath)
@@ -122,13 +122,13 @@ func TestDecodeHookEnvelope_CommandStillWinsOverPrompt(t *testing.T) {
 func TestDecodeHookEnvelope(t *testing.T) {
 	cmdPayload := `{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"Bash",` +
 		`"tool_input":{"command":"magus run ci | tail"}}`
-	req, ok := decodeHookEnvelope(cmdPayload)
+	req, ok := decodeTestEnvelope(t,cmdPayload)
 	require.True(t, ok)
 	assert.Equal(t, hookRequest{Value: "magus run ci | tail", Who: hookAttribution{Session: "s1", Event: "PreToolUse"}}, req)
 
 	// A file_path payload is a WRITE, so the envelope decides the --path question too.
 	writePayload := `{"hook_event_name":"PreToolUse","tool_input":{"file_path":"MAGUS.md"}}`
-	req, ok = decodeHookEnvelope(writePayload)
+	req, ok = decodeTestEnvelope(t,writePayload)
 	require.True(t, ok)
 	assert.Equal(t, "MAGUS.md", req.Value)
 	assert.True(t, req.IsPath, "a file_path payload must be judged as a path, not as a command")
@@ -140,7 +140,7 @@ func TestDecodeHookEnvelope(t *testing.T) {
 		`{not json`,                     // malformed
 		`{"tool_input":{"command":""}}`, // explicitly empty
 	} {
-		_, ok := decodeHookEnvelope(raw)
+		_, ok := decodeTestEnvelope(t,raw)
 		assert.False(t, ok, "must fall through to the literal form: %q", raw)
 	}
 
@@ -149,14 +149,14 @@ func TestDecodeHookEnvelope(t *testing.T) {
 	// test cannot reach directly since decodeHookEnvelope is unexported to this package.
 	const nothingToJudge = `{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"TodoWrite",` +
 		`"tool_input":{"todos":[{"content":"never use sed -i here"}]}}`
-	req, ok = decodeHookEnvelope(nothingToJudge)
+	req, ok = decodeTestEnvelope(t,nothingToJudge)
 	require.True(t, ok, "a payload naming a host hook event is an envelope")
 	assert.True(t, req.NothingToJudge)
 	assert.Empty(t, req.Value)
 
 	// The same JSON with no envelope marker on it is still judged as the text it is: only a
 	// payload that identifies itself as a host hook may claim the exemption.
-	_, ok = decodeHookEnvelope(`{"tool_input":{"todos":[{"content":"never use sed -i here"}]}}`)
+	_, ok = decodeTestEnvelope(t,`{"tool_input":{"todos":[{"content":"never use sed -i here"}]}}`)
 	assert.False(t, ok)
 }
 
@@ -169,7 +169,7 @@ func TestDecodeHookEnvelopeReadsEveryWritePathSpelling(t *testing.T) {
 		"a notebook":              `{"tool_name":"NotebookEdit","tool_input":{"notebook_path":"MAGUS.md"}}`,
 		"any other _path key":     `{"tool_name":"Other","tool_input":{"target_path":"MAGUS.md"}}`,
 	} {
-		req, ok := decodeHookEnvelope(payload)
+		req, ok := decodeTestEnvelope(t,payload)
 		require.True(t, ok, name)
 		assert.True(t, req.IsPath, name)
 		assert.Equal(t, "MAGUS.md", req.Value, name)
@@ -178,7 +178,7 @@ func TestDecodeHookEnvelopeReadsEveryWritePathSpelling(t *testing.T) {
 	// A field arriving with an unexpected type still reaches the MCP arm. Typed, it
 	// failed the unmarshal outright and the raw JSON was judged as a shell line, which is
 	// the one outcome the default arm of the decoder exists to prevent.
-	req, ok := decodeHookEnvelope(`{"tool_name":"mcp__magus__buzz","tool_input":{"path":123}}`)
+	req, ok := decodeTestEnvelope(t,`{"tool_name":"mcp__magus__buzz","tool_input":{"path":123}}`)
 	require.True(t, ok)
 	assert.Equal(t, "magus buzz 123", req.Value)
 }

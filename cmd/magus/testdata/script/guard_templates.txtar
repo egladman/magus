@@ -109,20 +109,20 @@ cd read-ws
 # case: command/deny
 # No offset and no limit: the whole file.
 stdin $WORK/read-whole.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --tool-rows tools
 stdout '"permissionDecision":"deny"'
 stdout 'big.go'
 
 # case: command/deny
 # A limit past 300 lines counts as whole.
 stdin $WORK/read-huge-limit.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --tool-rows tools
 stdout '"permissionDecision":"deny"'
 
 # case: command/pass
 # An offset and a limit inside the threshold is the bounded read the deny points to.
 stdin $WORK/read-range.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --tool-rows tools
 ! stdout 'permissionDecision'
 cd $WORK
 
@@ -1438,6 +1438,15 @@ magus\project({
     "no_language": "fixture workspace: only the read rule's view of a long Go file matters here",
 });
 magus\guard.builtins({"read-navigation": {"decision": "deny", "lines": 120}});
+-- read-ws/tools/version --
+1
+-- read-ws/tools/runs --
+-- read-ws/tools/reads --
+Read
+-- read-ws/tools/writes --
+-- read-ws/tools/spawns --
+-- read-ws/tools/network --
+-- read-ws/tools/inert --
 -- read-ws/big.go --
 package fixture
 

@@ -1501,7 +1501,7 @@ func TestSpawnedAgentIDShapes(t *testing.T) {
 func TestDecodeHookEnvelopeSpawnCodexResponse(t *testing.T) {
 	t.Parallel()
 
-	req, ok := decodeHookEnvelope(`{"session_id":"019e4c21","cwd":"/Users/dev/repo","hook_event_name":"PostToolUse","tool_name":"spawn_agent",` +
+	req, ok := decodeTestEnvelope(t,`{"session_id":"019e4c21","cwd":"/Users/dev/repo","hook_event_name":"PostToolUse","tool_name":"spawn_agent",` +
 		`"tool_input":{"message":"Audit internal/guard.","agent_type":"explorer"},"tool_use_id":"call_Qx8aTz1uJm",` +
 		`"tool_response":"{\"agent_id\":\"019e4c22-1b3d-7e90-8c44-5a6f7d8e9012\",\"nickname\":\"Hubble\"}"}`)
 	require.True(t, ok)

@@ -617,6 +617,8 @@ const (
 	FlagShellReportsSkills = "reports-skills"
 	// shell: --session
 	FlagShellSession = "session"
+	// shell: --tool-rows
+	FlagShellToolRows = "tool-rows"
 	// shell: --transcript
 	FlagShellTranscript = "transcript"
 	// shell: --transport
@@ -1229,6 +1231,7 @@ type ShellFlags struct {
 	Transcript          string // --transcript
 	Event               string // --event
 	ReportsSkills       bool   // --reports-skills
+	ToolRows            string // --tool-rows
 	RendersAsk          bool   // --renders-ask
 	CallBackground      bool   // --call-background
 	CallTimeoutMs       int    // --call-timeout-ms
@@ -1250,6 +1253,7 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	fs.StringVar(&f.Transcript, FlagShellTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
 	fs.StringVar(&f.Event, FlagShellEvent, "", "The host's hook event name (e.g. PreToolUse)")
 	fs.BoolVar(&f.ReportsSkills, FlagShellReportsSkills, false, "This hook wiring reports when the host loads a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down")
+	fs.StringVar(&f.ToolRows, FlagShellToolRows, "", "The directory, relative to the workspace root, holding the host's tool rows that `magus agent harness install` writes; without it no tool is known and each call whose input shape names no command, path, search, prompt or skill is unjudged")
 	fs.BoolVar(&f.RendersAsk, FlagShellRendersAsk, false, "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny")
 	fs.BoolVar(&f.CallBackground, FlagShellCallBackground, false, "The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused")
 	fs.IntVar(&f.CallTimeoutMs, FlagShellCallTimeoutMs, 0, "The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default")

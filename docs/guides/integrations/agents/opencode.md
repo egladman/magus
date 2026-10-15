@@ -154,7 +154,7 @@ other templates.
 // deny for a leased worker's. Where that prompt cannot happen (the config does not ask, or
 // the call is not a plain one the pattern matches) an ask throws, naming the person's own
 // terminal. A decision this file does not know throws too, and never allows.
-// magus-guard-template: 28
+// magus-guard-template: 29
 // magus-guard-coverage: schema=2 host=opencode input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=opencode input=path deny=model advise=model pass=none ask=model
 // magus-guard-coverage: schema=2 host=opencode input=mcp deny=model advise=model pass=none ask=model

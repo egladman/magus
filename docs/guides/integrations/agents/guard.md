@@ -881,13 +881,19 @@ guard judges the call by the shape of its input:
 - a prompt is a spawn, a skill name a skill load, a magus MCP call the CLI verb it
   stands for.
 
-What the shape cannot settle, the guard reads from one table of the host tool names
-it knows, each with what it can do: run a command, read, write, spawn, or touch
-nothing at all (a todo list, a plan, a web lookup, a read of a background task's
-output). A call to a tool that touches nothing passes before any rule loads, so wiring
-every tool costs the host no wait it did not already pay.
+What the shape cannot settle, the guard reads from the host's tool rows: each tool by
+the host's own name, with what it can do: run a command, read, write, spawn, reach the
+network, or touch nothing at all (a todo list, a plan, a web lookup, a read of a
+background task's output). The harness spell declares the rows (`harness_tools`), and
+`magus agent harness install` writes them beside the host's config, one file per
+capability with one tool name per line and a version file. The hook names that directory
+with `--tool-rows`, so the guard reads them with no workspace load. A call to a tool that
+touches nothing passes before any rule loads, so wiring every tool costs the host no wait
+it did not already pay. With no rows to read (a hook config older than them, an install
+that never ran) no tool is known, and the refusal says so and names the install;
+`magus doctor` reports rows that differ from what the spell declares.
 
-A call whose input has none of those shapes, from a tool the table does not list, is
+A call whose input has none of those shapes, from a tool the rows do not list, is
 one no rule could judge. The
 [`unjudged-tool`](../../../reference/rules/unjudged-tool.md) rule names it: it advises
 once per session by default, since the guard cannot know such a tool is harmful, and

@@ -96,7 +96,7 @@ func TestMagusToolCallMatchesOnlyMagusTools(t *testing.T) {
 		assert.Empty(t, magusToolCall(name), "%q is not a call to magus", name)
 	}
 
-	req, ok := decodeHookEnvelope(`{"tool_name":"mcp__other__client","tool_input":{"script":"import \"magus\"; magus\\run([\"ci\"]);"}}`)
+	req, ok := decodeTestEnvelope(t,`{"tool_name":"mcp__other__client","tool_input":{"script":"import \"magus\"; magus\\run([\"ci\"]);"}}`)
 	require.True(t, ok)
 	assert.NotContains(t, req.Value, "magus run ci", "another server's client tool is not graded as magus's")
 }

@@ -42,6 +42,19 @@ export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
     return opencode_config();
 }
 
+// Every OpenCode tool the guard should know, written by `magus agent harness install` to
+// the directory the plugin names to `magus shell --tool-rows`. A tool missing here is one
+// the guard cannot judge (unjudged-tool).
+export fun harness_tools(target: Target, cb: fun(any)) > {str: any} {
+    final rows = mut [<any>];
+    rows.append({"name": "bash", "capability": "runs"});
+    foreach (name in ["read", "glob", "grep", "list"]) { rows.append({"name": name, "capability": "reads"}); }
+    foreach (name in ["write", "edit", "patch"]) { rows.append({"name": name, "capability": "writes"}); }
+    rows.append({"name": "task", "capability": "spawns"});
+    foreach (name in ["todowrite", "todoread", "webfetch", "skill"]) { rows.append({"name": name, "capability": "inert"}); }
+    return {"dir": ".opencode/magus/tools", "rows": rows};
+}
+
 export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
     return opencode_skills();
 }
