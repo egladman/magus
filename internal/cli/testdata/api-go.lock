@@ -1104,6 +1104,7 @@ github.com/egladman/magus/types.CommandRequest.Dir field string
 github.com/egladman/magus/types.CommandRequest.Host field string
 github.com/egladman/magus/types.CommandRequest.Lease field *Job
 github.com/egladman/magus/types.CommandRequest.Orchestration field Orchestration
+github.com/egladman/magus/types.CommandRequest.OwnedCheckouts field []string
 github.com/egladman/magus/types.CommandRequest.Parent field string
 github.com/egladman/magus/types.CommandRequest.Role field AgentRole
 github.com/egladman/magus/types.CommandRequest.Session field string

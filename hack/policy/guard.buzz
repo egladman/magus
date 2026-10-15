@@ -112,7 +112,7 @@ export fun judge(req: CommandRequest) > GuardVerdict {
         lease = req.lease!.id;
     }
     final integrator = req.role == "integrator";
-    final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease, integrator = integrator }, disk: binaries\onDisk(),
+    final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease, integrator = integrator, owned = req.ownedCheckouts }, disk: binaries\onDisk(),
         worker: !integrator and (req.role == "worker" or req.parent != "" or req.agent != ""));
     if (denial != "") {
         return magus\guard.deny(denial);

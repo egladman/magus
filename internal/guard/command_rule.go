@@ -71,6 +71,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict types
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	req := commandRequest(ctx, in, who, at, facts)
+	req.OwnedCheckouts = ownedCheckouts(ctx, deps, at)
 	if deps.CheckoutState != nil {
 		if site, ok := locateCheckout(in.command, in.dialect, cmp.Or(at.dir, at.workspace)); ok {
 			req.Checkout = deps.CheckoutState(ctx, site.dir)

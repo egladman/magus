@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
@@ -121,6 +122,26 @@ func TestCommandRuleSeesTheWorkersLease(t *testing.T) {
 	require.NotNil(t, probe.asked[0].Lease)
 	assert.Equal(t, row.ID, probe.asked[0].Lease.ID)
 	assert.Equal(t, row.WritePaths, probe.asked[0].Lease.WritePaths)
+}
+
+// A worker's request names the checkout its row owns, and not one another job's fork made.
+func TestCommandRuleSeesTheCheckoutsTheCallerOwns(t *testing.T) {
+	row := types.Job{ID: "wave/worker", Criteria: "the guard", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
+	other := types.Job{ID: "wave/other", Criteria: "the docs", WritePaths: []string{"docs/**"}, State: types.StateRunning, Registered: 1}
+	ctx, _ := fleetFixture(t, row, other)
+	at, _ := ctx.Value(locationKey{}).(location)
+	store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+	owned, foreign := t.TempDir(), t.TempDir()
+	for id, root := range map[string]string{row.ID: owned, other.ID: foreign} {
+		_, err := store.RecordWorktree(ctx, id, types.JobWorktree{Root: root, Source: at.workspace})
+		require.NoError(t, err)
+	}
+	bindCaller(t, ctx, hookAttribution{Host: "claude-code", Session: "8f2c6a1e"}, row.ID)
+
+	probe := &commandRuleProbe{}
+	Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: claudeBashEnvelope, Host: "claude-code"})
+	require.Len(t, probe.asked, 1)
+	assert.Equal(t, []string{owned}, probe.asked[0].OwnedCheckouts)
 }
 
 func TestCommandInvocations(t *testing.T) {

@@ -1225,6 +1225,7 @@ export object CommandRequest {
     checkout: CheckoutState? = null,
     dir: str = "",
     workspace: str = "",
+    ownedCheckouts: [str] = [],
 }
 
 export object WriteRequest {

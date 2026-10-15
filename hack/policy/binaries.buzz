@@ -13,11 +13,13 @@ import "./hack/policy/builds" as builds;
 // Where is where a command runs: the directory the host reported, and the workspace root
 // holding it. Either is "" when unknown. lease is the job the caller works under, "" for the
 // main session or a person; integrator is true when that caller integrates this checkout.
+// owned are the checkouts forks made for jobs the caller may work in.
 export object Where {
     dir: str,
     workspace: str,
     lease: str = "",
     integrator: bool = false,
+    owned: [str] = [<str>],
 }
 
 // Disk answers the three questions the binary rules ask the filesystem, passed in so the
@@ -79,10 +81,12 @@ export fun decideBinaries(programs: [helpers\Program], where: Where, disk: Disk,
 // binary carries A's guard rules, host declarations and spell bytecode, so its verdicts
 // describe A and what it regenerates lands in B unmarked. A magus run against a workspace
 // that is not a checkout of magus (a benchmark tree, a fixture) is magus used as a tool,
-// and passes.
+// and passes. So does the binary in a checkout the caller's job owns: the fork placed it
+// there from the forking checkout, and the holder runs it wherever its host's cwd stands.
 fun foreignBinary(p: helpers\Program, where: Where, disk: Disk) > str {
     if (p.name != "magus" or p.path == "") { return ""; }
     final built = path\clean(fs\dirname(p.path));
+    if (where.owned.indexOf(built) != null) { return ""; }
     final isCheckout = disk.isCheckout;
     if (!isCheckout(built)) { return ""; }
     var target = where.workspace;
@@ -248,6 +252,13 @@ test "a binary run against its own checkout, on PATH, unknown, or on a non-magus
         sameFile = fun (a: str, b: str) > bool { return true; },
     };
     std\assert(binaryDenial([["/w/a/magus", "--root", "/w/b", "ls"]], where: inB, disk: aliased) == "", message: "two spellings of one file");
+}
+
+test "the binary in a checkout the caller's job owns runs from any cwd" {
+    final holder = Where{ dir = "/w/b", workspace = "/w/b", lease = "scout", owned = ["/w/a"] };
+    std\assert(binaryDenial([["/w/a/magus", "job", "exec", "scout"]], where: holder, disk: twoCheckouts) == "", message: "the owned checkout's binary");
+    std\assert(binaryDenial([["/w/a/magus", "ls"]], where: Where{ dir = "/w/b", workspace = "/w/b", lease = "scout", owned = ["/w/c"] }, disk: twoCheckouts) != "",
+        message: "a checkout another job owns");
 }
 
 test "go -C into another checkout of magus is denied for a verb its targets cover" {

@@ -313,8 +313,9 @@ func TestWorktreeRemoveRefusesALockItCannotProveIsYourFinishedWorkers(t *testing
 
 // A cherry-pick lands a worker's commits under new ids, amended and with more beside
 // them; what it changed reads the same in the caller's HEAD, so nothing is lost.
-// A checkout a job's fork made is that job's: the session that forked it removes it once the
-// job ended, over the lock the fork took, and a caller under another job is refused.
+// A checkout a job's fork made is that job's: git removes its lock only with -f -f, which
+// would discard work too, so its owner is sent to magus, and a caller under another job is
+// refused.
 func TestWorktreeRemoveHoldsAJobsCheckoutToItsRoot(t *testing.T) {
 	r := newWorktreeRepo(t)
 	wt := r.add("owned")
@@ -323,10 +324,17 @@ func TestWorktreeRemoveHoldsAJobsCheckoutToItsRoot(t *testing.T) {
 	remove := "git worktree remove -f -f " + wt
 
 	root := Dependencies{caller: job.Caller{Host: "claude", Session: "s1"}}
-	assert.Equal(t, ShellVerdict{}, r.judgeWith(root, r.main, remove, row), "the forking session removes its ended job's checkout")
-	for _, plain := range []string{"git worktree remove " + wt, "git worktree remove -f " + wt} {
-		assert.Equal(t, ShellVerdict{}, r.judgeWith(root, r.main, plain, row), "the lock is the fork's own, so no forced remove is asked for: %q", plain)
+	for _, line := range []string{remove, "git worktree remove " + wt, "git worktree remove -f " + wt} {
+		v := r.judgeWith(root, r.main, line, row)
+		assertRemovalDenied(t, v, "job w1's fork made and locked")
+		require.Len(t, v.Next, 1, "%q", line)
+		assert.Equal(t, hint.JobPrune.Argv(), v.Next[0].Argv, "an ended job's checkout goes through prune: %q", line)
 	}
+	declared := row
+	declared.State, declared.CheckoutRoot = types.StateDeclared, ""
+	v := r.judgeWith(root, r.main, remove, declared)
+	require.Len(t, v.Next, 1)
+	assert.Equal(t, hint.JobExit.Argv("w1"), v.Next[0].Argv, "a job not ended yet is ended through exit")
 
 	foreign := Dependencies{caller: job.Caller{Host: "claude", Session: "s1", Agent: "agent-x"}, lease: "other"}
 	other := types.Job{ID: "other", State: types.StateRunning}

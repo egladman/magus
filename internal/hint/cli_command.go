@@ -137,6 +137,7 @@ var (
 	JobWatch            = cmd("job", "watch")
 	JobRun              = cmd("job", "run")
 	JobRm               = cmd("job", "rm")
+	JobPrune            = cmd("job", "prune")
 	NotesLs             = cmd("notes", "ls")
 	NotesGet            = cmd("notes", "get")
 	NotesEdit           = cmd("notes", "edit")

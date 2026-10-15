@@ -234,6 +234,11 @@ type CommandRequest struct {
 	Dir string
 	// Workspace is the root of the workspace holding Dir, empty when none does.
 	Workspace string
+	// OwnedCheckouts are the roots, cleaned, of the standing checkouts `magus job fork
+	// --checkout` made for jobs the caller may work in: its lease's, one descending from
+	// it, the row a spawn record names before the caller binds, or any for a root. Empty
+	// when the job store cannot be read, which a rule reads as owning none.
+	OwnedCheckouts []string
 }
 
 // GuardBinary is the magus binary answering a guard hook, as magus\guard.binary() reports
