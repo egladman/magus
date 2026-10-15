@@ -1,52 +1,17 @@
 package postag
 
 import (
-	"bufio"
-	"bytes"
-	"compress/gzip"
-	"os"
 	"slices"
-	"strings"
 	"testing"
 )
 
-// ewtTexts returns the raw text of every EWT test sentence.
-func ewtTexts(tb testing.TB) []string {
-	tb.Helper()
-
-	gz, err := os.ReadFile("testdata/en_ewt-ud-test.conllu.gz")
-	if err != nil {
-		tb.Fatal(err)
-	}
-
-	zr, err := gzip.NewReader(bytes.NewReader(gz))
-	if err != nil {
-		tb.Fatal(err)
-	}
-
-	var texts []string
-
-	sc := bufio.NewScanner(zr)
-	for sc.Scan() {
-		if text, ok := strings.CutPrefix(sc.Text(), "# text = "); ok {
-			texts = append(texts, text)
-		}
-	}
-
-	if err := sc.Err(); err != nil {
-		tb.Fatal(err)
-	}
-
-	return texts
-}
-
 func BenchmarkTokenize(b *testing.B) {
-	texts := ewtTexts(b)
+	sentences := ewt(b)
 	b.ReportAllocs()
 
 	for b.Loop() {
-		for _, text := range texts {
-			Tokenize(text)
+		for _, s := range sentences {
+			Tokenize(s.Text)
 		}
 	}
 }
@@ -157,61 +122,30 @@ func TestTagTokenized(t *testing.T) {
 // sentences Tokenize splits exactly as EWT did, once EWT's split hyphenated
 // words are joined back, since Tokenize keeps them whole.
 func TestTokenizeAgreesWithEWT(t *testing.T) {
-	gz, err := os.ReadFile("testdata/en_ewt-ud-test.conllu.gz")
-	if err != nil {
-		t.Fatal(err)
-	}
-	zr, err := gzip.NewReader(bytes.NewReader(gz))
-	if err != nil {
-		t.Fatal(err)
-	}
-	type sentence struct {
-		text  string
-		forms []string
-	}
-	var sentences []sentence
-	var cur sentence
-	attached, joining := false, false
-	sc := bufio.NewScanner(zr)
-	for sc.Scan() {
-		line := sc.Text()
-		if text, ok := strings.CutPrefix(line, "# text = "); ok {
-			cur.text = text
-			continue
-		}
-		if line == "" {
-			if len(cur.forms) > 0 {
-				sentences = append(sentences, cur)
-			}
-			cur, attached, joining = sentence{}, false, false
-			continue
-		}
-		cols := strings.Split(line, "\t")
-		if strings.HasPrefix(line, "#") || len(cols) != 10 || strings.ContainsAny(cols[0], "-.") {
-			continue
-		}
-		form, glued := cols[1], strings.Contains(cols[9], "SpaceAfter=No")
-		switch {
-		case joining:
-			cur.forms[len(cur.forms)-1] += form
-		case form == "-" && attached && glued:
-			cur.forms[len(cur.forms)-1] += form
-		default:
-			cur.forms = append(cur.forms, form)
-		}
-		joining = form == "-" && attached && glued
-		attached = glued
-	}
-	if err := sc.Err(); err != nil {
-		t.Fatal(err)
-	}
+	sentences := ewt(t)
 
 	exact := 0
 	for _, s := range sentences {
-		if got := Tokenize(s.text); slices.Equal(got, s.forms) {
+		var forms []string
+		attached, joining := false, false
+		for _, w := range s.Words {
+			glued := !w.SpaceAfter
+			switch {
+			case joining:
+				forms[len(forms)-1] += w.Form
+			case w.Form == "-" && attached && glued:
+				forms[len(forms)-1] += w.Form
+			default:
+				forms = append(forms, w.Form)
+			}
+			joining = w.Form == "-" && attached && glued
+			attached = glued
+		}
+
+		if got := Tokenize(s.Text); slices.Equal(got, forms) {
 			exact++
 		} else if testing.Verbose() {
-			t.Logf("%q\n got %q\nwant %q", s.text, got, s.forms)
+			t.Logf("%q\n got %q\nwant %q", s.Text, got, forms)
 		}
 	}
 	share := float64(exact) / float64(len(sentences))

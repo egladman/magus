@@ -1,22 +1,45 @@
 package postag
 
 import (
-	"bufio"
-	"bytes"
 	"compress/gzip"
 	"os"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/egladman/magus/libs/proofread/internal/conllu"
 )
 
-func BenchmarkTag(b *testing.B) {
-	texts := ewtTexts(b)
+// ewt reads the EWT test split the trainer wrote.
+func ewt(tb testing.TB) []conllu.Sentence {
+	tb.Helper()
 
-	sentences := make([][]string, len(texts))
-	for i, text := range texts {
-		sentences[i] = Tokenize(text)
+	f, err := os.Open("testdata/en_ewt-ud-test.conllu.gz")
+	if err != nil {
+		tb.Fatal(err)
+	}
+	defer f.Close()
+
+	zr, err := gzip.NewReader(f)
+	if err != nil {
+		tb.Fatal(err)
+	}
+
+	sentences, err := conllu.Read(zr)
+	if err != nil {
+		tb.Fatal(err)
+	}
+
+	return sentences
+}
+
+func BenchmarkTag(b *testing.B) {
+	gold := ewt(b)
+
+	sentences := make([][]string, len(gold))
+	for i, s := range gold {
+		sentences[i] = Tokenize(s.Text)
 	}
 
 	loadModel()
@@ -29,58 +52,15 @@ func BenchmarkTag(b *testing.B) {
 	}
 }
 
-type goldToken struct{ form, upos, xpos string }
-
-func readGold(t *testing.T, path string) [][]goldToken {
-	t.Helper()
-	gz, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	zr, err := gzip.NewReader(bytes.NewReader(gz))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var sentences [][]goldToken
-	var cur []goldToken
-	sc := bufio.NewScanner(zr)
-	for sc.Scan() {
-		line := sc.Text()
-		if line == "" {
-			if len(cur) > 0 {
-				sentences = append(sentences, cur)
-			}
-			cur = nil
-			continue
-		}
-		cols := strings.Split(line, "\t")
-		if strings.HasPrefix(line, "#") || len(cols) != 10 || strings.ContainsAny(cols[0], "-.") {
-			continue
-		}
-		cur = append(cur, goldToken{form: cols[1], upos: cols[3], xpos: cols[4]})
-	}
-	if err := sc.Err(); err != nil {
-		t.Fatal(err)
-	}
-	if len(cur) > 0 {
-		sentences = append(sentences, cur)
-	}
-	return sentences
-}
-
 func TestTagAccuracy(t *testing.T) {
 	var tokens, upos, xpos int
-	for _, s := range readGold(t, "testdata/en_ewt-ud-test.conllu.gz") {
-		words := make([]string, len(s))
-		for i, tok := range s {
-			words[i] = tok.form
-		}
-		for i, got := range Tag(words) {
+	for _, s := range ewt(t) {
+		for i, got := range Tag(s.Forms()) {
 			tokens++
-			if got.UPOS.String() == s[i].upos {
+			if got.UPOS.String() == s.Words[i].UPOS {
 				upos++
 			}
-			if string(got.XPOS) == s[i].xpos {
+			if string(got.XPOS) == s.Words[i].XPOS {
 				xpos++
 			}
 		}

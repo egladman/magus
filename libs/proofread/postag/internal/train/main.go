@@ -12,6 +12,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/egladman/magus/libs/proofread/internal/conllu"
 	"github.com/egladman/magus/libs/proofread/postag/internal/feature"
 )
 
@@ -31,7 +32,7 @@ func main() {
 }
 
 func run(modelPath, testPath string, iterations int, seed uint64, levels int) error {
-	splits := map[string][]sentence{}
+	splits := map[string][]conllu.Sentence{}
 
 	var testRaw []byte
 
@@ -45,7 +46,7 @@ func run(modelPath, testPath string, iterations int, seed uint64, levels int) er
 			testRaw = raw
 		}
 
-		if splits[split], err = parseCoNLLU(raw); err != nil {
+		if splits[split], err = conllu.Read(bytes.NewReader(raw)); err != nil {
 			return fmt.Errorf("%s: %w", split, err)
 		}
 	}
@@ -107,23 +108,23 @@ const (
 	dictMinShare = 0.97
 )
 
-func newTrainer(train []sentence) *trainer {
+func newTrainer(train []conllu.Sentence) *trainer {
 	t := &trainer{index: map[class]uint16{}, dict: map[string]uint16{}, p: newPerceptron()}
 	counts := map[string]map[class]int{}
 
 	for _, s := range train {
-		for _, tok := range s {
-			c := class{xpos: tok.xpos, upos: tok.upos}
+		for _, tok := range s.Words {
+			c := class{xpos: tok.XPOS, upos: tok.UPOS}
 			if _, ok := t.index[c]; !ok {
 				t.index[c] = 0
 				t.classes = append(t.classes, c)
 			}
 
-			if counts[tok.form] == nil {
-				counts[tok.form] = map[class]int{}
+			if counts[tok.Form] == nil {
+				counts[tok.Form] = map[class]int{}
 			}
 
-			counts[tok.form][c]++
+			counts[tok.Form][c]++
 		}
 	}
 
@@ -155,7 +156,7 @@ func newTrainer(train []sentence) *trainer {
 
 // train conditions each word on the tags it predicted for the words before
 // it, as tagging will, not on the gold tags.
-func (t *trainer) train(train []sentence, iterations int, seed uint64) {
+func (t *trainer) train(train []conllu.Sentence, iterations int, seed uint64) {
 	order := slices.Clone(train)
 	rng := rand.New(rand.NewPCG(seed, seed))
 	scores := make([]int64, len(t.classes))
@@ -166,16 +167,15 @@ func (t *trainer) train(train []sentence, iterations int, seed uint64) {
 		rng.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
 
 		for _, s := range order {
-			words := s.forms()
-			context := feature.Padded(words)
+			context := feature.Padded(s.Forms())
 			prev, prev2 := feature.Start, feature.Start2
 
-			for i, tok := range s {
-				guess, ok := t.dict[tok.form]
+			for i, tok := range s.Words {
+				guess, ok := t.dict[tok.Form]
 				if !ok {
-					feats = feature.Extract(feats[:0], context, i, tok.form, prev, prev2)
+					feats = feature.Extract(feats[:0], context, i, tok.Form, prev, prev2)
 					guess = t.p.predict(feats, scores)
-					t.p.update(t.index[class{xpos: tok.xpos, upos: tok.upos}], guess, feats)
+					t.p.update(t.index[class{xpos: tok.XPOS, upos: tok.UPOS}], guess, feats)
 				}
 
 				prev, prev2 = guess, prev
@@ -186,30 +186,29 @@ func (t *trainer) train(train []sentence, iterations int, seed uint64) {
 
 // evaluate tags each sentence exactly as postag.Tag does and counts the
 // tokens, the UPOS matches and the XPOS matches.
-func (t *trainer) evaluate(q *quantized, sentences []sentence) (counts testCounts) {
+func (t *trainer) evaluate(q *quantized, sentences []conllu.Sentence) (counts testCounts) {
 	scores := make([]int64, len(t.classes))
 
 	var feats []feature.Hash
 
 	for _, s := range sentences {
-		words := s.forms()
-		context := feature.Padded(words)
+		context := feature.Padded(s.Forms())
 		prev, prev2 := feature.Start, feature.Start2
 
-		for i, tok := range s {
-			c, ok := t.dict[tok.form]
+		for i, tok := range s.Words {
+			c, ok := t.dict[tok.Form]
 			if !ok {
-				feats = feature.Extract(feats[:0], context, i, tok.form, prev, prev2)
+				feats = feature.Extract(feats[:0], context, i, tok.Form, prev, prev2)
 				c = q.predict(feats, scores)
 			}
 
 			counts.tokens++
 
-			if t.classes[c].upos == tok.upos {
+			if t.classes[c].upos == tok.UPOS {
 				counts.upos++
 			}
 
-			if t.classes[c].xpos == tok.xpos {
+			if t.classes[c].xpos == tok.XPOS {
 				counts.xpos++
 			}
 
@@ -218,14 +217,6 @@ func (t *trainer) evaluate(q *quantized, sentences []sentence) (counts testCount
 	}
 
 	return counts
-}
-
-func (s sentence) forms() []string {
-	words := make([]string, len(s))
-	for i, tok := range s {
-		words[i] = tok.form
-	}
-	return words
 }
 
 func ratio(n, d int) float64 { return float64(n) / float64(d) }
