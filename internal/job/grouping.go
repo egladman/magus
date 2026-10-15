@@ -193,7 +193,7 @@ func groupingLines(out types.GroupingOutput) []string {
 			facts = append(facts, fmt.Sprintf("%.0f context tokens per group", *r.ContextPerGroup))
 		}
 		if r.WallMsPerGroup != nil {
-			facts = append(facts, fmt.Sprintf("%s wall per group", (time.Duration(*r.WallMsPerGroup) * time.Millisecond).Round(time.Second)))
+			facts = append(facts, fmt.Sprintf("%s wall per group", (time.Duration(*r.WallMsPerGroup)*time.Millisecond).Round(time.Second)))
 		}
 		if r.SetupTokensMedian != nil {
 			facts = append(facts, fmt.Sprintf("median %d tokens at the first write", *r.SetupTokensMedian))

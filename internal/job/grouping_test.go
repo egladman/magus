@@ -150,8 +150,9 @@ func TestStoreGroupingLensReadsTheRecordedOutcomes(t *testing.T) {
 	got, err := s.GroupingLens(t.Context(), nil)
 
 	require.NoError(t, err)
-	assert.Equal(t, types.GroupingDefinition, got.Definition)
-	assert.Equal(t, 1, got.Unclassified, "its write paths resolved to no project: no Owners")
+	want := GroupingRecords(nil, nil)
+	want.Unclassified = 1 // its write paths resolved to no project: no Owners
+	assert.Equal(t, want, got)
 }
 
 func TestGroupingLinesStateTheSampleAndNeverAdvise(t *testing.T) {

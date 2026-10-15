@@ -194,7 +194,7 @@ func (s *Store) assignModelTier(ctx context.Context, row types.Job, plan []types
 	if s.modelTierMatrix != nil && s.owners != nil && row.Model == "" && len(row.WritePaths) > 0 {
 		projects, err := s.writeProjects(ctx, row)
 		if err != nil {
-			return types.JobModelTier{}, fmt.Errorf("job: finding the projects %s writes in: %w", row.ID, err)
+			return types.JobModelTier{}, fmt.Errorf("finding the projects %s writes in: %w", row.ID, err)
 		}
 		req.WriteProjects = projects
 	}

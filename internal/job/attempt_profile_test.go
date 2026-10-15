@@ -59,11 +59,12 @@ func TestAttemptWorkLeavesTheContextUnknownWhenACallReportedNone(t *testing.T) {
 	got, _ := attemptWork(base, "a", since)
 
 	require.NotNil(t, got)
-	assert.Equal(t, 2, got.Calls)
-	assert.Equal(t, ptr(int64(30_000)), got.SetupTokens, "the first write itself reported one")
-	assert.Nil(t, got.SetupContext)
-	assert.Nil(t, got.ContextTokens)
-	assert.Nil(t, got.PeakTokens)
+	require.NotNil(t, got.SetupMs)
+	assert.Equal(t, types.JobWork{
+		Calls: 2, Writes: 1, SetupCalls: 1,
+		SetupTokens: ptr(int64(30_000)), // the first write itself reported one
+		SetupMs:     got.SetupMs,
+	}, *got)
 }
 
 func TestAttemptWorkOfAHolderThatNeverWroteHasNoSetupFigures(t *testing.T) {
@@ -75,12 +76,10 @@ func TestAttemptWorkOfAHolderThatNeverWroteHasNoSetupFigures(t *testing.T) {
 	got, _ := attemptWork(base, "a", time.Now().Unix()-1)
 
 	require.NotNil(t, got)
-	assert.Equal(t, 1, got.SetupCalls)
-	assert.Zero(t, got.Writes)
-	assert.Nil(t, got.SetupMs)
-	assert.Nil(t, got.SetupTokens)
-	assert.Nil(t, got.SetupContext)
-	assert.Equal(t, ptr(int64(10_000)), got.ContextTokens)
+	assert.Equal(t, types.JobWork{
+		Calls: 1, SetupCalls: 1,
+		ContextTokens: ptr(int64(10_000)), PeakTokens: ptr(int64(10_000)),
+	}, *got)
 }
 
 // No call under the lease is a holder the guard never saw, and no trail is nothing to read:

@@ -440,13 +440,17 @@ func TestStoreRecordsTheParentAttemptProjectsAndWork(t *testing.T) {
 	jobs := recordedJobs(t, history)
 	require.Len(t, jobs, 1)
 	got := jobs[0]
-	assert.Equal(t, "root", got.Parent)
-	assert.Equal(t, 1, got.ParentAttempt)
-	assert.Equal(t, []string{"internal/job", "types"}, got.Projects)
 	require.NotNil(t, got.Work)
-	assert.Equal(t, 2, got.Work.Calls)
-	assert.Equal(t, 1, got.Work.SetupCalls)
-	assert.Equal(t, ptr(int64(30_000)), got.Work.SetupTokens)
+	want := got
+	want.Parent, want.ParentAttempt, want.Projects = "root", 1, []string{"internal/job", "types"}
+	want.Tokens, want.CostUSD = nil, nil // no model table to price against
+	want.Work = &types.JobWork{
+		Calls: 2, Writes: 1, SetupCalls: 1,
+		SetupContext: ptr(int64(10_000)), SetupTokens: ptr(int64(30_000)),
+		ContextTokens: ptr(int64(40_000)), PeakTokens: ptr(int64(30_000)),
+		SetupMs: got.Work.SetupMs,
+	}
+	assert.Equal(t, want, got)
 }
 
 // A holder the guard never saw records no work profile: unknown, never an idle holder.
