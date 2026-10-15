@@ -76,7 +76,8 @@ func TestConformValidateAcceptsAConfiguredPolicy(t *testing.T) {
 func TestConformValidateRefuses(t *testing.T) {
 	t.Parallel()
 
-	metrics := "[file-lines func-lines type-methods file-symbols dep-fanout clone-tokens export-scope]"
+	metrics := "[file-lines func-lines type-methods file-symbols dep-fanout clone-tokens export-scope " +
+		"call-sequence shared-body shared-reach caller-spread mode-knobs alias-share name-clash]"
 	for name, tc := range map[string]struct {
 		edit func(*ConformOptions)
 		want string

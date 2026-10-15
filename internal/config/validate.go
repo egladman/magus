@@ -220,13 +220,22 @@ func conformFailures(c ConformConfig) []FieldFailure {
 
 func conformLimitFailures(field string, metric types.ConformMetric, l ConformLimitConfig) []FieldFailure {
 	var out []FieldFailure
-	if l.Percentile <= 0 {
+	// mode-knobs is a list, not a distribution: anchor 0 names every function shared past the
+	// coupling rule, and percentile 0 measures no proposal.
+	list := metric == types.ConformModeKnobs
+	switch {
+	case list && l.Percentile < 0:
+		out = append(out, FieldFailure{Field: field + ".percentile", Tag: "gte", Param: "0", Value: fmt.Sprint(l.Percentile)})
+	case !list && l.Percentile <= 0:
 		out = append(out, FieldFailure{Field: field + ".percentile", Tag: "gt", Param: "0", Value: fmt.Sprint(l.Percentile)})
 	}
 	if l.Percentile > 100 {
 		out = append(out, FieldFailure{Field: field + ".percentile", Tag: "lte", Param: "100", Value: fmt.Sprint(l.Percentile)})
 	}
-	if l.Anchor < 1 {
+	switch {
+	case list && l.Anchor < 0:
+		out = append(out, FieldFailure{Field: field + ".anchor", Tag: "gte", Param: "0", Value: fmt.Sprint(l.Anchor)})
+	case !list && l.Anchor < 1:
 		out = append(out, FieldFailure{Field: field + ".anchor", Tag: "gte", Param: "1", Value: fmt.Sprint(l.Anchor)})
 	}
 	for _, scope := range slices.Sorted(maps.Keys(l.Scopes)) {
