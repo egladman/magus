@@ -445,13 +445,7 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 	composes := sync.OnceValue(func() func(target, project string) bool {
 		return checksCompose(ctx, deps, at.workspace, checks)
 	})
-	workspace := sync.OnceValue(func() types.WorkspaceReader {
-		ws, err := deps.inspect(ctx, at.workspace)
-		if err != nil || ws == nil {
-			return nil
-		}
-		return ws
-	})
+	workspace := lazyWorkspace(ctx, deps, at.workspace)
 	for _, r := range runs {
 		if r.allowed(checks, produces) || r.composedByCheck(composes) {
 			if d := denyRewriteOutsideLease(r, me, deps.DefaultCharms, workspace); d.refused() {
@@ -482,6 +476,18 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		}
 	}
 	return denial{}
+}
+
+// lazyWorkspace opens the workspace at root on its first call and keeps it; nil when it
+// cannot be opened.
+func lazyWorkspace(ctx context.Context, deps Dependencies, root string) func() types.WorkspaceReader {
+	return sync.OnceValue(func() types.WorkspaceReader {
+		ws, err := deps.inspect(ctx, root)
+		if err != nil || ws == nil {
+			return nil
+		}
+		return ws
+	})
 }
 
 // denyRewriteOutsideLease refuses a run the worker may make once the rw charm would have it
@@ -717,7 +723,7 @@ func (r targetRun) writesOutside(ws types.WorkspaceReader, writePaths []string) 
 	}
 	for _, p := range projects {
 		_ = types.WalkChain(p, targetName(r.target), ws.Get, func(v types.ChainVisit) error {
-			var globs []types.Glob
+			globs := make([]types.Glob, 0, len(v.Project.TargetOutputs[v.Target])+len(v.Project.TargetUpdates[v.Target]))
 			for _, ref := range v.Project.TargetOutputs[v.Target] {
 				globs = append(globs, ref.Rooted(v.Project.Path))
 			}

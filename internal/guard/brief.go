@@ -204,13 +204,7 @@ func judgeBriefOffCheck(deps Dependencies, brief briefInput) ShellVerdict {
 		return v
 	}
 	var notes []string
-	workspace := sync.OnceValue(func() types.WorkspaceReader {
-		ws, err := deps.inspect(ctx, at.workspace)
-		if err != nil || ws == nil {
-			return nil
-		}
-		return ws
-	})
+	workspace := lazyWorkspace(ctx, deps, at.workspace)
 	for _, row := range graded {
 		produces := lazyProducers(sync.OnceValue(func() func(target, project string) bool {
 			return leaseProducers(ctx, deps, at.workspace, row.WritePaths)

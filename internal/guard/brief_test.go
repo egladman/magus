@@ -160,7 +160,8 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 		{"the row's own check", "Run `./magus run diagrams_generate docs` once at the end.", ""},
 		{"the check with a charm, in prose", "Run ./magus run diagrams-generate:rw docs -- -v and report.", ""},
 		{"a target regenerating past the write paths", "Regenerate with `./magus run figures-generate:rw docs`.", "figures-generate:rw"},
-		{"a target regenerating the write paths, read-only", "Check with `./magus run figures-generate docs`.", ""},		{"a word the workspace defines as no target", "Run the check target once, then magus run takes over.", ""},
+		{"a target regenerating the write paths, read-only", "Check with `./magus run figures-generate docs`.", ""},
+		{"a word the workspace defines as no target", "Run the check target once, then magus run takes over.", ""},
 		{"a placeholder", "Run `./magus run <target> <project>` for the row's check.", ""},
 		{"a read", "Read `./magus describe job figures/flow` first.", ""},
 	} {
