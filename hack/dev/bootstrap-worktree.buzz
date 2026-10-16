@@ -13,9 +13,12 @@ import "assert";
 final USAGE = "usage: magus buzz hack/dev/bootstrap-worktree.buzz -- (--job <id> [--from <checkout>] | --check --from <checkout>)";
 final HELP = "cost: a binary copy, a graph build and a lease, in seconds; this script never compiles magus\n{USAGE}\n\n"
     + "Makes a fresh worktree of this repository usable for the worker holding <id>: places the root checkout's ./magus\n"
-    + "(the main checkout, or the one --from names), refreshes the wired harness skills, builds the graph, takes the job's\n"
-    + "lease, then refuses unless the row names this worktree as its checkout and the base it recorded matches the row's\n"
-    + "checkpoint. Writes ./magus, the graph, harness skills and the job row.\n\n"
+    + "(the main checkout, or the one --from names), refreshes the wired harness skills, takes the job's lease, refuses\n"
+    + "unless the row names this worktree as its checkout and the base it recorded matches the row's checkpoint, and builds\n"
+    + "the graph last. The lease comes first so an edit made while the graph builds lands after the base is recorded. A\n"
+    + "graph build that fails prints a line naming `./magus graph build` and does not fail the bootstrap. The last line\n"
+    + "printed says the worktree is ready: act on that line, never on partial output. Writes ./magus, harness skills,\n"
+    + "the job row and the graph.\n\n"
     + "The orchestrator builds one ./magus per base commit, in the root, and every worker checkout receives a copy. A copy is\n"
     + "placed only when it is provably the binary this worktree would build: no Go build input (a file in a package\n"
     + "`go list -deps ./cmd/magus` names, or the root go.mod, go.sum or go.work) differs between the commit the binary was\n"
@@ -294,11 +297,12 @@ export fun refusal(why: str, source: str) > str {
         + "(`{source}/magus --root {source} run go-build .`), then reruns this with `--from {source}`.";
 }
 
-// bootstrap places ./magus in root, refreshes harness skills, builds the graph, takes job, and returns the row as the
-// fresh binary reads it back. ./magus is copied from source, the main checkout when source is "",
+// bootstrap places ./magus in root, refreshes harness skills, takes job, checks the row fits, builds the graph, and
+// returns the row as the fresh binary reads it back. ./magus is copied from source, the main checkout when source is "",
 // and only when that binary is provably root's own build; otherwise it raises, since a worker
 // checkout never compiles magus. Raises on any step that fails and on a row unfit for a worker
-// here, so a caller never starts work on a wrong binding.
+// here, so a caller never starts work on a wrong binding. The graph build runs last, after the
+// lease records the base on a clean tree; its failure is printed, not raised.
 export fun bootstrap(root: str, job: str, source: str) > Row !> any {
     final main = checkRepository(root);
     final origin = if (source == "") main else source;
@@ -317,12 +321,9 @@ export fun bootstrap(root: str, job: str, source: str) > Row !> any {
     fs\rename("{local}.bootstrap", dst: local);
     std\print("placed " + placed(v.bin, commit: v.build.commit, rootRev: readHead(root), scopes: v.scopes));
     // A bound job cannot rewrite the skills that steer it, so refresh every wired
-    // harness before job exec takes the lease. Do this before graph build so it
-    // indexes the installed skill content when the installer updates it.
+    // harness before job exec takes the lease.
     magusAt(local, root: root, args: ["agent", "harness", "install"]);
     std\print("refreshed the wired harness skills");
-    magusAt(local, root: root, args: ["graph", "build", "--silent"]);
-    std\print("built the graph");
     final took = magusAt(local, root: root, args: ["job", "exec", job]);
     foreach (line in took.split("\n")) {
         if (line.trim() != "") {
@@ -336,7 +337,24 @@ export fun bootstrap(root: str, job: str, source: str) > Row !> any {
     } catch (e: str) {
         throw "bootstrap-worktree: REFUSED, job {job} is not fit to work here:\n  {e}";
     }
+    try {
+        magusAt(local, root: root, args: ["graph", "build", "--silent"]);
+        std\print("built the graph");
+    } catch (e: str) {
+        std\print(graphBuildFailed(e));
+    }
     return row;
+}
+
+// graphBuildFailed is the line printed when the graph build fails after the lease is taken: the
+// job is bound and usable, only the graph is cold.
+export fun graphBuildFailed(cause: str) > str {
+    return "the graph did not build; the lease is taken and the worktree works, but run `./magus graph build` before querying: {cause}";
+}
+
+// readyLine is the last line the bootstrap prints.
+export fun readyLine(row: Row, root: str) > str {
+    return "ready: job {row.id} is taken in {root}; setup is finished and edits may begin";
 }
 
 export fun render(row: Row, root: str) > [str] {
@@ -383,9 +401,11 @@ export fun main(args: [str]) > void !> any {
     if (job == "") {
         throw "bootstrap-worktree: --job is required: the lease is the point of a worker's worktree\n{USAGE}";
     }
-    foreach (line in render(bootstrap(root, job: job, source: source), root: root)) {
+    final row = bootstrap(root, job: job, source: source);
+    foreach (line in render(row, root: root)) {
         std\print(line);
     }
+    std\print(readyLine(row, root: root));
 }
 
 final WT = "/work/magus/.claude/worktrees/w1";
@@ -425,6 +445,18 @@ test "a row bound to the main checkout is refused, naming it" {
     assert\equal(fitReasons(fixture("bootstrap-main.json"), root: WT, main: MAIN, trackedClean: true), want: [
         "job agent-scripts names /work/magus as its checkout, not /work/magus/.claude/worktrees/w1 (the main checkout: every write the worker makes here is graded against the wrong tree); rerun `./magus job exec agent-scripts` from /work/magus/.claude/worktrees/w1",
     ], message: "main");
+}
+
+test "bootstrap names the graph build as the fix when it fails after the lease" {
+    final line = graphBuildFailed("exit 1:\nMGS3009");
+    assert\equal(line.indexOf("`./magus graph build`") != null, want: true, message: "names the command");
+    assert\equal(line.indexOf("lease is taken") != null, want: true, message: "says the lease held");
+    assert\equal(line.indexOf("MGS3009") != null, want: true, message: "keeps the cause");
+}
+
+test "bootstrap ends on a line that says the worktree is ready" {
+    final row = fixture("bootstrap-match.json");
+    assert\equal(readyLine(row, root: WT), want: "ready: job {row.id} is taken in {WT}; setup is finished and edits may begin", message: "ready");
 }
 
 test "a diverged base is refused with the checkpoint to switch to" {
