@@ -91,7 +91,7 @@ func (h *FactHandler) Handle(ctx context.Context, r slog.Record) error {
 		StartedMs:      e.StartedMs,
 		Slots:          e.Slots,
 		MemoryMB:       e.MemoryMB,
-		Sizing:         Sizing(e.Sizing),
+		Sizing:         e.Sizing,
 		WaitedMs:       e.WaitedMs,
 		MaxRSSBytes:    e.MaxRSSBytes,
 		CPUMs:          e.CPUMs,

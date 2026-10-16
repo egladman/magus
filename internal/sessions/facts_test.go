@@ -135,10 +135,10 @@ func TestFactHandlerCopiesTheClaimAndCost(t *testing.T) {
 	assert.Equal(t, []TargetResult{
 		{
 			Target: "build", Project: "api", Outcome: OutcomePass,
-			StartedMs: 1700000000000, Slots: 2, MemoryMB: 512, Sizing: SizingDeclared,
+			StartedMs: 1700000000000, Slots: 2, MemoryMB: 512, Sizing: journal.SizingDeclared,
 			WaitedMs: 40, MaxRSSBytes: 3 << 20, CPUMs: 900,
 		},
-		{Target: "lint", Project: "web", Outcome: OutcomePass, Replayed: true, Sizing: SizingNone},
+		{Target: "lint", Project: "web", Outcome: OutcomePass, Replayed: true, Sizing: journal.SizingNone},
 	}, summaries[0].Targets)
 }
 

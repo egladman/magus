@@ -322,7 +322,7 @@ type Result struct {
 	HintID string
 	// Claim is the admission the step ran under. A replay runs nothing, so it carries
 	// none, even when a remote hit took a machine claim before it found the entry.
-	Claim StepClaim
+	Claim stepClaim
 	// MaxRSSBytes and CPUMs are what the processes the step ran cost; see
 	// types.WithExecCost. Zero on a replay.
 	MaxRSSBytes int64
@@ -330,7 +330,7 @@ type Result struct {
 }
 
 // sizing names where c's memory came from, as a journal result spells it.
-func (c StepClaim) sizing() string {
+func (c stepClaim) sizing() string {
 	switch {
 	case c.MemoryMB == 0:
 		return journal.SizingNone
@@ -341,8 +341,8 @@ func (c StepClaim) sizing() string {
 	}
 }
 
-// StepClaim is the admission a step was granted before it ran.
-type StepClaim struct {
+// stepClaim is the admission a step was granted before it ran.
+type stepClaim struct {
 	// Started is when the step held every seat it needed and began.
 	Started time.Time
 	// Waited is how long it queued for its machine claim and its local slots.
@@ -374,13 +374,13 @@ type runCtx struct {
 	// runTarget runs a step's BeforeKey targets; see WithTargetRunner.
 	runTarget func(context.Context, types.TargetRef) error
 	// claim is the admission RunAll granted this step; see grantedClaim.
-	claim StepClaim
+	claim stepClaim
 }
 
 // grantedClaim hands Run the admission RunAll took for the step, so a miss reports it.
 // An option rather than a context value, because a nested step runs under its parent's
 // context and would otherwise report the parent's claim as its own.
-func grantedClaim(claim StepClaim) RunOption {
+func grantedClaim(claim stepClaim) RunOption {
 	return func(rc *runCtx) { rc.claim = claim }
 }
 
@@ -1614,7 +1614,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			queued := time.Now()
 			// admitAndRun takes the local slot beneath whatever machine seat machineCtx
 			// carries and runs the step there.
-			admitAndRun := func(machineCtx context.Context, claim StepClaim, runOpts []RunOption) (Result, error) {
+			admitAndRun := func(machineCtx context.Context, claim stepClaim, runOpts []RunOption) (Result, error) {
 				// A slot-acquire failure is usually this batch's own cancellation, which
 				// fail swallows regardless. A deadlocked pool is the exception: nothing
 				// upstream failed and the batch was not cancelled, so it is an independent
@@ -1654,11 +1654,11 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			var err error
 			key := c.localHitKey(gctx, &s)
 			if key != "" {
-				r, err = admitAndRun(gctx, StepClaim{}, slices.Concat(opts, []RunOption{replayLocal(key)}))
+				r, err = admitAndRun(gctx, stepClaim{}, slices.Concat(opts, []RunOption{replayLocal(key)}))
 			}
 			if key == "" || errors.Is(err, errLocalEntryGone) {
 				ran = false
-				var claim StepClaim
+				var claim stepClaim
 				if !admissionFrom(gctx).machineClaim {
 					claim.MemoryMB, claim.Sizing = s.MemoryMB, s.MemorySizing
 				}

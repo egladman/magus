@@ -7,6 +7,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
@@ -41,7 +42,7 @@ func TestTargetResultEncodesTheClaimAndCost(t *testing.T) {
 	t.Parallel()
 	ran := TargetResult{
 		Target: "go-test", Outcome: OutcomePass, StartedMs: 1_700_000_000_000,
-		Slots: 4, MemoryMB: 3800, Sizing: SizingMeasured, WaitedMs: 1500,
+		Slots: 4, MemoryMB: 3800, Sizing: journal.SizingMeasured, WaitedMs: 1500,
 		MaxRSSBytes: 2 << 30, CPUMs: 90_000,
 	}
 	b, err := json.Marshal(ran)
@@ -51,7 +52,7 @@ func TestTargetResultEncodesTheClaimAndCost(t *testing.T) {
 	require.NoError(t, json.Unmarshal(b, &got))
 	assert.Equal(t, ran, got)
 
-	b, err = json.Marshal(TargetResult{Target: "go-test", Outcome: OutcomePass, Replayed: true, Sizing: SizingNone})
+	b, err = json.Marshal(TargetResult{Target: "go-test", Outcome: OutcomePass, Replayed: true, Sizing: journal.SizingNone})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"target":"go-test","outcome":"pass","duration_ms":0,"replayed":true,"sizing":"none"}`, string(b))
 }
