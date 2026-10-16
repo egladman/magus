@@ -444,6 +444,60 @@ func TestBoundWorkerNarrowsAWriteToADeclaration(t *testing.T) {
 	assert.Contains(t, err.Error(), "SHRINK write_paths")
 }
 
+// Containment is by glob match, not string equality: a glob narrows to the files it matches.
+func TestBoundWorkerNarrowsAGlobToItsFiles(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "adj/globs", WritePaths: []string{"internal/**/*.go"}, State: types.StateRunning}
+	loc := declared(t, row)
+
+	stored, err := boundStore(loc, "adj/globs").Update(t.Context(), "adj/globs", func(u *types.Job) {
+		u.WritePaths = []string{"internal/job/authorize.go", "internal/job/*_test.go"}
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"internal/job/authorize.go", "internal/job/*_test.go"}, stored.WritePaths)
+}
+
+func TestBoundWorkerCannotWidenAGlob(t *testing.T) {
+	t.Parallel()
+
+	for _, wider := range []string{"internal/**", "internal/job/*", "internal/job/*.txt", "."} {
+		t.Run(wider, func(t *testing.T) {
+			t.Parallel()
+
+			row := types.Job{ID: "adj/globs", WritePaths: []string{"internal/job/*.go"}, State: types.StateRunning}
+			loc := declared(t, row)
+
+			_, err := boundStore(loc, "adj/globs").Update(t.Context(), "adj/globs", func(u *types.Job) {
+				u.WritePaths = []string{wider}
+			})
+			var refused *RefusedError
+			require.ErrorAs(t, err, &refused, "%q is not within internal/job/*.go", wider)
+			assert.Contains(t, err.Error(), "SHRINK write_paths")
+		})
+	}
+}
+
+func TestChildIsHandedAFileItsParentsGlobMatches(t *testing.T) {
+	t.Parallel()
+
+	parent := types.Job{ID: "adj/store", WritePaths: []string{"internal/job/*.go"}, State: types.StateRunning}
+	loc := declared(t, parent)
+
+	stored, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store/plan", func(u *types.Job) {
+		*u = types.Job{Parent: "adj/store", WritePaths: []string{"internal/job/plan.go"}}
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"internal/job/plan.go"}, stored.WritePaths)
+
+	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/wide", func(u *types.Job) {
+		*u = types.Job{Parent: "adj/store", WritePaths: []string{"internal/job/plan.go", "internal/sessions/a.go"}}
+	})
+	var refused *RefusedError
+	require.ErrorAs(t, err, &refused)
+	assert.Contains(t, err.Error(), "may only be handed paths its parent owns")
+}
+
 // A child may be handed one declaration of a file its parent owns whole: that is a
 // narrower boundary than the parent's, the same admission [subset] makes for a worker
 // shrinking its own row. A child claiming anything beyond what the parent owns is still

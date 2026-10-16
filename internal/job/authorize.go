@@ -403,34 +403,18 @@ func listedIn(inner, outer []string) bool {
 	})
 }
 
-// subset reports whether every declaration in inner is one outer also holds, compared as
-// exact strings (a worker rewriting a glob into a wider one must not look contained), with
-// one narrowing allowed one way only: a claim on one declaration of a file (`F#d`) is
-// inside outer's whole-file entry for that file (`F`), never the reverse.
+// subset reports whether every declaration in inner is within some entry of outer by
+// [types.PathWithin], so a holder may narrow a glob to the files it matches or a file to
+// one declaration of it. A glob rewritten into a wider one is not within the narrower
+// (`internal/**` is not within `internal/job/*.go`).
 func subset(inner, outer []string) bool {
 	for _, p := range inner {
 		p := strings.TrimSpace(p)
-		if slices.ContainsFunc(outer, func(o string) bool { return strings.TrimSpace(o) == p }) {
-			continue
-		}
-		if !narrowsWholeFile(p, outer) {
+		if !slices.ContainsFunc(outer, func(o string) bool { return types.PathWithin(p, strings.TrimSpace(o)) }) {
 			return false
 		}
 	}
 	return true
-}
-
-// narrowsWholeFile reports whether p claims one declaration of a file that some entry in
-// outer holds whole, the one case [subset] admits beyond exact string equality.
-func narrowsWholeFile(p string, outer []string) bool {
-	file, decl := types.SplitClaim(p)
-	if decl == "" {
-		return false
-	}
-	return slices.ContainsFunc(outer, func(o string) bool {
-		of, od := types.SplitClaim(strings.TrimSpace(o))
-		return od == "" && of == file
-	})
 }
 
 // authorizeDelete refuses a bound holder deleting a row.

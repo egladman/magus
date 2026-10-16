@@ -2182,7 +2182,9 @@ func LiteralPrefix(p string) string {
 // holder replacing outer with inner only narrows. A literal is within a glob that matches
 // it, a literal names itself and everything beneath it, `F#d` is within `F` and within a
 // glob matching F, and a glob is within a literal directory holding its literal prefix or
-// within `<prefix>/**` and `<prefix>/**/<last>` when its prefix is under that one.
+// within `<prefix>/**` and `<prefix>/**/<last>` when its prefix is under that one. Against
+// `<prefix>/**/*<suffix>`, a last segment glob is within it when every name it matches
+// ends in the literal suffix: `internal/job/*_test.go` is within `internal/**/*.go`.
 //
 // It errs toward false: two globs of any other shape are never within one another, since
 // proving one glob's matches a subset of another's is a solver, and a refused narrowing
@@ -2215,10 +2217,27 @@ func PathWithin(inner, outer string) bool {
 		return true
 	}
 	if IsGlobMeta(base) {
-		return false
+		return segmentWithin(base, last)
 	}
 	matched, err := doublestar.Match(last, base)
 	return err == nil && matched
+}
+
+// segmentWithin reports whether every name the glob segment inner matches is one the
+// segment outer matches, for an outer of the form `*<suffix>` with a literal suffix. A
+// match for inner always ends in the literal run after inner's last metacharacter, so
+// that run ending in the suffix is enough, and an inner ending in a metacharacter, or
+// `**`, can end in anything.
+func segmentWithin(inner, outer string) bool {
+	if inner == "**" || !strings.HasPrefix(outer, "*") || IsGlobMeta(outer[1:]) {
+		return false
+	}
+	suffix := outer[1:]
+	if suffix == "" {
+		return true
+	}
+	tail := inner[strings.LastIndexAny(inner, "*?[]{}")+1:]
+	return tail != "" && strings.HasSuffix(tail, suffix)
 }
 
 // underDir reports whether p is dir or beneath it; every path is under the root, "".
