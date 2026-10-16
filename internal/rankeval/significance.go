@@ -185,7 +185,7 @@ func TopicSetSize(sd, delta, alpha, power float64) int {
 
 // pairedTPower is the two-sided power at n topics and standardized effect
 // delta/sd, approximating the noncentral t with noncentrality sqrt(n)*effect by
-// P(T' <= t) ~ Phi((t(1-1/4f) - lambda) / sqrt(1 + t^2/2f)), f = n-1 (Sakai 2016,
+// `P(T' <= t) ~ Phi((t(1-1/4f) - lambda) / sqrt(1 + t^2/2f))`, `f = n-1` (Sakai 2016,
 // eq. for the paired t-test).
 func pairedTPower(n int, effect, alpha float64) float64 {
 	f := float64(n - 1)
@@ -197,7 +197,7 @@ func pairedTPower(n int, effect, alpha float64) float64 {
 }
 
 // CohenKappa is Cohen's kappa between two raters' labels of the same items
-// (Cohen 1960): (p_o - p_e) / (1 - p_e), with p_e from each rater's marginals.
+// (Cohen 1960): `(p_o - p_e) / (1 - p_e)`, with p_e from each rater's marginals.
 // It is NaN when p_e is 1, as when both raters give every item one label. It
 // panics when a and b differ in length or are empty.
 func CohenKappa(a, b []int) float64 {
@@ -210,7 +210,7 @@ func CohenKappa(a, b []int) float64 {
 }
 
 // WeightedKappa is Cohen's weighted kappa with linear weights (Cohen 1968) for
-// ordinal grades: 1 - sum(w*observed) / sum(w*expected), with disagreement
+// ordinal grades: `1 - sum(w*observed) / sum(w*expected)`, with disagreement
 // weight |x-y| on the grade values. It equals scikit-learn's
 // cohen_kappa_score(weights="linear") when the observed grades are consecutive
 // integers. Its NaN and panic cases are CohenKappa's.
@@ -223,7 +223,7 @@ func WeightedKappa(a, b []int) float64 {
 	})
 }
 
-// kappa is 1 - observed/expected disagreement, kept in integers until the one
+// kappa is `1 - observed/expected` disagreement, kept in integers until the one
 // division: observed is n*sum(w(a_i, b_i)), expected sum(w(x, y)*count_a(x)*count_b(y)).
 func kappa(a, b []int, weight func(x, y int) int64) float64 {
 	if len(a) != len(b) || len(a) == 0 {

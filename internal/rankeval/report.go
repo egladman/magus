@@ -308,7 +308,7 @@ const (
 )
 
 // Comparison is one metric of one set compared between two reports over the queries
-// both scored. Delta is mean(now - base) over those pairs. P is the two-sided paired
+// both scored. Delta is `mean(now - base)` over those pairs. P is the two-sided paired
 // randomization p, flipping one sign per session for a clustered set, and PHolm is P
 // adjusted by Holm over every comparison of the same Compare. Lo, Hi and Effect are
 // the 95% t-interval and Cohen's d_z; for a clustered set they are taken over
