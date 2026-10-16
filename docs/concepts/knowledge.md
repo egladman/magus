@@ -655,6 +655,17 @@ deliberately does not decode each index to check it parses: that is a full unmar
 lookup to catch a case the graph build already logs, while a never-built index is the case
 that occurs.
 
+A stale index is one built before the sources it covers, and magus says which sources:
+the line under the answer names up to five files modified since the index was built,
+counts the rest, and says that deletions are not listed, since a deleted file leaves
+nothing to compare. The list is a fact of the moment you ask, so only a read that
+evaluates the workspace names files; one answered from the verdict a graph build recorded
+names the projects alone. `magus describe job` uses the list: it grades a job's symbol
+goals against the built graph when none of the changed files falls inside the job's write
+paths, and leaves them ungraded, naming `magus graph build`, when one does or when the
+index names no files. Re-indexing stays whole-project: the list makes the staleness
+precise, it does not make indexing partial.
+
 ## Citations (@links)
 
 A URL written in a code comment is almost always a pointer at documentation, and until it

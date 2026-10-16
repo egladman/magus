@@ -80,7 +80,7 @@ func leaseBoundary(ctx context.Context, root string, store *job.Store, row types
 		UnrunGates:         notes.UnrunGates,
 		Affinity:           leaseAffinity(ctx, m, affected.Seed),
 		Stage:              workspaceStage(ctx, m),
-		DeletionCandidates: deletionCandidates(ctx, graph.load, row),
+		DeletionCandidates: deletionCandidates(ctx, graph.loadFor(row.WritePaths), row),
 	}
 	// A history file that does not read leaves the section out, the way Affinity's scan does.
 	if grouping, err := store.GroupingLens(ctx, affected.Seed); err == nil {
@@ -334,13 +334,13 @@ func chainToGate(start string, deps map[string][]string) []string {
 // ordinary source directories the containment tree does not carry, and a "no node" line
 // per path would bury the ones that do resolve. A cold graph is different and is
 // reported once: "not asked" must not read as "nothing depends on this". It takes the domain
-// graph through graph, so a graph that must not build answers cold while a symbol index is
-// stale.
+// graph through graph, so a graph that must not build answers cold while a stale symbol
+// index may hold changes inside paths.
 func leaseGraphEvidence(ctx context.Context, graph *jobGraph, paths []string) (evidence []job.TermsEvidence, cold bool) {
 	if len(paths) == 0 {
 		return nil, false
 	}
-	g := graph.loadDomain(ctx)
+	g := graph.loadDomain(ctx, paths)
 	if g == nil {
 		return nil, true
 	}
@@ -377,7 +377,7 @@ func pathEvidence(g *knowledge.Graph, declared string) (job.TermsEvidence, bool)
 // expensive part; loading per name would reopen it once per symbol. A load failure is
 // remembered too, so a verification does not retry a graph that is not there once per
 // gate and report the same failure five times. Without rebuild, a stale symbol index
-// answers no name at all (see jobGraph).
+// answers no name at all: this reader has no write paths to clear it against (see jobGraph).
 func jobSymbolReader(root string, rebuild bool) job.SymbolReader {
 	return graphSymbolReader(newJobGraph(root, rebuild).load)
 }
@@ -395,12 +395,18 @@ func graphSymbolReader(load func(context.Context) *knowledge.Graph) job.SymbolRe
 // jobGraph is one command's knowledge graph, loaded on first use and handed to every later
 // caller, or the same nil when the load failed.
 //
-// A read that must not build (rebuild false, which is `describe job`) asks first whether
-// any symbol index is stale, and while one is it loads nothing: bringing the graph up to
-// date is a build of seconds, and the symbol goals graded against it would answer from an
-// index older than the sources anyway. They print as not graded, beside the stale-index
-// line that names the rebuild. With every index current it reads the graph as built, so it
-// and `job wait` grade alike.
+// A read that must not build (rebuild false, which is `describe job`) asks first whether a
+// stale symbol index could hold a change to the row's write paths, and while one could it
+// loads nothing: bringing the graph up to date is a build of seconds, and the symbol goals
+// graded against it would answer from an index that misses that change. They print as not
+// graded, beside the stale-index line that names the rebuild. An index whose changed files
+// all fall outside the write paths does not stop the read: the files the row writes are as
+// the index saw them. An index that names no changed files, or only some of them, stops it
+// as before. With nothing stopping it, it reads the graph as built, so it and
+// `job wait` grade alike. A deleted source names no file, so a deletion inside the write
+// paths does not stop the read.
+//
+// One jobGraph serves one row: the first read that names write paths scopes every later one.
 type jobGraph struct {
 	rebuild bool
 	stale   func(context.Context) []types.KnowledgeStaleIndex
@@ -411,6 +417,8 @@ type jobGraph struct {
 
 	staleOnce   sync.Once
 	staleIdx    []types.KnowledgeStaleIndex
+	scopeOnce   sync.Once
+	scope       []string
 	graph       lazyGraph
 	domainGraph lazyGraph
 }
@@ -437,7 +445,16 @@ func (l *lazyGraph) get(ctx context.Context, skip func(context.Context) bool, bu
 func newJobGraph(root string, rebuild bool) *jobGraph {
 	return &jobGraph{
 		rebuild: rebuild,
-		stale:   func(ctx context.Context) []types.KnowledgeStaleIndex { return staleIndexes(ctx, root) },
+		stale: func(ctx context.Context) []types.KnowledgeStaleIndex {
+			// The opened workspace judges afresh and names the changed files, which a
+			// verdict the store recorded does not carry. Describe opens it for the
+			// boundary anyway.
+			m, err := loadMagus(ctx, root)
+			if err != nil {
+				return staleIndexes(ctx, root)
+			}
+			return findStaleIndexes(ctx, m)
+		},
 		build: func(ctx context.Context) (*knowledge.Graph, error) {
 			return loadKnowledgeGraphForRefs(ctx, root, false, "")
 		},
@@ -451,29 +468,61 @@ func (r *jobGraph) load(ctx context.Context) *knowledge.Graph {
 	return r.graph.get(ctx, r.mustNotRead, r.build)
 }
 
-// loadDomain is load for the domain graph, under the same rule.
-func (r *jobGraph) loadDomain(ctx context.Context) *knowledge.Graph {
+// loadFor is load for a row writing paths.
+func (r *jobGraph) loadFor(paths []string) func(context.Context) *knowledge.Graph {
+	return func(ctx context.Context) *knowledge.Graph {
+		r.scopeTo(paths)
+		return r.load(ctx)
+	}
+}
+
+// loadDomain is loadFor for the domain graph, under the same rule.
+func (r *jobGraph) loadDomain(ctx context.Context, paths []string) *knowledge.Graph {
+	r.scopeTo(paths)
 	return r.domainGraph.get(ctx, r.mustNotRead, r.domain)
 }
 
-// mustNotRead reports whether a read that must not build faces a stale symbol index.
+func (r *jobGraph) scopeTo(paths []string) {
+	r.scopeOnce.Do(func() { r.scope = paths })
+}
+
+// mustNotRead reports whether a read that must not build faces a stale symbol index that
+// could hold a change inside the write paths.
 func (r *jobGraph) mustNotRead(ctx context.Context) bool {
 	return !r.rebuild && len(r.staleIndexes(ctx)) > 0
 }
 
-// staleIndexes is the stale symbol indexes, asked once.
+// staleIndexes is the stale symbol indexes that keep a read from the graph, judged once
+// against the write paths the first scoped read named; with none named, every stale index.
 func (r *jobGraph) staleIndexes(ctx context.Context) []types.KnowledgeStaleIndex {
-	r.staleOnce.Do(func() { r.staleIdx = r.stale(ctx) })
+	r.staleOnce.Do(func() {
+		r.scopeTo(nil)
+		for _, s := range r.stale(ctx) {
+			if staleIndexHits(s, r.scope) {
+				r.staleIdx = append(r.staleIdx, s)
+			}
+		}
+	})
 	return r.staleIdx
+}
+
+// staleIndexHits reports whether s could hold a change inside paths: it names no changed
+// file or only some, paths is empty, or a file it names falls inside one of them.
+func staleIndexHits(s types.KnowledgeStaleIndex, paths []string) bool {
+	if len(paths) == 0 || s.ChangedCount == 0 || len(s.Changed) < s.ChangedCount {
+		return true
+	}
+	return slices.ContainsFunc(s.Changed, func(file string) bool {
+		return slices.ContainsFunc(paths, func(p string) bool { return types.PathsIntersect(p, file) })
+	})
 }
 
 // jobObserver is the checkpoint observer plus the symbol delta of the job's diff and, for a
 // job with a check gate on ci, the newest green ci gate on this checkout's branch and the
 // tier of the change since it. One graph load serves the symbol goals and the delta.
 func jobObserver(root string, graph *jobGraph) job.Observer {
-	checkpoint := job.CheckpointObserver(root, graphSymbolReader(graph.load))
 	return func(ctx context.Context, row types.Job) (job.Observed, error) {
-		seen, err := checkpoint(ctx, row)
+		seen, err := job.CheckpointObserver(root, graphSymbolReader(graph.loadFor(row.WritePaths)))(ctx, row)
 		if err != nil {
 			return seen, err
 		}
@@ -505,7 +554,7 @@ func observeSymbolDelta(ctx context.Context, root string, row types.Job, seen jo
 	}
 	var g *knowledge.Graph
 	if filepath.Clean(tree) == filepath.Clean(root) {
-		g = graph.load(ctx)
+		g = graph.loadFor(row.WritePaths)(ctx)
 	} else if ws, err := magus.Inspect(ctx, tree, append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...); err == nil &&
 		(graph.rebuild || len(findStaleIndexes(ctx, ws)) == 0) {
 		g, _ = loadRefsGraph(ctx, ws, globalCfg, false, "")
