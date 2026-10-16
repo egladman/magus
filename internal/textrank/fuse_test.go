@@ -3,6 +3,7 @@ package textrank
 import (
 	"math"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -76,7 +77,10 @@ func TestFuse(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := Fuse(tt.lists, k)
+			got, err := Fuse(tt.lists, k)
+			if err != nil {
+				t.Fatalf("Fuse: %v", err)
+			}
 			if got == nil {
 				t.Fatal("Fuse returned nil, want a non-nil slice")
 			}
@@ -99,8 +103,24 @@ func TestFuse(t *testing.T) {
 }
 
 func TestFuseK(t *testing.T) {
-	got := Fuse([]RankedList{{Name: "l", Weight: 1, IDs: []string{"a"}}}, 0)
+	got, err := Fuse([]RankedList{{Name: "l", Weight: 1, IDs: []string{"a"}}}, 0)
+	if err != nil {
+		t.Fatalf("Fuse: %v", err)
+	}
 	if len(got) != 1 || got[0].Score != 1.0 {
 		t.Fatalf("Fuse with k=0 = %+v, want one result scoring 1/(0+1)", got)
+	}
+}
+
+func TestFuseRefusesDuplicateNames(t *testing.T) {
+	got, err := Fuse([]RankedList{
+		{Name: "bm25", Weight: 1, IDs: []string{"a"}},
+		{Name: "bm25", Weight: 1, IDs: []string{"b"}},
+	}, 60)
+	if err == nil {
+		t.Fatalf("Fuse = %+v, want an error naming the duplicate list", got)
+	}
+	if !strings.Contains(err.Error(), `"bm25"`) {
+		t.Errorf("Fuse error = %q, want it to name the duplicate list", err)
 	}
 }
