@@ -408,8 +408,8 @@ that, a change answers only for what it did.
   everywhere, and the sweep lands with it.
 - A measured rule, one whose fix is a refactor anyone can do, lands with a baseline
   listing every item already past it. The baseline only shrinks. `magus run format .`
-  deletes the items that no longer violate, so nobody edits it to keep a passing change
-  passing.
+  deletes the items that no longer violate and follows an item through a rename or a
+  move, so nobody edits it to keep a passing change passing.
 - A rule whose fix needs knowledge of the code, or a taste, advises and never fails.
 
 A rule's header comment names its tier, then the reason:
