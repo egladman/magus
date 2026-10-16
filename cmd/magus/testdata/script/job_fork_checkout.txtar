@@ -32,12 +32,65 @@ stdout '^ended scout, recorded no_return'
 stdout '^checkout .*scout: removed once job scout ended'
 ! exists $WORK/scout
 
+# A checkout changed only in the tool rows the wired harness's install writes is magus's own
+# work: it is restored, and the checkout goes.
+exec magus job fork rows --read-only --criteria 'install the tool rows' --checkout $WORK/rows
+cp $WORK/runs-rewritten $WORK/rows/host/tools/runs
+cp $WORK/runs-rewritten $WORK/rows/host/tools/models
+exec magus job exit rows
+stdout '^checkout .*rows: removed once job rows ended'
+! exists $WORK/rows
+
+# Any other change beside them keeps it, and the rows are still restored.
+exec magus job fork held-rows --read-only --criteria 'install the tool rows and edit a note' --checkout $WORK/held
+cp $WORK/runs-rewritten $WORK/held/host/tools/runs
+cp $WORK/runs-rewritten $WORK/held/notes.md
+exec magus job exit held-rows
+stdout '^checkout .*held: kept after job held-rows ended: 1 path\(s\) in it hold uncommitted work \(notes\.md\)'
+exists $WORK/held/notes.md
+grep 'Shell' $WORK/held/host/tools/runs
+
+-- runs-rewritten --
+rewritten
 -- shop/.gitignore --
 .magus/
 -- shop/magus.yaml --
 concurrency: 2
+-- shop/notes.md --
+notes
+-- shop/host/tools/runs --
+Shell
+-- shop/host/tools/models --
+-- shop/host/tools/tiers --
+-- shop/host/tools/version --
+1
+-- shop/spells/rows-host/spell.buzz --
+import "magus/spell";
+
+export fun mgs_getName() > str { return "rows-host"; }
+
+export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
+    return {"path": "host/hooks.json"};
+}
+
+export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
+    return {"paths": [".agents/skills"], "form": "both"};
+}
+
+export fun harness_entries(target: Target, cb: fun(any)) > [any] {
+    return [{
+        "path": ["hooks", "before"],
+        "entries": [{"match": "run", "commands": [{"type": "command", "command": "sh stand-in.sh"}]}],
+    }];
+}
+
+export fun harness_tools(target: Target, cb: fun(any)) > {str: any} {
+    return {"dir": "host/tools", "rows": [{"name": "Shell", "capability": "runs"}]};
+}
 -- shop/magusfile.buzz --
 import "magus";
+import "spells/rows-host" as rowshost;
+magus\harness.provider(rowshost);
 
 // test has nothing to check; the job here only reads.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {

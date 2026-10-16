@@ -38,6 +38,28 @@ func TestHarnessToolsFilesAreOneFilePerCapability(t *testing.T) {
 	}, tools.Files())
 }
 
+// Holds names every file install writes, including a capability file this table has no row
+// for, and nothing else, in this directory or beside it.
+func TestHarnessToolsHoldsEveryFileInstallWrites(t *testing.T) {
+	tools := HarnessTools{Dir: "host/magus/tools", Rows: []HarnessTool{{Name: "Shell", Capability: ToolRuns}}}
+	for _, f := range (HarnessTools{Dir: tools.Dir, Models: &ModelFacts{}}).Files() {
+		assert.True(t, tools.Holds(f.Path), f.Path)
+	}
+	for _, c := range ToolCapabilities {
+		assert.True(t, tools.Holds(path.Join(tools.Dir, string(c))), c)
+	}
+	for _, other := range []string{
+		"host/magus/tools/notes",
+		"host/magus/tools/runs/extra",
+		"host/magus/runs",
+		"other/tools/runs",
+		"runs",
+		"host/magus/tools",
+	} {
+		assert.False(t, tools.Holds(other), other)
+	}
+}
+
 func TestReadToolRowsReadsBackWhatFilesWrote(t *testing.T) {
 	root := t.TempDir()
 	writeToolFiles(t, root, HarnessTools{Dir: "tools", Rows: []HarnessTool{

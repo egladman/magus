@@ -20,6 +20,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/broker"
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file/watch"
@@ -1755,7 +1756,8 @@ func abandonJobs(ctx context.Context, store *job.Store, ids []string) error {
 
 // endWorktrees removes the checkouts that jobs which ended own, and the linked checkout each
 // job in ended was taken in, restoring what magus wrote in them first, and prints what
-// became of each one: removed, or kept and why.
+// became of each one: removed, or kept and why. What magus wrote includes the tool rows a
+// wired harness's install puts in a checkout, which describe file leaves unclaimed.
 func endWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ...string) error {
 	if globalCfg.DryRun {
 		return nil
@@ -1769,9 +1771,18 @@ func endWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ..
 		if err != nil {
 			return nil, err
 		}
+		wired := ws.Harnesses()
+		hostCtx := agent.ContextWithWiredHarnesses(ctx, wired)
+		var toolRows []agent.HarnessTools
+		for _, id := range wired {
+			if d, _, err := agent.LoadHarness(hostCtx, ws.Root(), id); err == nil && d.Tools != nil {
+				toolRows = append(toolRows, *d.Tools)
+			}
+		}
 		var out []string
 		for _, f := range files {
-			if f.Role == types.DiffRoleOutput || f.Role == types.DiffRoleMaintained {
+			installed := slices.ContainsFunc(toolRows, func(t agent.HarnessTools) bool { return t.Holds(f.Path) })
+			if installed || f.Role == types.DiffRoleOutput || f.Role == types.DiffRoleMaintained {
 				out = append(out, f.Path)
 			}
 		}

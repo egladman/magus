@@ -137,6 +137,18 @@ func (t HarnessTools) Files() []HarnessAgentFile {
 	return append(files, HarnessAgentFile{Path: path.Join(t.Dir, toolRowsVersionFile), Content: strconv.Itoa(ToolRowsVersion) + "\n"})
 }
 
+// Holds reports whether rel, a slash-separated workspace-relative path, is a file install
+// writes into the rows directory: every name Files can emit, whether or not this table
+// currently has rows for it.
+func (t HarnessTools) Holds(rel string) bool {
+	dir, name := path.Split(rel)
+	if path.Clean(dir) != path.Clean(t.Dir) {
+		return false
+	}
+	return name == modelRowsFile || name == tierFile || name == toolRowsVersionFile ||
+		slices.Contains(ToolCapabilities, ToolCapability(name))
+}
+
 // toolFiles is d's tool rows directory as files, nil when d declares no tools.
 func (d HarnessDescriptor) toolFiles() []HarnessAgentFile {
 	if d.Tools == nil {
