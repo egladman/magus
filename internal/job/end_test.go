@@ -286,7 +286,8 @@ func TestEndCheckoutsTriesTheLinkedCheckoutAnEndedJobWasTakenIn(t *testing.T) {
 	assert.Equal(t, "w1", changed[0].ID)
 	assert.Equal(t, linked, changed[0].Worktree.Root)
 	assert.NoFileExists(t, filepath.Join(linked, "MAGUS.md"), "what magus wrote is restored first")
-	assert.Contains(t, changed[0].Worktree.Kept, "removing it failed", "the VCS removes only a checkout `magus job fork --checkout` made")
+	assert.Empty(t, changed[0].Worktree.Kept, "a checkout no fork made is removed once removing it loses nothing")
+	assert.NoDirExists(t, linked)
 	assert.Nil(t, storedRows(t, s)["w1"].Worktree, "no worktree is recorded for a checkout no fork made")
 }
 
