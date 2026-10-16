@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 27937
-skill_short_bytes: 20644
+skill_full_bytes: 28022
+skill_short_bytes: 20822
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `141` |
+| `agent-skill-version` | `142` |
 | `knowledge-schema-version` | `22` |
-| `skill-content` | `8f7a1c5c9ef0` |
+| `skill-content` | `17abb40ac9f5` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -345,6 +345,7 @@ binds its child to nothing.
    Or fork from a record with `magus job fork --stdin`, the form that carries goals;
    [reference.md](reference.md) shows one.
 
+   Before every fork, run `magus job fork --stdin --dry-run`: it lists every problem with its code and fix, and writes nothing.
    `magus job fork --schema` prints every field and the newest `schema_version`.
 3. Spawn the worker with the description `<parent>/<role> <job>`: two words, the
    first a parent id and a role joined by `/`, the second the job id.
@@ -354,14 +355,14 @@ binds its child to nothing.
      else `api-store/migrate`.
    - The role is a word for the work (`feat`, `fix`, `review`). A workspace spawn
      rule may restrict it, and its refusal names the list.
+   - A title naming a row that no fork or apply validated is refused (`spawn-unvalidated`).
 
-Write paths name FILES or file globs, never a directory. The check is `<target>
-<project> [-- args]`, never the gate. [reference.md](reference.md) covers claiming one
-declaration in a shared file and forking from a leased worker.
+Write paths name exact FILES; a glob too broad is refused as MGS3043 unless waived. The
+check is `<target> <project> [-- args]`, never the gate. [reference.md](reference.md)
+covers claiming one declaration in a shared file and forking from a leased worker.
 
-Read the `regenerated outside the write paths` block fork prints: declared outputs a target
-rebuilds from sources the job may edit. Widen the paths to cover the ones the job must
-regenerate itself, or leave them out and regenerate them after integration.
+A fork refuses a job whose sources regenerate an output outside its write paths (MGS3044).
+Add the output to the write paths, or waive it when the root regenerates it after integration.
 
 Render the prompt FROM the row; never type it. `magus describe job <job>` prints the
 job's own criteria, boundary and check, plus what the workspace knows and nobody wrote
@@ -682,9 +683,9 @@ that names one.
 - Inheriting the parent's model ON PURPOSE is fine and often right. A hard review
   under a cheaper coordinator is exactly the case a weaker-only ordering would forbid.
 - Inheriting it BY OMISSION is the failure. A host defaulting to "same as the parent"
-  makes every unnamed spawn the most expensive one, and records no choice. Measured 2026-09-15: nine
-  workers inherited the root's model, five of them on mechanical work a cheaper model
-  does as well.
+  makes every unnamed spawn the most expensive one, and records no choice.
+  Measured 2026-09-15: five of nine workers that inherited the root's model did mechanical
+  work a cheaper model does as well.
 
 When the tier is unclear, start at economy. A job that fails its criteria there is
 re-forked one tier up, not retried at the same one. "Only ever spawn something
@@ -789,9 +790,8 @@ project's magusfile, its `magus.yaml`, or a spell source a magusfile imports.
 
 magus READS those files to load the workspace. A half-saved one stops the workspace
 loading for everybody in that checkout at once. The rest lose `magus run`, `magus ls` and their own tests over an edit they
-cannot see. Measured 2026-09-17: three workers
-shared a checkout, one saved the root magusfile mid-edit, and all three were
-stopped for the duration by a file only one of them had ever opened.
+cannot see. Measured 2026-09-17: one half-saved magusfile stopped three workers
+sharing a checkout.
 When `magus job fork` refuses one, the answer is a separate worktree, not a narrower
 boundary: fork with `--checkout <dir>` outside the workspace, never by hand.
 
@@ -827,6 +827,7 @@ an editor magus cannot attribute.
    Or fork from a record with `magus job fork --stdin`, the form that carries goals;
    [reference.md](reference.md) shows one.
 
+   Before every fork, run `magus job fork --stdin --dry-run`: it lists every problem with its code and fix, and writes nothing.
    `magus job fork --schema` prints every field and the newest `schema_version`.
 3. Spawn the worker with the description `<parent>/<role> <job>`: two words, the
    first a parent id and a role joined by `/`, the second the job id.
@@ -836,14 +837,14 @@ an editor magus cannot attribute.
      else `api-store/migrate`.
    - The role is a word for the work (`feat`, `fix`, `review`). A workspace spawn
      rule may restrict it, and its refusal names the list.
+   - A title naming a row that no fork or apply validated is refused (`spawn-unvalidated`).
 
-Write paths name FILES or file globs, never a directory. The check is `<target>
-<project> [-- args]`, never the gate. [reference.md](reference.md) covers claiming one
-declaration in a shared file and forking from a leased worker.
+Write paths name exact FILES; a glob too broad is refused as MGS3043 unless waived. The
+check is `<target> <project> [-- args]`, never the gate. [reference.md](reference.md)
+covers claiming one declaration in a shared file and forking from a leased worker.
 
-Read the `regenerated outside the write paths` block fork prints: declared outputs a target
-rebuilds from sources the job may edit. Widen the paths to cover the ones the job must
-regenerate itself, or leave them out and regenerate them after integration.
+A fork refuses a job whose sources regenerate an output outside its write paths (MGS3044).
+Add the output to the write paths, or waive it when the root regenerates it after integration.
 
 Render the prompt FROM the row; never type it. `magus describe job <job>` prints the
 job's own criteria, boundary and check, plus what the workspace knows and nobody wrote
