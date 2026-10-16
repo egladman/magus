@@ -148,7 +148,8 @@ func refuseLiveDescendants(ctx context.Context, rows []types.Job, id string, res
 
 // unnamedError refuses ending id, which would end the live rows in descs with it.
 func unnamedError(id string, descs []descendant) error {
-	ids := []string{id}
+	ids := make([]string, 0, 1+len(descs))
+	ids = append(ids, id)
 	for _, d := range descs {
 		ids = append(ids, d.row.ID)
 	}
