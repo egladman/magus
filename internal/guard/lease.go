@@ -23,7 +23,6 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/cmdline"
@@ -171,60 +170,22 @@ func workspaceRunsDir(cacheDir string) string {
 // clock.
 //
 // One log file is one invocation, so there is nothing to cluster and no way to count
-// the same run twice. Candidates are filtered by file modification time before any
-// file is opened, which keeps a directory of thousands cheap.
+// the same run twice.
 func recentGateRuns(runsDir string, now time.Time) (runs int, spent time.Duration) {
-	if runsDir == "" {
-		return 0, 0
-	}
-	entries, err := os.ReadDir(runsDir)
-	if err != nil {
-		return 0, 0
-	}
 	cutoff := now.Add(-gateRepeatWindow)
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		info, ierr := e.Info()
-		if ierr != nil || info.ModTime().Before(cutoff) {
-			continue
-		}
-		started, ok := readGateInvocation(filepath.Join(runsDir, e.Name()))
-		if !ok || started.Before(cutoff) {
-			continue
+	recentRunLogs(runsDir, cutoff, func(started journal.Event, modified time.Time, _ *bufio.Reader) {
+		start := time.UnixMilli(started.Ts)
+		if !isGateCommand(started.Command.Arguments) || start.Before(cutoff) {
+			return
 		}
 		runs++
 		// The log's last write is the run's end; a run still in flight measures as
 		// however far it has got, which is the honest reading of "spent so far".
-		if d := info.ModTime().Sub(started); d > 0 {
+		if d := modified.Sub(start); d > 0 {
 			spent += d
 		}
-	}
+	})
 	return runs, spent
-}
-
-// readGateInvocation reports when an invocation started, and whether it was the CI
-// gate, by reading only its first line: the started event, which carries the argv.
-func readGateInvocation(path string) (time.Time, bool) {
-	f, err := os.Open(path)
-	if err != nil {
-		return time.Time{}, false
-	}
-	defer f.Close()
-
-	sc := bufio.NewScanner(f)
-	if !sc.Scan() {
-		return time.Time{}, false
-	}
-	var ev journal.Event
-	if json.Unmarshal(sc.Bytes(), &ev) != nil || ev.Kind != journal.KindStarted || ev.Command == nil {
-		return time.Time{}, false
-	}
-	if !isGateCommand(ev.Command.Arguments) {
-		return time.Time{}, false
-	}
-	return time.UnixMilli(ev.Ts), true
 }
 
 // commandRunsGate reports whether a shell line would invoke the CI gate.
