@@ -1,6 +1,6 @@
 ### Added
 
-- **`magus job fork --dry-run` validates a job record without forking it.** It prints every problem at once, each as `[MGSxxxx] <field>: <message>` with a `fix:` line, then the record as it would be stored, the problems a waiver accepted and the checks that could not run. It writes nothing and exits 1 while a problem remains. `-o json` emits the same as `types.JobValidation`. A real fork with problems prints the same list, and `job apply` lists every record's problems before it writes any.
+- **`magus job fork --dry-run` validates a job record without forking it.** It prints every problem as `[MGSxxxx] <field>: <message>` with a `fix:` line, then the record as it would be stored, waived problems and checks that could not run. It writes nothing and exits 1 while a problem remains; `-o json` emits `types.JobValidation`.
 
 ### Changed
 
