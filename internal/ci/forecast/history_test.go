@@ -3,6 +3,7 @@ package forecast
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -37,6 +39,14 @@ func TestHistorySchemaLockIsStructural(t *testing.T) {
 			"setup": true, "alpha": true, "workspace_fallback_ms": true, "runs": true,
 			"jobs": true,
 		},
+		// The store's own framing: which entry a line holds, and the key of a
+		// (project, target), the same path and name Projects is keyed by.
+		reflect.TypeOf(historyLine{}): {"workspace": true, "stats": true, "run": true, "job": true, "removed": true},
+		reflect.TypeOf(workspaceEntry{}): {
+			"version": true, "updated_at": true, "constants": true, "setup": true,
+			"alpha": true, "workspace_fallback_ms": true,
+		},
+		reflect.TypeOf(statsEntry{}): {"project": true, "target": true, "Stats": true},
 		reflect.TypeOf(types.JobOutcome{}): {
 			// Ids, enum cases, the sentence that chose a tier and the file:line of the
 			// declaration that chose it: names the workspace declared and numbers about a
@@ -135,33 +145,68 @@ func TestHistorySchemaLock(t *testing.T) {
 		Jobs:                []types.JobOutcome{{Job: "docs", ModelTier: "economy", Kind: types.JobKindCheck, State: types.StatePass, Ended: 1}},
 	}
 
-	b, err := json.Marshal(h)
-	require.NoError(t, err, "marshal History")
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	require.NoError(t, h.Save(t.Context(), path))
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
 
-	var top map[string]json.RawMessage
-	require.NoError(t, json.Unmarshal(b, &top), "unmarshal to map")
-
-	// Approved top-level keys. Extend only with fields that contain
+	// Approved line keys: which entry a line holds, and whether it ends one.
+	allowed := map[string]bool{
+		"workspace": true, // the workspace entry, locked below
+		"stats":     true, // one (project, target)'s Stats, locked below
+		"run":       true, // a Run: commit ids and ref names, the ONE exception; see the cache-safety notice in history.go
+		"job":       true, // a types.JobOutcome: job ids and tier case names the workspace chose, enums and counters; locked field by field above
+		"removed":   true, // bool: the line ends the entry its key names
+	}
+	// Approved workspace keys. Extend only with fields that contain
 	// integer timings, project paths, or subdir tag names — never
 	// source code, content hashes, secrets, author identity, or error messages.
-	allowed := map[string]bool{
+	allowedWorkspace := map[string]bool{
 		"version":               true, // schema version int
 		"updated_at":            true, // ISO timestamp of last ingest
 		"constants":             true, // {setup_p50_ms, alpha_ms} — integer ms
-		"projects":              true, // map[path]map[target]Stats — paths + int timings
 		"setup":                 true, // []int64 of per-shard setup observations
 		"alpha":                 true, // []int64 of fitted α observations
 		"workspace_fallback_ms": true, // int64 workspace-wide p75
-		"runs":                  true, // []Run: commit ids and ref names, the ONE exception; see the cache-safety notice in history.go
-		"jobs":                  true, // []types.JobOutcome: job ids and tier case names the workspace chose, enums and counters; locked field by field above
 	}
-	for k := range top {
-		assert.Truef(t, allowed[k], "unexpected History JSON key %q — add to allowed map with a safety justification, or remove the field", k)
+	type entry = map[string]json.RawMessage
+	var workspaces []entry
+	projects := map[string]map[string]entry{}
+	for line := range strings.Lines(string(raw)) {
+		var top entry
+		require.NoError(t, json.Unmarshal([]byte(line), &top), "unmarshal a line to a map")
+		for k := range top {
+			assert.Truef(t, allowed[k], "unexpected history line key %q — add to allowed map with a safety justification, or remove the field", k)
+		}
+		if w, ok := top["workspace"]; ok {
+			var keys entry
+			require.NoError(t, json.Unmarshal(w, &keys))
+			workspaces = append(workspaces, keys)
+		}
+		if s, ok := top["stats"]; ok {
+			var keys entry
+			require.NoError(t, json.Unmarshal(s, &keys))
+			var at struct {
+				Project string `json:"project"`
+				Target  string `json:"target"`
+			}
+			require.NoError(t, json.Unmarshal(s, &at))
+			delete(keys, "project")
+			delete(keys, "target")
+			if projects[at.Project] == nil {
+				projects[at.Project] = map[string]entry{}
+			}
+			projects[at.Project][at.Target] = keys
+		}
 	}
+	require.Len(t, workspaces, 1)
+	for k := range workspaces[0] {
+		assert.Truef(t, allowedWorkspace[k], "unexpected workspace JSON key %q — add to allowedWorkspace with a safety justification, or remove the field", k)
+	}
+	require.NotEmpty(t, projects, "the fixture's stats reached the file")
 
-	// Also lock the Stats sub-schema.
-	var projects map[string]map[string]map[string]json.RawMessage
-	require.NoError(t, json.Unmarshal(top["projects"], &projects), "unmarshal projects")
+	// Also lock the Stats sub-schema; project and target are the line's key, a
+	// workspace-relative path and a target name.
 	allowedStats := map[string]bool{
 		"p75_ms":          true, // int64 — rolling p75 of recent durations
 		"samples":         true, // int   — total number of ingested miss samples
@@ -848,10 +893,9 @@ func TestLoad_missingFileIsZeroHistory(t *testing.T) {
 	t.Parallel()
 
 	var h History
-	path := filepath.Join(t.TempDir(), "does-not-exist.json")
+	path := filepath.Join(t.TempDir(), "does-not-exist.jsonl")
 	require.NoError(t, h.Load(context.Background(), path))
-	assert.Equal(t, HistoryVersion, h.Version)
-	assert.Nil(t, h.Projects, "missing file yields zero History with nil map")
+	assert.Equal(t, History{Version: HistoryVersion, Projects: map[string]map[string]Stats{}}, h)
 }
 
 // TestSaveThenLoad round-trips a populated history through the atomic writer
@@ -884,7 +928,7 @@ func TestSaveThenLoad(t *testing.T) {
 func TestOutcomeCostRoundTripsAndIsOmittedWhenUnmeasured(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join(t.TempDir(), "history.json")
+	path := filepath.Join(t.TempDir(), "history.jsonl")
 	orig := History{Version: HistoryVersion, Projects: map[string]map[string]Stats{
 		"svc": {"go-test": {RecentOutcomes: []Outcome{
 			{Result: OutcomePass, DurationMs: 1_000, CPUMs: 3_500},
@@ -893,15 +937,15 @@ func TestOutcomeCostRoundTripsAndIsOmittedWhenUnmeasured(t *testing.T) {
 	}}
 	require.NoError(t, orig.Save(context.Background(), path))
 
-	raw, err := os.ReadFile(path)
-	require.NoError(t, err)
+	lines := readLines(t, path)
+	require.Len(t, lines, 2, "the workspace line, then the one (project, target)")
 	var keys struct {
-		Projects map[string]map[string]struct {
+		Stats struct {
 			RecentOutcomes []map[string]json.RawMessage `json:"recent_outcomes"`
-		} `json:"projects"`
+		} `json:"stats"`
 	}
-	require.NoError(t, json.Unmarshal(raw, &keys))
-	written := keys.Projects["svc"]["go-test"].RecentOutcomes
+	require.NoError(t, json.Unmarshal([]byte(lines[1]), &keys))
+	written := keys.Stats.RecentOutcomes
 	require.Len(t, written, 2)
 	assert.Contains(t, written[0], "cpu_ms")
 	assert.NotContains(t, written[1], "cpu_ms", "an unmeasured outcome carries no key")
@@ -920,7 +964,7 @@ func TestOutcomeCostRoundTripsAndIsOmittedWhenUnmeasured(t *testing.T) {
 func TestLoad_versionTooNew(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join(t.TempDir(), "future.json")
+	path := filepath.Join(t.TempDir(), "future.jsonl")
 	// Hand-craft a future-version file via the codec used by Save.
 	future := History{Version: HistoryVersion + 1}
 	require.NoError(t, future.Save(context.Background(), path))
@@ -931,17 +975,178 @@ func TestLoad_versionTooNew(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported history version")
 }
 
-// TestLoad_decodeError surfaces a malformed-file decode failure.
+// TestLoad_decodeError names the file and line of a complete line that does not decode,
+// including one holding two entries, which no magus writes.
 func TestLoad_decodeError(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join(t.TempDir(), "bad.json")
-	require.NoError(t, os.WriteFile(path, []byte("{not valid json"), 0o644))
+	for name, content := range map[string]string{
+		"not json":    `{"workspace":{"version":8}}` + "\n{not valid json\n",
+		"two entries": `{"workspace":{"version":8}}` + "\n" + `{"run":{"commit":"a"},"job":{"job":"j"}}` + "\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "history.jsonl")
+			require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+
+			var h History
+			err := h.Load(context.Background(), path)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), path+":2:")
+		})
+	}
+}
+
+// readLines is the store's lines, newline-terminated each.
+func readLines(t *testing.T, path string) []string {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.True(t, strings.HasSuffix(string(raw), "\n"), "every line ends in a newline")
+	return strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n")
+}
+
+func recordDuration(project, target string, ms int64) func(*History) error {
+	return func(h *History) error {
+		h.Update(fixedNow, []Sample{{Project: project, Target: target, DurationMs: ms}}, nil)
+		return nil
+	}
+}
+
+// TestUpdateHistoryAppendsWhatChangedThenReloads pins the store as a log: an update
+// appends a line for each entry it changed and leaves every other line alone, and a
+// reload folds the lines back into the History that was written.
+func TestUpdateHistoryAppendsWhatChangedThenReloads(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	require.NoError(t, UpdateHistory(t.Context(), path, recordDuration("svc", "go/test", 1_000)))
+	first := readLines(t, path)
+	require.Len(t, first, 2, "the workspace line and the one (project, target)")
+
+	require.NoError(t, UpdateHistory(t.Context(), path, recordDuration("web", "go/test", 2_000)))
+	second := readLines(t, path)
+	require.Len(t, second, 4, "the workspace fallback moved, and web is new; svc is unchanged")
+	assert.Equal(t, first, second[:2], "nothing written is rewritten")
+	assert.Contains(t, second[3], `"project":"web"`)
+
+	require.NoError(t, UpdateHistory(t.Context(), path, func(h *History) error {
+		h.RecordRun(Run{Commit: "aaa", Ref: "main", Target: "ci", Status: RunPassed}, fixedNow)
+		return nil
+	}))
+	assert.Len(t, readLines(t, path), 5, "a run touches only its own line")
+
+	var got History
+	require.NoError(t, got.Load(t.Context(), path))
+	assert.Equal(t, []int64{1_000}, got.Projects["svc"]["go/test"].Recent)
+	assert.Equal(t, []int64{2_000}, got.Projects["web"]["go/test"].Recent)
+	commit, ok := got.PassedCommit("main", "ci")
+	assert.True(t, ok)
+	assert.Equal(t, "aaa", commit)
+}
+
+// TestHistoryLastLinePerKeyWins pins the fold: a (project, target) written twice reads as
+// its later line, and a removal ends the entry its key names.
+func TestHistoryLastLinePerKeyWins(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	lines := strings.Join([]string{
+		`{"workspace":{"version":8,"workspace_fallback_ms":1}}`,
+		`{"stats":{"project":"svc","target":"ci","p75_ms":100}}`,
+		`{"run":{"commit":"aaa","ref":"main","target":"ci","status":"passed","at":"2026-01-02T03:04:05Z"}}`,
+		`{"stats":{"project":"svc","target":"ci","p75_ms":200}}`,
+		`{"workspace":{"version":8,"workspace_fallback_ms":2}}`,
+		`{"removed":true,"run":{"commit":"aaa","ref":"main","target":"ci","status":"passed","at":"2026-01-02T03:04:05Z"}}`,
+	}, "\n") + "\n"
+	require.NoError(t, os.WriteFile(path, []byte(lines), 0o644))
+
+	var got History
+	require.NoError(t, got.Load(t.Context(), path))
+	assert.Equal(t, int64(200), got.Projects["svc"]["ci"].P75Ms)
+	assert.Equal(t, int64(2), got.WorkspaceFallbackMs)
+	assert.Empty(t, got.Runs, "the removal ended the run")
+}
+
+// TestUpdateHistoryCompactsToTheLiveEntries pins the window and the compaction together:
+// a run past RunWindow is ended by a removal line, and once the lines outgrow the entries
+// the file is rewritten to the live ones alone.
+func TestUpdateHistoryCompactsToTheLiveEntries(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	t0 := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	const runs = 3 * RunWindow
+	for i := range runs {
+		require.NoError(t, UpdateHistory(t.Context(), path, func(h *History) error {
+			h.RecordRun(Run{Commit: fmt.Sprint(i), Ref: "main", Target: "ci", Status: RunPassed}, t0.Add(time.Duration(i)*time.Minute))
+			return nil
+		}))
+	}
+
+	entries := RunWindow + 1 // the runs in the window and the workspace
+	lines := readLines(t, path)
+	assert.LessOrEqual(t, len(lines), 2*entries+file.CompactSlack, "compaction bounds the lines")
+
+	var got History
+	require.NoError(t, got.Load(t.Context(), path))
+	require.Len(t, got.Runs, RunWindow)
+	assert.Equal(t, fmt.Sprint(runs-RunWindow), got.Runs[0].Commit, "the oldest are the ones dropped")
+	commit, _ := got.PassedCommit("main", "ci")
+	assert.Equal(t, fmt.Sprint(runs-1), commit)
+}
+
+// TestHistoryTornLastLine pins what a line no writer finished costs: a read leaves it
+// unread, since it may be an append in flight, and the next update rewrites the file
+// without it and says so, rather than gluing its own line onto the fragment.
+func TestHistoryTornLastLine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	require.NoError(t, UpdateHistory(t.Context(), path, recordDuration("svc", "go/test", 1_000)))
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0)
+	require.NoError(t, err)
+	_, err = f.WriteString(`{"run":{"commit":"to`)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	var read History
+	require.NoError(t, read.Load(t.Context(), path))
+	assert.Contains(t, read.Projects, "svc")
+	assert.Empty(t, read.Runs)
+
+	var logged strings.Builder
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	require.NoError(t, UpdateHistory(t.Context(), path, func(h *History) error {
+		h.RecordRun(Run{Commit: "aaa", Ref: "main", Target: "ci", Status: RunPassed}, fixedNow)
+		return nil
+	}))
+	assert.Contains(t, logged.String(), path+" ended in a line no writer finished")
+	assert.Len(t, readLines(t, path), 3, "the workspace, svc and the run; the fragment is gone")
+
+	var got History
+	require.NoError(t, got.Load(t.Context(), path))
+	assert.Contains(t, got.Projects, "svc")
+	require.Len(t, got.Runs, 1)
+	assert.Equal(t, "aaa", got.Runs[0].Commit)
+}
+
+// TestHistoryRefusesTheOldDocument pins that the JSON document an older magus kept beside
+// the store is named and never read.
+func TestHistoryRefusesTheOldDocument(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "v1.json"), []byte(`{"version":8}`), 0o644))
+	path := filepath.Join(dir, "history.jsonl")
 
 	var h History
-	err := h.Load(context.Background(), path)
+	err := h.Load(t.Context(), path)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "decode history")
+	assert.Contains(t, err.Error(), "mv "+filepath.Join(dir, "v1.json"))
+	require.Error(t, UpdateHistory(t.Context(), path, recordDuration("svc", "go/test", 1)))
+	assert.NoFileExists(t, path, "nothing is written while the old document stands")
 }
 
 // TestLoad_contextCancelled asserts the pre-read ctx guard returns the ctx
@@ -1231,11 +1436,11 @@ func syntheticStats(seed int, _ string) Stats {
 	}
 }
 
-// BenchmarkHistoryLoad measures the full Load path: os.ReadFile +
-// json.Unmarshal for a 100-project history file.
+// BenchmarkHistoryLoad measures the full Load path: reading, decoding and folding the
+// lines of a 100-project history file.
 func BenchmarkHistoryLoad(b *testing.B) {
 	dir := b.TempDir()
-	path := filepath.Join(dir, "history.json")
+	path := filepath.Join(dir, "history.jsonl")
 	h := syntheticHistory(100)
 	if err := h.Save(context.Background(), path); err != nil {
 		b.Fatal(err)
@@ -1249,10 +1454,10 @@ func BenchmarkHistoryLoad(b *testing.B) {
 	}
 }
 
-// BenchmarkHistorySave measures the full Save path: json.MarshalIndent +
-// atomic write for a 100-project history file.
+// BenchmarkHistorySave measures the full Save path: encoding one line per entry and the
+// atomic rewrite for a 100-project history file.
 func BenchmarkHistorySave(b *testing.B) {
-	path := filepath.Join(b.TempDir(), "history.json")
+	path := filepath.Join(b.TempDir(), "history.jsonl")
 	h := syntheticHistory(100)
 	b.ResetTimer()
 	for range b.N {

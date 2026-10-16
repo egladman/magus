@@ -1,14 +1,15 @@
 // CACHE-SAFETY NOTICE
 //
-// History is serialized to JSON and cached in GitHub Actions (or any other CI
+// History is stored as JSON Lines and cached in GitHub Actions (or any other CI
 // cache backend). The schema is intentionally locked to integer timing data and
 // workspace-relative project paths. The following fields and their types are the
 // COMPLETE allowed set:
 //
-//	History:      version(int), updated_at(time), constants(Constants),
-//	              projects(map[string]map[string]Stats), setup([]int64),
-//	              alpha([]int64), workspace_fallback_ms(int64),
-//	              runs([]Run), jobs([]types.JobOutcome)
+//	line:         one of workspace(workspace), stats(stats), run(Run), job(JobOutcome),
+//	              and removed(bool)
+//	workspace:    version(int), updated_at(time), constants(Constants), setup([]int64),
+//	              alpha([]int64), workspace_fallback_ms(int64)
+//	stats:        project(string: a workspace-relative path), target(string), and Stats
 //	Constants:    setup_p50_ms(int64), alpha_ms(int64)
 //	Stats:        p75_ms(int64), samples(int), last_updated(time), recent([]int64),
 //	              buckets(map[string]BucketStats), hit_count(int), miss_count(int),
@@ -57,15 +58,15 @@
 package forecast
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
-	"io/fs"
+	"maps"
 	"math"
-	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -812,80 +813,236 @@ func (r Run) matches(ref, target string) bool {
 	return target == "" || r.Target == "" || r.Target == target
 }
 
-// Load reads the history file at path; a missing file is not an error (returns a zero History).
+// oldHistoryFile is the JSON document an older magus kept the history in, beside the
+// store. It is named when found, never read; see [file.RefuseOld].
+const oldHistoryFile = "v1.json"
+
+// historyLine is one line of the history store: one entry, or, with Removed set, the
+// end of the entry its key names. Exactly one of the entry fields is set.
+type historyLine struct {
+	Workspace *workspaceEntry   `json:"workspace,omitempty"`
+	Stats     *statsEntry       `json:"stats,omitempty"`
+	Run       *Run              `json:"run,omitempty"`
+	Job       *types.JobOutcome `json:"job,omitempty"`
+	Removed   bool              `json:"removed,omitempty"`
+}
+
+// workspaceEntry is the History fields that are not per project, run or job.
+type workspaceEntry struct {
+	Version             int       `json:"version"`
+	UpdatedAt           time.Time `json:"updated_at"`
+	Constants           Constants `json:"constants"`
+	Setup               []int64   `json:"setup"`
+	Alpha               []int64   `json:"alpha"`
+	WorkspaceFallbackMs int64     `json:"workspace_fallback_ms"`
+}
+
+// statsEntry is the Stats of one (project, target).
+type statsEntry struct {
+	Project string `json:"project"`
+	Target  string `json:"target"`
+	Stats   `json:",inline"`
+}
+
+// UnmarshalJSON refuses a line that holds no entry or more than one, which no magus
+// writes.
+func (l *historyLine) UnmarshalJSON(b []byte) error {
+	type plain historyLine
+	var p plain
+	if err := json.Unmarshal(b, &p); err != nil {
+		return err
+	}
+	set := 0
+	for _, ok := range []bool{p.Workspace != nil, p.Stats != nil, p.Run != nil, p.Job != nil} {
+		if ok {
+			set++
+		}
+	}
+	if set != 1 {
+		return fmt.Errorf("a history line holds one of workspace, stats, run or job, and this one holds %d", set)
+	}
+	*l = historyLine(p)
+	return nil
+}
+
+// key names the entry: the workspace, a (project, target), a run, or one attempt of a job.
+func (l historyLine) key() string {
+	switch {
+	case l.Workspace != nil:
+		return "workspace"
+	case l.Stats != nil:
+		return "stats\x00" + l.Stats.Project + "\x00" + l.Stats.Target
+	case l.Run != nil:
+		r := l.Run
+		return strings.Join([]string{"run", r.Commit, r.Ref, r.Target, string(r.Status), r.At.UTC().Format(time.RFC3339Nano)}, "\x00")
+	case l.Job != nil:
+		return fmt.Sprintf("job\x00%s\x00%d\x00%d", l.Job.Job, l.Job.Ended, l.Job.Attempt)
+	}
+	return ""
+}
+
+func historyLog(path string) file.JSONL[historyLine] {
+	old := filepath.Join(filepath.Dir(path), oldHistoryFile)
+	if old == filepath.Clean(path) {
+		old = ""
+	}
+	return file.JSONL[historyLine]{
+		Path: path,
+		Key:  historyLine.key,
+		Live: func(l historyLine) bool { return !l.Removed },
+		Old:  old,
+	}
+}
+
+// Load reads the history store at path; a missing file is not an error (returns a zero
+// History). A last line no writer finished is an append in flight and is left unread.
 func (h *History) Load(ctx context.Context, path string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	b, err := os.ReadFile(path)
+	lines, err := historyLog(path).Load()
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			*h = History{Version: HistoryVersion}
-			return nil
-		}
-		return fmt.Errorf("forecast: read history %q: %w", path, err)
+		return fmt.Errorf("forecast: read history: %w", err)
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return h.decode(path, b)
+	return h.fold(path, lines)
 }
 
-func (h *History) decode(path string, b []byte) error {
-	if err := json.Unmarshal(b, h); err != nil {
-		return fmt.Errorf("forecast: decode history %q: %w", path, err)
+// fold replaces h with the entries lines hold. Runs and jobs come back oldest first,
+// whatever order their lines were last written in.
+func (h *History) fold(path string, lines []historyLine) error {
+	*h = History{Version: HistoryVersion, Projects: make(map[string]map[string]Stats)}
+	for _, l := range lines {
+		switch {
+		case l.Workspace != nil:
+			w := l.Workspace
+			h.Version, h.UpdatedAt, h.Constants = w.Version, w.UpdatedAt, w.Constants
+			h.Setup, h.Alpha, h.WorkspaceFallbackMs = w.Setup, w.Alpha, w.WorkspaceFallbackMs
+		case l.Stats != nil:
+			targets, ok := h.Projects[l.Stats.Project]
+			if !ok {
+				targets = make(map[string]Stats)
+				h.Projects[l.Stats.Project] = targets
+			}
+			targets[l.Stats.Target] = l.Stats.Stats
+		case l.Run != nil:
+			h.Runs = append(h.Runs, *l.Run)
+		case l.Job != nil:
+			h.Jobs = append(h.Jobs, *l.Job)
+		}
 	}
 	if h.Version > HistoryVersion {
 		return fmt.Errorf("forecast: unsupported history version %d in %q (max %d)",
 			h.Version, path, HistoryVersion)
 	}
-	if h.Projects == nil {
-		h.Projects = make(map[string]map[string]Stats)
-	}
+	slices.SortStableFunc(h.Runs, func(a, b Run) int { return a.At.Compare(b.At) })
+	slices.SortStableFunc(h.Jobs, func(a, b types.JobOutcome) int { return cmp.Compare(a.Ended, b.Ended) })
 	return nil
 }
 
+// lines is h as store lines: the workspace entry, each (project, target) in sorted
+// order, then the runs and jobs oldest first.
+func (h *History) lines() []historyLine {
+	out := []historyLine{{Workspace: &workspaceEntry{
+		Version: h.Version, UpdatedAt: h.UpdatedAt, Constants: h.Constants,
+		Setup: h.Setup, Alpha: h.Alpha, WorkspaceFallbackMs: h.WorkspaceFallbackMs,
+	}}}
+	for _, project := range slices.Sorted(maps.Keys(h.Projects)) {
+		targets := h.Projects[project]
+		for _, target := range slices.Sorted(maps.Keys(targets)) {
+			out = append(out, historyLine{Stats: &statsEntry{Project: project, Target: target, Stats: targets[target]}})
+		}
+	}
+	for i := range h.Runs {
+		out = append(out, historyLine{Run: &h.Runs[i]})
+	}
+	for i := range h.Jobs {
+		out = append(out, historyLine{Job: &h.Jobs[i]})
+	}
+	return out
+}
+
 // UpdateHistory applies fn to the history at path as it stands on disk, under a
-// cross-process lock, and writes the result atomically; fn failing writes nothing.
+// cross-process lock, and appends a line for each entry fn changed and a removal for
+// each it dropped; fn failing writes nothing.
 //
 // The file is shared by every workspace on the host, so a writer that loaded it before
 // a run and saves it after would erase every outcome another run recorded meanwhile.
 // Such a writer keeps what IT learned and replays that here instead. ctx bounds only
 // the wait for the lock.
 func UpdateHistory(ctx context.Context, path string, fn func(*History) error) error {
-	d := file.Doc[History]{Path: path, Decode: func(b []byte, h *History) error { return h.decode(path, b) }}
-	err := d.Update(ctx, func(h *History) error {
-		if h.Projects == nil {
-			h.Projects = make(map[string]map[string]Stats)
-		}
-		if err := fn(h); err != nil {
-			return err
-		}
-		h.Version = HistoryVersion
-		return nil
+	var failed error
+	err := historyLog(path).Update(ctx, func(entries []historyLine) []historyLine {
+		var add []historyLine
+		add, failed = changedLines(path, entries, fn)
+		return add
 	})
-	if err != nil {
+	if err = cmp.Or(failed, err); err != nil {
 		return fmt.Errorf("forecast: update history: %w", err)
 	}
 	return nil
 }
 
-// Save writes h to path atomically, replacing whatever is there. A writer sharing the
-// file with other processes uses [UpdateHistory] instead.
+// changedLines folds entries into a History, applies fn, and returns the lines that
+// differ from entries: a changed or new entry, and a removal for each entry fn dropped.
+// The entries are encoded before fn runs, since fn may write through slices they share.
+func changedLines(path string, entries []historyLine, fn func(*History) error) ([]historyLine, error) {
+	before := make(map[string][]byte, len(entries))
+	for _, e := range entries {
+		b, err := json.Marshal(e)
+		if err != nil {
+			return nil, err
+		}
+		before[e.key()] = b
+	}
+	var h History
+	if err := h.fold(path, entries); err != nil {
+		return nil, err
+	}
+	if err := fn(&h); err != nil {
+		return nil, err
+	}
+	h.Version = HistoryVersion
+	var add []historyLine
+	kept := make(map[string]bool, len(entries))
+	for _, l := range h.lines() {
+		k := l.key()
+		kept[k] = true
+		b, err := json.Marshal(l)
+		if err != nil {
+			return nil, err
+		}
+		if !bytes.Equal(b, before[k]) {
+			add = append(add, l)
+		}
+	}
+	for _, e := range entries {
+		if !kept[e.key()] {
+			e.Removed = true
+			add = append(add, e)
+		}
+	}
+	return add, nil
+}
+
+// Save replaces the store at path with h, one line per entry, through a rename. A writer
+// sharing the file with other processes uses [UpdateHistory] instead.
 func (h *History) Save(ctx context.Context, path string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	// Compact, not indented: every run rewrites the whole file, which is shared by every
-	// workspace on the host and runs to megabytes; indenting 6.6MB took 15ms against 6ms.
-	b, err := json.Marshal(h)
-	if err != nil {
-		return fmt.Errorf("forecast: encode history: %w", err)
+	lines := h.lines()
+	encoded := make([][]byte, len(lines))
+	for i, l := range lines {
+		b, err := json.Marshal(l)
+		if err != nil {
+			return fmt.Errorf("forecast: encode history: %w", err)
+		}
+		encoded[i] = b
 	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if err := file.WriteFileAtomic(path, b, 0o644); err != nil {
+	if err := file.RewriteLines(path, encoded, 0o644); err != nil {
 		return fmt.Errorf("forecast: write history: %w", err)
 	}
 	return nil
