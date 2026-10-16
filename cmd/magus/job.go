@@ -1242,7 +1242,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			return forkDryRun(opts, validation)
 		}
 		if len(validation.Problems) > 0 {
-			return refuseFork(ctx, validation)
+			return refuseFork(validation)
 		}
 	}
 	var worktree types.JobWorktree
@@ -1278,7 +1278,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	case err != nil:
 		// The fork stored nothing, so the validation is read again for the list it joined.
 		if v, verr := job.ValidateFork(ctx, store, row.ID, merge, globalCfg.Jobs, reader); verr == nil && len(v.Problems) > 0 {
-			return refuseFork(ctx, v)
+			return refuseFork(v)
 		}
 		return exit.Usagef("magus job fork: %s", err)
 	}
@@ -2391,7 +2391,8 @@ func jobApply(ctx context.Context, root string, args []string) error {
 			return exit.Usagef("magus job apply: %s", err)
 		}
 		for _, v := range validations {
-			logValidation(ctx, v.Job.ID+":\n", v)
+			fmt.Fprintf(os.Stderr, "%s:\n", v.Job.ID)
+			job.RenderValidation(os.Stderr, v, false)
 		}
 		return listedProblems{err}
 	}

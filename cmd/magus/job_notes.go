@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -28,19 +27,10 @@ type rowNotes struct {
 	ForegroundOverrun  *job.ForegroundOverrun
 }
 
-// refuseFork logs every problem of v and refuses the fork with them.
-func refuseFork(ctx context.Context, v types.JobValidation) error {
-	logValidation(ctx, "", v)
+// refuseFork prints every problem of v and refuses the fork with them.
+func refuseFork(v types.JobValidation) error {
+	job.RenderValidation(os.Stderr, v, false)
 	return listedProblems{v.Err()}
-}
-
-// logValidation logs v's problems under heading as one error record, which the display
-// prints and -q, -s, redaction and -o jsonl reach.
-func logValidation(ctx context.Context, heading string, v types.JobValidation) {
-	var b strings.Builder
-	b.WriteString(heading)
-	job.RenderValidation(&b, v, false)
-	slog.ErrorContext(ctx, strings.TrimSuffix(b.String(), "\n"))
 }
 
 // listedProblems is a refusal whose problems were already printed in full, so it exits
