@@ -9,12 +9,11 @@ import (
 // mmapFloor is the size below which a copying read beats a mapping.
 //
 // A mapping costs a syscall plus a page fault per page touched; a small file is one
-// read() into an already-warm buffer. The floor is a guess until BenchmarkTextIndexBuildFromDisk
+// read() into an already-warm buffer. The floor is a guess until BenchmarkTextIndexScanFromDisk
 // says otherwise, which is why it is one named constant rather than a condition inline.
 const mmapFloor = 16 << 10
 
-// Reader serves file bytes to Build and Scan, mapping rather than copying where that is
-// cheaper.
+// Reader serves file bytes to Scan, mapping rather than copying where that is cheaper.
 //
 // A scan reads every searched file once and keeps none of them, which is the shape
 // mmap exists for: the kernel already holds these pages in its page cache, and a copying
@@ -22,13 +21,12 @@ const mmapFloor = 16 << 10
 //
 // optimization: map the file instead of copying it into the heap.
 //
-//	measured: BenchmarkTextIndexBuildFromDisk{Mapped,Copied} at 200x64KB: B/op 129.3MB ->
-//	          114.6MB (-11%, exactly the bytes read), ns/op unchanged within noise (n=20).
+//	measured: reading 200x64KB through the trigram index build: B/op 129.3MB -> 114.6MB
+//	          (-11%, exactly the bytes read), ns/op unchanged within noise (n=20). Re-measure
+//	          on BenchmarkTextIndexScanFromDisk{Mapped,Copied}.
 //	trade-off: the returned bytes are the mapping and die at Close, so no consumer may
-//	          retain them; and the win is memory only. Build is dominated by the trigram
-//	          loop, not the read, so do not expect time back here. The scan path, which
-//	          is read-and-match with no index, is where the time case still has to be
-//	          made separately.
+//	          retain them; and the measured win is memory only. Whether a scan gets time
+//	          back is unmeasured.
 //	assumes:  unix for the mapping; every other platform falls back to a copying read.
 //
 // Mappings stay live until Close, because the bytes handed out ARE the mapping. Callers

@@ -430,9 +430,9 @@ func (l Lens) describe() string {
 	return strings.Join(parts, "; ")
 }
 
-// render lays g out with magus/figure. The authored budgets always apply: an oversized
-// figure is a FindingsError telling the reader to narrow the lens, never a generated()
-// escape. Every call compiles figure anew; the server reaches it through renderCache.
+// render lays g out with magus/figure. The figure budgets always apply: an oversized
+// figure is a FindingsError telling the reader to narrow the lens. Every call compiles
+// figure anew; the server reaches it through renderCache.
 func render(ctx context.Context, g graph, desc, anchorHref string) (Figure, error) {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
