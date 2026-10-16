@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
@@ -1103,11 +1104,15 @@ func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, 
 	if err != nil {
 		return denial{}
 	}
+	// The magus the line runs resolves its store's actor as job.RunLease does: the
+	// checkout's record, else the BAGGAGE it starts with, which is the line's own when it
+	// sets one and the session's otherwise, the environment this hook shares.
+	claim := cmp.Or(lineBaggageLease(f), trail.LeaseFromEnv())
 	h := holder{
 		id:       actingLease,
 		standing: sync.OnceValue(func() leaseStanding { return actingLeaseStanding(ctx, deps, actingLease) }),
 		storeLease: func() string {
-			lease, _ := job.ActingLease(hookLocation(ctx, deps).jobs(), "")
+			lease, _ := job.ActingLease(hookLocation(ctx, deps).jobs(), claim)
 			return lease
 		},
 	}
@@ -1139,6 +1144,36 @@ func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, 
 		why += "\n" + leaseActorWhy
 	}
 	return denial{Say: "magus workspace: `" + elideCommand(command) + "` " + what.problem + "; " + fix, Why: why}
+}
+
+// lineBaggageLease is the lease the last BAGGAGE assignment in f names, exported,
+// assigned or prefixed to a command, "" when f sets none. A prefix counts for the whole
+// line, not only the command it precedes: it can only make the line's store write as a
+// lease, which the store then grades.
+func lineBaggageLease(f *syntax.File) string {
+	lease := ""
+	take := func(a *syntax.Assign) {
+		if a == nil || a.Name == nil || a.Name.Value != trail.EnvBaggage || a.Value == nil {
+			return
+		}
+		if l := trail.LeaseFromBaggage(literalWord(a.Value.Parts)); l != "" {
+			lease = l
+		}
+	}
+	syntax.Walk(f, func(n syntax.Node) bool {
+		switch x := n.(type) {
+		case *syntax.DeclClause:
+			for _, a := range x.Args {
+				take(a)
+			}
+		case *syntax.CallExpr:
+			for _, a := range x.Assigns {
+				take(a)
+			}
+		}
+		return true
+	})
+	return lease
 }
 
 // rebind is what the rebind rule refuses a bound caller's command, worded as the verdict

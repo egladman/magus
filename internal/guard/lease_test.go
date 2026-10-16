@@ -1819,6 +1819,28 @@ func TestDenyLeaseScopedRebindGradesTheChildWhereTheStoreCannot(t *testing.T) {
 	}
 }
 
+// A line that runs magus under the worker's own BAGGAGE writes the store as that lease,
+// which grades the child against the worker's row, so its writing child is the store's to
+// judge. Another lease's BAGGAGE grades nothing against this one.
+func TestDenyLeaseScopedRebindLetsTheStoreGradeALineCarryingTheLease(t *testing.T) {
+	me := narrowLease()
+	ctx, _ := fleetFixture(t, me)
+	t.Setenv(trail.EnvBaggage, "")
+	fork := "magus job fork " + me.ID + "/impl --parent " + me.ID + " --write-paths " + me.WritePaths[0] + " --check 'test .'"
+
+	for _, line := range []string{
+		"export BAGGAGE=" + trail.BaggageLease + "=" + me.ID + "; " + fork,
+		"BAGGAGE=" + trail.BaggageLease + "=" + me.ID + " " + fork,
+	} {
+		assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, line), "%q", line)
+	}
+	other := "export BAGGAGE=" + trail.BaggageLease + "=elsewhere; " + fork
+	assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, other).Say, "nothing would grade")
+
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+me.ID)
+	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, fork), "the session's own BAGGAGE is what the line starts with")
+}
+
 // TestActingLeaseStandingSeparatesTheThreeAnswers is what the undeclared and terminal
 // rules are built on: "not declared" and "could not be read" are different facts, and only
 // the first is the caller's mistake.
