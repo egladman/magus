@@ -108,6 +108,8 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocMonitorPile},
 	{doc: ruleDocSpawnWaiter},
 	{doc: ruleDocSpawnDuplicate},
+	{doc: ruleDocSpawnUnvalidated},
+	{doc: ruleDocReleaseRequested, advisory: true, enrolled: true},
 	{doc: ruleDocCaptureFilter, advisory: true, enrolled: true},
 	{doc: ruleDocCheckpointState, advisory: true},
 	{doc: ruleDocCheckTimeout, advisory: true, enrolled: true},

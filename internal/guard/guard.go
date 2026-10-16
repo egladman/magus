@@ -1303,10 +1303,16 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	// magus cannot parse both leave every lease-scoped rule inert while the verdicts look
 	// identical to a session nobody leased. Once per session each, and never on a deny,
 	// which explains itself and was reached by a rule that did not need the row. Graded
-	// before the gate, so one the workspace raised refuses every call.
+	// before the gate, so one the workspace raised refuses every call. A release request
+	// for the lease is the third: it reads the attention queue, so only until it has fired.
+	var release advice
+	if !req.Observe && verdict.Decision != decisionDeny && verdict.Decision != decisionAsk && !markers.AlreadyFired(advisoryReleaseRequested) {
+		release = adviseReleaseRequested(location, actingLease)
+	}
 	for kind, notice := range map[hint.MarkerKind]advice{
-		advisoryLeaseTerminal: adviseTerminalLease(standing, actingLease),
-		advisoryLeaseInvalid:  adviseInvalidLease(actingLease),
+		advisoryLeaseTerminal:    adviseTerminalLease(standing, actingLease),
+		advisoryLeaseInvalid:     adviseInvalidLease(actingLease),
+		advisoryReleaseRequested: release,
 	} {
 		if notice.Say == "" || req.Observe || verdict.Decision == decisionDeny || verdict.Decision == decisionAsk {
 			continue

@@ -223,6 +223,9 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 	if row, ok := spawnDuplicate(ctx, at, facts, env.Spawn.Description); ok {
 		return refused(denyRuleSpawnDuplicate, denySpawnDuplicate(row)), ""
 	}
+	if row, ok := spawnTitleJob(ctx, at, env.Spawn.Description); ok && row.Validated == 0 {
+		return refused(denyRuleSpawnUnvalidated, denySpawnUnvalidated(row)), ""
+	}
 	if spawnWaitsFires(env.Spawn.Description, env.Value) {
 		return refused(denyRuleSpawnWaiter, denySpawnWaiter()), ""
 	}

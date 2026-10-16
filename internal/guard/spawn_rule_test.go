@@ -511,7 +511,7 @@ func TestSpawnRuleSeesTheHostsSubagentID(t *testing.T) {
 // A spawn titled for a live row carries the model tier the row was forked at; a title that
 // names no row carries none.
 func TestSpawnRuleSeesTheRowsModelTier(t *testing.T) {
-	ctx := tierFixture(t, testModelTiers(t, "claude-code"), types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+	ctx := tierFixture(t, testModelTiers(t, "claude-code"), types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared, Validated: 1})
 	probe := &spawnRuleProbe{}
 	deps := Dependencies{SpawnRule: probe.rule()}
 
@@ -526,8 +526,8 @@ func TestSpawnRuleSeesTheRowsModelTier(t *testing.T) {
 // A row that owns a checkout runs its worker there, so the spawn needs no host isolation.
 func TestSpawnRuleCountsARowsOwnCheckoutAsIsolation(t *testing.T) {
 	ctx := tierFixture(t, testModelTiers(t, "claude-code"),
-		types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared},
-		types.Job{ID: "other", ReadOnly: true, State: types.StateDeclared})
+		types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared, Validated: 1},
+		types.Job{ID: "other", ReadOnly: true, State: types.StateDeclared, Validated: 1})
 	at, _ := ctx.Value(locationKey{}).(location)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace})
 	_, err := store.RecordWorktree(ctx, "scout", types.JobWorktree{Root: t.TempDir(), Source: at.workspace})
@@ -951,7 +951,7 @@ func TestAWorkerInItsOwnWorktreeIsGradedUnderItsJob(t *testing.T) {
 // sweep later stats: a registration in the spawner's checkout would outlive the worker's
 // worktree and keep the job live forever.
 func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
-	row := types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
+	row := types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, Validated: 1}
 	_, spawnerRoot := fleetFixture(t, row)
 	head := commitCheckout(t, spawnerRoot)
 	workerRoot := linkedWorktree(t, spawnerRoot)
@@ -982,6 +982,7 @@ func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
 		CheckoutRoot: abs,
 		Generation:   1,
 		Attempts:     1,
+		Validated:    row.Validated,
 		Created:      got.Created,
 		Updated:      got.Updated,
 	}, got)
