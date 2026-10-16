@@ -38,11 +38,12 @@ const (
 	// once, through the holdout ledger, for a frozen candidate. It is disjoint from
 	// judged-dev as above, and from definition-lookup by query text.
 	SetJudgedHoldout EvalSet = "judged-holdout"
-	// SetDefinitionLookup asks for harvested identifiers through query, with gold the
-	// one file the symbol index says defines each. It is the identifier guard. It
+	// SetDefinitionLookup asks for harvested identifiers through query under
+	// kind=symbol, since a bare identifier never reaches the symbol layer, with gold
+	// the one file the symbol index says defines each. It is the identifier guard. It
 	// drops every identifier queries.jsonl asks, so it is disjoint from judged-dev and
-	// judged-holdout by query text. It shares query text with agent-agreement by
-	// construction: its identifiers are harvested there, but its gold is not.
+	// judged-holdout by query text. It shares its identifiers with agent-agreement by
+	// construction: they are harvested there, but its gold is not.
 	SetDefinitionLookup EvalSet = "definition-lookup"
 	// SetDocmaskGo asks for a documented Go declaration by its doc's first sentence,
 	// with the doc blanked in both indexes. It draws from the provenance-group holdout,
@@ -178,7 +179,6 @@ func (j Judgment) validate() error {
 // rather than under the decoder's "cannot unmarshal" wrapping.
 type invalid struct{ error }
 
-// readLines decodes JSON Lines into T, whose UnmarshalJSON carries the encoding,
 // decodeStrict is the UnmarshalJSON of every row type T: it decodes b strictly into
 // P, T without its methods so the decode does not recurse, and sets *into only when
 // validate accepts the row. An unknown or repeated field is an error.
@@ -195,6 +195,7 @@ func decodeStrict[P any, T interface{ validate() error }](b []byte, into *T, row
 	return nil
 }
 
+// readLines decodes JSON Lines into T, whose UnmarshalJSON carries the encoding,
 // skipping blank lines and naming the line and file of the first error.
 func readLines[T any](r io.Reader, file string) ([]T, error) {
 	sc := bufio.NewScanner(r)

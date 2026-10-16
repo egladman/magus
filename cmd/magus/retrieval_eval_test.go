@@ -182,9 +182,9 @@ func readHoldout(t *testing.T, ledger string, queries []rankeval.Query, candidat
 
 // definitionLookup builds the definition-lookup set: each distinct identifier an
 // agent-agreement row asked, unless queries.jsonl asks it too, with gold the one file
-// the symbol index says defines it, asked through query. skipped counts what it left
-// out and why. A dotted identifier names its symbol by the last part; every earlier
-// part must appear in the symbol's id.
+// the symbol index says defines it, asked through query as definitionQuery words it.
+// skipped counts what it left out and why. A dotted identifier names its symbol by the
+// last part; every earlier part must appear in the symbol's id.
 func definitionLookup(agreement []rankeval.Judgment, judged []rankeval.Query, symbols *knowledge.Graph, known map[string]string) (out []rankeval.Judgment, skipped string) {
 	asked := map[string]bool{}
 	for _, q := range judged {
@@ -228,11 +228,50 @@ func definitionLookup(agreement []rankeval.Judgment, judged []rankeval.Query, sy
 			continue
 		}
 		out = append(out, rankeval.Judgment{
-			ID: "definition-lookup/" + ident, Query: ident, Verb: readQuery, Date: first[ident].Date, Source: "symbol-index",
+			ID: "definition-lookup/" + ident, Query: definitionQuery(ident), Verb: readQuery, Date: first[ident].Date, Source: "symbol-index",
 			Set: rankeval.SetDefinitionLookup, Shape: rankeval.ShapeIdentifier, Gold: map[string]int{slices.Collect(maps.Keys(files))[0]: 2},
 		})
 	}
 	return out, fmt.Sprintf("%d with no defining file in the symbol index, %d defined in more than one file", unresolved, ambiguous)
+}
+
+// TestDefinitionLookupSeedsTheSymbolLayer pins why definition-lookup once scored
+// unknown on every query: asked bare, an identifier is replayed against the domain
+// graph, which holds no symbol.
+func TestDefinitionLookupSeedsTheSymbolLayer(t *testing.T) {
+	symbols := knowledge.NewGraph()
+	symbols.AddNode(types.KnowledgeNode{ID: "file:internal/textembed/index.go", Kind: types.KindFile, Source: "internal/textembed/index.go"})
+	symbols.AddNode(types.KnowledgeNode{ID: "symbol:readIndex", Kind: types.KindSymbol, Label: "readIndex", Source: "internal/textembed/index.go:131"})
+	known := map[string]string{}
+	for _, n := range symbols.Nodes() {
+		known[n.ID] = n.Source
+	}
+	agreement := []rankeval.Judgment{{
+		ID: "agent/1", Query: "readIndex", Verb: readQuery, Date: "2026-10-01", Source: "harvest",
+		Set: rankeval.SetAgentAgreement, Shape: rankeval.ShapeIdentifier, Gold: map[string]int{"file:internal/textembed/index.go": 1},
+	}}
+
+	lookup, skipped := definitionLookup(agreement, nil, symbols, known)
+	require.Len(t, lookup, 1, skipped)
+	require.Equal(t, map[string]int{"file:internal/textembed/index.go": 2}, lookup[0].Gold)
+	require.False(t, knowledge.SeedsLazyLayer("readIndex"), "a bare identifier seeds the symbol layer now; ask it bare")
+	r := replayer{domain: knowledge.NewGraph(), symbols: symbols}
+	require.Same(t, symbols, r.loadedGraph(lookup[0].Query), "%q is replayed against the domain graph", lookup[0].Query)
+
+	probed := func(_ string, seeded bool) knowledge.Coverage {
+		return knowledge.Coverage{Seeded: seeded, Probed: true}
+	}
+	res := searchLoaded(context.Background(), r.loadedGraph(lookup[0].Query), graphRead{Input: lookup[0].Query, Nearest: true}, probed)
+	require.Equal(t, types.VerdictFound, res.Out.Answer.Verdict)
+	require.Equal(t, "symbol:readIndex", res.Out.Matches[0].ID)
+}
+
+// definitionQuery is the query text definition-lookup asks for ident. A bare identifier
+// does not seed the symbol layer, so query searches domain entities only and answers
+// unknown, pointing at refs; the kind filter routes it to the symbol shards, where the
+// ranker under test orders the symbols that match.
+func definitionQuery(ident string) string {
+	return "kind=" + types.KindSymbol + " " + ident
 }
 
 // printComparisons tests now against the committed baseline, set by set and query by
