@@ -765,7 +765,13 @@ var Magus = Module{
 						"the worker's prompt, so the console can join activity to the row. " +
 						"created/updated/releases/write_proof, generation, attempts, prior and rejection " +
 						"are stamped by the store and cannot be set " +
-						"here. A put that CREATES a row raises when its write_paths cover a file the " +
+						"here. A put is validated whole before anything is stored, and raises every " +
+						"problem at once (codes MGS3037 through MGS3046), each with the field it is " +
+						"on and the fix. The record's schema is what `magus job fork --schema` prints. " +
+						"waivers, a list of {code, subject, reason}, keeps a write path broader than " +
+						"the workspace allows (MGS3043), an output a target regenerates outside the " +
+						"write paths (MGS3044) or a ci target the job does not run (MGS3045). " +
+						"A put that CREATES a row raises when its write_paths cover a file the " +
 						"workspace has to load (a magusfile, a magus.yaml, an imported spell source) " +
 						"while another live job with write paths is bound to this checkout: that job " +
 						"needs a worktree of its own, since a half-saved one of those stops the " +
@@ -1942,6 +1948,17 @@ func MagusClearJob(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	return store.Clear(ctx)
+}
+
+// MagusJobSchema is the JSON Schema `magus job fork --schema` prints, decoded, for the
+// magus\job.schema method that lets a caller with no CLI read the record it must put. It
+// needs no workspace.
+func MagusJobSchema(ctx context.Context) (map[string]any, error) {
+	var schema map[string]any
+	if err := json.Unmarshal([]byte(job.DeclarationSchema), &schema); err != nil {
+		return nil, fmt.Errorf("decode the job record schema: %w", err)
+	}
+	return schema, nil
 }
 
 // jobAttemptFromContext reads the output descriptor from the workspace already on ctx.

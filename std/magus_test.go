@@ -5,13 +5,16 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/testkit"
@@ -953,4 +956,29 @@ func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 	rows, err = stored.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
+}
+
+func TestMagusPutJobRaisesEveryProblemAtOnce(t *testing.T) {
+	testkit.Isolate(t)
+	root := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(root, "src"), 0o755))
+	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: root})
+
+	_, err := MagusPutJob(ctx, "u1", types.JobPut{WritePaths: new([]string{"src"})})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, types.WritePathIsDirectory, "the directory is named")
+	assert.ErrorIs(t, err, types.JobUngraded, "so is the missing grade, in the same error")
+}
+
+func TestMagusJobSchemaIsTheDeclarationSchema(t *testing.T) {
+	t.Parallel()
+
+	got, err := MagusJobSchema(t.Context())
+	require.NoError(t, err)
+
+	var want map[string]any
+	require.NoError(t, json.Unmarshal([]byte(job.DeclarationSchema), &want))
+	assert.Equal(t, want, got)
+	assert.Contains(t, got, "properties")
 }
