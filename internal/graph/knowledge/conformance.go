@@ -765,20 +765,16 @@ type knownCarry struct {
 // known itself is not modified.
 func carryKnown(known []types.ConformanceKnown, sampled, past map[types.ConformanceMetric]map[string]bool, shapes map[string]string) knownCarry {
 	listed := conformanceKnownItems(known)
-	type itemKey struct {
-		metric types.ConformanceMetric
-		id     string
-	}
 	var found []types.ConformanceCarry
-	seen := map[itemKey]bool{}
-	claims := map[itemKey]int{}
+	seen := map[metricItem]bool{}
+	claims := map[metricItem]int{}
 	for _, k := range known {
 		for _, from := range k.Items {
 			shape := k.Shapes[from]
-			if shape == "" || sampled[k.Metric][from] || seen[itemKey{k.Metric, from}] {
+			if shape == "" || sampled[k.Metric][from] || seen[metricItem{k.Metric, from}] {
 				continue
 			}
-			seen[itemKey{k.Metric, from}] = true
+			seen[metricItem{k.Metric, from}] = true
 			var to []string
 			for id := range past[k.Metric] {
 				if !listed[k.Metric][id] && shapes[id] == shape {
@@ -790,37 +786,49 @@ func carryKnown(known []types.ConformanceKnown, sampled, past map[types.Conforma
 			}
 			slices.Sort(to)
 			for _, id := range to {
-				claims[itemKey{k.Metric, id}]++
+				claims[metricItem{k.Metric, id}]++
 			}
 			found = append(found, types.ConformanceCarry{Metric: k.Metric, From: from, To: to})
 		}
 	}
 
 	out := knownCarry{known: known}
-	renamed := map[itemKey]string{}
+	renamed := map[metricItem]string{}
 	for _, c := range found {
-		if len(c.To) == 1 && claims[itemKey{c.Metric, c.To[0]}] == 1 {
+		if len(c.To) == 1 && claims[metricItem{c.Metric, c.To[0]}] == 1 {
 			out.carried = append(out.carried, c)
-			renamed[itemKey{c.Metric, c.From}] = c.To[0]
+			renamed[metricItem{c.Metric, c.From}] = c.To[0]
 		} else {
 			out.ambiguous = append(out.ambiguous, c)
 		}
 	}
-	if len(renamed) == 0 {
-		return out
+	if len(renamed) > 0 {
+		out.known = rekeyKnown(known, renamed)
 	}
-	out.known = make([]types.ConformanceKnown, len(known))
+	return out
+}
+
+// metricItem is one item under one metric.
+type metricItem struct {
+	metric types.ConformanceMetric
+	id     string
+}
+
+// rekeyKnown is a copy of known with each item renamed lists moved to its new ID, its
+// recorded shape with it.
+func rekeyKnown(known []types.ConformanceKnown, renamed map[metricItem]string) []types.ConformanceKnown {
+	out := make([]types.ConformanceKnown, len(known))
 	for i, k := range known {
 		k.Items = slices.Clone(k.Items)
 		k.Shapes = maps.Clone(k.Shapes)
 		for j, item := range k.Items {
-			if to, ok := renamed[itemKey{k.Metric, item}]; ok {
+			if to, ok := renamed[metricItem{k.Metric, item}]; ok {
 				k.Items[j] = to
 				k.Shapes[to] = k.Shapes[item]
 				delete(k.Shapes, item)
 			}
 		}
-		out.known[i] = k
+		out[i] = k
 	}
 	return out
 }
