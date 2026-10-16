@@ -34,7 +34,7 @@ const (
 	// takes one target and many projects, so the same target run twice on different
 	// project sets is usually one call typed twice. On ONE line the chained-run deny names
 	// the combined call instead. ACROSS two calls it is held to one firing per session (see
-	// internal/guard/splitrun.go), since the session already knows and a second reminder of
+	// internal/guard/split_run.go), since the session already knows and a second reminder of
 	// the same standing fact teaches nothing new.
 	advisorySplitRun hint.MarkerKind = "split-run"
 	// advisorySharedCheckout fires on a SPAWN, which is the one moment the choice between
