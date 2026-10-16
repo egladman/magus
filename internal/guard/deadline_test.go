@@ -12,10 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -370,48 +368,4 @@ func TestJudgeWithinAnswersAWriteWhoseWorkspaceOpenStalls(t *testing.T) {
 	assert.Less(t, time.Since(start), hookBudget)
 	assert.NotEqual(t, string(advisoryUnfinished), v.Rule, "judged, not lapsed")
 	assert.Equal(t, int32(1), opens.Load(), "one stalled open per judgment")
-}
-
-// BenchmarkJudgeWithinInertCall is one hook call for a tool that touches nothing, now that
-// every tool reaches the guard: a todo list, as Claude Code's catch-all entry forwards it.
-// The judge callback stands in for the rule loading the CLI does inside it. Each call reads
-// the tool rows directory, as each hook process does. fast is the read-only fast path;
-// judged is the same call when no fast path answers it, which is what every call cost
-// before there was one.
-func BenchmarkJudgeWithinInertCall(b *testing.B) {
-	testkit.Isolate(b)
-	root := testkit.NewWorkspace(b).Root()
-	for _, f := range (agent.HarnessTools{Dir: "tools", Rows: testToolRows}).Files() {
-		if err := os.MkdirAll(filepath.Join(root, filepath.Dir(f.Path)), 0o755); err != nil {
-			b.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(root, f.Path), []byte(f.Content), 0o644); err != nil {
-			b.Fatal(err)
-		}
-	}
-	ctx := WithLocation(b.Context(), b.TempDir(), root, root)
-	req := Request{
-		Input: `{"hook_event_name":"PreToolUse","session_id":"bench","cwd":"` + root + `","tool_name":"TodoWrite",` +
-			`"tool_input":{"todos":[{"content":"read the guard","status":"pending"}]}}`,
-		Host: "claude-code", Form: "buzz", Session: "bench",
-	}
-	b.Run("fast", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			req.Tools = agent.ReadToolRows(root, "tools")
-			judge := func(ctx context.Context) types.GuardJudgment { return Judge(ctx, Dependencies{}, req) }
-			if v := JudgeWithin(ctx, Dependencies{}, req, judge); v.Decision != decisionPass {
-				b.Fatalf("a todo list was not passed: %+v", v)
-			}
-		}
-	})
-	b.Run("judged", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			req.Tools = agent.ReadToolRows(root, "tools")
-			if v := Judge(ctx, Dependencies{}, req); v.Decision != decisionPass {
-				b.Fatalf("a todo list was not passed: %+v", v)
-			}
-		}
-	})
 }

@@ -262,6 +262,9 @@ func (s *ModelTierSet) Resolve(host HarnessKey, alias string) (ModelTier, bool) 
 	return ModelTier{set: s, rank: i}, true
 }
 
+// Enum is the name of the Buzz enum that declared the set.
+func (s *ModelTierSet) Enum() string { return s.enum }
+
 // Site is the file:line, or module name, of the declaration.
 func (s *ModelTierSet) Site() string { return s.site }
 

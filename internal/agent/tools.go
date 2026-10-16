@@ -365,7 +365,7 @@ func encodeTiers(set *types.ModelTierSet) string {
 		return ""
 	}
 	tiers := set.All()
-	line := tierLine{Enum: tierEnum(set), Site: set.Site(), Default: set.Default().Rank()}
+	line := tierLine{Enum: set.Enum(), Site: set.Site(), Default: set.Default().Rank()}
 	for _, t := range tiers {
 		b := set.Bounds(t)
 		line.Cases = append(line.Cases, t.Name())
@@ -385,24 +385,6 @@ func encodeTiers(set *types.ModelTierSet) string {
 	var b strings.Builder
 	writeJSONLine(&b, line)
 	return b.String()
-}
-
-// tierEnum is the name of the enum that declared set. The set reports it only inside the
-// error of a Parse no case answers, and the empty name is one: no case is empty.
-//
-// TODO: read it from a types.ModelTierSet accessor once one is exported.
-func tierEnum(set *types.ModelTierSet) string {
-	_, err := set.Parse("")
-	if err == nil {
-		return ""
-	}
-	tiers := set.All()
-	cases := make([]string, len(tiers))
-	for i, t := range tiers {
-		cases[i] = t.Name()
-	}
-	msg, _ := strings.CutPrefix(err.Error(), `"" is not a model tier: enum `)
-	return strings.TrimSuffix(msg, " at "+set.Site()+" declares "+strings.Join(cases, ", "))
 }
 
 func decodeTiers(body []byte) (*types.ModelTierSet, error) {

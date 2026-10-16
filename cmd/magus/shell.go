@@ -240,6 +240,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	// The spell catalog is compiled in, so the raw-tool rule judges a lapsed call too.
 	base := guard.Dependencies{CacheDir: guardCacheDir(""), BinaryVersion: version, Spells: project.DefaultSpellRegistry().All}
 	base.Binary, _ = runningBinaryPath()
+	ctx = agent.ContextWithToolRows(ctx, req.Tools)
 	// The rules load inside the bound too: a magusfile's imports parse to the end however
 	// long they take.
 	verdict := guard.JudgeWithin(ctx, base, req, func(ctx context.Context) types.GuardJudgment {
