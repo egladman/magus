@@ -43,7 +43,7 @@ func Declare(row types.Declaration, defaultTimeout time.Duration) func(*types.Jo
 // ForkMerge applies a field merge to one row, for `magus job fork` (whose merge is
 // [Declare]) and magus\job.put (from the client tool or a magusfile), and takes
 // default_timeout when a merge that creates the row named no timeout. What it is held to is
-// [ValidateMerge]'s, the rules `magus job apply` shares, with the merge's checkpoint and
+// [validateMerge]'s, the rules `magus job apply` shares, with the merge's checkpoint and
 // symbol goals settled in the same pass: the error joins every problem left after the row's
 // waivers, and nothing is written then. read may be nil where no graph is at hand, which
 // skips only the ambiguity check.
@@ -126,7 +126,7 @@ type Applied struct {
 // Every record is validated before any is written, each against the plan as the records
 // before it leave it, and the error joins every record's problems, each message prefixed by
 // its record id, so a stream with problems in its first and third records writes nothing
-// and names both. Each record is held to [ValidateMerge], with its checkpoint settled in the
+// and names both. Each record is held to [validateMerge], with its checkpoint settled in the
 // same pass. A record carrying state, enter or checkout is a JobRecordInvalid problem: state
 // is status, and an entry and a checkout are `magus job fork`'s. So is one naming a job that
 // already ended, and one dropping every write path a live job holds. Who may write a record
@@ -201,7 +201,7 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 		if err := authorizeRow(actor, rec.ID, asDeclaration, prev, next, i >= 0, rows); err != nil {
 			return nil, err
 		}
-		v := ValidateMerge(ctx, refusing, rows, rec.ID, merge, limits, read)
+		v := validateMerge(ctx, refusing, rows, rec.ID, merge, limits, read)
 		problems = append(problems, prefixed(rec.ID, append(ps, v.Problems...))...)
 		next.Releases = store.releases(ctx, prev, next, time.Now().Unix(), prev.Registered != 0 && actor.Lease != rec.ID)
 		plan = append(plan, Applied{Prev: prev, Next: next, Created: i < 0, Changed: specChanges(prev, next)})

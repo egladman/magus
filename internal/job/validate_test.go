@@ -43,7 +43,7 @@ func TestValidateMergeCollectsEveryProblem(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	v := ValidateMerge(t.Context(), s, nil, "w", func(u *types.Job) {
+	v := validateMerge(t.Context(), s, nil, "w", func(u *types.Job) {
 		u.WritePaths = []string{"cli", "cli/registry.go"}
 		u.Check = &types.LeaseCheck{Target: "nosuch", Project: "."}
 		u.Goals = []types.Goal{{ID: "elsewhere", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "test", Project: "nowhere"}}}
@@ -88,7 +88,7 @@ func TestValidateMergeWaivesOnlyWhatTheRecordNames(t *testing.T) {
 			u.WritePaths, u.Check, u.Waivers = []string{"cli/registry.go"}, forkCheck(), waivers
 		}
 	}
-	v := ValidateMerge(t.Context(), s, nil, "w", declare(), config.Jobs{}, nil)
+	v := validateMerge(t.Context(), s, nil, "w", declare(), config.Jobs{}, nil)
 	require.NotEmpty(t, v.Problems)
 	var waivers []types.JobWaiver
 	for _, p := range v.Problems {
@@ -96,7 +96,7 @@ func TestValidateMergeWaivesOnlyWhatTheRecordNames(t *testing.T) {
 		waivers = append(waivers, types.JobWaiver{Code: p.Code, Subject: p.Subject, Reason: "the root regenerates and runs it"})
 	}
 
-	waived := ValidateMerge(t.Context(), s, nil, "w", declare(waivers...), config.Jobs{}, nil)
+	waived := validateMerge(t.Context(), s, nil, "w", declare(waivers...), config.Jobs{}, nil)
 	assert.Empty(t, waived.Problems)
 	assert.Equal(t, v.Problems, waived.Waived)
 
@@ -105,7 +105,7 @@ func TestValidateMergeWaivesOnlyWhatTheRecordNames(t *testing.T) {
 	assert.NotZero(t, stored.Validated, "a validated row is stamped")
 	assert.Equal(t, waivers, stored.Waivers)
 
-	wrong := ValidateMerge(t.Context(), s, nil, "w2", func(u *types.Job) {
+	wrong := validateMerge(t.Context(), s, nil, "w2", func(u *types.Job) {
 		u.WritePaths, u.Check = []string{"cli"}, forkCheck()
 		u.Waivers = []types.JobWaiver{{Code: types.WritePathIsDirectory, Subject: "cli", Reason: "it is mine"}, {Code: types.GateNotRun, Subject: "lint ."}}
 	}, config.Jobs{}, nil)
@@ -124,7 +124,7 @@ func TestValidateMergeNamesWhatItCouldNotCheck(t *testing.T) {
 	root, _ := regeneratedWorkspace(t)
 	merge := func(u *types.Job) { u.WritePaths, u.Check = []string{"cli/registry.go"}, forkCheck() }
 
-	v := ValidateMerge(t.Context(), NewStore(tmpLoc(t, root)), nil, "w", merge, config.Jobs{}, nil)
+	v := validateMerge(t.Context(), NewStore(tmpLoc(t, root)), nil, "w", merge, config.Jobs{}, nil)
 	assert.Empty(t, v.Problems)
 	assert.Len(t, v.Unchecked, 4, "the target, outputs, gates and breadth checks each say they did not run")
 	for _, why := range v.Unchecked {
@@ -132,11 +132,11 @@ func TestValidateMergeNamesWhatItCouldNotCheck(t *testing.T) {
 	}
 
 	unavailable := NewStore(tmpLoc(t, root)).InWorkspace(Workspace{Unavailable: "magusfile.buzz: line 3: unexpected }"})
-	v = ValidateMerge(t.Context(), unavailable, nil, "w", merge, config.Jobs{}, nil)
+	v = validateMerge(t.Context(), unavailable, nil, "w", merge, config.Jobs{}, nil)
 	require.Len(t, v.Unchecked, 4)
 	assert.Contains(t, v.Unchecked[0], "the workspace did not load: magusfile.buzz: line 3")
 
-	v = ValidateMerge(t.Context(), unavailable, nil, "scout", func(u *types.Job) { u.ReadOnly = true }, config.Jobs{}, nil)
+	v = validateMerge(t.Context(), unavailable, nil, "scout", func(u *types.Job) { u.ReadOnly = true }, config.Jobs{}, nil)
 	assert.Empty(t, v.Unchecked, "a read-only row with no check skips nothing it would have needed")
 }
 
@@ -172,10 +172,10 @@ func TestValidateMergeJudgesAnUpdateByWhatItAdds(t *testing.T) {
 	rows, err := s.List()
 	require.NoError(t, err)
 
-	narrowed := ValidateMerge(t.Context(), s, rows, "w", func(u *types.Job) { u.WritePaths = []string{"cli/registry.go"} }, config.Jobs{}, nil)
+	narrowed := validateMerge(t.Context(), s, rows, "w", func(u *types.Job) { u.WritePaths = []string{"cli/registry.go"} }, config.Jobs{}, nil)
 	assert.Empty(t, narrowed.Problems, "narrowing a glob to a file it covers adds nothing")
 
-	widened := ValidateMerge(t.Context(), s, rows, "w", func(u *types.Job) { u.WritePaths = []string{"cli/**", "docs/**", "cmd"} }, config.Jobs{}, nil)
+	widened := validateMerge(t.Context(), s, rows, "w", func(u *types.Job) { u.WritePaths = []string{"cli/**", "docs/**", "cmd"} }, config.Jobs{}, nil)
 	assert.Equal(t, "write_paths[2]", problemAt(t, widened.Problems, types.WritePathIsDirectory).Field,
 		"a problem found on what the update adds names the field in the whole row")
 	assert.NotContains(t, codes(widened.Problems), types.JobRecordInvalid, "a shape the row already had is not the update's")

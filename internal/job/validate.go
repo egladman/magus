@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ValidateMerge holds a merge into job id, against the plan rows, to every rule a stored
+// validateMerge holds a merge into job id, against the plan rows, to every rule a stored
 // job meets, in one pass that never stops at the first problem. The result carries the row
 // as the merge would leave it, every problem left once the row's waivers apply, the
 // problems they waived, each check that could not run and why, and the write proof the row
@@ -46,7 +46,7 @@ import (
 // named in Unchecked instead. read may be nil where no graph is at hand, which skips the
 // ambiguity check. The guard grades the checks against rows rather than sweep the store
 // again.
-func ValidateMerge(ctx context.Context, store *Store, rows []types.Job, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) types.JobValidation {
+func validateMerge(ctx context.Context, store *Store, rows []types.Job, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) types.JobValidation {
 	graded := WithSnapshot(ctx, Snapshot{Rows: rows})
 	prev, updates := mergeBase(rows, id, merge)
 	merged := prev.Clone()
@@ -116,7 +116,7 @@ func ValidateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 }
 
 // ValidateFork is the dry run of a fork: the plan as store reads it, the merge's checkpoint
-// and symbol goals settled as a fork settles them, and [ValidateMerge] over a dry view of
+// and symbol goals settled as a fork settles them, and [validateMerge] over a dry view of
 // store, so nothing is written, no release is requested, no sweep runs and no worktree is
 // made. The error is only a store that could not be read.
 func ValidateFork(ctx context.Context, store *Store, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) (types.JobValidation, error) {
@@ -139,7 +139,7 @@ func validateFork(ctx context.Context, store *Store, rows []types.Job, id string
 	} else {
 		merge = resolved
 	}
-	v := ValidateMerge(ctx, store, rows, id, merge, limits, read)
+	v := validateMerge(ctx, store, rows, id, merge, limits, read)
 	v.Problems = append(ps, v.Problems...)
 	return v, merge
 }
