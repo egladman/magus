@@ -8,10 +8,9 @@ import "std";
 import "magus";
 import "magus/lint";
 
-// ENFORCED are the conformance metrics this repository fails on. The size and coupling
-// metrics stay advice, printed and never failing: most of what they flag is a size or a
-// shape chosen on purpose.
-export final ENFORCED = ["file-lines", "clone-tokens", "export-scope", "dep-fanout"];
+// ENFORCED are the conformance metrics this repository fails on. The rest stay advice,
+// printed and never failing: most of what they flag is a size or a shape chosen on purpose.
+export final ENFORCED = ["file-lines", "func-lines", "clone-tokens", "export-scope", "dep-fanout"];
 
 // RATCHET is the committed record knowledge.conformance.ratchet names in magus.yaml.
 final RATCHET = "hack/policy/conformance.jsonl";
@@ -188,16 +187,16 @@ fun report(indexes: [any], rows: [any], stale: [any]) > {str: any} {
 test "a violation of an enforced metric fails at its line and an advice metric does not" {
     final rows: [any] = [
         conformanceRow("file-lines", violations: [violation("file:vcs/git.go", source: "vcs/git.go:1", measure: 4174.0)]),
-        conformanceRow("func-lines", violations: [violation("symbol:x/Judge().", source: "internal/guard/guard.go:654", measure: 771.0)]),
+        conformanceRow("type-methods", violations: [violation("symbol:x/Store#", source: "internal/job/store.go:40", measure: 71.0)]),
     ];
     final r = report([fresh()], rows: rows, stale: [<any>]);
     final got = judge(r);
-    assert\equal(got.len(), want: 1, message: "only file-lines is enforced");
+    assert\equal(got.len(), want: 1, message: "type-methods is not enforced");
     assert\equal(got[0].path, want: "vcs/git.go", message: "file");
     assert\equal(got[0].line, want: 1, message: "line");
     assert\equal(got[0].message.indexOf("past the ratchet ceiling of 938") != null, want: true, message: got[0].message);
     final printed = advice(r);
-    assert\equal(printed.len(), want: 1, message: "func-lines is printed as advice");
+    assert\equal(printed.len(), want: 1, message: "type-methods is printed as advice");
 }
 
 test "a known entry that no longer violates fails at the ratchet" {
@@ -210,12 +209,12 @@ test "a known entry that no longer violates fails at the ratchet" {
 }
 
 test "a stale entry of an advice metric is printed, never failed" {
-    final entry: {str: any} = {"metric": "func-lines", "items": ["internal/guard/guard.go#Judge"], "reason": "split pending"};
+    final entry: {str: any} = {"metric": "type-methods", "items": ["internal/job/store.go#Store"], "reason": "split pending"};
     final r = report([fresh()], rows: [<any>], stale: [entry]);
-    assert\equal(judge(r).len(), want: 0, message: "func-lines is advice");
+    assert\equal(judge(r).len(), want: 0, message: "type-methods is advice");
     final printed = advice(r);
     assert\equal(printed.len(), want: 1, message: "one advice line");
-    assert\equal(printed[0].indexOf("internal/guard/guard.go#Judge") != null, want: true, message: printed[0]);
+    assert\equal(printed[0].indexOf("internal/job/store.go#Store") != null, want: true, message: printed[0]);
 }
 
 test "a stale index or an unknown answer fails instead of passing on what it lacks" {
