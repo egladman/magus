@@ -291,7 +291,7 @@ func TestTargetPatternMatchesTheValidator(t *testing.T) {
 
 	pattern := regexp.MustCompile(targetPattern())
 	for _, name := range []string{"test", "go-test", "go_test", "T1"} {
-		assert.NoError(t, types.ValidateTargetName(name), "%q", name)
+		require.NoError(t, types.ValidateTargetName(name), "%q", name)
 		assert.True(t, pattern.MatchString(name), "%q", name)
 	}
 	assert.True(t, pattern.MatchString("go::go-test"), "a spell filter prefixes the target")
