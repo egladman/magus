@@ -812,13 +812,41 @@ export object Graph {
     blastRadius: {str: int} = {},
 }
 
+export object KnowledgeTermScore {
+    term: str = "",
+    field: str = "",
+    score: double = 0.0,
+}
+
+export object KnowledgeListRank {
+    list: str = "",
+    rank: int = 0,
+}
+
+export object KnowledgeMatchWhy {
+    matched: int = 0,
+    of: int = 0,
+    terms: [KnowledgeTermScore] = [],
+    lists: [KnowledgeListRank] = [],
+    seeds: [str] = [],
+    prior: double = 0.0,
+}
+
 export object Match {
     id: str = "",
     kind: str = "",
     label: str = "",
     score: int = 0,
+    why: KnowledgeMatchWhy? = null,
     staleness: str = "",
     outrunDays: int = 0,
+}
+
+export object KnowledgeRanking {
+    weights: str = "",
+    reader: [str] = [],
+    skipped: [str] = [],
+    note: str = "",
 }
 
 export object QueryResult {
@@ -832,6 +860,7 @@ export object QueryResult {
     nodes: [KnowledgeNode] = [],
     links: [KnowledgeEdge] = [],
     answer: KnowledgeAnswer = KnowledgeAnswer{},
+    ranking: KnowledgeRanking? = null,
 }
 
 export object RefSite {

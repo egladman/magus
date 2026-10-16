@@ -134,11 +134,6 @@ func wildcardCouldMatchPrefix(pattern, prefix string) bool {
 // high-degree node cannot pull in the whole graph.
 const DefaultBudget = 50
 
-// wildcardTermScore is the flat credit a matched wildcard term contributes: a glob is
-// a boolean filter, not a relevance signal, so it scores like a doc hit (1) and lets
-// kindRank and ID order break ties among wildcard matches.
-const wildcardTermScore = 1
-
 // knownFields are the recognized field:value prefixes. relation constrains which edges a
 // neighborhood traverses; every other field constrains which nodes match.
 var knownFields = map[string]bool{
@@ -244,123 +239,88 @@ func tokenize(s string) []string {
 	return out
 }
 
-// Resolve returns nodes matching the query, ranked by score (desc) then ID (asc),
-// truncated to limit (0 = no limit).
-//
-// It scans the graph's search index (see search_index.go), not g.nodes: the lowercased
-// text and the project owner of every node are computed once per graph, and a positive
-// kind= filter visits only the entries of the kinds it names. The match set, scores and
-// order are those of the straightforward per-node scan.
+// Resolve returns the matches Retrieve ranks under the shipped weights, with no reader
+// context, that hold every token of the query's free text, truncated to limit (0 = no
+// limit). explain, path and refs take a node from it, so a fuzzy name resolves by the one
+// scorer every query uses and never to a node that shares only some of its words: refs on
+// a name nothing defines answers absent, not about a neighbor.
 func (g *Graph) Resolve(input string, limit int) []types.KnowledgeMatch {
-	q := g.normalizePaths(parseQuery(input))
-	ix := g.searchIdx()
-	cq := g.compileQuery(q)
-	var matches []types.KnowledgeMatch
-	add := func(i int) {
-		score, ok := g.scoreNode(ix, i, cq)
-		if !ok {
-			return
-		}
-		n := &ix.entries[i].node
-		m := types.KnowledgeMatch{ID: n.ID, Kind: n.Kind, Label: n.Label, Score: score}
-		// Prose whose subject moved on is LABELED, never reordered; see stalenessLabel for
-		// why ranking on it is the wrong repair. The label travels with the match so a caller
-		// can show "400 days behind its subject" beside the result and let the reader judge.
-		m.Staleness, m.OutrunDays = stalenessLabel(n.Attrs)
-		matches = append(matches, m)
+	matches, _, err := g.Retrieve(input, RetrieveOptions{Weights: ShippedWeights()})
+	if err != nil {
+		// Only weights the rankers refuse fail Retrieve, and the shipped file is validated.
+		panic(fmt.Sprintf("knowledge: shipped weights refused: %v", err))
 	}
-	if len(cq.kindPos) > 0 {
-		// A kind= filter names a handful of kinds; the partition skips every other node
-		// without testing it. matchesKind runs per kind, not per node.
-		for kind, positions := range ix.byKind {
-			if !matchesKind(kind, cq.kindPos) {
-				continue
-			}
-			for _, i := range positions {
-				add(int(i))
-			}
-		}
-	} else {
-		for i := range ix.entries {
-			add(i)
+	var full []types.KnowledgeMatch
+	for _, m := range matches {
+		if m.Why.Matched == m.Why.Of {
+			full = append(full, m)
 		}
 	}
-	slices.SortFunc(matches, func(a, b types.KnowledgeMatch) int {
-		if a.Score != b.Score {
-			return cmp.Compare(b.Score, a.Score)
-		}
-		return cmp.Compare(a.ID, b.ID)
-	})
-	if limit > 0 && len(matches) > limit {
-		matches = matches[:limit]
+	if limit > 0 && len(full) > limit {
+		full = full[:limit]
 	}
-	return matches
+	return full
 }
 
-// scoreNode applies node-level field filters and free-text scoring to the index entry at
-// position i. It returns (score, true) when the node matches every positive constraint
-// and no negation. A relation-only query (no node constraints) matches nodes that touch
+// admits applies node-level field filters, negated terms and wildcard terms to the index
+// entry at position i. A relation-only query (no node constraints) admits nodes that touch
 // such an edge, so `magus query relation=uses` still resolves seeds.
-//
-// The decisions are the ones the per-node scan made; only where each input comes from
-// changed (lowercased text and the owner from the index, field lookups and globs from the
-// compiled query).
-func (g *Graph) scoreNode(ix *searchIndex, i int, cq *compiledQuery) (int, bool) {
+func (g *Graph) admits(ix *searchIndex, i int, cq *compiledQuery) bool {
 	e := &ix.entries[i]
 	n := &e.node
 	if len(cq.kindPos) > 0 && !matchesKind(n.Kind, cq.kindPos) {
-		return 0, false
+		return false
 	}
 	if matchesKind(n.Kind, cq.kindNeg) {
-		return 0, false
+		return false
 	}
 	if len(cq.kindRe) > 0 && !matchesAnyRe(n.Kind, cq.kindRe) {
-		return 0, false
+		return false
 	}
 	if cq.needsOwner {
 		o := ix.owners()[i]
 		if len(cq.projPos) > 0 && (!o.ok || !matchesProject(o.path, cq.projPos)) {
-			return 0, false
+			return false
 		}
 		if len(cq.projNeg) > 0 && o.ok && matchesProject(o.path, cq.projNeg) {
-			return 0, false
+			return false
 		}
 		if len(cq.projRe) > 0 && (!o.ok || !matchesAnyRe(o.path, cq.projRe)) {
-			return 0, false
+			return false
 		}
 	}
 	if len(cq.idPos) > 0 && !anyIn(e.lcID, cq.idPos) {
-		return 0, false
+		return false
 	}
 	if anyIn(e.lcID, cq.idNeg) {
-		return 0, false
+		return false
 	}
 	if len(cq.idRe) > 0 && !matchesAnyRe(n.ID, cq.idRe) {
-		return 0, false
+		return false
 	}
 	// language filters on the node's language attr (set on file and symbol nodes), so
 	// `language:go` groups every source file and symbol of a language regardless of
 	// whether magus's AST walk or a foreign SCIP index produced it. A node without the
 	// attr never matches a positive language constraint.
 	if cq.language.active() && !cq.language.allows(n.Attrs["language"]) {
-		return 0, false
+		return false
 	}
 	// role filters on the doc-classification attr (readme/agent/changelog/...), so
 	// `kind=doc role=agent` finds the agent-instruction files. A node without the attr
 	// never matches a positive role constraint.
 	if cq.role.active() && !cq.role.allows(n.Attrs[attrRole]) {
-		return 0, false
+		return false
 	}
 	// layer and family compare one attr exactly, as role does: both are closed
 	// vocabularies, not text to search.
 	if cq.layer.active() && !cq.layer.allows(n.Attrs[types.AttrLayer]) {
-		return 0, false
+		return false
 	}
 	if cq.family.active() && !cq.family.allows(n.Attrs[types.AttrMarkerFamily]) {
-		return 0, false
+		return false
 	}
 	if cq.stamp && !matchesStamp(*n, cq.q) {
-		return 0, false
+		return false
 	}
 
 	// Negated free text must not appear anywhere in the node's text (a wildcard term
@@ -369,64 +329,43 @@ func (g *Graph) scoreNode(ix *searchIndex, i int, cq *compiledQuery) (int, bool)
 		switch {
 		case t.glob != nil:
 			if t.glob.matchLower(e.lcID) || t.glob.matchLower(e.lcLabel) {
-				return 0, false
+				return false
 			}
 		case t.span:
 			// A phrase can straddle two fields, so it is tested against the joined text the
 			// scan always used. Rare, so the join is not worth keeping in the index.
 			if strings.Contains(e.lcID+" "+e.lcLabel+" "+e.lcDoc, t.lc) {
-				return 0, false
+				return false
 			}
 		default:
 			// With no space in the term, a hit cannot cross the separators of the joined
 			// text, so testing the three fields apart is the same answer.
 			if strings.Contains(e.lcID, t.lc) || strings.Contains(e.lcLabel, t.lc) || strings.Contains(e.lcDoc, t.lc) {
-				return 0, false
+				return false
 			}
 		}
 	}
-
-	if len(cq.terms) == 0 {
-		if cq.relOnly && !g.touchesRelationIn(n.ID, cq.relSet) {
-			return 0, false
-		}
-		return 1 + kindRank(n.Kind) + g.citedRank(n.ID, n.Kind), true // field-only match; flat score plus kind bias
-	}
-
-	// Every positive term must match (AND); score is the sum of best per-term
-	// leaf-anchored scores against ID and label, with a small credit for a doc hit.
-	// A wildcard term is a boolean glob filter (no fuzzy score), matched against ID and
-	// label, NOT the doc (prose is not glob-shaped, unlike the plain-substring path
-	// which does search the doc). It contributes a flat credit so it ranks like a doc
-	// hit, not a leaf match.
-	total := 0
+	// A wildcard term is a glob over the ID and label, not the doc: prose is not
+	// glob-shaped. It filters; it does not score. A path term filters by containment, so
+	// a path outside the workspace answers nothing rather than whatever shares its words.
 	for _, t := range cq.terms {
-		if t.glob != nil {
+		switch {
+		case t.glob != nil:
 			if !t.glob.matchLower(e.lcID) && !t.glob.matchLower(e.lcLabel) {
-				return 0, false
+				return false
 			}
-			total += wildcardTermScore
-			continue
-		}
-		best := max(leafScoreLower(e.lcID, t.lc, e.idSlashes), leafScoreLower(e.lcLabel, t.lc, e.lblSlash))
-		if best <= 0 {
-			// LeafScore anchors on the leaf and charges 10 per '/', so a non-leaf hit
-			// inside a slash-heavy ID (kind:function docs -> function:docs/f.buzz:x)
-			// comes back zero or negative. A substring hit anywhere in the ID or doc still
-			// matches, with the flat doc-hit credit, instead of dropping the node.
-			if !strings.Contains(e.lcID, t.lc) && !strings.Contains(e.lcDoc, t.lc) {
-				return 0, false
+		case t.path:
+			if !strings.Contains(e.lcID, t.lc) && !strings.Contains(e.lcLabel, t.lc) && !strings.Contains(e.lcDoc, t.lc) {
+				return false
 			}
-			best = 1
 		}
-		total += best
 	}
-	return total + kindRank(n.Kind) + g.citedRank(n.ID, n.Kind), true
+	return !cq.relOnly || g.touchesRelationIn(n.ID, cq.relSet)
 }
 
-// kindRank biases resolution toward primary domain entities over source-level nodes on
-// a text-relevance tie, so a bare `explain build` resolves the target, not its function.
-// The bonus only breaks ties; it never outranks a stronger text match.
+// kindRank orders primary domain entities above source-level nodes where a score ties:
+// Retrieve's equal scores and nearest's equal edit distances. It never outranks a stronger
+// match; a lift that does belongs in the weight file's kind_prior.
 func kindRank(kind string) int {
 	switch kind {
 	case types.KindProject, types.KindTarget, types.KindSpell, types.KindOp,
@@ -445,7 +384,10 @@ const citedDocRank = 50
 
 // citedRank is the cited half of kindRank, kept separate because it reads the GRAPH rather
 // than the kind: the boost is earned by a source file pointing at this page in a comment,
-// not by being prose. An uncited page ranks exactly as it did.
+// not by being prose.
+//
+// TODO: Retrieve does not read it. Its weight belongs in weights.json beside kind_prior,
+// as a multiplicative prior, once weights_test.go stops pinning the shipped file's shape.
 func (g *Graph) citedRank(id, kind string) int {
 	if kind != types.KindDoc && kind != types.KindDocSection {
 		return 0
@@ -555,42 +497,15 @@ func (g *Graph) Query(input string, budget int) types.KnowledgeQueryOutput {
 // is the substrate for MCP pagination, where a large match set (symbol references)
 // must be returned across several bounded responses. offset past the end yields an
 // empty page with the true MatchCount, so a caller can stop.
+//
+// It ranks under the shipped weights with no reader context; QueryRanked takes both.
 func (g *Graph) QueryPage(input string, budget, offset, limit int) types.KnowledgeQueryOutput {
-	if budget <= 0 {
-		budget = DefaultBudget
+	out, err := g.QueryRanked(input, budget, offset, limit, RetrieveOptions{Weights: ShippedWeights()})
+	if err != nil {
+		// Only weights the rankers refuse fail Retrieve, and the shipped file is validated.
+		panic(fmt.Sprintf("knowledge: shipped weights refused: %v", err))
 	}
-	if offset < 0 {
-		offset = 0
-	}
-	q := parseQuery(input)
-	matches := g.Resolve(input, 0)
-	total := len(matches)
-
-	var page []types.KnowledgeMatch
-	if offset < total {
-		page = matches[offset:]
-	}
-	if limit > 0 && len(page) > limit {
-		page = page[:limit]
-	}
-
-	seeds := make([]string, len(page))
-	for i, m := range page {
-		seeds[i] = m.ID
-	}
-	sub := g.Neighborhood(seeds, budget, q.fields["relation"])
-	out := sub.Output()
-	return types.KnowledgeQueryOutput{
-		Definition:    types.KnowledgeQueryDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
-		Query:         strings.TrimSpace(input),
-		Budget:        budget,
-		MatchCount:    total,
-		Offset:        offset,
-		Matches:       page,
-		Nodes:         out.Nodes,
-		Links:         out.Links,
-	}
+	return out
 }
 
 // Select resolves the input to seeds and returns the induced neighborhood as a

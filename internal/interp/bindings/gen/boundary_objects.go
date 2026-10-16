@@ -700,12 +700,55 @@ func ObjectInsightReport(v types.InsightReport, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
+func ObjectKnowledgeTermScore(v types.KnowledgeTermScore) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("term", vm.StrValue(v.Term))
+	out.MapSet("field", vm.StrValue(v.Field))
+	out.MapSet("score", vm.FloatValue(float64(v.Score)))
+	return out
+}
+
+func ObjectKnowledgeListRank(v types.KnowledgeListRank) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("list", vm.StrValue(v.List))
+	out.MapSet("rank", vm.IntValue(int64(v.Rank)))
+	return out
+}
+
+func ObjectKnowledgeMatchWhy(v types.KnowledgeMatchWhy) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("matched", vm.IntValue(int64(v.Matched)))
+	out.MapSet("of", vm.IntValue(int64(v.Of)))
+	itemsTerms := make([]vm.Value, len(v.Terms))
+	for indexTerms := range v.Terms {
+		itemsTerms[indexTerms] = ObjectKnowledgeTermScore(v.Terms[indexTerms])
+	}
+	out.MapSet("terms", vm.ListValue(itemsTerms))
+	itemsLists := make([]vm.Value, len(v.Lists))
+	for indexLists := range v.Lists {
+		itemsLists[indexLists] = ObjectKnowledgeListRank(v.Lists[indexLists])
+	}
+	out.MapSet("lists", vm.ListValue(itemsLists))
+	itemsSeeds := make([]vm.Value, len(v.Seeds))
+	for indexSeeds := range v.Seeds {
+		itemsSeeds[indexSeeds] = vm.StrValue(v.Seeds[indexSeeds])
+	}
+	out.MapSet("seeds", vm.ListValue(itemsSeeds))
+	out.MapSet("prior", vm.FloatValue(float64(v.Prior)))
+	return out
+}
+
 func ObjectKnowledgeMatch(v types.KnowledgeMatch) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StrValue(v.ID))
 	out.MapSet("kind", vm.StrValue(v.Kind))
 	out.MapSet("label", vm.StrValue(v.Label))
 	out.MapSet("score", vm.IntValue(int64(v.Score)))
+	optWhy := vm.Null
+	if v.Why != nil {
+		optWhy = ObjectKnowledgeMatchWhy((*v.Why))
+	}
+	out.MapSet("why", optWhy)
 	out.MapSet("staleness", vm.StrValue(v.Staleness))
 	out.MapSet("outrunDays", vm.IntValue(int64(v.OutrunDays)))
 	return out
@@ -742,6 +785,23 @@ func ObjectKnowledgeEdge(v types.KnowledgeEdge) vm.Value {
 	return out
 }
 
+func ObjectKnowledgeRanking(v types.KnowledgeRanking) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("weights", vm.StrValue(v.Weights))
+	itemsReader := make([]vm.Value, len(v.Reader))
+	for indexReader := range v.Reader {
+		itemsReader[indexReader] = vm.StrValue(v.Reader[indexReader])
+	}
+	out.MapSet("reader", vm.ListValue(itemsReader))
+	itemsSkipped := make([]vm.Value, len(v.Skipped))
+	for indexSkipped := range v.Skipped {
+		itemsSkipped[indexSkipped] = vm.StrValue(v.Skipped[indexSkipped])
+	}
+	out.MapSet("skipped", vm.ListValue(itemsSkipped))
+	out.MapSet("note", vm.StrValue(v.Note))
+	return out
+}
+
 func ObjectKnowledgeQueryOutput(v types.KnowledgeQueryOutput, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StrValue(v.Definition))
@@ -766,6 +826,11 @@ func ObjectKnowledgeQueryOutput(v types.KnowledgeQueryOutput, enums ffi.EnumCase
 	}
 	out.MapSet("links", vm.ListValue(itemsLinks))
 	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer, enums))
+	optRanking := vm.Null
+	if v.Ranking != nil {
+		optRanking = ObjectKnowledgeRanking((*v.Ranking))
+	}
+	out.MapSet("ranking", optRanking)
 	return out
 }
 

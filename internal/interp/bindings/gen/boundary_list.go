@@ -166,11 +166,17 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "KnowledgeIndexCause", Zero: types.KnowledgeIndexCause{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeIndexCause(v.(types.KnowledgeIndexCause))
 	}},
+	{Name: "KnowledgeListRank", Zero: types.KnowledgeListRank{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectKnowledgeListRank(v.(types.KnowledgeListRank)) }},
+	{Name: "KnowledgeMatchWhy", Zero: types.KnowledgeMatchWhy{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectKnowledgeMatchWhy(v.(types.KnowledgeMatchWhy)) }},
 	{Name: "KnowledgeNode", Zero: types.KnowledgeNode{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectKnowledgeNode(v.(types.KnowledgeNode)) }},
 	{Name: "KnowledgeOrphan", Zero: types.KnowledgeOrphan{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectKnowledgeOrphan(v.(types.KnowledgeOrphan)) }},
+	{Name: "KnowledgeRanking", Zero: types.KnowledgeRanking{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectKnowledgeRanking(v.(types.KnowledgeRanking)) }},
 	{Name: "KnowledgeStats", Zero: types.KnowledgeStats{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectKnowledgeStats(v.(types.KnowledgeStats)) }},
 	{Name: "KnowledgeSymbolGap", Zero: types.KnowledgeSymbolGap{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeSymbolGap(v.(types.KnowledgeSymbolGap), enums)
+	}},
+	{Name: "KnowledgeTermScore", Zero: types.KnowledgeTermScore{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectKnowledgeTermScore(v.(types.KnowledgeTermScore))
 	}},
 	{Name: "KnowledgeTextPresence", Zero: types.KnowledgeTextPresence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeTextPresence(v.(types.KnowledgeTextPresence))

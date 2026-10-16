@@ -12,15 +12,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/types"
 )
 
-// refResolver is the pre-index Resolve, kept verbatim in behavior as the oracle the
-// index-backed Resolve is held to: a linear scan over g.nodes that lowercases, scores
-// through interactive.LeafScore and finds a node's project by a longest-first prefix scan
-// of every project path, per node, per call. It is slow on purpose. Do not "improve" it:
-// its only job is to be obviously the old semantics.
+// refResolver is the pre-index filter scan, kept verbatim in behavior as the oracle the
+// index-backed filters are held to: a linear scan over g.nodes that lowercases and finds a
+// node's project by a longest-first prefix scan of every project path, per node, per call.
+// It is slow on purpose. Do not "improve" it: its only job is to be obviously the old
+// semantics. Free text is ranked, not filtered, so the oracle answers filter-only queries.
 type refResolver struct {
 	g *Graph
 	// projects is every project node's path, longest first then lexical, the order the old
@@ -44,28 +43,17 @@ func newRefResolver(g *Graph) *refResolver {
 	return &refResolver{g: g, projects: paths}
 }
 
-func (r *refResolver) resolve(input string, limit int) []types.KnowledgeMatch {
+// resolve returns the ids of every node the filters of input admit, sorted.
+func (r *refResolver) resolve(input string) []string {
 	q := r.g.normalizePaths(parseQuery(input))
-	var matches []types.KnowledgeMatch
+	var ids []string
 	for id, n := range r.g.nodes {
-		score, ok := r.scoreNode(n, id, q)
-		if !ok {
-			continue
+		if r.admits(n, id, q) {
+			ids = append(ids, id)
 		}
-		m := types.KnowledgeMatch{ID: id, Kind: n.Kind, Label: n.Label, Score: score}
-		m.Staleness, m.OutrunDays = stalenessLabel(n.Attrs)
-		matches = append(matches, m)
 	}
-	slices.SortFunc(matches, func(a, b types.KnowledgeMatch) int {
-		if a.Score != b.Score {
-			return cmp.Compare(b.Score, a.Score)
-		}
-		return cmp.Compare(a.ID, b.ID)
-	})
-	if limit > 0 && len(matches) > limit {
-		matches = matches[:limit]
-	}
-	return matches
+	slices.Sort(ids)
+	return ids
 }
 
 func (r *refResolver) projectOf(n types.KnowledgeNode, id string) (string, bool) {
@@ -137,136 +125,145 @@ func (r *refResolver) touchesRelation(id string, rels []string) bool {
 	return false
 }
 
-func (r *refResolver) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int, bool) {
+func (r *refResolver) admits(n types.KnowledgeNode, id string, q parsedQuery) bool {
 	if vals, ok := q.fields["kind"]; ok && !matchesKind(n.Kind, vals) {
-		return 0, false
+		return false
 	}
 	if vals := q.negFields["kind"]; matchesKind(n.Kind, vals) {
-		return 0, false
+		return false
 	}
 	if res := q.reFields["kind"]; len(res) > 0 && !matchesAnyRe(n.Kind, res) {
-		return 0, false
+		return false
 	}
 	if vals, ok := q.fields["project"]; ok {
 		proj, owned := r.projectOf(n, id)
 		if !owned || !matchesProject(proj, vals) {
-			return 0, false
+			return false
 		}
 	}
 	if vals := q.negFields["project"]; len(vals) > 0 {
 		if proj, owned := r.projectOf(n, id); owned && matchesProject(proj, vals) {
-			return 0, false
+			return false
 		}
 	}
 	if res := q.reFields["project"]; len(res) > 0 {
 		if proj, owned := r.projectOf(n, id); !owned || !matchesAnyRe(proj, res) {
-			return 0, false
+			return false
 		}
 	}
 	if vals, ok := q.fields["id"]; ok && !refContainsAny(id, vals) {
-		return 0, false
+		return false
 	}
 	if vals := q.negFields["id"]; refContainsAny(id, vals) {
-		return 0, false
+		return false
 	}
 	if res := q.reFields["id"]; len(res) > 0 && !matchesAnyRe(id, res) {
-		return 0, false
+		return false
 	}
 	if vals, ok := q.fields["language"]; ok && !slices.Contains(vals, n.Attrs["language"]) {
-		return 0, false
+		return false
 	}
 	if vals := q.negFields["language"]; slices.Contains(vals, n.Attrs["language"]) {
-		return 0, false
+		return false
 	}
 	if res := q.reFields["language"]; len(res) > 0 && !matchesAnyRe(n.Attrs["language"], res) {
-		return 0, false
+		return false
 	}
 	if vals, ok := q.fields["role"]; ok && !slices.Contains(vals, n.Attrs[attrRole]) {
-		return 0, false
+		return false
 	}
 	if vals := q.negFields["role"]; slices.Contains(vals, n.Attrs[attrRole]) {
-		return 0, false
+		return false
 	}
 	if res := q.reFields["role"]; len(res) > 0 && !matchesAnyRe(n.Attrs[attrRole], res) {
-		return 0, false
+		return false
 	}
 	for field, attr := range map[string]string{"layer": types.AttrLayer, "family": types.AttrMarkerFamily} {
 		if vals, ok := q.fields[field]; ok && !slices.Contains(vals, n.Attrs[attr]) {
-			return 0, false
+			return false
 		}
 		if vals := q.negFields[field]; slices.Contains(vals, n.Attrs[attr]) {
-			return 0, false
+			return false
 		}
 		if res := q.reFields[field]; len(res) > 0 && !matchesAnyRe(n.Attrs[attr], res) {
-			return 0, false
+			return false
 		}
 	}
 	if !matchesStamp(n, q) {
-		return 0, false
+		return false
 	}
 
 	hay := strings.ToLower(id + " " + n.Label + " " + n.Doc)
 	for _, t := range q.negTerms {
 		if hasWildcard(t) {
 			if refGlobMatch(t, id) || refGlobMatch(t, n.Label) {
-				return 0, false
+				return false
 			}
 		} else if strings.Contains(hay, strings.ToLower(t)) {
-			return 0, false
+			return false
 		}
 	}
 
-	if len(q.terms) == 0 {
-		if _, relOnly := q.fields["relation"]; relOnly && !r.touchesRelation(id, q.fields["relation"]) {
-			return 0, false
-		}
-		return 1 + kindRank(n.Kind) + r.g.citedRank(id, n.Kind), true
-	}
-
-	total := 0
 	for _, t := range q.terms {
-		if hasWildcard(t) {
-			if !refGlobMatch(t, id) && !refGlobMatch(t, n.Label) {
-				return 0, false
-			}
-			total += wildcardTermScore
-			continue
+		if hasWildcard(t) && !refGlobMatch(t, id) && !refGlobMatch(t, n.Label) {
+			return false
 		}
-		best := max(interactive.LeafScore(id, t), interactive.LeafScore(n.Label, t))
-		if best <= 0 {
-			switch lt := strings.ToLower(t); {
-			case strings.Contains(strings.ToLower(id), lt),
-				strings.Contains(strings.ToLower(n.Doc), lt):
-				best = 1
-			default:
-				return 0, false
-			}
+		lt := strings.ToLower(t)
+		if !hasWildcard(t) && strings.ContainsAny(t, `/\`) &&
+			!strings.Contains(strings.ToLower(id), lt) && !strings.Contains(strings.ToLower(n.Label), lt) && !strings.Contains(strings.ToLower(n.Doc), lt) {
+			return false
 		}
-		total += best
 	}
-	return total + kindRank(n.Kind) + r.g.citedRank(id, n.Kind), true
+	if _, relOnly := q.fields["relation"]; relOnly && len(q.terms) == 0 && !r.touchesRelation(id, q.fields["relation"]) {
+		return false
+	}
+	return true
 }
 
-// requireResolveMatchesReference holds g.Resolve to the reference for every query, at no
-// limit and at a small one (the limit cuts after the sort, so it checks the order too). It
-// returns how many queries matched anything, so a caller can refuse a vacuous run.
-func requireResolveMatchesReference(t *testing.T, g *Graph, queries []string) int {
+// filterOnly reports whether input has no scored free text, the queries the reference
+// answers.
+func filterOnly(input string) bool {
+	scored, _ := queryTokens(compileTerms(parseQuery(input).terms))
+	return len(scored) == 0
+}
+
+// requireResolveMatchesReference holds g.Resolve to the reference for every filter-only
+// query: the same ids, ordered by prior, kind and id, at no limit and at a small one. It returns
+// how many queries it compared and how many of those matched anything, so a caller can
+// refuse a vacuous run.
+func requireResolveMatchesReference(t *testing.T, g *Graph, queries []string) (compared, nonEmpty int) {
 	t.Helper()
 	ref := newRefResolver(g)
-	nonEmpty := 0
 	for _, in := range queries {
-		all := ref.resolve(in, 0)
-		require.Equalf(t, all, g.Resolve(in, 0), "Resolve(%q, 0) diverged from the reference scan", in)
-		first := all[:min(7, len(all))]
-		if len(all) == 0 {
-			first = nil
+		if !filterOnly(in) {
+			continue
 		}
-		require.Equalf(t, first, g.Resolve(in, 7), "Resolve(%q, 7) diverged from the reference scan", in)
-		if len(all) > 0 {
+		compared++
+		want := ref.resolve(in)
+		all := g.Resolve(in, 0)
+		got := make([]string, len(all))
+		for i, m := range all {
+			got[i] = m.ID
+		}
+		slices.SortStableFunc(all, func(a, b types.KnowledgeMatch) int {
+			return cmp.Or(cmp.Compare(b.Why.Prior, a.Why.Prior), cmp.Compare(kindRank(b.Kind), kindRank(a.Kind)), cmp.Compare(a.ID, b.ID))
+		})
+		require.Equalf(t, all, g.Resolve(in, 0), "Resolve(%q, 0) is not in prior, kind, id order", in)
+		slices.Sort(got)
+		require.Equalf(t, want, nilIfNone(got), "Resolve(%q, 0) admitted another set than the reference scan", in)
+		require.Equalf(t, all[:min(7, len(all))], nilIfNone(g.Resolve(in, 7)), "Resolve(%q, 7) is not the first 7", in)
+		if len(want) > 0 {
 			nonEmpty++
 		}
 	}
-	return nonEmpty
+	return compared, nonEmpty
+}
+
+func nilIfNone[T any](xs []T) []T {
+	if len(xs) == 0 {
+		return nil
+	}
+	return xs
 }
 
 // withFilterNodes adds nodes to g that the synthetic fixture lacks and the filters need:
@@ -305,8 +302,9 @@ func withFilterNodes(g *Graph) {
 }
 
 // resolveQueries cover each filter the grammar has, alone and combined: field filters
-// (=, :, !=, =~) on every known field, negated and wildcard terms, phrases, multi-term AND,
-// case, non-ASCII, relation-only queries and project=.
+// (=, :, !=, =~) on every known field, negated and wildcard terms, phrases, case,
+// non-ASCII, relation-only queries and project=. The differential answers the ones with no
+// scored free text.
 var resolveQueries = []string{
 	"t003", "T003", "kind:target t003", "kind=target t003 project=pkg/p00010", "kind=target t00 t003", "build", "BUILD", "build -test",
 	"build -t003", "-build", "-\"overview of\"", "-\"p00010 build\"", "-\"x.go\"", "\"pkg/p00010 t003\"", "\"workspace and\"",
@@ -329,9 +327,9 @@ var resolveQueries = []string{
 func TestResolveMatchesReferenceOnLargeGraph(t *testing.T) {
 	g := largeGraph(t)
 	withFilterNodes(g)
-	nonEmpty := requireResolveMatchesReference(t, g, resolveQueries)
+	compared, nonEmpty := requireResolveMatchesReference(t, g, resolveQueries)
 	// A guard against the cases drifting into a vacuous pass: most queries must match.
-	assert.Greater(t, nonEmpty, len(resolveQueries)*2/3, "too few queries matched anything; the differential would prove little")
+	assert.Greater(t, nonEmpty, compared*2/3, "too few queries matched anything; the differential would prove little")
 }
 
 // TestResolveMatchesReferenceOnQuirkGraph is the same differential on a small graph built
@@ -379,34 +377,22 @@ func TestResolveMatchesReferenceOnRandomQueries(t *testing.T) {
 	requireResolveMatchesReference(t, g, queries)
 }
 
-// TestQueryPageMatchesReference holds the page Query builds to the reference's matches:
-// its Matches and MatchCount are what MCP and the CLI show.
-func TestQueryPageMatchesReference(t *testing.T) {
+// TestQueryPageMatchesResolve holds the page Query builds to Resolve's matches: its
+// Matches and MatchCount are what MCP and the CLI show.
+func TestQueryPageMatchesResolve(t *testing.T) {
 	g := largeGraph(t)
 	withFilterNodes(g)
-	ref := newRefResolver(g)
 	for _, in := range []string{"t003", "kind:target t003", "project=pkg/p00010 kind=file", "relation=references"} {
-		want := ref.resolve(in, 0)
+		want := g.Resolve(in, 0)
+		require.NotEmptyf(t, want, "%q matches nothing; the comparison would prove little", in)
 		out := g.QueryPage(in, 50, 0, 10)
 		assert.Equalf(t, len(want), out.MatchCount, "MatchCount for %q", in)
 		assert.Equalf(t, want[:min(10, len(want))], out.Matches, "first page for %q", in)
+		require.NotNil(t, out.Ranking)
+		assert.Equal(t, ShippedWeights().Digest(), out.Ranking.Weights)
 	}
 }
 
-func TestResolveLeafScoreLowerMatchesInteractive(t *testing.T) {
-	paths := []string{
-		"", "a", "target:pkg/p00001:t003", "Target:PKG/P00001:T003", "function:docs/f.buzz:x", "x/y/z/leaf", "leaf", "/", "//", "a/", "/a",
-		"İstanbul/Straße", "ÀÉÎ/ÕÜ", "kKelvin/K", "bad\xffutf/\xc3(x", "file:web/ui/App.tsx", "t003", "tt003",
-	}
-	queries := []string{"", "t003", "T003", "x", "leaf", "L", "/", "straße", "ISTANBUL", "k", "é", "\xff", "ui/app", "tsx"}
-	for _, p := range paths {
-		for _, q := range queries {
-			want := interactive.LeafScore(p, q)
-			got := leafScoreLower(strings.ToLower(p), strings.ToLower(q), strings.Count(p, "/"))
-			assert.Equalf(t, want, got, "LeafScore(%q, %q)", p, q)
-		}
-	}
-}
 
 // TestResolveGlobLoweringIsIdempotent pins the assumption the index rests on: the scan
 // lowercases a glob's subject once, at build time, where globMatch lowercases it per call.

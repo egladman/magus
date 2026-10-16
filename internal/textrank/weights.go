@@ -20,8 +20,11 @@ const weightsVersion = 1
 // Weights is every tunable number the rankers read. It comes only from the committed
 // weights.json: a person edits and reviews it, and nothing adjusts it at run time.
 type Weights struct {
-	Version   int                `json:"version"`
-	BM25F     BM25F              `json:"bm25f"`
+	Version int   `json:"version"`
+	BM25F   BM25F `json:"bm25f"`
+	// KindPrior multiplies a node's lexical score by its kind; a kind it does not name
+	// keeps its score. Empty for now: on the retrieval eval's 242 query judgments, 2x on
+	// the domain kinds cost .003 nDCG@10 and 1.5x on file, dir and symbol gained .010.
 	KindPrior map[string]float64 `json:"kind_prior"`
 	PPR       PPRWeights         `json:"ppr"`
 	Fusion    FusionWeights      `json:"fusion"`
@@ -52,6 +55,7 @@ type PPRWeights struct {
 }
 
 // FusionWeights holds the reciprocal rank fusion constant K and each list's weight by name.
+// A list Lists does not name weighs 1, the unweighted fusion of Cormack et al. 2009.
 type FusionWeights struct {
 	K     float64            `json:"k"` // 60: Cormack, Clarke and Buettcher 2009
 	Lists map[string]float64 `json:"lists"`

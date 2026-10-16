@@ -274,6 +274,7 @@ func TestQueryPagePaginatesMatches(t *testing.T) {
 			Matches:       page.Matches,
 			Nodes:         page.Nodes,
 			Links:         page.Links,
+			Ranking:       &types.KnowledgeRanking{Weights: ShippedWeights().Digest()},
 		}
 		assert.Equal(t, want, page)
 		assert.LessOrEqual(t, len(page.Matches), limit)
@@ -362,6 +363,23 @@ func TestResolveFreeTextReachesFullID(t *testing.T) {
 
 	ids := matchIDs(g.Resolve("kind:function web render", 0))
 	assert.Equal(t, []string{"function:web/deep/dir/site.buzz:render"}, ids)
+}
+
+// Query ranks any-term matches and labels the partial ones; Resolve, which names one node
+// for explain, path and refs, keeps only the matches holding every term.
+func TestQueryLabelsPartialMatchesResolveKeepsFull(t *testing.T) {
+	g := NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: "function:web/site.buzz:render", Kind: types.KindFunction, Label: "render", Source: "web/site.buzz:1"})
+	g.AddNode(types.KnowledgeNode{ID: "function:web/site.buzz:parse", Kind: types.KindFunction, Label: "parse", Source: "web/site.buzz:2"})
+
+	out := g.Query("kind:function web render", 0)
+	require.Equal(t, 2, out.MatchCount)
+	assert.Equal(t, []string{"function:web/site.buzz:render", "function:web/site.buzz:parse"}, matchIDs(out.Matches))
+	assert.Equal(t, [2]int{2, 2}, [2]int{out.Matches[0].Why.Matched, out.Matches[0].Why.Of})
+	assert.Equal(t, [2]int{1, 2}, [2]int{out.Matches[1].Why.Matched, out.Matches[1].Why.Of})
+
+	assert.Equal(t, []string{"function:web/site.buzz:render"}, matchIDs(g.Resolve("kind:function web render", 0)))
+	assert.Empty(t, g.Resolve("kind:function web nosuch", 0), "no node holds every term")
 }
 
 func TestGlobMatch(t *testing.T) {

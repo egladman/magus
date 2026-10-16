@@ -2823,6 +2823,9 @@ github.com/egladman/magus/types.KnowledgeGraphOutput.SourceBaseURL field string 
 github.com/egladman/magus/types.KnowledgeIndexCause type struct
 github.com/egladman/magus/types.KnowledgeIndexCause.Fix field string "json:\"fix\" yaml:\"fix\""
 github.com/egladman/magus/types.KnowledgeIndexCause.Why field string "json:\"why\" yaml:\"why\""
+github.com/egladman/magus/types.KnowledgeListRank type struct
+github.com/egladman/magus/types.KnowledgeListRank.List field string "json:\"list\" yaml:\"list\""
+github.com/egladman/magus/types.KnowledgeListRank.Rank field int "json:\"rank\" yaml:\"rank\""
 github.com/egladman/magus/types.KnowledgeMatch type struct
 github.com/egladman/magus/types.KnowledgeMatch.ID field string "json:\"id\"    yaml:\"id\""
 github.com/egladman/magus/types.KnowledgeMatch.Kind field string "json:\"kind\"  yaml:\"kind\""
@@ -2830,6 +2833,14 @@ github.com/egladman/magus/types.KnowledgeMatch.Label field string "json:\"label\
 github.com/egladman/magus/types.KnowledgeMatch.OutrunDays field int "json:\"outrun_days,omitempty\" yaml:\"outrun_days,omitempty\""
 github.com/egladman/magus/types.KnowledgeMatch.Score field int "json:\"score\" yaml:\"score\""
 github.com/egladman/magus/types.KnowledgeMatch.Staleness field string "json:\"staleness,omitempty\"   yaml:\"staleness,omitempty\""
+github.com/egladman/magus/types.KnowledgeMatch.Why field *KnowledgeMatchWhy "json:\"why,omitempty\" yaml:\"why,omitempty\""
+github.com/egladman/magus/types.KnowledgeMatchWhy type struct
+github.com/egladman/magus/types.KnowledgeMatchWhy.Lists field []KnowledgeListRank "json:\"lists,omitempty\" yaml:\"lists,omitempty\""
+github.com/egladman/magus/types.KnowledgeMatchWhy.Matched field int "json:\"matched\"         yaml:\"matched\""
+github.com/egladman/magus/types.KnowledgeMatchWhy.Of field int "json:\"of\"              yaml:\"of\""
+github.com/egladman/magus/types.KnowledgeMatchWhy.Prior field float64 "json:\"prior\"           yaml:\"prior\""
+github.com/egladman/magus/types.KnowledgeMatchWhy.Seeds field []string "json:\"seeds,omitempty\" yaml:\"seeds,omitempty\""
+github.com/egladman/magus/types.KnowledgeMatchWhy.Terms field []KnowledgeTermScore "json:\"terms,omitempty\" yaml:\"terms,omitempty\""
 github.com/egladman/magus/types.KnowledgeNeighborhoodDefinition const untyped string = "neighborhood walks outward from one focus node up to a depth, along the chosen relations only, and optionally folds every node under a path prefix into that prefix's directory, so a figure or a reader sees a subsystem at the grain they asked for."
 github.com/egladman/magus/types.KnowledgeNeighborhoodOptions type struct
 github.com/egladman/magus/types.KnowledgeNeighborhoodOptions.Collapse field []string "json:\"collapse,omitempty\" yaml:\"collapse,omitempty\""
@@ -2924,7 +2935,13 @@ github.com/egladman/magus/types.KnowledgeQueryOutput.Matches field []KnowledgeMa
 github.com/egladman/magus/types.KnowledgeQueryOutput.Nodes field []KnowledgeNode "json:\"nodes\"          yaml:\"nodes\""
 github.com/egladman/magus/types.KnowledgeQueryOutput.Offset field int "json:\"offset,omitempty\" yaml:\"offset,omitempty\""
 github.com/egladman/magus/types.KnowledgeQueryOutput.Query field string "json:\"query\"          yaml:\"query\""
+github.com/egladman/magus/types.KnowledgeQueryOutput.Ranking field *KnowledgeRanking "json:\"ranking,omitempty\" yaml:\"ranking,omitempty\""
 github.com/egladman/magus/types.KnowledgeQueryOutput.SchemaVersion field int "json:\"schema_version\" yaml:\"schema_version\""
+github.com/egladman/magus/types.KnowledgeRanking type struct
+github.com/egladman/magus/types.KnowledgeRanking.Note field string "json:\"note,omitempty\"    yaml:\"note,omitempty\""
+github.com/egladman/magus/types.KnowledgeRanking.Reader field []string "json:\"reader,omitempty\"  yaml:\"reader,omitempty\""
+github.com/egladman/magus/types.KnowledgeRanking.Skipped field []string "json:\"skipped,omitempty\" yaml:\"skipped,omitempty\""
+github.com/egladman/magus/types.KnowledgeRanking.Weights field string "json:\"weights\"           yaml:\"weights\""
 github.com/egladman/magus/types.KnowledgeRefSite type struct
 github.com/egladman/magus/types.KnowledgeRefSite.Count field int "json:\"count,omitempty\" yaml:\"count,omitempty\""
 github.com/egladman/magus/types.KnowledgeRefSite.File field string "json:\"file\"            yaml:\"file\""
@@ -3055,6 +3072,10 @@ github.com/egladman/magus/types.KnowledgeSymbolRef.Alias field string
 github.com/egladman/magus/types.KnowledgeSymbolRef.Count field int
 github.com/egladman/magus/types.KnowledgeSymbolRef.Lines field []int
 github.com/egladman/magus/types.KnowledgeSymbolRef.Path field string
+github.com/egladman/magus/types.KnowledgeTermScore type struct
+github.com/egladman/magus/types.KnowledgeTermScore.Field field string "json:\"field\" yaml:\"field\""
+github.com/egladman/magus/types.KnowledgeTermScore.Score field float64 "json:\"score\" yaml:\"score\""
+github.com/egladman/magus/types.KnowledgeTermScore.Term field string "json:\"term\"  yaml:\"term\""
 github.com/egladman/magus/types.KnowledgeTextPresence type struct
 github.com/egladman/magus/types.KnowledgeTextPresence.Files field int "json:\"files\" yaml:\"files\""
 github.com/egladman/magus/types.KnowledgeTextPresence.Hits field int "json:\"hits\"  yaml:\"hits\""

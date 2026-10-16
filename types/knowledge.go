@@ -1169,7 +1169,12 @@ type KnowledgeMatch struct {
 	ID    string `json:"id"    yaml:"id"`
 	Kind  string `json:"kind"  yaml:"kind"`
 	Label string `json:"label" yaml:"label"`
-	Score int    `json:"score" yaml:"score"`
+	// Score is the fused ranking score scaled by 10000 and rounded. Only the order of
+	// matches means anything; the magnitude changes with the weight file.
+	Score int `json:"score" yaml:"score"`
+	// Why says how the match ranked: which query terms it held, in which fields, and its
+	// rank in each fused list.
+	Why *KnowledgeMatchWhy `json:"why,omitempty" yaml:"why,omitempty"`
 	// Staleness and OutrunDays travel with a prose match that ranked DOWN because the
 	// thing it describes moved on without it. They are the evidence for the weight, and
 	// they exist so the weight is never silent: a reader can see "ranked down: 400 days
@@ -1177,6 +1182,45 @@ type KnowledgeMatch struct {
 	// not penalized, including prose with no history to measure.
 	Staleness  string `json:"staleness,omitempty"   yaml:"staleness,omitempty"`
 	OutrunDays int    `json:"outrun_days,omitempty" yaml:"outrun_days,omitempty"`
+}
+
+// KnowledgeMatchWhy explains one match's rank. Matched of Of is how many distinct query
+// words the match holds; a match holding fewer than Of is a partial match. A term holding
+// a path separator must appear whole, so its words are not counted. Terms are the
+// BM25F contributions by term and field, largest first. Lists is the match's 1-based rank
+// in each list the ranking fused. Seeds are the graph seeds that lifted it most. Prior is
+// the multiplicative kind and citation prior its lexical score was scaled by.
+type KnowledgeMatchWhy struct {
+	Matched int                  `json:"matched"         yaml:"matched"`
+	Of      int                  `json:"of"              yaml:"of"`
+	Terms   []KnowledgeTermScore `json:"terms,omitempty" yaml:"terms,omitempty"`
+	Lists   []KnowledgeListRank  `json:"lists,omitempty" yaml:"lists,omitempty"`
+	Seeds   []string             `json:"seeds,omitempty" yaml:"seeds,omitempty"`
+	Prior   float64              `json:"prior"           yaml:"prior"`
+}
+
+// KnowledgeTermScore is one query term's BM25F contribution from one field.
+type KnowledgeTermScore struct {
+	Term  string  `json:"term"  yaml:"term"`
+	Field string  `json:"field" yaml:"field"`
+	Score float64 `json:"score" yaml:"score"`
+}
+
+// KnowledgeListRank is a match's 1-based rank in one fused list.
+type KnowledgeListRank struct {
+	List string `json:"list" yaml:"list"`
+	Rank int    `json:"rank" yaml:"rank"`
+}
+
+// KnowledgeRanking names everything a ranked answer is a function of besides the graph
+// and the query: the weight file's digest, the reader context paths, the lists that could
+// not run and why, and a note when the ranking fell back to something less than the
+// stored lexical index.
+type KnowledgeRanking struct {
+	Weights string   `json:"weights"           yaml:"weights"`
+	Reader  []string `json:"reader,omitempty"  yaml:"reader,omitempty"`
+	Skipped []string `json:"skipped,omitempty" yaml:"skipped,omitempty"`
+	Note    string   `json:"note,omitempty"    yaml:"note,omitempty"`
 }
 
 // KnowledgeGraphDiffDefinition is the human-readable description of `magus graph diff`.
@@ -1439,6 +1483,9 @@ type KnowledgeQueryOutput struct {
 	// queries never seed the symbol shards, so a bare term matching nothing says nothing
 	// about whether a code symbol by that name exists; this is where that is stated.
 	Answer KnowledgeAnswer `json:"answer" yaml:"answer"`
+	// Ranking is what the match order depends on beyond the graph and the query. Nil for
+	// an answer that was not ranked.
+	Ranking *KnowledgeRanking `json:"ranking,omitempty" yaml:"ranking,omitempty"`
 }
 
 // EdgeDirection says which end of an edge the focus node sits on. Distinct from

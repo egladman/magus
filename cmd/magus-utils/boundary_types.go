@@ -185,6 +185,9 @@ var boundaryTypes = []boundaryType{
 	{Name: "Volatility", Type: reflect.TypeFor[types.VolatilityReport](), RuntimeObject: true},
 	// Graph reads, leaf-first. magus\query, explain, path, refs, and stats return these.
 	// KnowledgeGodNode.in is a Buzz keyword; the mirror emits it as a free identifier.
+	{Name: "KnowledgeTermScore", Type: reflect.TypeFor[types.KnowledgeTermScore](), RuntimeObject: true},
+	{Name: "KnowledgeListRank", Type: reflect.TypeFor[types.KnowledgeListRank](), RuntimeObject: true},
+	{Name: "KnowledgeMatchWhy", Type: reflect.TypeFor[types.KnowledgeMatchWhy](), RuntimeObject: true},
 	{Name: "Match", Type: reflect.TypeFor[types.KnowledgeMatch](), RuntimeObject: true},
 	{Name: "KnowledgeNode", Type: reflect.TypeFor[types.KnowledgeNode](), RuntimeObject: true},
 	{Name: "KnowledgeEdge", Type: reflect.TypeFor[types.KnowledgeEdge](), RuntimeObject: true},
@@ -194,6 +197,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "KnowledgeGodNode", Type: reflect.TypeFor[types.KnowledgeGodNode](), RuntimeObject: true},
 	{Name: "KnowledgeOrphan", Type: reflect.TypeFor[types.KnowledgeOrphan](), RuntimeObject: true},
 	{Name: "KnowledgeDocCoverage", Type: reflect.TypeFor[types.KnowledgeDocCoverage](), RuntimeObject: true},
+	{Name: "KnowledgeRanking", Type: reflect.TypeFor[types.KnowledgeRanking](), RuntimeObject: true},
 	{Name: "QueryResult", Type: reflect.TypeFor[types.KnowledgeQueryOutput](), RuntimeObject: true},
 	{Name: "PublicSymbol", Type: reflect.TypeFor[types.PublicSymbol](), RuntimeObject: true},
 	{Name: "ExplainResult", Type: reflect.TypeFor[types.KnowledgeExplainOutput](), RuntimeObject: true},
