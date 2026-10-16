@@ -34,15 +34,7 @@ func (r HoldoutRead) MarshalJSON() ([]byte, error) {
 // MarshalJSON would refuse.
 func (r *HoldoutRead) UnmarshalJSON(b []byte) error {
 	type plain HoldoutRead
-	var p plain
-	if err := json.UnmarshalStrict(b, &p); err != nil {
-		return err
-	}
-	if err := HoldoutRead(p).validate(); err != nil {
-		return invalid{err}
-	}
-	*r = HoldoutRead(p)
-	return nil
+	return decodeStrict(b, r, func(p plain) HoldoutRead { return HoldoutRead(p) })
 }
 
 func (r HoldoutRead) validate() error {

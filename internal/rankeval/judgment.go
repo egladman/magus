@@ -112,15 +112,7 @@ func (j Judgment) MarshalJSON() ([]byte, error) {
 // judgment MarshalJSON would refuse.
 func (j *Judgment) UnmarshalJSON(b []byte) error {
 	type plain Judgment
-	var p plain
-	if err := json.UnmarshalStrict(b, &p); err != nil {
-		return err
-	}
-	if err := Judgment(p).validate(); err != nil {
-		return invalid{err}
-	}
-	*j = Judgment(p)
-	return nil
+	return decodeStrict(b, j, func(p plain) Judgment { return Judgment(p) })
 }
 
 // ReadJudgments reads JSON Lines, one Judgment per non-blank line, and names the line
@@ -187,6 +179,22 @@ func (j Judgment) validate() error {
 type invalid struct{ error }
 
 // readLines decodes JSON Lines into T, whose UnmarshalJSON carries the encoding,
+// decodeStrict is the UnmarshalJSON of every row type T: it decodes b strictly into
+// P, T without its methods so the decode does not recurse, and sets *into only when
+// validate accepts the row. An unknown or repeated field is an error.
+func decodeStrict[P any, T interface{ validate() error }](b []byte, into *T, row func(P) T) error {
+	var p P
+	if err := json.UnmarshalStrict(b, &p); err != nil {
+		return err
+	}
+	v := row(p)
+	if err := v.validate(); err != nil {
+		return invalid{err}
+	}
+	*into = v
+	return nil
+}
+
 // skipping blank lines and naming the line and file of the first error.
 func readLines[T any](r io.Reader, file string) ([]T, error) {
 	sc := bufio.NewScanner(r)

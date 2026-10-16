@@ -39,15 +39,7 @@ func (q Query) MarshalJSON() ([]byte, error) {
 // MarshalJSON would refuse.
 func (q *Query) UnmarshalJSON(b []byte) error {
 	type plain Query
-	var p plain
-	if err := json.UnmarshalStrict(b, &p); err != nil {
-		return err
-	}
-	if err := Query(p).validate(); err != nil {
-		return invalid{err}
-	}
-	*q = Query(p)
-	return nil
+	return decodeStrict(b, q, func(p plain) Query { return Query(p) })
 }
 
 func (q Query) validate() error {
