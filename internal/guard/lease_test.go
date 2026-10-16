@@ -691,26 +691,7 @@ func TestWorkerCheckOnly(t *testing.T) {
 // passes, since nothing says what it touches. The refusal names the globs and the run
 // without the charm.
 func TestWorkerCheckOnlyHoldsARewriteToTheWritePaths(t *testing.T) {
-	ws := typestest.NewMockWorkspaceRepository(t)
-	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{Projects: []types.TargetGraphProject{
-		{Path: ".", Nodes: []types.TargetGraphNode{
-			{Name: "format", Dependencies: []string{"markdown-format", "markdown-build"}, Spells: []types.TargetSpellUse{{Spell: "dprint", Ops: []string{"dprint"}}}},
-			{Name: "markdown-format"},
-			{Name: "markdown-build"},
-		}},
-	}}, nil).Maybe()
-	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
-	root := &types.Project{
-		Path: ".",
-		TargetChains: map[string][]types.ChainStep{
-			"format": append(types.Needs("markdown-format", "markdown-build"), types.ChainStep{Project: "libs/md", Target: "format"}),
-		},
-		TargetOutputs: map[string][]types.OutputRef{"markdown-build": {{Glob: "gen/mdtool"}}},
-		TargetUpdates: map[string][]types.UpdateRef{"markdown-format": {{Glob: "docs/**/*.md"}}, "dprint": {{Glob: "console/**/*.md"}}},
-	}
-	ws.EXPECT().Get(".").Return(root).Maybe()
-	ws.EXPECT().Get("libs/md").Return(&types.Project{Path: "libs/md", TargetUpdates: map[string][]types.UpdateRef{"format": {{Glob: "**/*.go"}}}}).Maybe()
-	ws.EXPECT().All().Return([]*types.Project{root}).Maybe()
+	ws := formatChainWorkspace(t)
 	opens := 0
 	deps := Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) {
 		opens++
@@ -771,6 +752,33 @@ func TestWorkerCheckOnlyHoldsARewriteToTheWritePaths(t *testing.T) {
 	require.NotEmpty(t, reason, "a run over every project reads every project's declarations")
 	assert.Contains(t, reason.Why, "`docs/**/*.md`")
 	assert.Contains(t, reason.Say, " run format /`.")
+}
+
+// formatChainWorkspace is a root project whose format check needs markdown-format and
+// markdown-build, then libs/md's format, and calls the dprint op.
+func formatChainWorkspace(t *testing.T) *typestest.MockWorkspaceRepository {
+	t.Helper()
+	ws := typestest.NewMockWorkspaceRepository(t)
+	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{Projects: []types.TargetGraphProject{
+		{Path: ".", Nodes: []types.TargetGraphNode{
+			{Name: "format", Dependencies: []string{"markdown-format", "markdown-build"}, Spells: []types.TargetSpellUse{{Spell: "dprint", Ops: []string{"dprint"}}}},
+			{Name: "markdown-format"},
+			{Name: "markdown-build"},
+		}},
+	}}, nil).Maybe()
+	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	root := &types.Project{
+		Path: ".",
+		TargetChains: map[string][]types.ChainStep{
+			"format": append(types.Needs("markdown-format", "markdown-build"), types.ChainStep{Project: "libs/md", Target: "format"}),
+		},
+		TargetOutputs: map[string][]types.OutputRef{"markdown-build": {{Glob: "gen/mdtool"}}},
+		TargetUpdates: map[string][]types.UpdateRef{"markdown-format": {{Glob: "docs/**/*.md"}}, "dprint": {{Glob: "console/**/*.md"}}},
+	}
+	ws.EXPECT().Get(".").Return(root).Maybe()
+	ws.EXPECT().Get("libs/md").Return(&types.Project{Path: "libs/md", TargetUpdates: map[string][]types.UpdateRef{"format": {{Glob: "**/*.go"}}}}).Maybe()
+	ws.EXPECT().All().Return([]*types.Project{root}).Maybe()
+	return ws
 }
 
 // TestWorkerCheckOnlyJudgesTheDefaultCharms: default_charms [rw] make a plain `magus run`
