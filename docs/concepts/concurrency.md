@@ -283,8 +283,8 @@ worktrees, so N agents each running `magus affected ci` start N budgets' worth o
 work against one host. Measured on a ten-core workstation: four concurrent gates,
 load average 13.7, and tests failing because they were starved rather than wrong.
 
-So before a step starts, magus takes its concurrency slots and its declared
-`memory_mb` from a budget shared by every magus on the machine: the host's capacity.
+So before a step starts, magus takes its concurrency slots and its memory from a budget
+shared by every magus on the machine: the host's capacity.
 It lives in the [broker](../guides/integrations/server.md): one broker per user means
 one budget per machine, and a run starts one if none is up.
 
@@ -299,9 +299,19 @@ Key properties:
   fixed 512 MiB floor for the kernel and its page cache. A CI job that asks for
   `aggressive` claims memory the same way it claims cores.
 - **Declared or measured, never observed live.** It arbitrates what targets say they
-  need ([`memory_mb`](targets.md)) and what their recorded runs measured, so the same
-  command with the same history reaches the same verdict whatever else is running.
-  Observed pressure warns separately and never blocks.
+  need ([`memory_mb`](targets.md) and `slots`) and what their recorded runs measured, so
+  the same command with the same history reaches the same verdict whatever else is
+  running. Observed pressure warns separately and never blocks. A declaration always
+  wins: `slots` is claimed as written, and `memory_mb` is a ceiling a measurement only
+  narrows. A target that declares nothing claims, once it has three successful measured
+  runs, 1.25 times their highest peak memory and the 75th percentile of their CPU time
+  over wall time as slots, rounded up; before that, no memory and one slot. A replayed
+  step claims nothing. [MGS3009](../reference/codes/sandbox/MGS3009.md) has the whole
+  rule, and `magus session -o json` records how each step's claim was sized.
+- **A step runs Go as wide as it claims.** Every process a step starts gets
+  `GOMAXPROCS` and `-p` equal to its slots, one included, since `go` reads no jobserver
+  and would otherwise take every core the budget counted as free. So a Go target's
+  measured width never exceeds its claim: declare `slots` to widen one.
 - **It does not queue behind another invocation.** A step kept out by another magus
   invocation is refused immediately, exiting **75**
   ([MGS3009](../reference/codes/sandbox/MGS3009.md)), the same transient-failure code

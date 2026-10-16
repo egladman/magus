@@ -1076,44 +1076,49 @@ func (h *History) PredictPeakRSS(project, target string) (int64, bool) {
 	return max, max > 0
 }
 
-// MeasuredPeak is the highest peak resident memory among a set of successful runs and
-// how many runs it was taken over.
-type MeasuredPeak struct {
-	MaxBytes int64
-	Runs     int
+// Measurement is a figure taken over a set of successful runs, and how many runs it was
+// taken over: a peak in bytes from [MeasuredRuns.Peak], a width in slots from
+// [MeasuredRuns.Width].
+type Measurement struct {
+	Value int64
+	Runs  int
 }
 
-// fold combines the peaks of two spells serving one target. The step runs both, one
-// after the other, so the peak is the larger; Runs is the smaller, because the
-// least-observed spell bounds how far the maximum can be trusted.
-func (a MeasuredPeak) fold(b MeasuredPeak) MeasuredPeak {
+// fold combines the measurements of two spells serving one target. The step runs both,
+// one after the other, so the figure is the larger; Runs is the smaller, because the
+// least-observed spell bounds how far the figure can be trusted.
+func (a Measurement) fold(b Measurement) Measurement {
 	switch {
 	case b.Runs == 0:
 		return a
 	case a.Runs == 0:
 		return b
 	}
-	return MeasuredPeak{MaxBytes: max(a.MaxBytes, b.MaxBytes), Runs: min(a.Runs, b.Runs)}
+	return Measurement{Value: max(a.Value, b.Value), Runs: min(a.Runs, b.Runs)}
 }
 
-// PeakIndex is the successful measured runs of a [History], copied out so it can be
+// MeasuredRuns is the successful measured runs of a [History], copied out so it can be
 // read while that History goes on recording: a run records outcomes concurrently with
 // the steps it is still sizing.
-type PeakIndex struct {
+type MeasuredRuns struct {
 	projects map[string]map[string]Stats
 }
 
-// PeakIndex snapshots every outcome that passed, on the first attempt or a retry, and
-// recorded a peak. A failed run is left out because it can die early, well below what
-// a finished run reaches, and an unmeasured one because zero means unknown.
-func (h *History) PeakIndex() PeakIndex {
-	x := PeakIndex{projects: map[string]map[string]Stats{}}
+// MeasuredRuns snapshots every outcome that passed, on the first attempt or a retry, and
+// recorded a peak or the CPU time it spent. A failed run is left out because it can die
+// early, well below what a finished run reaches, and an unmeasured one because zero
+// means unknown.
+func (h *History) MeasuredRuns() MeasuredRuns {
+	x := MeasuredRuns{projects: map[string]map[string]Stats{}}
 	for project, targets := range h.Projects {
 		for key, st := range targets {
 			var kept []Outcome
 			for _, o := range st.RecentOutcomes {
-				if o.Result != OutcomeFail && o.MaxRSSBytes > 0 {
-					kept = append(kept, Outcome{Result: o.Result, MaxRSSBytes: o.MaxRSSBytes, Charms: slices.Clone(o.Charms), ArgsHash: o.ArgsHash})
+				if o.Result != OutcomeFail && (o.MaxRSSBytes > 0 || measuredWidth(o)) {
+					kept = append(kept, Outcome{
+						Result: o.Result, DurationMs: o.DurationMs, MaxRSSBytes: o.MaxRSSBytes, CPUMs: o.CPUMs,
+						Charms: slices.Clone(o.Charms), ArgsHash: o.ArgsHash,
+					})
 				}
 			}
 			if len(kept) == 0 {
@@ -1128,21 +1133,60 @@ func (h *History) PeakIndex() PeakIndex {
 	return x
 }
 
-// Peak returns the measured peak of target's runs in project that recorded shape, and
-// of every run of target whatever its shape, which includes the runs from before
-// shapes were recorded. target resolves as [History.PredictPeakRSS] does.
-func (x PeakIndex) Peak(project, target string, shape Shape) (sameShape, anyShape MeasuredPeak) {
+// measuredWidth reports whether o recorded both halves of the parallelism it used.
+func measuredWidth(o Outcome) bool { return o.CPUMs > 0 && o.DurationMs > 0 }
+
+// Peak returns the highest peak resident memory, in bytes, of target's runs in project
+// that recorded shape, and of every run of target whatever its shape, which includes the
+// runs from before shapes were recorded. target resolves as [History.PredictPeakRSS]
+// does.
+func (x MeasuredRuns) Peak(project, target string, shape Shape) (sameShape, anyShape Measurement) {
 	for _, s := range targetHistories(x.projects[project], target) {
-		var same, all MeasuredPeak
+		var same, all Measurement
 		for _, o := range s.RecentOutcomes {
-			all.MaxBytes, all.Runs = max(all.MaxBytes, o.MaxRSSBytes), all.Runs+1
+			if o.MaxRSSBytes <= 0 {
+				continue
+			}
+			all.Value, all.Runs = max(all.Value, o.MaxRSSBytes), all.Runs+1
 			if shape.matches(o) {
-				same.MaxBytes, same.Runs = max(same.MaxBytes, o.MaxRSSBytes), same.Runs+1
+				same.Value, same.Runs = max(same.Value, o.MaxRSSBytes), same.Runs+1
 			}
 		}
 		sameShape, anyShape = sameShape.fold(same), anyShape.fold(all)
 	}
 	return sameShape, anyShape
+}
+
+// Width returns how many slots target's runs in project kept busy: the 75th percentile
+// of CPU time over wall time, rounded up and never below one, split by shape as
+// [MeasuredRuns.Peak] splits it. A percentile rather than the maximum, so one run that
+// burst wide does not size every run after it.
+func (x MeasuredRuns) Width(project, target string, shape Shape) (sameShape, anyShape Measurement) {
+	for _, s := range targetHistories(x.projects[project], target) {
+		var same, all []int64
+		for _, o := range s.RecentOutcomes {
+			if !measuredWidth(o) {
+				continue
+			}
+			// Thousandths of a core, so percentile's integer interpolation keeps the
+			// fraction that decides which way a width rounds.
+			milli := o.CPUMs * 1000 / o.DurationMs
+			all = append(all, milli)
+			if shape.matches(o) {
+				same = append(same, milli)
+			}
+		}
+		sameShape, anyShape = sameShape.fold(widthSlots(same)), anyShape.fold(widthSlots(all))
+	}
+	return sameShape, anyShape
+}
+
+// widthSlots is the p75 of widths given in thousandths of a core, in whole slots.
+func widthSlots(milli []int64) Measurement {
+	if len(milli) == 0 {
+		return Measurement{}
+	}
+	return Measurement{Value: max((percentile(milli, 0.75)+999)/1000, 1), Runs: len(milli)}
 }
 
 // FoldTargetHistories combines every spell history a project recorded for target into

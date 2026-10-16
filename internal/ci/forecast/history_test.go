@@ -1348,9 +1348,10 @@ func TestNewShape(t *testing.T) {
 	assert.NotEqual(t, ArgsHash(nil), ArgsHash([]string{""}))
 }
 
-// TestPeakIndex pins which runs a claim may be sized from: successful ones that
-// measured a peak, split by shape, with every spell serving the target folded in.
-func TestPeakIndex(t *testing.T) {
+// TestMeasuredRunsPeak pins which runs a memory claim may be sized from: successful
+// ones that measured a peak, split by shape, with every spell serving the target folded
+// in.
+func TestMeasuredRunsPeak(t *testing.T) {
 	t.Parallel()
 
 	const mb = int64(1) << 20
@@ -1367,22 +1368,23 @@ func TestPeakIndex(t *testing.T) {
 			o(OutcomePass, 0, full),    // unmeasured
 			o(OutcomePass, 300, narrow),
 			{Result: OutcomePass, MaxRSSBytes: 5000 * mb}, // before v6: no shape
+			{Result: OutcomePass, CPUMs: 900, DurationMs: 100, Charms: full.Charms, ArgsHash: full.ArgsHash}, // a width, no peak
 		}},
 		"go/test": {RecentOutcomes: []Outcome{o(OutcomePass, 2000, full), o(OutcomePass, 2100, narrow)}},
 	}}}
-	x := h.PeakIndex()
+	x := h.MeasuredRuns()
 
 	same, all := x.Peak(".", "test", full)
-	assert.Equal(t, MeasuredPeak{MaxBytes: 4500 * mb, Runs: 1}, same,
+	assert.Equal(t, Measurement{Value: 4500 * mb, Runs: 1}, same,
 		"the larger spell's peak, over the least-observed spell's run count")
-	assert.Equal(t, MeasuredPeak{MaxBytes: 5000 * mb, Runs: 2}, all, "every shape, the unshaped run included")
+	assert.Equal(t, Measurement{Value: 5000 * mb, Runs: 2}, all, "every shape, the unshaped run included")
 
 	same, _ = x.Peak(".", "test", narrow)
-	assert.Equal(t, MeasuredPeak{MaxBytes: 2100 * mb, Runs: 1}, same)
+	assert.Equal(t, Measurement{Value: 2100 * mb, Runs: 1}, same)
 
 	same, all = x.Peak(".", "magusfile/test", full)
-	assert.Equal(t, MeasuredPeak{MaxBytes: 4500 * mb, Runs: 2}, same, "an exact key answers alone")
-	assert.Equal(t, MeasuredPeak{MaxBytes: 5000 * mb, Runs: 4}, all)
+	assert.Equal(t, Measurement{Value: 4500 * mb, Runs: 2}, same, "an exact key answers alone")
+	assert.Equal(t, Measurement{Value: 5000 * mb, Runs: 4}, all)
 
 	same, all = x.Peak(".", "test", Shape{})
 	assert.Zero(t, same, "the zero Shape matches nothing, not the unshaped runs")
@@ -1397,7 +1399,50 @@ func TestPeakIndex(t *testing.T) {
 	st.RecentOutcomes = append(st.RecentOutcomes, o(OutcomePass, 8000, full))
 	h.Projects["."]["go/test"] = st
 	_, all = x.Peak(".", "test", full)
-	assert.Equal(t, 5000*mb, all.MaxBytes)
+	assert.Equal(t, 5000*mb, all.Value)
+}
+
+// TestMeasuredRunsWidth pins how a slot claim is sized: the p75 of CPU time over wall
+// time across successful runs that measured both, rounded up to whole slots and never
+// below one, split by shape like a peak.
+func TestMeasuredRunsWidth(t *testing.T) {
+	t.Parallel()
+
+	full := NewShape(nil, nil)
+	narrow := NewShape(nil, []string{"-run", "TestOne"})
+	o := func(r OutcomeResult, cpuMs, wallMs int64, s Shape) Outcome {
+		return Outcome{Result: r, CPUMs: cpuMs, DurationMs: wallMs, Charms: s.Charms, ArgsHash: s.ArgsHash}
+	}
+	h := History{Projects: map[string]map[string]Stats{".": {
+		"magusfile/scip": {RecentOutcomes: []Outcome{
+			o(OutcomePass, 2000, 1000, full),     // 2.0 cores
+			o(OutcomePass, 3000, 1000, full),     // 3.0
+			o(OutcomeVolatile, 3400, 1000, full), // 3.4
+			o(OutcomePass, 9000, 1000, full),     // 9.0: a burst the percentile does not chase
+			o(OutcomeFail, 20000, 1000, full),    // a failed run sizes nothing
+			o(OutcomePass, 0, 1000, full),        // unmeasured
+			o(OutcomePass, 50, 1000, narrow),     // a twentieth of a core still takes one slot
+		}},
+		"magusfile/lint": {RecentOutcomes: []Outcome{o(OutcomePass, 3000, 1000, full)}},
+		"go/lint":        {RecentOutcomes: []Outcome{o(OutcomePass, 5000, 1000, full), o(OutcomePass, 5000, 1000, full)}},
+	}}}
+	x := h.MeasuredRuns()
+
+	same, all := x.Width(".", "scip", full)
+	// p75 of [2.0 3.0 3.4 9.0] interpolates to 4.8, which takes 5 slots.
+	assert.Equal(t, Measurement{Value: 5, Runs: 4}, same)
+	// With the narrow run, p75 of [0.05 2.0 3.0 3.4 9.0] is 3.4.
+	assert.Equal(t, Measurement{Value: 4, Runs: 5}, all, "every shape, the narrow run included")
+
+	same, _ = x.Width(".", "scip", narrow)
+	assert.Equal(t, Measurement{Value: 1, Runs: 1}, same)
+
+	same, _ = x.Width(".", "lint", full)
+	assert.Equal(t, Measurement{Value: 5, Runs: 1}, same, "the wider spell, over the least-observed spell's run count")
+
+	same, all = x.Width(".", "test", full)
+	assert.Zero(t, same)
+	assert.Zero(t, all)
 }
 
 // syntheticHistory builds a History with n projects × 2 targets, each with

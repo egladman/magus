@@ -747,9 +747,9 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// take one slot each and a full claim each, so a single invocation queued behind
 	// memory its own siblings held.
 	//
-	// The declarations as written. A run re-sizes them from its measured peaks once it
+	// The declarations as written. A run re-sizes them from its measured runs once it
 	// knows its own shape (executeStages).
-	m.claimMemory(&step, p, target, nil)
+	m.sizeClaim(&step, p, target, nil)
 	// A step that only runs installs dispatches each spell's install, and each keys
 	// itself (installStep). Keyed here on the project baseline, a hit would skip the stamp
 	// check that notices a deleted tree.
@@ -2012,14 +2012,13 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	obs := m.probeObservations(ctx, uniqueProjects, drivenByProject)
 	// Joined here rather than beside the volatility runtime below: every step's claim is
 	// sized from it, and the probes above already overlapped most of the decode.
-	sizeMemory := memorySizer(m.peakIndex(history), forecast.NewShape(charmKey, opts.ExtraArgs))
+	sizeClaims := newClaimSizer(m.measuredRuns(history), forecast.NewShape(charmKey, opts.ExtraArgs))
 	// keyedStep is newStep without the revision, for the planning below that must not
 	// wait on it.
 	keyedStep := func(p *types.Project, target string) (cache.Step, error) {
 		step := m.buildStep(p, target)
-		if sizeMemory != nil {
-			if sizing := m.claimMemory(&step, p, target, sizeMemory); sizing.Measured() {
-				step.MemorySizing = sizing
+		if sizeClaims != nil {
+			if sizing := m.sizeClaim(&step, p, target, sizeClaims); sizing.Measured() {
 				slog.With(attr.Component("magus")).DebugContext(ctx, "memory claim sized from measured peaks",
 					slog.String("project", p.Path), slog.String("target", target),
 					slog.Int("memory_mb", step.MemoryMB), slog.String("sizing", sizing.String()))
@@ -2637,9 +2636,9 @@ func (m *Magus) loadHistory(ctx context.Context) func() (*forecast.History, erro
 	}
 }
 
-// peakIndex waits for the history and snapshots its measured peaks. nil, when history
+// measuredRuns waits for the history and snapshots its measured runs. nil, when history
 // is disabled or unreadable, leaves every claim at its declaration.
-func (m *Magus) peakIndex(history func() (*forecast.History, error)) *forecast.PeakIndex {
+func (m *Magus) measuredRuns(history func() (*forecast.History, error)) *forecast.MeasuredRuns {
 	if history == nil {
 		return nil
 	}
@@ -2647,7 +2646,7 @@ func (m *Magus) peakIndex(history func() (*forecast.History, error)) *forecast.P
 	if err != nil {
 		return nil
 	}
-	x := h.PeakIndex()
+	x := h.MeasuredRuns()
 	return &x
 }
 
