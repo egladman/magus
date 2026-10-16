@@ -106,7 +106,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		if rf.Rename != "" {
 			return refsRenameCmd(ctx, root, opts, g, pos[0], rf.Rename, globalCfg.DryRun)
 		}
-		res = lookupRefs(ctx, ws, globalCfg, g, read)
+		res = lookupRefs(ctx, ws, globalCfg, g, read, measuredCoverage(ctx, ws, globalCfg))
 	}
 	if len(res.Ambiguous) > 0 {
 		return refuseAmbiguous(noticeLines{ctx: ctx, level: slog.LevelError}, pos[0], res.Ambiguous)
@@ -182,22 +182,28 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		return reportIndexStaleness(noticeLines{ctx: ctx, level: slog.LevelError}, out.Answer)
 	}
 
-	fmt.Printf("symbol: %s", out.Symbol)
+	return writeRefsText(os.Stdout, out)
+}
+
+// writeRefsText writes out, a resolved symbol's references, as `magus refs` prints them
+// in text form, and returns the error that sets the exit status.
+func writeRefsText(w io.Writer, out types.KnowledgeRefsOutput) error {
+	fmt.Fprintf(w, "symbol: %s", out.Symbol)
 	if out.Label != "" {
-		fmt.Printf("  (%s)", out.Label)
+		fmt.Fprintf(w, "  (%s)", out.Label)
 	}
-	fmt.Println()
+	fmt.Fprintln(w)
 	if len(out.Defs) > 0 {
-		fmt.Println("defined in:")
+		fmt.Fprintln(w, "defined in:")
 		for _, d := range out.Defs {
-			fmt.Printf("  %s\n", d.File)
+			fmt.Fprintf(w, "  %s\n", d.File)
 		}
 	}
 	if len(out.Refs) == 0 {
-		fmt.Println("no references found")
-		printVerdict(os.Stdout, out.Answer, "")
-		printIndexCause(os.Stdout, out.Answer)
-		if err := reportIndexStaleness(os.Stdout, out.Answer); err != nil {
+		fmt.Fprintln(w, "no references found")
+		printVerdict(w, out.Answer, "")
+		printIndexCause(w, out.Answer)
+		if err := reportIndexStaleness(w, out.Answer); err != nil {
 			return err
 		}
 		// "nothing uses this" is a NEGATIVE claim, so it follows the verdict the same way
@@ -209,13 +215,13 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		}
 		return nil
 	}
-	fmt.Printf("referenced in %d file(s), %d occurrence(s):\n", out.FileCount, out.RefCount)
+	fmt.Fprintf(w, "referenced in %d file(s), %d occurrence(s):\n", out.FileCount, out.RefCount)
 	for _, r := range out.Refs {
-		fmt.Printf("  %s  (%d)%s\n", r.File, r.Count, linesSuffix(r.Lines))
+		fmt.Fprintf(w, "  %s  (%d)%s\n", r.File, r.Count, linesSuffix(r.Lines))
 	}
 	// Under the rows, never instead of them. A found answer from a stale index is the
 	// dangerous one: it looks complete, and nothing else on this path would say otherwise.
-	return reportIndexStaleness(os.Stdout, out.Answer)
+	return reportIndexStaleness(w, out.Answer)
 }
 
 // refsMiss is what refs learned about a name no symbol node matches.
@@ -317,8 +323,9 @@ type refsResult struct {
 	coverage knowledge.Coverage
 }
 
-// lookupRefs looks ref up in g, a graph with ref's symbol shards merged, under cfg.
-func lookupRefs(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, g *knowledge.Graph, read graphRead) refsResult {
+// lookupRefs looks ref up in g, a graph with ref's symbol shards merged, under cfg,
+// judging the answer by coverage.
+func lookupRefs(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, g *knowledge.Graph, read graphRead, coverage coverageFunc) refsResult {
 	symbol, ambiguous := pickSymbol(g, read.Input)
 	if len(ambiguous) > 0 {
 		return refsResult{Ambiguous: ambiguous}
@@ -328,7 +335,7 @@ func lookupRefs(ctx context.Context, ws types.WorkspaceRepository, cfg config.Co
 	// being asked about existed. Passing HasSymbols() would also be wrong: an exact symbol
 	// ID routes to a subset of shards, so it answers about the subset, not the workspace.
 	// The declared-index probe is the authority.
-	cov := measureSymbolCoverage(ctx, ws, cfg, read.Input, true)
+	cov := coverage(read.Input, true)
 	out, ok := g.Refs(symbol)
 	if !ok {
 		// This is the miss where a stale index IS the explanation. A name refs cannot

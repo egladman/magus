@@ -207,6 +207,33 @@ func TestEmitDefinitionsText(t *testing.T) {
 		"c.go  (the index recorded no line in this file)\n", got)
 }
 
+func TestWriteRefsText(t *testing.T) {
+	out := types.KnowledgeRefsOutput{
+		Symbol: "symbol:a F().", Label: "F",
+		Defs:      []types.KnowledgeRefSite{{File: "a.go"}},
+		Refs:      []types.KnowledgeRefSite{{File: "b.go", Count: 2, Lines: []int{4, 9}}, {File: "c.go", Count: 1}},
+		FileCount: 2, RefCount: 3,
+		Answer: types.KnowledgeAnswer{Verdict: types.VerdictFound},
+	}
+	var b bytes.Buffer
+	require.NoError(t, writeRefsText(&b, out))
+	assert.Equal(t, "symbol: symbol:a F().  (F)\ndefined in:\n  a.go\n"+
+		"referenced in 2 file(s), 3 occurrence(s):\n"+
+		"  b.go  (2)"+linesSuffix([]int{4, 9})+"\n  c.go  (1)\n", b.String())
+
+	// A resolved symbol nothing references is a verified answer, unless the verdict is not.
+	out.Refs, out.FileCount, out.RefCount = nil, 0, 0
+	b.Reset()
+	require.NoError(t, writeRefsText(&b, out))
+	assert.Equal(t, "symbol: symbol:a F().  (F)\ndefined in:\n  a.go\nno references found\n", b.String())
+
+	out.Answer.Verdict = types.VerdictUnknown
+	b.Reset()
+	err := writeRefsText(&b, out)
+	assert.True(t, exit.AlreadyReported(err))
+	assert.Contains(t, b.String(), "verdict: unknown, not absent")
+}
+
 // A changed range still prints, marked, but the exit status says the lines are not the
 // symbol's; -o name withholds it, since a bare range has nowhere to carry the mark.
 func TestEmitDefinitionsChangedExitsOne(t *testing.T) {

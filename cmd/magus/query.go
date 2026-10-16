@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -289,12 +290,20 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		return exitForQuery(out)
 	}
 
-	fmt.Printf("query: %s\n", out.Query)
-	fmt.Printf("matches: %d  (neighborhood budget %d)\n\n", out.MatchCount, out.Budget)
+	return writeQueryText(ctx, os.Stdout, nx, next, res)
+}
+
+// writeQueryText writes res as `magus query` prints it in text form, with next under
+// it, and returns the error that sets the exit status. The nearest-node hint goes to
+// stderr, not w.
+func writeQueryText(ctx context.Context, w io.Writer, nx nextGate, next []types.NextStep, res queryResult) error {
+	out := res.Out
+	fmt.Fprintf(w, "query: %s\n", out.Query)
+	fmt.Fprintf(w, "matches: %d  (neighborhood budget %d)\n\n", out.MatchCount, out.Budget)
 	if out.MatchCount == 0 {
-		printVerdict(os.Stdout, out.Answer, hint.Refs.With("<name>"))
+		printVerdict(w, out.Answer, hint.Refs.With("<name>"))
 		emitNearest(ctx, res.Nearest)
-		if err := reportIndexStaleness(os.Stdout, out.Answer); err != nil {
+		if err := reportIndexStaleness(w, out.Answer); err != nil {
 			return err
 		}
 		// An empty result set is still a legitimate answer to a search, so this exits 0 on
@@ -306,15 +315,15 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		shown = shown[:20]
 	}
 	for _, m := range shown {
-		fmt.Printf("  %-7d %s  [%s]\n", m.Score, m.ID, m.Kind)
+		fmt.Fprintf(w, "  %-7d %s  [%s]\n", m.Score, m.ID, m.Kind)
 	}
 	if len(out.Matches) > len(shown) {
-		fmt.Printf("  ... and %d more\n", len(out.Matches)-len(shown))
+		fmt.Fprintf(w, "  ... and %d more\n", len(out.Matches)-len(shown))
 	}
-	fmt.Printf("\nneighborhood: %d nodes, %d edges\n", len(out.Nodes), len(out.Links))
-	fmt.Println("Run with -o json for the full subgraph.")
-	printNext(os.Stdout, nx, next)
-	return reportIndexStaleness(os.Stdout, out.Answer)
+	fmt.Fprintf(w, "\nneighborhood: %d nodes, %d edges\n", len(out.Nodes), len(out.Links))
+	fmt.Fprintln(w, "Run with -o json for the full subgraph.")
+	printNext(w, nx, next)
+	return reportIndexStaleness(w, out.Answer)
 }
 
 // outputRefOpts carries the options for `magus query output <ref>`.
@@ -904,9 +913,17 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		return emitNames([]string{out.Node.ID})
 	}
 
-	fmt.Print(resolutionNote(pos[0], out))
-	fmt.Print(render.ExplainText(out))
-	printSessionContact(os.Stdout, root, out.Node)
+	return writeExplainText(os.Stdout, root, pos[0], nx, next, res)
+}
+
+// writeExplainText writes res, the node asked resolved to, as `magus explain` prints it
+// in text form, with next under it, and returns the error that sets the exit status.
+// res must be found.
+func writeExplainText(w io.Writer, root, asked string, nx nextGate, next []types.NextStep, res explainResult) error {
+	out := res.Out
+	fmt.Fprint(w, resolutionNote(asked, out))
+	fmt.Fprint(w, render.ExplainText(out))
+	printSessionContact(w, root, out.Node)
 
 	// Complementary deep-link: focus this node in the live Graph Explorer with a
 	// blast view (the console's own analogue of `magus explain`). Symbol nodes are
@@ -915,12 +932,12 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 	// the server may not be up when the browser opens it, hence the hint.
 	if out.Node.Kind != types.KindSymbol {
 		link := liveExplorerLink(url.GraphLinkOpts{View: "blast", Node: out.Node.ID})
-		fmt.Printf("\nView in Graph Explorer: %s\n", link)
-		fmt.Printf("%s\n", authHint(link))
-		fmt.Printf("(start the magus server if the graph does not load)\n")
+		fmt.Fprintf(w, "\nView in Graph Explorer: %s\n", link)
+		fmt.Fprintf(w, "%s\n", authHint(link))
+		fmt.Fprintf(w, "(start the magus server if the graph does not load)\n")
 	}
-	printNext(os.Stdout, nx, next)
-	return reportIndexStaleness(os.Stdout, res.Answer)
+	printNext(w, nx, next)
+	return reportIndexStaleness(w, res.Answer)
 }
 
 func pathCmd(ctx context.Context, root string, args []string) error {
@@ -1052,14 +1069,41 @@ func searchGraph(ctx context.Context, ws graphWorkspace, cfg config.Config, read
 		out = g.Query(read.Input, read.Budget)
 		stop()
 	}
-	stop := tr.phase("query.coverage")
-	out.Answer = knowledge.Answer(read.Input, out.MatchCount > 0, measureSymbolCoverage(ctx, ws, cfg, read.Input, seeded))
+	return answerQuery(ctx, g, read, out, seeded, measuredCoverage(ctx, ws, cfg)), nil
+}
+
+// coverageFunc says what the symbol layer covers for a read of input, as
+// measureSymbolCoverage does.
+type coverageFunc func(input string, seeded bool) knowledge.Coverage
+
+// measuredCoverage measures ws under cfg afresh on every call, as a single read does.
+func measuredCoverage(ctx context.Context, ws graphWorkspace, cfg config.Config) coverageFunc {
+	return func(input string, seeded bool) knowledge.Coverage {
+		return measureSymbolCoverage(ctx, ws, cfg, input, seeded)
+	}
+}
+
+// searchLoaded is searchGraph over g, a graph loaded once for many reads: it must hold
+// every symbol shard when read seeds the symbol layer, and only the default graph
+// otherwise.
+func searchLoaded(ctx context.Context, g *knowledge.Graph, read graphRead, coverage coverageFunc) queryResult {
+	stop := traceFromContext(ctx).phase("query.search")
+	out := g.Query(read.Input, read.Budget)
+	stop()
+	return answerQuery(ctx, g, read, out, knowledge.SeedsLazyLayer(read.Input), coverage)
+}
+
+// answerQuery judges out, what g matched for read, and names the nearest node when
+// nothing matched.
+func answerQuery(ctx context.Context, g *knowledge.Graph, read graphRead, out types.KnowledgeQueryOutput, seeded bool, coverage coverageFunc) queryResult {
+	stop := traceFromContext(ctx).phase("query.coverage")
+	out.Answer = knowledge.Answer(read.Input, out.MatchCount > 0, coverage(read.Input, seeded))
 	stop()
 	res := queryResult{Out: out}
 	if out.MatchCount == 0 && read.Nearest {
 		res.Nearest = g.NearestNode(read.Input)
 	}
-	return res, nil
+	return res
 }
 
 func explainNode(ctx context.Context, ws graphWorkspace, cfg config.Config, read graphRead, refresh, global bool) (explainResult, error) {
@@ -1071,7 +1115,16 @@ func explainNode(ctx context.Context, ws graphWorkspace, cfg config.Config, read
 	if err != nil {
 		return explainResult{}, err
 	}
-	stop = tr.phase("explain.search")
+	return explainLoaded(ctx, g, read, measuredCoverage(ctx, ws, cfg)), nil
+}
+
+// explainLoaded is explainNode over g, a graph loaded once for many reads: it must hold
+// every symbol shard when read seeds the symbol layer, and only the default graph
+// otherwise.
+func explainLoaded(ctx context.Context, g *knowledge.Graph, read graphRead, coverage coverageFunc) explainResult {
+	tr := traceFromContext(ctx)
+	seeded := knowledge.SeedsLazyLayer(read.Input)
+	stop := tr.phase("explain.search")
 	out, found := g.Explain(read.Input)
 	stop()
 	// A bare name does not seed symbols, so a miss was resolved against a graph that held
@@ -1079,7 +1132,7 @@ func explainNode(ctx context.Context, ws graphWorkspace, cfg config.Config, read
 	// look nonexistent, so the answer says so when the input could have named one, and a
 	// typo'd `kind:target` still gets the absent verdict it deserves.
 	stop = tr.phase("explain.coverage")
-	cov := measureSymbolCoverage(ctx, ws, cfg, read.Input, seeded)
+	cov := coverage(read.Input, seeded)
 	if found {
 		// One symbol: only its own language's indexes could have missed a site of it.
 		cov = cov.Narrow(g.SymbolLanguage(read.Input))
@@ -1089,7 +1142,7 @@ func explainNode(ctx context.Context, ws graphWorkspace, cfg config.Config, read
 	if !found {
 		res.Nearest = g.NearestNode(read.Input)
 	}
-	return res, nil
+	return res
 }
 
 // graphWorkspace is what a graph read needs of its workspace: the root, and the Inspector
@@ -1224,7 +1277,7 @@ func serveGraphRead(ctx context.Context, m *magus.Magus, cfg config.Config, verb
 	case readRefs:
 		var g *knowledge.Graph
 		if g, err = loadRefsGraph(ctx, m, cfg, false, read.Input); err == nil {
-			res = lookupRefs(ctx, m, cfg, g, read)
+			res = lookupRefs(ctx, m, cfg, g, read, measuredCoverage(ctx, m, cfg))
 		}
 	default:
 		return nil, fmt.Errorf("%w: no %q read", proc.ErrNotAdoptable, verb)

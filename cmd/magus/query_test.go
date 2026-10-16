@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
@@ -406,7 +408,7 @@ func (f graphReadFixture) localAnswer(tb testing.TB, verb string, read graphRead
 		var g *knowledge.Graph
 		g, err = loadRefsGraph(ctx, f.local, f.cfg, false, read.Input)
 		if err == nil {
-			res = lookupRefs(ctx, f.local, f.cfg, g, read)
+			res = lookupRefs(ctx, f.local, f.cfg, g, read, measuredCoverage(ctx, f.local, f.cfg))
 		}
 	}
 	require.NoError(tb, err)
@@ -441,15 +443,121 @@ func mergedSearch(tb testing.TB, ws types.WorkspaceRepository, cfg config.Config
 	ctx := context.Background()
 	g, err := loadWorkspaceGraph(ctx, ws, cfg, false, false, true)
 	require.NoError(tb, err)
-	out := g.Query(read.Input, read.Budget)
-	out.Answer = knowledge.Answer(read.Input, out.MatchCount > 0, measureSymbolCoverage(ctx, ws, cfg, read.Input, true))
-	res := queryResult{Out: out}
-	if out.MatchCount == 0 && read.Nearest {
-		res.Nearest = g.NearestNode(read.Input)
-	}
-	b, err := json.Marshal(res)
+	b, err := json.Marshal(searchLoaded(ctx, g, read, measuredCoverage(ctx, ws, cfg)))
 	require.NoError(tb, err)
 	return string(b)
+}
+
+// memoCoverage measures ws once per kind of read and answers every later read of that
+// kind from it, for many reads of a tree and indexes that do not change between them.
+// measureSymbolCoverage reads its input only through knowledge.CouldMatchLazyLayer.
+func memoCoverage(ctx context.Context, ws graphWorkspace, cfg config.Config) coverageFunc {
+	type kind struct{ couldMatch, seeded bool }
+	var mu sync.Mutex
+	memo := map[kind]knowledge.Coverage{}
+	return func(input string, seeded bool) knowledge.Coverage {
+		k := kind{knowledge.CouldMatchLazyLayer(input), seeded}
+		mu.Lock()
+		defer mu.Unlock()
+		cov, ok := memo[k]
+		if !ok {
+			cov = measureSymbolCoverage(ctx, ws, cfg, input, seeded)
+			memo[k] = cov
+		}
+		return cov
+	}
+}
+
+// loadedGraphs is the default graph and the default graph with every symbol shard merged,
+// each loaded once, with the coverage measured once: what the retrieval eval answers
+// every judgment from.
+type loadedGraphs struct {
+	domain, symbols *knowledge.Graph
+	coverage        coverageFunc
+}
+
+func (f graphReadFixture) loadGraphs(tb testing.TB) loadedGraphs {
+	tb.Helper()
+	ctx := context.Background()
+	domain, err := loadWorkspaceGraph(ctx, f.local, f.cfg, false, false, false)
+	require.NoError(tb, err)
+	symbols, err := loadWorkspaceGraph(ctx, f.local, f.cfg, false, false, true)
+	require.NoError(tb, err)
+	return loadedGraphs{domain: domain, symbols: symbols, coverage: memoCoverage(ctx, f.local, f.cfg)}
+}
+
+// loadedAnswer is localAnswer from graphs loaded once rather than per read.
+func (f graphReadFixture) loadedAnswer(tb testing.TB, gs loadedGraphs, verb string, read graphRead) any {
+	tb.Helper()
+	ctx := context.Background()
+	g := gs.domain
+	if knowledge.SeedsLazyLayer(read.Input) {
+		g = gs.symbols
+	}
+	switch verb {
+	case readQuery:
+		return searchLoaded(ctx, g, read, gs.coverage)
+	case readExplain:
+		return explainLoaded(ctx, g, read, gs.coverage)
+	case readRefs:
+		return lookupRefs(ctx, f.local, f.cfg, gs.symbols, read, gs.coverage)
+	}
+	tb.Fatalf("no read %q", verb)
+	return nil
+}
+
+// The retrieval eval answers every judgment from one pair of loaded graphs; each answer
+// must be the one a read that loads its own graph gives.
+func TestLoadedGraphReadsAnswerAsTheLocalReadDoes(t *testing.T) {
+	f := newGraphReadFixture(t)
+	gs := f.loadGraphs(t)
+	for _, tc := range graphReadCases {
+		t.Run(tc.name, func(t *testing.T) {
+			b, err := json.Marshal(f.loadedAnswer(t, gs, tc.verb, tc.read))
+			require.NoError(t, err)
+			assert.JSONEq(t, f.localAnswer(t, tc.verb, tc.read), string(b))
+		})
+	}
+}
+
+// The text renderers print exactly what the CLI verbs do, so the bytes the retrieval eval
+// counts from one rendered answer are the bytes a run of the verb prints.
+func TestTextRenderersPrintWhatTheVerbPrints(t *testing.T) {
+	f := newGraphReadFixture(t)
+	gs := f.loadGraphs(t)
+	globalCfg.Server.Enabled = false
+	// The gate prints a next step's reason once per session; silent drops it from both.
+	global.silent = true
+	ctx := context.Background()
+	nx := newNextGate(f.root)
+	for _, tc := range []struct {
+		verb  string
+		input string
+		cmd   func(context.Context, string, []string) error
+	}{
+		{readQuery, "guide", queryCmd},
+		{readQuery, "SearchVerdict kind=symbol", queryCmd},
+		{readQuery, "zzzunmatched", queryCmd},
+		{readExplain, "docs", explainCmd},
+	} {
+		t.Run(tc.verb+" "+tc.input, func(t *testing.T) {
+			var cmdErr error
+			want := captureStdout(t, func() { cmdErr = tc.cmd(ctx, f.root, []string{tc.input}) })
+
+			read := graphRead{Input: tc.input, Nearest: tc.verb == readQuery}
+			var got strings.Builder
+			var err error
+			switch res := f.loadedAnswer(t, gs, tc.verb, read).(type) {
+			case queryResult:
+				err = writeQueryText(ctx, &got, nx, nx.served(hint.NextForQuery(res.Out)), res)
+			case explainResult:
+				require.True(t, res.Found)
+				err = writeExplainText(&got, f.root, tc.input, nx, nx.served(hint.NextForExplain(res.Out)), res)
+			}
+			assert.Equal(t, want, got.String())
+			assert.Equal(t, cmdErr, err, "the same exit status")
+		})
+	}
 }
 
 // A symbol-seeded query ranks from the symbol names index and decodes only the shards its answer
