@@ -2147,9 +2147,6 @@ fun coverage_blocks_ran(profiles: [str]) > {str: bool} !> any {
 // console/coverage.txt, so run `magus run test console` first; the console
 // imports this project, so it cannot be a need.
 export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
-    // test reads every module's Go files, which each library test's own format rewrites.
-    ctx.needs(gopherbuzz\format, diagnostics\format, conventions\format,
-        testlayout\format, scipbuzz\format, xdg\format, cmdline\format);
     // generate first: the denominator reads every Go file the generators write.
     ctx.needs(generate, test, gopherbuzz\test, diagnostics\test,
         conventions\test, testlayout\test, scipbuzz\test, xdg\test, cmdline\test, buzz_test);
@@ -2647,8 +2644,6 @@ export fun retrieval_eval(ctx: magus\Context, args: [str]) > void !> any {
 // cannot reach. Requires libzstd and liblzma rather than skipping without them. Not
 // `test:cgo`: charms patch argv, and this needs CGO_ENABLED in the environment.
 export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void !> any {
-    // After format: gofmt rewrites these files in place (MGS4008).
-    ctx.needs(format);
     ctx.readsFiles("internal/compress/*.go");
     foreach (lib in ["libzstd", "liblzma"]) {
         proc\exec("pkg-config", ["--exists", lib], ".", {});
@@ -2662,8 +2657,6 @@ export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void !> any {
 // workspace; see docs/guides/integrations/agents.md. Not `go-test` with forwarded args:
 // a target is what a policy can name, and this one spends model tokens.
 export fun hoste2e_test(ctx: magus\Context, args: [str]) > void !> any {
-    // After format: gofmt rewrites these files in place (MGS4008).
-    ctx.needs(format);
     ctx.readsFiles("internal/hoste2e/**");
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
         {"args": ["-tags", "e2e", "-run", "TestHosts", "-count=1", "./internal/hoste2e/"]});
