@@ -405,7 +405,9 @@ const denyRuleWorkerCheckOnly denyRuleName = "worker-check-only"
 // A slice passes because it is the iteration the check exists to end in: `go-test . --
 // -run X` under a `test .` check runs a part of the check's own work, and refusing it sent
 // workers to a raw `go test` that nothing graded at all. An install passes because a fresh
-// worktree can run nothing, its check included, until its dependencies are there.
+// worktree can run nothing, its check included, until its dependencies are there. Every
+// other run it lets through, the check included, is held to the write paths under the rw
+// charm by denyRewriteOutsideLease.
 //
 // Silent where there is nothing to hold the run to: no lease, no live row, the checkout's
 // integrator, which builds, regenerates and gates there, or a row declaring no check at
@@ -443,8 +445,21 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 	composes := sync.OnceValue(func() func(target, project string) bool {
 		return checksCompose(ctx, deps, at.workspace, checks)
 	})
+	workspace := sync.OnceValue(func() types.WorkspaceReader {
+		ws, err := deps.inspect(ctx, at.workspace)
+		if err != nil || ws == nil {
+			return nil
+		}
+		return ws
+	})
 	for _, r := range runs {
-		if r.allowed(checks, produces) || r.composedByCheck(composes) || r.installs(deps) {
+		if r.allowed(checks, produces) || r.composedByCheck(composes) {
+			if d := denyRewriteOutsideLease(r, me, workspace); d.refused() {
+				return d
+			}
+			continue
+		}
+		if r.installs(deps) {
 			continue
 		}
 		commands := make([]string, len(checks))
@@ -467,6 +482,41 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		}
 	}
 	return denial{}
+}
+
+// denyRewriteOutsideLease refuses a run the worker may make once the rw charm would have it
+// write past the row's write paths: a glob its target's declarations write that no write
+// path covers, or a target declaring no write at all. A leased `dprint:rw` rewrote
+// console/README.md this way, and the audit that saw it could only report the write after
+// it landed. A workspace that cannot be read leaves the run to the rest of the rule, as
+// leaseProducers does.
+func denyRewriteOutsideLease(r targetRun, me types.Job, workspace func() types.WorkspaceReader) denial {
+	if r.verb != "run" || !r.rewrites() {
+		return denial{}
+	}
+	ws := workspace()
+	if ws == nil {
+		return denial{}
+	}
+	outside, undeclared := r.writesOutside(ws, me.WritePaths)
+	if len(outside) == 0 && len(undeclared) == 0 {
+		return denial{}
+	}
+	var why []string
+	if len(outside) > 0 {
+		why = append(why, fmt.Sprintf("Under the rw charm `%s` writes `%s`, which lease %s's write paths (%s) do not cover.",
+			r.target, strings.Join(outside, "`, `"), me.ID, strings.Join(me.WritePaths, ", ")))
+	}
+	if len(undeclared) > 0 {
+		why = append(why, fmt.Sprintf("`%s` declares no write (ctx.writesFiles or ctx.modifiesExistingFiles) and composes nothing, so nothing says what it touches under the rw charm.",
+			strings.Join(undeclared, "`, `")))
+	}
+	next := r.readOnly()
+	why = append(why, fmt.Sprintf("`%s` reports the same drift without writing it. The checkout's integrator, "+integratorIs+", rewrites the rest after it integrates the units; name the files in your result's unresolved risks if the unit needs them.", next))
+	return denial{
+		Say: fmt.Sprintf("magus workspace: `%s` rewrites files outside lease %s's write paths; run `%s`.", r.target, me.ID, next),
+		Why: strings.Join(why, "\n"),
+	}
 }
 
 // denyWorkerRawTool refuses a bound worker a raw tool a spell op covers, naming the check
@@ -604,6 +654,107 @@ func (r targetRun) composedByCheck(composes func() func(target, project string) 
 	}
 	composed := composes()
 	return !slices.ContainsFunc(r.projectsOrRoot(), func(p string) bool { return !composed(r.target, p) })
+}
+
+// rewrites reports a run whose target names the rw charm. A workspace's default_charms
+// can activate rw as well, which the target alone does not show.
+func (r targetRun) rewrites() bool {
+	_, t := splitSpell(r.target)
+	parsed, err := types.ParseTarget(t)
+	return err == nil && slices.Contains(parsed.Charms, types.CharmReadWrite)
+}
+
+// readOnly is the run's command without the rw charm, and with no default charms that
+// could put it back.
+func (r targetRun) readOnly() string {
+	spell, t := splitSpell(r.target)
+	name, charms, _ := strings.Cut(t, ":")
+	kept := slices.DeleteFunc(strings.Split(charms, ","), func(c string) bool {
+		return c == "" || types.NormalizeCharm(c) == types.CharmReadWrite
+	})
+	if len(kept) > 0 {
+		name += ":" + strings.Join(kept, ",")
+	}
+	if spell != "" {
+		name = spell + "::" + name
+	}
+	return hint.Run.With(append(append([]string{name}, r.projects...), "--no-default-charms")...)
+}
+
+// writesOutside reads what a run under the rw charm writes from the workspace's
+// declarations: every ctx.writesFiles and ctx.modifiesExistingFiles glob of its target,
+// and of each step the target's ctx.needs chain reaches, in every project the run names.
+// outside holds the rooted globs no write path covers. undeclared holds each target that
+// declares no write and composes nothing, so nothing records what it touches.
+func (r targetRun) writesOutside(ws types.WorkspaceReader, writePaths []string) (outside, undeclared []string) {
+	var projects []*types.Project
+	if slices.Contains(r.projects, "/") {
+		projects = ws.All()
+	} else {
+		for _, p := range r.projectsOrRoot() {
+			found := ws.Get(path.Clean(p))
+			if found == nil {
+				undeclared = append(undeclared, path.Clean(p)+":"+targetName(r.target))
+				continue
+			}
+			projects = append(projects, found)
+		}
+	}
+	for _, p := range projects {
+		_ = types.WalkChain(p, targetName(r.target), ws.Get, func(v types.ChainVisit) error {
+			var globs []types.Glob
+			for _, ref := range v.Project.TargetOutputs[v.Target] {
+				globs = append(globs, ref.Rooted(v.Project.Path))
+			}
+			for _, ref := range v.Project.TargetUpdates[v.Target] {
+				globs = append(globs, ref.Rooted(v.Project.Path))
+			}
+			if len(globs) == 0 && len(v.Project.TargetChains[v.Target]) == 0 {
+				undeclared = append(undeclared, v.Project.Path+":"+v.Target)
+			}
+			for _, g := range globs {
+				if !leaseCoversGlob(writePaths, g.Pattern) && !slices.Contains(outside, g.Pattern) {
+					outside = append(outside, g.Pattern)
+				}
+			}
+			return nil
+		})
+	}
+	return outside, undeclared
+}
+
+// leaseCoversGlob reports whether writePaths cover every path glob can match.
+//
+// declarationCovering matches a declaration against the glob's own text, which holds for
+// `*`: a declared `docs/gen/*` matches the output `docs/gen/*.svg` and covers it. It fails
+// for `**`, which a declared `docs/*` would match as one segment while the output reaches
+// every depth. A glob holding `**` is covered only by a declaration spelling the same
+// glob, or one claiming a whole directory its literal prefix lies in.
+func leaseCoversGlob(writePaths []string, glob string) bool {
+	if !strings.Contains(glob, "**") {
+		_, covered, _ := declarationCovering(writePaths, glob)
+		return covered
+	}
+	var prefix []string
+	for _, segment := range strings.Split(glob, "/") {
+		if types.IsGlobMeta(segment) {
+			break
+		}
+		prefix = append(prefix, segment)
+	}
+	literal := strings.Join(prefix, "/")
+	return slices.ContainsFunc(writePaths, func(raw string) bool {
+		file, _ := types.SplitClaim(raw)
+		declared := path.Clean(file)
+		if declared == glob || declared == "**" {
+			return true
+		}
+		dir := strings.TrimSuffix(declared, "/**")
+		if dir == "." || dir == "/" || types.IsGlobMeta(dir) || literal == "" {
+			return false
+		}
+		return literal == dir || strings.HasPrefix(literal, dir+"/")
+	})
 }
 
 // installs reports a run of a dependency install: the workspace's `install` target, or a

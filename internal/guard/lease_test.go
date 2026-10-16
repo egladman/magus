@@ -456,16 +456,30 @@ func figuresLease() types.Job {
 	}
 }
 
-// figuresWorkspace declares figures-generate as the producer of the row's figure. No other
-// target the cases run declares an output among its write paths.
+// figuresWorkspace declares figures-generate as the producer of every figure, the row's
+// among them, and flow-generate as the producer of the row's page alone. No other target
+// the cases run declares an output among its write paths. The check writes only the row's
+// figure.
 func figuresWorkspace(t *testing.T) Dependencies {
 	t.Helper()
 	ws := typestest.NewMockWorkspaceRepository(t)
-	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return([]types.FileEntry{{
-		Path: "docs/gen/figures/flow.svg", Project: "docs", Role: "output",
-		Claims: []types.FileClaim{{Project: "docs", Target: "figures-generate", Role: "output", Glob: "gen/figures/*.svg"}},
-	}}, nil).Maybe()
+	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return([]types.FileEntry{
+		{
+			Path: "docs/gen/figures/flow.svg", Project: "docs", Role: "output",
+			Claims: []types.FileClaim{{Project: "docs", Target: "figures-generate", Role: "output", Glob: "gen/figures/*.svg"}},
+		},
+		{
+			Path: "docs/figures/flow.md", Project: "docs", Role: "output",
+			Claims: []types.FileClaim{{Project: "docs", Target: "flow-generate", Role: "output", Glob: "figures/flow.md"}},
+		},
+	}, nil).Maybe()
 	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{}, nil).Maybe()
+	docs := &types.Project{Path: "docs", TargetOutputs: map[string][]types.OutputRef{
+		"diagrams-generate": {{Glob: "gen/figures/flow.svg"}},
+		"figures-generate":  {{Glob: "gen/figures/*.svg"}},
+		"flow-generate":     {{Glob: "figures/flow.md"}},
+	}}
+	ws.EXPECT().Get("docs").Return(docs).Maybe()
 	return Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
 }
 
@@ -625,7 +639,8 @@ func TestWorkerCheckOnly(t *testing.T) {
 		{"the check", "./magus run diagrams_generate docs", false},
 		{"the check with a charm and forwarded args", "./magus run diagrams-generate:rw docs --server-enabled=false -- --verbose", false},
 		{"the check with a flag value before its project", "magus run diagrams-generate --timeout 5m docs", false},
-		{"a target declaring an output in the write paths", "./magus run figures-generate:rw docs", false},
+		{"a target declaring an output in the write paths", "./magus run figures-generate docs", false},
+		{"that target rewriting only the write paths", "./magus run flow-generate:rw docs", false},
 		{"a run that only reports", "./magus run lint docs --dry-run", false},
 		{"a shard plan", "./magus affected ci --plan", false},
 		{"a read", "./magus describe file docs/figures/flow.md", false},
@@ -653,6 +668,101 @@ func TestWorkerCheckOnly(t *testing.T) {
 
 	assert.NotEmpty(t, denyLeaseScopedGate(ctx, deps, row.ID, "./magus run lint docs"), "the role-scoped entry reaches this rule")
 	assert.Contains(t, denyLeaseScopedGate(ctx, deps, row.ID, "./magus affected ci").Why, "gates once", "the gate keeps its own refusal")
+}
+
+// TestWorkerCheckOnlyHoldsARewriteToTheWritePaths pins the run a worker may make that
+// rewrites files past its lease: a leased `dprint:rw`, a slice of a `format` check,
+// rewrote console/README.md. Under the rw charm a run passes only when every glob its
+// target and the targets its chain reaches declare writing lies inside the write paths,
+// and a target declaring no write is refused, since nothing says what it touches. The
+// refusal names the globs and the run without the charm.
+func TestWorkerCheckOnlyHoldsARewriteToTheWritePaths(t *testing.T) {
+	ws := typestest.NewMockWorkspaceRepository(t)
+	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{Projects: []types.TargetGraphProject{
+		{Path: ".", Nodes: []types.TargetGraphNode{
+			{Name: "format", Dependencies: []string{"markdown-format"}, Spells: []types.TargetSpellUse{{Spell: "dprint", Ops: []string{"dprint"}}}},
+			{Name: "markdown-format"},
+		}},
+	}}, nil).Maybe()
+	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	root := &types.Project{
+		Path:          ".",
+		TargetChains:  map[string][]types.ChainStep{"format": types.Needs("markdown-format")},
+		TargetUpdates: map[string][]types.UpdateRef{"markdown-format": {{Glob: "docs/**/*.md"}}},
+	}
+	ws.EXPECT().Get(".").Return(root).Maybe()
+	ws.EXPECT().All().Return([]*types.Project{root}).Maybe()
+	deps := Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
+
+	lease := func(writePaths ...string) types.Job {
+		return types.Job{
+			ID: "docs/jobs", Criteria: "document jobs", WritePaths: writePaths,
+			Check: &types.LeaseCheck{Target: "format", Project: "."}, State: types.StateRunning, Registered: 1,
+		}
+	}
+	for _, tt := range []struct {
+		name, command string
+		writePaths    []string
+		outside       string // a glob the refusal names; "" for a pass
+	}{
+		{"the check rewriting past one page", "./magus run format:rw .", []string{"docs/guides/jobs.md"}, "`docs/**/*.md`"},
+		{"a step its chain reaches", "./magus run markdown-format:rw .", []string{"docs/guides/jobs.md"}, "`docs/**/*.md`"},
+		{"an op declaring no write", "./magus run dprint:rw .", []string{"docs/**"}, "`.:dprint` declares no write"},
+		{"a spell-qualified op declaring no write", "./magus run dprint::dprint:rw .", []string{"docs/**"}, "`.:dprint` declares no write"},
+		{"a pattern one segment deep", "./magus run format:rw .", []string{"docs/*"}, "`docs/**/*.md`"},
+		{"a pattern under the tree", "./magus run format:rw .", []string{"docs/guides/**"}, "`docs/**/*.md`"},
+		{"the tree the glob writes", "./magus run format:rw .", []string{"docs/**"}, ""},
+		{"the directory the glob writes", "./magus run format:rw .", []string{"docs"}, ""},
+		{"the same glob", "./magus run format:rw .", []string{"docs/**/*.md"}, ""},
+		{"the check read-only", "./magus run format .", []string{"docs/guides/jobs.md"}, ""},
+		{"the op read-only", "./magus run dprint .", []string{"docs/guides/jobs.md"}, ""},
+	} {
+		row := lease(tt.writePaths...)
+		ctx, _ := fleetFixture(t, row)
+		reason := denyWorkerCheckOnly(ctx, deps, row.ID, tt.command)
+		if tt.outside == "" {
+			assert.Empty(t, reason, tt.name)
+			continue
+		}
+		require.NotEmpty(t, reason, tt.name)
+		assert.Contains(t, reason.Say, "rewrites files outside lease docs/jobs's write paths; run `", tt.name)
+		_, next, _ := strings.Cut(reason.Say, "; run `")
+		assert.True(t, strings.HasSuffix(next, " . --no-default-charms`."), "%s: the next run drops the charm: %s", tt.name, next)
+		assert.NotContains(t, next, ":rw", "%s: the next run drops the charm", tt.name)
+		assert.Contains(t, reason.Why, tt.outside, tt.name)
+	}
+
+	everywhere := lease("docs/guides/jobs.md")
+	everywhere.Check.Project = "/"
+	ctx, _ := fleetFixture(t, everywhere)
+	reason := denyWorkerCheckOnly(ctx, deps, everywhere.ID, "./magus run format:rw /")
+	require.NotEmpty(t, reason, "a run over every project reads every project's declarations")
+	assert.Contains(t, reason.Why, "`docs/**/*.md`")
+	assert.Contains(t, reason.Say, " run format / --no-default-charms`.")
+}
+
+// TestLeaseCoversGlob pins how a glob a target writes is held to the write paths: a
+// declaration matching its text covers a single-segment wildcard, and only a whole tree
+// covers `**`.
+func TestLeaseCoversGlob(t *testing.T) {
+	for _, tt := range []struct {
+		writePaths []string
+		glob       string
+		covered    bool
+	}{
+		{[]string{"docs/gen/figures/flow.svg"}, "docs/gen/figures/flow.svg", true},
+		{[]string{"docs/gen/figures/flow.svg"}, "docs/gen/figures/*.svg", false},
+		{[]string{"docs/gen/figures/*"}, "docs/gen/figures/*.svg", true},
+		{[]string{"docs/gen/figures/*.png"}, "docs/gen/figures/*.svg", false},
+		{[]string{"docs/gen"}, "docs/gen/figures/*.svg", true},
+		{[]string{"docs/*"}, "docs/**", false},
+		{[]string{"docs/**"}, "docs/**", true},
+		{[]string{"docs"}, "docs/**/*.md", true},
+		{[]string{"**"}, "console/**/*.md", true},
+		{[]string{"docs/**"}, "**/*.md", false},
+	} {
+		assert.Equal(t, tt.covered, leaseCoversGlob(tt.writePaths, tt.glob), "%v covering %s", tt.writePaths, tt.glob)
+	}
 }
 
 // TestWorkerCheckOnlyStaysQuiet covers every caller with nothing to hold a run to.
