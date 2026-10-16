@@ -176,17 +176,25 @@ its append, its last-line read, its compaction and its lock;
 `file.WriteFileAtomic` gives every rewrite its rename; and `internal/json`
 gives every line its strict decoder. Nothing refuses a new JSON document, so
 the rule holds in review alone. The stores that do not follow it yet, as
-found on 2026-10-14, are the exceptions:
+found on 2026-10-14, are debt or exceptions:
 
-- **Runtime history** is one compact JSON document (`$XDG_STATE_HOME/magus/history/v1.json`) shared
-  by every workspace on the host, megabytes long and rewritten after every
-  run. It is a log and wants appended lines.
-- **One file per entry, a JSON document inside.** Cache manifests, run
-  descriptors, knowledge-graph shards, merge-queue verdicts, the service
-  journal and connector records break the one-file and the line rules.
+- **Runtime history** was one rewritten JSON document and is now converted to
+  a JSON Lines store (`$XDG_STATE_HOME/magus/history/history.jsonl`).
+- **Runtime records** are a capped log kept as one rewritten JSON array in the
+  knowledge graph store. The state cannot be rebuilt, so this is debt owed a
+  conversion to appended lines.
+- **Owed regenerations** are one rewritten JSON document in `vcs/owed.go`. The
+  state cannot be rebuilt, so this is debt owed a conversion to appended lines.
 - **Name and value pairs.** The lock, pipe and watchdog records
   (`internal/file/record`) write one `name<TAB>value` pair per line and want
   one JSON object per line.
+- **Derived, rebuildable caches** are accelerators, exempt from the rule. The
+  rule covers state that cannot be rebuilt, and a cache that is deleted and
+  recomputed loses nothing.
+- **One file per entry, a JSON document inside.** Cache manifests, run
+  descriptors, knowledge-graph shards, merge-queue verdicts, the service
+  journal and connector records break the one-file and the line rules, and stay
+  an exception.
 
 ### Human-first is the AI integration
 
