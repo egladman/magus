@@ -1596,7 +1596,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 	in := conformanceInput{patch: patch}
 	if cfg.baseline != nil {
 		if indexed {
-			in.changes, in.removed = attachAPIDelta(&out, byPath, graph, cfg, m.externalReferents)
+			in.changes, in.removed, in.base = attachAPIDelta(&out, byPath, graph, cfg, m.externalReferents)
 			if out.API != nil {
 				out.API.Stage = m.releaseStage(ctx)
 			}

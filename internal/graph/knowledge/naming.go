@@ -45,6 +45,11 @@ type ConformanceChange struct {
 	// RatchetBase is the ratchet record at the diff's base, nil when the base has none. The
 	// threshold check compares it with Conformance.Ratchet to see what the change moves.
 	RatchetBase *types.ConformanceRatchet
+	// Base is the knowledge graph at the diff's base, nil without a baseline. The threshold check
+	// reads a known item's measure there to say how far the change grew it.
+	Base *Graph
+	// Touched holds the symbol IDs whose bodies the change edits and that are not Subjects.
+	Touched []string
 }
 
 // ConformanceChecks runs every conformance check over the change and returns what clears the bar,

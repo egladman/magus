@@ -177,3 +177,95 @@ func TestThresholdPastLeavesAMetricWithItsOwnCheckToThatCheck(t *testing.T) {
 	require.Len(t, hits, 1)
 	assert.Equal(t, types.ConformanceFuncLines, hits[0].key.Metric)
 }
+
+// thresholdGrowthGraph is one function spanning lines 3 to 2+lines, and a short second function
+// that serves as the change's subject.
+func thresholdGrowthGraph(lines int) (g *Graph, ids map[string]string) {
+	const a = "/internal/a"
+	frob := conformanceSym(a, "Frobnicate().", thresholdFile, 3, 2+lines, lines, "", 0)
+	frob.Label = "Frobnicate"
+	hob := conformanceSym(a, "Hobnob().", thresholdFile, 100, 102, 3, "", 0)
+	hob.Label = "Hobnob"
+	g = mergeAll([]Shard{assembleSymbols(".", []types.KnowledgeSymbol{conformancePkg(a, []string{thresholdFile}), frob, hob}, nil)})
+	return g, map[string]string{
+		"Frobnicate": symbolID(conformanceNS(a) + "Frobnicate()."),
+		"Hobnob":     symbolID(conformanceNS(a) + "Hobnob()."),
+	}
+}
+
+func thresholdGrowthOptions(known bool) types.ConformanceOptions {
+	o := thresholdOptions()
+	o.Ratchet.Thresholds = []types.ConformanceThreshold{{
+		ConformanceKey: types.ConformanceKey{Metric: types.ConformanceFuncLines, Population: types.ConformancePopSource}, Value: 52,
+	}}
+	if known {
+		o.Ratchet.Known = []types.ConformanceKnown{{
+			Metric: types.ConformanceFuncLines, Items: []string{thresholdFile + "#Frobnicate"}, Reason: "split pending",
+		}}
+	}
+	return o
+}
+
+func TestThresholdCheckReportsAKnownItemTheChangeGrew(t *testing.T) {
+	head, id := thresholdGrowthGraph(64)
+	base, _ := thresholdGrowthGraph(60)
+	const grew = "`Frobnicate` measures 64 for func-lines source, up from 60 at the base, past the committed value of 52"
+
+	t.Run("touched body", func(t *testing.T) {
+		got := head.ConformanceChecks(ConformanceChange{
+			Subjects: []string{id["Hobnob"]}, Touched: []string{id["Frobnicate"]}, Base: base, Conformance: thresholdGrowthOptions(true),
+		})
+
+		assert.Equal(t, []string{grew}, thresholdMessages(t, got[id["Frobnicate"]]))
+	})
+
+	t.Run("re-signed subject", func(t *testing.T) {
+		got := head.ConformanceChecks(ConformanceChange{
+			Subjects: []string{id["Frobnicate"]}, Base: base, Conformance: thresholdGrowthOptions(true),
+		})
+
+		assert.Equal(t, []string{grew}, thresholdMessages(t, got[id["Frobnicate"]]))
+	})
+
+	t.Run("not touched", func(t *testing.T) {
+		got := head.ConformanceChecks(ConformanceChange{
+			Subjects: []string{id["Hobnob"]}, Base: base, Conformance: thresholdGrowthOptions(true),
+		})
+
+		assert.Empty(t, got, "a known item the change leaves alone is nobody's to answer for")
+	})
+
+	t.Run("without a base graph", func(t *testing.T) {
+		got := head.ConformanceChecks(ConformanceChange{
+			Subjects: []string{id["Hobnob"]}, Touched: []string{id["Frobnicate"]}, Conformance: thresholdGrowthOptions(true),
+		})
+
+		assert.Empty(t, got)
+	})
+}
+
+func TestThresholdCheckIsSilentWhenAKnownItemDidNotGrow(t *testing.T) {
+	for name, lines := range map[string][2]int{"shrank": {64, 60}, "unchanged": {64, 64}} {
+		t.Run(name, func(t *testing.T) {
+			head, id := thresholdGrowthGraph(lines[1])
+			base, _ := thresholdGrowthGraph(lines[0])
+
+			got := head.ConformanceChecks(ConformanceChange{
+				Subjects: []string{id["Hobnob"]}, Touched: []string{id["Frobnicate"]}, Base: base, Conformance: thresholdGrowthOptions(true),
+			})
+
+			assert.Empty(t, got)
+		})
+	}
+}
+
+func TestThresholdCheckLeavesAnUnlistedGrowthToTheRatchet(t *testing.T) {
+	head, id := thresholdGrowthGraph(64)
+	base, _ := thresholdGrowthGraph(60)
+
+	got := head.ConformanceChecks(ConformanceChange{
+		Subjects: []string{id["Hobnob"]}, Touched: []string{id["Frobnicate"]}, Base: base, Conformance: thresholdGrowthOptions(false),
+	})
+
+	assert.Empty(t, got, "an unlisted item past its value is a violation lint reports, not growth")
+}

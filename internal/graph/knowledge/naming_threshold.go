@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -11,25 +12,29 @@ import (
 // checkThreshold is the Check.Name of thresholdCheck's findings.
 const checkThreshold = "conformance-threshold"
 
-// Scores of thresholdCheck's two findings: a subject past its value is a measurement, and a
-// subject that passes only because the change moved the ratchet is the sharper fact.
+// Scores of thresholdCheck's three findings: a subject past its value is a measurement, a known
+// item the change made longer is a growth between the two, and a subject that passes only because
+// the change moved the ratchet is the sharper fact.
 const (
 	thresholdPastScore  = 0.6
+	thresholdGrewScore  = 0.65
 	thresholdMovedScore = 0.7
 )
 
 // thresholdCheck reports a symbol the change adds, renames or re-signs that sits past the value
 // [types.ConformanceOptions.Effective] enforces for one of the symbol-level conformance metrics, and one
 // that sits past the value only the base's ratchet enforced: the change raised the ceiling or
-// listed the symbol as known. It judges against the committed value or the anchor and never a
-// live percentile, and it is silent in a workspace that names no ratchet.
+// listed the symbol as known. It also reports a known item the change touches that measures more
+// than at the base, since the ratchet matches a known item by ID and never compares its measure.
+// It judges against the committed value or the anchor and never a live percentile, and it is
+// silent in a workspace that names no ratchet.
 type thresholdCheck struct{}
 
 func (thresholdCheck) name() string { return checkThreshold }
 
 func (thresholdCheck) run(x *namingIndex) []finding {
 	o := x.change.Conformance
-	if o.RatchetPath == "" || len(x.subjects) == 0 {
+	if o.RatchetPath == "" || len(x.subjects)+len(x.change.Touched) == 0 {
 		return nil
 	}
 	byItem := map[string]*namingDecl{}
@@ -40,7 +45,7 @@ func (thresholdCheck) run(x *namingIndex) []finding {
 	}
 	head := x.g.Conformance(o)
 	past := thresholdPast(head, byItem)
-	var out []finding
+	out := thresholdGrew(x, o)
 	for _, p := range past {
 		out = append(out, finding{
 			subject: p.subject.id,
@@ -69,6 +74,71 @@ func (thresholdCheck) run(x *namingIndex) []finding {
 			message: fmt.Sprintf("`%s` measures %d for %s, past the %d the base enforced; this change %s",
 				p.subject.label, p.measure, thresholdName(p.key), p.value, how),
 		})
+	}
+	return out
+}
+
+// thresholdGrew reports each known item among the change's subjects and touched symbols that measures
+// more than in the base graph. A known item never appears in a row's violations, so this reads
+// the samples itself; a clone group is judged whole elsewhere and is skipped.
+func thresholdGrew(x *namingIndex, o types.ConformanceOptions) []finding {
+	if x.change.Base == nil || len(o.Ratchet.Known) == 0 {
+		return nil
+	}
+	known := conformanceKnownItems(o.Ratchet.Known)
+	isKnown := func(id string) bool {
+		for _, ids := range known {
+			if ids[id] {
+				return true
+			}
+		}
+		return false
+	}
+	byItem := map[string]*namingDecl{}
+	add := func(d *namingDecl) {
+		if id, ok := thresholdItemID(d); ok && isKnown(id) {
+			byItem[id] = d
+		}
+	}
+	for _, s := range x.subjects {
+		add(s)
+	}
+	for _, id := range x.change.Touched {
+		if d, ok := x.byID[id]; ok {
+			add(d)
+		}
+	}
+	if len(byItem) == 0 {
+		return nil
+	}
+	head, base := conformanceSamples(x.g, o), conformanceSamples(x.change.Base, o)
+	var out []finding
+	for _, key := range slices.SortedFunc(maps.Keys(head), compareConformanceKeys) {
+		if _, owned := ownCheck[key.Metric]; owned || key == cloneKey {
+			continue
+		}
+		value, source := o.Effective(key)
+		if source == "" {
+			continue
+		}
+		before := map[string]int{}
+		for _, it := range base[key] {
+			before[it.ID] = it.Measure
+		}
+		for _, it := range head[key] {
+			d, ok := byItem[it.ID]
+			if !ok || it.Measure <= value || !known[key.Metric][it.ID] {
+				continue
+			}
+			if was, inBase := before[it.ID]; inBase && was < it.Measure {
+				out = append(out, finding{
+					subject: d.id,
+					score:   thresholdGrewScore,
+					message: fmt.Sprintf("`%s` measures %d for %s, up from %d at the base, past the %s of %d",
+						d.label, it.Measure, thresholdName(key), was, thresholdSource(source), value),
+				})
+			}
+		}
 	}
 	return out
 }

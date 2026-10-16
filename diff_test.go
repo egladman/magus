@@ -435,6 +435,54 @@ func TestAttachConformanceRunsTheThresholdCheck(t *testing.T) {
 	assert.Contains(t, names, "conformance-threshold")
 }
 
+func TestAttachConformanceReportsAKnownSymbolWhoseBodyGrew(t *testing.T) {
+	const file = "internal/trail/trail.go"
+	ns := "gomod example.com/m `example.com/m/internal/trail`/"
+	build := func(longEnd int) *knowledge.Graph {
+		sym := func(key, label, line string, end int) types.KnowledgeSymbol {
+			return types.KnowledgeSymbol{
+				Key: ns + key, Label: label, Language: "go", SymbolKind: "Function", Namespace: ns,
+				Source: file + ":" + line, DefEndLine: end, Defs: []string{file},
+			}
+		}
+		g := knowledge.NewGraph()
+		for _, sh := range knowledge.AssembleShards(knowledge.Inputs{
+			Graph:   types.TargetGraphOutput{Projects: []types.TargetGraphProject{{Path: "."}}},
+			Symbols: map[string][]types.KnowledgeSymbol{".": {sym("Long().", "Long", "6", longEnd), sym("Short().", "Short", "100", 102)}},
+		}) {
+			g.Merge(sh.Nodes, sh.Edges)
+		}
+		return g
+	}
+	head, base := build(65), build(61)
+	ids := map[string]string{}
+	for id, def := range definedSymbols(head.Nodes()) {
+		ids[def.node.Label] = id
+	}
+	conformance := shippedConformance()
+	conformance.Limits = map[types.ConformanceKey]types.ConformanceLimit{
+		{Metric: types.ConformanceFuncLines, Population: types.ConformancePopSource}: {Percentile: 99, Anchor: 52},
+	}
+	conformance.RatchetPath = "conformance.jsonl"
+	conformance.Ratchet = types.ConformanceRatchet{Schema: 1, Known: []types.ConformanceKnown{{
+		Metric: types.ConformanceFuncLines, Items: []string{file + "#Long"}, Reason: "split pending",
+	}}}
+	out := types.Diff{Files: []types.DiffFile{{Path: file, Project: "."}}}
+
+	attachConformance(map[string]*types.DiffFile{file: &out.Files[0]}, head, conformanceInput{
+		conformance: conformance, base: base,
+		changes: map[string]string{ids["Long"]: types.DiffChangeBody, ids["Short"]: types.DiffChangeAdded},
+	})
+
+	var got []string
+	for _, s := range out.Files[0].Symbols {
+		for _, c := range s.Checks {
+			got = append(got, c.Message)
+		}
+	}
+	assert.Equal(t, []string{"`Long` measures 60 for func-lines source, up from 56 at the base, past the configured anchor of 52"}, got)
+}
+
 const ratchetHead = `{"kind":"schema","schema":1}
 {"kind":"measured","rev":"r","date":"d"}
 {"kind":"threshold","metric":"func-lines","population":"source","value":80,"n":40,"percentile":99,"why":"w"}

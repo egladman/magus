@@ -107,20 +107,21 @@ type externalsFunc func(g *knowledge.Graph, symbolID, owner string) ([]string, i
 // attachAPIDelta classifies every symbol the changeset's files define on either side against
 // base, attaches the public ones to their files, and sets out.API. It returns every symbol's
 // DiffChange by ID, public or not, and the base's nodes for the symbols the changed files no
-// longer define; both are nil when the baseline could not be compared.
-func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *knowledge.Graph, cfg diffConfig, externals externalsFunc) (map[string]string, []types.KnowledgeNode) {
+// longer define, and the graph it built from the baseline; all three are nil when the baseline
+// could not be compared.
+func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *knowledge.Graph, cfg diffConfig, externals externalsFunc) (map[string]string, []types.KnowledgeNode, *knowledge.Graph) {
 	baseOut := *cfg.baseline
 	if baseOut.SchemaVersion < 14 {
 		out.Notes = append(out.Notes, fmt.Sprintf(
 			"API delta skipped: the baseline %s is knowledge schema %d, which predates recorded signatures; export it again with this magus",
 			cfg.baselineLabel, baseOut.SchemaVersion))
-		return nil, nil
+		return nil, nil, nil
 	}
 	baseDefs := definedSymbols(baseOut.Nodes)
 	if len(baseDefs) == 0 {
 		out.Notes = append(out.Notes, "API delta skipped: the baseline "+cfg.baselineLabel+
 			" carries no symbols; export it with `magus graph export --symbols`")
-		return nil, nil
+		return nil, nil, nil
 	}
 	var removed []types.KnowledgeNode
 	base := knowledge.NewGraph()
@@ -225,14 +226,15 @@ func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *kn
 			"API delta: %d symbol(s) in changed files had no readable definition lines on one side, so an edit to their bodies is not counted",
 			unmeasured))
 	}
-	return classified, removed
+	return classified, removed, base
 }
 
 // conformanceInput is what attachConformance reads beyond the head graph.
 type conformanceInput struct {
-	// changes and removed are attachAPIDelta's answer, nil without a baseline.
+	// changes, removed and base are attachAPIDelta's answer, nil without a baseline.
 	changes map[string]string
 	removed []types.KnowledgeNode
+	base    *knowledge.Graph
 	// patch is the changeset's unified diff, which says what is new when there is no baseline.
 	patch     string
 	generated map[string]bool
@@ -255,7 +257,7 @@ type conformanceInput struct {
 // and it was renamed from the name a removed line of its file spells where it now reads its own.
 func attachConformance(byPath map[string]*types.DiffFile, head *knowledge.Graph, in conformanceInput) {
 	defs := definedSymbols(head.Nodes())
-	var subjects []string
+	var subjects, touched []string
 	introduced := map[string]bool{}
 	renamed := map[string]string{}
 	var pf patchFacts
@@ -275,6 +277,8 @@ func attachConformance(byPath map[string]*types.DiffFile, head *knowledge.Graph,
 				subjects = append(subjects, id)
 			case types.DiffChangeSignature:
 				subjects = append(subjects, id)
+			case types.DiffChangeBody:
+				touched = append(touched, id)
 			}
 			continue
 		}
@@ -294,7 +298,7 @@ func attachConformance(byPath map[string]*types.DiffFile, head *knowledge.Graph,
 	}
 	found := head.ConformanceChecks(knowledge.ConformanceChange{
 		Subjects: subjects, Introduced: introduced, Generated: in.generated, Renamed: renamed,
-		Read: in.read, Conformance: in.conformance, RatchetBase: in.ratchetBase,
+		Read: in.read, Conformance: in.conformance, RatchetBase: in.ratchetBase, Base: in.base, Touched: touched,
 	})
 	for _, id := range slices.Sorted(maps.Keys(found)) {
 		def, ok := defs[id]
