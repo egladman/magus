@@ -225,6 +225,10 @@ magus\project({
         // Four of a 10-core machine's 10 slots: the seat runs go test -p 4 with GOMAXPROCS=4,
         // so two suites and the other workers' builds share the machine the broker counts.
         "go-test": {"slots": 4},
+        // Measured over 159 scip-go runs longer than 10 s: p75 width 3.6 cores, p75 peak 1.7 GiB,
+        // max 2.9 GiB. Undeclared, each claimed 1 slot and 0 MiB, so the broker admitted
+        // every worker's graph build at once and scip-go took every core.
+        "scip": {"slots": 4, "memory_mb": 2048},
     },
 });
 
