@@ -19,6 +19,12 @@ func fixtureDocs() []Document {
 }
 
 // fixtureWeights leaves FieldPath unweighted, so c's path hit on "leaf" must not score.
+// handIDF is BM25's idf of a term df of n documents hold, written out for the hand
+// computations.
+func handIDF(n, df float64) float64 {
+	return math.Log(1 + (n-df+0.5)/(df+0.5))
+}
+
 func fixtureWeights() BM25F {
 	return BM25F{K1: 1.2, Fields: map[string]FieldWeight{
 		FieldName: {Weight: 5, B: 0.75},
@@ -33,8 +39,8 @@ func TestIndexScoreHandComputed(t *testing.T) {
 	ix := NewIndex(fixtureDocs())
 	require.Equal(t, 3, ix.Len())
 
-	idfLeaf := math.Log(1 + (3-3+0.5)/(3+0.5))
-	idfScore := math.Log(1 + (3-2+0.5)/(2+0.5))
+	idfLeaf := handIDF(3, 3)
+	idfScore := handIDF(3, 2)
 	// Length norms: name a 0.25+0.75*2/(4/3)=1.375, name b 0.25+0.75*1/(4/3)=0.8125,
 	// body a 0.25+0.75*3/2=1.375, body b 0.25+0.75*1/2=0.625.
 	leafA := 5*1/1.375 + 1*2/1.375
@@ -76,7 +82,7 @@ func termFields(h Hit) []string {
 // not: a's "leaf" in name and body saturates once, over the weighted sum.
 func TestIndexScoreSaturatesPerDocument(t *testing.T) {
 	ix := NewIndex(fixtureDocs())
-	idf := math.Log(1 + (3-3+0.5)/(3+0.5))
+	idf := handIDF(3, 3)
 	name, body := 5*1/1.375, 1*2/1.375
 
 	hits := ix.Score([]string{"leaf"}, fixtureWeights())
