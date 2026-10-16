@@ -569,12 +569,8 @@ func (x *conformanceIndex) exports() []conformanceExport {
 			continue
 		}
 		item := types.ConformanceItem{ID: s.itemID, Source: s.node.Source, Measure: 1}
-		for _, e := range x.g.in[s.id] {
-			ref := strings.TrimPrefix(e.Source, types.KindFile+":")
-			if e.Relation == types.RelationReferences && !types.IsTestPath(ref) && path.Dir(ref) != dir {
-				item.Measure = 0
-				break
-			}
+		if x.g.usedOutside(s.id, dir) > 0 {
+			item.Measure = 0
 		}
 		out = append(out, conformanceExport{item: item, pop: s.pop})
 	}

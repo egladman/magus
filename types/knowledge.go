@@ -1474,6 +1474,12 @@ type KnowledgeExplainOutput struct {
 	// Resolution says how the name asked about became Node. A fuzzy card may describe
 	// something other than what was named, so a caller anchoring by path refuses one.
 	Resolution KnowledgeResolution `json:"resolution,omitempty" yaml:"resolution,omitempty"`
+	// PublicAPI is a dir node's symbols that a non-test file outside the dir references,
+	// most used first. Empty for other kinds.
+	PublicAPI []PublicSymbol `json:"public_api,omitempty" yaml:"public_api,omitempty"`
+	// PublicAPIGap says the graph holds no symbols of the dir's language for the dir, so an
+	// empty PublicAPI is not read as a dir that offers nothing.
+	PublicAPIGap string `json:"public_api_gap,omitempty" yaml:"public_api_gap,omitempty"`
 }
 
 // KnowledgeResolution is how a lookup turned the name it was given into one node.

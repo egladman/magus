@@ -195,6 +195,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "KnowledgeOrphan", Type: reflect.TypeFor[types.KnowledgeOrphan](), RuntimeObject: true},
 	{Name: "KnowledgeDocCoverage", Type: reflect.TypeFor[types.KnowledgeDocCoverage](), RuntimeObject: true},
 	{Name: "QueryResult", Type: reflect.TypeFor[types.KnowledgeQueryOutput](), RuntimeObject: true},
+	{Name: "PublicSymbol", Type: reflect.TypeFor[types.PublicSymbol](), RuntimeObject: true},
 	{Name: "ExplainResult", Type: reflect.TypeFor[types.KnowledgeExplainOutput](), RuntimeObject: true},
 	{Name: "PathResult", Type: reflect.TypeFor[types.KnowledgePathOutput](), RuntimeObject: true},
 	{Name: "RefsResult", Type: reflect.TypeFor[types.KnowledgeRefsOutput](), RuntimeObject: true},

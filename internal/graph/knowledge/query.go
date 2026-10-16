@@ -613,7 +613,8 @@ func (g *Graph) Select(input string, budget int) types.KnowledgeGraphOutput {
 // Explain resolves ref to a node and returns its context card, or ok=false when
 // nothing resolves. Resolution says whether ref was the node's ID, its exact path, or a
 // ranked guess. A package node that is not replaced carries the documentation URL of the
-// version its version attr names.
+// version its version attr names. A dir node carries its public API, or, when that is empty
+// for want of symbols, the gap that says so.
 func (g *Graph) Explain(ref string) (types.KnowledgeExplainOutput, bool) {
 	id, how, ok := g.resolve(ref)
 	if !ok {
@@ -630,6 +631,11 @@ func (g *Graph) Explain(ref string) (types.KnowledgeExplainOutput, bool) {
 	}
 	if n.Kind == types.KindPackage && n.Attrs[attrPackageReplaced] == "" {
 		out.DocsURL, _ = deps.DocsURL(n.Attrs[attrPackageManager], n.Label, n.Attrs[AttrPackageVersion])
+	}
+	if dir, ok := strings.CutPrefix(id, types.KindDir+":"); ok {
+		if out.PublicAPI = g.PublicAPI([]string{dir}); len(out.PublicAPI) == 0 {
+			out.PublicAPIGap = g.publicAPIGap(dir)
+		}
 	}
 	for _, e := range g.out[id] {
 		out.Out = append(out.Out, g.edgeRef(e, types.EdgeOut, e.Target))
