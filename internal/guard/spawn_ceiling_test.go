@@ -170,21 +170,27 @@ func TestSpawnAboveParentTierReadsTheHarnessRowsTier(t *testing.T) {
 // alias with a prefix or another case is no alias, and a row with an alias but no tier names
 // none.
 func TestSpawnAboveParentTierReadsTheHarnessRowsAlias(t *testing.T) {
-	ctx, deps, _ := ceilingFixture(t, "claude-sonnet-5-5", true)
-	deps.ModelRows = func() []types.ModelPricing {
-		return []types.ModelPricing{
-			{ID: "claude-sonnet-5-5", Tier: "standard", Alias: "mid"},
-			{ID: "claude-opus-5-5", Tier: "principal", Alias: "top"},
-			{ID: "claude-fable-5-1", Alias: "fable"},
+	fixture := func() (context.Context, Dependencies) {
+		ctx, deps, _ := ceilingFixture(t, "claude-sonnet-5-5", true)
+		deps.ModelRows = func() []types.ModelPricing {
+			return []types.ModelPricing{
+				{ID: "claude-sonnet-5-5", Tier: "standard", Alias: "mid"},
+				{ID: "claude-opus-5-5", Tier: "principal", Alias: "top"},
+				{ID: "claude-fable-5-1", Alias: "fable"},
+			}
 		}
+		return ctx, deps
 	}
 
+	ctx, deps := fixture()
 	v := judgeSpawnBy(ctx, t, deps, "", "top")
 	shape, text := spoken(v)
 	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnAboveParentTier)}, shape)
 	assert.Contains(t, text, "this spawn runs top, model tier principal (rank 2)")
 
+	// The unknown-tier advisory speaks once per caller, so each spawn gets its own session.
 	for _, spawn := range []string{"top-1", "Top", "fable"} {
+		ctx, deps := fixture()
 		v = judgeSpawnBy(ctx, t, deps, "", spawn)
 		assert.Equal(t, decisionAdvise, v.Decision, spawn)
 		assert.Contains(t, v.Context, "add a row for "+spawn, spawn)
