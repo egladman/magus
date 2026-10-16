@@ -262,6 +262,11 @@ type Outcome struct {
 	// nothing and a fully replayed target records none. Both attempts of a retried
 	// target count, as DurationMs spans both. Omitted, and UNMEASURED, when zero.
 	CPUMs int64 `json:"cpu_ms,omitzero"`
+	// Slots is the claim the run held. A step runs the Go toolchain only that wide
+	// (spawn.SeatJobserver), so CPUMs over DurationMs never exceeds it, and a width near
+	// it says the claim held the run back rather than what the run needed. Omitted, and
+	// UNKNOWN, when zero: such a run's width cannot be read either way.
+	Slots int `json:"slots,omitzero"`
 	// Charms and ArgsHash are the run's [Shape]; the target is the key the outcome is
 	// filed under. Two runs of one target reach different peaks when their shapes
 	// differ (`-- -run TestOne` against the whole suite).
@@ -1117,7 +1122,7 @@ func (h *History) MeasuredRuns() MeasuredRuns {
 				if o.Result != OutcomeFail && (o.MaxRSSBytes > 0 || measuredWidth(o)) {
 					kept = append(kept, Outcome{
 						Result: o.Result, DurationMs: o.DurationMs, MaxRSSBytes: o.MaxRSSBytes, CPUMs: o.CPUMs,
-						Charms: slices.Clone(o.Charms), ArgsHash: o.ArgsHash,
+						Slots: o.Slots, Charms: slices.Clone(o.Charms), ArgsHash: o.ArgsHash,
 					})
 				}
 			}
@@ -1133,8 +1138,9 @@ func (h *History) MeasuredRuns() MeasuredRuns {
 	return x
 }
 
-// measuredWidth reports whether o recorded both halves of the parallelism it used.
-func measuredWidth(o Outcome) bool { return o.CPUMs > 0 && o.DurationMs > 0 }
+// measuredWidth reports whether o recorded the parallelism it used and the claim it
+// used it under.
+func measuredWidth(o Outcome) bool { return o.CPUMs > 0 && o.DurationMs > 0 && o.Slots > 0 }
 
 // Peak returns the highest peak resident memory, in bytes, of target's runs in project
 // that recorded shape, and of every run of target whatever its shape, which includes the
@@ -1157,23 +1163,30 @@ func (x MeasuredRuns) Peak(project, target string, shape Shape) (sameShape, anyS
 	return sameShape, anyShape
 }
 
-// Width returns how many slots target's runs in project kept busy: the 75th percentile
-// of CPU time over wall time, rounded up and never below one, split by shape as
-// [MeasuredRuns.Peak] splits it. A percentile rather than the maximum, so one run that
-// burst wide does not size every run after it.
+// saturatedMilli is the width, in thousandths of each slot a run held, at which the
+// claim rather than the run set that width.
+const saturatedMilli = 900
+
+// Width returns how many slots target's runs in project should claim, split by shape as
+// [MeasuredRuns.Peak] splits it.
+//
+// A run's width is its CPU time over wall time. One that reached 0.9 of the slots it
+// held is saturated: the claim capped it, so its width is a floor, and the next claim
+// is twice its slots until a run granted more slots than it held comes back
+// unsaturated. Unsaturated runs measured what the target needed, and their 75th
+// percentile, rounded up and never below one, is the width; the figure is the larger of
+// the two. A percentile rather than the maximum, so one run that burst wide does not
+// size every run after it.
 func (x MeasuredRuns) Width(project, target string, shape Shape) (sameShape, anyShape Measurement) {
 	for _, s := range targetHistories(x.projects[project], target) {
-		var same, all []int64
+		var same, all []Outcome
 		for _, o := range s.RecentOutcomes {
 			if !measuredWidth(o) {
 				continue
 			}
-			// Thousandths of a core, so percentile's integer interpolation keeps the
-			// fraction that decides which way a width rounds.
-			milli := o.CPUMs * 1000 / o.DurationMs
-			all = append(all, milli)
+			all = append(all, o)
 			if shape.matches(o) {
-				same = append(same, milli)
+				same = append(same, o)
 			}
 		}
 		sameShape, anyShape = sameShape.fold(widthSlots(same)), anyShape.fold(widthSlots(all))
@@ -1181,12 +1194,33 @@ func (x MeasuredRuns) Width(project, target string, shape Shape) (sameShape, any
 	return sameShape, anyShape
 }
 
-// widthSlots is the p75 of widths given in thousandths of a core, in whole slots.
-func widthSlots(milli []int64) Measurement {
-	if len(milli) == 0 {
+// widthSlots sizes a slot claim from runs that each measured a width, as
+// [MeasuredRuns.Width] describes.
+func widthSlots(runs []Outcome) Measurement {
+	if len(runs) == 0 {
 		return Measurement{}
 	}
-	return Measurement{Value: max((percentile(milli, 0.75)+999)/1000, 1), Runs: len(milli)}
+	var unsaturated []int64
+	var saturatedClaim, unsaturatedClaim int
+	for _, o := range runs {
+		// Thousandths of a core, so percentile's integer interpolation keeps the
+		// fraction that decides which way a width rounds.
+		milli := o.CPUMs * 1000 / o.DurationMs
+		if milli >= saturatedMilli*int64(o.Slots) {
+			saturatedClaim = max(saturatedClaim, o.Slots)
+			continue
+		}
+		unsaturated = append(unsaturated, milli)
+		unsaturatedClaim = max(unsaturatedClaim, o.Slots)
+	}
+	var width int64
+	if len(unsaturated) > 0 {
+		width = max((percentile(unsaturated, 0.75)+999)/1000, 1)
+	}
+	if saturatedClaim >= unsaturatedClaim && saturatedClaim > 0 {
+		width = max(width, 2*int64(saturatedClaim))
+	}
+	return Measurement{Value: width, Runs: len(runs)}
 }
 
 // FoldTargetHistories combines every spell history a project recorded for target into

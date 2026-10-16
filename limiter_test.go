@@ -310,8 +310,9 @@ func TestSizeClaimFoldsSizedFigures(t *testing.T) {
 // over the measurement on that axis.
 func TestSizeClaimMeasuresAnUndeclaredTarget(t *testing.T) {
 	shape := forecast.NewShape(nil, nil)
-	// 1.6 GiB peaks and three cores busy over wall time, the shape of a scip build.
-	run := forecast.Outcome{Result: forecast.OutcomePass, MaxRSSBytes: 1600 * mib, CPUMs: 3000, DurationMs: 1000, Charms: shape.Charms, ArgsHash: shape.ArgsHash}
+	// 1.6 GiB peaks and three of four claimed cores busy over wall time, the shape of a
+	// scip build.
+	run := forecast.Outcome{Result: forecast.OutcomePass, MaxRSSBytes: 1600 * mib, CPUMs: 3000, DurationMs: 1000, Slots: 4, Charms: shape.Charms, ArgsHash: shape.ArgsHash}
 	history := func(runs int) *forecast.MeasuredRuns {
 		h := forecast.History{Projects: map[string]map[string]forecast.Stats{
 			".": {"magusfile/scip": {RecentOutcomes: slices.Repeat([]forecast.Outcome{run}, runs)}},
@@ -337,6 +338,28 @@ func TestSizeClaimMeasuresAnUndeclaredTarget(t *testing.T) {
 		"declared slots beat the measured width")
 	assert.Equal(t, cache.Step{MemoryMB: 1024, MemoryDeclaredBy: "scip", Slots: 3}, claim(types.Target{MemoryMB: 1024}, minMeasuredRuns),
 		"declared memory caps the measured peak")
+}
+
+// A Go target runs only as wide as its claim, so a claim its runs saturate doubles, up
+// to the budget, rather than settling at what the cap let them measure.
+func TestSizeClaimGrowsASaturatedClaim(t *testing.T) {
+	shape := forecast.NewShape(nil, nil)
+	m := &Magus{}
+	m.limOnce.Do(func() { m.lim = cache.NewLimiter(8) })
+	m.hostMemOnce.Do(func() { m.hostMemBytes = 1 << 40 })
+	slots := func(claimed int) int {
+		run := forecast.Outcome{Result: forecast.OutcomePass, CPUMs: int64(claimed) * 1000, DurationMs: 1000, Slots: claimed, Charms: shape.Charms, ArgsHash: shape.ArgsHash}
+		h := forecast.History{Projects: map[string]map[string]forecast.Stats{
+			".": {"go/test": {RecentOutcomes: slices.Repeat([]forecast.Outcome{run}, minMeasuredRuns)}},
+		}}
+		x := h.MeasuredRuns()
+		var step cache.Step
+		m.sizeClaim(&step, chainProject(".", map[string]types.Target{"test": {}}, nil), "test", newClaimSizer(&x, shape))
+		return step.Slots
+	}
+	assert.Equal(t, 2, slots(1), "one slot kept busy claims two")
+	assert.Equal(t, 8, slots(4), "four slots kept busy claim eight")
+	assert.Equal(t, 8, slots(8), "the budget caps the doubling")
 }
 
 func TestSizeSlotClaim(t *testing.T) {

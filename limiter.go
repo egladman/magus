@@ -214,11 +214,8 @@ func sizeMemoryClaim(declaredMB int, sameShape, anyShape forecast.Measurement) (
 
 // sizeSlotClaim is the measured width (forecast.MeasuredRuns.Width), capped at capacity
 // when the budget is limited, or 0, which takes one slot, when too few runs measured
-// it.
-//
-// The width a run measures is bounded by the claim it ran under, since a step runs the
-// Go toolchain only as wide as its slots (spawn.SeatJobserver). So a Go-heavy target
-// sized here never measures its way wider; declaring `slots` is what widens it.
+// it. A run whose claim capped its width doubles the claim, so a Go-heavy target that
+// runs only as wide as its slots (spawn.SeatJobserver) still measures its way wider.
 func sizeSlotClaim(sameShape, anyShape forecast.Measurement, capacity int) int {
 	width, _, ok := trustedMeasurement(sameShape, anyShape)
 	if !ok {

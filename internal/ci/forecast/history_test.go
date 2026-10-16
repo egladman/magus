@@ -1402,16 +1402,17 @@ func TestMeasuredRunsPeak(t *testing.T) {
 	assert.Equal(t, 5000*mb, all.Value)
 }
 
-// TestMeasuredRunsWidth pins how a slot claim is sized: the p75 of CPU time over wall
-// time across successful runs that measured both, rounded up to whole slots and never
-// below one, split by shape like a peak.
+// TestMeasuredRunsWidth pins how a slot claim is sized from unsaturated runs: the p75 of
+// CPU time over wall time across successful runs that measured both and the claim they
+// held, rounded up to whole slots and never below one, split by shape like a peak.
 func TestMeasuredRunsWidth(t *testing.T) {
 	t.Parallel()
 
 	full := NewShape(nil, nil)
 	narrow := NewShape(nil, []string{"-run", "TestOne"})
+	// Every run held 16 slots, so none of them is saturated.
 	o := func(r OutcomeResult, cpuMs, wallMs int64, s Shape) Outcome {
-		return Outcome{Result: r, CPUMs: cpuMs, DurationMs: wallMs, Charms: s.Charms, ArgsHash: s.ArgsHash}
+		return Outcome{Result: r, CPUMs: cpuMs, DurationMs: wallMs, Slots: 16, Charms: s.Charms, ArgsHash: s.ArgsHash}
 	}
 	h := History{Projects: map[string]map[string]Stats{".": {
 		"magusfile/scip": {RecentOutcomes: []Outcome{
@@ -1422,6 +1423,7 @@ func TestMeasuredRunsWidth(t *testing.T) {
 			o(OutcomeFail, 20000, 1000, full),    // a failed run sizes nothing
 			o(OutcomePass, 0, 1000, full),        // unmeasured
 			o(OutcomePass, 50, 1000, narrow),     // a twentieth of a core still takes one slot
+			{Result: OutcomePass, CPUMs: 12000, DurationMs: 1000, Charms: full.Charms, ArgsHash: full.ArgsHash}, // no claim recorded
 		}},
 		"magusfile/lint": {RecentOutcomes: []Outcome{o(OutcomePass, 3000, 1000, full)}},
 		"go/lint":        {RecentOutcomes: []Outcome{o(OutcomePass, 5000, 1000, full), o(OutcomePass, 5000, 1000, full)}},
@@ -1443,6 +1445,37 @@ func TestMeasuredRunsWidth(t *testing.T) {
 	same, all = x.Width(".", "test", full)
 	assert.Zero(t, same)
 	assert.Zero(t, all)
+}
+
+// TestMeasuredRunsWidthSaturation pins the ratchet a claim needs because a step runs Go
+// only as wide as its slots: a run that kept 0.9 of its claim busy doubles the next
+// claim until a wider claim comes back unsaturated, and only unsaturated runs feed the
+// percentile.
+func TestMeasuredRunsWidthSaturation(t *testing.T) {
+	t.Parallel()
+
+	shape := NewShape(nil, nil)
+	run := func(slots int, cores float64) Outcome {
+		return Outcome{Result: OutcomePass, CPUMs: int64(cores * 1000), DurationMs: 1000, Slots: slots, Charms: shape.Charms, ArgsHash: shape.ArgsHash}
+	}
+	width := func(runs ...Outcome) Measurement {
+		h := History{Projects: map[string]map[string]Stats{".": {"go/test": {RecentOutcomes: runs}}}}
+		same, _ := h.MeasuredRuns().Width(".", "test", shape)
+		return same
+	}
+
+	assert.Equal(t, Measurement{Value: 2, Runs: 3}, width(run(1, 1), run(1, 1), run(1, 0.95)),
+		"one slot kept busy is a floor, not a width: the claim doubles rather than settling at one")
+	assert.Equal(t, Measurement{Value: 4, Runs: 4}, width(run(1, 1), run(1, 1), run(1, 1), run(2, 1.9)),
+		"a saturated history keeps growing")
+	assert.Equal(t, Measurement{Value: 3, Runs: 3}, width(run(4, 2), run(4, 2.5), run(4, 3)),
+		"an unsaturated history settles at its p75: 2.75 cores, three slots")
+	assert.Equal(t, Measurement{Value: 3, Runs: 4}, width(run(4, 2), run(4, 2.5), run(4, 3), run(3, 2.9)),
+		"a run saturated at three slots is answered by unsaturated runs granted four")
+	assert.Equal(t, Measurement{Value: 1, Runs: 2}, width(run(1, 1), run(2, 1)),
+		"a single-threaded target granted two slots used one, so it settles back at one")
+	assert.Equal(t, Measurement{Value: 8, Runs: 2}, width(run(4, 2), run(4, 3.8)),
+		"saturated and unsaturated at one claim: the claim grows")
 }
 
 // syntheticHistory builds a History with n projects × 2 targets, each with
