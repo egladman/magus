@@ -8,12 +8,12 @@ type Class uint8
 
 const (
 	Adjective Class = iota + 1
-	Adposition
+	adposition
 	Adverb
 	Auxiliary
 	CoordinatingConjunction
 	Determiner
-	Interjection
+	interjection
 	Noun
 	Numeral
 	Particle
@@ -23,14 +23,14 @@ const (
 	SubordinatingConjunction
 	Symbol
 	Verb
-	Other
+	other
 )
 
 var classNames = [...]string{
-	Adjective: "ADJ", Adposition: "ADP", Adverb: "ADV", Auxiliary: "AUX", CoordinatingConjunction: "CCONJ",
-	Determiner: "DET", Interjection: "INTJ", Noun: "NOUN", Numeral: "NUM", Particle: "PART", Pronoun: "PRON",
+	Adjective: "ADJ", adposition: "ADP", Adverb: "ADV", Auxiliary: "AUX", CoordinatingConjunction: "CCONJ",
+	Determiner: "DET", interjection: "INTJ", Noun: "NOUN", Numeral: "NUM", Particle: "PART", Pronoun: "PRON",
 	ProperNoun: "PROPN", Punctuation: "PUNCT", SubordinatingConjunction: "SCONJ", Symbol: "SYM", Verb: "VERB",
-	Other: "X",
+	other: "X",
 }
 
 // String returns the class as UD spells it, such as "NOUN", or "Class(n)"

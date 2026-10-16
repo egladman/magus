@@ -18,37 +18,37 @@ import (
 	"github.com/egladman/magus/libs/proofread"
 )
 
-// Label is what a labeled case says a rule does with its text. Hit and Pass
-// are the verdicts the rule must reach. FalsePositive and FalseNegative are
+// label is what a labeled case says a rule does with its text. Hit and pass
+// are the verdicts the rule must reach. False positive and false negative are
 // known misses, kept so precision and recall count them: the rule fires on a
 // false positive and stays silent on a false negative, and a replay that sees
 // otherwise reports the case, since the rule changed.
-type Label string
+type label string
 
 const (
-	LabelHit           Label = "hit"
-	LabelPass          Label = "pass"
-	LabelFalsePositive Label = "fp"
-	LabelFalseNegative Label = "fn"
+	labelHit           label = "hit"
+	labelPass          label = "pass"
+	labelFalsePositive label = "fp"
+	labelFalseNegative label = "fn"
 )
 
 // labelAuthor marks a case file section of an author's own texts. It holds no
 // case: its texts build the [proofread.Voice] every case in its file is
 // judged with.
-const labelAuthor Label = "author"
+const labelAuthor label = "author"
 
 // fires reports whether a case with this label expects its rule to report.
-func (l Label) fires() bool { return l == LabelHit || l == LabelFalsePositive }
+func (l label) fires() bool { return l == labelHit || l == labelFalsePositive }
 
-// Case is one labeled text and the rule judging it.
-type Case struct {
+// labeledCase is one labeled text and the rule judging it.
+type labeledCase struct {
 	// File and Line place the case's text in its case file, Line 1-based.
 	File string
 	Line int
 	Rule proofread.Rule
 	Kind proofread.Kind
 	// Label is the verdict the case records.
-	Label Label
+	Label label
 	Text  string
 	// Symbol names the declaration a doc-comment case documents; its Doc is
 	// Text.
@@ -115,13 +115,13 @@ const caseLead = "fix(cache): keep the key stable\n" +
 //
 // A file named for no rule, a header it cannot read, or a kind the rule does
 // not judge is an error naming the file and line.
-func LoadCases(fsys fs.FS) ([]Case, error) {
+func LoadCases(fsys fs.FS) ([]labeledCase, error) {
 	names, err := fs.Glob(fsys, "*.txtar")
 	if err != nil {
 		return nil, err
 	}
 
-	var out []Case
+	var out []labeledCase
 
 	for _, name := range names {
 		data, err := fs.ReadFile(fsys, name)
@@ -140,7 +140,7 @@ func LoadCases(fsys fs.FS) ([]Case, error) {
 	return out, nil
 }
 
-func parseCases(name string, data []byte) ([]Case, error) {
+func parseCases(name string, data []byte) ([]labeledCase, error) {
 	rule := proofread.Rule(strings.TrimSuffix(path.Base(name), ".txtar"))
 
 	doc, ok := catalog()[rule]
@@ -151,7 +151,7 @@ func parseCases(name string, data []byte) ([]Case, error) {
 	archive := txtar.Parse(data)
 	line := 1 + strings.Count(string(archive.Comment), "\n")
 
-	var out []Case
+	var out []labeledCase
 
 	authored := map[proofread.Kind][]string{}
 
@@ -215,28 +215,28 @@ func parseCases(name string, data []byte) ([]Case, error) {
 	return out, nil
 }
 
-func parseHeader(header string, doc proofread.RuleDoc) (Case, bool, error) {
+func parseHeader(header string, doc proofread.RuleDoc) (labeledCase, bool, error) {
 	fields := strings.Fields(header)
 	if len(fields) == 0 {
-		return Case{}, false, errors.New("a section needs a <label>/<kind> header")
+		return labeledCase{}, false, errors.New("a section needs a <label>/<kind> header")
 	}
 
-	label, kind, ok := strings.Cut(fields[0], "/")
+	verdict, kind, ok := strings.Cut(fields[0], "/")
 	if !ok {
-		return Case{}, false, fmt.Errorf("section %q needs a <label>/<kind> header", header)
+		return labeledCase{}, false, fmt.Errorf("section %q needs a <label>/<kind> header", header)
 	}
 
 	parsed, _ := proofread.ParseKind(kind)
-	out := Case{Label: Label(label), Kind: parsed}
+	out := labeledCase{Label: label(verdict), Kind: parsed}
 
 	switch out.Label {
-	case LabelHit, LabelPass, LabelFalsePositive, LabelFalseNegative, labelAuthor:
+	case labelHit, labelPass, labelFalsePositive, labelFalseNegative, labelAuthor:
 	default:
-		return Case{}, false, fmt.Errorf("label %q is none of hit, pass, fp, fn or author", label)
+		return labeledCase{}, false, fmt.Errorf("label %q is none of hit, pass, fp, fn or author", verdict)
 	}
 
 	if !slices.Contains(doc.Kinds, out.Kind) {
-		return Case{}, false, fmt.Errorf("rule %s does not judge kind %q", doc.Name, kind)
+		return labeledCase{}, false, fmt.Errorf("rule %s does not judge kind %q", doc.Name, kind)
 	}
 
 	whole := false
@@ -256,7 +256,7 @@ func parseHeader(header string, doc proofread.RuleDoc) (Case, bool, error) {
 		case "thread":
 			n, err := strconv.Atoi(value)
 			if err != nil || n < 0 {
-				return Case{}, false, fmt.Errorf("thread=%q is not a count", value)
+				return labeledCase{}, false, fmt.Errorf("thread=%q is not a count", value)
 			}
 
 			out.ThreadLength = n
@@ -264,16 +264,16 @@ func parseHeader(header string, doc proofread.RuleDoc) (Case, bool, error) {
 			out.Event = proofread.Event(value)
 			events := []proofread.Event{proofread.EventApprove, proofread.EventRequestChanges, proofread.EventComment}
 			if !slices.Contains(events, out.Event) {
-				return Case{}, false, fmt.Errorf("event=%q is none of APPROVE, REQUEST_CHANGES or COMMENT", value)
+				return labeledCase{}, false, fmt.Errorf("event=%q is none of APPROVE, REQUEST_CHANGES or COMMENT", value)
 			}
 		case "was":
 			// The label a case carried in a labeling round before a fix moved it, as
 			// fp:<round>:<id>; hack/lint holds a moved fp to it, and calibrate ignores it.
 			if parts := strings.Split(value, ":"); len(parts) != 3 || slices.Contains(parts, "") {
-				return Case{}, false, fmt.Errorf("was=%q is not <label>:<round>:<id>", value)
+				return labeledCase{}, false, fmt.Errorf("was=%q is not <label>:<round>:<id>", value)
 			}
 		default:
-			return Case{}, false, fmt.Errorf("unknown attribute %q", attr)
+			return labeledCase{}, false, fmt.Errorf("unknown attribute %q", attr)
 		}
 	}
 
@@ -284,7 +284,7 @@ func parseHeader(header string, doc proofread.RuleDoc) (Case, bool, error) {
 // rule at its default decision and the case's rule turned on where it is house
 // style, under the case's voice when it has one. The other rules run because a
 // rule leaves a span to another that reports it.
-func (c Case) Fires() bool {
+func (c labeledCase) Fires() bool {
 	opts := []proofread.Option{
 		proofread.WithThreadLength(c.ThreadLength), proofread.WithEvent(c.Event), proofread.WithVoice(c.Voice),
 	}
@@ -307,13 +307,13 @@ func (c Case) Fires() bool {
 }
 
 // Agrees reports whether the rule still does what the case's label records.
-func (c Case) Agrees() bool { return c.Fires() == c.Label.fires() }
+func (c labeledCase) Agrees() bool { return c.Fires() == c.Label.fires() }
 
 // HeldOut reports whether c is in the fifth of the cases kept out of tuning: a
 // rule's exceptions are never written against it, so its precision is the one
 // a gate can trust. The split is a hash of the text, so adding or editing one
 // case never moves another into or out of it.
-func (c Case) HeldOut() bool {
+func (c labeledCase) HeldOut() bool {
 	h := fnv.New64a()
 	h.Write([]byte(c.Text))
 
@@ -348,7 +348,7 @@ type Score struct {
 // Scores runs every case and tallies the verdicts it observes per rule, in
 // [proofread.Rules] order. A case labeled hit or fn should be reported; one
 // the rule reports is a true positive, one it does not a false negative.
-func Scores(cases []Case) []Score {
+func Scores(cases []labeledCase) []Score {
 	byRule := map[proofread.Rule]*Score{}
 	heldTP, heldFP := map[proofread.Rule]int{}, map[proofread.Rule]int{}
 
@@ -360,7 +360,7 @@ func Scores(cases []Case) []Score {
 		}
 
 		fired := c.Fires()
-		shouldFire := c.Label == LabelHit || c.Label == LabelFalseNegative
+		shouldFire := c.Label == labelHit || c.Label == labelFalseNegative
 		held := c.HeldOut()
 
 		s.Cases++
@@ -424,13 +424,13 @@ const z95 = 1.959963984540054
 func wilsonLower(p float64, n int) float64 { return wilson(p, n, z95) }
 
 // The precision gates of the proofread method: a rule ships advise once at
-// least GateFirings of its firings are labeled and the Wilson 95% lower bound
-// on their precision reaches AdviseLower, and deny once that bound reaches
-// DenyLower (0 wrong of 35, 1 of 53, 2 of 69).
+// least gateFirings of its firings are labeled and the Wilson 95% lower bound
+// on their precision reaches adviseLower, and deny once that bound reaches
+// denyLower (0 wrong of 35, 1 of 53, 2 of 69).
 const (
-	GateFirings = 30
-	AdviseLower = 0.70
-	DenyLower   = 0.90
+	gateFirings = 30
+	adviseLower = 0.70
+	denyLower   = 0.90
 )
 
 // denyUnmeasured names the conditions of the deny gate that labeled cases
@@ -525,11 +525,11 @@ func decisionRank(d proofread.Decision) int {
 
 func supported(firings int, lower *float64) proofread.Decision {
 	switch {
-	case lower == nil || firings < GateFirings:
+	case lower == nil || firings < gateFirings:
 		return proofread.DecisionOff
-	case *lower >= DenyLower:
+	case *lower >= denyLower:
 		return proofread.DecisionDeny
-	case *lower >= AdviseLower:
+	case *lower >= adviseLower:
 		return proofread.DecisionAdvise
 	default:
 		return proofread.DecisionOff
@@ -538,13 +538,13 @@ func supported(firings int, lower *float64) proofread.Decision {
 
 func gateLower(d proofread.Decision) float64 {
 	if d == proofread.DecisionDeny {
-		return DenyLower
+		return denyLower
 	}
 
-	return AdviseLower
+	return adviseLower
 }
 
-// firingsNeeded is the fewest labeled firings, at least [GateFirings], whose
+// firingsNeeded is the fewest labeled firings, at least gateFirings, whose
 // Wilson lower bound at precision reaches bar. It is false when precision
 // does not exceed bar, since the bound only approaches the precision.
 func firingsNeeded(precision, bar float64) (int, bool) {
@@ -554,12 +554,12 @@ func firingsNeeded(precision, bar float64) (int, bool) {
 
 	reaches := func(n int) bool { return wilsonLower(precision, n) >= bar }
 
-	hi := GateFirings
+	hi := gateFirings
 	for !reaches(hi) {
 		hi *= 2
 	}
 
-	lo := GateFirings
+	lo := gateFirings
 	for lo < hi {
 		mid := lo + (hi-lo)/2
 		if reaches(mid) {
@@ -582,8 +582,8 @@ func ratio(n, d int) *float64 {
 	return &r
 }
 
-// Rate is how often one rule reports over the texts of a group.
-type Rate struct {
+// rate is how often one rule reports over the texts of a group.
+type rate struct {
 	Rule     proofread.Rule     `json:"rule"`
 	Decision proofread.Decision `json:"decision"`
 	Findings int                `json:"findings"`
@@ -603,14 +603,14 @@ type Rate struct {
 type GroupRates struct {
 	Group string `json:"group"`
 	Texts int    `json:"texts"`
-	Rules []Rate `json:"rules"`
+	Rules []rate `json:"rules"`
 }
 
-// Tally counts findings per rule and group over texts of one kind, judged
+// tally counts findings per rule and group over texts of one kind, judged
 // with the rules' default decisions. It is safe for concurrent use.
-type Tally struct {
+type tally struct {
 	kind  proofread.Kind
-	rules []Rate
+	rules []rate
 
 	mu     sync.Mutex
 	groups map[string]*groupTally
@@ -623,14 +623,14 @@ type groupTally struct {
 	denied   map[proofread.Rule]int
 }
 
-// NewTally returns a Tally over the rules on by default for kind. Voice drift
-// is left out, since a Tally judges with no voice.
-func NewTally(kind proofread.Kind) *Tally {
-	t := &Tally{kind: kind, groups: map[string]*groupTally{}}
+// NewTally returns a tally over the rules on by default for kind. Voice drift
+// is left out, since a tally judges with no voice.
+func NewTally(kind proofread.Kind) *tally {
+	t := &tally{kind: kind, groups: map[string]*groupTally{}}
 
 	for _, doc := range proofread.Catalog() {
 		if d, ok := doc.Decisions[kind]; ok && d != proofread.DecisionOff && doc.Name != proofread.RuleVoiceDrift {
-			t.rules = append(t.rules, Rate{Rule: doc.Name, Decision: d})
+			t.rules = append(t.rules, rate{Rule: doc.Name, Decision: d})
 		}
 	}
 
@@ -638,7 +638,7 @@ func NewTally(kind proofread.Kind) *Tally {
 }
 
 // Add judges text and counts its findings under group.
-func (t *Tally) Add(group, text string) {
+func (t *tally) Add(group, text string) {
 	var found []proofread.Finding
 	if t.kind == proofread.KindDocComment {
 		found = proofread.Judge(proofread.Symbol{Doc: text})
@@ -678,7 +678,7 @@ func (t *Tally) Add(group, text string) {
 
 // Rates returns each group's rates, groups sorted by name and rules in
 // [proofread.Rules] order, every rule that runs on the kind listed.
-func (t *Tally) Rates() []GroupRates {
+func (t *tally) Rates() []GroupRates {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -686,7 +686,7 @@ func (t *Tally) Rates() []GroupRates {
 
 	for _, name := range slices.Sorted(maps.Keys(t.groups)) {
 		g := t.groups[name]
-		gr := GroupRates{Group: name, Texts: g.texts, Rules: []Rate{}}
+		gr := GroupRates{Group: name, Texts: g.texts, Rules: []rate{}}
 
 		for _, r := range t.rules {
 			r.Findings, r.Texts, r.DeniedTexts = g.findings[r.Rule], g.hit[r.Rule], g.denied[r.Rule]

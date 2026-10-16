@@ -31,18 +31,18 @@ func TestEveryRuleHasAHitAndAPassCase(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	labels := map[proofread.Rule]map[Label]bool{}
+	labels := map[proofread.Rule]map[label]bool{}
 
 	for _, c := range cases {
 		if labels[c.Rule] == nil {
-			labels[c.Rule] = map[Label]bool{}
+			labels[c.Rule] = map[label]bool{}
 		}
 
 		labels[c.Rule][c.Label] = true
 	}
 
 	for _, r := range proofread.Rules() {
-		if !labels[r][LabelHit] || !labels[r][LabelPass] {
+		if !labels[r][labelHit] || !labels[r][labelPass] {
 			t.Errorf("cases/%s.txtar needs a hit and a pass case, has %v", r, labels[r])
 		}
 	}
@@ -61,11 +61,11 @@ func TestLoadCasesReadsHeadersLinesAndWholeSections(t *testing.T) {
 	}
 
 	sym := proofread.Symbol{Name: "Close", Owner: "Pool", Callable: true}
-	want := []Case{
-		{File: "docstub.txtar", Line: 4, Rule: proofread.RuleDocStub, Kind: proofread.KindDocComment, Label: LabelHit, Text: "Close closes.", Symbol: sym},
-		{File: "docstub.txtar", Line: 6, Rule: proofread.RuleDocStub, Kind: proofread.KindDocComment, Label: LabelHit, Text: "Close closes the Pool.", Symbol: sym},
+	want := []labeledCase{
+		{File: "docstub.txtar", Line: 4, Rule: proofread.RuleDocStub, Kind: proofread.KindDocComment, Label: labelHit, Text: "Close closes.", Symbol: sym},
+		{File: "docstub.txtar", Line: 6, Rule: proofread.RuleDocStub, Kind: proofread.KindDocComment, Label: labelHit, Text: "Close closes the Pool.", Symbol: sym},
 		{
-			File: "docstub.txtar", Line: 8, Rule: proofread.RuleDocStub, Kind: proofread.KindDocComment, Label: LabelPass,
+			File: "docstub.txtar", Line: 8, Rule: proofread.RuleDocStub, Kind: proofread.KindDocComment, Label: labelPass,
 			Text: "Open dials.\n\nIt blocks.", Symbol: proofread.Symbol{Name: "Open"},
 		},
 	}
@@ -77,7 +77,7 @@ func TestLoadCasesReadsHeadersLinesAndWholeSections(t *testing.T) {
 
 func TestLoadCasesAcceptsTheLabelACaseCarriedBeforeAMove(t *testing.T) {
 	noted := fstest.MapFS{"absolute.txtar": {Data: []byte("-- pass/change-description was=fp:round4:r4-0022 --\n- Nobody declared it.\n")}}
-	if got, err := LoadCases(noted); err != nil || len(got) != 1 || got[0].Label != LabelPass {
+	if got, err := LoadCases(noted); err != nil || len(got) != 1 || got[0].Label != labelPass {
 		t.Errorf("LoadCases(was=fp:round4:r4-0022) = %+v, %v; want one pass case", got, err)
 	}
 
@@ -186,13 +186,13 @@ func TestLoadCasesRefusesAFileItCannotRead(t *testing.T) {
 }
 
 func TestCalibrateTalliesEachLabelAsTheRuleJudgesIt(t *testing.T) {
-	cases := []Case{
-		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: LabelHit, Text: "It may help."},
-		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: LabelHit, Text: "It holds."},
-		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: LabelPass, Text: "It holds."},
-		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: LabelFalsePositive, Text: "It probably holds."},
-		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: LabelFalseNegative, Text: "It holds."},
-		{Rule: proofread.RuleFiller, Kind: proofread.KindReference, Label: LabelPass, Text: "It holds."},
+	cases := []labeledCase{
+		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: labelHit, Text: "It may help."},
+		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: labelHit, Text: "It holds."},
+		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: labelPass, Text: "It holds."},
+		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: labelFalsePositive, Text: "It probably holds."},
+		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: labelFalseNegative, Text: "It holds."},
+		{Rule: proofread.RuleFiller, Kind: proofread.KindReference, Label: labelPass, Text: "It holds."},
 	}
 
 	got := Scores(cases)
@@ -245,7 +245,7 @@ func TestTallyCountsFindingsAndTextsPerGroup(t *testing.T) {
 
 	for _, r := range rates[1].Rules {
 		if r.Rule == proofread.RuleBuzzword {
-			want := Rate{
+			want := rate{
 				Rule: proofread.RuleBuzzword, Decision: proofread.DecisionDeny, Findings: 2, PerThousand: 1000, Texts: 1,
 				Share: 0.5, DeniedTexts: 1,
 			}
@@ -286,21 +286,21 @@ func TestWilsonLowerMatchesTheMethodTable(t *testing.T) {
 
 func TestDenyLowerTakesZeroOf35OneOf53TwoOf69(t *testing.T) {
 	for wrong, n := range []int{35, 53, 69} {
-		reaches := func(n int) bool { return wilsonLower(float64(n-wrong)/float64(n), n) >= DenyLower }
+		reaches := func(n int) bool { return wilsonLower(float64(n-wrong)/float64(n), n) >= denyLower }
 		if !reaches(n) || reaches(n-1) {
 			t.Errorf("%d wrong: deny at %d is %v and at %d is %v, want only the first", wrong, n, reaches(n), n-1, reaches(n-1))
 		}
 	}
 
-	if n, ok := firingsNeeded(1, DenyLower); !ok || n != 35 {
+	if n, ok := firingsNeeded(1, denyLower); !ok || n != 35 {
 		t.Errorf("deny at precision 1 needs %d %v, want 35", n, ok)
 	}
 
-	if n, ok := firingsNeeded(1, AdviseLower); !ok || n != GateFirings {
-		t.Errorf("advise at precision 1 needs %d %v, want the floor %d", n, ok, GateFirings)
+	if n, ok := firingsNeeded(1, adviseLower); !ok || n != gateFirings {
+		t.Errorf("advise at precision 1 needs %d %v, want the floor %d", n, ok, gateFirings)
 	}
 
-	if _, ok := firingsNeeded(0.9, DenyLower); ok {
+	if _, ok := firingsNeeded(0.9, denyLower); ok {
 		t.Error("a precision of 0.9 reaches a lower bound of 0.9")
 	}
 }
@@ -309,8 +309,8 @@ func TestHeldOutIsAStableFifth(t *testing.T) {
 	held := 0
 
 	for i := range 2000 {
-		c := Case{Text: fmt.Sprintf("The cache key sorts input %d.", i)}
-		if c.HeldOut() != (Case{Text: c.Text, Rule: proofread.RuleHedge, Label: LabelHit, Line: i}).HeldOut() {
+		c := labeledCase{Text: fmt.Sprintf("The cache key sorts input %d.", i)}
+		if c.HeldOut() != (labeledCase{Text: c.Text, Rule: proofread.RuleHedge, Label: labelHit, Line: i}).HeldOut() {
 			t.Fatalf("%q: the split depends on more than the text", c.Text)
 		}
 
@@ -327,17 +327,17 @@ func TestHeldOutIsAStableFifth(t *testing.T) {
 func TestCalibrateScoresTheHeldOutCasesAlone(t *testing.T) {
 	text := func(held bool, format string) string {
 		for i := 0; ; i++ {
-			if s := fmt.Sprintf(format, i); (Case{Text: s}).HeldOut() == held {
+			if s := fmt.Sprintf(format, i); (labeledCase{Text: s}).HeldOut() == held {
 				return s
 			}
 		}
 	}
 
-	cases := []Case{
-		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: LabelHit, Text: text(true, "It may help runner %d.")},
-		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: LabelFalsePositive, Text: text(true, "It probably holds for %d.")},
-		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: LabelHit, Text: text(false, "It may help runner %d.")},
-		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: LabelPass, Text: text(true, "Runner %d holds.")},
+	cases := []labeledCase{
+		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: labelHit, Text: text(true, "It may help runner %d.")},
+		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: labelFalsePositive, Text: text(true, "It probably holds for %d.")},
+		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: labelHit, Text: text(false, "It may help runner %d.")},
+		{Rule: proofread.RuleHedge, Kind: proofread.KindReference, Label: labelPass, Text: text(true, "Runner %d holds.")},
 	}
 
 	got := Scores(cases)

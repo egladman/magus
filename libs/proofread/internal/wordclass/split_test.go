@@ -61,9 +61,9 @@ func TestSplit(t *testing.T) {
 // checked by hand, so a tokenization the model was not trained on shows.
 func TestTagSplitWords(t *testing.T) {
 	const (
-		adj, adp, adv, aux, cconj, det = Adjective, Adposition, Adverb, Auxiliary, CoordinatingConjunction, Determiner
+		adj, adp, adv, aux, cconj, det = Adjective, adposition, Adverb, Auxiliary, CoordinatingConjunction, Determiner
 		noun, num, part, pron, propn   = Noun, Numeral, Particle, Pronoun, ProperNoun
-		punct, sconj, verb, x          = Punctuation, SubordinatingConjunction, Verb, Other
+		punct, sconj, verb, x          = Punctuation, SubordinatingConjunction, Verb, other
 	)
 
 	cases := []struct {

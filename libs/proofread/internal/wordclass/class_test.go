@@ -3,7 +3,7 @@ package wordclass
 import "testing"
 
 func TestClassString(t *testing.T) {
-	for c := Adjective; c <= Other; c++ {
+	for c := Adjective; c <= other; c++ {
 		got, ok := parseClass(c.String())
 		if !ok || got != c {
 			t.Errorf("parseClass(%q) = %v, %v; want %v", c.String(), got, ok, c)

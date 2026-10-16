@@ -118,7 +118,7 @@ func TestTemplateRate(t *testing.T) {
 		"one sentence shape twice": {slices.Concat(cycle, cycle), 0.4},
 		"no repeat": {
 			[]wordclass.Class{
-				wordclass.Determiner, wordclass.Noun, wordclass.Verb, wordclass.Adposition,
+				wordclass.Determiner, wordclass.Noun, wordclass.Verb, wordclass.Adverb,
 				wordclass.Determiner, wordclass.Adjective, wordclass.Noun,
 			}, 0,
 		},
