@@ -955,6 +955,20 @@ func TestForkOutputCarriesReferencedOutsideBesideTheRow(t *testing.T) {
 		got["referenced_outside"])
 }
 
+// A workspace with no symbol index cannot say what references the write paths, so a fork
+// says the list is unknown instead of printing nothing.
+func TestJobForkSaysReferencedOutsideIsUnknownWithoutASymbolIndex(t *testing.T) {
+	resetWorkspaceMemo(t)
+	root, _ := execFixture(t)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\n"+testTarget), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("package a\n\nfunc A() {}\n"), 0o644))
+
+	out := captureStdout(t, func() {
+		require.NoError(t, jobFork(t.Context(), root, []string{"unindexed", "--check", "test .", "--write-paths", "a.go"}))
+	})
+	assert.Contains(t, out, "referenced outside the write paths: unknown, no symbol index answered; `"+hint.GraphBuild.String()+"` builds one")
+}
+
 // bindCheckout records id as the checkout's binding, as the guard does when a caller whose
 // host names no session takes a job there.
 func bindCheckout(t *testing.T, cacheDir, id string) {

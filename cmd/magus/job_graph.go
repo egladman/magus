@@ -37,6 +37,20 @@ func deletionCandidates(ctx context.Context, load func(context.Context) *knowled
 	return job.UnreferencedInPaths(row, g.Unreferenced())
 }
 
+// referencedOutside is the files outside row's write paths that use what they define, and
+// whether a symbol index answered. With no graph, or one holding no symbols, Referrers
+// answers nil for every file, which reads the same as nothing outside using them.
+func referencedOutside(ctx context.Context, load func(context.Context) *knowledge.Graph, root string, row types.Job, projects []*types.Project) (files []job.ReferencedFile, indexed bool) {
+	if row.ReadOnly || len(row.WritePaths) == 0 {
+		return nil, true
+	}
+	g := load(ctx)
+	if g == nil || !g.HasSymbols() {
+		return nil, false
+	}
+	return job.ReferencedOutside(root, row, projects, g.Referrers), true
+}
+
 // leaseAffinityCommits is how far back the co-change scan reads. Wide enough that a
 // coupling has to be a habit rather than one refactor, narrow enough that a boundary
 // two owners ago does not warn about a partition nobody runs any more.
@@ -82,9 +96,9 @@ func leaseBoundary(ctx context.Context, root string, store *job.Store, row types
 		Stage:              workspaceStage(ctx, m),
 		DeletionCandidates: deletionCandidates(ctx, graph.loadScoped(row.WritePaths), row),
 	}
-	if g := graph.loadScoped(row.WritePaths)(ctx); g != nil {
-		facts.ReferencedOutside = job.ReferencedOutside(m.Root(), row, m.All(), g.Referrers)
-	}
+	// TODO: Terms has no field for an unindexed answer, so a graph holding no symbols still
+	// renders as no file outside using the write paths here; fork prints the gap.
+	facts.ReferencedOutside, _ = referencedOutside(ctx, graph.loadScoped(row.WritePaths), m.Root(), row, m.All())
 	// A history file that does not read leaves the section out, the way Affinity's scan does.
 	if grouping, err := store.GroupingLens(ctx, affected.Seed); err == nil {
 		facts.Grouping = &grouping

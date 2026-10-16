@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
@@ -169,8 +170,14 @@ func generatedFile(projects []*types.Project, file string) bool {
 }
 
 // RenderReferencedOutside writes files as the block [Terms] renders, for a command that
-// prints no terms. Nothing is written for none.
-func RenderReferencedOutside(w io.Writer, files []ReferencedFile) {
+// prints no terms. Nothing is written for none. Unindexed, no symbol index answered and none
+// would read as nothing outside using the write paths, so a line saying the list is unknown
+// is written in its place.
+func RenderReferencedOutside(w io.Writer, files []ReferencedFile, indexed bool) {
+	if !indexed {
+		fmt.Fprintf(w, "referenced outside the write paths: unknown, no symbol index answered; `%s` builds one\n", hint.GraphBuild)
+		return
+	}
 	renderBlock(w, referencedHeading, referencedLines(files))
 }
 

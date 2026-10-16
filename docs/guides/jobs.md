@@ -513,8 +513,9 @@ is the path to add when the change reaches it. A `file#declaration` claim counts
 the references to that declaration.
 
 The list reports and never refuses. A file a target declares as an output is left out,
-because MGS3044 reports it, and the list is empty when no knowledge graph is built. `-o
-json` carries it as `referenced_outside`.
+because MGS3044 reports it. With no symbol index to ask, the fork says the list is
+unknown and names `magus graph build`, rather than printing an empty list. `-o json`
+carries it as `referenced_outside`.
 
 ## CI checks the merged work
 
