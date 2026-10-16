@@ -10,9 +10,9 @@ Query: `magus query project=libs/cmdline`
 | ---------------- | ---------------------------------------------------------------------- |
 | `generate`       | Regenerates MAGUS.md.                                                  |
 | `format`         |                                                                        |
-| `lint`           |                                                                        |
 | `golangci-lint`  | The tree-wide conventions over this module, through .magus/custom-gcl. |
-| `build`          |                                                                        |
-| `test`           | Runs the suite; the root merges coverage.out into its coverage badge.  |
 | `ci`             | The anchor `magus affected ci` keys off.                               |
 | `index-generate` | Renders MAGUS.md, this project's target catalog.                       |
+| `lint`           |                                                                        |
+| `build`          |                                                                        |
+| `test`           | Runs the suite; the root merges coverage.out into its coverage badge.  |

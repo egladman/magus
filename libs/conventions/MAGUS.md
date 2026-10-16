@@ -10,9 +10,9 @@ Query: `magus query project=libs/conventions`
 | ---------------- | ----------------------------------------------------------------------- |
 | `generate`       | Regenerates MAGUS.md and fails on drift.                                |
 | `format`         |                                                                         |
-| `lint`           | go-vet only: the custom golangci-lint binary is built from this module. |
 | `golangci-lint`  | The tree-wide conventions over this module, through .magus/custom-gcl.  |
-| `build`          | Compiles every analyzer package; the module root holds none.            |
-| `test`           | Runs the suite; the root merges coverage.out into its coverage badge.   |
 | `ci`             | The anchor `magus affected ci` keys off.                                |
 | `index-generate` | Renders MAGUS.md, this project's target catalog.                        |
+| `lint`           | go-vet only: the custom golangci-lint binary is built from this module. |
+| `build`          | Compiles every analyzer package; the module root holds none.            |
+| `test`           | Runs the suite; the root merges coverage.out into its coverage badge.   |
