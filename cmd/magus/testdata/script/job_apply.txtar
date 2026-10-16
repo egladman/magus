@@ -36,7 +36,7 @@ stdout 'src/pkg/other\.go'
 # Every record's problems come back at once, and none of the records is written.
 ! exec magus job apply -f $WORK/two.jsonl
 ! stdout .
-stderr '^wave/a:$'
+stderr '^\[error\] wave/a:$'
 stderr '^wave/b:$'
 stderr '\[MGS3018\]'
 stderr '\[MGS3040\]'

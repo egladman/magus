@@ -17,7 +17,7 @@ exec git commit -q -m 'registry and its generated pages'
 
 ! exec magus job fork flags/shell --write-paths 'cli/*.go,docs/rules/*.md' --check 'test .'
 ! stdout .
-stderr '^2 problems:$'
+stderr '^\[error\] 2 problems:$'
 stderr '^  1\. \[MGS3044\] write_paths: docs:content-generate regenerates docs/manpage/\*\.md from cli/registry\.go'
 stderr '^  2\. \[MGS3044\] write_paths: \.:man-generate regenerates cli/testdata/api\.lock from cli/\*\*/\*\.go'
 stderr '^     fix: add "docs/manpage/\*\.md" to write_paths, or waive it in waivers: \{"code":"MGS3044","subject":"docs/manpage/\*\.md","reason":"the root regenerates it"\}$'

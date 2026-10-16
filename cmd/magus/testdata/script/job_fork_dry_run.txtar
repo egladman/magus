@@ -24,7 +24,7 @@ exec magus ls jobs -o name
 
 ! exec magus job fork wave/many --write-paths 'src,**/*.go' --check 'nosuch .'
 ! stdout .
-stderr '^3 problems:$'
+stderr '^\[error\] 3 problems:$'
 stderr '\[MGS3040\] check\.target'
 exec magus ls jobs -o name
 ! stdout .

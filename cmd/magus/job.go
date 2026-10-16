@@ -2390,11 +2390,12 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		if !ok {
 			return exit.Usagef("magus job apply: %s", err)
 		}
+		var list strings.Builder
 		for _, v := range validations {
-			fmt.Fprintf(os.Stderr, "%s:\n", v.Job.ID)
-			job.RenderValidation(os.Stderr, v, false)
+			fmt.Fprintf(&list, "%s:\n", v.Job.ID)
+			job.RenderValidation(&list, v, false)
 		}
-		return listedProblems{err}
+		return listedProblems{list: list.String(), err: err}
 	}
 	if jobWS.Unavailable != "" && slices.ContainsFunc(applied, func(a job.Applied) bool { return !a.Next.ReadOnly && len(a.Next.WritePaths) > 0 }) {
 		warnWorkspaceUnloaded(ctx, errors.New(jobWS.Unavailable))

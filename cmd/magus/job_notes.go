@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,21 +28,23 @@ type rowNotes struct {
 	ForegroundOverrun  *job.ForegroundOverrun
 }
 
-// refuseFork prints every problem of v and refuses the fork with them.
+// refuseFork refuses the fork with every problem of v listed in full.
 func refuseFork(v types.JobValidation) error {
-	job.RenderValidation(os.Stderr, v, false)
-	return listedProblems{v.Err()}
+	var list strings.Builder
+	job.RenderValidation(&list, v, false)
+	return listedProblems{list: list.String(), err: v.Err()}
 }
 
-// listedProblems is a refusal whose problems were already printed in full, so it exits
-// Failure without printing them again. Its text stays the problems, for a caller that
-// matches on it.
-type listedProblems struct{ err error }
+// listedProblems is a refusal whose text is its problems as [job.RenderValidation] lists
+// them, so the one error record carries the whole list. It unwraps to the problems.
+type listedProblems struct {
+	list string
+	err  error
+}
 
-func (e listedProblems) Error() string       { return e.err.Error() }
-func (e listedProblems) Unwrap() error       { return e.err }
-func (listedProblems) ExitCode() int         { return exit.Failure }
-func (listedProblems) AlreadyReported() bool { return true }
+func (e listedProblems) Error() string { return strings.TrimSuffix(e.list, "\n") }
+func (e listedProblems) Unwrap() error { return e.err }
+func (listedProblems) ExitCode() int   { return exit.Failure }
 
 // forkDryRun reports what a fork would do and writes nothing: the validation as
 // [types.JobValidation] for a structured format, or the rendered problems and record. It
