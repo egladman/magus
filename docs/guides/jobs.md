@@ -414,6 +414,95 @@ A word that names none is accepted, because the declaration may not be written y
 When removing a code path, flag or test reaches the goal, deleting it is a valid route:
 give the deletion to the job that owns that declaration rather than adding a parallel path.
 
+A job that already holds a glob may narrow it, and containment is judged by glob
+match. A job holding `internal/job/*.go` may narrow to `internal/job/breadth.go`,
+because every path the new entry names is one the glob matches. Going the other way,
+from `internal/job/breadth.go` to `internal/job/*.go`, widens the claim: the fork checks
+it as a new claim, with the breadth and overlap checks that a new claim gets.
+
+## Checking a record before you fork it
+
+`magus job fork` validates the whole record before it writes anything. A record with
+problems is refused in full: every problem is listed at once, each with its code, the
+field it names, what is wrong and the edit that clears it. Nothing is stored, so the
+record can be corrected and sent again.
+
+To check a record without forking it, add the global `--dry-run` flag:
+
+```sh
+magus job fork --stdin --dry-run < job.json
+```
+
+It prints the problems, the record as it would be stored, the problems a waiver
+accepted, and each check that could not run. It exits 1 while any problem is left. A
+missing workspace or knowledge graph is named among the checks that could not run,
+never read as a clean record. Nothing is written, so run it as often as needed.
+
+These are the codes a fork can raise. Each code page says what the problem means in
+full.
+
+| Code                                             | Problem                                                                                                                                  | Fix                                                                                                   |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| [MGS3037](../reference/codes/sandbox/MGS3037.md) | A field cannot be read as declared: an id, a timeout, a path outside the workspace, an unknown member                                    | Edit each field the problem names                                                                     |
+| [MGS3038](../reference/codes/sandbox/MGS3038.md) | A goal no evidence could grade: a duplicate id, a dependency cycle, or a symbol the graph resolves to more than one declaration          | Name one symbol per goal, using the id `magus refs` prints for an ambiguous one                       |
+| [MGS3039](../reference/codes/sandbox/MGS3039.md) | The job writes and declares no check or goal, or names no write paths without being `read_only`                                          | Add the check that proves the change, or set `read_only`                                              |
+| [MGS3040](../reference/codes/sandbox/MGS3040.md) | A check the worker cannot run: an unknown target, a command the guard denies, or arguments that skip the tests of the packages it writes | Name a target the workspace has, with arguments that still run those tests                            |
+| [MGS3041](../reference/codes/sandbox/MGS3041.md) | A checkpoint this checkout cannot place                                                                                                  | Fork where that revision is checked out, or name the checkpoint `magus vcs checkpoint -o name` prints |
+| [MGS3042](../reference/codes/sandbox/MGS3042.md) | A fork past `jobs.max_depth` or `jobs.max_live`                                                                                          | Fork under a shallower parent, end a live job first, or change the limit in `magus.yaml`              |
+| [MGS3043](../reference/codes/sandbox/MGS3043.md) | A glob write path too broad for `jobs.max_claim_files` or `jobs.max_claim_projects`                                                      | Name the files the job edits, or waive the path                                                       |
+| [MGS3044](../reference/codes/sandbox/MGS3044.md) | A target regenerates an output from sources the job may edit, and the output is outside its write paths                                  | Add the output to the write paths, or waive it when the root regenerates it                           |
+| [MGS3045](../reference/codes/sandbox/MGS3045.md) | A ci target reads files the job may write, and neither its check nor a goal runs it                                                      | Add a goal for the target, or waive it when the root runs it after integration                        |
+| [MGS3046](../reference/codes/sandbox/MGS3046.md) | A workspace file (a magusfile, `magus.yaml` or a spell source) is in the write paths while another live job works in this checkout       | Fork the job with `--checkout` into its own worktree, or leave the file out of its write paths        |
+
+The claim refusals from before this series keep their own pages:
+[MGS3018](../reference/codes/sandbox/MGS3018.md) for a directory write path,
+[MGS3031](../reference/codes/sandbox/MGS3031.md) and
+[MGS3032](../reference/codes/sandbox/MGS3032.md) for claims, and
+[MGS3036](../reference/codes/sandbox/MGS3036.md) for a whole-file configuration claim.
+
+### Waivers
+
+A record can waive three problems and no others: MGS3043, MGS3044 and MGS3045. A waiver
+names the code, the subject the problem reports, and a reason:
+
+```json
+"waivers": [
+  { "code": "MGS3043", "subject": "**/*.go", "reason": "renames the type everywhere" }
+]
+```
+
+The subject is what the problem names: the write path for MGS3043, the output path for
+MGS3044, and `target project` for MGS3045, such as `lint .`. A waiver matches the code
+and the subject spelled exactly, so a waiver for `**/*.go` does not cover `**/*.md`. A
+waiver on any other code is refused under MGS3037, and so is a waiver with no subject
+or no reason.
+
+Magus checks that the reason is not blank and keeps the waiver on the stored job. It
+does not judge the reason. A reviewer reads it, so write it for that reader: say why
+this job needs the whole path, or who runs the output or the gate instead. A waived
+problem does not refuse the fork, and `--dry-run` lists it apart from the problems left.
+
+### Limits on a glob write path
+
+MGS3043 measures glob write paths only. Literal paths, `file#declaration` claims and
+read-only jobs are not measured. For a glob, the fork counts the files it matches, leaving
+out the files VCS ignores, and counts the projects those files belong to. Two keys in
+`magus.yaml` set the bounds:
+
+- `jobs.max_claim_files`, default 50: the most files one glob may match.
+- `jobs.max_claim_projects`, default 1: the most projects one glob may reach.
+
+Zero or a negative number is an error. Both keys are read from the workspace's own
+`magus.yaml`, not from your user configuration. If that file cannot be read, the fork
+refuses the glob under MGS3043 and says the breadth was not judged, rather than
+passing it. A glob that begins with `**` is refused whatever it matches.
+
+The fix for an MGS3043 problem gives the narrowest write paths the job's symbol goals
+and criteria name, as a ready `write_paths` array, then the waiver that keeps the glob.
+When the knowledge graph cannot answer the symbol goals, the fix says so; `magus graph
+build` and a fork again give a fuller list. MGS3042 reads `jobs.max_depth` and
+`jobs.max_live` the same way, and a zero limit is unlimited.
+
 ## CI checks the merged work
 
 Each job passed in the worktree it was written in. Whether the work still passes
