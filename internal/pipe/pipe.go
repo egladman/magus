@@ -284,28 +284,28 @@ func GatePath(dir string, procID int) string {
 // execWait, since the shell forks every stage of a pipeline at once and a stage may
 // run other commands before it execs.
 func ReadByMagus(ctx context.Context, out *os.File) bool {
-	_, ok := ReaderArgv(ctx, out)
+	_, _, ok := ReaderArgv(ctx, out)
 	return ok
 }
 
-// ReaderArgv is ReadByMagus that also returns the reader's argv, argv[0] first: what the
-// next stage of the pipe was asked to do. argv is nil when a magus reads out but its
-// argv cannot be read.
-func ReaderArgv(ctx context.Context, out *os.File) (argv []string, ok bool) {
+// ReaderArgv is ReadByMagus that also returns the reader's pid and argv, argv[0] first:
+// which process is the next stage of the pipe and what it was asked to do. argv is nil
+// when a magus reads out but its argv cannot be read.
+func ReaderArgv(ctx context.Context, out *os.File) (pid int, argv []string, ok bool) {
 	if out == nil {
-		return nil, false
+		return 0, nil, false
 	}
 	self := os.Getpid()
 	p, err := pipepeer.WriteEnd(self, int(out.Fd()))
 	if err != nil {
-		return nil, false
+		return 0, nil, false
 	}
 	ancestors := ancestorPIDs(ctx, self)
-	ok = pollPeers(ctx, p.Readers, p.ReaderExec, func(pid int) bool { return pid == self || ancestors[pid] }, func(_ int, readerArgv []string) bool {
-		argv = readerArgv
+	ok = pollPeers(ctx, p.Readers, p.ReaderExec, func(peer int) bool { return peer == self || ancestors[peer] }, func(reader int, readerArgv []string) bool {
+		pid, argv = reader, readerArgv
 		return true
 	})
-	return argv, ok
+	return pid, argv, ok
 }
 
 // AwaitReaderProof holds this process, a stage writing out, until every magus reading out

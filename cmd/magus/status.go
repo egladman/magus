@@ -27,7 +27,6 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/sys/pipepeer"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
@@ -161,7 +160,7 @@ func awaitBudget(ctx context.Context, rootOverride string) error {
 		waited = true
 		slog.InfoContext(ctx, msg, attr.Notice(""), attr.Component("magus"), attr.Elapsed(time.Since(start)))
 	}
-	reader, argv := pipedReader(ctx)
+	reader, argv, _ := pipe.ReaderArgv(ctx, os.Stdout)
 	claims := pipedRunClaims(ctx, rootOverride, argv)
 	var err error
 	if reader == 0 {
@@ -199,32 +198,6 @@ func reserveSeat(ctx context.Context, reader int, argv []string, claims []types.
 		return fmt.Errorf("%w: the running broker predates seat reservations; `%s` stops it, and the next run starts a current one", err, hint.BinaryName()+" broker stop")
 	}
 	return err
-}
-
-// pipedReader is the pid and argv of the magus reading this process's stdout, 0 and nil
-// when nothing proven to be magus reads it.
-func pipedReader(ctx context.Context) (int, []string) {
-	argv, ok := pipe.ReaderArgv(ctx, os.Stdout)
-	if !ok {
-		return 0, nil
-	}
-	p, err := pipepeer.WriteEnd(os.Getpid(), int(os.Stdout.Fd()))
-	if err != nil {
-		return 0, nil
-	}
-	readers, err := p.Readers()
-	if err != nil {
-		return 0, nil
-	}
-	for _, reader := range readers {
-		if reader == os.Getpid() {
-			continue
-		}
-		if got, state := p.ReaderExec(reader); state == pipepeer.ExecSame && slices.Equal(got, argv) {
-			return reader, argv
-		}
-	}
-	return 0, nil
 }
 
 func queryCapacity(ctx context.Context) (types.MachineSnapshot, error) {
