@@ -191,39 +191,25 @@ type GroupHolder interface {
 	ReleaseHold(ctx context.Context, id string)
 }
 
-// stepGroups is where a claimed step's process groups are held: its admitter and claim.
-type stepGroups struct {
-	holder GroupHolder
-	claim  string
-}
-
-type stepGroupsKey struct{}
-
-// withStepGroups returns ctx holding the process groups started under it against claim,
-// when admit can hold them.
+// withStepGroups returns ctx under which every process group spawn.Exec starts rides
+// claim, when admit can hold groups.
 func withStepGroups(ctx context.Context, admit MachineAdmitter, claim string) context.Context {
 	holder, ok := admit.(GroupHolder)
 	if !ok || claim == "" {
 		return ctx
 	}
-	return context.WithValue(ctx, stepGroupsKey{}, stepGroups{holder: holder, claim: claim})
+	return spawn.WithGroupWatch(ctx, func(pgid int, command string) func() {
+		return holdStepGroup(ctx, holder, claim, pgid, command)
+	})
 }
 
-// holdStepGroup hands the machine budget process group pgid, which the step ctx admits
-// started, so the group ends with the step's claim: when the claim is released, or when
-// this process dies and its connection to the broker closes. Call release once the
-// group's leader has exited, before it is reaped: a stop after the reap could reach
-// another group that took the id. Outside a claimed step, or under an admitter that
-// cannot stop groups, it holds nothing.
-//
-// TODO: spawn.Exec does not call this yet, so no step's group rides its claim. It needs
-// a hook spawn calls with each group it starts, which claimMachine sets on ctx.
-func holdStepGroup(ctx context.Context, pgid int, command string) (release func()) {
-	g, ok := ctx.Value(stepGroupsKey{}).(stepGroups)
-	if !ok {
-		return func() {}
-	}
-	id, err := g.holder.HoldGroup(ctx, g.claim, pgid, command)
+// holdStepGroup hands holder process group pgid, which the step holding claim started,
+// so the group ends with the claim: when the claim is released, or when this process
+// dies and its connection to the broker closes. Call release once the group's leader has
+// exited, before it is reaped: a stop after the reap could reach another group that took
+// the id.
+func holdStepGroup(ctx context.Context, holder GroupHolder, claim string, pgid int, command string) (release func()) {
+	id, err := holder.HoldGroup(ctx, claim, pgid, command)
 	if err != nil {
 		slog.WarnContext(ctx, fmt.Sprintf("process group %d (%s) runs unheld: if this run dies, nothing stops it", pgid, command),
 			attr.Error(err))
@@ -232,7 +218,7 @@ func holdStepGroup(ctx context.Context, pgid int, command string) (release func(
 	return func() {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), machineReleaseTimeout)
 		defer cancel()
-		g.holder.ReleaseHold(ctx, id)
+		holder.ReleaseHold(ctx, id)
 	}
 }
 

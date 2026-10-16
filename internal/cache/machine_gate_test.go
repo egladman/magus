@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/types"
 )
 
@@ -130,25 +133,34 @@ func (a *groupAdmitter) ReleaseHold(_ context.Context, id string) {
 
 // A process group a step starts rides the step's own claim, and is let go before it.
 func TestAStepGroupRidesItsStepsClaim(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows starts a step's group unwatched")
+	}
 	t.Setenv("MAGUS_LEVEL", "")
 	b, _ := testBudget(t, 10_000, 8)
 	admit := &groupAdmitter{budgetAdmitter: &budgetAdmitter{budget: b}}
 	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(admit))
 	require.NoError(t, err)
 
+	var pgid string
 	_, err = c.RunAll(t.Context(), []Step{{ProjectPath: ".", Target: "go-test"}},
 		func(ctx context.Context, _ Step) error {
-			holdStepGroup(ctx, 4242, "sleep 30")()
-			return nil
+			res, err := spawn.Exec(ctx, "sh", []string{"-c", "echo $$"}, spawn.ExecOptions{Capture: true, Quiet: true})
+			pgid = strings.TrimSpace(res.Stdout)
+			return err
 		})
 	require.NoError(t, err)
 
 	require.Len(t, admit.released, 1)
 	claim := admit.released[0]
-	assert.Equal(t, []string{"hold 4242 (sleep 30) on " + claim, "release hold-" + claim}, admit.events)
+	assert.Equal(t, []string{
+		"hold " + pgid + ` (sh -c "echo $$") on ` + claim,
+		"release hold-" + claim,
+	}, admit.events)
 
 	admit.events = nil
-	holdStepGroup(t.Context(), 4242, "sleep 30")()
+	_, err = spawn.Exec(t.Context(), "true", nil, spawn.ExecOptions{Quiet: true})
+	require.NoError(t, err)
 	assert.Empty(t, admit.events, "outside a claimed step there is no claim to ride")
 }
 

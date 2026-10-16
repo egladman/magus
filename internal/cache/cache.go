@@ -1147,8 +1147,8 @@ func stepSlots(s Step, lim *Limiter) int {
 
 // claimMachine takes the machine-wide half of a step's admission: the concurrency slot
 // and the declared memory arbitrated across every magus on the host. It returns ctx
-// marked as holding the claim, plus the release that hands it back. A process group the
-// step hands holdStepGroup rides the claim and ends with it.
+// marked as holding the claim, plus the release that hands it back. A process group
+// spawn.Exec starts under that ctx rides the claim and ends with it.
 //
 // Only a step that will execute takes it. A step whose entry is in the local store
 // ([Cache.localHitKey]) replays under its local slot alone: replay spends none of the
