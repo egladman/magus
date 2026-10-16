@@ -1771,7 +1771,7 @@ func endWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ..
 		if err != nil {
 			return nil, err
 		}
-		wired := ws.Harnesses()
+		wired := workspaceHarnessNames(ws)
 		hostCtx := agent.ContextWithWiredHarnesses(ctx, wired)
 		var toolRows []agent.HarnessTools
 		for _, id := range wired {
