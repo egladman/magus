@@ -815,16 +815,20 @@ type metricItem struct {
 }
 
 // rekeyKnown is a copy of known with each item renamed lists moved to its new ID, its
-// recorded shape with it.
+// recorded shape with it where the entry has one.
 func rekeyKnown(known []types.ConformanceKnown, renamed map[metricItem]string) []types.ConformanceKnown {
 	out := make([]types.ConformanceKnown, len(known))
 	for i, k := range known {
 		k.Items = slices.Clone(k.Items)
 		k.Shapes = maps.Clone(k.Shapes)
 		for j, item := range k.Items {
-			if to, ok := renamed[metricItem{k.Metric, item}]; ok {
-				k.Items[j] = to
-				k.Shapes[to] = k.Shapes[item]
+			to, ok := renamed[metricItem{k.Metric, item}]
+			if !ok {
+				continue
+			}
+			k.Items[j] = to
+			if shape, ok := k.Shapes[item]; ok {
+				k.Shapes[to] = shape
 				delete(k.Shapes, item)
 			}
 		}

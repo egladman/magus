@@ -312,6 +312,21 @@ func TestConformanceCarriesARenamedKnownFunction(t *testing.T) {
 	assert.Equal(t, []string{"pkg/a.go#Long", "pkg/b.go#Other"}, o.Ratchet.Known[0].Items, "the record is read, never edited")
 }
 
+func TestConformanceCarriesAnItemListedTwice(t *testing.T) {
+	long := func(name string) types.KnowledgeSymbol {
+		return conformanceSym("/pkg", name+"().", "pkg/a.go", 1, 20, 20, "SA", 100)
+	}
+	o := carryOptions(types.ConformanceFuncLines, "pkg/a.go#Long")
+	o.Ratchet.Known[0].Shapes = map[string]string{"pkg/a.go#Long": "SA"}
+	o.Ratchet.Known = append(o.Ratchet.Known, types.ConformanceKnown{
+		Metric: types.ConformanceFuncLines, Items: []string{"pkg/a.go#Long"}, Reason: "listed again", Line: 4,
+	})
+
+	out := assembleLens([]types.KnowledgeSymbol{long("Renamed")}).Conformance(o)
+	assert.Equal(t, []types.ConformanceCarry{{Metric: types.ConformanceFuncLines, From: "pkg/a.go#Long", To: []string{"pkg/a.go#Renamed"}}}, out.Carried)
+	assert.Equal(t, 1, conformanceRowFor(t, out, types.ConformanceFuncLines, types.ConformancePopSource, "").Known)
+}
+
 func TestConformanceCarriesAMovedKnownFile(t *testing.T) {
 	file := func(path string) []types.KnowledgeSymbol {
 		a := conformanceSym("/pkg", "A().", path, 1, 2, 300, "", 0)

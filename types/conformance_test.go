@@ -71,6 +71,10 @@ func TestConformanceValidateAcceptsAConfiguredPolicy(t *testing.T) {
 	o = conformanceOptions()
 	o.Ratchet.Thresholds[0].Value = 2200
 	assert.NoError(t, o.Validate(), "a committed value equal to its anchor is not looser")
+
+	o = conformanceOptions()
+	o.Ratchet.Known = append(o.Ratchet.Known, ConformanceKnown{Metric: ConformanceFuncLines, Items: []string{"a.go#F"}, Reason: "long", Line: 13})
+	assert.NoError(t, o.Validate(), "one item under two metrics")
 }
 
 func TestConformanceValidateRefuses(t *testing.T) {
@@ -141,6 +145,12 @@ func TestConformanceValidateRefuses(t *testing.T) {
 		"known with no reason": {
 			func(o *ConformanceOptions) { o.Ratchet.Known[0].Reason = "" },
 			"hack/policy/conformance.jsonl:12: known clone-tokens: no reason",
+		},
+		"known item listed twice under one metric": {
+			func(o *ConformanceOptions) {
+				o.Ratchet.Known = append(o.Ratchet.Known, ConformanceKnown{Metric: ConformanceCloneTokens, Items: []string{"c.go#F", "b.go#F"}, Reason: "again", Line: 13})
+			},
+			"hack/policy/conformance.jsonl:13: known clone-tokens: b.go#F listed twice, first at line 12",
 		},
 		"known with a shape for an item it does not list": {
 			func(o *ConformanceOptions) { o.Ratchet.Known[0].Shapes = map[string]string{"c.go#F": "s1"} },

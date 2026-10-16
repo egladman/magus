@@ -211,6 +211,7 @@ func (o ConformanceOptions) Validate() error {
 			fail("%s: %s: committed %d is looser than its anchor %d", at, name, t.Value, limit.Anchor)
 		}
 	}
+	listedAt := map[ConformanceMetric]map[string]int{}
 	for _, k := range r.Known {
 		at := o.ratchetAt(k.Line)
 		if err := checkConformanceMetric(k.Metric); err != nil {
@@ -218,6 +219,16 @@ func (o ConformanceOptions) Validate() error {
 		}
 		if len(k.Items) == 0 {
 			fail("%s: known %s: no items", at, k.Metric)
+		}
+		if listedAt[k.Metric] == nil {
+			listedAt[k.Metric] = map[string]int{}
+		}
+		for _, item := range k.Items {
+			if line, dup := listedAt[k.Metric][item]; dup {
+				fail("%s: known %s: %s listed twice, first at line %d", at, k.Metric, item, line)
+				continue
+			}
+			listedAt[k.Metric][item] = k.Line
 		}
 		if k.Reason == "" {
 			fail("%s: known %s: no reason", at, k.Metric)
