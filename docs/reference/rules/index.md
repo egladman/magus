@@ -25,6 +25,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [background-left](background-left.md)                 | an agent finishing while shell commands it ran in the background are still running                   |
 | [background-unbounded](background-unbounded.md)       | a shell command run in the background with nothing to end it                                         |
 | [backtick-substitution](backtick-substitution.md)     | a backtick command substitution, which inside double quotes runs a command                           |
+| [busy-wait](busy-wait.md)                             | a while or until loop that sleeps, or a for loop that sleeps until it breaks out                     |
 | [cache-dir-write](cache-dir-write.md)                 | a write into this checkout's magus cache dir, which magus alone owns                                 |
 | [claimed-declaration](claimed-declaration.md)         | a leased edit landing in a declaration another live job claims (`run.go#executeStages`)              |
 | [conflict-rewrite](conflict-rewrite.md)               | an inline interpreter rewriting a file that holds merge conflict markers                             |
@@ -45,8 +46,10 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [notes-author](notes-author.md)                       | an agent authoring a human's note, whose only provenance is who wrote it                             |
 | [orchestrator-groundwork](orchestrator-groundwork.md) | a session that hands out work doing its own groundwork: reads, searches, edits, runs                 |
 | [policy-unloaded](policy-unloaded.md)                 | a push, merge, spawn or state-writing magus verb while the guard policy that judges it does not load |
+| [process-poll](process-poll.md)                       | a process table inspected to wait on magus work the lock already reports                             |
 | [push-ungated](push-ungated.md)                       | a push at a commit with no green gate: the person is asked, a leased worker refused                  |
 | [shared-stash](shared-stash.md)                       | a bare stash push or pop, on a stack every worktree shares                                           |
+| [sleep-poll](sleep-poll.md)                           | a sleep before a one-shot status read, or a call that only sleeps (a timer)                          |
 | [spawn-above-parent-tier](spawn-above-parent-tier.md) | a subagent spawned on a model whose tier ranks above its spawner's                                   |
 | [spawn-duplicate](spawn-duplicate.md)                 | a spawn for a job that already has a worker                                                          |
 | [stale-binary](stale-binary.md)                       | a call that changes state while the magus judging it cannot load this tree's guard policy            |
@@ -64,7 +67,6 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [architecture-unbriefed](architecture-unbriefed.md)     | an agent's next call after a structure question, or a new directory, before the architecture skill |
 | [brief-command](brief-command.md)                       | a spawn or continuation brief that teaches a command the guard denies                              |
 | [brief-plain-commands](brief-plain-commands.md)         | a brief for an isolated worker that does not hold it to one plain command per call                 |
-| [busy-wait](busy-wait.md)                               | a while or until loop that sleeps, or a for loop that sleeps until it breaks out                   |
 | [buzz-unbriefed](buzz-unbriefed.md)                     | the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill  |
 | [capture-filter](capture-filter.md)                     | a filter over a run capture or log, which cuts the failure block apart                             |
 | [chained-run](chained-run.md)                           | magus runs sequenced with `&&` or `;`, which a pipe of the same stages runs ordered and fail-fast  |
@@ -100,7 +102,6 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [output-pipe](output-pipe.md)                           | magus output piped into a filter, when magus projects the record itself                            |
 | [output-redirect](output-redirect.md)                   | magus output sent to a file or discarded, which the run log already holds                          |
 | [precedent-search](precedent-search.md)                 | a hunt for one distinctive name, which refs answers with verified sites                            |
-| [process-poll](process-poll.md)                         | a process table inspected to wait on magus work the lock already reports                           |
 | [push-gate](push-gate.md)                               | a push the run log does not prove ungated, which names the gate and lets it through                |
 | [raw-tool](raw-tool.md)                                 | a toolchain command a spell already wraps, run outside the cache                                   |
 | [read-navigation](read-navigation.md)                   | a whole read of a Go, Buzz or Markdown file past the workspace's line limit                        |
@@ -115,7 +116,6 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [shared-checkout](shared-checkout.md)                   | a spawn into a checkout a live job already holds and writes                                        |
 | [sibling-checkout](sibling-checkout.md)                 | a magus command relocated into another checkout, judging a tree nobody ships                       |
 | [skill-source](skill-source.md)                         | a write to an installed skill copy rather than to its source                                       |
-| [sleep-poll](sleep-poll.md)                             | a sleep before a one-shot status read, or a call that only sleeps (a timer)                        |
 | [source-read](source-read.md)                           | an unbounded source read the symbol index has already answered                                     |
 | [spawn-nested-waiter](spawn-nested-waiter.md)           | a subagent spawning a helper whose title or brief opening speaks of waiting or watching            |
 | [spawn-unbriefed](spawn-unbriefed.md)                   | a subagent spawned before the multi-agent skill loaded                                             |
@@ -131,12 +131,12 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [unknown-env](unknown-env.md)                           | a retired or misspelled MAGUS_* variable handed to a command                                       |
 | [unleased-write](unleased-write.md)                     | a write magus cannot attribute while a fleet is running                                            |
 | [workspace-command-failed](workspace-command-failed.md) | a command the workspace's rule could not judge, so only the built-in rules graded it               |
+| [workspace-spawn-failed](workspace-spawn-failed.md)     | a spawn the workspace's rule could not judge, so only the built-in rules graded it                 |
+| [workspace-write-failed](workspace-write-failed.md)     | a file write the workspace's rule could not judge, so only the built-in rules graded it            |
 | [root-context-budget](root-context-budget.md)           | a session's main thread whose context has grown past its level's size                              |
 | [root-heavy-command](root-heavy-command.md)             | a main thread running delegable commands one after another without spawning                        |
 | [root-repeat](root-repeat.md)                           | a main thread running the same delegable command again with no write since                         |
 | [root-result-cap](root-result-cap.md)                   | one tool result too large for a main thread's context, said on its next call                       |
 | [spawn-above-model-tier](spawn-above-model-tier.md)     | a subagent spawned on a model whose tier ranks above the tier its job was forked at                |
 | [spawn-names-model](spawn-names-model.md)               | a main thread spawning a subagent without naming the model it runs on                              |
-| [workspace-spawn-failed](workspace-spawn-failed.md)     | a spawn the workspace's rule could not judge, so only the built-in rules graded it                 |
-| [workspace-write-failed](workspace-write-failed.md)     | a file write the workspace's rule could not judge, so only the built-in rules graded it            |
 | [stall](stall.md)                                       | a leased worker refused by something only the root can clear                                       |

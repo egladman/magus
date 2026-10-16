@@ -1,12 +1,12 @@
 ---
 title: "sleep-poll: a sleep before a one-shot status read, or a call that only sleeps (a timer)"
-description: "An advisory by default: it explains, and blocks nothing, on a sleep before a one-shot status read, or a call that only sleeps (a timer)."
-tags: [guard, rules, sleep-poll, advise]
+description: "A deny rule by default: it refuses a sleep before a one-shot status read, or a call that only sleeps (a timer), and names what to run instead."
+tags: [guard, rules, sleep-poll, deny]
 ---
 
 # sleep-poll
 
-An advisory by default: it explains, and blocks nothing, on a sleep before a one-shot status read, or a call that only sleeps (a timer).
+A deny rule by default: it refuses a sleep before a one-shot status read, or a call that only sleeps (a timer), and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ Both are a wait whose loop is the caller's own next call. A sleep of ten seconds
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"sleep-poll": "deny"})
+magus\guard.builtins({"sleep-poll": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [sleep-poll]: ...
+deny [sleep-poll]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [sleep-poll]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [sleep-poll]: ...` instead.
 
 `magus describe rule sleep-poll` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

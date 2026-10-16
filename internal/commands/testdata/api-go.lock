@@ -2019,10 +2019,10 @@ github.com/egladman/magus/types.GlobsOverlap func(a string, b string) bool
 github.com/egladman/magus/types.GoModReplaceDrift const DiagnosticCode = "MGS1016"
 github.com/egladman/magus/types.Goal type struct
 github.com/egladman/magus/types.Goal.Check field LeaseCheck "json:\"check,omitempty\" yaml:\"check,omitempty\""
-github.com/egladman/magus/types.Goal.DependsOn field []string "json:\"depends_on,omitempty\"  yaml:\"depends_on,omitempty\""
+github.com/egladman/magus/types.Goal.DependsOn field []string "json:\"depends_on,omitempty\"  yaml:\"depends_on,omitempty\"  schema:\"leaseid\""
 github.com/egladman/magus/types.Goal.Description field string "json:\"description,omitempty\" yaml:\"description,omitempty\""
 github.com/egladman/magus/types.Goal.Expect field GoalExpect "json:\"expect,omitempty\" yaml:\"expect,omitempty\""
-github.com/egladman/magus/types.Goal.ID field string "json:\"id\"                     yaml:\"id\""
+github.com/egladman/magus/types.Goal.ID field string "json:\"id\"                     yaml:\"id\"                     schema:\"leaseid\""
 github.com/egladman/magus/types.Goal.Kind field GoalKind "json:\"kind\" yaml:\"kind\""
 github.com/egladman/magus/types.Goal.Paths field []string "json:\"paths,omitempty\" yaml:\"paths,omitempty\""
 github.com/egladman/magus/types.Goal.Resolve method func() Goal
@@ -2582,6 +2582,7 @@ github.com/egladman/magus/types.JobPut.ReadOnly field *bool "json:\"read_only,om
 github.com/egladman/magus/types.JobPut.ReadPaths field *[]string "json:\"read_paths,omitempty\""
 github.com/egladman/magus/types.JobPut.State field *JobState "json:\"state,omitempty\""
 github.com/egladman/magus/types.JobPut.Timeout field *string "json:\"timeout,omitempty\""
+github.com/egladman/magus/types.JobPut.Waivers field *[]JobWaiver "json:\"waivers,omitempty\""
 github.com/egladman/magus/types.JobPut.WritePaths field *[]string "json:\"write_paths,omitempty\""
 github.com/egladman/magus/types.JobReadOnly type struct
 github.com/egladman/magus/types.JobReadOnly.Job field string "json:\"job\"   yaml:\"job\""
@@ -2665,7 +2666,7 @@ github.com/egladman/magus/types.JobValidation.Waived field JobProblems "json:\"w
 github.com/egladman/magus/types.JobValidation.WriteProof field JobWriteProof "json:\"write_proof,omitempty\""
 github.com/egladman/magus/types.JobWaiver type struct
 github.com/egladman/magus/types.JobWaiver.Code field DiagnosticCode "json:\"code\""
-github.com/egladman/magus/types.JobWaiver.Reason field string "json:\"reason\""
+github.com/egladman/magus/types.JobWaiver.Reason field string "json:\"reason\" schema:\"nonblank\""
 github.com/egladman/magus/types.JobWaiver.Subject field string "json:\"subject\""
 github.com/egladman/magus/types.JobWork type struct
 github.com/egladman/magus/types.JobWork.Calls field int "json:\"calls\"  yaml:\"calls\""
@@ -3269,6 +3270,7 @@ github.com/egladman/magus/types.MethodNotAllowed const DiagnosticCode = "MGS9012
 github.com/egladman/magus/types.MisconfiguredEnvVar const DiagnosticCode = "MGS1046"
 github.com/egladman/magus/types.MissingDependencyDetected const DiagnosticCode = "MGS4004"
 github.com/egladman/magus/types.ModelPricing type struct
+github.com/egladman/magus/types.ModelPricing.Alias field string
 github.com/egladman/magus/types.ModelPricing.CacheRead field USDPerMTok
 github.com/egladman/magus/types.ModelPricing.CacheWrite1h field USDPerMTok
 github.com/egladman/magus/types.ModelPricing.CacheWrite5m field USDPerMTok
@@ -3344,6 +3346,7 @@ github.com/egladman/magus/types.ModelTierSet.All method(ptr) func() []ModelTier
 github.com/egladman/magus/types.ModelTierSet.At method(ptr) func(rank int) (ModelTier, bool)
 github.com/egladman/magus/types.ModelTierSet.Bounds method(ptr) func(t ModelTier) ModelTierBounds
 github.com/egladman/magus/types.ModelTierSet.Default method(ptr) func() ModelTier
+github.com/egladman/magus/types.ModelTierSet.Enum method(ptr) func() string
 github.com/egladman/magus/types.ModelTierSet.Hosts method(ptr) func() []HarnessKey
 github.com/egladman/magus/types.ModelTierSet.Parse method(ptr) func(name string) (ModelTier, error)
 github.com/egladman/magus/types.ModelTierSet.Resolve method(ptr) func(host HarnessKey, alias string) (ModelTier, bool)

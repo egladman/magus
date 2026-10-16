@@ -1,12 +1,12 @@
 ---
 title: "busy-wait: a while or until loop that sleeps, or a for loop that sleeps until it breaks out"
-description: "An advisory by default: it explains, and blocks nothing, on a while or until loop that sleeps, or a for loop that sleeps until it breaks out."
-tags: [guard, rules, busy-wait, advise]
+description: "A deny rule by default: it refuses a while or until loop that sleeps, or a for loop that sleeps until it breaks out, and names what to run instead."
+tags: [guard, rules, busy-wait, deny]
 ---
 
 # busy-wait
 
-An advisory by default: it explains, and blocks nothing, on a while or until loop that sleeps, or a for loop that sleeps until it breaks out.
+A deny rule by default: it refuses a while or until loop that sleeps, or a for loop that sleeps until it breaks out, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ A backgrounded command is tracked and announces its own completion, so starting 
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"busy-wait": "deny"})
+magus\guard.builtins({"busy-wait": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [busy-wait]: ...
+deny [busy-wait]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [busy-wait]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [busy-wait]: ...` instead.
 
 `magus describe rule busy-wait` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
