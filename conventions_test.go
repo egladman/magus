@@ -871,8 +871,8 @@ var storeMechanicsAllowed = map[string]string{
 	"pipe.go:projectLocker.publishHolds":                     "a project lock waits unbounded with a heartbeat: its holder is a build",
 }
 
-// storeMechanicsSkipDirs are trees the rule does not govern. libs/ holds modules of their
-// own, which cannot import internal/file.
+// storeMechanicsSkipDirs are trees the rule does not govern. libs/ and any directory
+// with its own go.mod (hack/embed) hold modules of their own, which ship apart from magus.
 var storeMechanicsSkipDirs = skipDirs("gen", "testdata")
 
 // TestStoreMechanicsLiveInInternalFile holds the file-persistence mechanics to one
@@ -1119,6 +1119,9 @@ func storeGoFiles(root string) ([]string, error) {
 		slashed := filepath.ToSlash(rel)
 		if d.IsDir() {
 			if storeMechanicsSkipDirs[d.Name()] || slashed == "libs" || slashed == "internal/file" {
+				return filepath.SkipDir
+			}
+			if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil && path != root {
 				return filepath.SkipDir
 			}
 			return nil
