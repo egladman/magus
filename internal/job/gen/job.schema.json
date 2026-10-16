@@ -44,31 +44,34 @@
     "write_paths": {
       "type": "array",
       "items": {
-        "type": "string"
+        "type": "string",
+        "pattern": "^(?:(?:[^/#.*~](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.[^/#.](?:\\\\#|[^/#])*|\\.\\.(?:\\\\#|[^/#])+)|(?:[^/#.~](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+)(?:/(?:[^/#.](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))*/(?:[^/#.*](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))(?:#[^#]+)?$"
       },
       "description": "WritePaths is what this lease may write, empty on a read-only row by design. An entry `<file>#<declaration>` claims one declaration of the file (see SplitClaim)."
     },
     "deny_paths": {
       "type": "array",
       "items": {
-        "type": "string"
+        "type": "string",
+        "pattern": "^(?:(?:[^/#.*~](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.[^/#.](?:\\\\#|[^/#])*|\\.\\.(?:\\\\#|[^/#])+)|(?:[^/#.~](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+)(?:/(?:[^/#.](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))*/(?:[^/#.*](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))(?:#[^#]+)?$"
       },
       "description": "DenyPaths are the paths inside those this lease may not write."
     },
     "read_paths": {
       "type": "array",
       "items": {
-        "type": "string"
+        "type": "string",
+        "pattern": "^(?:(?:[^/#.*~](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.[^/#.](?:\\\\#|[^/#])*|\\.\\.(?:\\\\#|[^/#])+)|(?:[^/#.~](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+)(?:/(?:[^/#.](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))*/(?:[^/#.*](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))(?:#[^#]+)?$"
       },
       "description": "ReadPaths is what it may READ, widened to those projects' dependencies by the guard. Empty means write_paths stands in."
     },
     "depends_on": {
       "type": "array",
       "items": {
-        "type": "string"
+        "type": "string",
+        "pattern": "^[./0-9:A-Z_a-z-]+$",
+        "maxLength": 128
       },
-      "pattern": "^[./0-9:A-Z_a-z-]+$",
-      "maxLength": 128,
       "description": "DependsOn names the lease ids that must land before this one."
     },
     "breaks": {
@@ -84,6 +87,7 @@
     },
     "checkout": {
       "type": "string",
+      "pattern": "^/",
       "description": "Checkout is an absolute directory, outside the workspace, where the fork makes a new checkout of the repository for this job at its checkpoint, or at the forking checkout's revision when it names none. The job owns it: see [JobWorktree]. Empty works wherever the job is taken."
     },
     "owned_paths": {
@@ -114,10 +118,10 @@
     "check": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["target"],
       "properties": {
         "target": {
           "type": "string",
+          "pattern": "^(?:[0-9A-Z_a-z-]+::[0-9A-Z_a-z-]+|[0-9A-Z_a-z-]*)$",
           "description": "Target is the magus target the check runs, without the `magus run` in front of it. Empty when Script names the check instead."
         },
         "script": {
@@ -140,6 +144,30 @@
           "description": "NoDefaultCharms runs the check with --no-default-charms, so only a run made without the workspace's default_charms satisfies it: the charmless `generate` that compares against HEAD, in a workspace whose default is rw."
         }
       },
+      "oneOf": [
+        {
+          "required": ["target"],
+          "properties": {
+            "target": {
+              "minLength": 1
+            },
+            "script": {
+              "maxLength": 0
+            }
+          }
+        },
+        {
+          "required": ["script"],
+          "properties": {
+            "script": {
+              "minLength": 1
+            },
+            "target": {
+              "maxLength": 0
+            }
+          }
+        }
+      ],
       "description": "Check is the one check this lease runs, and acceptance binds a worker's evidence to it."
     },
     "state": {
@@ -163,7 +191,9 @@
         "required": ["id", "kind"],
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[./0-9:A-Z_a-z-]+$",
+            "maxLength": 128
           },
           "description": {
             "type": "string"
@@ -171,7 +201,9 @@
           "depends_on": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^[./0-9:A-Z_a-z-]+$",
+              "maxLength": 128
             }
           },
           "kind": {
@@ -187,10 +219,10 @@
           "check": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["target"],
             "properties": {
               "target": {
                 "type": "string",
+                "pattern": "^(?:[0-9A-Z_a-z-]+::[0-9A-Z_a-z-]+|[0-9A-Z_a-z-]*)$",
                 "description": "Target is the magus target the check runs, without the `magus run` in front of it. Empty when Script names the check instead."
               },
               "script": {
@@ -213,6 +245,30 @@
                 "description": "NoDefaultCharms runs the check with --no-default-charms, so only a run made without the workspace's default_charms satisfies it: the charmless `generate` that compares against HEAD, in a workspace whose default is rw."
               }
             },
+            "oneOf": [
+              {
+                "required": ["target"],
+                "properties": {
+                  "target": {
+                    "minLength": 1
+                  },
+                  "script": {
+                    "maxLength": 0
+                  }
+                }
+              },
+              {
+                "required": ["script"],
+                "properties": {
+                  "script": {
+                    "minLength": 1
+                  },
+                  "target": {
+                    "maxLength": 0
+                  }
+                }
+              }
+            ],
             "description": "Check is the run a GoalKindCheck goal examines. Zero on every other kind."
           },
           "paths": {
@@ -239,6 +295,7 @@
     },
     "timeout": {
       "type": "string",
+      "pattern": "^(?:(?:(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:ns|us|µs|μs|ms|s|m|h))*(?:[0-9]*[1-9][0-9]*(?:\\.[0-9]*)?|[0-9]*\\.[0-9]*[1-9][0-9]*)(?:ns|us|µs|μs|ms|s|m|h)(?:(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:ns|us|µs|μs|ms|s|m|h))*)?$",
       "description": "Timeout bounds the lease, as a Go duration. The store stamps Job.Deadline from it when it writes the row, so a declaration carries a length and never an instant. Empty is no bound; there is no default here (a workspace may set jobs.default_timeout)."
     },
     "max_attempts": {
@@ -260,7 +317,8 @@
             "type": "string"
           },
           "reason": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1
           }
         }
       },

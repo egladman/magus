@@ -67,7 +67,7 @@ func (ps JobProblems) Waive(ws []JobWaiver) (kept, waived JobProblems) {
 type JobWaiver struct {
 	Code    DiagnosticCode `json:"code"`
 	Subject string         `json:"subject"`
-	Reason  string         `json:"reason"`
+	Reason  string         `json:"reason" schema:"nonblank"`
 }
 
 // Waivable reports whether a problem of code c may be waived: only a judgment about how

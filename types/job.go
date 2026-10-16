@@ -112,9 +112,9 @@ const PrimaryGoalID = "check"
 // captured after the job was declared; target execution limits remain the target's run
 // policy rather than a second goal timeout.
 type Goal struct {
-	ID          string   `json:"id"                     yaml:"id"`
+	ID          string   `json:"id"                     yaml:"id"                     schema:"leaseid"`
 	Description string   `json:"description,omitempty" yaml:"description,omitempty"`
-	DependsOn   []string `json:"depends_on,omitempty"  yaml:"depends_on,omitempty"`
+	DependsOn   []string `json:"depends_on,omitempty"  yaml:"depends_on,omitempty"  schema:"leaseid"`
 	// Kind names WHAT this goal examines and Expect names what must be true of it. Two
 	// fields rather than one, because the alternative is a kind per pair: `paths` beside
 	// `exists` beside `absent` beside `no-symbol`, which is a vocabulary that grows by
