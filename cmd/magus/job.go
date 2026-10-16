@@ -1770,7 +1770,11 @@ func endWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ..
 		hostCtx := agent.ContextWithWiredHarnesses(ctx, wired)
 		var toolRows []agent.HarnessTools
 		for _, id := range wired {
-			if d, _, err := agent.LoadHarness(hostCtx, ws.Root(), id); err == nil && d.Tools != nil {
+			d, _, err := agent.LoadHarness(hostCtx, ws.Root(), id)
+			if err != nil {
+				return nil, fmt.Errorf("loading wired harness %s for the tool rows it installs: %w", id, err)
+			}
+			if d.Tools != nil {
 				toolRows = append(toolRows, *d.Tools)
 			}
 		}

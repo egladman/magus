@@ -705,6 +705,57 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 	}
 }
 
+// The tool rows a wired harness installs in a checkout are magus's, so ending its job
+// removes the checkout; a harness that fails to load keeps it and names the failure,
+// since its rows would otherwise read as work.
+func TestEndWorktreesRestoresAWiredHarnessToolRows(t *testing.T) {
+	harness := agent.HarnessDescriptor{
+		SchemaVersion: 2,
+		ID:            "limit-host",
+		Display:       agent.HarnessDisplay{Name: "Limit host"},
+		Skills:        agent.HarnessSkills{Form: agent.FormShort},
+		Config:        agent.HarnessConfig{Path: "hooks.json"},
+	}
+	for _, tt := range []struct {
+		name, toolsDir, want string
+	}{
+		{"a harness that loads", ".host-tools", "removed once job w ended"},
+		{"a broken descriptor", "/host-tools", `kept after job w ended: restoring what magus wrote in it failed: loading wired harness limit-host for the tool rows it installs: invalid harness spell "limit-host": tools: dir must be a workspace-relative path`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			wired := harness
+			wired.Tools = &agent.HarnessTools{Dir: tt.toolsDir}
+			fixture.WireHarness(t, wired)
+			resetWorkspaceMemo(t)
+			t.Cleanup(snapshotGlobals())
+			testkit.Isolate(t)
+			global = globalFlags{}
+			repo := testkit.NewRepo(t, map[string]string{
+				"magus.yaml":                   "",
+				"magusfile.buzz":               "import \"magus\";\nimport \"spells/limit-host\" as host;\nmagus\\harness.provider(host);\n" + testTarget,
+				"spells/limit-host/spell.buzz": limitHostSpell,
+				".host-tools/models":           "committed\n",
+			})
+			_, cacheDir := seedJobStore(t, repo.Root())
+			store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: repo.Root()})
+			wt, made, err := store.ForkWorktree(t.Context(), "w", filepath.Join(t.TempDir(), "w"), "", "")
+			require.NoError(t, err)
+			require.True(t, made)
+			_, err = store.Update(t.Context(), "w", func(cur *types.Job) {
+				*cur = types.Job{ID: "w", State: types.StatePass, WritePaths: []string{"a.go"}}
+			})
+			require.NoError(t, err)
+			_, err = store.RecordWorktree(t.Context(), "w", wt)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(filepath.Join(wt.Root, ".host-tools", "models"), []byte("reinstalled\n"), 0o644))
+
+			var out bytes.Buffer
+			require.NoError(t, endWorktrees(t.Context(), &out, store, "w"))
+			assert.Contains(t, out.String(), tt.want)
+		})
+	}
+}
+
 // The store the CLI opens resolves a ref the worker recorded in its own checkout, so an
 // orchestrator can exit a job on its worker's behalf.
 func TestJobExitResolvesARefInTheJobsCheckout(t *testing.T) {
