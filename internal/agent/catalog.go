@@ -417,7 +417,10 @@ import (
 // carry split into a full and a short arm. Those two keep 137's text, whose rewrites the
 // compression predates. magus-multi-agent's reference.md carries short arms too, which no
 // install renders while Render keeps references full.
-const SkillVersion = 138
+//
+// 139: magus-multi-agent and magus-sdk move their rationale into full-only blocks, so
+// their short forms are compressed too.
+const SkillVersion = 139
 
 const skillLicense = "GPL-3.0-or-later"
 
