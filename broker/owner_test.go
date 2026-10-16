@@ -329,6 +329,43 @@ func TestAReleasedStepGroupIsLeftAlone(t *testing.T) {
 	assert.True(t, groupAlive(pgid), "a released group is never stopped")
 }
 
+// A group rides its claim onto the broker that replaces the one it was handed to, so a
+// run that dies after a broker restart still takes its step's group with it.
+func TestAStepGroupRidesItsClaimOntoANewBroker(t *testing.T) {
+	old := redialEvery
+	redialEvery = 20 * time.Millisecond
+	t.Cleanup(func() { redialEvery = old })
+
+	addr := testAddr(t)
+	stopFirst, _ := serve(t, addr, WithCapacity(1000, 4))
+	c := NewClient(addr)
+	t.Cleanup(func() { _ = c.Close() })
+	pgid, done := stepGroup(t)
+	v, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", Slots: 1})
+	require.NoError(t, err)
+	_, err = c.HoldGroup(t.Context(), v.ID, pgid, "sleep 30")
+	require.NoError(t, err)
+
+	first := c.live()
+	stopFirst()
+	serve(t, addr, WithCapacity(1000, 4))
+	require.Eventually(t, func() bool {
+		cn := c.live()
+		return cn != nil && cn != first
+	}, 3*time.Second, 20*time.Millisecond, "the client reconnects on its own")
+	require.False(t, exitsWithin(done, 100*time.Millisecond), "a stopping broker leaves the group to its run")
+
+	require.NoError(t, c.Close())
+	require.True(t, exitsWithin(done, 5*time.Second), "the new broker ends the group with the run")
+	var r WorkReport
+	require.Eventually(t, func() bool {
+		r, err = QueryWork(t.Context(), addr)
+		return err == nil && len(r.Ended) > 0
+	}, 5*time.Second, 20*time.Millisecond)
+	require.Len(t, r.Ended, 1)
+	assert.Contains(t, r.Ended[0].Reason, "outlived the magus run whose step started it")
+}
+
 // A stale hold whose group emptied names whatever group takes the id next. That group's
 // leader started after the hold, so the claim's release leaves it alone.
 func TestAGroupThatTookAHeldIdIsLeftAlone(t *testing.T) {

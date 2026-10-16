@@ -387,6 +387,7 @@ func (s *server) forget(conn net.Conn, sess *session) {
 	var claims []string
 	var services map[string]int
 	var holds map[string]*heldWork
+	closing := s.closing
 	if sess != nil {
 		for id := range sess.claims {
 			claims = append(claims, id)
@@ -397,6 +398,14 @@ func (s *server) forget(conn net.Conn, sess *session) {
 	}
 	s.mu.Unlock()
 	for _, h := range holds {
+		// A broker that is stopping hung up itself: the client still runs, re-asserts
+		// its riders on the next broker, and enforces its own deadlines.
+		if closing {
+			if h.timer != nil {
+				h.timer.Stop()
+			}
+			continue
+		}
 		s.reapOrphan(h)
 	}
 	for _, id := range claims {

@@ -536,32 +536,58 @@ var _ cache.GroupHolder = (*Client)(nil)
 // HoldGroup hands the broker process group pgid, which a step holding claim (an id
 // [Client.Request] granted) started, so the group ends with the claim: when it is
 // released, or when this connection closes. [Client.ReleaseHold] takes the id it
-// returns, once the group's leader has exited. Like a hold, it is not re-asserted on a
-// broker that replaces this one. A group the broker stops is filed in the attention
-// queue of the workspace ctx carries (see [types.WithWorkspace]); with none, nowhere.
+// returns, once the group's leader has exited. Unlike a hold, it is re-asserted with its
+// claim on a broker that replaces this one. A group the broker stops is filed in the
+// attention queue of the workspace ctx carries (see [types.WithWorkspace]); with none,
+// nowhere.
 func (c *Client) HoldGroup(ctx context.Context, claim string, pgid int, command string) (string, error) {
+	hold := Hold{PGID: pgid, Command: command, Held: time.Now()}
+	if ws := types.WorkspaceFromContext(ctx); ws != nil {
+		hold.Root = ws.Root()
+	}
+	id := claim + "/pgid " + strconv.Itoa(pgid)
+	r := &heldRider{claim: claim, hold: hold}
 	c.mu.Lock()
 	h, ok := c.held[claim]
+	if ok {
+		hold.Claim = h.remote
+		// Recorded before it is sent, so a broker that replaces this one mid-request is
+		// handed it too; the broker keys it by claim and group, so twice is once.
+		c.riders[id] = r
+	}
 	c.mu.Unlock()
-	if !ok || h.remote == "" {
+	if hold.Claim == "" {
 		return "", fmt.Errorf("broker: hold process group %d: this client holds no claim %q", pgid, claim)
 	}
-	var root string
-	if ws := types.WorkspaceFromContext(ctx); ws != nil {
-		root = ws.Root()
+	remote, err := c.Hold(ctx, hold)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err != nil {
+		if c.riders[id] == r {
+			delete(c.riders, id)
+		}
+		return "", err
 	}
-	return c.Hold(ctx, Hold{Claim: h.remote, PGID: pgid, Command: command, Root: root})
+	r.remote = remote
+	return id, nil
 }
 
 // ReleaseHold says the held command ended on its own. A broker that is gone already
 // released it with the connection. A release the broker does not answer is logged: the
 // broker still holds the group then, and signals it only while it is the group it held.
 func (c *Client) ReleaseHold(ctx context.Context, id string) {
+	remote := id
+	c.mu.Lock()
+	if r, ok := c.riders[id]; ok {
+		remote = r.remote
+		delete(c.riders, id)
+	}
+	c.mu.Unlock()
 	cn := c.live()
-	if cn == nil || id == "" {
+	if cn == nil || remote == "" {
 		return
 	}
-	if err := cn.roundTrip(ctx, c.next(), typeHoldRelease, holdReleaseRequest{ID: id}, typeHoldReply, nil, nil); err != nil {
+	if err := cn.roundTrip(ctx, c.next(), typeHoldRelease, holdReleaseRequest{ID: remote}, typeHoldReply, nil, nil); err != nil {
 		slog.WarnContext(ctx, "the broker may still hold a process group that ended", slog.String("hold", id), attr.Error(err))
 	}
 }

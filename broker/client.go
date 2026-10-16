@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"os"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -59,8 +61,8 @@ func WithStart(start func(context.Context) bool) ClientOption {
 // released when the process exits, however it exits. Safe for concurrent use; call
 // Close to release everything before the process ends.
 //
-// When its broker dies, a Client holding claims redials on its own and re-asserts them
-// on the next broker to answer.
+// When its broker dies, a Client holding claims redials on its own and re-asserts them,
+// with the process groups riding them, on the next broker to answer.
 type Client struct {
 	addr      string
 	hello     hello
@@ -72,6 +74,7 @@ type Client struct {
 	mu        sync.Mutex
 	cur       *conn
 	held      map[string]*heldClaim
+	riders    map[string]*heldRider
 	closed    bool
 	redialing bool
 	done      chan struct{}
@@ -93,6 +96,15 @@ type heldClaim struct {
 	remote string
 }
 
+// heldRider is a process group this client handed the broker to end with one of its
+// claims, keyed in held by claim, and the hold id the current broker knows it by;
+// remote is empty while no broker does.
+type heldRider struct {
+	claim  string
+	hold   Hold
+	remote string
+}
+
 // NewClient returns a client for the broker at addr (a unix:// URL or a bare path). It
 // does not dial; the first request does.
 func NewClient(addr string, opts ...ClientOption) *Client {
@@ -101,8 +113,9 @@ func NewClient(addr string, opts ...ClientOption) *Client {
 	c := &Client{
 		addr:  addr,
 		hello: hello{Magic: helloMagic, Protocol: ProtocolVersion, PID: os.Getpid(), Dir: dir, Argv: os.Args, Lease: lease},
-		held:  map[string]*heldClaim{},
-		done:  make(chan struct{}),
+		held:   map[string]*heldClaim{},
+		riders: map[string]*heldRider{},
+		done:   make(chan struct{}),
 	}
 	for _, fn := range opts {
 		fn(c)
@@ -171,6 +184,12 @@ func (c *Client) Release(ctx context.Context, id string) {
 	c.mu.Lock()
 	h, ok := c.held[id]
 	delete(c.held, id)
+	// The broker ends the groups riding the claim with it.
+	for rider, r := range c.riders {
+		if r.claim == id {
+			delete(c.riders, rider)
+		}
+	}
 	cn := c.cur
 	c.mu.Unlock()
 	if !ok || h.remote == "" || cn == nil {
@@ -283,6 +302,7 @@ func (c *Client) Close() error {
 	cn := c.cur
 	c.cur = nil
 	c.held = map[string]*heldClaim{}
+	c.riders = map[string]*heldRider{}
 	c.mu.Unlock()
 	if cn != nil {
 		return cn.nc.Close()
@@ -293,8 +313,9 @@ func (c *Client) Close() error {
 func (c *Client) next() uint64 { return c.nextID.Add(1) }
 
 // connect returns the live connection, dialing one when there is none. A fresh
-// connection re-asserts every claim this client still holds before any other request
-// uses it, so a new broker learns about running steps before it seats anything else.
+// connection re-asserts every claim this client still holds, and the groups riding
+// them, before any other request uses it, so a new broker learns about running steps
+// before it seats anything else.
 // open is connect for a call that takes something from the broker, which is the only
 // kind that may start one. The redial loop uses connect, so a broker that will not
 // start is not respawned every tick.
@@ -362,6 +383,11 @@ func (c *Client) connect(ctx context.Context) (*conn, error) {
 		h.remote = reply.Verdict.ID
 		c.mu.Unlock()
 	}
+	riders, err := c.reassertRiders(ctx, dctx, cn)
+	if err != nil {
+		_ = nc.Close()
+		return nil, err
+	}
 	if c.crashHint != "" {
 		c.watchCrashes(dctx, cn)
 	}
@@ -373,19 +399,69 @@ func (c *Client) connect(ctx context.Context) (*conn, error) {
 		return nil, fmt.Errorf("%w: client closed", ErrUnavailable)
 	}
 	c.cur = cn
-	// A Release that ran before cn was published found no connection to send on, so
-	// the claims it dropped are handed back here; one after it finds cn itself.
-	var released []string
+	// A Release or ReleaseHold that ran before cn was published found no connection to
+	// send on, so what it dropped is handed back here; one after it finds cn itself.
+	var released, unheld []string
 	for id, h := range held {
 		if c.held[id] != h {
 			released = append(released, h.remote)
 		}
 	}
+	for id, r := range riders {
+		if c.riders[id] != r && r.remote != "" {
+			unheld = append(unheld, r.remote)
+		}
+	}
 	c.mu.Unlock()
+	// Riders first: a claim's release stops the groups still riding it.
+	for _, id := range unheld {
+		_, _ = cn.call(dctx, c.next(), typeHoldRelease, holdReleaseRequest{ID: id})
+	}
 	for _, id := range released {
 		_, _ = cn.call(dctx, c.next(), typeRelease, releaseRequest{ClaimID: id})
 	}
 	return cn, nil
+}
+
+// reassertRiders hands cn's broker every process group riding a claim this client
+// holds, once the claims are re-asserted on it, and returns the riders it sent. A group
+// the broker refuses runs unheld from then on, which is said; any other failure is
+// returned, and cn is not used.
+func (c *Client) reassertRiders(ctx, dctx context.Context, cn *conn) (map[string]*heldRider, error) {
+	c.mu.Lock()
+	riders := maps.Clone(c.riders)
+	c.mu.Unlock()
+	for id, r := range riders {
+		c.mu.Lock()
+		hold := r.hold
+		if h, ok := c.held[r.claim]; ok {
+			hold.Claim = h.remote
+		}
+		c.mu.Unlock()
+		if hold.Claim == "" {
+			continue
+		}
+		var reply holdReply
+		err := cn.roundTrip(dctx, c.next(), typeHold, holdRequest{Hold: hold}, typeHoldReply, &reply, nil)
+		var refused *Error
+		switch {
+		case errors.As(err, &refused):
+			slog.WarnContext(ctx, fmt.Sprintf("process group %d (%s) runs unheld: if this run dies, nothing stops it", hold.PGID, hold.Command),
+				attr.Error(err))
+			c.mu.Lock()
+			if c.riders[id] == r {
+				delete(c.riders, id)
+			}
+			c.mu.Unlock()
+		case err != nil:
+			return nil, err
+		default:
+			c.mu.Lock()
+			r.remote = reply.ID
+			c.mu.Unlock()
+		}
+	}
+	return riders, nil
 }
 
 // live is the current connection if it is still open.
@@ -418,6 +494,9 @@ func (c *Client) lost(cn *conn) {
 	}
 	for _, h := range c.held {
 		h.remote = ""
+	}
+	for _, r := range c.riders {
+		r.remote = ""
 	}
 	if c.closed || c.redialing || len(c.held) == 0 {
 		return
