@@ -24,7 +24,9 @@ func TestDefaults(t *testing.T) {
 		"human-only":           Deny,
 		"lease-state":          Advise,
 		"push-gate":            Advise,
-		"sleep-poll":           Advise,
+		"sleep-poll":           Deny,
+		"busy-wait":            Deny,
+		"process-poll":         Deny,
 		"read-paging":          Advise,
 		"brief-plain-commands": Advise,
 		"monitor-duplicate":    Advise,
@@ -80,6 +82,29 @@ func TestResolveFillsDefaults(t *testing.T) {
 
 // A rule's own markers fill a declaration that names none, so turning the rule on never
 // turns it deaf; a declared list replaces them.
+// A workspace policy that fails to load leaves the built-in defaults, so the timer rules
+// must refuse there, and no profile level may soften them.
+func TestTimerRulesDenyWhenNoWorkspacePolicyLoads(t *testing.T) {
+	timers := []string{"busy-wait", "process-poll", "sleep-poll"}
+
+	resolved, err := Resolve(nil)
+	require.NoError(t, err)
+	for _, name := range timers {
+		assert.Equal(t, Deny, Defaults()[name], name)
+		assert.Equal(t, Setting{Decision: Deny}, resolved[name], name)
+	}
+
+	for _, level := range types.GuardProfile("").Values() {
+		declared, err := ResolveProfile(types.GuardProfile(level), nil)
+		require.NoError(t, err, level)
+		profiled, err := Resolve(declared)
+		require.NoError(t, err, level)
+		for _, name := range timers {
+			assert.Equal(t, Deny, profiled[name].Decision, "%s at %s", name, level)
+		}
+	}
+}
+
 func TestResolveFillsTheMarkersARuleTakes(t *testing.T) {
 	got, err := Resolve(map[string]Setting{"compat-marker": {Decision: Advise}})
 	require.NoError(t, err)

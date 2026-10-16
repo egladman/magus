@@ -149,13 +149,15 @@ var profiles = map[types.GuardProfile]map[string]Setting{
 // defaults must name exactly the rules internal/guard catalogs. A rule that refuses
 // something the caller can recover from by running a different command advises, so
 // a workspace that wants it refused says so; a rule guarding something no later
-// command undoes, or a boundary a lease or person drew, denies.
+// command undoes, or a boundary a lease or person drew, denies. The timer rules
+// (busy-wait, process-poll, sleep-poll) deny too: a background task notifies on exit, so
+// no wait is needed, and an advising default would let timers through whenever the
+// workspace policy fails to load.
 var defaults = map[string]Decision{
 	// Recoverable: the served command answers what the refused one asked.
 	"architecture-unbriefed": Advise,
 	"brief-command":          Advise,
 	"brief-plain-commands":   Advise,
-	"busy-wait":              Advise,
 	"buzz-unbriefed":         Advise,
 	"chained-run":            Advise,
 	"exit-status-echo":       Advise,
@@ -167,7 +169,6 @@ var defaults = map[string]Decision{
 	"monitor-pile":           Advise,
 	"output-pipe":            Advise,
 	"output-redirect":        Advise,
-	"process-poll":           Advise,
 	"raw-tool":               Advise,
 	readNavigation:           Advise,
 	"read-paging":            Advise,
@@ -175,7 +176,6 @@ var defaults = map[string]Decision{
 	"search-translation":     Advise,
 	"sed-in-place":           Advise,
 	"sibling-checkout":       Advise,
-	"sleep-poll":             Advise,
 	"spawn-unbriefed":        Advise,
 	"spawn-waiter":           Advise,
 	"stage-all":              Advise,
@@ -188,6 +188,7 @@ var defaults = map[string]Decision{
 	"agent-sign-off":        Deny,
 	"background-left":       Deny,
 	"background-unbounded":  Deny,
+	"busy-wait":             Deny,
 	"backtick-substitution": Deny,
 	"cache-dir-write":       Deny,
 	"claimed-declaration":   Deny,
@@ -208,8 +209,10 @@ var defaults = map[string]Decision{
 	"merge-side-checkout":   Deny,
 	"notes-author":          Deny,
 	"policy-unloaded":       Deny,
+	"process-poll":          Deny,
 	"push-ungated":          Deny,
 	"shared-stash":          Deny,
+	"sleep-poll":            Deny,
 	"spawn-duplicate":       Deny,
 	spawnAboveParentTier:    Deny,
 	"stale-binary":          Deny,
