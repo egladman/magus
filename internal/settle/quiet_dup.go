@@ -26,7 +26,9 @@ func silenced(fn func() error) ([]byte, error) {
 	}()
 	saved := [3]int{-1, -1, -1}
 	for _, std := range []int{1, 2} {
-		if saved[std], err = unix.Dup(std); err != nil {
+		// Close-on-exec, or every child fn starts inherits the caller's own stdout and
+		// stderr: a broker it spawns outlives the hook and holds a piped caller open.
+		if saved[std], err = unix.FcntlInt(uintptr(std), unix.F_DUPFD_CLOEXEC, 0); err != nil {
 			_ = restore(saved)
 			return nil, fn()
 		}
