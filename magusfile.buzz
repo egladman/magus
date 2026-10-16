@@ -2064,7 +2064,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
                    "console/src/apps/graph/main.ts", "console/src/apps/graph/shapes.ts");
     ctx.readsFiles("MAGUS.md");
     // The guard's pull-request-text test runs the binary proofread-build links.
-    ctx.needs(format, buzz_test, proofreadlib\proofread_build);
+    ctx.needs(buzz_test, proofreadlib\proofread_build);
     // Explicit args replace go-test's `./...` default and the `-- -run` passthrough, hence
     // `args`. cmd/magus runs without -race: its TestScripts re-exec the raced binary hundreds
     // of times, and the engine's concurrency lives in the raced packages.
@@ -2264,7 +2264,6 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
 
 // Compiles one artifact: the host binary, or the container image under the `container` charm.
 export fun build(ctx: magus\Context, args: [str])  > void {
-    ctx.needs(format);
     if (ctx.hasCharm("container")) {
         ctx.needs(image_build);
     } else {
@@ -2275,8 +2274,6 @@ export fun build(ctx: magus\Context, args: [str])  > void {
 // Runs in libs/testlayout because `golangci-lint custom` reads .custom-gcl.yml from its
 // cwd. No declared outputs, for go-build's reason, so a read-only run leaves no binary.
 export fun install_linter(ctx: magus\Context, args: [str]) > void !> any {
-    // gofmt rewrites libs/testlayout, which this compiles.
-    ctx.needs(format);
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/go.mod",
                    "libs/testlayout/go.sum", "libs/testlayout/**/*.go",
                    "libs/conventions/go.mod", "libs/conventions/go.sum",
@@ -2293,7 +2290,7 @@ export fun install_linter(ctx: magus\Context, args: [str]) > void !> any {
 // reads and this footprint. A tree glob stops at a nested project, hence the named paths.
 export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
     // The proofread rules run the linked proofread rather than compile it.
-    ctx.needs(format, proofreadlib\proofread_build);
+    ctx.needs(proofreadlib\proofread_build);
     ctx.readsFiles("hack/lint/*.buzz",
                    "spells/**/*.buzz", "internal/queue/provider/*.buzz", "hack/**/*.buzz",
                    "hack/README.md",
@@ -2392,11 +2389,11 @@ export fun golangci_lint(ctx: magus\Context, args: [str]) > void !> any {
     golangci\run(".", if (ctx.hasCharm("rw")) ["--fix"] else []);
 }
 
-// Formats and builds the linter first, then golangci-lint, go vet, markdownlint,
+// Builds the linter first, then golangci-lint, go vet, markdownlint,
 // shellcheck, and actionlint. govulncheck lives in `security`. install_linter compiles
 // golangci-lint with the go on PATH, so mise must pin one go for build and analysis.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(format, install_linter, lint_rules, harness_drift);
+    ctx.needs(install_linter, lint_rules, harness_drift);
     // Not go["golangci-lint"]: that runs the stock binary off PATH. These reads key the
     // custom linter by content.
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml",
@@ -2466,9 +2463,10 @@ export fun format(ctx: magus\Context, args: [str]) > void !> any {
 // Runs the CI gates through their declared dependencies.
 // Under `--inherited=fatal` security runs in the body: ctx.needs hands a dependency no args.
 export fun ci(ctx: magus\Context, args: [str]) > void !> any {
-    // lint reads libs/**/*.go and test reads **/*.go, which each nested module's format
-    // rewrites (MGS4008).
-    ctx.needs(gopherbuzz\format, diagnostics\format, conventions\format,
+    // Only ci rewrites files: format first, so lint, build and test read the formatted
+    // tree. lint reads libs/**/*.go and test reads **/*.go, which each nested module's
+    // format rewrites (MGS4008).
+    ctx.needs(format, gopherbuzz\format, diagnostics\format, conventions\format,
         testlayout\format, scipbuzz\format, xdg\format, cmdline\format);
     if (!advisories\inheritedFatal(args)) {
         ctx.needs(lint, build, test, security);
