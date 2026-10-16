@@ -308,7 +308,9 @@ func TestOutputDstTeeWritesBoth(t *testing.T) {
 	require.NoError(t, err)
 	defer cleanup()
 
-	v := struct{ X int }{X: 42}
+	v := struct {
+		X int `json:"X"`
+	}{X: 42}
 	require.NoError(t, writeFormatted(w, output.Options{Format: outputJSON}, v))
 	cleanup()
 
@@ -329,7 +331,9 @@ func TestOutputDstTeeAppends(t *testing.T) {
 		w, cleanup, err := outputDst()
 		global.tee = prev
 		require.NoError(t, err, "outputDst call %d", i)
-		v := struct{ N int }{N: i}
+		v := struct {
+			N int `json:"N"`
+		}{N: i}
 		require.NoError(t, writeFormatted(w, output.Options{Format: outputJSON}, v), "write call %d", i)
 		cleanup()
 	}
