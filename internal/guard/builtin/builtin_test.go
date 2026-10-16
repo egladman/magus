@@ -80,8 +80,6 @@ func TestResolveFillsDefaults(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
-// A rule's own markers fill a declaration that names none, so turning the rule on never
-// turns it deaf; a declared list replaces them.
 // A workspace policy that fails to load leaves the built-in defaults, so the timer rules
 // must refuse there, and no profile level may soften them.
 func TestTimerRulesDenyWhenNoWorkspacePolicyLoads(t *testing.T) {
@@ -105,6 +103,8 @@ func TestTimerRulesDenyWhenNoWorkspacePolicyLoads(t *testing.T) {
 	}
 }
 
+// A rule's own markers fill a declaration that names none, so turning the rule on never
+// turns it deaf; a declared list replaces them.
 func TestResolveFillsTheMarkersARuleTakes(t *testing.T) {
 	got, err := Resolve(map[string]Setting{"compat-marker": {Decision: Advise}})
 	require.NoError(t, err)

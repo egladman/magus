@@ -41,10 +41,10 @@ func TestSleepPollRefusesASleepBeforeAStatusRead(t *testing.T) {
 			assert.NotEqual(t, denyRuleSleepPoll, v.Rule.Name, tt.line)
 		}
 	}
-	// It advises by default: a workspace raises it.
+	// It denies by default too.
 	v := Evaluate(Dependencies{}, "sleep 30; ./magus status")
-	assert.Empty(t, v.Deny)
-	assert.Equal(t, hint.MarkerKind(denyRuleSleepPoll), v.Kind)
+	assert.Equal(t, denyRuleSleepPoll, v.Rule.Name)
+	assert.NotEmpty(t, v.Deny)
 }
 
 func TestSleepTimerLine(t *testing.T) {
@@ -89,29 +89,33 @@ func TestSpawnWaitsFires(t *testing.T) {
 }
 
 // The pile the waiters scout found: timers a worker backgrounds to wake itself. Each is
-// refused as a timer when the workspace raises sleep-poll, and each counts toward the pile.
+// refused as a timer by default, and counts toward the pile when a workspace lowers
+// sleep-poll to advise.
 func TestBackgroundedSleepIsATimerAndCountsTowardThePile(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	judge := func(deps Dependencies, line string) types.GuardJudgment {
 		return Judge(ctx, deps, Request{Input: line, Session: "timers", Host: "claude-code", CallBackground: true})
 	}
 
-	raised := withSetting(string(denyRuleSleepPoll), builtin.Deny)
-	v := judge(raised, "sleep 540")
+	v := judge(Dependencies{}, "sleep 540")
 	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSleepPoll)}, judgedAs(v))
 
-	// By default it advises, and the timers it lets through are counted.
+	lowered := withSetting(string(denyRuleSleepPoll), builtin.Advise)
+	piled := Dependencies{Builtins: map[string]builtin.Setting{
+		string(denyRuleSleepPoll):   {Decision: builtin.Advise},
+		string(denyRuleMonitorPile): {Decision: builtin.Deny},
+	}}
 	for i := range monitorPileAdvise - 1 {
-		v = judge(Dependencies{}, "sleep "+strings.Repeat("9", i+2)+" && echo tick")
+		v = judge(lowered, "sleep "+strings.Repeat("9", i+2)+" && echo tick")
 		assert.NotEqual(t, "deny", v.Decision)
 	}
-	v = judge(withSetting(string(denyRuleMonitorPile), builtin.Deny), "sleep 300")
+	v = judge(piled, "sleep 300")
 	assert.Equal(t, types.GuardJudgment{Decision: "advise", Rule: string(denyRuleMonitorPile)}, judgedAs(v),
 		"the third live waiter is advised against")
 	for range monitorPileDeny - monitorPileAdvise - 1 {
-		judge(Dependencies{}, "sleep 301")
+		judge(lowered, "sleep 301")
 	}
-	v = judge(withSetting(string(denyRuleMonitorPile), builtin.Deny), "sleep 302")
+	v = judge(piled, "sleep 302")
 	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleMonitorPile)}, judgedAs(v), "the fifth is refused")
 
 	// A settle in the foreground is not a waiter.

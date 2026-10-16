@@ -2238,12 +2238,10 @@ func TestGuardDeniesProcessPoll(t *testing.T) {
 
 func TestShellRulesAdviseByDefault(t *testing.T) {
 	for rule, command := range map[denyRuleName]string{
-		denyRuleBusyWait:        `until grep -q "^summary:" out.log; do sleep 25; done`,
 		denyRuleChainedRun:      "magus run generate . && magus run lint .",
 		denyRuleExitStatusEcho:  `./check.sh; echo $?`,
 		denyRuleOutputPipe:      "magus ls jobs | wc -l",
 		denyRuleOutputRedirect:  "magus run lint . > /tmp/x.txt",
-		denyRuleProcessPoll:     "pgrep -fl magus",
 		denyRuleRawTool:         "go test ./...",
 		denyRuleScriptedRewrite: `perl -pi -e 's/a/b/' f.go`,
 		denyRuleSedInPlace:      sedInPlace,

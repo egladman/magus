@@ -420,7 +420,11 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 				input["agent_id"] = "a1"
 				writeSpawnedAgent(hint.NewGate(cacheDir, FactsKey("claude-code", "8f2c6a1e")), "a1", spawnedAgent{Description: tc.worker})
 			}
-			deps := Dependencies{CommandRule: m.CommandRule(), SpawnRule: m.SpawnRule(), WriteRule: m.WriteRule()}
+			// busy-wait off, so the policy's own loop rules (ci-watch, pr-watch) decide and say why.
+			deps := Dependencies{
+				CommandRule: m.CommandRule(), SpawnRule: m.SpawnRule(), WriteRule: m.WriteRule(),
+				Builtins: map[string]builtin.Setting{string(denyRuleBusyWait): {Decision: builtin.Off}},
+			}
 			if tc.checkout != nil {
 				deps.CheckoutState = func(context.Context, string) *types.CheckoutState { return tc.checkout }
 			}
@@ -1162,9 +1166,9 @@ func TestJobStoreRowsAreReadFreshEachCall(t *testing.T) {
 
 // recoverableRules are the compiled rules that refused before they advised by default.
 var recoverableRules = []string{
-	"architecture-unbriefed", "brief-command", "busy-wait", "buzz-unbriefed", "chained-run", "exit-status-echo",
+	"architecture-unbriefed", "brief-command", "buzz-unbriefed", "chained-run", "exit-status-echo",
 	"filter-without-input", "grep-reader", "interpreter-rewrite", "magus-timeout",
-	"output-pipe", "output-redirect", "process-poll", "raw-tool", "read-navigation",
+	"output-pipe", "output-redirect", "raw-tool", "read-navigation",
 	"scripted-rewrite", "search-translation", "sed-in-place", "sibling-checkout",
 	"spawn-unbriefed", "stage-all", "symbol-search", "throwaway-copy", "unknown-env",
 }

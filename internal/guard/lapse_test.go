@@ -51,18 +51,20 @@ func TestLapsedJudgmentStillRefusesAPollingLoop(t *testing.T) {
 }
 
 // A judgment that lapses before it loads anything grades by the settings the last judgment
-// in the cache dir applied, so a workspace that raised busy-wait to deny keeps it raised.
+// in the cache dir applied, so a workspace that lowered busy-wait to advise keeps it lowered.
 func TestLapseBeforeTheLoadGradesByTheLastAppliedSettings(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	line := "until [ -s out.txt ]; do sleep 5; done"
 	req := Request{Input: line, Host: "claude-code", Session: "s1"}
 	nothing := func(context.Context) {}
 
-	assert.Equal(t, string(advisoryUnfinished), lapseNow(ctx, t, Dependencies{}, req, nothing).Rule,
-		"with no settings on record busy-wait only advises, as it does by default")
+	assert.Equal(t, verdictWithRule(decisionDeny, string(denyRuleBusyWait)), unworded(lapseNow(ctx, t, Dependencies{}, req, nothing)),
+		"with no settings on record busy-wait denies, as it does by default")
 
-	rememberSettings(cacheDir, strict(Dependencies{}).Builtins)
-	assert.Equal(t, verdictWithRule(decisionDeny, string(denyRuleBusyWait)), unworded(lapseNow(ctx, t, Dependencies{}, req, nothing)))
+	lowered := strict(Dependencies{}).Builtins
+	lowered[string(denyRuleBusyWait)] = builtin.Setting{Decision: builtin.Advise}
+	rememberSettings(cacheDir, lowered)
+	assert.Equal(t, string(advisoryUnfinished), lapseNow(ctx, t, Dependencies{}, req, nothing).Rule)
 }
 
 // A destructive VCS verb is refused by its own rule on a lapse, and a push is never

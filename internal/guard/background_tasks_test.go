@@ -243,6 +243,5 @@ func TestJudgeRefusesAnUnboundedBackgroundedCall(t *testing.T) {
 	assert.NotEqual(t, "deny", judge("timeout 600 rsync -a src/ dst/").Decision)
 
 	timer := judge("sleep 540")
-	assert.NotEqual(t, "deny", timer.Decision, timer.Reason)
-	assert.NotEqual(t, string(denyRuleBackgroundUnbounded), timer.Rule)
+	assert.Equal(t, string(denyRuleSleepPoll), timer.Rule, timer.Reason)
 }

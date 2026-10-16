@@ -58,9 +58,11 @@ func TestWatchSubjectsNormalizeWhatIsWaitedOn(t *testing.T) {
 // The pile the waiters scout found: one worker arming watcher after watcher on one run.
 func TestMonitorDuplicateAndPile(t *testing.T) {
 	ctx, _ := spawnFixture(t)
+	// busy-wait lowered, so the polling watcher below is judged by the monitor rules.
 	raised := Dependencies{Builtins: map[string]builtin.Setting{
 		string(denyRuleMonitorDuplicate): {Decision: builtin.Deny},
 		string(denyRuleMonitorPile):      {Decision: builtin.Deny},
+		string(denyRuleBusyWait):         {Decision: builtin.Advise},
 	}}
 	watch := func(agent, command string) types.GuardJudgment {
 		return Judge(ctx, raised, Request{Input: monitorCall(t, agent, command), Host: "claude-code"})
@@ -88,7 +90,11 @@ func TestMonitorDuplicateAndPile(t *testing.T) {
 
 func TestMonitorOnABackgroundedCommandsProcessIsADuplicate(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	raised := withSetting(string(denyRuleMonitorDuplicate), builtin.Deny)
+	raised := Dependencies{Builtins: map[string]builtin.Setting{
+		string(denyRuleMonitorDuplicate): {Decision: builtin.Deny},
+		string(denyRuleBusyWait):         {Decision: builtin.Advise},
+		string(denyRuleProcessPoll):      {Decision: builtin.Advise},
+	}}
 	run := Judge(ctx, raised, Request{Input: "timeout 600 go version", Session: "watchers", Host: "claude-code", Agent: "w1", CallBackground: true})
 	require.NotEqual(t, "deny", run.Decision, run.Reason)
 	v := Judge(ctx, raised, Request{Input: monitorCall(t, "w1", `until ! pgrep -f "go version"; do sleep 15; done`), Host: "claude-code"})
