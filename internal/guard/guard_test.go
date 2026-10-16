@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -882,6 +883,8 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, deps, req := tc.setup(t)
+			// Its own, so another process's copy in the shared one is not read as this one's.
+			t.Setenv("TMPDIR", t.TempDir())
 			dirs := []string{hookLocation(ctx, deps).cacheDir, os.Getenv("XDG_STATE_HOME")}
 			checked := req
 			checked.DryRun = true
@@ -913,6 +916,30 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A dry run's copy goes when its context ends, since a judgment past the hook's deadline is
+// still running when the process exits; and it goes on release when the run returns first.
+func TestSessionCopyIsRemovedByReleaseOrItsContextEnding(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	gone := func(dir string) func() bool {
+		return func() bool {
+			_, err := os.Stat(dir)
+			return errors.Is(err, os.ErrNotExist)
+		}
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	dir, release := sessionCopy(ctx, t.TempDir(), "s1")
+	require.DirExists(t, dir)
+	cancel()
+	assert.Eventually(t, gone(dir), 5*time.Second, 10*time.Millisecond, "the deadline removes it")
+	release()
+
+	dir, release = sessionCopy(t.Context(), t.TempDir(), "s1")
+	require.DirExists(t, dir)
+	release()
+	assert.True(t, gone(dir)(), "release removes it")
 }
 
 // Judging a spawn records it, so a dry run refuses one rather than record it.

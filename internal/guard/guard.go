@@ -745,8 +745,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	// what the rules judge against, so a check swaps only the cache dir.
 	stateAt := location
 	if req.DryRun {
-		stateAt.cacheDir = copySessionState(location.cacheDir, who.callerKey(), who.factsKey(), who.skillsKey())
-		defer os.RemoveAll(stateAt.cacheDir)
+		var release func()
+		stateAt.cacheDir, release = sessionCopy(ctx, location.cacheDir, who.callerKey(), who.factsKey(), who.skillsKey())
+		defer release()
 	}
 	markers := hint.NewGate(stateAt.cacheDir, who.callerKey())
 	facts := hint.NewGate(stateAt.cacheDir, who.factsKey())
@@ -2097,6 +2098,23 @@ func leaseRows(ctx context.Context, at location) ([]types.Job, error) {
 		return pinned.Rows, pinned.Err
 	}
 	return job.NewStore(at.jobs()).List()
+}
+
+// sessionCopy is copySessionState's copy and the release that removes it, which also runs
+// once ctx is done. A dry run nested in a hook judgment that runs out of time is still
+// running when JudgeWithin answers unjudged and the process exits, so its deferred release
+// never runs.
+func sessionCopy(ctx context.Context, cacheDir string, keys ...string) (string, func()) {
+	dir := copySessionState(cacheDir, keys...)
+	if dir == "" {
+		return "", func() {}
+	}
+	remove := func() { _ = os.RemoveAll(dir) }
+	stop := context.AfterFunc(ctx, remove)
+	return dir, func() {
+		stop()
+		remove()
+	}
 }
 
 // copySessionState copies into a new temporary directory what the gates keyed on keys hold
