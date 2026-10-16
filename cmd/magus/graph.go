@@ -115,8 +115,8 @@ func graphUsage() {
 // way to say "refresh everything now", especially the symbol indexes, which the server
 // otherwise keeps fresh in the background. A missing indexer is reported with an install
 // hint but does not fail the build; the domain graph rebuilds regardless. A reindex refused
-// because an outer run holds the project's lock (MGS3007) fails the build once the rest is
-// done.
+// because an outer run holds the project's lock (MGS3007), or because the machine's build
+// budget is full (MGS3009), fails the build once the rest is done.
 func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	var skipSymbols, skipSessions bool
 	_, err = cmdParse("graph build", args, func(fs *flag.FlagSet) {
@@ -187,16 +187,16 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 		}
 	}
 	if refused != nil {
-		return fmt.Errorf("magus graph build: the graph was rebuilt over an index this run was refused the lock to refresh: %w", refused)
+		return fmt.Errorf("magus graph build: the graph was rebuilt over an index this run was refused the lock or the build budget to refresh: %w", refused)
 	}
 	return nil
 }
 
 // reindexRefusals is the part of a reindex failure that fails `graph build`: each project
-// refused because the run this one is nested inside holds its lock (MGS3007). A missing
-// indexer is the machine's state and stays a warning. A refusal is the caller's own nesting,
-// and an exit 0 under magus\cmd's quiet hid that the index it wanted stayed stale. Nil when
-// nothing was refused.
+// refused because the run this one is nested inside holds its lock (MGS3007), or because the
+// machine's build budget could not seat the indexer (MGS3009). A missing indexer is the
+// machine's state and stays a warning. A refusal means the index it wanted stayed stale, and
+// an exit 0 under magus\cmd's quiet hid that. Nil when nothing was refused.
 func reindexRefusals(err error) error {
 	errs := []error{err}
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
@@ -204,7 +204,7 @@ func reindexRefusals(err error) error {
 	}
 	var refused []error
 	for _, e := range errs {
-		if errors.Is(e, types.ProjectLockHeldByAncestor) {
+		if errors.Is(e, types.ProjectLockHeldByAncestor) || errors.Is(e, types.MachineBudgetExhausted) {
 			refused = append(refused, e)
 		}
 	}

@@ -261,4 +261,9 @@ func TestGraphBuildFailsOnlyOnALockRefusal(t *testing.T) {
 	assert.NotContains(t, got.Error(), "scip-typescript", "only the refusal fails the build")
 
 	require.ErrorIs(t, reindexRefusals(refusal), types.ProjectLockHeldByAncestor, "an unjoined refusal counts too")
+
+	full := types.DiagnosticErrorf(types.MachineBudgetExhausted, "not starting scip: this machine's build budget is full")
+	got = reindexRefusals(errors.Join(missing, full))
+	require.ErrorIs(t, got, types.MachineBudgetExhausted, "a full budget fails the build")
+	assert.NotContains(t, got.Error(), "scip-typescript", "only the refusal fails the build")
 }
