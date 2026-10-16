@@ -47,6 +47,7 @@ func assembleBuzzIn(w *TreeWalk) Shard {
 	for _, f := range files {
 		scanned[f] = true
 	}
+	figures := &figureExtractor{scanned: scanned, byID: map[string]int{}}
 
 	for _, rel := range files {
 		src, err := os.ReadFile(filepath.Join(root, rel))
@@ -69,6 +70,11 @@ func assembleBuzzIn(w *TreeWalk) Shard {
 		// Top-level function names (for intra-file call resolution) and their lines
 		// (for binding rationale comments to the enclosing function).
 		sameFile := map[string]bool{}
+		figureNS, magusNS, drawsFigures := figureNamespaces(prog)
+		var consts map[string]string
+		if drawsFigures {
+			consts = stringConsts(prog)
+		}
 		var fnLines []fnLine
 		for _, stmt := range prog.Stmts {
 			if d, ok := stmt.(*ast.FunDecl); ok {
@@ -91,6 +97,9 @@ func assembleBuzzIn(w *TreeWalk) Shard {
 				})
 				s.Edges = append(s.Edges, extractedEdge(fID, fnID, types.RelationContains, rel))
 				s.Edges = append(s.Edges, callEdges(rel, d, sameFile)...)
+				if drawsFigures {
+					figures.appendFigures(&s, rel, d, figureNS, magusNS, consts)
+				}
 			case *ast.ImportStmt:
 				if target, ok := resolveBuzzImport(d.Path, scanned); ok {
 					s.Edges = append(s.Edges, extractedEdge(fID, fileID(target), types.RelationImports, rel))

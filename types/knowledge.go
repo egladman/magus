@@ -140,6 +140,11 @@ const (
 	// doc line, keyed "marker:<rel path>:<line>". It is a declaration, so its edges carry
 	// ConfidenceDeclared. A begin/end pair folds into one node with a line range.
 	KindMarker = "marker"
+
+	// KindFigure is a diagram a Buzz figure\of call builds, keyed "figure:<id>" by its
+	// literal id. It is read from source, never rendered, so the graph build stays
+	// independent of the figure engine.
+	KindFigure = "figure"
 )
 
 // RelationID is a stable directed predicate in the knowledge graph. It is string-backed
@@ -171,6 +176,10 @@ const (
 	// reported rather than silently drifting.
 	RelationAnnotates RelationID = "annotates" // note->any known entity, from the notes store
 )
+
+// RelationDepicts links a figure to each directory or project it draws, from the literal
+// magus\dir calls in the function that builds it.
+const RelationDepicts RelationID = "depicts"
 
 // RelationCoChanges links two files changed in the same commits, from git history. It is
 // symmetric and stored once, with the lesser path as the source.
