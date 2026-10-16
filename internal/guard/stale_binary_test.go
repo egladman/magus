@@ -217,6 +217,38 @@ func TestStaleBinaryRemedyFollowsTheCaller(t *testing.T) {
 	}
 }
 
+// A worker whose placed ./magus was built ahead of its checkout fast-forwards its own branch
+// to that commit, which neither the stale binary nor lease-vcs refuses; any other way of
+// moving the branch stays denied, and the stored verdict names the fast-forward.
+func TestStaleBinaryLetsAWorkerFastForwardToItsBinary(t *testing.T) {
+	ctx, _ := fleetFixture(t, fixture.FleetLeases()[0])
+	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
+	root := ownCheckout(t, ctx, true)
+	declareGuardRule(t, root)
+	deps := unloadedDepsFor(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
+	judge := func(session, line string) types.GuardJudgment {
+		return Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: session, Lease: "lease-a"})
+	}
+
+	for i, line := range []string{"git merge --ff-only f1980cc5c", "git merge f1980cc5c3224cc9fca99c41a9f03415fd77db4b --ff-only"} {
+		v := judge("ff"+strconv.Itoa(i), line)
+		assert.NotEqual(t, decisionDeny, v.Decision, "%s: %s", line, v.Reason)
+	}
+	for i, line := range []string{
+		"git merge f1980cc5c",
+		"git merge --ff-only main",
+		"git reset --hard f1980cc5c",
+		"git -C ../sibling merge --ff-only f1980cc5c",
+		"git merge --ff-only f1980cc5c && git push",
+	} {
+		v := judge("other"+strconv.Itoa(i), line)
+		assert.Equal(t, decisionDeny, v.Decision, line)
+	}
+
+	stored := servedDeny(t, cacheDir, judge("touch", "touch notes.txt"), denyRuleStaleBinary, staleWorkerSay, placementNext(denyRuleStaleBinary, "lease-a"))
+	assert.Contains(t, stored, "\n"+workerFastForward+"\n")
+}
+
 // A read-only scout may still record its work while the binary is stale: `job exec`,
 // `job exit` and `buzz --record` pass for it, and stay denied for a lease that writes.
 func TestStaleBinaryLetsAReadOnlyScoutRecord(t *testing.T) {
@@ -606,6 +638,14 @@ func TestRecoveryLine(t *testing.T) {
 		{"git cherry-pick --abort && git push", "lease-a", false, false},
 		{"FOO=1 git cherry-pick --continue", "lease-a", false, false},
 		{"git worktree remove ../scratch", "lease-a", false, false},
+		{"git merge --ff-only f1980cc5c", "lease-a", false, true},
+		{"git merge --ff-only f1980cc5c", "lease-a", true, true},
+		{"git merge --ff-only f1980cc5c", "", true, false},
+		{"FOO=1 git merge --ff-only f1980cc5c", "lease-a", false, false},
+		{"git merge f1980cc5c", "lease-a", false, false},
+		{"git merge --no-ff f1980cc5c", "lease-a", false, false},
+		{"git merge --ff-only origin/main", "lease-a", false, false},
+		{"git merge --ff-only f1980cc5c && git push", "lease-a", false, false},
 		{"./magus run go-build . -s", "lease-a", true, true},
 		{"GOEXPERIMENT=jsonv2 go build -trimpath -o magus ./cmd/magus", "lease-a", true, true},
 		{workerPlacementRun, "lease-a", true, true},

@@ -16,6 +16,9 @@ import (
 // what it may run rather than vcsMutation's list of what nobody may: a verb neither list
 // names, a config alias included, is refused instead of slipping through.
 func workerVCSOp(c hint.Invocation) string {
+	if fastForward(c) {
+		return ""
+	}
 	if op := vcsMutation(c); op != "" {
 		return op
 	}
@@ -35,6 +38,37 @@ func workerVCSOp(c hint.Invocation) string {
 		return ""
 	}
 	return c.Name + " " + sub
+}
+
+// fastForward reports `git merge --ff-only <commit>`, the recovery of a worker whose placed
+// ./magus was built ahead of its checkout: it moves the branch the checkout is on forward to
+// a commit named by its id, and git refuses it when the branch has diverged or a change
+// nobody committed is in the way, so it rewrites and loses nothing. A branch name is refused,
+// since following one is how a worker drifts onto commits nobody handed it, and so is a git
+// option ahead of the verb, which can point the merge at another checkout.
+func fastForward(c hint.Invocation) bool {
+	if c.Name != "git" || len(c.Args) != 3 || c.Args[0] != "merge" {
+		return false
+	}
+	flag, commit := c.Args[1], c.Args[2]
+	if flag != "--ff-only" {
+		flag, commit = commit, flag
+	}
+	return flag == "--ff-only" && commitID(commit)
+}
+
+// commitID reports a full or abbreviated hexadecimal object name, as `magus version` prints a
+// build's commit.
+func commitID(s string) bool {
+	if len(s) < 7 || len(s) > 64 {
+		return false
+	}
+	for _, r := range s {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // addsCheckout reports a call that makes a second checkout of the repository by hand: `git

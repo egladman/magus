@@ -349,8 +349,9 @@ func scoutRecord(args []string) bool {
 // out of an interrupted cherry-pick, merge or rebase, or adds a worktree, since a tree left
 // mid-pick links no binary at all. Each stands alone on its line. builds is whether the
 // caller builds this checkout's binary: the root, or the checkout's integrator. Any other
-// leased worker's only binary fix is the placement of its base's: a worker building a
-// second is the thing the deny exists to prevent.
+// leased worker's binary fixes are the placement of its base's, and the fast-forward of its
+// branch to the commit its placed binary was built at (see fastForward): a worker building
+// a second is the thing the deny exists to prevent.
 func recoveryLine(command string, d Dialect, lease string, builds bool) bool {
 	call, ok := soleCall(command, d)
 	if !ok {
@@ -358,6 +359,9 @@ func recoveryLine(command string, d Dialect, lease string, builds bool) bool {
 	}
 	words := literalWords(call.Args)
 	if vcsRecoveryLine(words) && onlyEditorAssigns(call.Assigns) {
+		return true
+	}
+	if lease != "" && len(call.Assigns) == 0 && fastForward(hint.Invocation{Name: path.Base(words[0]), Args: words[1:]}) {
 		return true
 	}
 	placement := len(call.Assigns) == 0 && len(words) >= 3 && path.Base(words[0]) == "magus" && words[1] == "buzz" && words[2] == placementScript
@@ -482,6 +486,12 @@ func binaryRemedy(own, hasBinary bool, lease string, builds bool) binaryFix {
 		lease = ""
 	}
 	switch {
+	case lease != "" && own && hasBinary:
+		return binaryFix{
+			say:      "ask the main session to place a ./magus that loads this workspace",
+			why:      workerFastForward + "\n" + onePerBase,
+			placeFor: lease,
+		}
 	case lease != "" && own:
 		return binaryFix{
 			say:      "ask the main session to place a ./magus that loads this workspace",
@@ -515,6 +525,12 @@ const placementScript = "hack/dev/bootstrap-worktree.buzz"
 const onePerBase = "There is one binary per base commit: the checkout's integrator builds ./magus once, in the landing checkout, " +
 	"and " + placementScript + " copies it into a worker checkout whenever no Go build input differs. " +
 	"A build per worker is two Go compiles each, and a fan-out runs a dozen at once."
+
+// workerFastForward is the fix a leased worker runs itself when its placed ./magus was built
+// ahead of its checkout.
+const workerFastForward = "When ./magus was built at a commit ahead of this checkout, fast-forward this checkout's branch to it first, alone on its line: " +
+	"`git merge --ff-only <commit>`, with the commit `./magus version -o template='{{.commit}}'` prints. " +
+	"git refuses it when the branch has diverged from that commit, and then only a placed ./magus fixes this."
 
 // workerBuildVerdict is the verdict for a worker building magus. Its command is
 // placementNext, served apart from it.
