@@ -425,7 +425,7 @@ import (
 // does: a worker whose check finds the budget full commits, reports and stops.
 //
 // 141: magus-query says free text is ranked by BM25F, a partial match is labeled,
-// and each match says why it ranked.
+// and each match says why it ranked; magus-multi-agent fits 500 lines again.
 const SkillVersion = 141
 
 const skillLicense = "GPL-3.0-or-later"

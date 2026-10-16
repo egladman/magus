@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `141` |
 | `knowledge-schema-version` | `22` |
-| `skill-content` | `edb5b5162ae7` |
+| `skill-content` | `8f7a1c5c9ef0` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -156,8 +156,7 @@ tree. Skipping the declaration because nothing is forked is the same failure.
 
 ## Set one topology boundary
 
-Before spawning, state the topology: the model per job, and whether isolated
-worktrees are available.
+Before spawning, state the topology: the model per job, and whether isolated worktrees are available.
 
 - Fan-out and depth are not capped unless the workspace sets a cap. Spawn as many
   jobs, nested as deep, as the partition supports.
@@ -607,8 +606,7 @@ the edits land, and only then report the change done.
 
 ## Set one topology boundary
 
-Before spawning, state the topology: the model per job, and whether isolated
-worktrees are available.
+Before spawning, state the topology: the model per job, and whether isolated worktrees are available.
 
 - Fan-out and depth are not capped unless the workspace sets a cap. Spawn as many
   jobs, nested as deep, as the partition supports.

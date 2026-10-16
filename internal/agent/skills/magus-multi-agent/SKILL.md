@@ -132,8 +132,7 @@ the edits land, and only then report the change done{{end}}.
 
 ## Set one topology boundary
 
-Before spawning, state the topology: the model per job, and whether isolated
-worktrees are available.
+Before spawning, state the topology: the model per job, and whether isolated worktrees are available.
 
 - Fan-out and depth are not capped unless the workspace sets a cap. Spawn as many
   jobs, nested as deep, as the partition supports.
