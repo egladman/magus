@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
@@ -198,35 +199,63 @@ func TestSpawnDuplicateRefusesASecondWorkerForAJob(t *testing.T) {
 	}
 }
 
-// A worker that finds the build budget full reports to its orchestrator and stops; it
-// never waits for a seat, whichever tool would run the wait.
+// A worker waits for the build budget only in the call that spends the seat: a wait piped
+// straight into its run reserves the seat for it, and every other wait holds nothing,
+// whichever tool would run it.
 func TestSleepPollRefusesAWorkersWaitForTheBuildBudget(t *testing.T) {
 	worker := figuresLease()
 	worker.Parent = "figures"
 	ctx, _ := fleetFixture(t, worker)
 	waits := []string{
-		"./magus status --wait | ./magus run diagrams_generate docs",
 		"./magus status -wait",
+		"./magus status --wait; ./magus run diagrams_generate docs",
+		"./magus status --watch=15s | ./magus run diagrams_generate docs",
 		"./magus status --watch=15s",
 		"./magus status -W 15s",
 		"sleep 60; ./magus run diagrams_generate docs",
+		"sleep 60; ./magus status --wait | ./magus run diagrams_generate docs",
 	}
 	for i, line := range waits {
 		bash := Judge(ctx, Dependencies{}, Request{Input: line, Lease: worker.ID})
 		assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(bash), "Bash: %s", line)
 		if i == 0 {
-			assert.Contains(t, bash.Reason, "report to your orchestrator", "a repeat is shortened to the rule's name")
+			assert.Contains(t, bash.Reason, "only in the call that spends the seat", "a repeat is shortened to the rule's name")
 		}
 		watcher := Judge(ctx, Dependencies{}, Request{Input: monitorCall(t, "", line), Lease: worker.ID, Host: "claude-code"})
 		assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(watcher), "Monitor: %s", line)
 	}
-	watched := Judge(ctx, Dependencies{}, Request{Input: monitorCall(t, "", "./magus status"), Lease: worker.ID, Host: "claude-code"})
-	assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(watched), "a watcher repeats even a one-shot read")
-
-	for _, line := range []string{"./magus status", "./magus run diagrams_generate docs", "sleep 2; ./magus run diagrams_generate docs"} {
-		v := Judge(ctx, Dependencies{}, Request{Input: line, Lease: worker.ID})
-		assert.NotEqual(t, string(denyRuleSleepPoll), v.Rule, "a worker reads the pool once and runs its check: %s", line)
+	for _, line := range []string{"./magus status", "./magus status --wait | ./magus run diagrams_generate docs"} {
+		watched := Judge(ctx, Dependencies{}, Request{Input: monitorCall(t, "", line), Lease: worker.ID, Host: "claude-code"})
+		assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(watched), "a watcher repeats the call: %s", line)
 	}
+
+	for _, line := range []string{
+		"./magus status",
+		"./magus run diagrams_generate docs",
+		"sleep 2; ./magus run diagrams_generate docs",
+		"./magus status --wait | ./magus run diagrams_generate docs",
+	} {
+		v := Judge(ctx, Dependencies{}, Request{Input: line, Lease: worker.ID})
+		assert.NotEqual(t, string(denyRuleSleepPoll), v.Rule, "a worker reads the pool once, or waits in its check's own call: %s", line)
+	}
+}
+
+// TestWorkerRetryIsSentToThePipedWait: inside the minute after a refusal a worker's bare
+// rerun of its check is refused and named the piped wait, which it may then run.
+func TestWorkerRetryIsSentToThePipedWait(t *testing.T) {
+	worker := figuresLease()
+	worker.Parent = "figures"
+	ctx, _ := fleetFixture(t, worker)
+	runsDir := filepath.Join(ctx.Value(locationKey{}).(location).cacheDir, cache.RunsDir)
+	require.NoError(t, os.MkdirAll(runsDir, 0o755))
+	writeRefusalLog(t, runsDir, "invrefused", time.Now().Add(-10*time.Second), true, "run", "diagrams_generate", "docs")
+
+	bare := Judge(ctx, Dependencies{}, Request{Input: "./magus run diagrams_generate docs", Lease: worker.ID})
+	assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(bare))
+	assert.Contains(t, bare.Reason, "status --wait | ")
+
+	piped := Judge(ctx, Dependencies{}, Request{Input: "./magus status --wait | ./magus run diagrams_generate docs", Lease: worker.ID})
+	assert.NotEqual(t, string(denyRuleSleepPoll), piped.Rule, piped.Reason)
 }
 
 // The orchestrator is who waits for the build budget, so the same lines pass for it.
@@ -347,11 +376,30 @@ func TestDenyRefusedRetry(t *testing.T) {
 		t.Parallel()
 		assert.False(t, denyRefusedRetry(at(t, 10*time.Second, false), Dependencies{}, "", retry).refused())
 	})
+	t.Run("the same command after a later run that got its seat", func(t *testing.T) {
+		t.Parallel()
+		ctx := at(t, 50*time.Second, true)
+		runsDir := workspaceRunsDir(ctx.Value(locationKey{}).(location).cacheDir)
+		writeRefusalLog(t, runsDir, "invpassed", time.Now().Add(-20*time.Second), false, refusedArgv...)
+		assert.False(t, denyRefusedRetry(ctx, Dependencies{}, "", retry).refused(), "the newest run of the command passed")
+	})
 	t.Run("the piped wait", func(t *testing.T) {
 		t.Parallel()
 		ctx := at(t, 10*time.Second, true)
 		assert.False(t, denyRefusedRetry(ctx, Dependencies{}, "", "./magus status --wait | "+retry).refused())
-		assert.False(t, denyRefusedRetry(ctx, Dependencies{}, "", "./magus status -W | "+retry).refused())
+		assert.False(t, denyRefusedRetry(ctx, Dependencies{}, "", "./magus status --wait 2>/dev/null | timeout 600 "+retry).refused())
+	})
+	t.Run("a wait that feeds no run", func(t *testing.T) {
+		t.Parallel()
+		ctx := at(t, 10*time.Second, true)
+		for _, line := range []string{
+			retry + "; ./magus status --wait",
+			"./magus status --wait; " + retry,
+			"./magus status -W 15s | " + retry,
+			"./magus status --wait | ./magus run lint . && " + retry,
+		} {
+			assert.True(t, denyRefusedRetry(ctx, Dependencies{}, "", line).refused(), line)
+		}
 	})
 	t.Run("no run log", func(t *testing.T) {
 		t.Parallel()

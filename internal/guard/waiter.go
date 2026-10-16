@@ -56,54 +56,128 @@ var (
 	denySleepTimerWhy = "The work's own backgrounded call is the waiter: its notice arrives with the result, where a timer's says only that time passed. " +
 		"A timer wakes you on a guess, every timer still pending wakes you again after the work is done, and a foreground sleep past the tool timeout is moved to the background and becomes one."
 
-	denySlotWait = "a worker never waits for the build budget: when it is full, commit what you have, report to your orchestrator that your check found no seat (`" +
-		hint.Status.String() + "` reads the pool once), and stop; the orchestrator waits and resumes you."
-	denySlotWaitWhy = "The orchestrator sees every worker and the pool, so it waits once for all of them; workers waiting each race for the same seat, and `status --wait` " +
-		"reporting a seat free does not reserve it, so the run after it can still be refused with MGS3009. A worker looping on that refusal spends turns no one who can free a seat sees."
+	denySlotWait = "a worker waits for the build budget only in the call that spends the seat: `" + hint.Status.With("--wait") + " | " + hint.Run.String() +
+		" <your check>`. A wait on its own, a watch, or a sleep before a run reserves nothing."
+	denySlotWaitWhy = "`status --wait` piped straight into a magus run reserves the seat it sized for that run until the run claims it, so no other worker can take it in between. " +
+		"A wait that feeds no run holds nothing, so the run after it can still be refused with MGS3009, and a worker looping on reads and refusals spends turns no one who can free a seat sees."
 
-	budgetFullWhy = "Every worker's check needs a seat in the build budget, and a worker that finds none reports and stops instead of waiting, so spawning into a full budget spends a worker's turns on a report. " +
+	budgetFullWhy = "Every worker's check needs a seat in the build budget, and a worker that finds none waits in its check's call until one frees, so spawning into a full budget spends a worker's time waiting. " +
 		"The budget is the machine's, shared by every worktree, so it frees only as the runs holding it end."
 )
 
-// slotWaitLine reports a line that waits for room in the build budget: `magus status
-// --wait` or `--watch`, a status read beside a sleep or inside a watcher, or a magus run
-// after a sleep of at least sleepPollFloor, which retries a run the budget refused.
+// slotWaitLine reports a line that waits for room in the build budget without reserving
+// it: `magus status --wait` that pipes into no magus run, `--watch`, a status read beside
+// a sleep or inside a watcher, or a magus run after a sleep of at least sleepPollFloor,
+// which retries a run the budget refused. `status --wait | magus run ...` alone is not
+// one: the wait holds the seat for the run it feeds.
 func slotWaitLine(command string, d Dialect, watcher bool) bool {
-	cmds, ok := ParseCommandsDialect(command, d)
-	if !ok {
+	f, err := parseFile(command, d)
+	if err != nil {
 		return false
 	}
 	var slept time.Duration
 	napped := false
-	for _, c := range cmds {
+	eachCall(f, d, func(_ *syntax.CallExpr, c hint.Invocation) {
 		if dur, ok := sleepDuration(c); ok {
 			slept, napped = max(slept, dur), true
 		}
-	}
-	return slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
+	})
+	paired := seatWaits(f, d)
+	waits := false
+	eachCall(f, d, func(call *syntax.CallExpr, c hint.Invocation) {
 		if !isMagusInvocation(c) {
-			return false
+			return
 		}
 		words := magusSubcommandWords(c.Args)
 		if len(words) == 0 {
-			return false
+			return
 		}
 		switch words[0] {
 		case "status":
-			return watcher || napped || waitsOnBudget(c.Args)
+			waits = waits || watcher || napped || !paired[call] && statusFlag(c.Args, "wait", "watch", "W")
 		case "run", "affected":
-			return slept >= sleepPollFloor
+			waits = waits || slept >= sleepPollFloor
 		}
-		return false
+	})
+	return waits
+}
+
+// statusFlag reports a status argv carrying any of names, in any spelling Go's flag
+// package reads.
+func statusFlag(args []string, names ...string) bool {
+	return slices.ContainsFunc(args, func(a string) bool {
+		name, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		return strings.HasPrefix(a, "-") && slices.Contains(names, name)
 	})
 }
 
-// waitsOnBudget reports a status argv that blocks on the pool: --wait, or --watch in any
-// spelling Go's flag package reads.
-func waitsOnBudget(args []string) bool {
-	return slices.ContainsFunc(args, func(a string) bool {
-		name, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "=")
-		return strings.HasPrefix(a, "-") && (name == "wait" || name == "watch" || name == "W")
+// seatWaits is each `magus status --wait` on a parsed line whose stdout pipes straight
+// into a magus run or affected, and each run it feeds: the wait reserves that run's seat
+// until the run claims it. A watch reserves nothing, and neither does a wait whose output
+// goes anywhere else.
+func seatWaits(f *syntax.File, d Dialect) map[*syntax.CallExpr]bool {
+	paired := map[*syntax.CallExpr]bool{}
+	syntax.Walk(f, func(n syntax.Node) bool {
+		pipe, ok := n.(*syntax.BinaryCmd)
+		if !ok || (pipe.Op != syntax.Pipe && pipe.Op != syntax.PipeAll) {
+			return true
+		}
+		wait, run := pipeEnd(pipe.X, true), pipeEnd(pipe.Y, false)
+		if wait == nil || run == nil {
+			return true
+		}
+		if magusCallIs(wait, d, func(sub string, args []string) bool { return sub == "status" && statusFlag(args, "wait") }) &&
+			magusCallIs(run, d, func(sub string, _ []string) bool { return sub == "run" || sub == "affected" }) {
+			paired[wait], paired[run] = true, true
+		}
+		return true
+	})
+	return paired
+}
+
+// pipeEnd is the call at one end of a pipe's side: its last stage's when last, else its
+// first stage's. nil when that stage is not a plain call.
+func pipeEnd(s *syntax.Stmt, last bool) *syntax.CallExpr {
+	for s != nil {
+		switch cmd := s.Cmd.(type) {
+		case *syntax.CallExpr:
+			return cmd
+		case *syntax.BinaryCmd:
+			if cmd.Op != syntax.Pipe && cmd.Op != syntax.PipeAll {
+				return nil
+			}
+			s = cmd.X
+			if last {
+				s = cmd.Y
+			}
+		default:
+			return nil
+		}
+	}
+	return nil
+}
+
+// magusCallIs reports whether call, its wrappers peeled, is one magus invocation whose
+// subcommand and argv is answers true for.
+func magusCallIs(call *syntax.CallExpr, d Dialect, is func(sub string, args []string) bool) bool {
+	cs := peelWrappers(literalWords(call.Args), d)
+	if len(cs) != 1 || !isMagusInvocation(cs[0]) {
+		return false
+	}
+	words := magusSubcommandWords(cs[0].Args)
+	return len(words) > 0 && is(words[0], cs[0].Args)
+}
+
+// eachCall calls fn with every command a parsed line runs, wrappers peeled, beside the
+// call it was written as.
+func eachCall(f *syntax.File, d Dialect, fn func(*syntax.CallExpr, hint.Invocation)) {
+	syntax.Walk(f, func(n syntax.Node) bool {
+		if call, ok := n.(*syntax.CallExpr); ok {
+			for _, c := range peelWrappers(literalWords(call.Args), d) {
+				fn(call, c)
+			}
+		}
+		return true
 	})
 }
 
@@ -123,12 +197,14 @@ type refusedRun struct {
 }
 
 // denyRefusedRetry refuses a magus run that repeats, argv for argv, one this checkout's run
-// log recorded refused with MGS3009 inside refusedRetryWindow. Nothing freed a seat on the
-// caller's behalf in between, so the rerun is the poll again with the caller's turn as its
-// loop. A line that waits for the budget first (`magus status --wait | magus run ...`)
-// passes, as does any line that runs no target. The run log is read only for a line that
-// runs one, and only logs written inside the window are opened.
-func denyRefusedRetry(ctx context.Context, deps Dependencies, actingLease, command string) denial {
+// log recorded refused with MGS3009 inside refusedRetryWindow, when that refusal is still
+// the newest run of the command. Nothing freed a seat on the caller's behalf in between,
+// so the rerun is the poll again with the caller's turn as its loop. A run fed by a wait
+// (`magus status --wait | magus run ...`) passes, as does any line that runs no target.
+// The run log is read only for a line that runs one, and only logs written inside the
+// window are opened. Workers and orchestrators are told the same pipe: the wait holds the
+// seat for the run it feeds.
+func denyRefusedRetry(ctx context.Context, deps Dependencies, _, command string) denial {
 	argvs := unwaitedRuns(command)
 	if len(argvs) == 0 {
 		return denial{}
@@ -139,66 +215,100 @@ func denyRefusedRetry(ctx context.Context, deps Dependencies, actingLease, comma
 		return denial{}
 	}
 	run := strings.Join(append([]string{hint.BinaryName()}, quoteArgs(r.argv)...), " ")
-	ago := now.Sub(r.at).Round(time.Second)
-	if actingLease != "" {
-		if me, leased := actingLiveLease(ctx, deps, actingLease); leased && workerRole(me, deps.caller) != "" {
-			return denial{
-				Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago; %s", run, types.MachineBudgetExhausted, ago, denySlotWait),
-				Why: denyRefusedRetryWhy + " " + denySlotWaitWhy,
-			}
-		}
-	}
 	return denial{
 		Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago; wait for a seat in the same call: `%s | %s`.",
-			run, types.MachineBudgetExhausted, ago, hint.Status.With("--wait"), run),
-		Why: denyRefusedRetryWhy + " `status --wait` sizes the piped run's claim and exits once the budget can seat it, so the run starts as soon as a seat frees instead of on the caller's next turn.",
+			run, types.MachineBudgetExhausted, now.Sub(r.at).Round(time.Second), hint.Status.With("--wait"), run),
+		Why: denyRefusedRetryWhy + " `status --wait` sizes the piped run's claim, waits until the budget can seat it and reserves that seat for the run, so the run starts as soon as a seat frees instead of on the caller's next turn, and no one takes the seat in between.",
 	}
 }
 
 var denyRefusedRetryWhy = "A refusal frees no seat, and the same command run again inside a minute meets the same full budget: one checkout was once refused 63 times in 12 minutes, each retry a turn spent on a look."
 
-// unwaitedRuns is the argv of each magus run or affected on a line that does not wait for
-// the build budget first, nil for a line that waits or runs neither.
+// unwaitedRuns is the argv of each magus run or affected on a line that no `magus status
+// --wait` pipes straight into; nil for a line that runs neither.
 func unwaitedRuns(command string) [][]string {
-	cmds, ok := ParseCommands(command)
-	if !ok {
+	f, err := parseFile(command, DialectBash)
+	if err != nil {
 		return nil
 	}
+	paired := seatWaits(f, DialectBash)
 	var argvs [][]string
-	for _, c := range cmds {
-		if !isMagusInvocation(c) {
-			continue
+	eachCall(f, DialectBash, func(call *syntax.CallExpr, c hint.Invocation) {
+		if paired[call] || !isMagusInvocation(c) {
+			return
 		}
-		words := magusSubcommandWords(c.Args)
-		if len(words) == 0 {
-			continue
-		}
-		switch words[0] {
-		case "status":
-			if waitsOnBudget(c.Args) {
-				return nil
-			}
-		case "run", "affected":
+		if words := magusSubcommandWords(c.Args); len(words) > 0 && (words[0] == "run" || words[0] == "affected") {
 			argvs = append(argvs, c.Args)
 		}
-	}
+	})
 	return argvs
 }
 
+// commandAttempt is the newest run of one argv in the window, and its refusal if it was
+// refused.
+type commandAttempt struct {
+	started time.Time
+	refusal refusedRun
+	refused bool
+}
+
 // recentRefusal is the newest MGS3009 refusal in runsDir of any of argvs inside
-// refusedRetryWindow of now. A log last written before the window cannot hold one, so it
-// is skipped unopened.
+// refusedRetryWindow of now, counting a refusal only while no later run of the same argv
+// started: a run that passed, or is still running, after it got its seat.
 func recentRefusal(runsDir string, argvs [][]string, now time.Time) (refusedRun, bool) {
+	cutoff := now.Add(-refusedRetryWindow)
+	latest := map[string]commandAttempt{}
+	recentRunLogs(runsDir, cutoff, func(started journal.Event, _ time.Time, rest *bufio.Reader) {
+		if !slices.ContainsFunc(argvs, func(a []string) bool { return slices.Equal(a, started.Command.Arguments) }) {
+			return
+		}
+		key := strings.Join(started.Command.Arguments, "\x00")
+		at := time.UnixMilli(started.Ts)
+		if prev, ok := latest[key]; ok && !at.After(prev.started) {
+			return
+		}
+		refusedAt, refused := readRefusal(rest)
+		latest[key] = commandAttempt{started: at, refusal: refusedRun{argv: started.Command.Arguments, at: refusedAt}, refused: refused}
+	})
+	var newest refusedRun
+	found := false
+	for _, a := range latest {
+		if a.refused && !a.refusal.at.Before(cutoff) && (!found || a.refusal.at.After(newest.at)) {
+			newest, found = a.refusal, true
+		}
+	}
+	return newest, found
+}
+
+// readRefusal reads the rest of one run log for a result carrying MGS3009, and when it
+// was recorded.
+func readRefusal(rest *bufio.Reader) (time.Time, bool) {
+	for {
+		line, err := rest.ReadBytes('\n')
+		var ev journal.Event
+		if bytes.Contains(line, refusalCode) && json.Unmarshal(line, &ev) == nil &&
+			ev.Kind == journal.KindResult && ev.DiagnosticCode == string(types.MachineBudgetExhausted) {
+			return time.UnixMilli(ev.Ts), true
+		}
+		if err != nil {
+			return time.Time{}, false
+		}
+	}
+}
+
+// recentRunLogs calls read for each run log in runsDir last written at or after cutoff,
+// with its started event, when it was last written, and the log past that first line. A
+// log written before cutoff is skipped unopened, and one that does not open on a started
+// event carrying its command is skipped unread, so a directory of thousands stays cheap.
+// A runsDir that is "" or unreadable reads nothing.
+func recentRunLogs(runsDir string, cutoff time.Time, read func(started journal.Event, modified time.Time, rest *bufio.Reader)) {
 	if runsDir == "" {
-		return refusedRun{}, false
+		return
 	}
 	entries, err := os.ReadDir(runsDir)
 	if err != nil {
-		return refusedRun{}, false
+		return
 	}
-	cutoff := now.Add(-refusedRetryWindow)
-	var newest refusedRun
-	found := false
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
@@ -207,43 +317,24 @@ func recentRefusal(runsDir string, argvs [][]string, now time.Time) (refusedRun,
 		if err != nil || info.ModTime().Before(cutoff) {
 			continue
 		}
-		r, ok := readRefusal(filepath.Join(runsDir, e.Name()), argvs)
-		if ok && !r.at.Before(cutoff) && (!found || r.at.After(newest.at)) {
-			newest, found = r, true
-		}
+		readRunLog(filepath.Join(runsDir, e.Name()), info.ModTime(), read)
 	}
-	return newest, found
 }
 
-// readRefusal reads one run log: its started event must carry one of argvs, and a result
-// line must carry MGS3009. The rest of a log for another command is never read.
-func readRefusal(path string, argvs [][]string) (refusedRun, bool) {
+// readRunLog is recentRunLogs for one log at path.
+func readRunLog(path string, modified time.Time, read func(started journal.Event, modified time.Time, rest *bufio.Reader)) {
 	f, err := os.Open(path)
 	if err != nil {
-		return refusedRun{}, false
+		return
 	}
 	defer f.Close()
 	rd := bufio.NewReader(f)
-	var argv []string
-	for {
-		line, err := rd.ReadBytes('\n')
-		var ev journal.Event
-		switch {
-		case len(line) == 0:
-		case argv == nil:
-			if json.Unmarshal(line, &ev) != nil || ev.Kind != journal.KindStarted || ev.Command == nil ||
-				!slices.ContainsFunc(argvs, func(a []string) bool { return slices.Equal(a, ev.Command.Arguments) }) {
-				return refusedRun{}, false
-			}
-			argv = ev.Command.Arguments
-		case bytes.Contains(line, refusalCode) && json.Unmarshal(line, &ev) == nil &&
-			ev.Kind == journal.KindResult && ev.DiagnosticCode == string(types.MachineBudgetExhausted):
-			return refusedRun{argv: argv, at: time.UnixMilli(ev.Ts)}, true
-		}
-		if err != nil {
-			return refusedRun{}, false
-		}
+	first, _ := rd.ReadBytes('\n')
+	var started journal.Event
+	if json.Unmarshal(first, &started) != nil || started.Kind != journal.KindStarted || started.Command == nil {
+		return
 	}
+	read(started, modified, rd)
 }
 
 // quoteArgs quotes each argument for a shell, so a printed command runs as it was recorded.
