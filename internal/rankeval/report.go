@@ -41,16 +41,18 @@ type Metrics struct {
 	MeanBytes   float64       `json:"mean_bytes"`
 }
 
-// Report is Metrics overall and per slice, so a gain on one shape or split cannot hide
-// a loss on another.
+// Report is Metrics overall and per slice, so a gain on one shape, split or verb cannot
+// hide a loss on another. VerbSplits is keyed by verb, then split.
 type Report struct {
-	Overall Metrics                `json:"overall"`
-	Shapes  map[QueryShape]Metrics `json:"shapes"`
-	Splits  map[string]Metrics     `json:"splits"`
+	Overall    Metrics                       `json:"overall"`
+	Shapes     map[QueryShape]Metrics        `json:"shapes"`
+	Splits     map[string]Metrics            `json:"splits"`
+	Verbs      map[string]Metrics            `json:"verbs"`
+	VerbSplits map[string]map[string]Metrics `json:"verb_splits"`
 }
 
 // Delta is one metric of one slice that differs between two reports. Slice is "all",
-// "shape=<shape>" or "split=<split>".
+// "shape=<shape>", "split=<split>", "verb=<verb>" or "verb=<verb>,split=<split>".
 type Delta struct {
 	Metric string  `json:"metric"`
 	Slice  string  `json:"slice"`
@@ -62,20 +64,39 @@ type Delta struct {
 func Summarize(runs []Run) Report {
 	byShape := map[QueryShape][]Run{}
 	bySplit := map[string][]Run{}
+	byVerb := map[string][]Run{}
+	byVerbSplit := map[string]map[string][]Run{}
 	for _, r := range runs {
-		byShape[r.Judgment.Shape] = append(byShape[r.Judgment.Shape], r)
-		bySplit[r.Judgment.Split] = append(bySplit[r.Judgment.Split], r)
+		j := r.Judgment
+		byShape[j.Shape] = append(byShape[j.Shape], r)
+		bySplit[j.Split] = append(bySplit[j.Split], r)
+		byVerb[j.Verb] = append(byVerb[j.Verb], r)
+		if byVerbSplit[j.Verb] == nil {
+			byVerbSplit[j.Verb] = map[string][]Run{}
+		}
+		byVerbSplit[j.Verb][j.Split] = append(byVerbSplit[j.Verb][j.Split], r)
 	}
 	rep := Report{
-		Overall: summarize(runs),
-		Shapes:  make(map[QueryShape]Metrics, len(byShape)),
-		Splits:  make(map[string]Metrics, len(bySplit)),
+		Overall:    summarize(runs),
+		Shapes:     make(map[QueryShape]Metrics, len(byShape)),
+		Splits:     make(map[string]Metrics, len(bySplit)),
+		Verbs:      make(map[string]Metrics, len(byVerb)),
+		VerbSplits: make(map[string]map[string]Metrics, len(byVerbSplit)),
 	}
 	for shape, rs := range byShape {
 		rep.Shapes[shape] = summarize(rs)
 	}
 	for split, rs := range bySplit {
 		rep.Splits[split] = summarize(rs)
+	}
+	for verb, rs := range byVerb {
+		rep.Verbs[verb] = summarize(rs)
+	}
+	for verb, splits := range byVerbSplit {
+		rep.VerbSplits[verb] = make(map[string]Metrics, len(splits))
+		for split, rs := range splits {
+			rep.VerbSplits[verb][split] = summarize(rs)
+		}
 	}
 	return rep
 }
@@ -161,10 +182,19 @@ func (r Report) slices() map[string]Metrics {
 	for split, m := range r.Splits {
 		out["split="+split] = m
 	}
+	for verb, m := range r.Verbs {
+		out["verb="+verb] = m
+	}
+	for verb, splits := range r.VerbSplits {
+		for split, m := range splits {
+			out["verb="+verb+",split="+split] = m
+		}
+	}
 	return out
 }
 
-// sliceOrder puts "all" first, then shapes, then splits, each sorted by name.
+// sliceOrder puts "all" first, then shapes, splits, verbs and each verb's splits, each
+// sorted by name.
 func sliceOrder(names []string) []string {
 	slices.SortFunc(names, func(a, b string) int {
 		return cmp.Or(cmp.Compare(sliceRank(a), sliceRank(b)), cmp.Compare(a, b))
@@ -178,8 +208,12 @@ func sliceRank(name string) int {
 		return 0
 	case strings.HasPrefix(name, "shape="):
 		return 1
-	default:
+	case strings.HasPrefix(name, "split="):
 		return 2
+	case strings.Contains(name, ",split="):
+		return 4
+	default:
+		return 3
 	}
 }
 

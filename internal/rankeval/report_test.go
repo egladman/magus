@@ -25,6 +25,7 @@ func sampleRuns() []Run {
 	r2 := run("r2", ShapeProse, "dev", map[string]int{"b": 1}, "x", "b")
 	r2.Bytes, r2.Latency = 200, 30*time.Millisecond
 	r3 := run("r3", ShapeProse, "holdout", map[string]int{"c": 2})
+	r3.Judgment.Verb = "refs"
 	r3.Latency, r3.Unknown, r3.Dropped = 20*time.Millisecond, true, 1
 	r4 := run("r4", ShapePath, "holdout", map[string]int{}, "y")
 	r4.Latency, r4.Dropped = 5*time.Millisecond, 2
@@ -74,6 +75,16 @@ func TestSummarizeSlices(t *testing.T) {
 		LatencyP50:  20 * time.Millisecond,
 		LatencyP95:  20 * time.Millisecond,
 	}, holdout)
+
+	require.Len(t, rep.Verbs, 2)
+	assert.Equal(t, 2, rep.Verbs["query"].Queries)
+	assert.Equal(t, 1, rep.Verbs["query"].Unscorable)
+	assert.Equal(t, 1, rep.Verbs["refs"].Queries)
+	require.Len(t, rep.VerbSplits["query"], 2)
+	assert.Equal(t, dev, rep.VerbSplits["query"]["dev"], "every dev run is a query")
+	assert.Equal(t, Metrics{Unscorable: 1, DroppedGold: 2}, rep.VerbSplits["query"]["holdout"])
+	assert.Equal(t, holdout.MRR, rep.VerbSplits["refs"]["holdout"].MRR)
+	assert.NotContains(t, rep.VerbSplits["refs"], "dev")
 }
 
 func TestSummarizeEmpty(t *testing.T) {
@@ -81,6 +92,8 @@ func TestSummarizeEmpty(t *testing.T) {
 	assert.Equal(t, Metrics{}, rep.Overall)
 	assert.Empty(t, rep.Shapes)
 	assert.Empty(t, rep.Splits)
+	assert.Empty(t, rep.Verbs)
+	assert.Empty(t, rep.VerbSplits)
 }
 
 func TestSummarizeTextOrdersSlices(t *testing.T) {
@@ -89,7 +102,10 @@ func TestSummarizeTextOrdersSlices(t *testing.T) {
 	for _, line := range strings.Split(strings.TrimSpace(text), "\n") {
 		first = append(first, strings.Fields(line)[0])
 	}
-	assert.Equal(t, []string{"slice", "all", "shape=identifier", "shape=path", "shape=prose", "split=dev", "split=holdout"}, first)
+	assert.Equal(t, []string{
+		"slice", "all", "shape=identifier", "shape=path", "shape=prose", "split=dev", "split=holdout",
+		"verb=query", "verb=refs", "verb=query,split=dev", "verb=query,split=holdout", "verb=refs,split=holdout",
+	}, first)
 	assert.Contains(t, text, "0.500", "overall MRR")
 }
 
@@ -117,6 +133,10 @@ func TestCompareListsChangedMetrics(t *testing.T) {
 		{Metric: "ndcg@10", Slice: "shape=prose", Base: 1 / math.Log2(3) / 2, Now: 0.5},
 		{Metric: "mrr", Slice: "split=dev", Base: 0.75, Now: 1},
 		{Metric: "ndcg@10", Slice: "split=dev", Base: (1 + 1/math.Log2(3)) / 2, Now: 1},
+		{Metric: "mrr", Slice: "verb=query", Base: 0.75, Now: 1},
+		{Metric: "ndcg@10", Slice: "verb=query", Base: (1 + 1/math.Log2(3)) / 2, Now: 1},
+		{Metric: "mrr", Slice: "verb=query,split=dev", Base: 0.75, Now: 1},
+		{Metric: "ndcg@10", Slice: "verb=query,split=dev", Base: (1 + 1/math.Log2(3)) / 2, Now: 1},
 	}, Compare(base, now))
 }
 
@@ -126,4 +146,5 @@ func TestCompareSliceInOneReport(t *testing.T) {
 	assert.Contains(t, deltas, Delta{Metric: "queries", Slice: "shape=identifier", Base: 0, Now: 1})
 	assert.Contains(t, deltas, Delta{Metric: "queries", Slice: "split=dev", Base: 0, Now: 1})
 	assert.Contains(t, deltas, Delta{Metric: "queries", Slice: "all", Base: 0, Now: 1})
+	assert.Contains(t, deltas, Delta{Metric: "queries", Slice: "verb=query,split=dev", Base: 0, Now: 1})
 }

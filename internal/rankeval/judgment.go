@@ -68,6 +68,20 @@ func ReadJudgments(r io.Reader) ([]Judgment, error) {
 	return out, nil
 }
 
+// Resolved returns j keeping only the gold ids known reports, and how many it dropped:
+// a judgment harvested from an older tree can name a node the current graph lacks.
+func (j Judgment) Resolved(known func(id string) bool) (Judgment, int) {
+	gold := make(map[string]int, len(j.Gold))
+	for id, grade := range j.Gold {
+		if known(id) {
+			gold[id] = grade
+		}
+	}
+	dropped := len(j.Gold) - len(gold)
+	j.Gold = gold
+	return j, dropped
+}
+
 func (j Judgment) validate() error {
 	switch {
 	case j.ID == "":

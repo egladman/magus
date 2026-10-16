@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -21,6 +23,8 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rankeval"
 	"github.com/egladman/magus/internal/workspace"
@@ -47,24 +51,30 @@ func TestRetrievalEval(t *testing.T) {
 	t.Cleanup(func() { _ = m.Close() })
 	ctx = withMagus(ctx, m)
 
-	g, err := loadWorkspaceGraph(ctx, m, cfg, false, false, false)
+	r := replayer{root: root, m: m, cfg: cfg, next: newNextGate(root), coverage: memoCoverage(ctx, m, cfg)}
+	r.domain, err = loadWorkspaceGraph(ctx, m, cfg, false, false, false)
 	require.NoError(t, err)
-	known := make(map[string]string)
-	for _, n := range g.Nodes() {
-		known[n.ID] = n.Source
+	r.symbols, err = loadWorkspaceGraph(ctx, m, cfg, false, false, true)
+	require.NoError(t, err)
+	r.known = make(map[string]string)
+	for _, n := range r.domain.Nodes() {
+		r.known[n.ID] = n.Source
 	}
 
-	runs := make([]rankeval.Run, 0, len(judgments))
+	workers := runtime.GOMAXPROCS(0)
+	start := time.Now()
+	runs, err := rankeval.Replay(ctx, judgments, workers, r.replay)
+	require.NoError(t, err)
+	elapsed := time.Since(start)
 	dropped := 0
-	for _, j := range judgments {
-		run := replayJudgment(t, ctx, root, m, cfg, j, known)
+	for _, run := range runs {
 		dropped += run.Dropped
-		runs = append(runs, run)
 	}
 
 	report := rankeval.Summarize(runs)
 	fmt.Print(report.Text())
 	fmt.Printf("dropped gold: %d\n", dropped)
+	fmt.Printf("replayed %d judgments in %s on %d workers\n", len(runs), elapsed.Round(time.Millisecond), workers)
 	printBaselineDeltas(t, filepath.Join(root, "testdata", "retrieval", "baseline.json"), report)
 	if dest := os.Getenv("MAGUS_RETRIEVAL_EVAL_BASELINE"); dest != "" {
 		writeRetrievalBaseline(t, root, dest, report)
@@ -84,33 +94,45 @@ func readRetrievalJudgments(t *testing.T, file string) []rankeval.Judgment {
 	return judgments
 }
 
-// replayJudgment drops j's gold ids that known (the default graph's node ids) no longer
-// holds, then asks j's verb j's query through the helpers the CLI verb calls.
-func replayJudgment(t *testing.T, ctx context.Context, root string, m *magus.Magus, cfg config.Config, j rankeval.Judgment, known map[string]string) rankeval.Run {
-	t.Helper()
-	var run rankeval.Run
-	gold := make(map[string]int, len(j.Gold))
-	for id, grade := range j.Gold {
-		if _, ok := known[id]; ok {
-			gold[id] = grade
-		} else {
-			run.Dropped++
-		}
-	}
-	j.Gold = gold
-	run.Judgment = j
+// replayer answers judgments from two graphs loaded once: domain, the default graph,
+// and symbols, the default graph with every symbol shard merged, which is what
+// searchGraph, explainNode and loadRefsGraph load per call for a read that seeds the
+// symbol layer. coverage measures the symbol indexes once rather than per read, which
+// walks the tree. known maps each default graph node id to its Source. Safe for
+// concurrent use: a knowledge.Graph is safe for concurrent reads.
+type replayer struct {
+	root     string
+	m        *magus.Magus
+	cfg      config.Config
+	next     nextGate
+	coverage coverageFunc
+	domain   *knowledge.Graph
+	symbols  *knowledge.Graph
+	known    map[string]string
+}
+
+// replay drops j's gold ids that r.known no longer holds, asks j's verb j's query
+// through the helpers the CLI verb calls, and renders the answer as the verb prints it
+// in text form to count its bytes. Latency covers the answer, not the render.
+func (r replayer) replay(ctx context.Context, j rankeval.Judgment) (rankeval.Run, error) {
+	j, dropped := j.Resolved(func(id string) bool {
+		_, ok := r.known[id]
+		return ok
+	})
+	run := rankeval.Run{Judgment: j, Dropped: dropped}
 
 	read := graphRead{Input: j.Query}
 	sources := map[string]string{}
 	var hits []string
 	var answer types.KnowledgeAnswer
+	var printed bytes.Buffer
+	var err error
 	start := time.Now()
 	switch j.Verb {
 	case readQuery:
 		read.Nearest = true
-		res, err := searchGraph(ctx, m, cfg, read, false, false)
+		res := searchLoaded(ctx, r.graphFor(read.Input), read, r.coverage)
 		run.Latency = time.Since(start)
-		require.NoError(t, err, "judgment %s", j.ID)
 		for _, n := range res.Out.Nodes {
 			sources[n.ID] = n.Source
 		}
@@ -118,42 +140,59 @@ func replayJudgment(t *testing.T, ctx context.Context, root string, m *magus.Mag
 			hits = append(hits, match.ID)
 		}
 		answer = res.Out.Answer
+		err = writeQueryText(ctx, &printed, r.next, r.next.served(hint.NextForQuery(res.Out)), res)
 	case readExplain:
-		res, err := explainNode(ctx, m, cfg, read, false, false)
+		res := explainLoaded(ctx, r.graphFor(read.Input), read, r.coverage)
 		run.Latency = time.Since(start)
-		require.NoError(t, err, "judgment %s", j.ID)
+		answer = res.Answer
+		// A miss prints to stderr only.
 		if res.Found {
 			sources[res.Out.Node.ID] = res.Out.Node.Source
 			hits = append(hits, res.Out.Node.ID)
 			for _, e := range slices.Concat(res.Out.Out, res.Out.In) {
 				hits = append(hits, e.Other)
 			}
+			err = writeExplainText(&printed, r.root, j.Query, r.next, r.next.served(hint.NextForExplain(res.Out)), res)
 		}
-		answer = res.Answer
 	case readRefs:
-		g, err := loadRefsGraph(ctx, m, cfg, false, j.Query)
-		require.NoError(t, err, "judgment %s", j.ID)
-		res := lookupRefs(ctx, m, cfg, g, read)
+		res := lookupRefs(ctx, r.m, r.cfg, r.symbols, read, r.coverage)
 		run.Latency = time.Since(start)
 		answer = res.Answer
+		// A miss or an ambiguous name prints to stderr only, so the text search refs
+		// runs beside a miss adds nothing here.
 		if res.Found {
 			for _, site := range slices.Concat(res.Out.Defs, res.Out.Refs) {
 				hits = append(hits, types.KindFile+":"+site.File)
 			}
 			answer = res.Out.Answer
+			out := res.Out
+			out.Answer = withIndexCause(ctx, r.root, out.Answer)
+			err = writeRefsText(&printed, out)
 		}
 	default:
-		t.Fatalf("judgment %s: no replay for verb %q", j.ID, j.Verb)
+		return run, fmt.Errorf("no replay for verb %q", j.Verb)
+	}
+	// A miss, an unknown verdict or a stale index exits nonzero after printing its answer.
+	if err != nil && !exit.AlreadyReported(err) {
+		return run, fmt.Errorf("magus %s %q: %w", j.Verb, j.Query, err)
 	}
 	run.Unknown = answer.Verdict == types.VerdictUnknown
 	run.Ranked = withDefiningFiles(hits, func(id string) string {
 		if s, ok := sources[id]; ok {
 			return s
 		}
-		return known[id]
-	}, known)
-	run.Bytes = printedBytes(t, ctx, root, j)
-	return run
+		return r.known[id]
+	}, r.known)
+	run.Bytes = printed.Len()
+	return run, nil
+}
+
+// graphFor is the graph the CLI verb would load for input.
+func (r replayer) graphFor(input string) *knowledge.Graph {
+	if knowledge.SeedsLazyLayer(input) {
+		return r.symbols
+	}
+	return r.domain
 }
 
 // withDefiningFiles follows each hit with the file:<path> its node's Source points into
@@ -194,23 +233,6 @@ func sourceFile(source string) string {
 		}
 		source = source[:i]
 	}
-}
-
-// printedBytes runs j's CLI verb in text form and measures what it prints to stdout.
-func printedBytes(t *testing.T, ctx context.Context, root string, j rankeval.Judgment) int {
-	t.Helper()
-	verb := map[string]func(context.Context, string, []string) error{
-		readQuery:   queryCmd,
-		readExplain: explainCmd,
-		readRefs:    refsCmd,
-	}[j.Verb]
-	var err error
-	printed := captureStdout(t, func() { err = verb(ctx, root, []string{j.Query}) })
-	// A miss, an unknown verdict or a stale index exits nonzero after printing its answer.
-	if err != nil && !exit.AlreadyReported(err) {
-		t.Fatalf("judgment %s: magus %s %q: %v", j.ID, j.Verb, j.Query, err)
-	}
-	return len(printed)
 }
 
 func printBaselineDeltas(t *testing.T, file string, now rankeval.Report) {

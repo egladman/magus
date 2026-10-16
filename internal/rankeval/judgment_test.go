@@ -66,3 +66,17 @@ func TestReadJudgmentsEmpty(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }
+
+func TestJudgmentResolvedDropsUnknownGold(t *testing.T) {
+	j := Judgment{ID: "j", Gold: map[string]int{"file:a.go": 3, "file:gone.go": 2, "dir:.": 1}}
+	known := map[string]bool{"file:a.go": true, "dir:.": true}
+
+	got, dropped := j.Resolved(func(id string) bool { return known[id] })
+	assert.Equal(t, 1, dropped)
+	assert.Equal(t, map[string]int{"file:a.go": 3, "dir:.": 1}, got.Gold)
+	assert.Len(t, j.Gold, 3, "the receiver's gold is left as read")
+
+	none, dropped := j.Resolved(func(string) bool { return false })
+	assert.Equal(t, 3, dropped)
+	assert.Empty(t, none.Gold)
+}
