@@ -3178,18 +3178,86 @@ func TestCheckoutLifecycle(t *testing.T) {
 	assert.Empty(t, listed)
 }
 
-// RemoveCheckout touches only what CreateCheckout made: a worktree the user added by hand
-// is neither listed nor removable through it.
-func TestRemoveCheckoutRefusesACheckoutItDidNotCreate(t *testing.T) {
+// Checkouts lists only what CreateCheckout made, so a worktree added by hand never reaches
+// cleanup that walks the list.
+func TestCheckoutsSkipsAWorktreeItDidNotCreate(t *testing.T) {
 	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
-	mine := filepath.Join(t.TempDir(), "mine")
-	gitRun(t, dir, "worktree", "add", "-q", "--detach", mine, "HEAD")
+	gitRun(t, dir, "worktree", "add", "-q", "--detach", filepath.Join(t.TempDir(), "mine"), "HEAD")
 
 	listed, err := gitVCS{}.Checkouts(t.Context(), dir)
 	require.NoError(t, err)
 	assert.Empty(t, listed)
-	require.ErrorContains(t, gitVCS{}.RemoveCheckout(t.Context(), dir, mine), "not a checkout CreateCheckout made")
-	assert.DirExists(t, mine)
+}
+
+// RemoveCheckout removes a worktree CreateCheckout did not make only when nothing in it is
+// lost: no changed or untracked file, and every commit it reaches named by a ref.
+func TestRemoveCheckoutOfAWorktreeItDidNotCreate(t *testing.T) {
+	tests := []struct {
+		name string
+		// prepare edits the worktree at co, added detached at the repository's HEAD, and
+		// returns the error RemoveCheckout gives, or "" when it removes co.
+		prepare func(t *testing.T, co string) string
+	}{
+		{name: "clean at a reachable HEAD", prepare: func(*testing.T, string) string { return "" }},
+		{name: "on a branch with its own commit", prepare: func(t *testing.T, co string) string {
+			gitRun(t, co, "switch", "-q", "-c", "topic")
+			gitRun(t, co, "commit", "-q", "--allow-empty", "-m", "topic")
+			return ""
+		}},
+		{name: "a changed file", prepare: func(t *testing.T, co string) string {
+			require.NoError(t, os.WriteFile(filepath.Join(co, "a.txt"), []byte("b\n"), 0o644))
+			return "1 changed or untracked file(s), which removing it would lose: a.txt"
+		}},
+		{name: "an untracked file", prepare: func(t *testing.T, co string) string {
+			require.NoError(t, os.WriteFile(filepath.Join(co, "new.txt"), []byte("n\n"), 0o644))
+			return "1 changed or untracked file(s), which removing it would lose: new.txt"
+		}},
+		{name: "a commit no ref reaches", prepare: func(t *testing.T, co string) string {
+			gitRun(t, co, "commit", "-q", "--allow-empty", "-m", "lost")
+			return "1 commit(s) no branch, tag or remote reaches, newest " + gitTestOutput(t, co, "rev-parse", "HEAD")
+		}},
+		{name: "a commit only a tag reaches", prepare: func(t *testing.T, co string) string {
+			gitRun(t, co, "commit", "-q", "--allow-empty", "-m", "tagged")
+			gitRun(t, co, "tag", "kept")
+			return ""
+		}},
+		{name: "its directory gone", prepare: func(t *testing.T, co string) string {
+			require.NoError(t, os.RemoveAll(co))
+			return ""
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
+			co := filepath.Join(t.TempDir(), "co")
+			gitRun(t, dir, "worktree", "add", "-q", "--detach", co, "HEAD")
+			want := tt.prepare(t, co)
+
+			err := gitVCS{}.RemoveCheckout(t.Context(), dir, co)
+			if want != "" {
+				require.ErrorContains(t, err, want)
+				assert.DirExists(t, co)
+				return
+			}
+			require.NoError(t, err)
+			assert.NoDirExists(t, co)
+			registered, err := gitVCS{}.RegisteredCheckouts(t.Context(), dir)
+			require.NoError(t, err)
+			assert.Len(t, registered, 1, "only the main checkout stays registered")
+		})
+	}
+}
+
+// RemoveCheckout never removes the main checkout or a directory git does not register as
+// a worktree of root.
+func TestRemoveCheckoutRefusesWhatIsNotALinkedWorktree(t *testing.T) {
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
+	require.ErrorContains(t, gitVCS{}.RemoveCheckout(t.Context(), dir, dir), "is the main checkout of")
+	assert.FileExists(t, filepath.Join(dir, "a.txt"))
+
+	stray := t.TempDir()
+	require.ErrorContains(t, gitVCS{}.RemoveCheckout(t.Context(), dir, stray), "is not a checkout of")
+	assert.DirExists(t, stray)
 }
 
 // RegisteredCheckouts lists every worktree git registers, the main one first, with its

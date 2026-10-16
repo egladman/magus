@@ -1163,8 +1163,11 @@ type CheckoutProvisioner interface {
 	// can then ask the remote for an object the merge itself wrote.
 	CreateCheckout(ctx context.Context, root, dir, rev string) error
 	// RemoveCheckout removes the checkout at dir and its registration, whether or not the
-	// directory still exists. A checkout CreateCheckout did not make is refused. Commits
-	// made in it stay in the store.
+	// directory still exists. Commits made in it stay in the store. A checkout
+	// CreateCheckout did not make is removed only when that loses nothing: git removes a
+	// linked worktree with no changed or untracked file whose HEAD a branch, tag or
+	// remote-tracking ref reaches, and refuses the main checkout and any other; hg and jj
+	// refuse every one.
 	RemoveCheckout(ctx context.Context, root, dir string) error
 	// Checkouts lists the checkouts CreateCheckout made, as absolute paths with symlinks
 	// resolved.

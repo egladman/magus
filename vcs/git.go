@@ -3782,7 +3782,8 @@ func (v gitVCS) CreateCheckout(ctx context.Context, root, dir, rev string) error
 // is removed by deleting its directory and its git directory, which reads none of the
 // files code run in it could have rewritten. Any other goes through `git worktree
 // remove`, whose doubled --force removes a locked worktree, one with changes in it, and
-// the registration of one whose directory is gone.
+// the registration of one whose directory is gone; a worktree CreateCheckout did not
+// make gets there only once foreignCheckout finds nothing in it to lose.
 func (v gitVCS) RemoveCheckout(ctx context.Context, root, dir string) error {
 	if !filepath.IsAbs(dir) {
 		return fmt.Errorf("vcs: checkout %q is not an absolute path", dir)
@@ -3805,12 +3806,69 @@ func (v gitVCS) RemoveCheckout(ctx context.Context, root, dir string) error {
 	}
 	registered, ok := owned[realPath(dir)]
 	if !ok {
-		return fmt.Errorf("vcs: %s is not a checkout CreateCheckout made", dir)
+		if registered, err = v.foreignCheckout(ctx, root, dir); err != nil {
+			return err
+		}
 	}
 	if _, err := gitOutput(ctx, root, gitOpts{Isolated: true}, "worktree", "remove", "--force", "--force", "--", registered); err != nil {
 		return fmt.Errorf("git worktree remove %s: %w", dir, err)
 	}
 	return nil
+}
+
+// foreignCheckout returns the path git registered dir under when dir is a linked worktree
+// of root that removing loses nothing from: no changed or untracked file, and a HEAD that
+// a branch, tag or remote-tracking ref reaches. Ignored files do not count. The main
+// checkout is refused.
+func (v gitVCS) foreignCheckout(ctx context.Context, root, dir string) (string, error) {
+	all, err := gitWorktrees(ctx, root)
+	if err != nil {
+		return "", err
+	}
+	want := realPath(dir)
+	i := slices.IndexFunc(all, func(co types.RegisteredCheckout) bool { return realPath(co.Root) == want })
+	if i < 0 {
+		return "", fmt.Errorf("vcs: %s is not a checkout of %s", dir, root)
+	}
+	co := all[i]
+	if co.Primary {
+		return "", fmt.Errorf("vcs: %s is the main checkout of %s", dir, root)
+	}
+	switch _, err := os.Lstat(co.Root); {
+	case errors.Is(err, fs.ErrNotExist):
+	case err != nil:
+		return "", err
+	default:
+		// Without its .git file, git status in the directory reads whichever repository
+		// encloses it, and its answer says nothing about the directory itself.
+		if _, err := os.Lstat(filepath.Join(co.Root, ".git")); err != nil {
+			return "", fmt.Errorf("vcs: %s is no longer a git checkout: %w", dir, err)
+		}
+		dirty, err := v.DirtyFiles(ctx, co.Root, nil)
+		if err != nil {
+			return "", err
+		}
+		if len(dirty) > 0 {
+			named := strings.Join(dirty[:min(len(dirty), 5)], ", ")
+			if len(dirty) > 5 {
+				named += ", ..."
+			}
+			return "", fmt.Errorf("vcs: %s has %d changed or untracked file(s), which removing it would lose: %s",
+				dir, len(dirty), named)
+		}
+	}
+	if co.Head == "" {
+		return co.Root, nil
+	}
+	out, err := gitOutput(ctx, root, gitOpts{}, "rev-list", co.Head, "--not", "--branches", "--tags", "--remotes", "--")
+	if err != nil {
+		return "", fmt.Errorf("git rev-list %s: %w", co.Head, err)
+	}
+	if stranded := splitLines([]byte(out)); len(stranded) > 0 {
+		return "", fmt.Errorf("vcs: %s has %d commit(s) no branch, tag or remote reaches, newest %s, which removing it would strand",
+			dir, len(stranded), stranded[0])
+	}
+	return co.Root, nil
 }
 
 // Checkouts implements types.CheckoutProvisioner.
