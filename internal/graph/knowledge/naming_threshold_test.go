@@ -219,6 +219,14 @@ func TestThresholdCheckReportsAKnownItemTheChangeGrew(t *testing.T) {
 		assert.Equal(t, []string{grew}, thresholdMessages(t, got[id["Frobnicate"]]))
 	})
 
+	t.Run("body-only change", func(t *testing.T) {
+		got := head.ConformanceChecks(ConformanceChange{
+			Touched: []string{id["Frobnicate"]}, Base: base, Conformance: thresholdGrowthOptions(true),
+		})
+
+		assert.Equal(t, []string{grew}, thresholdMessages(t, got[id["Frobnicate"]]))
+	})
+
 	t.Run("re-signed subject", func(t *testing.T) {
 		got := head.ConformanceChecks(ConformanceChange{
 			Subjects: []string{id["Frobnicate"]}, Base: base, Conformance: thresholdGrowthOptions(true),

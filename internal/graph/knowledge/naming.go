@@ -62,7 +62,7 @@ type ConformanceChange struct {
 // references, and the declaration shape a language's reader reports), reads a file only through
 // ConformanceChange.Read, and never fails: a symbol it cannot place is skipped.
 func (g *Graph) ConformanceChecks(c ConformanceChange) map[string][]types.Check {
-	if len(c.Subjects) == 0 {
+	if len(c.Subjects) == 0 && len(c.Touched) == 0 {
 		return nil
 	}
 	x := newNamingIndex(g, c)
