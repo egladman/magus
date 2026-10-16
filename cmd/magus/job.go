@@ -1294,12 +1294,15 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	overrun, err := forkOverrun(ctx, root, stored)
-	switch {
-	case err != nil:
-		warnWorkspaceUnloaded(ctx, err)
-	case jobWS.Unavailable != "" && !stored.ReadOnly && len(stored.WritePaths) > 0:
-		warnWorkspaceUnloaded(ctx, errors.New(jobWS.Unavailable))
+	var overrun *job.ForegroundOverrun
+	if !stored.ReadOnly && len(stored.WritePaths) > 0 {
+		overrun, err = forkOverrun(ctx, root, stored)
+		switch {
+		case err != nil:
+			warnWorkspaceUnloaded(ctx, err)
+		case jobWS.Unavailable != "":
+			warnWorkspaceUnloaded(ctx, errors.New(jobWS.Unavailable))
+		}
 	}
 	switch opts.Format {
 	case outputText:

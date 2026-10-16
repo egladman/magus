@@ -209,9 +209,14 @@ func (g *Graph) rankText(ix *searchIndex, cq *compiledQuery, tokens, need []stri
 		return &types.KnowledgeMatchWhy{Matched: termsHeld(c.hit, need), Of: len(need), Terms: termScores(c.hit.Terms), Prior: c.prior}
 	}
 	seedsOf := map[string][]string{}
-	graph, err := g.graphList(cands, opts, ranking, seedsOf)
-	if err != nil {
-		return nil, err
+	var graph *textrank.RankedList
+	if seeds := g.readerSeeds(opts.Reader); len(seeds) > 0 {
+		var err error
+		if graph, err = g.graphList(cands, opts, seeds, seedsOf); err != nil {
+			return nil, err
+		}
+	} else {
+		ranking.Skipped = append(ranking.Skipped, listGraph+": no reader path names a node")
 	}
 	matches := make([]types.KnowledgeMatch, 0, len(cands))
 	lexWeight := listWeight(opts.Weights, listLexical)
@@ -296,22 +301,8 @@ func exactPhrase(terms []compiledTerm) string {
 // The fusion constant bounds the lexical seeds: a lexical rank past k carries under half
 // the weight of rank 1 in the fusion, so it is no stronger as a seed.
 //
-// With no reader path naming a node there is no graph list (nil), and ranking.Skipped says
-// so: seeded by the lexical hits alone, the walk reranked them to no gain on the retrieval
-// eval (MRR .260 either way over 2548 judgments) at four times the explain latency.
-func (g *Graph) graphList(cands []candidate, opts RetrieveOptions, ranking *types.KnowledgeRanking, seedsOf map[string][]string) (*textrank.RankedList, error) {
-	seeds := map[string]float64{}
-	for _, p := range opts.Reader {
-		for _, id := range []string{fileID(p), dirID(p)} {
-			if _, ok := g.node(id); ok {
-				seeds[id] = 1
-			}
-		}
-	}
-	if len(seeds) == 0 {
-		ranking.Skipped = append(ranking.Skipped, listGraph+": no reader path names a node")
-		return nil, nil
-	}
+// seeds holds the reader seeds, which graphList adds the lexical seeds to.
+func (g *Graph) graphList(cands []candidate, opts RetrieveOptions, seeds map[string]float64, seedsOf map[string][]string) (*textrank.RankedList, error) {
 	if top := cands[0].score; top > 0 {
 		for _, c := range cands[:min(len(cands), max(1, int(opts.Weights.Fusion.K)))] {
 			seeds[c.hit.ID] = c.score / top
@@ -333,6 +324,22 @@ func (g *Graph) graphList(cands []candidate, opts RetrieveOptions, ranking *type
 		}
 	}
 	return list, nil
+}
+
+// readerSeeds weighs 1 each file and directory node a reader path names. With none there
+// is no graph list: seeded by the lexical hits alone, the walk reranked them to no gain on
+// the retrieval eval (MRR .260 either way over 2548 judgments) at four times the explain
+// latency.
+func (g *Graph) readerSeeds(reader []string) map[string]float64 {
+	seeds := map[string]float64{}
+	for _, p := range reader {
+		for _, id := range []string{fileID(p), dirID(p)} {
+			if _, ok := g.node(id); ok {
+				seeds[id] = 1
+			}
+		}
+	}
+	return seeds
 }
 
 // listWeight is the fusion weight fusion.lists names for list. A list the file does not

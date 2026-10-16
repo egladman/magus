@@ -272,9 +272,11 @@ func (r ToolRows) Models() (ModelFacts, error) {
 	if err != nil {
 		return ModelFacts{}, fmt.Errorf("no model tiers at %s, %s: %w", r.Dir, reinstall, err)
 	}
-	tiers, err := decodeTiers(body)
-	if err != nil {
-		return ModelFacts{}, fmt.Errorf("the model tiers at %s do not read, %s: %w", r.Dir, reinstall, err)
+	var tiers *types.ModelTierSet
+	if lines := jsonLines(body); len(lines) > 0 {
+		if tiers, err = decodeTiers(lines); err != nil {
+			return ModelFacts{}, fmt.Errorf("the model tiers at %s do not read, %s: %w", r.Dir, reinstall, err)
+		}
 	}
 	return ModelFacts{Rows: rows, Tiers: tiers}, nil
 }
@@ -387,13 +389,8 @@ func encodeTiers(set *types.ModelTierSet) string {
 	return b.String()
 }
 
-func decodeTiers(body []byte) (*types.ModelTierSet, error) {
-	lines := jsonLines(body)
-	switch len(lines) {
-	case 0:
-		return nil, nil
-	case 1:
-	default:
+func decodeTiers(lines [][]byte) (*types.ModelTierSet, error) {
+	if len(lines) != 1 {
 		return nil, fmt.Errorf("%d lines, and a declaration is one", len(lines))
 	}
 	var line tierLine

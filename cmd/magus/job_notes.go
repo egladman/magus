@@ -81,9 +81,6 @@ func warnWorkspaceUnloaded(ctx context.Context, err error) {
 // fact and must never be the reason a fork fails, nor read as a clean bill when it was
 // never computed.
 func forkOverrun(ctx context.Context, root string, row types.Job) (*job.ForegroundOverrun, error) {
-	if row.ReadOnly || len(row.WritePaths) == 0 {
-		return nil, nil
-	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return nil, err
