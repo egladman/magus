@@ -189,11 +189,13 @@ export fun harness_limits(target: Target, cb: fun(any)) > {str: any} {
 //
 // tier is the case of the shipped model tiers (magus/modeltiers) this exact id runs, "" for
 // none: a workspace that declares no tiers of its own maps each case to the row naming it,
-// and the agents magus ships run on the economy row.
-fun claude_model(id: str, tier: str, window: int, input: double, cacheWrite5m: double, cacheWrite1h: double, cacheRead: double, output: double, priceStep: int, stepFactor: double) > {str: any} {
+// and the agents magus ships run on the economy row. alias is the short name the host takes
+// for the model in a spawn, matched exactly, "" for none.
+fun claude_model(id: str, tier: str, alias: str, window: int, input: double, cacheWrite5m: double, cacheWrite1h: double, cacheRead: double, output: double, priceStep: int, stepFactor: double) > {str: any} {
     return {
         "id": id,
         "tier": tier,
+        "alias": alias,
         "window": window,
         "input": input,
         "cache_write_5m": cacheWrite5m,
@@ -207,13 +209,13 @@ fun claude_model(id: str, tier: str, window: int, input: double, cacheWrite5m: d
 
 fun claude_models() > [any] {
     return [
-        claude_model("claude-fable-5-1", tier: "", window: 1000000, input: 10.0, cacheWrite5m: 12.5, cacheWrite1h: 20.0, cacheRead: 0.25, output: 50.0, priceStep: 0, stepFactor: 0.0),
-        claude_model("claude-opus-5-5", tier: "principal", window: 1000000, input: 4.0, cacheWrite5m: 5.0, cacheWrite1h: 8.0, cacheRead: 0.2, output: 20.0, priceStep: 0, stepFactor: 0.0),
-        claude_model("claude-sonnet-5-5", tier: "standard", window: 1000000, input: 2.0, cacheWrite5m: 2.5, cacheWrite1h: 4.0, cacheRead: 0.1, output: 10.0, priceStep: 0, stepFactor: 0.0),
+        claude_model("claude-fable-5-1", tier: "", alias: "", window: 1000000, input: 10.0, cacheWrite5m: 12.5, cacheWrite1h: 20.0, cacheRead: 0.25, output: 50.0, priceStep: 0, stepFactor: 0.0),
+        claude_model("claude-opus-5-5", tier: "principal", alias: "opus", window: 1000000, input: 4.0, cacheWrite5m: 5.0, cacheWrite1h: 8.0, cacheRead: 0.2, output: 20.0, priceStep: 0, stepFactor: 0.0),
+        claude_model("claude-sonnet-5-5", tier: "standard", alias: "sonnet", window: 1000000, input: 2.0, cacheWrite5m: 2.5, cacheWrite1h: 4.0, cacheRead: 0.1, output: 10.0, priceStep: 0, stepFactor: 0.0),
         // The one current model priced by prompt length: every category is 5x above 100000
         // prompt tokens, cache reads and writes included.
-        claude_model("claude-haiku-5-5", tier: "economy", window: 1000000, input: 0.1, cacheWrite5m: 0.125, cacheWrite1h: 0.2, cacheRead: 0.01, output: 0.5, priceStep: 100000, stepFactor: 5.0),
-        claude_model("claude-haiku-4-5", tier: "", window: 200000, input: 1.0, cacheWrite5m: 1.25, cacheWrite1h: 2.0, cacheRead: 0.1, output: 5.0, priceStep: 0, stepFactor: 0.0),
+        claude_model("claude-haiku-5-5", tier: "economy", alias: "haiku", window: 1000000, input: 0.1, cacheWrite5m: 0.125, cacheWrite1h: 0.2, cacheRead: 0.01, output: 0.5, priceStep: 100000, stepFactor: 5.0),
+        claude_model("claude-haiku-4-5", tier: "", alias: "", window: 200000, input: 1.0, cacheWrite5m: 1.25, cacheWrite1h: 2.0, cacheRead: 0.1, output: 5.0, priceStep: 0, stepFactor: 0.0),
     ];
 }
 
@@ -819,4 +821,22 @@ test "harness_* contract wrappers return the same pure helpers" {
     assert\equal("{harness_mcp(noTarget, cb)["docs"]}", "docs/guides/integrations/mcp.md", "mcp docs");
     assert\equal("{harness_limits(noTarget, cb)["foreground_max_ms"]}", "{FOREGROUND_MAX_MS}", "foreground limits");
     assert\equal("{harness_limits(noTarget, cb)["hook_timeout_ms"]}", "10000", "the hook timeout every entry carries, in ms");
+}
+
+test "the tiered rows carry the host's exact aliases, and no other row has one" {
+    final aliases = mut {<str: str>};
+    foreach (row in claude_models()) {
+        final fields = row as {str: any};
+        final alias = "{fields["alias"]}";
+        if (alias == "") {
+            assert\equal("{fields["tier"]}", "", "{fields["id"]} has a tier but no alias");
+            continue;
+        }
+        assert\isTrue(aliases[alias] == null, "alias {alias} names one row");
+        aliases[alias] = "{fields["id"]}";
+    }
+    assert\equal(aliases["opus"] ?? "", "claude-opus-5-5", "the top tier's alias");
+    assert\equal(aliases["sonnet"] ?? "", "claude-sonnet-5-5", "the default tier's alias");
+    assert\equal(aliases["haiku"] ?? "", "claude-haiku-5-5", "the economy tier's alias");
+    assert\equal(aliases.len(), 3, "only the tiered rows carry an alias");
 }

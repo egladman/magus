@@ -303,6 +303,9 @@ type ModelPricing struct {
 	ID string
 	// Tier is the model-tier case this exact id runs, "" for none.
 	Tier string
+	// Alias is the short name the host takes for this model, matched exactly like ID and
+	// never as a prefix, "" for none.
+	Alias string
 	// Window is the context window in tokens.
 	Window int64
 	// Input, CacheWrite5m, CacheWrite1h, CacheRead and Output are the standard prices.

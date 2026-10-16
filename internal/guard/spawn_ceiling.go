@@ -95,12 +95,15 @@ func gradeSpawnCeiling(deps Dependencies, verdict types.GuardJudgment, env hookR
 }
 
 // modelTierByExactID is model's tier: the case the declaration maps model to for host, else the
-// tier the harness_models row whose id is exactly model names. False for any other model.
+// tier the harness_models row whose id or alias is exactly model names. False for any other
+// model.
 func modelTierByExactID(set *types.ModelTierSet, host types.HarnessKey, model string, rows []types.ModelPricing) (types.ModelTier, bool) {
 	if t, ok := set.Resolve(host, model); ok {
 		return t, true
 	}
-	i := slices.IndexFunc(rows, func(r types.ModelPricing) bool { return r.Tier != "" && r.ID == model })
+	i := slices.IndexFunc(rows, func(r types.ModelPricing) bool {
+		return r.Tier != "" && (r.ID == model || r.Alias != "" && r.Alias == model)
+	})
 	if i < 0 {
 		return types.ModelTier{}, false
 	}

@@ -166,6 +166,31 @@ func TestSpawnAboveParentTierReadsTheHarnessRowsTier(t *testing.T) {
 	assert.Contains(t, v.Context, "add a row for claude-sonnet-5-5-20261001")
 }
 
+// A row's alias resolves a spawn that names it exactly, with no declaration mapping it; an
+// alias with a prefix or another case is no alias, and a row with an alias but no tier names
+// none.
+func TestSpawnAboveParentTierReadsTheHarnessRowsAlias(t *testing.T) {
+	ctx, deps, _ := ceilingFixture(t, "claude-sonnet-5-5", true)
+	deps.ModelRows = func() []types.ModelPricing {
+		return []types.ModelPricing{
+			{ID: "claude-sonnet-5-5", Tier: "standard", Alias: "mid"},
+			{ID: "claude-opus-5-5", Tier: "principal", Alias: "top"},
+			{ID: "claude-fable-5-1", Alias: "fable"},
+		}
+	}
+
+	v := judgeSpawnBy(ctx, t, deps, "", "top")
+	shape, text := spoken(v)
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnAboveParentTier)}, shape)
+	assert.Contains(t, text, "this spawn runs top, model tier principal (rank 2)")
+
+	for _, spawn := range []string{"top-1", "Top", "fable"} {
+		v = judgeSpawnBy(ctx, t, deps, "", spawn)
+		assert.Equal(t, decisionAdvise, v.Decision, spawn)
+		assert.Contains(t, v.Context, "add a row for "+spawn, spawn)
+	}
+}
+
 // spoken splits a judgment into its shape, to compare whole, and the text it said, to
 // assert on: the text is wording a field-by-field comparison would pin to the letter.
 func spoken(v types.GuardJudgment) (shape types.GuardJudgment, text string) {

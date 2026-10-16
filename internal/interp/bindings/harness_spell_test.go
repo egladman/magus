@@ -264,9 +264,9 @@ func TestHarnessSpellsShipModelRowsOnlyForClaudeCode(t *testing.T) {
 	rows := loadShippedHarness(t, "claude-code").Models
 	assert.Equal(t, []types.ModelPricing{
 		{ID: "claude-fable-5-1", Window: 1_000_000, Input: 10, CacheWrite5m: 12.5, CacheWrite1h: 20, CacheRead: 0.25, Output: 50},
-		{ID: "claude-opus-5-5", Tier: "principal", Window: 1_000_000, Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.2, Output: 20},
-		{ID: "claude-sonnet-5-5", Tier: "standard", Window: 1_000_000, Input: 2, CacheWrite5m: 2.5, CacheWrite1h: 4, CacheRead: 0.1, Output: 10},
-		{ID: "claude-haiku-5-5", Tier: "economy", Window: 1_000_000, Input: 0.1, CacheWrite5m: 0.125, CacheWrite1h: 0.2, CacheRead: 0.01, Output: 0.5,
+		{ID: "claude-opus-5-5", Tier: "principal", Alias: "opus", Window: 1_000_000, Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.2, Output: 20},
+		{ID: "claude-sonnet-5-5", Tier: "standard", Alias: "sonnet", Window: 1_000_000, Input: 2, CacheWrite5m: 2.5, CacheWrite1h: 4, CacheRead: 0.1, Output: 10},
+		{ID: "claude-haiku-5-5", Tier: "economy", Alias: "haiku", Window: 1_000_000, Input: 0.1, CacheWrite5m: 0.125, CacheWrite1h: 0.2, CacheRead: 0.01, Output: 0.5,
 			LongContext: &types.PriceStep{Above: 100_000, Multiplier: 5}},
 		{ID: "claude-haiku-4-5", Window: 200_000, Input: 1, CacheWrite5m: 1.25, CacheWrite1h: 2, CacheRead: 0.1, Output: 5},
 	}, rows)
@@ -295,6 +295,39 @@ func TestDecodeHarnessModelsRefusesAHalfStep(t *testing.T) {
 			_, err := decodeHarnessModels([]any{row})
 
 			assert.EqualError(t, err, "row 1 (m-1) sets one of price_step and step_factor without the other")
+		})
+	}
+}
+
+func TestDecodeHarnessModelsReadsATierAndItsAlias(t *testing.T) {
+	got, err := decodeHarnessModels([]any{map[string]any{"id": "m-1", "tier": "standard", "alias": "mid"}})
+
+	require.NoError(t, err)
+	assert.Equal(t, []types.ModelPricing{{ID: "m-1", Tier: "standard", Alias: "mid"}}, got)
+}
+
+func TestDecodeHarnessModelsRefusesABadAlias(t *testing.T) {
+	tests := map[string]struct {
+		rows []any
+		want string
+	}{
+		"alias without a tier": {
+			rows: []any{map[string]any{"id": "m-1", "alias": "mid"}},
+			want: "row 1 (m-1) sets alias mid without a tier, so the alias names no tier",
+		},
+		"one alias on two rows": {
+			rows: []any{
+				map[string]any{"id": "m-1", "tier": "standard", "alias": "mid"},
+				map[string]any{"id": "m-2", "tier": "economy", "alias": "mid"},
+			},
+			want: "rows m-1 and m-2 both declare alias mid",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := decodeHarnessModels(tt.rows)
+
+			assert.EqualError(t, err, tt.want)
 		})
 	}
 }

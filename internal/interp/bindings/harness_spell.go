@@ -248,6 +248,8 @@ type harnessModelRow struct {
 	// Tier is the model-tier case this model runs, "" for none. It maps the case to this
 	// exact id, so the session model a host reports resolves to a tier by equality.
 	Tier string `json:"tier"`
+	// Alias is the short name the host takes for this model, matched exactly, "" for none.
+	Alias string `json:"alias"`
 }
 
 // decodeHarnessTierModels reads which exact model id each tier of a harness_models return
@@ -276,22 +278,34 @@ func decodeHarnessTierModels(data any) (map[string]string, error) {
 
 // decodeHarnessModels reads a harness_models return into model rows. A row without an id
 // is an error: it could match nothing and would hide a misspelled key. So is a row
-// setting only one of price_step and step_factor, a step no price could honor.
+// setting only one of price_step and step_factor, a step no price could honor. An alias
+// without a tier resolves to nothing, and one alias on two rows to no one model, so both are
+// errors.
 func decodeHarnessModels(data any) ([]types.ModelPricing, error) {
 	var rows []harnessModelRow
 	if err := decodeHarnessJSON(data, &rows); err != nil {
 		return nil, err
 	}
 	out := make([]types.ModelPricing, len(rows))
+	aliases := map[string]string{}
 	for i, r := range rows {
 		if strings.TrimSpace(r.ID) == "" {
 			return nil, fmt.Errorf("row %d has no id", i+1)
+		}
+		if r.Alias != "" {
+			if r.Tier == "" {
+				return nil, fmt.Errorf("row %d (%s) sets alias %s without a tier, so the alias names no tier", i+1, r.ID, r.Alias)
+			}
+			if prior, dup := aliases[r.Alias]; dup {
+				return nil, fmt.Errorf("rows %s and %s both declare alias %s", prior, r.ID, r.Alias)
+			}
+			aliases[r.Alias] = r.ID
 		}
 		if (r.PriceStep > 0) != (r.StepFactor > 0) {
 			return nil, fmt.Errorf("row %d (%s) sets one of price_step and step_factor without the other", i+1, r.ID)
 		}
 		out[i] = types.ModelPricing{
-			ID: r.ID, Tier: r.Tier, Window: r.Window, Input: types.USDPerMTok(r.Input), CacheWrite5m: types.USDPerMTok(r.CacheWrite5m),
+			ID: r.ID, Tier: r.Tier, Alias: r.Alias, Window: r.Window, Input: types.USDPerMTok(r.Input), CacheWrite5m: types.USDPerMTok(r.CacheWrite5m),
 			CacheWrite1h: types.USDPerMTok(r.CacheWrite1h), CacheRead: types.USDPerMTok(r.CacheRead), Output: types.USDPerMTok(r.Output),
 		}
 		if r.PriceStep > 0 {
