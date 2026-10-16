@@ -945,8 +945,8 @@ func TestStoreMechanicsLiveInInternalFile(t *testing.T) {
 	assert.Empty(t, violations,
 		"these functions write a file by temp and rename, or take an flock, themselves.\n"+
 			"Use internal/file: WriteFileAtomic or ReplaceFile to replace a file, WithLock to\n"+
-			"hold a lock, Doc.Update for a locked read-modify-write. A site that truly cannot\n"+
-			"(it streams while hashing, publishes a directory, waits unbounded) goes in\n"+
+			"hold a lock. A site that truly cannot (it streams while hashing, publishes a\n"+
+			"directory, waits unbounded) goes in\n"+
 			"storeMechanicsAllowed with its reason.\n\nviolations:\n%s", strings.Join(violations, "\n"))
 	assert.Empty(t, stale,
 		"storeMechanicsAllowed names sites that no longer hand-roll these mechanics; delete\n"+
