@@ -151,9 +151,7 @@ magus\project({
         "internal/textembed/testdata/*",
         // Embedded in the textrank package, and no other glob matches it.
         "internal/textrank/weights.json",
-        // The retrieval eval's judgments, which the rankeval tests read.
-        "internal/rankeval/testdata/*",
-        // The retrieval eval's fixture documents.
+        // The retrieval eval's judgments and its holdout ledger.
         "testdata/retrieval/*",
         // Embedded in the binary, and no other glob matches it.
         "internal/selfupdate/release-keys.json",
@@ -2629,15 +2627,17 @@ export fun agent_eval(ctx: magus\Context, args: [str]) > void !> any {
         {"args": ["-run=^TestAgentEval$", "-count=1", "-timeout=2h", "-v", "./cmd/magus/"] + args});
 }
 
-// Replays testdata/retrieval/judgments.jsonl through query, refs and explain and prints
-// recall, MRR and nDCG; report-only, so no score fails it. MAGUS_RETRIEVAL_EVAL_BASELINE
-// names a file to write the report to for a person to review.
+// Replays each eval set under testdata/retrieval through query, refs and explain and
+// prints recall, MRR and nDCG per set; no score fails it. MAGUS_EVAL_CANDIDATE unseals
+// the judged holdout for one recorded read, MAGUS_EVAL_REPORT_ONLY=1 permits a further
+// read that chooses nothing, and MAGUS_RETRIEVAL_EVAL_BASELINE names a file to write the
+// report to for a person to review.
 export fun retrieval_eval(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("testdata/retrieval/*");
-    final env = {
-        "GOEXPERIMENT": "jsonv2",
-        "MAGUS_RETRIEVAL_EVAL_BASELINE": os\env("MAGUS_RETRIEVAL_EVAL_BASELINE") ?? "",
-    };
+    final env = mut {"GOEXPERIMENT": "jsonv2"};
+    foreach (name in ["MAGUS_EVAL_CANDIDATE", "MAGUS_EVAL_REPORT_ONLY", "MAGUS_RETRIEVAL_EVAL_BASELINE"]) {
+        env[name] = os\env(name) ?? "";
+    }
     go["go-test"](ctx.withEnv(env),
         {"args": ["-tags", "retrievaleval", "-run=^TestRetrievalEval$", "-count=1", "-timeout=2h", "-v", "./cmd/magus/"] + args});
 }

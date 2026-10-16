@@ -112,6 +112,7 @@
 {"bucket":1,"path":"changes/unreleased/jobs-retain.md"}
 {"bucket":0,"path":"changes/unreleased/lease-commits-in-another-repo.md"}
 {"bucket":1,"path":"changes/unreleased/lexical-index.md"}
+{"bucket":1,"path":"changes/unreleased/lint-rollout-tiers.md"}
 {"bucket":0,"path":"changes/unreleased/ls-jobs-live-only.md"}
 {"bucket":0,"path":"changes/unreleased/magus-affected-plan-prints-affected-unbounded.md"}
 {"bucket":0,"path":"changes/unreleased/magus-doctor-reports-whether-bound-lease.md"}
@@ -810,8 +811,11 @@
 {"bucket":1,"path":"internal/race/filter.go"}
 {"bucket":0,"path":"internal/race/race.go"}
 {"bucket":1,"path":"internal/race/race_test.go"}
+{"bucket":0,"path":"internal/rankeval/holdout.go"}
 {"bucket":0,"path":"internal/rankeval/metrics_test.go"}
+{"bucket":1,"path":"internal/rankeval/qrels.go"}
 {"bucket":0,"path":"internal/rankeval/replay.go"}
+{"bucket":1,"path":"internal/rankeval/significance.go"}
 {"bucket":0,"path":"internal/readlog/read_log.go"}
 {"bucket":0,"path":"internal/render/graph_ir.go"}
 {"bucket":1,"path":"internal/render/knowledge_graph_test.go"}
