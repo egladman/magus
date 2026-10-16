@@ -74,6 +74,20 @@ func TestTermsRendersUnrunGatesAsASection(t *testing.T) {
 		"the section sits among the facts, ahead of the check")
 }
 
+// The files outside the write paths that use them follow the deny paths, so the holder
+// reads the paths to add beside the paths it has; a row with none renders no heading.
+func TestTermsRendersReferencedOutsideAfterThePaths(t *testing.T) {
+	t.Parallel()
+
+	assert.NotContains(t, NewTerms(briefRow(), TermsFacts{}).String(), referencedHeading)
+
+	refs := []ReferencedFile{{File: "internal/ledger/x_test.go", Count: 2, Uses: []string{"internal/ledger/x.go"}}}
+	got := NewTerms(briefRow(), TermsFacts{ReferencedOutside: refs}).String()
+	assert.Contains(t, got, "\n"+referencedHeading+"\n  internal/ledger/x_test.go (tests internal/ledger/x.go, 2 reference(s))\n")
+	assert.Less(t, strings.Index(got, "write paths"), strings.Index(got, referencedHeading))
+	assert.Less(t, strings.Index(got, referencedHeading), strings.Index(got, "the only check you run"))
+}
+
 // The grouping history renders only when it was read, and a lens with nothing for the
 // lease's projects says so rather than dropping the section.
 func TestTermsRendersTheGroupingHistoryWhenItWasRead(t *testing.T) {

@@ -71,6 +71,9 @@ type Terms struct {
 	// DeletionCandidates are the unreferenced symbols in the write paths, from
 	// [UnreferencedInPaths]: findings to finish or delete, never goals.
 	DeletionCandidates []types.UnreferencedEntry `json:"deletion_candidates,omitempty" yaml:"deletion_candidates,omitempty"`
+	// ReferencedOutside are the files outside the write paths that use what they define,
+	// from [ReferencedOutside]: findings, never a boundary.
+	ReferencedOutside []ReferencedFile `json:"referenced_outside,omitempty" yaml:"referenced_outside,omitempty"`
 }
 
 // TermsEvidence is what the knowledge graph knows about one write path: the node it
@@ -122,6 +125,7 @@ type TermsFacts struct {
 	Grouping           *types.GroupingOutput
 	Stage              types.ReleaseStage
 	DeletionCandidates []types.UnreferencedEntry
+	ReferencedOutside  []ReferencedFile
 }
 
 // NewTerms renders one job's terms: the job itself, plus what the workspace contributed.
@@ -139,6 +143,7 @@ func NewTerms(row types.Job, facts TermsFacts) Terms {
 		Grouping:           facts.Grouping,
 		Stage:              facts.Stage,
 		DeletionCandidates: facts.DeletionCandidates,
+		ReferencedOutside:  facts.ReferencedOutside,
 	}
 }
 
@@ -165,6 +170,7 @@ func (b Terms) String() string {
 	writeList(&s, deletionHeading, deletionLines(b.DeletionCandidates))
 	writeList(&s, "write paths", b.Lease.WritePaths)
 	writeList(&s, "deny paths", b.Lease.DenyPaths)
+	writeList(&s, referencedHeading, referencedLines(b.ReferencedOutside))
 	writeList(&s, "projects", b.Projects)
 
 	switch {

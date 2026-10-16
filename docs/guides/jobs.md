@@ -503,6 +503,19 @@ When the knowledge graph cannot answer the symbol goals, the fix says so; `magus
 build` and a fork again give a fuller list. MGS3042 reads `jobs.max_depth` and
 `jobs.max_live` the same way, and a zero limit is unlimited.
 
+### Files outside the write paths that use them
+
+A fork that stores a writing job lists the files outside its write paths that reference
+a symbol its write paths define. These are the tests and callers a change reaches one
+hop out. `magus describe job` shows the same list. Tests come first, then the files with
+the most references. Each line names the write paths the file uses, and the file itself
+is the path to add when the change reaches it. A `file#declaration` claim counts only
+the references to that declaration.
+
+The list reports and never refuses. A file a target declares as an output is left out,
+because MGS3044 reports it, and the list is empty when no knowledge graph is built. `-o
+json` carries it as `referenced_outside`.
+
 ## CI checks the merged work
 
 Each job passed in the worktree it was written in. Whether the work still passes

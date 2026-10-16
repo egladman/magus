@@ -938,6 +938,23 @@ func TestDeletionCandidatesAskNothingOfARowThatWritesNothing(t *testing.T) {
 	assert.Nil(t, deletionCandidates(t.Context(), load, types.Job{}))
 }
 
+func TestForkOutputCarriesReferencedOutsideBesideTheRow(t *testing.T) {
+	t.Parallel()
+
+	out := forkOutput{
+		Job:               types.Job{ID: "fork-names-refs-outside"},
+		ReferencedOutside: []job.ReferencedFile{{File: "types/conformance_test.go", Count: 9, Uses: []string{"types/conformance.go"}}},
+	}
+	raw, err := json.Marshal(forkReport{forkOutput: out})
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, "fork-names-refs-outside", got["id"], "the row flattens")
+	assert.Equal(t, []any{map[string]any{"file": "types/conformance_test.go", "count": float64(9), "uses": []any{"types/conformance.go"}}},
+		got["referenced_outside"])
+}
+
 // bindCheckout records id as the checkout's binding, as the guard does when a caller whose
 // host names no session takes a job there.
 func bindCheckout(t *testing.T, cacheDir, id string) {

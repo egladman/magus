@@ -82,6 +82,9 @@ func leaseBoundary(ctx context.Context, root string, store *job.Store, row types
 		Stage:              workspaceStage(ctx, m),
 		DeletionCandidates: deletionCandidates(ctx, graph.loadScoped(row.WritePaths), row),
 	}
+	if g := graph.loadScoped(row.WritePaths)(ctx); g != nil {
+		facts.ReferencedOutside = job.ReferencedOutside(m.Root(), row, m.All(), g.Referrers)
+	}
 	// A history file that does not read leaves the section out, the way Affinity's scan does.
 	if grouping, err := store.GroupingLens(ctx, affected.Seed); err == nil {
 		facts.Grouping = &grouping

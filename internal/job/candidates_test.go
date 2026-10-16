@@ -2,10 +2,13 @@ package job
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/types"
 )
@@ -43,6 +46,69 @@ func TestUnreferencedInPathsIsEmptyForARowThatWritesNothing(t *testing.T) {
 	all := []types.UnreferencedEntry{unreferenced("a", "Function", "internal/job/a.go:1")}
 	assert.Nil(t, UnreferencedInPaths(types.Job{ReadOnly: true, WritePaths: []string{"internal/job"}}, all))
 	assert.Nil(t, UnreferencedInPaths(types.Job{}, all))
+}
+
+func TestReferencedOutsideNamesTheTestAndRegistryOneHopOut(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal", "job"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "internal", "job", "a.go"), []byte("package job\n"), 0o644))
+	row := types.Job{WritePaths: []string{"types/conformance.go", "cmd/magus/job.go#Fork", "internal/job"}}
+	projects := []*types.Project{{Path: ".", TargetOutputs: map[string][]types.OutputRef{"mocks": {{Glob: "**/mocks_test.go"}}}}}
+	asked := map[string]bool{}
+	referrers := func(file, declaration string) map[string]int {
+		asked[file+"#"+declaration] = true
+		switch file + "#" + declaration {
+		case "types/conformance.go#":
+			return map[string]int{
+				"types/conformance.go":                4,
+				"cmd/magus-utils/boundary_types.go":   3,
+				"internal/doctor/ratchet_test.go":     1,
+				"types/conformance_test.go":           9,
+				"internal/doctor/mocks_test.go":       2,
+				"internal/job/a.go":                   1,
+				"internal/handler/insight/service.go": 3,
+			}
+		case "cmd/magus/job.go#Fork":
+			return map[string]int{"cmd/magus/job.go": 1, "cmd/magus/job_test.go": 2, "types/conformance_test.go": 1}
+		}
+		return nil
+	}
+
+	got := ReferencedOutside(root, row, projects, referrers)
+
+	assert.Equal(t, []ReferencedFile{
+		{File: "types/conformance_test.go", Count: 10, Uses: []string{"types/conformance.go", "cmd/magus/job.go#Fork"}},
+		{File: "cmd/magus/job_test.go", Count: 2, Uses: []string{"cmd/magus/job.go#Fork"}},
+		{File: "internal/doctor/ratchet_test.go", Count: 1, Uses: []string{"types/conformance.go"}},
+		{File: "cmd/magus-utils/boundary_types.go", Count: 3, Uses: []string{"types/conformance.go"}},
+		{File: "internal/handler/insight/service.go", Count: 3, Uses: []string{"types/conformance.go"}},
+	}, got, "tests first, then by count; files the write paths cover and generated outputs are left out")
+	assert.Equal(t, map[string]bool{"types/conformance.go#": true, "cmd/magus/job.go#Fork": true, "internal/job/a.go#": true}, asked,
+		"a claim asks for its declaration, a directory for each file under it")
+	assert.Nil(t, ReferencedOutside(root, types.Job{ReadOnly: true, WritePaths: row.WritePaths}, projects, referrers))
+}
+
+func TestRenderReferencedOutsideCapsAndSaysWhatToAdd(t *testing.T) {
+	t.Parallel()
+
+	var empty strings.Builder
+	RenderReferencedOutside(&empty, nil)
+	assert.Empty(t, empty.String(), "nothing is written for none")
+
+	files := []ReferencedFile{{File: "a_test.go", Count: 2, Uses: []string{"a.go"}}}
+	for i := range ReferencedOutsideLimit + 1 {
+		files = append(files, ReferencedFile{File: fmt.Sprintf("f%02d.go", i), Count: 1, Uses: []string{"a.go#Run"}})
+	}
+	var out strings.Builder
+	RenderReferencedOutside(&out, files)
+	got := out.String()
+
+	assert.True(t, strings.HasPrefix(got, referencedHeading+"\n  a_test.go (tests a.go, 2 reference(s))\n  f00.go (uses a.go#Run, 1 reference(s))\n"), got)
+	assert.NotContains(t, got, "f11.go")
+	assert.Contains(t, got, "and 2 more; -o json lists every one")
+	assert.Contains(t, got, "add each one the change touches to the write paths")
 }
 
 func TestRenderDeletionCandidatesCapsAndCarriesTheCaveat(t *testing.T) {

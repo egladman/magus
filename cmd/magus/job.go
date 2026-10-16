@@ -1294,7 +1294,10 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	var overrun *job.ForegroundOverrun
+	var (
+		overrun    *job.ForegroundOverrun
+		referenced []job.ReferencedFile
+	)
 	if !stored.ReadOnly && len(stored.WritePaths) > 0 {
 		overrun, err = forkOverrun(ctx, root, stored)
 		switch {
@@ -1302,6 +1305,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			warnWorkspaceUnloaded(ctx, err)
 		case jobWS.Unavailable != "":
 			warnWorkspaceUnloaded(ctx, errors.New(jobWS.Unavailable))
+		}
+		if g := graph.load(ctx); g != nil {
+			referenced = job.ReferencedOutside(root, stored, jobWS.Projects, g.Referrers)
 		}
 	}
 	switch opts.Format {
@@ -1321,6 +1327,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			}
 		}
 		job.RenderDeletionCandidates(os.Stdout, deletionCandidates(ctx, graph.load, stored))
+		job.RenderReferencedOutside(os.Stdout, referenced)
 		job.RenderForegroundOverrun(os.Stdout, overrun)
 		// The forker waits for the build budget so the job's holder never does.
 		if globalCfg.Broker.Resolved() != types.BrokerOff {
@@ -1337,6 +1344,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			forkOutput{
 				Job:                stored,
 				DeletionCandidates: deletionCandidates(ctx, graph.load, stored),
+				ReferencedOutside:  referenced,
 				ForegroundOverrun:  overrun,
 				ClaimNotes:         job.ForkNotes(ctx, store, plan, stored),
 			},
