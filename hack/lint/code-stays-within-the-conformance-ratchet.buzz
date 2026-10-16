@@ -21,7 +21,7 @@ export fun reads() > [str] {
         "libs/cmdline/**/*.go", RATCHET, "magus.yaml"];
 }
 
-// check fails each violation of an ENFORCED metric, each known entry that no longer
+// check fails each violation of an ENFORCED metric, each known entry of one that no longer
 // violates, and an index the lens could not vouch for, and prints the rest as advice.
 export fun check(files: [Path]) > [Finding] !> any {
     final report = magus\conformance();
@@ -87,22 +87,38 @@ export fun judge(report: {str: any}) > [Finding] !> any {
     final stale: [any] = report["stale"] ?? [<any>];
     foreach (k in stale) {
         final metric: str = k["metric"] ?? "";
-        final items: [any] = k["items"] ?? [<any>];
-        final names = mut [<str>];
-        foreach (item in items) {
-            names.append("{item}");
+        if (ENFORCED.indexOf(metric) == null) {
+            continue;
         }
-        final named = names.join(", ");
         found.append(Finding{ path = RATCHET,
-            message = "a {metric} known entry names {named}, which no longer violates",
+            message = "a {metric} known entry names {staleNames(k)}, which no longer violates",
             fix = "Delete the entry: the known lists only shrink." });
     }
     return found;
 }
 
-// advice is a line per violation of a metric ENFORCED leaves out.
+// staleNames joins a stale known entry's items.
+fun staleNames(entry: any) > str {
+    final items: [any] = entry["items"] ?? [<any>];
+    final names = mut [<str>];
+    foreach (item in items) {
+        names.append("{item}");
+    }
+    return names.join(", ");
+}
+
+// advice is a line per violation, and per stale known entry, of a metric ENFORCED leaves
+// out. A stale entry of such a metric never fails: shrinking a long function must not cost
+// more than the advice its length earned.
 fun advice(report: {str: any}) > [str] {
     final lines = mut [<str>];
+    final stale: [any] = report["stale"] ?? [<any>];
+    foreach (k in stale) {
+        final metric: str = k["metric"] ?? "";
+        if (ENFORCED.indexOf(metric) == null) {
+            lines.append("advice: a {metric} known entry in " + RATCHET + " names {staleNames(k)}, which no longer violates");
+        }
+    }
     final rows: [any] = report["rows"] ?? [<any>];
     foreach (row in rows) {
         final key: {str: any} = row["key"];
@@ -189,11 +205,13 @@ test "a known entry that no longer violates fails at the ratchet" {
     assert\equal(got[0].message.indexOf("vcs/hg.go#hgVCS.Bisect") != null, want: true, message: got[0].message);
 }
 
-test "a stale entry of an advice metric fails like an enforced one" {
+test "a stale entry of an advice metric is printed, never failed" {
     final entry: {str: any} = {"metric": "func-lines", "items": ["internal/guard/guard.go#Judge"], "reason": "split pending"};
-    final got = judge(report([fresh()], rows: [<any>], stale: [entry]));
-    assert\equal(got.len(), want: 1, message: "func-lines is advice, yet its stale entry fails");
-    assert\equal(got[0].path, want: RATCHET, message: "points at the ratchet");
+    final r = report([fresh()], rows: [<any>], stale: [entry]);
+    assert\equal(judge(r).len(), want: 0, message: "func-lines is advice");
+    final printed = advice(r);
+    assert\equal(printed.len(), want: 1, message: "one advice line");
+    assert\equal(printed[0].indexOf("internal/guard/guard.go#Judge") != null, want: true, message: printed[0]);
 }
 
 test "a stale index or an unknown answer fails instead of passing on what it lacks" {
