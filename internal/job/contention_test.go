@@ -27,13 +27,13 @@ func TestUnusedWritePaths(t *testing.T) {
 	t.Run("the paths and claims no changed line falls under", func(t *testing.T) {
 		t.Parallel()
 		h := holder("a.md", "b.md", "run.go#A", "run.go#C", "docs/**", "*.md")
-		assert.Equal(t, []string{"b.md", "run.go#C", "docs/**"}, UnusedWritePaths(t.Context(), s, []types.Job{h}, h))
+		assert.Equal(t, []string{"b.md", "run.go#C", "docs/**"}, unusedWritePaths(t.Context(), s, []types.Job{h}, h))
 	})
 
 	t.Run("every path used is empty, not unknown", func(t *testing.T) {
 		t.Parallel()
 		h := holder("a.md", "run.go")
-		got := UnusedWritePaths(t.Context(), s, nil, h)
+		got := unusedWritePaths(t.Context(), s, nil, h)
 		assert.NotNil(t, got)
 		assert.Empty(t, got)
 	})
@@ -42,7 +42,7 @@ func TestUnusedWritePaths(t *testing.T) {
 		t.Parallel()
 		h := holder("a.md")
 		h.Checkpoint = ""
-		assert.Nil(t, UnusedWritePaths(t.Context(), s, []types.Job{h}, h))
+		assert.Nil(t, unusedWritePaths(t.Context(), s, []types.Job{h}, h))
 		assert.Contains(t, describeUnused("A", nil), "could not be read")
 	})
 }

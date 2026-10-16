@@ -436,7 +436,7 @@ func sharedCheckoutProblems(store *Store, rows []types.Job, row types.Job) types
 		}
 		reported[declared] = true
 		if !measured {
-			unused, measured = UnusedWritePaths(ctx, store, rows, holder), true
+			unused, measured = unusedWritePaths(ctx, store, rows, holder), true
 		}
 		store.requestRelease(ctx, holder.ID, load, []string{declared}, unused)
 		ps = append(ps, types.JobProblem{

@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// UnusedWritePaths returns the write paths of holder its footprint has not touched, the
+// unusedWritePaths returns the write paths of holder its footprint has not touched, the
 // ones it could release to a job refused for wanting them. The footprint is holder's diff
 // since its checkpoint in the checkout that took it, read through the store's version
 // control. A path entry is used when a changed file falls under it ([types.PathWithin]); a
@@ -19,7 +19,7 @@ import (
 //
 // A footprint that cannot be read returns nil, and a holder that has used every path
 // returns an empty, non-nil slice, so a caller never reads "unknown" as "all used".
-func UnusedWritePaths(ctx context.Context, store *Store, rows []types.Job, holder types.Job) []string {
+func unusedWritePaths(ctx context.Context, store *Store, rows []types.Job, holder types.Job) []string {
 	if store == nil || store.root == "" {
 		return nil
 	}
@@ -53,7 +53,7 @@ func usesEntry(entry string, loc types.Location) bool {
 	return loc.Declaration == "" || types.NamesDeclaration(decl, loc.Declaration)
 }
 
-// describeUnused is UnusedWritePaths as a refusal names it.
+// describeUnused is unusedWritePaths as a refusal names it.
 func describeUnused(holder string, unused []string) string {
 	switch {
 	case unused == nil:

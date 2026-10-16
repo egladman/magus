@@ -169,7 +169,7 @@ func (s *Store) dry() *Store {
 // requestRelease files one attention request (outcome waiting) asking holder to release
 // what it does not edit of file, which a refused fork wanted as the claims in wanted. unused
 // are the holder's write paths its footprint has not touched, nil when it could not be read
-// (see [UnusedWritePaths]); the message lists them. The request is keyed on holder, file and
+// (see [unusedWritePaths]); the message lists them. The request is keyed on holder, file and
 // that message (see [sessions.RequestID]), so every refusal over the pair lands on one row
 // until the holder's footprint grows or someone disposes of it; the claims ride along as its
 // files, and a reader holding the holder's id finds its requests by that key. A dry-run store

@@ -160,7 +160,7 @@ func wholeFileConfigClaimProblems(ctx context.Context, store *Store, row types.J
 			for _, holder := range liveHolders(f.Jobs, row.ID, file) {
 				// A parent holds its children's paths by design; it is not blocking them.
 				if !orderedPair(combined, row.ID, holder.ID) {
-					store.requestRelease(ctx, holder.ID, file, []string{file}, UnusedWritePaths(ctx, store, f.Jobs, holder))
+					store.requestRelease(ctx, holder.ID, file, []string{file}, unusedWritePaths(ctx, store, f.Jobs, holder))
 				}
 			}
 		}
@@ -231,7 +231,7 @@ func driverPattern(p string) string {
 // jobs at once, as WritePathFileShared: a candidate entry and a holder's entry name the same
 // file, still intersect (types.PathsIntersect), and neither row is the other's ancestor,
 // descendant, or depends_on partner. Each entry is reported once, against the first holder
-// found. The message names the holder's unused write paths ([UnusedWritePaths]), and one
+// found. The message names the holder's unused write paths ([unusedWritePaths]), and one
 // attention request asks the holder to release what it does not edit (see requestRelease).
 //
 // Left alone: a same-checkout or not-yet-taken holder (CheckoutRoot == ""), which
@@ -289,7 +289,7 @@ func sharedFileProblem(ctx context.Context, store *Store, rows, combined []types
 				continue
 			}
 			touched, unreadable := touchedDeclarations(ctx, store, rows, holder.ID, file)
-			unused := UnusedWritePaths(ctx, store, rows, holder)
+			unused := unusedWritePaths(ctx, store, rows, holder)
 			wanted := slices.DeleteFunc(slices.Clone(row.WritePaths), func(entry string) bool {
 				other, ok := literalClaimableFile(store.root, entry)
 				return !ok || other != file
