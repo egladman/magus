@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/journal"
@@ -2603,4 +2604,23 @@ func TestOutputGlobsByRootStopsAtNestedProjects(t *testing.T) {
 		got = append(got, path)
 	}
 	assert.Equal(t, []string{filepath.Join(m.Root(), "gen", "own.txt")}, got)
+}
+
+// TestInvokeSpellHandsItsCostToTheStep pins that what a target's processes cost reaches
+// the cache step's collector, which the session record reads, though the collector the
+// outcome reads sits between them.
+func TestInvokeSpellHandsItsCostToTheStep(t *testing.T) {
+	s := spells.NewSpell("zzz-cost-hand-over", spells.WithTargets("spent"),
+		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
+			types.RecordPeakRSS(ctx, 4096)
+			types.RecordCPUMs(ctx, 700)
+			return nil, nil
+		}))
+	rt := volatility.NewRuntime(nil, "", volatility.Config{}, nil, false)
+	step := types.WithExecCost(volatility.WithRuntime(t.Context(), rt))
+
+	require.NoError(t, invokeSpell(step, &types.Project{Path: ".", Dir: t.TempDir()}, "spent", s))
+
+	assert.Equal(t, int64(4096), types.PeakRSS(step))
+	assert.Equal(t, int64(700), types.CPUMs(step))
 }

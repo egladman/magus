@@ -320,6 +320,26 @@ type Result struct {
 	// printed none; today only [HintUnchangedFailure]. It rides the result the way Ref
 	// does so a consumer counting a hint's uptake never has to match on its wording.
 	HintID string
+	// Claim is the admission the step ran under. A replay runs nothing, so it carries
+	// none, even when a remote hit took a machine claim before it found the entry.
+	Claim StepClaim
+	// MaxRSSBytes and CPUMs are what the processes the step ran cost; see
+	// types.WithExecCost. Zero on a replay.
+	MaxRSSBytes int64
+	CPUMs       int64
+}
+
+// StepClaim is the admission a step was granted before it ran.
+type StepClaim struct {
+	// Started is when the step held every seat it needed and began.
+	Started time.Time
+	// Waited is how long it queued for its machine claim and its local slots.
+	Waited time.Duration
+	Slots  int
+	// MemoryMB and Sizing are the machine claim's memory, zero for a step admitted
+	// beneath an ancestor's claim, which takes none of its own.
+	MemoryMB int
+	Sizing   types.MemorySizing
 }
 
 type runCtx struct {
@@ -341,6 +361,15 @@ type runCtx struct {
 	maxFailures int
 	// runTarget runs a step's BeforeKey targets; see WithTargetRunner.
 	runTarget func(context.Context, types.TargetRef) error
+	// claim is the admission RunAll granted this step; see grantedClaim.
+	claim StepClaim
+}
+
+// grantedClaim hands Run the admission RunAll took for the step, so a miss reports it.
+// An option rather than a context value, because a nested step runs under its parent's
+// context and would otherwise report the parent's claim as its own.
+func grantedClaim(claim StepClaim) RunOption {
+	return func(rc *runCtx) { rc.claim = claim }
 }
 
 // fireResults notifies every registered result observer, in registration order.
@@ -721,6 +750,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	}
 
 	result.HintID = c.emitUnchangedFailureHint(ctx, hash)
+	result.Claim = rc.claim
 	return c.runMiss(ctx, rc, s, hash, fn, start, netRec, result)
 }
 
@@ -840,8 +870,10 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	}
 
 	lp := c.logPath(s.ProjectPath, hash)
+	ctx = types.WithExecCost(ctx)
 	// NewContext lets spell bindings (magus.bust_cache) reach the active cache.
 	rawOutput, runErr := c.captureRun(NewContext(ctx, c), lp, s.ProjectPath, reproTarget(s), fn)
+	result.MaxRSSBytes, result.CPUMs = types.PeakRSS(ctx), types.CPUMs(ctx)
 
 	// fail is every way this step can end badly after fn was invoked: the run itself, a
 	// source the run mutated, a snapshot that would not write. All three record the same
@@ -1558,9 +1590,12 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				}
 			}
 
+			// The wait a step reports starts here: its upstreams are done, and what follows
+			// is queueing for seats.
+			queued := time.Now()
 			// admitAndRun takes the local slot beneath whatever machine seat machineCtx
 			// carries and runs the step there.
-			admitAndRun := func(machineCtx context.Context, runOpts []RunOption) (Result, error) {
+			admitAndRun := func(machineCtx context.Context, claim StepClaim, runOpts []RunOption) (Result, error) {
 				// A slot-acquire failure is usually this batch's own cancellation, which
 				// fail swallows regardless. A deadlocked pool is the exception: nothing
 				// upstream failed and the batch was not cancelled, so it is an independent
@@ -1571,6 +1606,8 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 					return Result{}, admitErr
 				}
 				defer release()
+				claim.Slots, claim.Started = slots, time.Now()
+				claim.Waited = claim.Started.Sub(queued)
 				if slog.Default().Enabled(gctx, levelTrace) {
 					slog.LogAttrs(gctx, levelTrace, "schedule.run",
 						slog.String("project", s.ProjectPath), slog.String("target", s.Target),
@@ -1591,17 +1628,21 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				ran = true
 				return c.Run(stepCtx, s, func(ctx context.Context) error {
 					return runSeated(ctx, lim, slots, func(ctx context.Context) error { return fn(ctx, s) })
-				}, runOpts...)
+				}, slices.Concat(runOpts, []RunOption{grantedClaim(claim)})...)
 			}
 
 			var r Result
 			var err error
 			key := c.localHitKey(gctx, &s)
 			if key != "" {
-				r, err = admitAndRun(gctx, slices.Concat(opts, []RunOption{replayLocal(key)}))
+				r, err = admitAndRun(gctx, StepClaim{}, slices.Concat(opts, []RunOption{replayLocal(key)}))
 			}
 			if key == "" || errors.Is(err, errLocalEntryGone) {
 				ran = false
+				var claim StepClaim
+				if !admissionFrom(gctx).machineClaim {
+					claim.MemoryMB, claim.Sizing = s.MemoryMB, s.MemorySizing
+				}
 				// The machine budget comes before the slot, so a step queues for it holding
 				// nothing a peer needs in order to finish; claimMachine carries the
 				// interleaving that ordering answers.
@@ -1626,7 +1667,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				if err := gctx.Err(); err != nil {
 					return fail(err)
 				}
-				r, err = admitAndRun(machineCtx, opts)
+				r, err = admitAndRun(machineCtx, claim, opts)
 			}
 			// Write key before complete; the complete→waitForUpstreams happens-before edge
 			// ensures dependents see the key when they unblock.

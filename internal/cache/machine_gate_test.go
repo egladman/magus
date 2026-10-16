@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -188,4 +189,64 @@ func TestMachineBusyRefusalNamesTheWaitPipe(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "status --wait | ")
 	assert.Contains(t, err.Error(), "run <same args>")
+}
+
+// A step's result carries the claim it ran under, what it cost, and how long it queued:
+// the budget seats one step at a time, so the second waits out the first.
+func TestAStepResultCarriesItsClaimAndItsWait(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "")
+	b, _ := testBudget(t, 10_000, 1)
+	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}))
+	require.NoError(t, err)
+
+	const hold = 300 * time.Millisecond
+	steps := []Step{
+		{ProjectPath: ".", Target: "build", MemoryMB: 512},
+		{ProjectPath: ".", Target: "lint", MemoryMB: 512},
+	}
+	results, err := c.RunAll(t.Context(), steps, func(ctx context.Context, _ Step) error {
+		types.RecordCPUMs(ctx, 40)
+		types.RecordPeakRSS(ctx, 1<<20)
+		time.Sleep(hold)
+		return nil
+	})
+	require.NoError(t, err)
+
+	require.Len(t, results, 2)
+	var waits []time.Duration
+	for _, r := range results {
+		assert.Equal(t, 1, r.Claim.Slots)
+		assert.Equal(t, 512, r.Claim.MemoryMB)
+		assert.False(t, r.Claim.Started.IsZero())
+		assert.Equal(t, int64(40), r.CPUMs)
+		assert.Equal(t, int64(1<<20), r.MaxRSSBytes)
+		waits = append(waits, r.Claim.Waited)
+	}
+	slices.Sort(waits)
+	assert.GreaterOrEqual(t, waits[1], hold, "the second step queued behind the first")
+}
+
+// A replay runs nothing, so its result carries no claim and no cost.
+func TestAReplayedStepCarriesNoClaim(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "")
+	b, _ := testBudget(t, 10_000, 8)
+	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}))
+	require.NoError(t, err)
+	steps := []Step{{ProjectPath: ".", Target: "build", MemoryMB: 512}}
+	run := func(ctx context.Context, _ Step) error {
+		types.RecordCPUMs(ctx, 40)
+		return nil
+	}
+
+	first, err := c.RunAll(t.Context(), steps, run)
+	require.NoError(t, err)
+	require.False(t, first[0].Hit)
+	assert.Equal(t, 512, first[0].Claim.MemoryMB)
+
+	replayed, err := c.RunAll(t.Context(), steps, run)
+	require.NoError(t, err)
+	require.True(t, replayed[0].Hit)
+	assert.Zero(t, replayed[0].Claim)
+	assert.Zero(t, replayed[0].CPUMs)
+	assert.Zero(t, replayed[0].MaxRSSBytes)
 }

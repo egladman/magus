@@ -2732,6 +2732,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	// runs, so the outcome recorded below carries them alongside its duration. The
 	// collector is installed here rather than higher up because the unit that
 	// has to fit on one runner is the target, not the invocation.
+	step := ctx
 	ctx = types.WithExecCost(ctx)
 	resp, err := s.Invoke(types.WithEvalMemo(ctx), req)
 	// Only a SUCCESSFUL invocation's value is recorded. A failed attempt is not
@@ -2768,7 +2769,11 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	// Reported only when a process actually reported one: an unmeasured target
 	// must stay zero in the record so a reader can tell it apart from a
 	// measured-and-tiny one.
-	peakRSS := types.PeakRSS(ctx)
+	peakRSS, cpuMs := types.PeakRSS(ctx), types.CPUMs(ctx)
+	// The cache step's own collector, which its session record reads, sees these
+	// processes only through this hand-over: the collector above hides them from it.
+	types.RecordPeakRSS(step, peakRSS)
+	types.RecordCPUMs(step, cpuMs)
 	// The same shape executeStages sizes claims by, read from the same run options.
 	shape := forecast.NewShape(types.CharmsFromContext(ctx), project.ExtraArgs(ctx))
 	rt.Record(p.Path, volatileTarget, forecast.Outcome{
@@ -2778,7 +2783,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 		At:             time.Now(),
 		Attempts:       attempts,
 		MaxRSSBytes:    peakRSS,
-		CPUMs:          types.CPUMs(ctx),
+		CPUMs:          cpuMs,
 		Charms:         shape.Charms,
 		ArgsHash:       shape.ArgsHash,
 	})
