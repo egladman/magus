@@ -21,7 +21,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-
 // replayer answers judgments from two graphs loaded once: domain, the default graph,
 // and symbols, the default graph with every symbol shard merged, which is what
 // searchGraph, explainNode and loadRefsGraph load per call for a read that seeds the
