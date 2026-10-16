@@ -1313,3 +1313,33 @@ func TestGradeLeasedWriteInTheLeasesOwnCheckout(t *testing.T) {
 	assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "w", filepath.Join(scratch, "main.go")).Decision,
 		"a go.mod alone makes no magus checkout")
 }
+
+// A worker its spawn bound is taken in the session's checkout while its fork made it one of
+// its own, nested or not. Its editor writes into that checkout are graded against its write
+// paths like the rest of its work, and a write into a third checkout is still refused.
+func TestGradeLeasedWriteInTheCheckoutTheLeasesForkMade(t *testing.T) {
+	ctx, session := fleetFixture(t)
+	nested := filepath.Join(session, ".claude", "worktrees", "w")
+	for name, own := range map[string]string{"apart": t.TempDir(), "nested": nested} {
+		t.Run(name, func(t *testing.T) {
+			third := t.TempDir()
+			for _, dir := range []string{session, own, third} {
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "std"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
+			}
+			row := types.Job{ID: "w", WritePaths: []string{"std/*.go"}, State: types.StateRunning,
+				Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1,
+				CheckoutRoot: session, Worktree: &types.JobWorktree{Root: own, Source: session}}
+			// Only a fork writes the worktree record, so the rows are pinned rather than stored.
+			ctx := job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{row}})
+
+			assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "w", filepath.Join(own, "std", "module.go")).Decision,
+				"a write the lease's paths cover, in the checkout its fork made")
+			outside := gradeLeasedWrite(ctx, Dependencies{}, "w", filepath.Join(own, "cmd", "main.go"))
+			assert.Equal(t, "deny", outside.Decision, "the fork's checkout is graded against the lease's paths, not waved through")
+			other := gradeLeasedWrite(ctx, Dependencies{}, "w", filepath.Join(third, "std", "module.go"))
+			assert.Equal(t, "deny", other.Decision)
+			assert.Contains(t, other.Reason, "another checkout")
+		})
+	}
+}

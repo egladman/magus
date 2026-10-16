@@ -258,10 +258,16 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		return writeGrade{}
 	}
 	// The store's paths are relative to the checkout a lease was taken in, which for a
-	// worker isolated in its own worktree is not the checkout its hooks resolve. A write
-	// outside that checkout has nothing to be graded against, unless it lands in another
-	// magus checkout; see denyOtherCheckout.
+	// worker isolated in its own worktree is not the checkout its hooks resolve, or, for a
+	// write inside it, the checkout the lease's fork made. A write outside that checkout has
+	// nothing to be graded against, unless it lands in another magus checkout; see
+	// denyOtherCheckout.
 	checkout := leaseCheckout(ctx, location, actingLease)
+	if owned := leaseWorktree(ctx, location, actingLease); owned != "" {
+		if _, in := workspaceRelative(owned, writePath); in {
+			checkout = owned
+		}
+	}
 	rel, inside := workspaceRelative(checkout, writePath)
 	if !inside {
 		return denyOtherCheckout(checkout, actingLease, writePath)
@@ -839,6 +845,23 @@ func leaseCheckout(ctx context.Context, at location, lease string) string {
 		return me.CheckoutRoot
 	}
 	return at.workspace
+}
+
+// leaseWorktree is the standing checkout the acting lease's fork made for it, "" when it
+// has none or is not live. A worker bound by its spawn is taken in the session's
+// checkout, so its row records that checkout while its editor writes land in this one.
+func leaseWorktree(ctx context.Context, at location, lease string) string {
+	if lease == "" {
+		return ""
+	}
+	rows, err := leaseRows(ctx, at)
+	if err != nil {
+		return ""
+	}
+	if me, live := liveLease(liveLeases(rows), lease); live && me.Worktree.Standing() {
+		return me.Worktree.Root
+	}
+	return ""
 }
 
 // denyOtherCheckout refuses a lease's write into a magus checkout other than the one its
