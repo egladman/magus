@@ -34,6 +34,30 @@ func TestStaleIndexNotice(t *testing.T) {
 	assert.Contains(t, both, "missing sites in . (buzz index), . (go index).", "and the line says which of its indexes is behind")
 }
 
+// The banner names the first changed files, counts the rest, and says what it cannot see;
+// an index whose files nobody listed adds no line at all.
+func TestStaleIndexNoticeNamesTheChangedFiles(t *testing.T) {
+	answer := func(stale ...types.KnowledgeStaleIndex) types.KnowledgeAnswer {
+		return knowledge.Answer("Foo", true, knowledge.Coverage{Seeded: true, Probed: true, Stale: stale})
+	}
+	got := staleIndexNotice(answer(
+		types.KnowledgeStaleIndex{Project: ".", Language: "go", Op: "scip",
+			Changed: []string{"a.go", "b.go", "c.go", "d.go", "e.go", "f.go", "magusfile.buzz"}, ChangedCount: 9},
+		types.KnowledgeStaleIndex{Project: ".", Language: "buzz", Op: "scip-buzz",
+			Changed: []string{"magusfile.buzz"}, ChangedCount: 1}))
+	assert.Contains(t, got, "  changed since: a.go, b.go, c.go, d.go, e.go and 4 more; deletions are not listed\n",
+		"five named, the shared magusfile counted once, and the two files past the list's cap counted")
+
+	assert.NotContains(t, staleIndexNotice(answer(types.KnowledgeStaleIndex{Project: "."})), "changed since",
+		"a recorded verdict names no files, and the line does not pretend it does")
+}
+
+func TestStaleIndexAdviceNamesTheChangedFiles(t *testing.T) {
+	got := renderStaleGraphAdvice("", []types.KnowledgeStaleIndex{{Project: ".", Language: "go", Changed: []string{"run.go"}, ChangedCount: 1}})
+	assert.Contains(t, got, "Changed since: run.go; deletions are not listed.")
+	assert.NotContains(t, renderStaleGraphAdvice("", []types.KnowledgeStaleIndex{{Project: "."}}), "Changed since")
+}
+
 // An answer from a server that predates per-index detail still names its projects.
 func TestStaleIndexNoticeFromProjectsAlone(t *testing.T) {
 	got := staleIndexNotice(types.KnowledgeAnswer{Verdict: types.VerdictFound, StaleIndexes: []string{"libs/api"}})

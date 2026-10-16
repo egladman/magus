@@ -5,9 +5,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -84,6 +86,65 @@ func writeSymbolStamp(indexPath, want string) {
 	_ = file.WriteFileAtomic(symbolStampPath(indexPath), []byte(want), 0o644)
 }
 
+// changedListCap bounds Changed on a status, so an edit across thousands of files cannot
+// bloat it; ChangedCount still counts them all.
+const changedListCap = 200
+
+// changedSinceIndex is the workspace-relative sources the step for op keys on in p whose
+// mtime is past index's, sorted. A deleted source leaves nothing to stat, so it is never
+// listed. memo is the sweep's, so the expansion symbolIndexStamp paid is not paid again.
+func (m *Magus) changedSinceIndex(ctx context.Context, p *types.Project, op, index string, memo *cache.SourceMemo) ([]string, error) {
+	built, err := os.Stat(index)
+	if err != nil {
+		return nil, err
+	}
+	c := m.freshnessCache(ctx)
+	if c == nil {
+		return nil, errors.New("no cache is open to expand the indexer's sources")
+	}
+	step := m.buildStep(p, op)
+	_, lines, err := c.StepKeyMemo(ctx, &step, memo)
+	if err != nil {
+		return nil, err
+	}
+	var changed []string
+	for _, line := range lines {
+		rel, ok := keyedSource(line)
+		if !ok {
+			continue
+		}
+		abs := filepath.Join(step.WorkspaceRoot, filepath.FromSlash(rel))
+		info, err := os.Stat(abs)
+		if err != nil || !info.ModTime().After(built.ModTime()) {
+			continue
+		}
+		if r, err := filepath.Rel(m.Root(), abs); err == nil {
+			rel = filepath.ToSlash(r)
+		}
+		changed = append(changed, rel)
+	}
+	slices.Sort(changed)
+	return slices.Compact(changed), nil
+}
+
+// keyedSource is the path of a cache key's "src:<path>:<hash>:<x>" line, read from the
+// right since a path may hold a colon. The key lines are the one record of the step's
+// expanded sources that honors every glob's exclusions.
+func keyedSource(line string) (string, bool) {
+	rest, ok := strings.CutPrefix(line, "src:")
+	if !ok {
+		return "", false
+	}
+	for range 2 {
+		i := strings.LastIndexByte(rest, ':')
+		if i < 0 {
+			return "", false
+		}
+		rest = rest[:i]
+	}
+	return rest, rest != ""
+}
+
 // SymbolFreshnessEnv names the environment variables an index freshness verdict depends
 // on, sorted: the ones the scip steps key on, and PATH, which decides the binary a version
 // probe runs. Two processes that agree on every value reach the same verdict about the
@@ -105,7 +166,9 @@ func (m *Magus) SymbolFreshnessEnv() []string {
 // from the server's watcher memo, so a graph read can state freshness as of the moment it
 // reads. An index whose stamp file matches is fresh with no probe; the rest pay the
 // tool-version and observation probes once for the sweep, as a run does, and each one the
-// probe finds fresh is stamped for the next read. Safe for concurrent use.
+// probe finds fresh is stamped for the next read. A stale entry carries the sources whose
+// mtime is past its index's in Changed; a deleted source is never among them. Safe for
+// concurrent use.
 func (m *Magus) SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolIndexStatus {
 	capable := m.workspaceIndexes()
 	if len(capable) == 0 {
@@ -122,9 +185,11 @@ func (m *Magus) SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolInde
 		stamp string
 	}
 	var probe []pending
+	indexes := make([]string, len(capable))
 	for i, idx := range capable {
 		out[i] = types.SymbolIndexStatus{Project: idx.projectRef(), Op: idx.op, Language: idx.language, Freshness: types.SymbolIndexNotBuilt}
 		index := symbols.IndexPath(cacheDir, idx.project.Dir, idx.op)
+		indexes[i] = index
 		if _, err := os.Stat(index); err != nil {
 			// The install hint is the fix for an index that was never built because its
 			// indexer is missing; an index whose indexer a run would find needs only a build.
@@ -169,6 +234,17 @@ func (m *Magus) SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolInde
 				writeSymbolStamp(w.index, w.stamp)
 			}
 		}
+	}
+	for i, idx := range capable {
+		if out[i].Freshness != types.SymbolIndexStale {
+			continue
+		}
+		changed, err := m.changedSinceIndex(ctx, idx.project, idx.op, indexes[i], memo)
+		if err != nil {
+			out[i].Detail = "cannot list the sources changed since it was built: " + err.Error()
+			continue
+		}
+		out[i].Changed, out[i].ChangedCount = changed[:min(len(changed), changedListCap)], len(changed)
 	}
 	slices.SortStableFunc(out, func(a, b types.SymbolIndexStatus) int { return cmp.Compare(a.Project.Path, b.Project.Path) })
 	return out

@@ -844,6 +844,12 @@ type SymbolIndexStatus struct {
 	Freshness SymbolIndexFreshness `json:"freshness"`
 	// Detail says why, for a freshness that needs it; empty otherwise.
 	Detail string `json:"detail,omitempty"`
+	// Changed lists, for a stale index, the workspace-relative sources modified since it
+	// was built, sorted, and ChangedCount how many there are. Changed may stop short of
+	// ChangedCount, so a long list stays bounded. A deleted source leaves nothing to stat,
+	// so it is never listed.
+	Changed      []string `json:"changed,omitempty"`
+	ChangedCount int      `json:"changed_count,omitempty"`
 }
 
 // KnowledgeSymbolRef is one referencing file: its path, how many times the symbol
@@ -968,6 +974,10 @@ type KnowledgeStaleIndex struct {
 	Project  string `json:"project"            yaml:"project"`
 	Language string `json:"language,omitempty" yaml:"language,omitempty"`
 	Op       string `json:"op,omitempty"       yaml:"op,omitempty"`
+	// Changed and ChangedCount are SymbolIndexStatus's: the sources modified since the
+	// index was built, deletions never among them.
+	Changed      []string `json:"changed,omitempty"       yaml:"changed,omitempty"`
+	ChangedCount int      `json:"changed_count,omitempty" yaml:"changed_count,omitempty"`
 }
 
 // Describe renders the index as "libs/api (go index)", or the bare project when the

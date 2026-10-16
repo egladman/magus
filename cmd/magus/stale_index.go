@@ -85,10 +85,41 @@ func staleIndexNotice(ans types.KnowledgeAnswer) string {
 	if projects == 0 {
 		return ""
 	}
-	return fmt.Sprintf("\nstale index: %s changed since %s last indexed %s, so this answer may be missing sites in %s.\n",
+	notice := fmt.Sprintf("\nstale index: %s changed since %s last indexed %s, so this answer may be missing sites in %s.\n",
 		plural(projects, "a project", "projects"), hint.GraphBuild,
-		plural(projects, "it", "them"), ans.DescribeStale()) +
-		fmt.Sprintf("  refresh and ask again: %s\n", hint.GraphBuild)
+		plural(projects, "it", "them"), ans.DescribeStale())
+	if files := describeChangedFiles(ans.StaleIndexDetails); files != "" {
+		notice += fmt.Sprintf("  changed since: %s; deletions are not listed\n", files)
+	}
+	return notice + fmt.Sprintf("  refresh and ask again: %s\n", hint.GraphBuild)
+}
+
+// changedFilesShown is how many changed files a stale-index line names before it counts
+// the rest.
+const changedFilesShown = 5
+
+// describeChangedFiles renders the sources modified since the stale indexes were built as
+// "a.go, b.go and 3 more", or "" when no index names its files: a verdict the store
+// recorded carries none. Two indexes of one project share their magusfiles, so a file
+// either names counts once.
+func describeChangedFiles(stale []types.KnowledgeStaleIndex) string {
+	var files []string
+	unlisted := 0
+	for _, s := range stale {
+		files = append(files, s.Changed...)
+		unlisted += s.ChangedCount - len(s.Changed)
+	}
+	slices.Sort(files)
+	files = slices.Compact(files)
+	if len(files)+unlisted == 0 {
+		return ""
+	}
+	shown := files[:min(len(files), changedFilesShown)]
+	out := strings.Join(shown, ", ")
+	if more := len(files) - len(shown) + unlisted; more > 0 {
+		out += fmt.Sprintf(" and %d more", more)
+	}
+	return out
 }
 
 // plural picks a word by count. Two call sites in one sentence, so the alternative is an
@@ -160,7 +191,9 @@ func findStaleIndexes(ctx context.Context, ws graphWorkspace) []types.KnowledgeS
 		if path == "" {
 			path = "."
 		}
-		stale = append(stale, types.KnowledgeStaleIndex{Project: path, Language: s.Language, Op: s.Op})
+		stale = append(stale, types.KnowledgeStaleIndex{
+			Project: path, Language: s.Language, Op: s.Op, Changed: s.Changed, ChangedCount: s.ChangedCount,
+		})
 	}
 	slices.SortFunc(stale, types.CompareStaleIndexes)
 	return stale
@@ -200,6 +233,9 @@ func renderStaleGraphAdvice(reason string, stale []types.KnowledgeStaleIndex) st
 	if projects := len(types.StaleIndexProjects(stale)); projects > 0 {
 		fmt.Fprintf(&b, "%s changed since %s last indexed %s: %s. A symbol added or moved since then is missing from the answer, and a lookup that misses it reports \"unknown, not absent\" rather than nothing being there.\n",
 			plural(projects, "One project", "Several projects"), hint.GraphBuild, plural(projects, "it", "them"), types.DescribeStaleIndexes(stale))
+	}
+	if files := describeChangedFiles(stale); files != "" {
+		fmt.Fprintf(&b, "Changed since: %s; deletions are not listed.\n", files)
 	}
 	b.WriteString("This is an advisory: a stale index still holds true facts, so the read is worth running either way.")
 	return b.String()
