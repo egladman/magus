@@ -70,7 +70,7 @@ func TestConformanceValidateAcceptsAConfiguredPolicy(t *testing.T) {
 
 	o = conformanceOptions()
 	o.Ratchet.Thresholds[0].Value = 2200
-	assert.NoError(t, o.Validate(), "a committed value equal to its anchor is not looser")
+	require.NoError(t, o.Validate(), "a committed value equal to its anchor is not looser")
 
 	o = conformanceOptions()
 	o.Ratchet.Known = append(o.Ratchet.Known, ConformanceKnown{Metric: ConformanceFuncLines, Items: []string{"a.go#F"}, Reason: "long", Line: 13})
