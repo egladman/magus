@@ -2637,7 +2637,7 @@ export fun retrieval_eval(ctx: magus\Context, args: [str]) > void !> any {
         "MAGUS_RETRIEVAL_EVAL_BASELINE": os\env("MAGUS_RETRIEVAL_EVAL_BASELINE") ?? "",
     };
     go["go-test"](ctx.withEnv(env),
-        {"args": ["-tags", "retrievaleval", "-run=^TestRetrievalEval$", "-count=1", "-v", "./cmd/magus/"] + args});
+        {"args": ["-tags", "retrievaleval", "-run=^TestRetrievalEval$", "-count=1", "-timeout=2h", "-v", "./cmd/magus/"] + args});
 }
 
 // Runs internal/compress's tests under the cgo tags, which the ordinary test target
