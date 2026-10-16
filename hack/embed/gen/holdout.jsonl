@@ -528,9 +528,9 @@
 {"bucket":1,"path":"hack/ci/show-failures.buzz"}
 {"bucket":0,"path":"hack/dev/show-feedback.buzz"}
 {"bucket":0,"path":"hack/dev/summarize-transcript.buzz"}
-{"bucket":1,"path":"hack/embed/corpus.buzz"}
 {"bucket":1,"path":"hack/embed/distill/vocab.go"}
 {"bucket":1,"path":"hack/embed/distill/vocab_test.go"}
+{"bucket":0,"path":"hack/embed/sources.buzz"}
 {"bucket":0,"path":"hack/lint/landing-rotator-slots-match-headline-count.buzz"}
 {"bucket":0,"path":"hack/lint/magusfile-modules-have-no-main.buzz"}
 {"bucket":1,"path":"hack/lint/markdown-carries-no-mermaid.buzz"}
