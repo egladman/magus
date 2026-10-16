@@ -2990,7 +2990,7 @@ github.com/egladman/magus/types.KnowledgeRoutingProject type struct
 github.com/egladman/magus/types.KnowledgeRoutingProject.KeyTargets field []string "json:\"key_targets,omitempty\" yaml:\"key_targets,omitempty\""
 github.com/egladman/magus/types.KnowledgeRoutingProject.Path field string "json:\"path\"                  yaml:\"path\""
 github.com/egladman/magus/types.KnowledgeRoutingProject.TargetCount field int "json:\"target_count\"          yaml:\"target_count\""
-github.com/egladman/magus/types.KnowledgeSchemaVersion const untyped int = 21
+github.com/egladman/magus/types.KnowledgeSchemaVersion const untyped int = 22
 github.com/egladman/magus/types.KnowledgeStaleIndex type struct
 github.com/egladman/magus/types.KnowledgeStaleIndex.Changed field []string "json:\"changed,omitempty\"       yaml:\"changed,omitempty\""
 github.com/egladman/magus/types.KnowledgeStaleIndex.ChangedCount field int "json:\"changed_count,omitzero\"  yaml:\"changed_count,omitempty\""

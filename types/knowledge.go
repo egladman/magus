@@ -39,7 +39,7 @@ import (
 // because shards load lazily and an edge legitimately arrives before the node that gives
 // its endpoint a kind. Graph.UndeclaredEdges reports violations, and a test over this
 // workspace's own graph fails when a producer widens the vocabulary without declaring it.
-const KnowledgeSchemaVersion = 21
+const KnowledgeSchemaVersion = 22
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
 // generates. Four renderers write one of these spellings: the target-graph index
