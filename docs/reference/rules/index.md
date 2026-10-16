@@ -115,7 +115,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [shared-checkout](shared-checkout.md)                   | a spawn into a checkout a live job already holds and writes                                        |
 | [sibling-checkout](sibling-checkout.md)                 | a magus command relocated into another checkout, judging a tree nobody ships                       |
 | [skill-source](skill-source.md)                         | a write to an installed skill copy rather than to its source                                       |
-| [sleep-poll](sleep-poll.md)                             | a sleep before a one-shot status read, or a backgrounded call that only sleeps                     |
+| [sleep-poll](sleep-poll.md)                             | a sleep before a one-shot status read, or a call that only sleeps (a timer)                        |
 | [source-read](source-read.md)                           | an unbounded source read the symbol index has already answered                                     |
 | [spawn-nested-waiter](spawn-nested-waiter.md)           | a subagent spawning a helper whose title or brief opening speaks of waiting or watching            |
 | [spawn-unbriefed](spawn-unbriefed.md)                   | a subagent spawned before the multi-agent skill loaded                                             |

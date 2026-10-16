@@ -1,20 +1,20 @@
 ---
-title: "sleep-poll: a sleep before a one-shot status read, or a backgrounded call that only sleeps"
-description: "An advisory by default: it explains, and blocks nothing, on a sleep before a one-shot status read, or a backgrounded call that only sleeps."
+title: "sleep-poll: a sleep before a one-shot status read, or a call that only sleeps (a timer)"
+description: "An advisory by default: it explains, and blocks nothing, on a sleep before a one-shot status read, or a call that only sleeps (a timer)."
 tags: [guard, rules, sleep-poll, advise]
 ---
 
 # sleep-poll
 
-An advisory by default: it explains, and blocks nothing, on a sleep before a one-shot status read, or a backgrounded call that only sleeps.
+An advisory by default: it explains, and blocks nothing, on a sleep before a one-shot status read, or a call that only sleeps (a timer).
 
 ## What it catches
 
-A sleep before a one-shot status read, or a backgrounded call that only sleeps.
+A sleep before a one-shot status read, or a call that only sleeps (a timer).
 
 ## Why
 
-Both are a wait whose loop is the caller's own next call. A sleep of ten seconds or more followed on the same line by a status read (`kill -0`, the process table, `magus status` or a job row, a pull request's checks, a CI run) looks once and leaves the next look to the next call. A backgrounded call that only sleeps and prints is a timer: its notice says only that time passed, where the work's own backgrounded call is announced with its result. A watch (`--watch`) is not a status read, and a loop is busy-wait's. It cannot tell a one-off settle before a single check from the tenth look of a poll; the served watch answers both.
+Both are a wait whose loop is the caller's own next call. A sleep of ten seconds or more followed on the same line by a status read (`kill -0`, the process table, `magus status` or a job row, a pull request's checks, a CI run) looks once and leaves the next look to the next call. A call whose only work is sleeping, printing and reading a file once (`sleep 300; echo tick`, `sleep 120 && tail -5 out.log`, a `for` loop of sleeps and echoes) is a timer: its notice says only that time passed, where the work's own backgrounded call is announced with its result. Backgrounded it is refused at any length; in the foreground from ten seconds, since a foreground sleep past the tool timeout is moved to the background and becomes one. A shorter foreground sleep is a settle, and a line that also builds, tests or runs a script is work. A watch (`--watch`) is not a status read, and a loop is busy-wait's. It cannot tell a one-off settle before a single check from the tenth look of a poll; the served watch answers both.
 
 ## Default and override
 
