@@ -12,47 +12,21 @@ import (
 type Resolver interface {
 	// Resolves reports whether the given anchor still names a live entity.
 	Resolves(ctx context.Context, a Anchor) bool
-	// Digest returns the CURRENT fingerprint of the anchored content.
+	// Digest returns the CURRENT fingerprint of a non-symbol anchor's content. It is never
+	// asked about a symbol anchor, which Signature grades.
 	//
 	// An empty digest with a nil error means the kind has nothing to hash: nothing to say,
-	// and nothing wrong. A non-nil error means the fingerprint COULD NOT be computed: an
-	// unbuilt symbol index, an indexer that reported no enclosing range, an unreadable
-	// file.
-	//
-	// Neither is drift, and that direction is deliberate: a gate that manufactures a change
-	// out of its own blind spot gets ignored, and an ignored gate is worse than none. They
-	// are separated because they are differently actionable: nothing to hash is the end of
-	// the story, while a failure names something a reader can go fix. Collapsing both into
-	// "" hid four distinct causes behind one silence.
+	// and nothing wrong. A non-nil error means the fingerprint COULD NOT be computed, such as
+	// an unreadable file. Neither is drift: a gate that manufactures a change out of its own
+	// blind spot gets ignored, and an ignored gate is worse than none. They are separated
+	// because nothing to hash is the end of the story, while a failure names something a
+	// reader can go fix.
 	Digest(ctx context.Context, a Anchor) (string, error)
-	// DeclDigest returns the CURRENT fingerprint of the anchored subject's declaration, or
-	// "" when the kind has no declaration to speak of.
-	//
-	// Errors are NOT reported separately from Digest's: this only ever grades a change
-	// Digest already found, so a declaration that cannot be computed degrades to an ungraded
-	// finding rather than to a second complaint about the same anchor.
-	DeclDigest(ctx context.Context, a Anchor) (string, error)
-}
-
-// DeclarationHeld reports whether the anchored subject's DECLARATION is the one the note was
-// last reviewed against. Call it only once Digest has already found a change: it is what
-// separates a body edit, which rarely invalidates prose, from drift worth re-reading for.
-//
-// Exported so the CLI and the server grade with one rule rather than two. They present the
-// answer differently (an Issue with a hint, an AnchorStatus with a detail), but a client
-// whose verdict disagreed with `magus notes verify` would be a second opinion rather than a
-// second view of one answer.
-//
-// False is the answer for every uncertainty: no recorded declaration digest, no computable
-// one, or an error. The finding then degrades to ungraded drift instead of to silence, which
-// is the safe direction: an ungraded finding overstates a change, while grading on absent
-// data would understate one.
-func DeclarationHeld(ctx context.Context, res Resolver, a Anchor) bool {
-	if a.DeclDigest == "" {
-		return false
-	}
-	decl, err := res.DeclDigest(ctx, a)
-	return err == nil && decl != "" && decl == a.DeclDigest
+	// Signature returns a symbol anchor's CURRENT declaration as its indexer renders it. It is
+	// asked only about symbol anchors. A symbol with no rendered signature is an error naming
+	// why (an unbuilt index, an indexer that renders none), never "": an empty signature
+	// compared against a recorded one would read as drift, and against none as clean.
+	Signature(ctx context.Context, a Anchor) (string, error)
 }
 
 // AnchorIssues reports every anchor that no longer resolves, with the coarser anchor it
@@ -125,8 +99,8 @@ const StatusUngraded IssueCode = "ungraded-anchor"
 
 // ResolveAnchors grades EVERY anchor of every note, healthy ones included. It is the
 // resolution pass itself, and AnchorIssues is that pass projected onto the anchors that graded
-// to a finding, so the two views cannot disagree; re-deriving a grade for either would be the
-// second opinion DeclarationHeld exists to prevent.
+// to a finding, so the two views cannot disagree. A client that maps Status instead of
+// re-deriving a grade shows `magus notes verify`'s answer rather than a second opinion.
 //
 // The per-anchor view is the primitive because an Issue can only describe a problem, while the
 // joins built on top of this store (which note does this diff touch) are mostly about anchors
@@ -197,10 +171,10 @@ type anchorFinding struct {
 	hint    string
 }
 
-// resolveAnchor grades one anchor: the single place the ladder from "gone" through "ungraded
-// drift" to "body edit" is decided, so the Issue view and the per-anchor view cannot disagree.
+// resolveAnchor grades one anchor: the single place the ladder is decided, so the Issue view,
+// the per-anchor view and every client mapping them cannot disagree.
 //
-// note names the declaring note, which the drift hint quotes back as the command to re-record.
+// note names the declaring note, which the hints quote back as the command to re-record.
 func resolveAnchor(ctx context.Context, res Resolver, note string, a Anchor) anchorFinding {
 	if !res.Resolves(ctx, a) {
 		return anchorFinding{
@@ -209,46 +183,59 @@ func resolveAnchor(ctx context.Context, res Resolver, note string, a Anchor) anc
 			hint:    degradeHint(a),
 		}
 	}
-	// The anchor resolves, so the easy question is answered. The harder one is whether the
-	// thing it points at still SAYS what the note claims: the case a reader cannot see and
-	// an existence check cannot catch.
-	//
-	// Both empty cases are silence, not drift: no stored digest means the note predates
-	// fingerprinting or was never re-anchored, and no current digest means it cannot be
-	// computed here. Guessing "changed" from either is exactly the false positive that trains
-	// a reader to ignore the flags.
+	if a.Kind == AnchorSymbol {
+		return gradeSignature(ctx, res, note, a)
+	}
+	// No stored digest means the note was never re-read against the file, and no current
+	// digest means the kind has nothing to hash. Guessing "changed" from either is the false
+	// positive that trains a reader to ignore the flags.
 	if a.Digest == "" {
 		return anchorFinding{}
 	}
 	current, derr := res.Digest(ctx, a)
 	if derr != nil {
-		// Reported, never as drift. The note may be exactly right; what is known is that
-		// nothing can check it right now, and the cause is usually one command away from
-		// fixed.
 		return anchorFinding{
 			code:    CodeUnverifiableAnchor,
 			message: fmt.Sprintf("anchor %s:%s could not be fingerprinted: %v", a.Kind, a.Target, derr),
-			hint:    "This is not drift - it means nothing can currently tell whether the note still holds. A symbol anchor needs the symbol index: `magus graph build`.",
+			hint:    "This is not drift - it means nothing can currently tell whether the note still holds.",
 		}
 	}
 	if current == "" || current == a.Digest {
 		return anchorFinding{}
 	}
-	// The content moved. Grade it before reporting: a body edited under an unchanged
-	// declaration is the overwhelmingly common change and the one that almost never
-	// invalidates prose, so calling it drift is how a store teaches its reader to stop
-	// reading the findings.
-	if DeclarationHeld(ctx, res, a) {
-		return anchorFinding{
-			code: CodeAnchorBodyChanged,
-			message: fmt.Sprintf("anchor %s:%s changed inside an unchanged declaration since this note was last reviewed",
-				a.Kind, a.Target),
-			hint: "Most edits under an unchanged signature do not invalidate the prose about them. Re-read only if the note claims something about the implementation rather than the interface.",
-		}
-	}
 	return anchorFinding{
 		code:    CodeDriftedAnchor,
 		message: fmt.Sprintf("anchor %s:%s still exists but its content changed since this note was last reviewed", a.Kind, a.Target),
+		hint:    driftHint(note, a),
+	}
+}
+
+// gradeSignature grades a live symbol anchor by its signature alone. A body edit and a move
+// leave the signature alone and almost never invalidate prose about what the symbol IS; a
+// signature change is the edit that does, measured 39-105x more likely to come with a prose
+// update across 1,496 repositories.
+func gradeSignature(ctx context.Context, res Resolver, note string, a Anchor) anchorFinding {
+	if a.Signature == "" {
+		return anchorFinding{
+			code:    CodeUnverifiableAnchor,
+			message: fmt.Sprintf("anchor %s:%s has no recorded signature", a.Kind, a.Target),
+			hint:    "It was recorded before notes graded symbols by signature; `magus notes edit " + note + "` records it once a person has re-read the note.",
+		}
+	}
+	current, err := res.Signature(ctx, a)
+	if err != nil {
+		return anchorFinding{
+			code:    CodeUnverifiableAnchor,
+			message: fmt.Sprintf("anchor %s:%s has no signature to compare: %v", a.Kind, a.Target, err),
+			hint:    "This is not drift - it means nothing can currently tell whether the note still holds. `magus graph build` builds the symbol index.",
+		}
+	}
+	if current == a.Signature {
+		return anchorFinding{}
+	}
+	return anchorFinding{
+		code:    CodeDriftedAnchor,
+		message: fmt.Sprintf("anchor %s:%s still exists but its signature changed since this note was last reviewed", a.Kind, a.Target),
 		hint:    driftHint(note, a),
 	}
 }
@@ -262,7 +249,7 @@ func driftHint(name string, a Anchor) string {
 	} else if a.Commit != "" {
 		hint += fmt.Sprintf(" It was last reviewed at %s.", a.Commit)
 	}
-	return hint + " If it still holds, `magus notes edit " + name + "` records the new fingerprint; if it does not, this is the moment to fix the prose. Nothing re-records it for you."
+	return hint + " If it still holds, `magus notes edit " + name + "` records what it reads now; if it does not, this is the moment to fix the prose. Nothing re-records it for you."
 }
 
 // degradeHint names the coarser anchor this one falls back to, and says what to do.
@@ -283,8 +270,9 @@ func degradeHint(a Anchor) string {
 	}
 }
 
-// RecordDigests stamps each anchor with the anchored content's CURRENT fingerprint and
-// returns how many changed, so the caller can say what it did.
+// RecordDigests stamps each symbol anchor with its CURRENT signature and every other anchor
+// with its content's CURRENT fingerprint, and returns how many changed, so the caller can say
+// what it did.
 //
 // This is a re-attestation, not a repair, and the distinction is the whole reason it is
 // separate from verify. Verify never writes; a person running this is stating "I have read
@@ -309,18 +297,25 @@ func RecordDigests(ctx context.Context, dir, name, rev string, res Resolver) (in
 			continue // nothing to fingerprint; verify reports it as dangling
 		}
 		// A fingerprint that cannot be computed is skipped rather than recorded: writing ""
-		// would erase a digest a person had already attested, turning a re-attestation into
-		// a quiet loss of the very evidence it exists to keep.
-		current, derr := res.Digest(ctx, a)
-		if derr != nil || current == "" || current == a.Digest {
-			continue
-		}
-		n.Anchors[i].Digest = current
-		// Stamped alongside, and allowed to be empty: a kind with no declaration records
-		// none, and a later verify simply reports that anchor ungraded. Computed from the
-		// same read as the content digest, so the two can never describe different revisions.
-		if decl, dErr := res.DeclDigest(ctx, a); dErr == nil {
-			n.Anchors[i].DeclDigest = decl
+		// would erase one a person had already attested, turning a re-attestation into a quiet
+		// loss of the very evidence it exists to keep. Verify keeps reporting it unverifiable.
+		if a.Kind == AnchorSymbol {
+			sig, err := res.Signature(ctx, a)
+			if err != nil || sig == "" {
+				continue
+			}
+			// A body digest from before signature grading is cleared, since nothing reads it.
+			if sig == a.Signature && a.Digest == "" {
+				continue
+			}
+			n.Anchors[i].Signature = sig
+			n.Anchors[i].Digest = ""
+		} else {
+			current, derr := res.Digest(ctx, a)
+			if derr != nil || current == "" || current == a.Digest {
+				continue
+			}
+			n.Anchors[i].Digest = current
 		}
 		// Stamped with the digest, never apart: a pair that disagreed would send a reader to
 		// the wrong diff, which is worse than no provenance.

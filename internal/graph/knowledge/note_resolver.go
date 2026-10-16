@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/notes"
@@ -25,9 +24,8 @@ import (
 type NoteResolver struct {
 	root string
 	live map[string]bool
-	// node carries the Source ("<path>:<line>") and def_end_line a symbol digest needs; the
-	// graph is the only thing that knows where a symbol currently lives, which is the point:
-	// the note stores no location at all.
+	// node carries the signature a symbol anchor is graded by. The note stores no location,
+	// so a symbol that moved within or between files grades the same.
 	node map[string]types.KnowledgeNode
 	// scope is the store whose notes this resolver is checking. It changes the answer for
 	// exactly one anchor kind (note-to-note, which names a note in the SAME store), so a
@@ -72,85 +70,38 @@ func (r NoteResolver) Resolves(_ context.Context, a notes.Anchor) bool {
 	return id != "" && r.live[id]
 }
 
-// Digest fingerprints the anchored source as it is right now.
-//
-// No failure path invents a change: a caller reads both the empty digest and the error as
-// "no opinion" for drift purposes, because a gate that cries wolf out of its own blind spot
-// gets ignored and an ignored gate is worse than none. What the error adds is WHICH blind
-// spot, since the four causes below are differently actionable and used to be one silence.
+// Digest fingerprints a file anchor's content as it is right now. Every other kind has
+// nothing to hash: a symbol is graded by Signature, and a project, target or note's
+// existence IS the whole signal.
 func (r NoteResolver) Digest(_ context.Context, a notes.Anchor) (string, error) {
-	switch a.Kind {
-	case notes.AnchorSymbol:
-		n, ok := r.node[r.NodeID(a)]
-		if !ok {
-			return "", fmt.Errorf("symbol %q is not in the graph, the symbol index may not be built", a.Target)
-		}
-		path, start, ok := splitSourceLine(n.Source)
-		if !ok {
-			return "", fmt.Errorf("symbol %q has no source location", a.Target)
-		}
-		end, err := strconv.Atoi(n.Attrs[attrDefEndLine])
-		if err != nil || end < start {
-			// No enclosing range from this indexer: the symbol's extent is unknown, and a
-			// guessed one would fingerprint the wrong lines.
-			return "", fmt.Errorf("symbol %q has no enclosing range, this indexer did not report one", a.Target)
-		}
-		src, err := os.ReadFile(filepath.Join(r.root, filepath.FromSlash(path)))
-		if err != nil {
-			return "", fmt.Errorf("read %s: %w", path, err)
-		}
-		return notes.DigestRange(string(src), start, end), nil
-	case notes.AnchorFile:
-		src, err := os.ReadFile(filepath.Join(r.root, filepath.FromSlash(a.Target)))
-		if err != nil {
-			return "", fmt.Errorf("read %s: %w", a.Target, err)
-		}
-		return notes.Digest(strings.Split(string(src), "\n")), nil
-	default:
-		// project/target/note have no content of their own to fingerprint: their existence
-		// IS the whole signal. Nothing to say, and nothing wrong.
+	if a.Kind != notes.AnchorFile {
 		return "", nil
 	}
+	src, err := os.ReadFile(filepath.Join(r.root, filepath.FromSlash(a.Target)))
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", a.Target, err)
+	}
+	return notes.Digest(strings.Split(string(src), "\n")), nil
 }
 
-// DeclDigest fingerprints the anchored symbol's declaration line, which is what grades a
-// content change as "what this IS moved" rather than "how it does it moved".
-//
-// Symbols only. A file anchor's declaration is the file, so grading it against itself would
-// answer nothing; project, target and note anchors have no content at all. Both return ""
-// with a nil error: an ungraded finding, never a second complaint about the same anchor.
-func (r NoteResolver) DeclDigest(_ context.Context, a notes.Anchor) (string, error) {
+// Signature reads a symbol anchor's declaration as its indexer rendered it into the graph.
+// A symbol missing from the graph, or one its indexer rendered no signature for, is an error
+// naming which, so the anchor reads unverifiable and never clean.
+func (r NoteResolver) Signature(_ context.Context, a notes.Anchor) (string, error) {
 	if a.Kind != notes.AnchorSymbol {
-		return "", nil
+		return "", fmt.Errorf("%s anchor %q has no signature: only a symbol anchor is graded by one", a.Kind, a.Target)
 	}
 	n, ok := r.node[r.NodeID(a)]
 	if !ok {
 		return "", fmt.Errorf("symbol %q is not in the graph, the symbol index may not be built", a.Target)
 	}
-	path, start, ok := splitSourceLine(n.Source)
-	if !ok {
-		return "", fmt.Errorf("symbol %q has no source location", a.Target)
+	sig := n.Attrs[AttrSignature]
+	if sig == "" {
+		indexer := "its"
+		if lang := n.Attrs[attrLanguage]; lang != "" {
+			indexer = "the " + lang
+		}
+		return "", fmt.Errorf("symbol %q has no signature, %s indexer rendered none", a.Target, indexer)
 	}
-	end, err := strconv.Atoi(n.Attrs[attrDefEndLine])
-	if err != nil || end < start {
-		return "", fmt.Errorf("symbol %q has no enclosing range, this indexer did not report one", a.Target)
-	}
-	src, err := os.ReadFile(filepath.Join(r.root, filepath.FromSlash(path)))
-	if err != nil {
-		return "", fmt.Errorf("read %s: %w", path, err)
-	}
-	return notes.DigestDecl(string(src), start, end), nil
-}
-
-// splitSourceLine parses a node's "<path>:<line>" Source.
-func splitSourceLine(src string) (string, int, bool) {
-	i := strings.LastIndexByte(src, ':')
-	if i < 0 {
-		return "", 0, false
-	}
-	line, err := strconv.Atoi(src[i+1:])
-	if err != nil || line < 1 {
-		return "", 0, false
-	}
-	return src[:i], line, true
+	return sig, nil
 }

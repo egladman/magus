@@ -1,8 +1,11 @@
 package knowledge
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -168,4 +171,113 @@ func TestAnchorNodeIDIgnoresScopeOffANote(t *testing.T) {
 		assert.Equal(t, "target:.:build", AnchorNodeID("target", "target:.:build", scope), "a target anchor is already a full id")
 		assert.Empty(t, AnchorNodeID("nonsense", "x", scope))
 	}
+}
+
+const putSymbol = "m internal/cache/Store#Put()."
+
+// symbolGraph holds one Go symbol defined at source, as the indexer would fold it in.
+func symbolGraph(source, signature string) *Graph {
+	attrs := map[string]string{attrLanguage: "go"}
+	if signature != "" {
+		attrs[AttrSignature] = signature
+	}
+	g := NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: symbolID(putSymbol), Kind: types.KindSymbol, Source: source, Attrs: attrs})
+	return g
+}
+
+// gradePut records the signature the graph holds now on a fresh note, then grades that
+// note against graph after, the way `magus notes edit` and a later verify do.
+func gradePut(t *testing.T, root string, before, after *Graph) []notes.ResolvedAnchor {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "notes")
+	require.NoError(t, notes.Save(dir, notes.Note{
+		Name: "put", Title: "Put pairs the caches",
+		Anchors: []notes.Anchor{{Kind: notes.AnchorSymbol, Target: putSymbol}},
+	}))
+	changed, err := notes.RecordDigests(t.Context(), dir, "put", "cafe1234", NewNoteResolver(root, before))
+	require.NoError(t, err)
+	require.Equal(t, 1, changed)
+
+	graded, err := notes.ResolveAnchors(t.Context(), dir, NewNoteResolver(root, after))
+	require.NoError(t, err)
+	require.Len(t, graded, 1)
+	return graded
+}
+
+func TestSymbolAnchorHoldsAcrossAMove(t *testing.T) {
+	root := t.TempDir()
+	const sig = "func (s *Store) Put(k string, v []byte) error"
+	before := symbolGraph("internal/cache/cache.go:10", sig)
+
+	for _, tt := range []struct{ name, source string }{
+		{"to another line", "internal/cache/cache.go:90"},
+		{"to another file", "internal/cache/store.go:3"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			graded := gradePut(t, root, before, symbolGraph(tt.source, sig))
+			assert.Empty(t, graded[0].Status, "a note stores no location, so a move is not drift")
+		})
+	}
+}
+
+// TestSymbolAnchorHoldsAcrossABodyEdit: the resolver never reads a symbol's lines, so a file
+// rewritten under an unchanged signature grades clean.
+func TestSymbolAnchorHoldsAcrossABodyEdit(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "internal", "cache", "cache.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(file), 0o755))
+	require.NoError(t, os.WriteFile(file, []byte("package cache\n\nfunc Put() { old() }\n"), 0o644))
+	g := symbolGraph("internal/cache/cache.go:3", "func Put()")
+
+	dir := filepath.Join(t.TempDir(), "notes")
+	require.NoError(t, notes.Save(dir, notes.Note{
+		Name: "put", Title: "Put pairs the caches",
+		Anchors: []notes.Anchor{{Kind: notes.AnchorSymbol, Target: putSymbol}},
+	}))
+	_, err := notes.RecordDigests(t.Context(), dir, "put", "cafe1234", NewNoteResolver(root, g))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(file, []byte("package cache\n\nfunc Put() {\n\tnew()\n\tnewer()\n}\n"), 0o644))
+
+	graded, err := notes.ResolveAnchors(t.Context(), dir, NewNoteResolver(root, g))
+	require.NoError(t, err)
+	require.Len(t, graded, 1)
+	assert.Empty(t, graded[0].Status)
+}
+
+func TestNoteResolverSignatureDriftsOnAChange(t *testing.T) {
+	root := t.TempDir()
+	graded := gradePut(t, root,
+		symbolGraph("internal/cache/cache.go:10", "func (s *Store) Put(k string) error"),
+		symbolGraph("internal/cache/cache.go:10", "func (s *Store) Put(ctx context.Context, k string) error"))
+	assert.Equal(t, notes.CodeDriftedAnchor, graded[0].Status)
+}
+
+// TestNoteResolverSignatureNamesAnIndexerThatRenderedNone: a symbol with no signature attr is
+// an error naming its indexer, so the anchor reads unverifiable and never clean.
+func TestNoteResolverSignatureNamesAnIndexerThatRenderedNone(t *testing.T) {
+	r := NewNoteResolver(t.TempDir(), symbolGraph("internal/cache/cache.go:10", ""))
+	_, err := r.Signature(t.Context(), notes.Anchor{Kind: notes.AnchorSymbol, Target: putSymbol})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "the go indexer rendered none")
+
+	_, err = r.Signature(t.Context(), notes.Anchor{Kind: notes.AnchorSymbol, Target: "m gone/Gone()."})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not in the graph")
+}
+
+// TestNoteResolverDigestHashesFilesOnly: a symbol's lines are never fingerprinted, since its
+// signature is what grades it.
+func TestNoteResolverDigestHashesFilesOnly(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("package a\n"), 0o644))
+	r := NewNoteResolver(root, symbolGraph("a.go:1", "package a"))
+
+	got, err := r.Digest(t.Context(), notes.Anchor{Kind: notes.AnchorFile, Target: "a.go"})
+	require.NoError(t, err)
+	assert.Equal(t, notes.Digest([]string{"package a", ""}), got)
+
+	got, err = r.Digest(t.Context(), notes.Anchor{Kind: notes.AnchorSymbol, Target: putSymbol})
+	require.NoError(t, err)
+	assert.Empty(t, got)
 }

@@ -112,8 +112,12 @@ func (s *Service) ListNotes(ctx context.Context, _ *connect.Request[notesv1.List
 		for _, iss := range issues {
 			status.Issues = append(status.Issues, issueLine(iss))
 		}
+		graded, err := grade(ctx, sd, res)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
 		for _, n := range found {
-			out.Notes = append(out.Notes, s.toProto(ctx, n, sd, res, stale, false))
+			out.Notes = append(out.Notes, s.toProto(n, sd, res, graded, stale, false))
 		}
 		status.NoteCount = int32(len(found))
 		out.Stores = append(out.Stores, status)
@@ -159,7 +163,11 @@ func (s *Service) GetNote(ctx context.Context, req *connect.Request[notesv1.GetN
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 		res, stale := s.resolver(ctx)
-		return connect.NewResponse(s.toProto(ctx, n, sd, res, stale, true)), nil
+		graded, err := grade(ctx, sd, res)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		return connect.NewResponse(s.toProto(n, sd, res, graded, stale, true)), nil
 	}
 	return nil, connect.NewError(connect.CodeNotFound,
 		fmt.Errorf("notes: this workspace declares no %s notes store", scopeName(want)))
@@ -188,7 +196,7 @@ func (s *Service) resolver(ctx context.Context) (*knowledge.NoteResolver, map[st
 
 // toProto renders one note. withBody is false for a listing: the prose is the largest field
 // and a list of it is not what a reader is scanning for.
-func (s *Service) toProto(ctx context.Context, n store.Note, sd scopedDir, res *knowledge.NoteResolver, noteNodes map[string]types.KnowledgeNode, withBody bool) *notesv1.Note {
+func (s *Service) toProto(n store.Note, sd scopedDir, res *knowledge.NoteResolver, graded map[anchorKey]store.IssueCode, noteNodes map[string]types.KnowledgeNode, withBody bool) *notesv1.Note {
 	out := &notesv1.Note{
 		Name:  n.Name,
 		Scope: sd.pbScope,
@@ -221,8 +229,14 @@ func (s *Service) toProto(ctx context.Context, n store.Note, sd scopedDir, res *
 		bound := res.ForScope(string(sd.scope))
 		scoped = &bound
 	}
-	for _, a := range n.Anchors {
-		out.Anchors = append(out.Anchors, anchorToProto(ctx, a, scoped))
+	for i, a := range n.Anchors {
+		// Absent only when the note changed between the store walk and this one; nothing graded
+		// what is here now.
+		status, ok := graded[anchorKey{note: n.Name, pos: i}]
+		if !ok {
+			status = store.StatusUngraded
+		}
+		out.Anchors = append(out.Anchors, anchorToProto(a, status, scoped))
 	}
 	out.Staleness, out.OutrunDays = staleness(noteNodes, knowledge.AnchorNodeID("note", n.Name, string(sd.scope)))
 	return out
@@ -246,62 +260,60 @@ func (s *Service) notePath(n store.Note, sd scopedDir) string {
 	return filepath.ToSlash(rel)
 }
 
-// anchorToProto checks one anchor and renders the verdict.
-//
-// A nil resolver means the graph would not load, and every anchor reports UNVERIFIED. That is
-// not the same as RESOLVES and must never be rendered as one: the honest report is that
-// nothing was checked.
-func anchorToProto(ctx context.Context, a store.Anchor, res *knowledge.NoteResolver) *notesv1.Anchor {
-	out := &notesv1.Anchor{Kind: anchorKind(a.Kind), Target: a.Target}
-	if res == nil {
-		out.Status = notesv1.AnchorStatus_ANCHOR_STATUS_UNVERIFIED
-		out.Detail = "The knowledge graph would not load, so this anchor was not checked."
-		return out
+// anchorKey names one anchor the way notes.ResolveAnchors does: its note, and its index there.
+type anchorKey struct {
+	note string
+	pos  int
+}
+
+// grade runs `magus notes verify`'s grader over one store. A nil resolver means the graph
+// would not load, and every anchor grades ungraded.
+func grade(ctx context.Context, sd scopedDir, res *knowledge.NoteResolver) (map[anchorKey]store.IssueCode, error) {
+	var scoped store.Resolver
+	if res != nil {
+		scoped = res.ForScope(string(sd.scope))
 	}
-	out.NodeId = res.NodeID(a)
-	if !res.Resolves(ctx, a) {
+	all, err := store.ResolveAnchors(ctx, sd.dir, scoped)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[anchorKey]store.IssueCode, len(all))
+	for _, r := range all {
+		out[anchorKey{note: r.Note, pos: r.Pos}] = r.Status
+	}
+	return out, nil
+}
+
+// anchorToProto renders the grade notes gave one anchor. It maps and never re-grades, so the
+// console cannot disagree with `magus notes verify`.
+//
+// Ungraded is not the same as RESOLVES and must never be rendered as one: the honest report is
+// that nothing was checked.
+func anchorToProto(a store.Anchor, status store.IssueCode, res *knowledge.NoteResolver) *notesv1.Anchor {
+	out := &notesv1.Anchor{Kind: anchorKind(a.Kind), Target: a.Target}
+	if res != nil {
+		out.NodeId = res.NodeID(a)
+	}
+	switch status {
+	case "":
+		out.Status = notesv1.AnchorStatus_ANCHOR_STATUS_RESOLVES
+	case store.CodeDanglingAnchor:
 		out.Status = notesv1.AnchorStatus_ANCHOR_STATUS_DANGLING
 		out.NodeId = ""
 		out.Detail = "This anchor no longer names anything in the workspace. `magus notes verify` names the coarser anchor it degrades to; nothing re-points it at a guess."
-		return out
-	}
-	// The anchor resolves, so the easy question is answered. The harder one is whether the
-	// thing it points at still SAYS what the note claims, the case a reader cannot see and an
-	// existence check cannot catch.
-	//
-	// Both empty cases are silence, not drift: no stored digest means the note was never
-	// re-read against the code, and no current digest means one cannot be computed here.
-	// Reporting drift from either is the false positive that trains a reader to ignore the flag.
-	if a.Digest == "" {
+	case store.CodeDriftedAnchor:
+		out.Status = notesv1.AnchorStatus_ANCHOR_STATUS_DRIFTED
+		out.Detail = "This still exists, but what it is changed since the note was last reviewed: a symbol's signature, or a file's content. Re-read the note against the code as it is now; `magus notes edit` records it again only when a person says it still holds."
+	case store.CodeUnverifiableAnchor:
 		out.Status = notesv1.AnchorStatus_ANCHOR_STATUS_UNVERIFIED
-		out.Detail = "Nobody has re-read this note against the code since anchors began carrying a fingerprint, so drift cannot be detected here."
-		return out
-	}
-	current, derr := res.Digest(ctx, a)
-	if derr != nil {
-		// Distinct from RESOLVES: the anchor is live, and whether the prose still holds is
-		// unknown rather than confirmed. Saying "resolves" here would report a check that
-		// never ran as a check that passed.
+		out.Detail = "This still exists, but nothing can tell whether the note still holds: a symbol note recorded no signature, or none could be read here. `magus notes verify` says which."
+	case store.StatusUngraded:
 		out.Status = notesv1.AnchorStatus_ANCHOR_STATUS_UNVERIFIED
-		out.Detail = "This still exists, but its fingerprint could not be computed, so nothing can tell whether the note still holds. A symbol anchor needs the symbol index: `magus graph build`."
-		return out
+		out.Detail = "The knowledge graph would not load, so this anchor was not checked."
+	default:
+		out.Status = notesv1.AnchorStatus_ANCHOR_STATUS_UNVERIFIED
+		out.Detail = fmt.Sprintf("notes graded this anchor %q, which this service does not render.", status)
 	}
-	if current == "" || current == a.Digest {
-		out.Status = notesv1.AnchorStatus_ANCHOR_STATUS_RESOLVES
-		return out
-	}
-	// The content moved. Grade it before calling it drift: a body edited under an unchanged
-	// declaration is the overwhelmingly common change and the one that almost never
-	// invalidates prose, so reporting it as drift is how a store teaches its reader to stop
-	// reading the verdicts. The rule lives in store so this and `magus notes verify` cannot
-	// drift apart.
-	if store.DeclarationHeld(ctx, res, a) {
-		out.Status = notesv1.AnchorStatus_ANCHOR_STATUS_BODY_CHANGED
-		out.Detail = "This changed inside a declaration that did not, which usually leaves prose about the interface standing. Re-read only if the note claims something about the implementation."
-		return out
-	}
-	out.Status = notesv1.AnchorStatus_ANCHOR_STATUS_DRIFTED
-	out.Detail = "This still exists, but its content changed since the note was last reviewed. Re-read the note against the code as it is now; `magus notes edit` records the new fingerprint only when a person says it still holds."
 	return out
 }
 
