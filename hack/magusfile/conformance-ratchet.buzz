@@ -10,19 +10,23 @@ import "encoding/json";
 // and an item leaving it can break the pair the rest still form.
 final CLONES = "clone-tokens";
 
-// Pruned is a record after prune: its lines, what left it, and why nothing did when the
-// report could not vouch for staleness.
+// Pruned is a record after prune: its lines, what left it, what was re-keyed, how many
+// shapes were recorded, and why nothing changed when the report could not vouch for it.
 object Pruned {
     lines: [str],
     removed: [str],
+    carried: [str],
+    filled: int,
     refused: str,
 }
 
 // run deletes from the record at path every known item a fresh conformance report calls
-// stale. It never adds an item, changes a threshold or edits a reason, and when an index is
-// not up to date or the answer is not found it leaves the record as it is and says why.
-// magus\conformance refreshes a stale index first, which format must not pay for, so run
-// asks `magus status` before it and prunes only when every index is already current.
+// stale, re-keys every item it carried through a rename or a move, and records the shape
+// of each listed item that has none. It never adds an item, changes a threshold or edits a
+// reason, and when an index is not up to date or the answer is not found it leaves the
+// record as it is and says why. magus\conformance refreshes a stale index first, which
+// format must not pay for, so run asks `magus status` before it and changes the record
+// only when every index is already current.
 export fun run(path: str) > void !> any {
     final status: {str: any} = json\parse(magus\cmd("status", args: ["--symbols", "-o", "json"], opts: {"quiet": true}).stdout);
     if (!status.hasKey("symbol_indexes")) {
@@ -38,33 +42,42 @@ export fun run(path: str) > void !> any {
         std\print("conformance-ratchet: left {path} as it is: {got.refused}");
         return;
     }
-    if (got.removed.len() == 0) {
+    if (got.removed.len() == 0 and got.carried.len() == 0 and got.filled == 0) {
         return;
     }
     fs\writeFileAtomic(path, content: got.lines.join("\n") + "\n");
     foreach (item in got.removed) {
         std\print("conformance-ratchet: deleted {item} from {path}: it no longer violates");
     }
+    foreach (item in got.carried) {
+        std\print("conformance-ratchet: re-keyed {item} in {path}: renamed or moved");
+    }
+    if (got.filled > 0) {
+        std\print("conformance-ratchet: recorded the shape of {got.filled} listed items in {path}");
+    }
 }
 
-// prune is record without the stale items of report, a known row left empty dropped. An
-// item of a metric other than CLONES leaves every row of its metric, since staleness is per
-// item; a clone entry leaves only as the whole row it was read from.
+// prune is record without the stale items of report, a known row left empty dropped, each
+// carried item under its new ID, and each listed item's shape recorded where the row had
+// none. An item of a metric other than CLONES leaves every row of its metric, since
+// staleness is per item; a clone entry leaves only as the whole row it was read from. A
+// row that changes is written in one member order; the rest stay byte for byte.
 export fun prune(report: {str: any}, record: [str]) > Pruned !> any {
     final refused = unvouched(report);
     if (refused != "") {
-        return Pruned{ lines = record, removed = [<str>], refused = refused };
+        return Pruned{ lines = record, removed = [<str>], carried = [<str>], filled = 0, refused = refused };
     }
-    return withoutStale(record, stale: staleOf(report));
+    return rewrite(record, plan: planOf(report));
 }
 
-// withoutStale is record minus the rows and items stale names, refusing when a narrowed row
-// cannot be edited in place.
-fun withoutStale(record: [str], stale: Stale) > Pruned !> any {
+// rewrite is record with plan applied to each known row.
+fun rewrite(record: [str], plan: Plan) > Pruned !> any {
     final kept = mut [<str>];
     final seen = mut {<str: bool>};
     final removed = mut [<str>];
-    foreach (i, text in record) {
+    final carried = mut [<str>];
+    var filled = 0;
+    foreach (text in record) {
         if (text.trim() == "") {
             continue;
         }
@@ -75,49 +88,48 @@ fun withoutStale(record: [str], stale: Stale) > Pruned !> any {
         }
         final metric: str = row["metric"] ?? "";
         final items = names(row["items"]);
-        if (metric == CLONES) {
-            if (stale.clones.hasKey(items.join(", "))) {
-                removed.append("the {metric} entry {items.join(", ")}");
-            } else {
-                kept.append(text);
-            }
+        if (metric == CLONES and plan.staleClones.hasKey(items.join(", "))) {
+            removed.append("the {metric} entry {items.join(", ")}");
             continue;
         }
-        final gone = items.filter(fun (index: int, item: str) > bool => stale.items.hasKey("{metric} {item}"));
-        foreach (item in gone) {
-            removed.append("{metric} {item}");
+        final got = rework(row["shapes"] ?? {<str: any>}, metric: metric, items: items, plan: plan);
+        foreach (item in got.removed) {
+            removed.append(item);
         }
-        if (gone.len() == 0) {
+        foreach (item in got.carried) {
+            carried.append(item);
+        }
+        filled += got.filled;
+        if (got.removed.len() == 0 and got.carried.len() == 0 and got.filled == 0) {
             kept.append(text);
             continue;
         }
-        if (gone.len() == items.len()) {
+        if (got.items.len() == 0) {
             continue;
         }
-        final left = items.filter(fun (index: int, item: str) > bool => !stale.items.hasKey("{metric} {item}"));
-        final narrowed = narrow(text, items: left);
-        if (narrowed == null) {
-            return Pruned{ lines = record, removed = [<str>],
-                refused = "line {i + 1} does not end with its items, so it cannot be narrowed without rewriting the rest" };
-        }
+        final rebuilt = knownRow(metric, reason: row["reason"] ?? "", items: got.items, shapes: got.shapes);
         // Narrowing can leave two rows equal, and the record refuses a repeated line.
-        if (!seen.hasKey(narrowed!)) {
-            seen[narrowed!] = true;
-            kept.append(narrowed!);
+        if (!seen.hasKey(rebuilt)) {
+            seen[rebuilt] = true;
+            kept.append(rebuilt);
         }
     }
-    return Pruned{ lines = kept, removed = removed, refused = "" };
+    return Pruned{ lines = kept, removed = removed, carried = carried, filled = filled, refused = "" };
 }
 
-// Stale is what a report calls stale: "<metric> <item>" keys for the per-item metrics, and
-// the joined items of each stale clone entry.
-object Stale {
-    items: {str: bool},
-    clones: {str: bool},
+// Plan is what a report asks of the record: "<metric> <item>" keys for the stale per-item
+// metrics, the joined items of each stale clone entry, each carried "<metric> <item>" key's
+// new ID, and the current shape of each listed item.
+object Plan {
+    staleItems: {str: bool},
+    staleClones: {str: bool},
+    renamed: {str: str},
+    shapes: {str: any},
 }
 
-// staleOf reads the stale list of report into the keys prune looks rows up by.
-fun staleOf(report: {str: any}) > Stale {
+// planOf reads the stale, carried and shapes members of report into the keys rewrite looks
+// rows up by.
+fun planOf(report: {str: any}) > Plan {
     final items = mut {<str: bool>};
     final clones = mut {<str: bool>};
     final entries: [any] = report["stale"] ?? [<any>];
@@ -132,17 +144,64 @@ fun staleOf(report: {str: any}) > Stale {
             items["{metric} {item}"] = true;
         }
     }
-    return Stale{ items = items, clones = clones };
+    final renamed = mut {<str: str>};
+    final carried: [any] = report["carried"] ?? [<any>];
+    foreach (c in carried) {
+        final metric: str = c["metric"] ?? "";
+        final old: str = c["from"] ?? "";
+        renamed["{metric} {old}"] = names(c["to"])[0];
+    }
+    return Plan{ staleItems = items, staleClones = clones, renamed = renamed, shapes = report["shapes"] ?? {<str: any>} };
 }
 
-// narrow is text with its trailing items array replaced by items, or null when text does not
-// end with that array and so cannot be edited without rewriting the rest of the row.
-fun narrow(text: str, items: [str]) > str? !> any {
-    final at = text.indexOf(`"items":`);
-    if (at == null or !text.endsWith("]}")) {
-        return null;
+// Reworked is one known row's items after a plan: those it keeps under their current IDs,
+// their shapes, and what left, was re-keyed or had its shape recorded.
+object Reworked {
+    items: [str],
+    shapes: {str: str},
+    removed: [str],
+    carried: [str],
+    filled: int,
+}
+
+// rework applies plan to the items of one known row of metric, whose shapes the row records
+// in recorded. A recorded shape is kept even when the item's current one differs.
+fun rework(recorded: {str: any}, metric: str, items: [str], plan: Plan) > Reworked !> any {
+    final left = mut [<str>];
+    final shapes = mut {<str: str>};
+    final removed = mut [<str>];
+    final carried = mut [<str>];
+    var filled = 0;
+    foreach (item in items) {
+        if (metric != CLONES and plan.staleItems.hasKey("{metric} {item}")) {
+            removed.append("{metric} {item}");
+            continue;
+        }
+        var id = item;
+        if (plan.renamed["{metric} {item}"] -> to) {
+            carried.append("{metric} {item} as {to}");
+            id = to;
+        }
+        left.append(id);
+        if (recorded[item] -> shape) {
+            shapes[id] = "{shape}";
+        } else if (plan.shapes[id] -> shape) {
+            shapes[id] = "{shape}";
+            filled += 1;
+        }
     }
-    return text.sub(0, len: at!) + `"items":` + json\stringify(items) + "}";
+    return Reworked{ items = left, shapes = shapes, removed = removed, carried = carried, filled = filled };
+}
+
+// knownRow is a known line in the record's member order. The record's reader refuses any
+// member a known row does not name, so these are all a row can hold.
+fun knownRow(metric: str, reason: any, items: [str], shapes: {str: str}) > str !> any {
+    var text = "\{\"kind\":\"known\",\"metric\":" + json\stringify(metric) + `,"reason":` + json\stringify(reason)
+        + `,"items":` + json\stringify(items);
+    if (shapes.len() > 0) {
+        text = text + `,"shapes":` + json\stringify(shapes);
+    }
+    return text + "}";
 }
 
 // unvouched is why report cannot say what is stale, or "" when it can: an index that is not
@@ -263,10 +322,41 @@ test "the first index that is not up to date is named; all current names none" {
     assert\equal(staleIndex(current), want: "", message: "all current");
 }
 
-test "a row whose items are not last is refused rather than reformatted" {
-    final record = [`{"kind":"known","metric":"file-lines","items":["a.go","b.go"],"reason":"r"}`];
+test "a row that changes is rebuilt in member order" {
+    final record = [`{"kind":"known","items":["a.go","b.go"],"reason":"r","metric":"file-lines"}`];
     final stale: [any] = [{"metric": "file-lines", "items": ["b.go"], "reason": "r"}];
     final got = prune(report(stale), record: record);
-    assert\equal(got.lines[0], want: record[0], message: "unchanged");
-    assert\equal(got.refused.indexOf("line 1") != null, want: true, message: got.refused);
+    assert\equal(got.lines[0], want: `{"kind":"known","metric":"file-lines","reason":"r","items":["a.go"]}`,
+        message: got.lines[0]);
+}
+
+test "a carried item is re-keyed with its shape, and a listed item's missing shape is recorded" {
+    final record = [`{"kind":"schema","schema":1}`,
+        `{"kind":"known","metric":"func-lines","reason":"long on purpose","items":["a.go#Long","b.go#Other"],"shapes":{"a.go#Long":"s1"}}`,
+        `{"kind":"known","metric":"clone-tokens","reason":"twins","items":["x.go#A","y.go#B"],"shapes":{"x.go#A":"s9","y.go#B":"s9"}}`];
+    final carried: [any] = [{"metric": "func-lines", "from": "a.go#Long", "to": ["a.go#Renamed"]},
+        {"metric": "clone-tokens", "from": "y.go#B", "to": ["y.go#B2"]}];
+    final r = report([<any>]);
+    final mutable = r.cloneMutable();
+    mutable["carried"] = carried;
+    mutable["shapes"] = {"a.go#Renamed": "s1", "b.go#Other": "s2", "x.go#A": "s9", "y.go#B2": "s9"};
+    final got = prune(mutable, record: record);
+    assert\equal(got.refused, want: "", message: "a fresh report");
+    assert\equal(got.lines[1],
+        want: `{"kind":"known","metric":"func-lines","reason":"long on purpose","items":["a.go#Renamed","b.go#Other"],"shapes":{"a.go#Renamed":"s1","b.go#Other":"s2"}}`,
+        message: got.lines[1]);
+    assert\equal(got.lines[2],
+        want: `{"kind":"known","metric":"clone-tokens","reason":"twins","items":["x.go#A","y.go#B2"],"shapes":{"x.go#A":"s9","y.go#B2":"s9"}}`,
+        message: got.lines[2]);
+    assert\equal(got.carried.len(), want: 2, message: got.carried.join("; "));
+    assert\equal(got.filled, want: 1, message: "b.go#Other had none");
+}
+
+test "a recorded shape is kept even when the item's current one differs" {
+    final record = [`{"kind":"known","metric":"func-lines","reason":"r","items":["a.go#F"],"shapes":{"a.go#F":"old"}}`];
+    final r = report([<any>]).cloneMutable();
+    r["shapes"] = {"a.go#F": "new"};
+    final got = prune(r, record: record);
+    assert\equal(got.lines[0], want: record[0], message: "only a missing shape is filled");
+    assert\equal(got.filled, want: 0, message: "nothing filled");
 }
