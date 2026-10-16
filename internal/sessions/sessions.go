@@ -325,13 +325,8 @@ func (w *Writer) write(kind string, payload any) error {
 	// Opened and closed per append rather than held: an invocation's facts are
 	// low-frequency, and a long-lived handle would need a close nobody on the CLI
 	// path is positioned to run. See internal/trail, which made the same trade.
-	f, err := os.OpenFile(w.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return fmt.Errorf("sessions: open %s: %w", w.path, err)
-	}
-	defer func() { _ = f.Close() }()
-	if _, err := f.Write(append(line, '\n')); err != nil {
-		return fmt.Errorf("sessions: append to %s: %w", w.path, err)
+	if err := file.AppendLinesNoSync(w.path, [][]byte{line}, 0o644); err != nil {
+		return fmt.Errorf("sessions: append %s record: %w", kind, err)
 	}
 	w.seq++
 	return nil

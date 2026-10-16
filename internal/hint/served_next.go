@@ -78,9 +78,6 @@ func AppendServedNext(cacheDir string, next []types.NextStep) {
 	if journal == "" || len(next) == 0 {
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(journal), 0o755); err != nil {
-		return
-	}
 	at := time.Now().UnixMilli()
 	lines := make([][]byte, 0, len(next))
 	for _, n := range next {
@@ -99,18 +96,7 @@ func AppendServedNext(cacheDir string, next []types.NextStep) {
 	// A bounded wait rather than a drop: a lost line is a command magus served and then
 	// refuses, and the holder is only ever appending a few hundred bytes.
 	_ = file.WithLock(context.Background(), journal+".lock", servedNextLockWait, func() error {
-		f, err := os.OpenFile(journal, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-		if err != nil {
-			return err
-		}
-		for _, line := range lines {
-			// One line per Write, so a short write cannot leave half of the NEXT entry
-			// behind the tail of this one.
-			if _, err := f.Write(append(line, '\n')); err != nil {
-				break
-			}
-		}
-		if err := f.Close(); err != nil {
+		if err := file.AppendLinesNoSync(journal, lines, 0o644); err != nil {
 			return err
 		}
 		rotateServedNext(journal)

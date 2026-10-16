@@ -654,16 +654,7 @@ func Append(ctx context.Context, base string, e Event) {
 	if err != nil {
 		return
 	}
-	d := filepath.Join(base, dir)
-	if err := os.MkdirAll(d, 0o755); err != nil {
-		return
-	}
-	f, err := os.OpenFile(filepath.Join(d, eventsFile), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		return
-	}
-	_, _ = f.Write(append(line, '\n'))
-	_ = f.Close()
+	_ = file.AppendLinesNoSync(eventsPath(base), [][]byte{line}, 0o644)
 }
 
 // WriteBlob stores a payload under a provenance prefix (e.g. "mcp") and returns its ref and byte

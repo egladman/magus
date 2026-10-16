@@ -57,6 +57,18 @@ func ReadLines(path string) (Lines, error) {
 // AppendLines adds lines to the end of the file at path in one write, so a reader sees each
 // of them whole or not at all, and syncs it. It creates the file and its directory.
 func AppendLines(path string, lines [][]byte, perm os.FileMode) error {
+	return appendLines(path, lines, perm, true)
+}
+
+// AppendLinesNoSync is [AppendLines] without the sync: the lines survive the process
+// dying but not the machine. It is for a store appended to on a hot path, such as once per
+// RPC, where a sync per append costs more than a lost tail; on macOS a sync is an
+// F_FULLFSYNC and takes milliseconds.
+func AppendLinesNoSync(path string, lines [][]byte, perm os.FileMode) error {
+	return appendLines(path, lines, perm, false)
+}
+
+func appendLines(path string, lines [][]byte, perm os.FileMode, sync bool) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -65,7 +77,7 @@ func AppendLines(path string, lines [][]byte, perm os.FileMode) error {
 		return err
 	}
 	_, err = f.Write(joinLines(lines))
-	if err == nil {
+	if err == nil && sync {
 		err = f.Sync()
 	}
 	return errors.Join(err, f.Close())

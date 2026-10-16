@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -69,19 +70,10 @@ func AppendFeedbackMark(dir string, m types.TrailMark, now time.Time) (types.Tra
 	if err != nil {
 		return m, err
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := file.AppendLinesNoSync(filepath.Join(dir, marksFile), [][]byte{line}, 0o644); err != nil {
 		return m, fmt.Errorf("feedback: %w", err)
 	}
-	f, err := os.OpenFile(filepath.Join(dir, marksFile), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		return m, fmt.Errorf("feedback: %w", err)
-	}
-	// One short line per append, so concurrent writers do not interleave.
-	if _, err := f.Write(append(line, '\n')); err != nil {
-		_ = f.Close()
-		return m, fmt.Errorf("feedback: %w", err)
-	}
-	return m, f.Close()
+	return m, nil
 }
 
 // ReadFeedbackMarks returns every mark in the store at dir, oldest first. A store nobody
