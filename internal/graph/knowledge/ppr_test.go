@@ -134,8 +134,8 @@ func TestPersonalizedPageRankWalksOnlyWeightedRelations(t *testing.T) {
 	assert.Contains(t, byID, "called")
 	assert.NotContains(t, byID, "owned", "a relation absent from the weights is not walked")
 	assert.NotContains(t, byID, "contained", "a relation weighted 0 is not walked")
-	assert.Equal(t, 2, res.Walked)
-	assert.Equal(t, []string{"contains"}, res.Skipped)
+	res.Scores = nil
+	assert.Equal(t, PPRResult{Walked: 2, Skipped: []string{"contains"}}, res)
 }
 
 func TestPersonalizedPageRankReportsUnplacedSeedsAndSkippedRelations(t *testing.T) {
@@ -148,10 +148,10 @@ func TestPersonalizedPageRankReportsUnplacedSeedsAndSkippedRelations(t *testing.
 	res, err := g.PersonalizedPageRank(map[string]float64{"file:a.go": 1, "file:new.go": 1}, w)
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"file:new.go"}, res.Unplaced)
-	assert.Equal(t, []string{"calls", "co_changes"}, res.Skipped)
 	byID := pprScoreByID(res)
 	assert.InDelta(t, 1, byID["file:a.go"].Score+byID["file:b.go"].Score, 1e-9, "an unplaced seed carries no mass")
+	res.Scores = nil
+	assert.Equal(t, PPRResult{Unplaced: []string{"file:new.go"}, Walked: 2, Skipped: []string{"calls", "co_changes"}}, res)
 }
 
 func TestPersonalizedPageRankRefusesBadWeights(t *testing.T) {

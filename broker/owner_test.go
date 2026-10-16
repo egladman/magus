@@ -201,9 +201,11 @@ func TestAStepGroupEndsWhenItsRunIsKilled(t *testing.T) {
 	r, err := QueryWork(t.Context(), addr)
 	require.NoError(t, err)
 	require.Len(t, r.Ended, 1)
-	assert.Equal(t, WorkRun, r.Ended[0].Kind)
-	assert.Equal(t, "sleep 30", r.Ended[0].Command)
-	assert.Contains(t, r.Ended[0].Reason, "outlived the magus run whose step started it")
+	got := r.Ended[0]
+	assert.Contains(t, got.Reason, "outlived the magus run whose step started it")
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	assert.Equal(t, Ended{Work: Work{Kind: WorkRun, PID: got.PID, Dir: wd, Command: "sleep 30", Since: got.Since}, Reason: got.Reason, At: got.At}, got)
 }
 
 // A claim handed back while a group it carries still runs takes the group with it.

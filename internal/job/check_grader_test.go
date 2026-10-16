@@ -114,12 +114,16 @@ func TestDeniedCheckProblemsWordAHumanOnlyCheckAsOneAPersonRuns(t *testing.T) {
 	s, _ := humanOnlyGrader(t)
 	ps := deniedCheckProblems(t.Context(), s, types.Job{ID: "w", Check: &types.LeaseCheck{Target: "bench", Project: "."}})
 	require.Len(t, ps, 1)
-	assert.Equal(t, types.JobCheckUnrunnable, ps[0].Code)
-	assert.NotContains(t, ps[0].Message, "\n", "a message is one line")
-	assert.Contains(t, ps[0].Message, "w's check `magus run bench .` is a target a person runs (human-only)")
-	assert.Contains(t, ps[0].Message, "launches paid sessions", "the guard's reason is quoted")
-	assert.Equal(t, "declare a check its worker may run in its place, with `magus job fork w --check '<target> <project>'`", ps[0].Fix)
-	assert.NotContains(t, ps[0].Fix, "go-vet", "compiling is no stand-in for a run a person owns")
+	p := ps[0]
+	assert.NotContains(t, p.Message, "\n", "a message is one line")
+	assert.Contains(t, p.Message, "w's check `magus run bench .` is a target a person runs (human-only)")
+	assert.Contains(t, p.Message, "launches paid sessions", "the guard's reason is quoted")
+	assert.Equal(t, types.JobProblem{
+		Code:    types.JobCheckUnrunnable,
+		Field:   "check",
+		Message: p.Message,
+		Fix:     "declare a check its worker may run in its place, with `magus job fork w --check '<target> <project>'`",
+	}, p, "compiling is no stand-in for a run a person owns")
 }
 
 func TestDeniedCheckProblemsGradeEveryGoalCheck(t *testing.T) {

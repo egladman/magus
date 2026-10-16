@@ -82,9 +82,10 @@ func TestRefuseUngradableClaims(t *testing.T) {
 		s := NewStore(tmpLoc(t, t.TempDir()))
 		ps := ungradableClaimProblems(context.Background(), s, types.Job{ID: "wave/job", WritePaths: []string{"run.go#executeStages"}})
 		require.Len(t, ps, 1)
-		assert.Equal(t, types.WritePathClaimUngradable, ps[0].Code)
-		assert.Equal(t, "write_paths[0]", ps[0].Field)
-		assert.Contains(t, ps[0].Message, `"run.go": `)
+		p := ps[0]
+		assert.Contains(t, p.Message, `"run.go": `)
+		assert.Equal(t, types.JobProblem{Code: types.WritePathClaimUngradable, Field: "write_paths[0]", Message: p.Message,
+			Fix: `claim the whole file "run.go"`}, p)
 	})
 
 	t.Run("every bad entry is its own problem", func(t *testing.T) {

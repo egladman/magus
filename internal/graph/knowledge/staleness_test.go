@@ -138,8 +138,14 @@ func TestResolveLabelsStalenessWithoutReordering(t *testing.T) {
 		byID[m.ID] = m
 	}
 	stale, current := byID["doc:docs/cache.md"], byID["doc:docs/cache-current.md"]
-	assert.Equal(t, StalenessPetrified, stale.Staleness)
-	assert.Equal(t, 400, stale.OutrunDays, "the day count is the evidence and must reach the caller")
+	var want types.KnowledgeMatch
+	for _, m := range unlabeled {
+		if m.ID == stale.ID {
+			want = m
+		}
+	}
+	want.Staleness, want.OutrunDays = StalenessPetrified, 400
+	assert.Equal(t, want, stale, "the label is all that changes, and the day count is the evidence and must reach the caller")
 	assert.Empty(t, current.Staleness, "prose that kept up carries no staleness claim")
 	assert.Zero(t, current.OutrunDays)
 }

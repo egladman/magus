@@ -124,8 +124,12 @@ func TestAbandonWaitsOnAPersonWhenARestatedDescendantHoldsWork(t *testing.T) {
 	}
 	requests := endRequests(t, repo.Root())
 	require.Len(t, requests, 1)
-	assert.Equal(t, "plan plan/w", requests[0].Where)
-	assert.Equal(t, []types.FileRef{{Value: filepath.Join(repo.Root(), "a.txt")}}, requests[0].Files)
+	req := requests[0]
+	assert.Equal(t, sessions.AttentionRequest{
+		ID: req.ID, Invocation: req.Invocation, OpenedMs: req.OpenedMs,
+		Outcome: "permission", Severity: "warning", Source: "job/end",
+		Where: "plan plan/w", Files: []types.FileRef{{Value: filepath.Join(repo.Root(), "a.txt")}}, Message: req.Message,
+	}, req)
 	for id, r := range storedRows(t, s) {
 		assert.Equal(t, types.StateRunning, r.State, id)
 	}

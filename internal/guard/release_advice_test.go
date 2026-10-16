@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
@@ -39,11 +40,13 @@ func TestReleaseRequestedAdvisesTheHolderOnce(t *testing.T) {
 		ctx, _ := fleetFixture(t, fixture.FleetLeases()...)
 		id := fileReleaseRequest(t, ctx, "lease-a")
 		v := call(ctx, "holder", "lease-a")
-		require.Equal(t, string(advisoryReleaseRequested), v.Rule, v.Context)
-		assert.Equal(t, decisionAdvise, v.Decision)
 		assert.Contains(t, v.Context, "a fork under lease lease-b was refused for internal/ledger/store.go (request "+id+")")
 		assert.Contains(t, v.Context, "lease-a has changed nothing under internal/ledger/**")
 		assert.Contains(t, v.Context, "magus job apply -f <record>")
+		require.Equal(t, types.GuardJudgment{
+			SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: v.Context,
+			Rule: string(advisoryReleaseRequested), Lease: "lease-a", LeaseFrom: types.LeaseSourceFlag,
+		}, v, v.Context)
 		assert.NotEqual(t, string(advisoryReleaseRequested), call(ctx, "holder", "lease-a").Rule, "said once a session")
 	})
 

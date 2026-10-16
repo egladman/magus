@@ -303,10 +303,12 @@ func TestConformanceCarriesARenamedKnownFunction(t *testing.T) {
 	row := conformanceRowFor(t, out, types.ConformanceFuncLines, types.ConformancePopSource, "")
 	assert.Equal(t, 2, row.Known, "Renamed is Long")
 	assert.Empty(t, row.Violations)
-	assert.Empty(t, out.Stale)
-	assert.Equal(t, []types.ConformanceCarry{{Metric: types.ConformanceFuncLines, From: "pkg/a.go#Long", To: []string{"pkg/a.go#Renamed"}}}, out.Carried)
-	assert.Empty(t, out.Ambiguous)
-	assert.Equal(t, map[string]string{"pkg/a.go#Renamed": "SA", "pkg/b.go#Other": "SB"}, out.Shapes, "under the carried ID")
+	out.Rows = nil
+	assert.Equal(t, types.ConformanceOutput{
+		Carried: []types.ConformanceCarry{{Metric: types.ConformanceFuncLines, From: "pkg/a.go#Long", To: []string{"pkg/a.go#Renamed"}}},
+		Shapes:  map[string]string{"pkg/a.go#Renamed": "SA", "pkg/b.go#Other": "SB"},
+		Answer:  types.KnowledgeAnswer{Verdict: types.VerdictFound},
+	}, out, "shapes under the carried ID")
 	assert.Equal(t, []string{"pkg/a.go#Long", "pkg/b.go#Other"}, o.Ratchet.Known[0].Items, "the record is read, never edited")
 }
 
@@ -346,14 +348,17 @@ func TestConformanceShapeTwinsCarryNothing(t *testing.T) {
 	o.Ratchet.Known[0].Shapes = map[string]string{"pkg/a.go#Long": "SA"}
 
 	out := assembleLens([]types.KnowledgeSymbol{renamed, twin}).Conformance(o)
-	assert.Empty(t, out.Carried)
-	assert.Equal(t, []types.ConformanceCarry{
-		{Metric: types.ConformanceFuncLines, From: "pkg/a.go#Long", To: []string{"pkg/a.go#Renamed", "pkg/b.go#Twin"}},
-	}, out.Ambiguous)
-	assert.Equal(t, []types.ConformanceKnown{
-		{Metric: types.ConformanceFuncLines, Items: []string{"pkg/a.go#Long"}, Reason: "split pending", Line: 3},
-	}, out.Stale)
 	assert.Len(t, conformanceRowFor(t, out, types.ConformanceFuncLines, types.ConformancePopSource, "").Violations, 2)
+	out.Rows = nil
+	assert.Equal(t, types.ConformanceOutput{
+		Stale: []types.ConformanceKnown{
+			{Metric: types.ConformanceFuncLines, Items: []string{"pkg/a.go#Long"}, Reason: "split pending", Line: 3},
+		},
+		Ambiguous: []types.ConformanceCarry{
+			{Metric: types.ConformanceFuncLines, From: "pkg/a.go#Long", To: []string{"pkg/a.go#Renamed", "pkg/b.go#Twin"}},
+		},
+		Answer: types.KnowledgeAnswer{Verdict: types.VerdictFound},
+	}, out)
 
 	// One candidate that two known items claim is no evidence for either.
 	o = carryOptions(types.ConformanceFuncLines, "pkg/a.go#Long", "pkg/c.go#Gone")

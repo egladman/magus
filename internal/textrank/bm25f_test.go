@@ -55,9 +55,13 @@ func TestIndexScoreHandComputed(t *testing.T) {
 	wantA := idfLeaf*sat(leafA) + idfScore*sat(scoreA)
 	wantB := idfLeaf*sat(leafB) + idfScore*sat(scoreB)
 	require.Greater(t, wantB, wantA, "the fixture is built so b outranks a")
-	assert.Equal(t, "b", hits[0].ID)
-	assert.InDelta(t, wantB, hits[0].Score, 1e-12)
-	assert.Equal(t, 2, hits[0].Matched)
+	top := hits[0]
+	assert.InDelta(t, wantB, top.Score, 1e-12)
+	require.Len(t, top.Terms, 2)
+	assert.Equal(t, Hit{ID: "b", Score: top.Score, Matched: 2, Terms: []TermScore{
+		{Term: "leaf", Field: "body", Score: top.Terms[0].Score},
+		{Term: "score", Field: "name", Score: top.Terms[1].Score},
+	}}, top)
 	assert.Equal(t, "a", hits[1].ID)
 	assert.InDelta(t, wantA, hits[1].Score, 1e-12)
 

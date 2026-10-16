@@ -36,8 +36,14 @@ func TestRetrieveRanksPartialMatchesByScore(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(ms), 2)
 	assert.Equal(t, []string{"symbol:x", "doc:y.md"}, retrieveIDs(ms[:2]))
-	assert.Equal(t, 1, ms[0].Why.Matched)
-	assert.Equal(t, 2, ms[0].Why.Of)
+	require.Len(t, ms[0].Why.Terms, 1)
+	assert.Equal(t, &types.KnowledgeMatchWhy{
+		Matched: 1,
+		Of:      2,
+		Terms:   []types.KnowledgeTermScore{{Term: "parse", Field: textrank.FieldName, Score: ms[0].Why.Terms[0].Score}},
+		Lists:   []types.KnowledgeListRank{{List: listLexical, Rank: 1}},
+		Prior:   1,
+	}, ms[0].Why)
 	assert.Equal(t, 2, ms[1].Why.Matched, "the full match is labeled, not dropped")
 	assert.Greater(t, ms[0].Score, ms[1].Score)
 }
@@ -146,10 +152,16 @@ func TestRetrieveWhyNamesEveryList(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, ranking.Skipped)
 	z := ms[slices.Index(retrieveIDs(ms), "symbol:z")]
-	assert.Equal(t, []types.KnowledgeListRank{{List: listLexical, Rank: 6}, {List: listExact, Rank: 6}, {List: listGraph, Rank: 1}}, z.Why.Lists)
-	assert.Contains(t, z.Why.Seeds, fileID("pkg/x.go"))
-	assert.Equal(t, []types.KnowledgeTermScore{{Term: "parse", Field: textrank.FieldName, Score: z.Why.Terms[0].Score}}, z.Why.Terms)
-	assert.InDelta(t, 1.0, z.Why.Prior, 0)
+	why := *z.Why
+	require.Len(t, why.Terms, 1)
+	assert.Equal(t, types.KnowledgeMatchWhy{
+		Matched: 1,
+		Of:      1,
+		Terms:   []types.KnowledgeTermScore{{Term: "parse", Field: textrank.FieldName, Score: why.Terms[0].Score}},
+		Lists:   []types.KnowledgeListRank{{List: listLexical, Rank: 6}, {List: listExact, Rank: 6}, {List: listGraph, Rank: 1}},
+		Seeds:   []string{"symbol:z", fileID("pkg/y.go"), fileID("pkg/x.go")},
+		Prior:   1,
+	}, why)
 
 	ms, ranking, err = g.Retrieve("parse", shipped())
 	require.NoError(t, err)

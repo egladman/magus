@@ -165,12 +165,18 @@ func TestExitNarrowsToWhatTheResultChanged(t *testing.T) {
 
 	exited, err := Exit(t.Context(), boundStore(loc, row.ID), row.ID, &result, resolver)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"internal/ledger", "cmd/magus/ledger.go"}, exited.WritePaths, "a directory covers what is under it")
 	require.Len(t, exited.Releases, 1)
-	assert.Equal(t, "docs/reference/*.md", exited.Releases[0].Path)
 	assert.False(t, exited.Releases[0].Revoked, "the holder gave it up")
-	assert.Equal(t, 2, exited.Generation, "narrowing is a spec change")
 	assert.Equal(t, 2, exited.Result.ObservedGeneration, "the evidence proved the wider spec, so it grades the narrowed one")
+	want := row
+	want.Version = types.JobSchemaVersion
+	want.WritePaths = []string{"internal/ledger", "cmd/magus/ledger.go"} // a directory covers what is under it
+	want.Releases = []types.JobRelease{{Path: "docs/reference/*.md", Digest: "absent", ReleasedAt: exited.Releases[0].ReleasedAt}}
+	want.Generation = 2 // narrowing is a spec change
+	want.Attempts, want.State = 1, types.StateExited
+	want.RegisteredBy, want.Created, want.Updated = exited.RegisteredBy, exited.Created, exited.Updated
+	want.Result, want.Attempt, want.GateAttempts = exited.Result, exited.Attempt, exited.GateAttempts
+	assert.Equal(t, want, exited)
 
 	status, err := Wait(t.Context(), NewStore(loc), row.ID, nil, nil, observeClaim(result), nil)
 	require.NoError(t, err)

@@ -102,15 +102,12 @@ func TestAssembleVCSCoChanges(t *testing.T) {
 	}
 	s := assembleVCS(nil, couplings, known, false)
 
-	require.Len(t, s.Edges, 2, "the pair with a node-less file is dropped")
-	first, second := s.Edges[0], s.Edges[1]
-	assert.Equal(t, fileID("a.buzz"), first.Source)
-	assert.Equal(t, fileID("b.buzz"), first.Target)
-	assert.Equal(t, types.RelationCoChanges, first.Relation)
-	assert.Equal(t, types.ConfidenceExtracted, first.Confidence)
-	assert.Equal(t, map[string]string{"support": "2", "confidence": "0.50"}, first.Attrs)
-	assert.Equal(t, fileID("b.buzz"), second.Source, "edges are sorted by source then target")
-	assert.Equal(t, map[string]string{"support": "3", "confidence": "0.75"}, second.Attrs)
+	assert.Equal(t, []types.KnowledgeEdge{
+		{Source: fileID("a.buzz"), Target: fileID("b.buzz"), Relation: types.RelationCoChanges, Confidence: types.ConfidenceExtracted,
+			Score: 1, Attrs: map[string]string{"support": "2", "confidence": "0.50"}},
+		{Source: fileID("b.buzz"), Target: fileID("c.buzz"), Relation: types.RelationCoChanges, Confidence: types.ConfidenceExtracted,
+			Score: 1, Attrs: map[string]string{"support": "3", "confidence": "0.75"}},
+	}, s.Edges, "the pair with a node-less file is dropped, and edges are sorted by source then target")
 	assert.Empty(t, s.Nodes, "an edge-only shard adds no nodes")
 }
 

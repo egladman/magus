@@ -51,8 +51,9 @@ func TestJobsClaimBounds(t *testing.T) {
 				return
 			}
 			require.NoError(t, Validate(cfg))
-			assert.Equal(t, tc.files, cfg.Jobs.MaxClaimFiles)
-			assert.Equal(t, tc.projs, cfg.Jobs.MaxClaimProjects)
+			want := Defaults().Jobs
+			want.MaxClaimFiles, want.MaxClaimProjects = tc.files, tc.projs
+			assert.Equal(t, want, cfg.Jobs)
 		})
 	}
 }

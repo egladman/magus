@@ -59,9 +59,21 @@ func TestSummarizeSlices(t *testing.T) {
 
 	assert.Equal(t, Metrics{Unscorable: 1, DroppedGold: 2}, rep.Shapes[ShapePath], "an all-dropped run scores nothing")
 	prose := rep.Shapes[ShapeProse]
-	assert.Equal(t, 2, prose.Queries)
 	assert.InDelta(t, 0.25, prose.MRR, 1e-12)
-	assert.Equal(t, 30*time.Millisecond, prose.LatencyP95)
+	assert.Equal(t, Metrics{
+		Queries:     2,
+		DroppedGold: 1,
+		Recall5:     0.5,
+		Recall10:    0.5,
+		Recall50:    0.5,
+		MRR:         prose.MRR,
+		NDCG10:      0.3154648767857287,
+		ZeroResult:  0.5,
+		Unknown:     0.5,
+		LatencyP50:  20 * time.Millisecond,
+		LatencyP95:  30 * time.Millisecond,
+		MeanBytes:   100,
+	}, prose)
 
 	dev, holdout := rep.Splits["dev"], rep.Splits["holdout"]
 	assert.Equal(t, 2, dev.Queries)
@@ -77,8 +89,19 @@ func TestSummarizeSlices(t *testing.T) {
 	}, holdout)
 
 	require.Len(t, rep.Verbs, 2)
-	assert.Equal(t, 2, rep.Verbs["query"].Queries)
-	assert.Equal(t, 1, rep.Verbs["query"].Unscorable)
+	assert.Equal(t, Metrics{
+		Queries:     2,
+		Unscorable:  1,
+		DroppedGold: 2,
+		Recall5:     1,
+		Recall10:    1,
+		Recall50:    1,
+		MRR:         0.75,
+		NDCG10:      0.8154648767857287,
+		LatencyP50:  10 * time.Millisecond,
+		LatencyP95:  30 * time.Millisecond,
+		MeanBytes:   150,
+	}, rep.Verbs["query"])
 	assert.Equal(t, 1, rep.Verbs["refs"].Queries)
 	require.Len(t, rep.VerbSplits["query"], 2)
 	assert.Equal(t, dev, rep.VerbSplits["query"]["dev"], "every dev run is a query")

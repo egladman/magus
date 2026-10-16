@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
@@ -370,7 +371,8 @@ func TestJudgeRefusesARetryAfterARefusal(t *testing.T) {
 	ctx := WithLocation(t.Context(), cacheDir, "/ws", "/ws")
 
 	v := Judge(ctx, Dependencies{}, Request{Input: "./magus run lint ."})
-	assert.Equal(t, decisionDeny, v.Decision, v.Reason)
-	assert.Equal(t, string(denyRuleSleepPoll), v.Rule, v.Reason)
 	assert.Contains(t, v.Reason, "refused with MGS3009")
+	assert.Equal(t, types.GuardJudgment{
+		SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: v.Reason, Rule: string(denyRuleSleepPoll),
+	}, v, v.Reason)
 }

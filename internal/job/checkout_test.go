@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -364,9 +365,13 @@ func TestSharedCheckoutRefusalNamesTheHoldersUnusedPaths(t *testing.T) {
 
 	requests := releaseRequests(t, root)
 	require.Len(t, requests, 1)
-	assert.Equal(t, "magusfile.buzz", requests[0].Where)
-	assert.Equal(t, []types.FileRef{{Value: "magusfile.buzz"}}, requests[0].Files)
-	assert.Contains(t, requests[0].Message, "job wave/worker-one holds magusfile.buzz")
+	req := requests[0]
+	assert.Contains(t, req.Message, "job wave/worker-one holds magusfile.buzz")
+	assert.Equal(t, sessions.AttentionRequest{
+		ID: req.ID, Invocation: req.Invocation, OpenedMs: req.OpenedMs,
+		Outcome: "waiting", Severity: "warning", Source: "magus/job-release",
+		Where: "magusfile.buzz", Files: []types.FileRef{{Value: "magusfile.buzz"}}, Message: req.Message,
+	}, req)
 
 	t.Run("a dry run files no request", func(t *testing.T) {
 		t.Parallel()

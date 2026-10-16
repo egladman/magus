@@ -130,11 +130,12 @@ func TestAmbiguousSymbolProblemsNameEveryDefinition(t *testing.T) {
 
 	ps := ambiguousSymbolProblems(t.Context(), gate("Declare", "Validate"), read)
 	require.Len(t, ps, 1)
-	assert.Equal(t, types.JobGoalInvalid, ps[0].Code)
-	assert.Equal(t, "goals[1].symbols[1]", ps[0].Field)
-	assert.Contains(t, ps[0].Message, `"Validate"`)
-	assert.Contains(t, ps[0].Message, "internal/config/validate.go")
-	assert.Contains(t, ps[0].Message, "types/job.go")
+	p := ps[0]
+	assert.Contains(t, p.Message, `"Validate"`)
+	assert.Contains(t, p.Message, "internal/config/validate.go")
+	assert.Contains(t, p.Message, "types/job.go")
+	assert.Equal(t, types.JobProblem{Code: types.JobGoalInvalid, Field: "goals[1].symbols[1]", Message: p.Message,
+		Fix: "name one by the symbol id `magus refs Validate` prints"}, p)
 
 	assert.Empty(t, ambiguousSymbolProblems(t.Context(), gate("Declare", "Cold"), read), "a name the graph cannot read fails open at declaration")
 	assert.Empty(t, ambiguousSymbolProblems(t.Context(), gate("Declare"), nil))

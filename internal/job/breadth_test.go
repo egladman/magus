@@ -47,14 +47,15 @@ func TestBroadClaimRefusesAGlobAcrossProjects(t *testing.T) {
 
 	got := broadClaimProblems(context.Background(), root, row, Workspace{}, nil)
 
-	require.Len(t, got, 1)
-	assert.Equal(t, types.WritePathTooBroad, got[0].Code)
-	assert.Equal(t, "write_paths[1]", got[0].Field)
-	assert.Equal(t, "**/*.go", got[0].Subject)
-	assert.Equal(t, `write path "**/*.go" matches 4 files in 2 projects: more than 1 project, `+
-		"a leading `**`, which reaches every directory of the workspace", got[0].Message)
-	assert.Equal(t, `replace "**/*.go" with the files the goals and criteria name: "write_paths": ["pkg/b.go"]; `+
-		`or keep it with the waiver {"code":"MGS3043","subject":"**/*.go","reason":"<why this job needs all of it>"}`, got[0].Fix)
+	assert.Equal(t, types.JobProblems{{
+		Code:    types.WritePathTooBroad,
+		Field:   "write_paths[1]",
+		Subject: "**/*.go",
+		Message: `write path "**/*.go" matches 4 files in 2 projects: more than 1 project, ` +
+			"a leading `**`, which reaches every directory of the workspace",
+		Fix: `replace "**/*.go" with the files the goals and criteria name: "write_paths": ["pkg/b.go"]; ` +
+			`or keep it with the waiver {"code":"MGS3043","subject":"**/*.go","reason":"<why this job needs all of it>"}`,
+	}}, got)
 }
 
 func TestBroadClaimRefusesAGlobPastTheFileLimit(t *testing.T) {
