@@ -298,7 +298,6 @@ describe("the Diagrams app", () => {
       eyebrow: "",
       desc: "focus app, depth 1",
       direction: "across",
-      generated: false,
       unscopedWhy: "served from the workspace graph: focus app, depth 1",
       graphEdges: false,
       boxes: [

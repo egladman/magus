@@ -26,7 +26,7 @@
 // The design system these figures follow is cathrynlavery/diagram-design (MIT),
 // https://github.com/cathrynlavery/diagram-design: its palette, role treatments, zones,
 // legend strip, connector and label rules. The title face, the Pico font variables, the
-// header band, the budgets for generated figures and the layout are this module's own.
+// header band, the budgets and the layout are this module's own.
 //
 // Two palettes, one geometry: Theme.page emits `var(--magus-diagram-*)` so an SVG inlined
 // into a docs page follows the site's theme toggle; Theme.light and Theme.dark bake hex
@@ -142,7 +142,7 @@ fun darkPalette() > Palette {
 // the frame keeps. Style{} is the design system as shipped; a caller names only what
 // differs.
 //
-// The omissions are deliberate. Grid, the budgets and layered()'s column geometry are
+// The omissions are deliberate. Grid, the budgets and flow()'s column geometry are
 // structural rather than painted: validate() reasons about them, so a per-render override
 // would let a caller ship a figure the validator approved under different numbers. Text
 // baselines and the character-width estimates that size an opaque label mask are calibrated
@@ -292,9 +292,6 @@ object LegendItem {
 // arrowhead at the first definition.
 object Diagram {
     id: str = "",
-    // Set by layered() and flow's generated(): lifts the node and edge budgets, which bound a
-    // hand-authored figure. Every structural check still applies.
-    generated: bool = false,
     title: str = "",
     eyebrow: str = "",
     desc: str = "",
@@ -443,7 +440,7 @@ fun overlapLen(p1: int, p2: int, q1: int, q2: int) > int {
 }
 
 // overlappingConnectors reports each pair of edges that share a stroke line. Runs on
-// generated layouts too: automatic placement is exactly where this goes wrong unnoticed.
+// automatic placement too, which is exactly where this goes wrong unnoticed.
 fun overlappingConnectors(d: Diagram) > [Fault] {
     final errs: mut [Fault] = mut [<Fault>];
     var i = 0;
@@ -551,11 +548,9 @@ fun bridgeRoom(d: Diagram, c: Crossing, found: [Crossing]) > int {
     return room;
 }
 
-// bridgeFaults reports a crossing whose hop cannot seat. A generated figure has no author to
-// move a bend, so there the renderer draws that crossing plain instead.
+// bridgeFaults reports a crossing whose hop cannot seat.
 fun bridgeFaults(d: Diagram, found: [Crossing]) > [Fault] {
     final errs: mut [Fault] = mut [<Fault>];
-    if (d.generated) { return errs; }
     foreach (c in found) {
         final room = bridgeRoom(d, c: c, found: found);
         if (room < HopClear) {
@@ -610,10 +605,10 @@ fun faults(d: Diagram) > [Fault] {
     final errs: mut [Fault] = mut [<Fault>];
 
     if (d.id == "") { errs.append(Fault{ rule = "id", text = "diagram has no id", fix = "marker ids would collide when inlined" }); }
-    if (d.generated == false and d.nodes.len() > MaxNodes) {
+    if (d.nodes.len() > MaxNodes) {
         errs.append(Fault{ rule = "nodeBudget", text = "{d.nodes.len()} nodes exceeds the budget of {MaxNodes}", fix = "split into overview plus detail" });
     }
-    if (d.generated == false and d.edges.len() > MaxEdges) {
+    if (d.edges.len() > MaxEdges) {
         errs.append(Fault{ rule = "edgeBudget", text = "{d.edges.len()} edges exceeds the budget of {MaxEdges}", fix = "split into overview plus detail" });
     }
 
@@ -654,7 +649,7 @@ fun faults(d: Diagram) > [Fault] {
     foreach (e in d.edges) {
         if (e.kind == "accent") { accent = accent + 1; }
     }
-    if (d.generated == false and accent > MaxAccent) {
+    if (accent > MaxAccent) {
         errs.append(Fault{ rule = "accentBudget", text = "{accent} accent elements exceeds the budget of {MaxAccent}", fix = "the focal signal is gone" });
     }
 
@@ -663,7 +658,7 @@ fun faults(d: Diagram) > [Fault] {
             errs.append(Fault{ rule = "zoneGrid", subjects = [z.label], text = "zone \"{z.label}\" is off the {Grid}px grid" });
         }
     }
-    if (d.generated == false and d.zones.len() > MaxZones) {
+    if (d.zones.len() > MaxZones) {
         errs.append(Fault{ rule = "zoneBudget", text = "{d.zones.len()} zones exceeds the budget of {MaxZones}", fix = "a figure banded that finely is a swimlane" });
     }
 
@@ -703,9 +698,7 @@ fun faults(d: Diagram) > [Fault] {
             errs.append(Fault{ rule = "decisionFan", subjects = ends, text = "edge {e.src}->{e.dst}: enters decision \"{e.dst}\" on a fanned slot, off the diamond" });
         }
         foreach (f in viaFaults(d, e: e)) { errs.append(f); }
-        // A generated layout packs its channels one grid step apart and has no author to
-        // move a bend, so there the painter clamps the radius down instead.
-        if (d.generated == false and findNode(d, id: e.src) != null and findNode(d, id: e.dst) != null) {
+        if (findNode(d, id: e.src) != null and findNode(d, id: e.dst) != null) {
             final tight = tightestBend(d, e);
             if (tight < BendFloor) {
                 errs.append(Fault{
@@ -2025,8 +2018,6 @@ test "a crossing too near a bend to seat its hop is a finding, never a refusal o
     final errs = faults(tight);
     assert\equal(errs.len(), want: 1, message: "one fault: {validate(tight)}");
     assert\equal(errs[0].rule, want: "bridge", message: "the hop has 8px before the corner at 248,140");
-    final generated = Diagram{ id = tight.id, width = tight.width, height = tight.height, nodes = tight.nodes, edges = tight.edges, generated = true };
-    assert\equal(validate(generated).len(), want: 0, message: "a generated figure draws that crossing plain");
 }
 
 test "a label with no spot 6px clear of every stroke and box is a finding naming its edge" {
@@ -2050,219 +2041,13 @@ test "every edge path carries a stable id a fragment can target" {
     std\assert(svg.indexOf("data-edge=\"a/b->c\" id=\"my_20fig-edge-a_2fb-c\"") != null, message: "beside data-edge: {svg}");
 }
 
-// LayeredItem is one node handed to layered(): an id, its display label, and the ids it
-// depends on. Edges are declared by the dependent, matching how a dependency graph is
-// usually held.
-object LayeredItem {
-    id: str = "",
-    label: str = "",
-    deps: [str] = [<str>],
-}
-
-// Layout constants for the generated form. Wider columns than an authored figure uses,
-// because a generated label is a project or target name nobody shortened for the picture.
-// flow()'s placement shares them, so the two automatic placements share one geometry.
+// Layout constants for flow()'s automatic placement. Wider columns than an authored figure
+// uses, because a label there is a project or target name nobody shortened for the picture.
 final LayerNodeW = 216;
 final LayerNodeH = 56;
 final LayerColGap = 72;
 final LayerRowGap = 24;
 final LayerTop = 64;
-
-// LayerMaxChars is what fits across a generated node at the 12px body size. A project
-// path longer than that is truncated from the FRONT: the tail (the project's own name) is
-// what distinguishes it, and "docs/guides/integrations/agents" overflows its box.
-final LayerMaxChars = 32;
-
-fun fitLabel(label: str) > str {
-    if (label.len() <= LayerMaxChars) { return label; }
-    return "..." + label.sub(label.len() - LayerMaxChars + 3);
-}
-
-// layered turns a dependency DAG into a Diagram: rank by longest path from the roots, one
-// column per rank, and the ranks left to right so every edge points forward.
-//
-// It is deliberately the dumbest placement that works: no crossing minimization, no
-// barycentre passes (flow() has them). Callers keep it small by capping the node count.
-
-// LayerStaggers are the per-column offsets layered() tries, in order. No single value works:
-// an attach point is `node.y + h * k/(n+1)`, so nodes at different y can share one once slot
-// counts differ. Each offset is laid out and checked by the validator until one is clean.
-//
-// Bounded and deterministic. If nothing is clean the last attempt is returned and the caller
-// drops the figure (see dependencyFigure).
-// Ascending, so a graph pays only the offset it needs. The list stops at one row pitch (80):
-// past that the staircase reads worse than the table the caller falls back to.
-final LayerStaggers = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80];
-
-fun layered(id: str, title: str, desc: str, items: [LayeredItem]) > Diagram {
-    var best = layoutWithStagger(id, title, desc, items, stagger: LayerStaggers[0]);
-    foreach (stagger in LayerStaggers) {
-        final attempt = layoutWithStagger(id, title, desc, items, stagger);
-        if (validate(attempt).len() == 0) { return attempt; }
-        best = attempt;
-    }
-    return best;
-}
-
-fun layoutWithStagger(id: str, title: str, desc: str, items: [LayeredItem], stagger: int) > Diagram {
-    final rank: mut {str: int} = mut {<str: int>};
-    foreach (it in items) { rank[it.id] = 0; }
-
-    // Longest-path ranking. Iterating once per node is enough for a DAG: each pass pushes
-    // every node at least one rank past its dependencies, so after n passes the deepest
-    // chain has settled. A cycle simply stops moving, which keeps this total.
-    var pass = 0;
-    while (pass < items.len()) {
-        foreach (it in items) {
-            foreach (dep in it.deps) {
-                final dr = rank[dep];
-                if (dr != null and dr! + 1 > (rank[it.id] ?? 0)) {
-                    rank[it.id] = dr! + 1;
-                }
-            }
-        }
-        pass = pass + 1;
-    }
-
-    var maxRank = 0;
-    foreach (it in items) {
-        if ((rank[it.id] ?? 0) > maxRank) { maxRank = rank[it.id] ?? 0; }
-    }
-
-    // Place each node at its rank's column, stacking in declaration order so the same
-    // graph always renders the same bytes.
-    final rowOf: mut {str: int} = mut {<str: int>};
-    final used: mut {int: int} = mut {<int: int>};
-    var maxRows = 0;
-    foreach (it in items) {
-        final r = rank[it.id] ?? 0;
-        final row = used[r] ?? 0;
-        rowOf[it.id] = row;
-        used[r] = row + 1;
-        if (row + 1 > maxRows) { maxRows = row + 1; }
-    }
-
-    final nodes: mut [Node] = mut [<Node>];
-    foreach (it in items) {
-        final r = rank[it.id] ?? 0;
-        final row = rowOf[it.id] ?? 0;
-        nodes.append(Node{
-            id = it.id,
-            label = fitLabel(it.label),
-            x = 32 + r * (LayerNodeW + LayerColGap),
-            // Each column sits `stagger` px lower than the last. Without a per-column
-            // offset, ranks share row positions, so one edge's arrival y equals another's
-            // departure y and their horizontal stubs run along the same line.
-            y = LayerTop + row * (LayerNodeH + LayerRowGap) + r * stagger,
-            w = LayerNodeW,
-            h = LayerNodeH,
-        });
-    }
-
-    // Fan the attach points: count each node's outgoing and incoming edges first, then
-    // hand out slots in order, so two edges never land on one point.
-    final outOf: mut {str: int} = mut {<str: int>};
-    final inOf: mut {str: int} = mut {<str: int>};
-    // Bound to locals first: `??` binds looser than `+`, so `m[k] ?? 0 + 1` reads as
-    // `m[k] ?? 1` and the counter sticks at one, which fans nothing.
-    foreach (it in items) {
-        foreach (dep in it.deps) {
-            final o = outOf[dep] ?? 0;
-            outOf[dep] = o + 1;
-            final i = inOf[it.id] ?? 0;
-            inOf[it.id] = i + 1;
-        }
-    }
-    // Vertical channels are allocated per COLUMN GAP, not per source node. Staggering
-    // within one node's own outgoing edges leaves two nodes in the same column handing out
-    // the same channel x, and their verticals then run along each other.
-    final gapTotal: mut {int: int} = mut {<int: int>};
-    foreach (it in items) {
-        foreach (dep in it.deps) {
-            final r = rank[dep] ?? 0;
-            final n = gapTotal[r] ?? 0;
-            gapTotal[r] = n + 1;
-        }
-    }
-
-    final outSeen: mut {str: int} = mut {<str: int>};
-    final inSeen: mut {str: int} = mut {<str: int>};
-    final gapSeen: mut {int: int} = mut {<int: int>};
-    final edges: mut [Edge] = mut [<Edge>];
-    foreach (it in items) {
-        foreach (dep in it.deps) {
-            final osPrev = outSeen[dep] ?? 0;
-            final inPrev = inSeen[it.id] ?? 0;
-            final os = osPrev + 1;
-            final ins = inPrev + 1;
-            outSeen[dep] = os;
-            inSeen[it.id] = ins;
-
-            final depRank = rank[dep] ?? 0;
-            final chPrev = gapSeen[depRank] ?? 0;
-            final ch = chPrev + 1;
-            gapSeen[depRank] = ch;
-            final total = gapTotal[depRank] ?? 1;
-            final srcRight = 32 + depRank * (LayerNodeW + LayerColGap) + LayerNodeW;
-            edges.append(Edge{
-                src = dep, dst = it.id,
-                srcSide = "right", dstSide = "left",
-                srcSlot = os, srcSlots = outOf[dep] ?? 1,
-                dstSlot = ins, dstSlots = inOf[it.id] ?? 1,
-                bend = srcRight + snap(LayerColGap * ch / (total + 1)),
-            });
-        }
-    }
-
-    return Diagram{
-        id = id,
-        generated = true,
-        title = title,
-        desc = desc,
-        width = 64 + (maxRank + 1) * LayerNodeW + maxRank * LayerColGap,
-        // maxRank * stagger, because a node's y carries r * stagger: the last column sits
-        // that much lower than the first, and a canvas sized from rows alone clips it.
-        height = LayerTop + maxRows * (LayerNodeH + LayerRowGap) + maxRank * stagger + 32,
-        nodes = nodes,
-        edges = edges,
-    };
-}
-
-test "layered ranks a chain into one column per step" {
-    final d = layered("t", title: "chain", desc: "a to c", items: [
-        LayeredItem{ id = "a", label = "A" },
-        LayeredItem{ id = "b", label = "B", deps = ["a"] },
-        LayeredItem{ id = "c", label = "C", deps = ["b"] },
-    ]);
-    assert\equal(validate(d).len(), want: 0, message: "a generated layout is structurally sound");
-    assert\equal(d.nodes.len(), want: 3, message: "every item placed");
-    assert\equal(d.edges.len(), want: 2, message: "every dependency drawn");
-    // Three ranks, so three distinct columns, left to right.
-    std\assert(d.nodes[0].x < d.nodes[1].x, message: "b sits right of a");
-    std\assert(d.nodes[1].x < d.nodes[2].x, message: "c sits right of b");
-}
-
-test "layered stacks independent roots in one column" {
-    final d = layered("t", title: "fan", desc: "two roots into one sink", items: [
-        LayeredItem{ id = "a", label = "A" },
-        LayeredItem{ id = "b", label = "B" },
-        LayeredItem{ id = "sink", label = "Sink", deps = ["a", "b"] },
-    ]);
-    assert\equal(validate(d).len(), want: 0, message: "no overlap, no shared attach point");
-    assert\equal(d.nodes[0].x, want: d.nodes[1].x, message: "both roots share rank 0");
-    std\assert(d.nodes[0].y != d.nodes[1].y, message: "and are stacked, not overlapping");
-}
-
-test "layered exceeds the authored budgets without complaint" {
-    final items: mut [LayeredItem] = mut [<LayeredItem>];
-    var i = 0;
-    while (i < 14) {
-        items.append(LayeredItem{ id = "n{i}", label = "N{i}" });
-        i = i + 1;
-    }
-    final d = layered("t", title: "wide", desc: "more nodes than a human should draw", items: items);
-    assert\equal(validate(d).len(), want: 0, message: "budgets are for hand-authored figures only");
-}
 
 // Distinct attach slots are NOT enough: two connectors can leave one box at different points
 // and still turn onto the same crossing line.
@@ -2300,18 +2085,6 @@ test "offsetting one bend clears the overlap" {
         ],
     };
     assert\equal(validate(good).len(), want: 0, message: "distinct crossing lines are traceable");
-}
-
-// The generated path must satisfy the same rule; a fan-out is the shape every run-order
-// figure ends in.
-test "layered fans siblings onto distinct crossing lines" {
-    final d = layered("t", title: "fan out", desc: "one root, three children", items: [
-        LayeredItem{ id = "root", label = "Root" },
-        LayeredItem{ id = "x", label = "X", deps = ["root"] },
-        LayeredItem{ id = "y", label = "Y", deps = ["root"] },
-        LayeredItem{ id = "z", label = "Z", deps = ["root"] },
-    ]);
-    assert\equal(validate(d).len(), want: 0, message: "no two generated connectors share a line");
 }
 
 
@@ -2410,7 +2183,6 @@ object Sketch {
     eyebrowText: str = "",
     descText: str = "",
     topDown: bool = false,
-    isGenerated: bool = false,
     isUnscoped: bool = false,
     unscopedWhy: str = "",
     nodes: mut [Node],
@@ -2452,14 +2224,6 @@ object Sketch {
     // down lays ranks out top to bottom instead of left to right.
     mut fun down() > mut Sketch {
         this.topDown = true;
-        return this;
-    }
-
-    // generated marks a figure computed from data nobody authored, as layered() does: the
-    // hand-authored node, edge, accent and zone budgets stop applying, every structural
-    // check stays, and it needs no scope.
-    mut fun generated() > mut Sketch {
-        this.isGenerated = true;
         return this;
     }
 
@@ -2721,7 +2485,6 @@ fun rebuilt(f: Sketch, nodes: mut [Node], edges: mut [Edge], observedNodes: mut 
         eyebrowText = f.eyebrowText,
         descText = f.descText,
         topDown = f.topDown,
-        isGenerated = f.isGenerated,
         isUnscoped = f.isUnscoped,
         unscopedWhy = f.unscopedWhy,
         nodes = nodes,
@@ -2969,7 +2732,7 @@ fun declarationFindings(f: Sketch) > [str] {
     }
 
     final scoped = f.scopeGlobs.len() > 0;
-    if (scoped == false and f.isUnscoped == false and f.isGenerated == false) {
+    if (scoped == false and f.isUnscoped == false) {
         errs.append("names no code; add scope([...]) or unscoped(why:)");
     }
     if (scoped and f.isUnscoped) {
@@ -2979,17 +2742,15 @@ fun declarationFindings(f: Sketch) > [str] {
         errs.append("unscoped gives no reason; say why in unscoped(why:)");
     }
 
-    if (f.isGenerated == false) {
-        // internal/handler/diagram's 422 test pins "split into overview plus detail".
-        final split = "split into overview plus detail, one flow() each";
-        if (f.nodes.len() > MaxNodes) { errs.append("{f.nodes.len()} nodes exceeds the budget of {MaxNodes}; {split}"); }
-        if (f.edges.len() > MaxEdges) { errs.append("{f.edges.len()} edges exceeds the budget of {MaxEdges}; {split}"); }
-        if (focal > MaxAccent) {
-            errs.append("{focal} focal nodes and edges exceed the budget of {MaxAccent}; keep Role.focal and EdgeRole.focal for the one point the figure makes");
-        }
-        if (f.zones.len() > MaxZones) {
-            errs.append("{f.zones.len()} zones and boundaries exceed the budget of {MaxZones}; merge bands or {split}");
-        }
+    // internal/handler/diagram's 422 test pins "split into overview plus detail".
+    final split = "split into overview plus detail, one flow() each";
+    if (f.nodes.len() > MaxNodes) { errs.append("{f.nodes.len()} nodes exceeds the budget of {MaxNodes}; {split}"); }
+    if (f.edges.len() > MaxEdges) { errs.append("{f.edges.len()} edges exceeds the budget of {MaxEdges}; {split}"); }
+    if (focal > MaxAccent) {
+        errs.append("{focal} focal nodes and edges exceed the budget of {MaxAccent}; keep Role.focal and EdgeRole.focal for the one point the figure makes");
+    }
+    if (f.zones.len() > MaxZones) {
+        errs.append("{f.zones.len()} zones and boundaries exceed the budget of {MaxZones}; merge bands or {split}");
     }
 
     foreach (verb in ["rank", "row", "order"]) {
@@ -4343,7 +4104,7 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
         foreach (face in [FaceOut, FaceIn]) {
             final n = faceCount[ni * 4 + face];
             if (isDecision[ni] == false) { size = imax(size, b: fanRoom(n)); }
-            if (isDecision[ni] == false and f.isGenerated == false and fanRoom(n) > crossBase * MaxFanGrowth) {
+            if (isDecision[ni] == false and fanRoom(n) > crossBase * MaxFanGrowth) {
                 found.append("node {quote(f.nodes[ni].id)} fans {n} connectors on one side; split the figure or add order([...])");
             }
         }
@@ -5161,7 +4922,6 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
 
     return Diagram{
         id = f.id,
-        generated = f.isGenerated,
         title = f.titleText,
         eyebrow = f.eyebrowText,
         desc = f.descText,
@@ -5498,34 +5258,14 @@ test "the server-http twin lays out clean" {
     std\assert(crossings(d).len() == 0, message: "no crossings");
 }
 
-test "an observed import scope lays out clean once generated" {
+test "an observed import scope past the budgets is refused" {
     final msg = thrown(observedServerScope());
     std\assert(msg.indexOf("flow \"observed-server\": 18 nodes exceeds the budget of 9; split into overview plus detail, one flow() each") != null,
-        message: "authored budgets apply by default: {msg}");
-    final d = observedServerScope().generated().diagram() catch Diagram{};
-    std\assert(d.generated, message: "marked generated");
-    std\assert(d.nodes.len() == 18 and d.edges.len() == 19, message: "every package and import placed");
-    std\assert(validate(d).len() == 0, message: "no findings: {validate(d)}");
+        message: "the authored budgets apply: {msg}");
 }
 
 fun midY(n: Node) > int {
     return n.y + n.h / 2;
-}
-
-// turnChannels is every distinct x a connector turns on between two columns, sorted.
-fun turnChannels(d: Diagram) > [int] {
-    final seen: mut {int: bool} = mut {<int: bool>};
-    final xs: mut [int] = mut [<int>];
-    foreach (e in d.edges) {
-        foreach (leg in edgeLegs(d, e: e)) {
-            if (leg[0] == leg[2] and leg[1] != leg[3] and seen[leg[0]] == null) {
-                seen[leg[0]] = true;
-                xs.append(leg[0]);
-            }
-        }
-    }
-    xs.sort(fun (a: int, b: int) > bool { return a < b; });
-    return xs;
 }
 
 fun fan(n: int) > mut Sketch {
@@ -5556,24 +5296,8 @@ fun fanIn(n: int) > mut Sketch {
     return f;
 }
 
-// Twenty slots a Pitch apart, with ten steps of room on the far side of the midline, need
-// 264px; the box grows to that and no other box grows with it.
-test "a fan past a gap's channels widens the gap and the fanning box alone" {
-    final d = fanIn(20).generated().diagram() catch Diagram{};
-    std\assert(validate(d).len() == 0, message: "twenty connectors, twenty lines");
-    final root = lookupNode(d, id: "root");
-    std\assert(root.h == 264 and lookupNode(d, id: "c0").h == LayerNodeH, message: "a Pitch per slot: {root.h}");
-    final xs = turnChannels(d);
-    std\assert(xs.len() == 10, message: "a rising and a falling connector share each channel: {xs}");
-    var k = 1;
-    while (k < xs.len()) {
-        std\assert(xs[k] - xs[k - 1] >= Pitch, message: "a Pitch per channel: {xs}");
-        k = k + 1;
-    }
-}
-
 test "every channel sits >= 16px from both faces" {
-    foreach (f in [fanIn(20).generated(), fanIn(5), serverHttpTwin()]) {
+    foreach (f in [fanIn(5), serverHttpTwin()]) {
         final d = f.diagram() catch Diagram{};
         foreach (e in d.edges) {
             final a = lookupNode(d, id: e.src);
@@ -6088,7 +5812,6 @@ test "the server-http twin over its whole scope lays out clean once it omits the
     final msg = thrown(serverHttpOmitting());
     std\assert(msg == "", message: "composed: {msg}");
     final d = serverHttpOmitting().diagram() catch Diagram{};
-    std\assert(d.generated == false, message: "authored budgets apply");
     std\assert(d.nodes.len() == 9 and d.edges.len() == 7, message: "nine boxes, seven connectors: {d.nodes.len()}, {d.edges.len()}");
     std\assert(lookupNode(d, id: "guard").anchor == "internal/httpx", message: "the declared id kept");
     std\assert(d.omits.size() == 12, message: "every omit kept");
@@ -6221,7 +5944,6 @@ test "a figure says what code it depicts, or why it depicts none" {
     final bare = thrown(flow("t").node("a"));
     std\assert(bare == "flow \"t\": names no code; add scope([...]) or unscoped(why:)", message: "bare: {bare}");
     std\assert(thrown(flow("t").node("a").scope(["pkg/a"])) == "", message: "a scope names code");
-    std\assert(thrown(flow("t").node("a").generated()) == "", message: "a generated figure needs neither");
     final d = flow("t").node("a").unscoped("a decision a person makes").diagram() catch Diagram{};
     std\assert(d.unscoped == "a decision a person makes", message: "the reason reaches the Diagram: {d.unscoped}");
     final silent = thrown(flow("t").node("a").unscoped(""));
@@ -6848,9 +6570,6 @@ export object Figure {
     eyebrow: str = "",
     desc: str = "",
     direction: Direction = Direction.across,
-    // Computed from data nobody authored: the hand-authored node, edge, accent and zone
-    // budgets stop applying, and it needs no code.
-    generated: bool = false,
     // Why the figure draws no directory; empty for a figure that draws some.
     unscopedWhy: str = "",
     // Draws the imports and declared calls the drawn records hold.
@@ -6998,15 +6717,14 @@ export object Figure {
     }
 }
 
-// of starts an empty figure. direction defaults to Direction.across; generated marks a
-// figure computed from data nobody authored.
+// of starts an empty figure. direction defaults to Direction.across.
 //
 // The enum parameter defaults to null rather than a case: gopherbuzz resolves a default in
 // the caller's scope.
-export fun of(id: str, title: str = "", eyebrow: str = "", desc: str = "", direction: Direction? = null, generated: bool = false) > mut Figure {
+export fun of(id: str, title: str = "", eyebrow: str = "", desc: str = "", direction: Direction? = null) > mut Figure {
     return mut Figure{
         id = id, title = title, eyebrow = eyebrow, desc = desc,
-        direction = direction ?? Direction.across, generated = generated,
+        direction = direction ?? Direction.across,
     };
 }
 
@@ -7482,13 +7200,13 @@ fun lowered(fig: Figure) > Sketch !> str {
     }
 
     final unscoped = fig.unscopedWhy != "";
-    if (codeParts == 0 and unscoped == false and fig.generated == false) {
+    if (codeParts == 0 and unscoped == false) {
         found.append("draws no directory; draw a box() or group(), or say why in unscoped(why:)");
     }
     if (codeParts > 0 and unscoped) {
         found.append("draws directories and declares unscoped(why:); drop the unscoped");
     }
-    if (codeParts > 1 and fig.graphEdges == false and fig.generated == false) {
+    if (codeParts > 1 and fig.graphEdges == false) {
         found.append("draws {codeParts} boxes of code and no edge between them; call edgesFromGraph()");
     }
 
@@ -7584,7 +7302,6 @@ fun lowered(fig: Figure) > Sketch !> str {
     f.eyebrowText = fig.eyebrow;
     f.descText = fig.desc;
     f.topDown = direction == "down";
-    f.isGenerated = fig.generated;
     f.isUnscoped = unscoped;
     f.unscopedWhy = fig.unscopedWhy;
     foreach (part in parts) {
