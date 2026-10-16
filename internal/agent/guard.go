@@ -223,7 +223,12 @@ var guardInputs = []string{"command", "path", "mcp"}
 // --tool-rows, the directory the host's tool rows are installed in. Under a config written
 // for 29, a 28 copy reports --tool-rows as unsupported, so the guard knows no tool and
 // refuses every call whose input names no command or path.
-const GuardTemplateVersion = 29
+//
+// 30: magus-command.buzz, magus-path.buzz and cursor-hook.buzz accept --observes-skill-loads
+// in place of --reports-skills, which a config written for 30 passes on every judging entry.
+// Under that config a 29 copy reports the flag as unsupported and every skill gate stands
+// down.
+const GuardTemplateVersion = 30
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.
