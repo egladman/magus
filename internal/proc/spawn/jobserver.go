@@ -158,18 +158,19 @@ func jobserverFrom(ctx context.Context) *Jobserver {
 
 // SeatJobserver returns ctx carrying a pool sized to slots, and the function that closes
 // it once the work holding those slots is done. Every process Exec starts under ctx also
-// runs the Go toolchain that many wide (see goEnviron), pool or not.
+// runs the Go toolchain that many wide (see goEnviron), pool or not, one slot included:
+// the broker counted one core for that step, and go left to itself takes every core.
 //
-// Below two slots ctx carries no pool, and one it inherited is withdrawn. A one-slot
-// step is every step that declares nothing, and a zero-token pool would serialize every
-// cargo build those steps run today; declaring `slots` is what opts a step in. On a
+// Below two slots ctx carries no pool, and one it inherited is withdrawn: a zero-token
+// pool would serialize every cargo build a one-slot step runs, where without one cargo
+// runs wide and its measured width sizes the step's later claims. On a
 // platform without the pipe form (see OpenJobserver) ctx carries none either, and
 // children schedule themselves as they would with no magus above them.
 func SeatJobserver(ctx context.Context, slots int) (context.Context, func(), error) {
+	ctx = context.WithValue(ctx, seatKey{}, max(slots, 0))
 	if slots < 2 {
-		return WithJobserver(context.WithValue(ctx, seatKey{}, 0), nil), func() {}, nil
+		return WithJobserver(ctx, nil), func() {}, nil
 	}
-	ctx = context.WithValue(ctx, seatKey{}, slots)
 	j, err := OpenJobserver(slots)
 	if errors.Is(err, errors.ErrUnsupported) {
 		return WithJobserver(ctx, nil), func() {}, nil
@@ -182,7 +183,7 @@ func SeatJobserver(ctx context.Context, slots int) (context.Context, func(), err
 
 type seatKey struct{}
 
-// seatedSlots is the slots the step running under ctx holds, 0 below two.
+// seatedSlots is the slots the step running under ctx holds, 0 outside a step.
 func seatedSlots(ctx context.Context) int {
 	n, _ := ctx.Value(seatKey{}).(int)
 	return n
