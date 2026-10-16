@@ -44,6 +44,8 @@ type procGroup struct {
 	c      *exec.Cmd
 	mu     sync.Mutex
 	reaped bool
+	// release ends a WithGroupWatch watch on the group; nil when nothing watches it.
+	release func()
 }
 
 // setCancel starts c in its own process group and, on context cancellation of a

@@ -116,3 +116,32 @@ func TestExecGivesACancelledChildItsGraceThenKillsTheGroup(t *testing.T) {
 	time.Sleep(3500 * time.Millisecond)
 	assert.NoFileExists(t, filepath.Join(dir, "late"))
 }
+
+// Each watch on ctx is told of the group by its leader's pid, the outer first, and is
+// released while the exited leader still holds the id, the inner first.
+func TestAGroupWatchIsReleasedBeforeTheLeaderIsReaped(t *testing.T) {
+	var events []string
+	watch := func(name string) groupWatch {
+		return func(pgid int, command string) func() {
+			events = append(events, name+" watches "+strconv.Itoa(pgid)+" ("+command+")")
+			return func() {
+				state := "reaped"
+				if syscall.Kill(pgid, 0) == nil {
+					state = "unreaped"
+				}
+				events = append(events, name+" released "+strconv.Itoa(pgid)+" "+state)
+			}
+		}
+	}
+	ctx := WithGroupWatch(WithGroupWatch(t.Context(), watch("outer")), watch("inner"))
+
+	res, err := Exec(ctx, "sh", []string{"-c", "echo $$"}, ExecOptions{Capture: true, Quiet: true})
+	require.NoError(t, err)
+	pgid := strings.TrimSpace(res.Stdout)
+	assert.Equal(t, []string{
+		"outer watches " + pgid + ` (sh -c "echo $$")`,
+		"inner watches " + pgid + ` (sh -c "echo $$")`,
+		"inner released " + pgid + " unreaped",
+		"outer released " + pgid + " unreaped",
+	}, events)
+}

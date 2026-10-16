@@ -82,6 +82,51 @@ type ExecOptions struct {
 // defaultCancelGrace is ExecOptions.CancelGrace when unset.
 const defaultCancelGrace = 5 * time.Second
 
+// groupWatch is what WithGroupWatch puts on ctx.
+type groupWatch func(pgid int, command string) (release func())
+
+type groupWatchKey struct{}
+
+// WithGroupWatch returns ctx under which w is told of each process group Exec starts, by
+// its id (the leader's pid) and command line, right after the leader starts. Exec calls
+// the release w returns once the leader has exited and before it is reaped: after the
+// reap another group can take the id, so nothing may act on it then. w watches on top of
+// any watch ctx already carries: the outer watch sees a group first and is released last.
+//
+// Exec watches a group only off a TTY on Linux, macOS and the BSDs, where it sees the
+// leader exit before reaping it. Elsewhere it starts groups unwatched.
+func WithGroupWatch(ctx context.Context, w func(pgid int, command string) (release func())) context.Context {
+	if outer, ok := ctx.Value(groupWatchKey{}).(groupWatch); ok {
+		inner := w
+		w = func(pgid int, command string) func() {
+			releaseOuter := outer(pgid, command)
+			releaseInner := inner(pgid, command)
+			return func() {
+				releaseInner()
+				releaseOuter()
+			}
+		}
+	}
+	return context.WithValue(ctx, groupWatchKey{}, groupWatch(w))
+}
+
+// groupWatcher is a procGroup whose wait releases a watch between its leader's exit and
+// the reap. A host without the method cannot see that moment.
+type groupWatcher interface {
+	watch(w groupWatch, command string)
+}
+
+// watchGroup hands group to the watch ctx carries, where the host can release it in time.
+func watchGroup(ctx context.Context, group any, command string) {
+	w, ok := ctx.Value(groupWatchKey{}).(groupWatch)
+	if !ok {
+		return
+	}
+	if g, ok := group.(groupWatcher); ok {
+		g.watch(w, command)
+	}
+}
+
 // ExecResult is the outcome of Exec.
 type ExecResult struct {
 	Stdout  string // captured stdout, empty unless ExecOptions.Capture; not trimmed
@@ -139,7 +184,8 @@ func (r ExecResult) BuzzObject() types.BuzzObject {
 // The child runs in a process group of its own. Off a TTY, on Linux, macOS and the
 // BSDs, whatever of that group outlives the child is killed once the child exits and
 // before it is reaped, so a background process it started ends with it; a process that
-// left the group (setsid) is not reached.
+// left the group (setsid) is not reached. A watch on ctx ([WithGroupWatch]) is told of
+// the group for as long as its leader runs.
 func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (ExecResult, error) {
 	if types.Tracing(ctx) {
 		slog.InfoContext(ctx, "run.exec", "cmd", name, "args", args, "dir", opts.Dir)
@@ -250,6 +296,7 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	} else {
 		if runErr = c.Start(); runErr == nil {
 			started(c.Process.Pid)
+			watchGroup(ctx, group, commandLine(name, args))
 			runErr = group.wait()
 		}
 	}

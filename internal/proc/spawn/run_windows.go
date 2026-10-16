@@ -56,6 +56,11 @@ func setCancel(c *exec.Cmd) *procGroup {
 	return g
 }
 
+// watch leaves the group unwatched: wait cannot see the child exit without reaping it,
+// so no release could come before the reap, and the group's id is the child's pid,
+// which another process can take once it is reaped.
+func (g *procGroup) watch(groupWatch, string) {}
+
 // wait reaps the child and, when it was cancelled, kills the tree it leaves.
 func (g *procGroup) wait() error {
 	err := g.c.Wait()
