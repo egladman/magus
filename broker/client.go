@@ -179,6 +179,23 @@ func (c *Client) Release(ctx context.Context, id string) {
 	_, _ = cn.call(ctx, c.next(), typeRelease, releaseRequest{ClaimID: h.remote})
 }
 
+// Reserve asks the broker to hold a seat the size of claim for process reader, once, and
+// answers at once. A grant does not ride this connection: the seat lasts until the
+// reader's first claim takes it, the reader exits, or the reader claims nothing within
+// the broker's bound, so it holds even after this client closes. A verdict that is not
+// Granted reserved nothing. It never starts a broker.
+func (c *Client) Reserve(ctx context.Context, claim types.MachineClaim, reader int) (types.MachineVerdict, error) {
+	cn, err := c.connect(ctx)
+	if err != nil {
+		return types.MachineVerdict{}, err
+	}
+	var reply reserveReply
+	if err := cn.roundTrip(ctx, c.next(), typeReserve, reserveRequest{Claim: claim, Reader: reader}, typeReserveReply, &reply, nil); err != nil {
+		return types.MachineVerdict{}, err
+	}
+	return reply.Verdict, nil
+}
+
 // AcquireService starts, or reuses, the shared service spec under key and returns once
 // it is ready, reporting whether the broker started it and so stops it at idle (false:
 // it was already running and the broker leaves it alone). The reference rides this

@@ -284,12 +284,13 @@ func (s *server) held() int {
 	return n
 }
 
-// startDrain turns away every new claim and service reference from here on, and
-// returns what is still held.
+// startDrain turns away every new claim and service reference from here on, gives back
+// every reserved seat, and returns what is still held.
 func (s *server) startDrain() int {
 	s.mu.Lock()
 	s.draining = true
 	s.mu.Unlock()
+	s.budget.DropReservations()
 	return s.held()
 }
 
@@ -470,6 +471,25 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 		}
 		s.mu.Unlock()
 		_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: v})
+
+	case typeReserve:
+		var req reserveRequest
+		if err := decodeBody(f, &req); err != nil || req.Reader <= 0 {
+			fail(CodeMalformed, "broker: a reservation needs a claim and the pid of the process it is held for")
+			return
+		}
+		s.mu.Lock()
+		draining := s.draining
+		var v types.MachineVerdict
+		if !draining {
+			v = s.budget.Reserve(s.attribute(sess, req.Claim), req.Reader)
+		}
+		s.mu.Unlock()
+		if draining {
+			_ = w.write(typeError, f.ID, s.drainingError())
+			return
+		}
+		_ = w.write(typeReserveReply, f.ID, reserveReply{Verdict: v})
 
 	case typeRelease:
 		var req releaseRequest

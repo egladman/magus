@@ -24,6 +24,8 @@ const (
 	typeClaimReply     = "claim.reply"
 	typeRelease        = "release"
 	typeReleaseReply   = "release.reply"
+	typeReserve        = "reserve"
+	typeReserveReply   = "reserve.reply"
 	typeServiceAcquire = "service.acquire"
 	typeServiceRelease = "service.release"
 	typeServiceStopAll = "service.stopall"
@@ -94,6 +96,19 @@ type claimReply struct {
 	// Seat is set on a claim kept out by its job tree's validation cap: the run waits,
 	// and this names the runs it waits on.
 	Seat *SeatWait `json:"seat,omitempty"`
+}
+
+// reserveRequest asks for a seat held for another process, Reader, until its first
+// claim. It does not ride the asking connection: `status --wait` exits before the run
+// reading its output may start.
+type reserveRequest struct {
+	Claim  types.MachineClaim `json:"claim"`
+	Reader int                `json:"reader"`
+}
+
+// reserveReply is the verdict. Granted means the seat is held for the reader.
+type reserveReply struct {
+	Verdict types.MachineVerdict `json:"verdict"`
 }
 
 // holdRequest registers a command a client runs under a deadline.

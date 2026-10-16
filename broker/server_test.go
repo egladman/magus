@@ -157,6 +157,72 @@ func TestClosingTheConnectionReleasesItsClaims(t *testing.T) {
 		"every claim the connection carried is released when it closes")
 }
 
+// startReader runs a real process to hold a reservation for, killed and reaped when the
+// test ends.
+func startReader(t *testing.T) *exec.Cmd {
+	t.Helper()
+	cmd := exec.Command("sleep", "60")
+	require.NoError(t, cmd.Start())
+	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	return cmd
+}
+
+// TestAReservationOutlivesItsAskerAndGoesToItsReader: `status --wait` exits before the
+// run reading it starts, so the seat stays after the asking connection closes, and only
+// the reader's claim takes it.
+func TestAReservationOutlivesItsAskerAndGoesToItsReader(t *testing.T) {
+	addr := testAddr(t)
+	serve(t, addr, WithCapacity(0, 4))
+	reader := startReader(t)
+
+	asker := dial(t, addr)
+	v, err := asker.Reserve(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", Slots: 4, Command: "magus run go-test ."}, reader.Process.Pid)
+	require.NoError(t, err)
+	require.True(t, v.Granted)
+	require.NoError(t, asker.Close())
+
+	held := holders(t, addr)
+	require.Len(t, held, 1)
+	assert.True(t, held[0].Reserved)
+	assert.Equal(t, reader.Process.Pid, held[0].PID, "the seat names the reader, not the asker")
+	assert.Equal(t, "magus run go-test .", held[0].Command)
+
+	stranger := dial(t, addr)
+	refused, err := stranger.Request(t.Context(), types.MachineClaim{Project: ".", Target: "test", Slots: 4})
+	require.NoError(t, err)
+	assert.False(t, refused.Granted, "a bare run cannot take the seat")
+
+	piped, err := stranger.Request(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", Slots: 4, PID: reader.Process.Pid})
+	require.NoError(t, err)
+	assert.True(t, piped.Granted, "the reader's claim takes the seat")
+}
+
+func TestAReservationDiesWithItsReader(t *testing.T) {
+	addr := testAddr(t)
+	serve(t, addr, WithCapacity(0, 4))
+	reader := startReader(t)
+	c := dial(t, addr)
+	v, err := c.Reserve(t.Context(), types.MachineClaim{Slots: 4}, reader.Process.Pid)
+	require.NoError(t, err)
+	require.True(t, v.Granted)
+
+	require.NoError(t, reader.Process.Kill())
+	_ = reader.Wait()
+	assert.Empty(t, holders(t, addr), "a reader that exited holds no seat")
+	after, err := c.Request(t.Context(), types.MachineClaim{Target: "test", Slots: 4})
+	require.NoError(t, err)
+	assert.True(t, after.Granted)
+}
+
+func TestAReservationNamesItsReader(t *testing.T) {
+	addr := testAddr(t)
+	serve(t, addr, WithCapacity(0, 4))
+	_, err := dial(t, addr).Reserve(t.Context(), types.MachineClaim{Slots: 1}, 0)
+	var refused *Error
+	require.ErrorAs(t, err, &refused)
+	assert.Equal(t, CodeMalformed, refused.Code)
+}
+
 // TestSIGKILLReleasesAtOnce kills a real holder process outright. It cannot run a
 // release, so only the kernel closing its socket can free what it held; the old
 // pid-polling budget held such a claim until some later request happened to reap it.

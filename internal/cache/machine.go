@@ -3,10 +3,12 @@ package cache
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/types"
 )
 
@@ -34,12 +36,21 @@ type MachineBudget struct {
 
 	// now is the reading a test cannot stage. Nil means the real clock.
 	now func() time.Time
+	// alive reports whether a reservation's reader still runs. Nil means pid.Alive.
+	alive func(pid int) bool
 }
 
 type machineEntry struct {
 	claim   types.MachineClaim
 	started time.Time
+	// reader is the process a reservation is held for; 0 for a granted claim.
+	reader int
 }
+
+// reservationBound is how long a reservation waits for its reader's first claim. It
+// covers the reader loading its workspace and taking its locks; a reader still running
+// past it, or one whose every step replays, gives the seat back to the budget.
+const reservationBound = 30 * time.Second
 
 // NewMachineBudget returns a budget of budgetMB megabytes and budgetSlots concurrency
 // slots. A non-positive figure leaves that half unlimited, the fallback for a host magus
@@ -62,17 +73,21 @@ func (b *MachineBudget) clock() time.Time {
 // Request asks for admission once. It grants and records the claim, or answers why not
 // and records nothing, and it never blocks: whether to ask again belongs to the client,
 // which the verdict's OwnRun tells.
+//
+// A seat reserved for c's process (see Reserve) does not count against c, and granting c
+// consumes it.
 func (b *MachineBudget) Request(c types.MachineClaim) types.MachineVerdict {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	b.pruneLocked()
 
 	if c.Slots < 1 {
 		c.Slots = 1
 	}
-	heldMB, heldSlots := b.held(c.Ancestors)
+	heldMB, heldSlots := b.held(c)
 	v := types.MachineVerdict{
 		Fits:        b.fits(c, 0, 0),
-		Holders:     b.holders(c.Ancestors),
+		Holders:     b.holders(c),
 		BudgetMB:    b.budgetMB,
 		HeldMB:      heldMB,
 		BudgetSlots: b.budgetSlots,
@@ -87,9 +102,91 @@ func (b *MachineBudget) Request(c types.MachineClaim) types.MachineVerdict {
 		return v
 	}
 
+	for id, e := range b.claims {
+		if e.reservedFor(c) {
+			delete(b.claims, id)
+		}
+	}
 	v.Granted, v.ID = true, b.record(c)
 	v.HeldMB, v.HeldSlots = heldMB+c.MemoryMB, heldSlots+c.Slots
 	return v
+}
+
+// Reserve holds a seat the size of c for process reader, when the budget can seat c now
+// beside everything it holds. The reader's first granted claim consumes the seat; until
+// then it counts against every other claim. It lapses once the reader is gone or has
+// claimed nothing for reservationBound, whichever comes first, so it never outlives its
+// reader. A second reservation for one reader replaces the first.
+//
+// Like Request it never blocks: a verdict that is not Granted reserved nothing, and Fits
+// says whether asking again can help. reader must be positive.
+func (b *MachineBudget) Reserve(c types.MachineClaim, reader int) types.MachineVerdict {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.pruneLocked()
+	for id, e := range b.claims {
+		if e.reader == reader {
+			delete(b.claims, id)
+		}
+	}
+	c.Slots, c.PID = max(c.Slots, 1), reader
+	heldMB, heldSlots := b.held(types.MachineClaim{})
+	v := types.MachineVerdict{
+		Fits:        b.fits(c, 0, 0),
+		Holders:     b.holders(types.MachineClaim{}),
+		BudgetMB:    b.budgetMB,
+		HeldMB:      heldMB,
+		BudgetSlots: b.budgetSlots,
+		HeldSlots:   heldSlots,
+	}
+	if !v.Fits || !b.fits(c, heldMB, heldSlots) {
+		return v
+	}
+	v.Granted, v.ID = true, b.record(c)
+	b.claims[v.ID].reader = reader
+	v.HeldMB, v.HeldSlots = heldMB+c.MemoryMB, heldSlots+c.Slots
+	return v
+}
+
+// DropReservations gives back every reserved seat, for a broker that seats nothing new.
+func (b *MachineBudget) DropReservations() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for id, e := range b.claims {
+		if e.reader != 0 {
+			delete(b.claims, id)
+		}
+	}
+}
+
+// pruneLocked drops each reservation whose reader has exited or whose bound has passed.
+// It runs before every reading of the budget, so a lapsed seat is never counted. Callers
+// hold b.mu.
+func (b *MachineBudget) pruneLocked() {
+	now := b.clock()
+	alive := b.alive
+	if alive == nil {
+		alive = pid.Alive
+	}
+	for id, e := range b.claims {
+		if e.reader != 0 && (now.Sub(e.started) >= reservationBound || !alive(e.reader)) {
+			delete(b.claims, id)
+		}
+	}
+}
+
+// reservedFor reports whether e is a seat reserved for the process taking c: c's own, or
+// the outermost invocation c runs under, which is the reader when the claim comes from a
+// nested magus or from the daemon adopting the reader's run.
+func (e *machineEntry) reservedFor(c types.MachineClaim) bool {
+	if e.reader == 0 {
+		return false
+	}
+	if c.PID == e.reader {
+		return true
+	}
+	owner, _, ok := strings.Cut(c.Run(), ":")
+	return ok && owner == strconv.Itoa(e.reader)
 }
 
 // Assert records a claim without asking whether it fits, and returns its id. It is for
@@ -126,18 +223,19 @@ func (b *MachineBudget) Release(id string) {
 func (b *MachineBudget) Snapshot() types.MachineSnapshot {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	heldMB, heldSlots := b.held(nil)
+	b.pruneLocked()
+	heldMB, heldSlots := b.held(types.MachineClaim{})
 	return types.MachineSnapshot{
 		BudgetMB:    b.budgetMB,
 		HeldMB:      heldMB,
 		BudgetSlots: b.budgetSlots,
 		HeldSlots:   heldSlots,
-		Holders:     b.holders(nil),
+		Holders:     b.holders(types.MachineClaim{}),
 	}
 }
 
-// held sums what counts against a claim with these ancestors: every live claim except
-// the ones its ancestor invocations hold.
+// held sums what counts against c: every live claim and reservation except the ones
+// excused names.
 //
 // The ancestor exclusion is what makes a nested magus possible. A target whose suite
 // runs `magus run test .` is a descendant of a run already holding that target's
@@ -154,8 +252,8 @@ func (b *MachineBudget) Snapshot() types.MachineSnapshot {
 // Two INDEPENDENT roots whose children each need more than the other root leaves free
 // are past what any exclusion here can reach, since a holder does not report whether it
 // is blocked. freeSlot answers that pair structurally.
-func (b *MachineBudget) held(ancestors []string) (mb, slots int) {
-	excused := b.excusedClaims(ancestors)
+func (b *MachineBudget) held(c types.MachineClaim) (mb, slots int) {
+	excused := b.excused(c)
 	return b.sum(func(id string, _ types.MachineClaim) bool { return excused[id] })
 }
 
@@ -166,7 +264,7 @@ func (b *MachineBudget) held(ancestors []string) (mb, slots int) {
 // The same process covers the server's adopted runs and a run's own concurrent steps;
 // the same run covers sibling nested magus processes under one root.
 func (b *MachineBudget) heldByOthers(c types.MachineClaim) (mb, slots int) {
-	excused := b.excusedClaims(c.Ancestors)
+	excused := b.excused(c)
 	run := c.Run()
 	return b.sum(func(id string, held types.MachineClaim) bool {
 		return excused[id] ||
@@ -187,15 +285,12 @@ func (b *MachineBudget) sum(skip func(id string, c types.MachineClaim) bool) (mb
 	return mb, slots
 }
 
-// excusedClaims is every claim an ancestor invocation holds; none of them counts
-// against a descendant, by the reasoning on held.
-func (b *MachineBudget) excusedClaims(ancestors []string) map[string]bool {
-	if len(ancestors) == 0 {
-		return nil
-	}
+// excused is every claim that does not count against c: each one an ancestor invocation
+// holds, by the reasoning on held, and the seat reserved for c's process.
+func (b *MachineBudget) excused(c types.MachineClaim) map[string]bool {
 	out := map[string]bool{}
 	for id, e := range b.claims {
-		if isMachineAncestor(e.claim.Invocation, ancestors) {
+		if isMachineAncestor(e.claim.Invocation, c.Ancestors) || e.reservedFor(c) {
 			out[id] = true
 		}
 	}
@@ -256,17 +351,17 @@ func (b *MachineBudget) fits(c types.MachineClaim, mb, slots int) bool {
 	return b.budgetSlots <= 0 || slots+c.Slots <= b.budgetSlots
 }
 
-// holders lists every claim that counts against a claim with these ancestors, oldest
-// first, so a refusal names who is holding the budget.
-func (b *MachineBudget) holders(ancestors []string) []types.MachineClaimant {
-	excused := b.excusedClaims(ancestors)
+// holders lists every claim that counts against c, oldest first, so a refusal names who
+// is holding the budget.
+func (b *MachineBudget) holders(c types.MachineClaim) []types.MachineClaimant {
+	excused := b.excused(c)
 	out := make([]types.MachineClaimant, 0, len(b.claims))
 	for id, e := range b.claims {
 		if excused[id] {
 			continue
 		}
 		out = append(out, types.MachineClaimant{
-			Project: e.claim.Project, Target: e.claim.Target, PID: e.claim.PID,
+			Reserved: e.reader != 0, Project: e.claim.Project, Target: e.claim.Target, PID: e.claim.PID,
 			MemoryMB: e.claim.MemoryMB, Sizing: e.claim.Sizing, Slots: e.claim.Slots,
 			Dir: e.claim.Dir, Command: e.claim.Command, Since: e.started,
 		})

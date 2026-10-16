@@ -45,8 +45,10 @@ func (c MachineClaim) Run() string {
 }
 
 // MachineClaimant is one step's hold on the machine budget. Since is when the claim was
-// granted.
+// granted. A Reserved holder is a seat `magus status --wait` sized and holds for PID, the
+// run reading its output, until that run's first claim takes it.
 type MachineClaimant struct {
+	Reserved bool         `json:"reserved,omitzero" yaml:"reserved,omitempty"`
 	Project  string       `json:"project" yaml:"project"`
 	Target   string       `json:"target" yaml:"target"`
 	PID      int          `json:"pid,omitzero" yaml:"pid,omitempty"`
