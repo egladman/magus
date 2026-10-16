@@ -179,8 +179,8 @@ var helpAliases = []string{"-h", "--help", "help"}
 // directory) and returns the string-literal case labels of its first
 // top-level switch statement, in source order, with helpAliases removed.
 //
-// This is TestDispatchSubCoversKnownSubcommands's technique (main.go's
-// dispatchSub vs knownSubcommands) applied one level down: a
+// This is TestDispatchSubCoversKnownSubcommands's technique (dispatchSub vs
+// knownSubcommands) applied one level down: a
 // per-command dispatcher that routes a child with no matching entry in that
 // command's registry.Children is invisible to man pages, completions, and
 // --help, which is exactly the class of gap item 1 of the 2026-08 doctrine
@@ -555,4 +555,36 @@ func TestRegistryExamplesParse(t *testing.T) {
 			})
 		}
 	})
+}
+
+// TestDispatchSubCoversKnownSubcommands guards the drift that shipped `mcp` as a case
+// dispatchSub routed with no matching entry in the command registry: `magus mcp`
+// worked when typed, but help, did-you-mean, the man pages, and every completion
+// script (all derived from cli.All) never mentioned it. dispatchSub's switch and the
+// registry are two separate declarations that can drift; this closes that gap
+// mechanically instead of relying on someone remembering to update both.
+//
+// It reads dispatchSub's case labels out of the source with go/parser rather than
+// exercising the switch at runtime: running it needs a loaded workspace for most
+// cases, which is more than a unit test should require to check that two name
+// lists agree.
+func TestDispatchSubCoversKnownSubcommands(t *testing.T) {
+	cases := dispatcherCases(t, "subcommands.go", "dispatchSub")
+	if len(cases) == 0 {
+		t.Fatal("found no case clauses in dispatchSub's switch - the parse is wrong, not the switch")
+	}
+
+	// help and version are routed in runCLI before dispatchSub is ever called (see
+	// runCLI's own switch on res.sub), so they belong in knownSubcommands and are
+	// deliberately absent from dispatchSub's case set, not a gap to flag.
+	got := append(cases, "help", "version")
+	slices.Sort(got)
+
+	want := slices.Clone(knownSubcommands)
+	slices.Sort(want)
+
+	if !slices.Equal(got, want) {
+		t.Errorf("dispatchSub's routed cases (+ help, version) = %v\nknownSubcommands (from commands.Root) = %v\n"+
+			"a case dispatchSub routes must have an entry in internal/commands' Root, and vice versa", got, want)
+	}
 }
