@@ -86,28 +86,7 @@ func thresholdGrew(x *namingIndex, o types.ConformanceOptions) []finding {
 		return nil
 	}
 	known := conformanceKnownItems(o.Ratchet.Known)
-	isKnown := func(id string) bool {
-		for _, ids := range known {
-			if ids[id] {
-				return true
-			}
-		}
-		return false
-	}
-	byItem := map[string]*namingDecl{}
-	add := func(d *namingDecl) {
-		if id, ok := thresholdItemID(d); ok && isKnown(id) {
-			byItem[id] = d
-		}
-	}
-	for _, s := range x.subjects {
-		add(s)
-	}
-	for _, id := range x.change.Touched {
-		if d, ok := x.byID[id]; ok {
-			add(d)
-		}
-	}
+	byItem := thresholdKnownSubjects(x, known)
 	if len(byItem) == 0 {
 		return nil
 	}
@@ -141,6 +120,34 @@ func thresholdGrew(x *namingIndex, o types.ConformanceOptions) []finding {
 		}
 	}
 	return out
+}
+
+// thresholdKnownSubjects maps the item ID of each subject and touched symbol of the change that
+// is a known item of any metric to its declaration.
+func thresholdKnownSubjects(x *namingIndex, known map[types.ConformanceMetric]map[string]bool) map[string]*namingDecl {
+	isKnown := func(id string) bool {
+		for _, ids := range known {
+			if ids[id] {
+				return true
+			}
+		}
+		return false
+	}
+	byItem := map[string]*namingDecl{}
+	add := func(d *namingDecl) {
+		if id, ok := thresholdItemID(d); ok && isKnown(id) {
+			byItem[id] = d
+		}
+	}
+	for _, s := range x.subjects {
+		add(s)
+	}
+	for _, id := range x.change.Touched {
+		if d, ok := x.byID[id]; ok {
+			add(d)
+		}
+	}
+	return byItem
 }
 
 // thresholdHit is one subject found past the value its row enforces.

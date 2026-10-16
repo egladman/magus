@@ -55,21 +55,12 @@ export fun prune(report: {str: any}, record: [str]) > Pruned !> any {
     if (refused != "") {
         return Pruned{ lines = record, removed = [<str>], refused = refused };
     }
-    final staleItems = mut {<str: bool>};
-    final staleClones = mut {<str: bool>};
-    final stale: [any] = report["stale"] ?? [<any>];
-    foreach (k in stale) {
-        final metric: str = k["metric"] ?? "";
-        final items = names(k["items"]);
-        if (metric == CLONES) {
-            staleClones[items.join(", ")] = true;
-            continue;
-        }
-        foreach (item in items) {
-            staleItems["{metric} {item}"] = true;
-        }
-    }
+    return withoutStale(record, stale: staleOf(report));
+}
 
+// withoutStale is record minus the rows and items stale names, refusing when a narrowed row
+// cannot be edited in place.
+fun withoutStale(record: [str], stale: Stale) > Pruned !> any {
     final kept = mut [<str>];
     final seen = mut {<str: bool>};
     final removed = mut [<str>];
@@ -85,42 +76,73 @@ export fun prune(report: {str: any}, record: [str]) > Pruned !> any {
         final metric: str = row["metric"] ?? "";
         final items = names(row["items"]);
         if (metric == CLONES) {
-            if (staleClones[items.join(", ")] ?? false) {
+            if (stale.clones.hasKey(items.join(", "))) {
                 removed.append("the {metric} entry {items.join(", ")}");
-                continue;
-            }
-            kept.append(text);
-            continue;
-        }
-        final left = mut [<str>];
-        foreach (item in items) {
-            if (staleItems["{metric} {item}"] ?? false) {
-                removed.append("{metric} {item}");
             } else {
-                left.append(item);
+                kept.append(text);
             }
+            continue;
         }
-        if (left.len() == items.len()) {
+        final gone = items.filter(fun (index: int, item: str) > bool => stale.items.hasKey("{metric} {item}"));
+        foreach (item in gone) {
+            removed.append("{metric} {item}");
+        }
+        if (gone.len() == 0) {
             kept.append(text);
             continue;
         }
-        if (left.len() == 0) {
+        if (gone.len() == items.len()) {
             continue;
         }
-        final at = text.indexOf(`"items":`);
-        if (at == null or !text.endsWith("]}")) {
+        final left = items.filter(fun (index: int, item: str) > bool => !stale.items.hasKey("{metric} {item}"));
+        final narrowed = narrow(text, items: left);
+        if (narrowed == null) {
             return Pruned{ lines = record, removed = [<str>],
                 refused = "line {i + 1} does not end with its items, so it cannot be narrowed without rewriting the rest" };
         }
-        final narrowed = text.sub(0, len: at!) + `"items":` + json\stringify(left) + "}";
         // Narrowing can leave two rows equal, and the record refuses a repeated line.
-        if (seen[narrowed] ?? false) {
-            continue;
+        if (!seen.hasKey(narrowed!)) {
+            seen[narrowed!] = true;
+            kept.append(narrowed!);
         }
-        seen[narrowed] = true;
-        kept.append(narrowed);
     }
     return Pruned{ lines = kept, removed = removed, refused = "" };
+}
+
+// Stale is what a report calls stale: "<metric> <item>" keys for the per-item metrics, and
+// the joined items of each stale clone entry.
+object Stale {
+    items: {str: bool},
+    clones: {str: bool},
+}
+
+// staleOf reads the stale list of report into the keys prune looks rows up by.
+fun staleOf(report: {str: any}) > Stale {
+    final items = mut {<str: bool>};
+    final clones = mut {<str: bool>};
+    final entries: [any] = report["stale"] ?? [<any>];
+    foreach (entry in entries) {
+        final metric: str = entry["metric"] ?? "";
+        final listed = names(entry["items"]);
+        if (metric == CLONES) {
+            clones[listed.join(", ")] = true;
+            continue;
+        }
+        foreach (item in listed) {
+            items["{metric} {item}"] = true;
+        }
+    }
+    return Stale{ items = items, clones = clones };
+}
+
+// narrow is text with its trailing items array replaced by items, or null when text does not
+// end with that array and so cannot be edited without rewriting the rest of the row.
+fun narrow(text: str, items: [str]) > str? !> any {
+    final at = text.indexOf(`"items":`);
+    if (at == null or !text.endsWith("]}")) {
+        return null;
+    }
+    return text.sub(0, len: at!) + `"items":` + json\stringify(items) + "}";
 }
 
 // unvouched is why report cannot say what is stale, or "" when it can: an index that is not
