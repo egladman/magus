@@ -1,6 +1,7 @@
 ### Changed
 
 - **Ending a job no longer ends the jobs below it unseen.** `magus job exit <job>` refuses
-  while live jobs sit below it, naming each with its holder, checkout and uncommitted work,
-  until the call names each. `magus job prune` refuses likewise. Ending one holding
-  uncommitted work or a running check waits until a person disposes its attention request.
+  while jobs sit below it, naming each with its holder, checkout and uncommitted work,
+  until you name each. `magus job prune` refuses likewise. If a named job holds
+  uncommitted work or a running check, the end waits until a person disposes the attention
+  request.

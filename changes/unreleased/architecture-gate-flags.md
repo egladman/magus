@@ -2,4 +2,3 @@
 
 - **Harness hooks pass `--observes-skill-loads` on every judging entry.** Hook wiring
   written by `magus describe harness` now applies skill gates to writes and commands too.
-  `magus job fork` refuses a row with no write paths unless it is `--read-only`.
