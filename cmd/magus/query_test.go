@@ -523,6 +523,7 @@ func TestLoadedGraphReadsAnswerAsTheLocalReadDoes(t *testing.T) {
 // The text renderers print exactly what the CLI verbs do, so the bytes the retrieval eval
 // counts from one rendered answer are the bytes a run of the verb prints.
 func TestTextRenderersPrintWhatTheVerbPrints(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
 	f := newGraphReadFixture(t)
 	gs := f.loadGraphs(t)
 	globalCfg.Server.Enabled = false
