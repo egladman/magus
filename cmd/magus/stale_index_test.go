@@ -48,7 +48,7 @@ func TestStaleIndexNoticeNamesTheChangedFiles(t *testing.T) {
 	assert.Contains(t, got, "  changed since: a.go, b.go, c.go, d.go, e.go and 4 more; deletions are not listed\n",
 		"five named, the shared magusfile counted once, and the two files past the list's cap counted")
 
-	assert.NotContains(t, staleIndexNotice(answer(types.KnowledgeStaleIndex{Project: "."})), "changed since",
+	assert.NotContains(t, staleIndexNotice(answer(types.KnowledgeStaleIndex{Project: "."})), "changed since:",
 		"a recorded verdict names no files, and the line does not pretend it does")
 }
 

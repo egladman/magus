@@ -123,6 +123,7 @@ func TestChangedSinceIndexListsSourcesNewerThanTheIndexSorted(t *testing.T) {
 	require.NoError(t, os.Chtimes(index, built, built))
 	before, after := built.Add(-time.Minute), built.Add(time.Minute)
 	require.NoError(t, os.Chtimes(src, before, before))
+	require.NoError(t, os.Chtimes(filepath.Join(m.Root(), "magusfile.buzz"), before, before))
 	for _, name := range []string{"zeta.go", "alpha.go"} {
 		path := filepath.Join(m.Root(), name)
 		require.NoError(t, os.WriteFile(path, []byte("package main\n"), 0o644))
@@ -131,7 +132,7 @@ func TestChangedSinceIndexListsSourcesNewerThanTheIndexSorted(t *testing.T) {
 
 	changed, err := m.changedSinceIndex(t.Context(), m.Get("."), spells.DefaultSymbolIndexOp, index, cache.NewSourceMemo())
 	require.NoError(t, err)
-	assert.Equal(t, []string{"alpha.go", "zeta.go"}, changed, "newer sources, sorted; main.go predates the index")
+	assert.Equal(t, []string{"alpha.go", "zeta.go"}, changed, "newer sources, sorted; main.go and the magusfile predate the index")
 }
 
 func TestChangedSinceIndexWithoutAnIndexFails(t *testing.T) {
