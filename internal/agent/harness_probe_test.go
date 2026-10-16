@@ -187,7 +187,7 @@ func TestVerifyHarnessProbeReportsNoMagusBinaryAsUnprobed(t *testing.T) {
 	// root/magus is deliberately absent, and PATH holds sh alone.
 	writeProbeableHarness(t, root, "nomagus", "magus buzz -s magus-command.buzz")
 
-	// Resolved and copied BEFORE PATH is overridden below.
+	// Resolved and linked BEFORE PATH is overridden below.
 	shOnlyPATH := buildMinimalPATH(t, "sh")
 	t.Setenv("PATH", shOnlyPATH)
 
@@ -239,20 +239,21 @@ func TestVerifyHarnessProbeSkipsLifecycleScripts(t *testing.T) {
 }
 
 // buildMinimalPATH resolves each name against the CURRENT (real) PATH, so call it
-// before t.Setenv("PATH", ...) replaces it, copies each into a fresh directory,
+// before t.Setenv("PATH", ...) replaces it, links each into a fresh directory,
 // and returns that directory. A test then sets PATH to exactly this, giving a
 // deterministic PATH that carries some real tools (sh) but not others
 // (magus), rather than depending on what happens to be installed elsewhere on
 // the machine running the suite.
+//
+// Each tool is symlinked, never copied: macOS kills a copied system binary
+// (Launch Constraint Violation) and writes a crash report each run.
 func buildMinimalPATH(t *testing.T, names ...string) string {
 	t.Helper()
 	dir := t.TempDir()
 	for _, name := range names {
 		real, err := exec.LookPath(name)
 		require.NoErrorf(t, err, "the test machine has no %q to stand in with", name)
-		data, err := os.ReadFile(real)
-		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(filepath.Join(dir, name), data, 0o755))
+		require.NoError(t, os.Symlink(real, filepath.Join(dir, name)))
 	}
 	return dir
 }
