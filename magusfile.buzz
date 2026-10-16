@@ -148,6 +148,7 @@ magus\project({
         "internal/hint/testdata/*",
         "internal/job/testdata/*",
         "benchmarks/agent/internal/bench/testdata/*",
+        "internal/textembed/testdata/*",
         // Embedded in the textrank package, and no other glob matches it.
         "internal/textrank/weights.json",
         // The retrieval eval's judgments, which the rankeval tests read.
