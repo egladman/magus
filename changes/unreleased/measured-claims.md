@@ -1,19 +1,6 @@
 ### Changed
 
-- **A target that declares nothing claims what its runs measured.** Once a target has
-  three successful measured runs, a step claims 1.25 times their highest peak memory and,
-  as slots, the 75th percentile of CPU time over wall time, rounded up. Before, an
-  undeclared target claimed no memory and one slot. A declared `memory_mb` stays the
-  ceiling and a declared `slots` wins outright. A refusal and `magus session` say when a
-  claim was measured.
-- **A one-slot step runs the Go toolchain one wide.** Every step now sets `GOMAXPROCS`
-  and `-p` to the slots it claims. Before, a one-slot step left Go its defaults, so it ran
-  on every core while the budget counted one. A Go target that needs more declares
-  `slots`, since its measured width cannot grow past its claim.
-
-### Fixed
-
-- **A run says when it cannot read its history.** A history store an older magus left
-  beside the current one, or any other read failure, prints an error naming the file and
-  how to move it aside. Before, the run sized every claim from declarations and recorded
-  nothing, without a word.
+- **A target that declares nothing claims what its runs measured.** After three measured
+  runs, its step claims 1.25 times their highest peak memory and, as slots, the 75th
+  percentile of CPU time over wall time, rounded up. A declared `memory_mb` caps the claim
+  and a declared `slots` wins. A refusal and `magus session` say when a claim was measured.
