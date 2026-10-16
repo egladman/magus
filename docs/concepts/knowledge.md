@@ -809,8 +809,10 @@ magus:                        # magus's, all of it
   anchors:
     - kind: symbol            # survives the code moving file and line; breaks on rename or delete
       target: "m internal/cache/Store#Put()."
+      signature: "func (s *Store) Put(key string, v []byte) error"  # recorded by `magus notes edit`
     - kind: file              # a path, when no single symbol covers it
       target: internal/cache/cache.go
+      digest: 3f9a1c0e7b2d4a68  # recorded by `magus notes edit`
 ---
 
 Nothing in the code says these must be cleared together.
@@ -823,8 +825,8 @@ and the rest are read past in silence rather than reported as malformed notes.
 
 Three consequences worth knowing:
 
-- **magus never rewrites your other frontmatter.** When it records an anchor fingerprint it
-  replaces the `magus:` block and leaves every other key, and their order, exactly as they
+- **magus never rewrites your other frontmatter.** When it records a signature or a
+  fingerprint it replaces the `magus:` block and leaves every other key, and their order, exactly as they
   were.
 - **`id` is what survives a reorganization.** Without it a note is identified by its path,
   so renaming the file in Obsidian (which rewrites your `[[wikilinks]]` and knows nothing
@@ -847,13 +849,22 @@ together").
 
 - **Does it still resolve?** A renamed or deleted subject reports `dangling-anchor`, with
   the coarser anchor it degrades to. Nothing is ever re-pointed at a guess.
-- **Did the content change?** A stored fingerprint of the anchored definition detects the
-  more common and more dangerous case: the code still exists and quietly stopped saying
-  what the note claims. The fingerprint ignores whitespace, so reformatting is free, and
-  reacts to tokens, so a real edit is loud.
+- **Did what it is change?** This is the more common and more dangerous case: the code
+  still exists and quietly stopped saying what the note claims.
+  - A symbol anchor is graded by its signature, as its indexer renders it. A changed
+    signature reports `drifted-anchor`. A body edit or a move to another line or file
+    leaves the signature alone and reads clean: those almost never invalidate prose about
+    what a symbol is.
+  - A symbol note with no recorded signature, or a symbol whose indexer renders none,
+    reports `unverifiable-anchor`. It is neither clean nor drifted, because nothing was
+    compared.
+  - A file anchor is graded by a fingerprint of its content. The fingerprint ignores
+    whitespace, so reformatting is free, and reacts to tokens, so a real edit is loud.
 
-Recording that fingerprint is a deliberate human act: `magus notes edit` stamps it, because
-the person just had the note and its subject in front of them. Verify only ever reports.
+Recording a signature or a fingerprint is a deliberate human act: `magus notes edit` stamps
+it, because the person just had the note and its subject in front of them. Verify only ever
+reports. A note recorded before symbols were graded by signature reads unverifiable until
+someone re-reads it and runs `magus notes edit`.
 
 Retrieval labels, and never reorders. A match whose subject has moved on carries its
 verdict and `outrun_days` so a reader can see "400 days behind its subject" beside the
