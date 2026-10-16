@@ -163,39 +163,10 @@ func EncodeTable(w io.Writer, spec TableSpec) error {
 }
 
 func (spec TableSpec) header() ([]byte, error) {
-	n := len(spec.Tokens)
-	if n == 0 {
-		return nil, errors.New("no tokens")
-	}
-	if len(spec.Weights) != n || len(spec.Rows) != n {
-		return nil, fmt.Errorf("%d tokens, %d weights and %d rows, but each token needs one of each", n, len(spec.Weights), len(spec.Rows))
-	}
-	dims := len(spec.Rows[0])
-	if err := checkDims(dims); err != nil {
+	dims, err := spec.checkVocabulary()
+	if err != nil {
 		return nil, err
 	}
-	var size int
-	var prefix [binary.MaxVarintLen64]byte
-	for i, tok := range spec.Tokens {
-		if i > 0 && tok <= spec.Tokens[i-1] {
-			return nil, fmt.Errorf("tokens %q and %q are not sorted and unique", spec.Tokens[i-1], tok)
-		}
-		if got := textrank.Tokens(tok); len(got) == 0 || got[0] != tok {
-			return nil, fmt.Errorf("token %q is not what textrank.Tokens makes of it (%q)", tok, got)
-		}
-		row := spec.Rows[i]
-		if len(row) != dims {
-			return nil, fmt.Errorf("token %q has %d dims, the first row %d", tok, len(row), dims)
-		}
-		if slices.Contains(row, math.MinInt8) {
-			return nil, fmt.Errorf("token %q holds -128, outside the symmetric int8 range", tok)
-		}
-		size += binary.PutUvarint(prefix[:], uint64(len(tok))) + len(tok)
-	}
-	if size > math.MaxUint32 {
-		return nil, fmt.Errorf("tokens take %d bytes, more than a uint32 offset reaches", size)
-	}
-
 	prov := spec.Prov
 	if prov.Format != 0 && prov.Format != tableFormat {
 		return nil, fmt.Errorf("provenance names format %d, but this build writes format %d", prov.Format, tableFormat)
@@ -208,7 +179,7 @@ func (spec TableSpec) header() ([]byte, error) {
 	}
 	return json.Marshal(tableHeader{
 		Dims:            dims,
-		Tokens:          n,
+		Tokens:          len(spec.Tokens),
 		Teacher:         prov.Teacher,
 		TeacherRevision: prov.TeacherRevision,
 		TextsDigest:     prov.TextsDigest,
@@ -219,6 +190,46 @@ func (spec TableSpec) header() ([]byte, error) {
 		GOARCH:          prov.GOARCH,
 		Seed:            prov.Seed,
 	})
+}
+
+// checkVocabulary checks that spec holds one weight and one row per token, tokens
+// sorted, unique and each what textrank.Tokens makes of it, rows of one length that
+// checkDims accepts and in the symmetric int8 range, and token bytes a uint32 offset
+// reaches. It returns the row length.
+func (spec TableSpec) checkVocabulary() (dims int, err error) {
+	n := len(spec.Tokens)
+	if n == 0 {
+		return 0, errors.New("no tokens")
+	}
+	if len(spec.Weights) != n || len(spec.Rows) != n {
+		return 0, fmt.Errorf("%d tokens, %d weights and %d rows, but each token needs one of each", n, len(spec.Weights), len(spec.Rows))
+	}
+	dims = len(spec.Rows[0])
+	if err := checkDims(dims); err != nil {
+		return 0, err
+	}
+	var size int
+	var prefix [binary.MaxVarintLen64]byte
+	for i, tok := range spec.Tokens {
+		if i > 0 && tok <= spec.Tokens[i-1] {
+			return 0, fmt.Errorf("tokens %q and %q are not sorted and unique", spec.Tokens[i-1], tok)
+		}
+		if got := textrank.Tokens(tok); len(got) == 0 || got[0] != tok {
+			return 0, fmt.Errorf("token %q is not what textrank.Tokens makes of it (%q)", tok, got)
+		}
+		row := spec.Rows[i]
+		if len(row) != dims {
+			return 0, fmt.Errorf("token %q has %d dims, the first row %d", tok, len(row), dims)
+		}
+		if slices.Contains(row, math.MinInt8) {
+			return 0, fmt.Errorf("token %q holds -128, outside the symmetric int8 range", tok)
+		}
+		size += binary.PutUvarint(prefix[:], uint64(len(tok))) + len(tok)
+	}
+	if size > math.MaxUint32 {
+		return 0, fmt.Errorf("tokens take %d bytes, more than a uint32 offset reaches", size)
+	}
+	return dims, nil
 }
 
 // layoutTable lays out a table without validating it.
@@ -282,7 +293,26 @@ func readTable(data []byte) (*Table, error) {
 		return nil, errors.New("sha256 trailer does not match the contents: the table is truncated or corrupt")
 	}
 
-	r := body[start:]
+	r, err := t.readHeader(body[start:])
+	if err != nil {
+		return nil, err
+	}
+	if r, err = t.readTokens(r); err != nil {
+		return nil, err
+	}
+	if want := int64(t.n) * int64(2+t.dims); int64(len(r)) != want {
+		return nil, fmt.Errorf("%d bytes follow the tokens, but %d tokens of %d dims need %d", len(r), t.n, t.dims, want)
+	}
+	t.weights, t.rows = r[:2*t.n], r[2*t.n:]
+	if i := bytes.IndexByte(t.rows, 0x80); i >= 0 {
+		return nil, fmt.Errorf("token %q holds -128, outside the symmetric int8 range", t.token(i/t.dims))
+	}
+	return t, nil
+}
+
+// readHeader decodes the uvarint-length header at the start of r into t's provenance,
+// dims and token count, and returns the bytes after it.
+func (t *Table) readHeader(r []byte) ([]byte, error) {
 	hlen, k := binary.Uvarint(r)
 	if k <= 0 || hlen > maxHeader || hlen > uint64(len(r)-k) {
 		return nil, errors.New("header length is malformed")
@@ -306,7 +336,13 @@ func readTable(data []byte) (*Table, error) {
 	if int64(t.n)*4 > int64(len(r)) {
 		return nil, fmt.Errorf("header names %d tokens, but the table holds room for at most %d", t.n, len(r)/4)
 	}
+	return r, nil
+}
 
+// readTokens reads the token offsets and the tokens at the start of r, checks that
+// they are sorted and unique, builds the prefix-key index lookup searches, and returns
+// the bytes after them.
+func (t *Table) readTokens(r []byte) ([]byte, error) {
 	t.offsets, r = r[:4*t.n], r[4*t.n:]
 	t.starts = make([]uint32, 1<<16+1)
 	pos, key := 0, 0
@@ -332,16 +368,8 @@ func readTable(data []byte) (*Table, error) {
 	for ; key < len(t.starts); key++ {
 		t.starts[key] = uint32(t.n)
 	}
-	t.toks, r = r[:pos], r[pos:]
-
-	if want := int64(t.n) * int64(2+t.dims); int64(len(r)) != want {
-		return nil, fmt.Errorf("%d bytes follow the tokens, but %d tokens of %d dims need %d", len(r), t.n, t.dims, want)
-	}
-	t.weights, t.rows = r[:2*t.n], r[2*t.n:]
-	if i := bytes.IndexByte(t.rows, 0x80); i >= 0 {
-		return nil, fmt.Errorf("token %q holds -128, outside the symmetric int8 range", t.token(i/t.dims))
-	}
-	return t, nil
+	t.toks = r[:pos]
+	return r[pos:], nil
 }
 
 // Dims is the length of every row and of every Vector the table makes.

@@ -61,119 +61,151 @@ func tinyModel(t *testing.T, cfg Config, w map[string][]float32) *Model {
 // naiveForward is the reference: one text, no padding, float64, loops only. It follows
 // bench/nomic_local.py line for line.
 func naiveForward(cfg Config, w map[string][]float32, ids []int32) []float64 {
-	h, nh, ff := cfg.Hidden, cfg.Heads, cfg.Inner
-	hd := h / nh
-	n := len(ids)
-	at := func(name string, i, j, cols int) float64 { return float64(w[name][i*cols+j]) }
-	ln := func(x [][]float64, wn, bn string) {
-		for _, row := range x {
-			var mu, v float64
-			for _, e := range row {
-				mu += e / float64(h)
-			}
-			for _, e := range row {
-				v += (e - mu) * (e - mu) / float64(h)
-			}
-			for j := range row {
-				row[j] = (row[j]-mu)/math.Sqrt(v+cfg.Eps)*float64(w[wn][j]) + float64(w[bn][j])
-			}
-		}
-	}
-	matT := func(x [][]float64, name string, out int) [][]float64 {
-		in := len(x[0])
-		y := make([][]float64, len(x))
-		for r := range x {
-			y[r] = make([]float64, out)
-			for o := range out {
-				for i := range in {
-					y[r][o] += x[r][i] * at(name, o, i, in)
-				}
-			}
-		}
-		return y
-	}
-	x := make([][]float64, n)
+	m := naive{cfg: cfg, w: w}
+	h := cfg.Hidden
+	x := make([][]float64, len(ids))
 	for p, id := range ids {
 		x[p] = make([]float64, h)
 		for j := range h {
-			x[p][j] = at("embeddings.word_embeddings.weight", int(id), j, h) + at("embeddings.token_type_embeddings.weight", 0, j, h)
+			x[p][j] = m.at("embeddings.word_embeddings.weight", int(id), j, h) + m.at("embeddings.token_type_embeddings.weight", 0, j, h)
 		}
 	}
-	ln(x, "emb_ln.weight", "emb_ln.bias")
-	rot := func(v []float64, pos int) []float64 {
-		out := make([]float64, hd)
-		for i := range hd / 2 {
-			inv := 1 / math.Pow(cfg.RotaryBase, float64(2*i)/float64(hd))
-			c, s := math.Cos(float64(pos)*inv), math.Sin(float64(pos)*inv)
-			out[i] = v[i]*c - v[i+hd/2]*s
-			out[i+hd/2] = v[i]*s + v[i+hd/2]*c
-		}
-		return out
-	}
+	m.layerNorm(x, "emb_ln.weight", "emb_ln.bias")
 	for l := range cfg.Layers {
-		pre := fmt.Sprintf("encoder.layers.%d.", l)
-		qkv := matT(x, pre+"attn.Wqkv.weight", 3*h)
-		a := make([][]float64, n)
-		for p := range a {
-			a[p] = make([]float64, h)
-		}
-		for head := range nh {
-			q, k, v := make([][]float64, n), make([][]float64, n), make([][]float64, n)
-			for p := range n {
-				q[p] = rot(qkv[p][head*hd:(head+1)*hd], p)
-				k[p] = rot(qkv[p][h+head*hd:h+(head+1)*hd], p)
-				v[p] = qkv[p][2*h+head*hd : 2*h+(head+1)*hd]
-			}
-			for i := range n {
-				scores := make([]float64, n)
-				mx := math.Inf(-1)
-				for j := range n {
-					for d := range hd {
-						scores[j] += q[i][d] * k[j][d]
-					}
-					scores[j] /= math.Sqrt(float64(hd))
-					mx = math.Max(mx, scores[j])
-				}
-				var z float64
-				for j := range scores {
-					scores[j] = math.Exp(scores[j] - mx)
-					z += scores[j]
-				}
-				for j := range n {
-					for d := range hd {
-						a[i][head*hd+d] += scores[j] / z * v[j][d]
-					}
-				}
-			}
-		}
-		o := matT(a, pre+"attn.out_proj.weight", h)
-		for p := range x {
-			for j := range x[p] {
-				x[p][j] += o[p][j]
-			}
-		}
-		ln(x, pre+"norm1.weight", pre+"norm1.bias")
-		y, g := matT(x, pre+"mlp.fc11.weight", ff), matT(x, pre+"mlp.fc12.weight", ff)
-		for p := range y {
-			for j := range y[p] {
-				y[p][j] *= g[p][j] / (1 + math.Exp(-g[p][j]))
-			}
-		}
-		m := matT(y, pre+"mlp.fc2.weight", h)
-		for p := range x {
-			for j := range x[p] {
-				x[p][j] += m[p][j]
-			}
-		}
-		ln(x, pre+"norm2.weight", pre+"norm2.bias")
+		m.layer(x, fmt.Sprintf("encoder.layers.%d.", l))
 	}
-	pooled := make([]float64, h)
-	if cfg.Pooling == PoolCLS {
+	return m.pool(x)
+}
+
+// naive holds the reference encoder's config and weights.
+type naive struct {
+	cfg Config
+	w   map[string][]float32
+}
+
+func (m naive) at(name string, i, j, cols int) float64 { return float64(m.w[name][i*cols+j]) }
+
+// layerNorm normalizes each row of x in place, then scales by weight wn and shifts by
+// bias bn.
+func (m naive) layerNorm(x [][]float64, wn, bn string) {
+	h := float64(m.cfg.Hidden)
+	for _, row := range x {
+		var mu, v float64
+		for _, e := range row {
+			mu += e / h
+		}
+		for _, e := range row {
+			v += (e - mu) * (e - mu) / h
+		}
+		for j := range row {
+			row[j] = (row[j]-mu)/math.Sqrt(v+m.cfg.Eps)*float64(m.w[wn][j]) + float64(m.w[bn][j])
+		}
+	}
+}
+
+// linear is x times the transpose of the [out, in] weight name.
+func (m naive) linear(x [][]float64, name string, out int) [][]float64 {
+	in := len(x[0])
+	y := make([][]float64, len(x))
+	for r := range x {
+		y[r] = make([]float64, out)
+		for o := range out {
+			for i := range in {
+				y[r][o] += x[r][i] * m.at(name, o, i, in)
+			}
+		}
+	}
+	return y
+}
+
+// rope rotates the head vector v at position pos, its halves paired, not interleaved.
+func (m naive) rope(v []float64, pos int) []float64 {
+	hd := len(v)
+	out := make([]float64, hd)
+	for i := range hd / 2 {
+		inv := 1 / math.Pow(m.cfg.RotaryBase, float64(2*i)/float64(hd))
+		c, s := math.Cos(float64(pos)*inv), math.Sin(float64(pos)*inv)
+		out[i] = v[i]*c - v[i+hd/2]*s
+		out[i+hd/2] = v[i]*s + v[i+hd/2]*c
+	}
+	return out
+}
+
+// attention is multi-head self-attention over x through the layer's fused qkv weight,
+// before the output projection.
+func (m naive) attention(x [][]float64, pre string) [][]float64 {
+	h, nh, n := m.cfg.Hidden, m.cfg.Heads, len(x)
+	hd := h / nh
+	qkv := m.linear(x, pre+"attn.Wqkv.weight", 3*h)
+	a := make([][]float64, n)
+	for p := range a {
+		a[p] = make([]float64, h)
+	}
+	for head := range nh {
+		q, k, v := make([][]float64, n), make([][]float64, n), make([][]float64, n)
+		for p := range n {
+			q[p] = m.rope(qkv[p][head*hd:(head+1)*hd], p)
+			k[p] = m.rope(qkv[p][h+head*hd:h+(head+1)*hd], p)
+			v[p] = qkv[p][2*h+head*hd : 2*h+(head+1)*hd]
+		}
+		for i := range n {
+			scores := make([]float64, n)
+			mx := math.Inf(-1)
+			for j := range n {
+				for d := range hd {
+					scores[j] += q[i][d] * k[j][d]
+				}
+				scores[j] /= math.Sqrt(float64(hd))
+				mx = math.Max(mx, scores[j])
+			}
+			var z float64
+			for j := range scores {
+				scores[j] = math.Exp(scores[j] - mx)
+				z += scores[j]
+			}
+			for j := range n {
+				for d := range hd {
+					a[i][head*hd+d] += scores[j] / z * v[j][d]
+				}
+			}
+		}
+	}
+	return a
+}
+
+// layer is one post-LayerNorm encoder layer over x, in place: attention, then the
+// SwiGLU MLP fc11 * silu(fc12), each added to its input before its LayerNorm.
+func (m naive) layer(x [][]float64, pre string) {
+	h, ff := m.cfg.Hidden, m.cfg.Inner
+	addRows(x, m.linear(m.attention(x, pre), pre+"attn.out_proj.weight", h))
+	m.layerNorm(x, pre+"norm1.weight", pre+"norm1.bias")
+	y, g := m.linear(x, pre+"mlp.fc11.weight", ff), m.linear(x, pre+"mlp.fc12.weight", ff)
+	for p := range y {
+		for j := range y[p] {
+			y[p][j] *= g[p][j] / (1 + math.Exp(-g[p][j]))
+		}
+	}
+	addRows(x, m.linear(y, pre+"mlp.fc2.weight", h))
+	m.layerNorm(x, pre+"norm2.weight", pre+"norm2.bias")
+}
+
+func addRows(x, y [][]float64) {
+	for p := range x {
+		for j := range x[p] {
+			x[p][j] += y[p][j]
+		}
+	}
+}
+
+// pool is the CLS row or the mean row of x, L2-normalized.
+func (m naive) pool(x [][]float64) []float64 {
+	pooled := make([]float64, m.cfg.Hidden)
+	if m.cfg.Pooling == PoolCLS {
 		copy(pooled, x[0])
 	} else {
 		for p := range x {
 			for j := range pooled {
-				pooled[j] += x[p][j] / float64(n)
+				pooled[j] += x[p][j] / float64(len(x))
 			}
 		}
 	}

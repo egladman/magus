@@ -11,7 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFiguresFromBuzz(t *testing.T) {
+// figureWorkspace holds a project and four Buzz files of figures: one with literal
+// ids and dirs, one built from parameters, a duplicate id, and an unrelated figure
+// namespace.
+func figureWorkspace(t *testing.T) string {
+	t.Helper()
 	ws := testkit.NewWorkspace(t)
 	ws.Write("libs/engine/magusfile.buzz", "export fun ci() > void {}\n")
 	ws.Write("diagrams/engine.buzz", `namespace engine;
@@ -58,8 +62,11 @@ fun other() > void {
     figure\of("not-a-figure");
 }
 `)
+	return ws.Root()
+}
 
-	shard := assembleBuzz(ws.Root())
+func TestFiguresFromBuzz(t *testing.T) {
+	shard := assembleBuzz(figureWorkspace(t))
 	out := mergeAll([]Shard{shard}).Output()
 
 	var figures []types.KnowledgeNode

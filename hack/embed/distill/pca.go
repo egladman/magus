@@ -49,6 +49,27 @@ func FitPCA(rows [][]float32, k int) (*PCA, error) {
 		mean[j] /= float64(len(rows))
 	}
 
+	var es mat.EigenSym
+	if !es.Factorize(sampleCovariance(rows, mean), true) {
+		return nil, errors.New("pca: the eigendecomposition did not converge")
+	}
+	vals := es.Values(nil)
+	var vecs mat.Dense
+	es.VectorsTo(&vecs)
+
+	p := &PCA{Mean: mean, Components: make([][]float64, k), Variances: make([]float64, k)}
+	for c := range k {
+		col := len(vals) - 1 - c // EigenSym returns ascending eigenvalues
+		p.Components[c] = fixSign(mat.Col(nil, col, &vecs))
+		p.Variances[c] = vals[col]
+	}
+	return p, nil
+}
+
+// sampleCovariance is the unbiased covariance of rows about mean, accumulated
+// covChunk centered rows at a time.
+func sampleCovariance(rows [][]float32, mean []float64) *mat.SymDense {
+	dims := len(mean)
 	cov := mat.NewSymDense(dims, nil)
 	chunk := mat.NewDense(min(covChunk, len(rows)), dims, nil)
 	for lo := 0; lo < len(rows); lo += covChunk {
@@ -62,34 +83,24 @@ func FitPCA(rows [][]float32, k int) (*PCA, error) {
 		cov.SymRankK(cov, 1, c.T())
 	}
 	cov.ScaleSym(1/float64(len(rows)-1), cov)
+	return cov
+}
 
-	var es mat.EigenSym
-	if !es.Factorize(cov, true) {
-		return nil, errors.New("pca: the eigendecomposition did not converge")
-	}
-	vals := es.Values(nil)
-	var vecs mat.Dense
-	es.VectorsTo(&vecs)
-
-	p := &PCA{Mean: mean, Components: make([][]float64, k), Variances: make([]float64, k)}
-	for c := range k {
-		col := len(vals) - 1 - c // EigenSym returns ascending eigenvalues
-		comp := mat.Col(nil, col, &vecs)
-		big := 0
-		for j, x := range comp {
-			if math.Abs(x) > math.Abs(comp[big]) {
-				big = j
-			}
+// fixSign negates comp in place when its largest-magnitude loading, the first on a
+// tie, is negative, since an eigenvector's sign is arbitrary. It returns comp.
+func fixSign(comp []float64) []float64 {
+	big := 0
+	for j, x := range comp {
+		if math.Abs(x) > math.Abs(comp[big]) {
+			big = j
 		}
-		if comp[big] < 0 {
-			for j := range comp {
-				comp[j] = -comp[j]
-			}
-		}
-		p.Components[c] = comp
-		p.Variances[c] = vals[col]
 	}
-	return p, nil
+	if comp[big] < 0 {
+		for j := range comp {
+			comp[j] = -comp[j]
+		}
+	}
+	return comp
 }
 
 // Dims is the number of components.

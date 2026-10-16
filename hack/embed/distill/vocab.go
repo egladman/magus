@@ -56,18 +56,9 @@ func BuildVocab(c TextSource, opts VocabOptions) (*Vocab, error) {
 		}
 	}
 
-	forced := map[string]bool{}
-	for _, f := range opts.Forced {
-		toks := textrank.Tokens(f)
-		if len(toks) == 0 {
-			return nil, fmt.Errorf("vocab: forced token %q yields no token", f)
-		}
-		for _, tok := range toks {
-			if !fixedPoint(tok) {
-				return nil, fmt.Errorf("vocab: forced token %q yields %q, which textrank.Tokens does not keep whole", f, tok)
-			}
-			forced[tok] = true
-		}
+	forced, err := forcedTokens(opts.Forced)
+	if err != nil {
+		return nil, err
 	}
 	if len(forced) > opts.Size {
 		return nil, fmt.Errorf("vocab: %d forced tokens exceed the size %d", len(forced), opts.Size)
@@ -97,6 +88,25 @@ func BuildVocab(c TextSource, opts VocabOptions) (*Vocab, error) {
 		n[i] = counts[tok]
 	}
 	return NewVocab(kept, n, total)
+}
+
+// forcedTokens is the set of tokens textrank.Tokens makes of forced, each of which it
+// must keep whole.
+func forcedTokens(forced []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	for _, f := range forced {
+		toks := textrank.Tokens(f)
+		if len(toks) == 0 {
+			return nil, fmt.Errorf("vocab: forced token %q yields no token", f)
+		}
+		for _, tok := range toks {
+			if !fixedPoint(tok) {
+				return nil, fmt.Errorf("vocab: forced token %q yields %q, which textrank.Tokens does not keep whole", f, tok)
+			}
+			out[tok] = true
+		}
+	}
+	return out, nil
 }
 
 // NewVocab checks a vocabulary read back from disk: tokens in rank order, unique, each

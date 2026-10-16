@@ -179,6 +179,18 @@ func condensed(files []string, judged map[string]bool) []string {
 	return slices.DeleteFunc(slices.Clone(files), func(f string) bool { return !judged[f] })
 }
 
+// judgedShare is judged@k for one nonempty ranked list: the share of top that
+// carries a judgment.
+func judgedShare(top []string, judged map[string]bool) float64 {
+	hit := 0
+	for _, f := range top {
+		if judged[f] {
+			hit++
+		}
+	}
+	return float64(hit) / float64(len(top))
+}
+
 func summarize(runs []Run) Metrics {
 	var m Metrics
 	var latencies []time.Duration
@@ -200,13 +212,7 @@ func summarize(runs []Run) Metrics {
 			m.ZeroResult++
 		} else {
 			returned++
-			hit := 0
-			for _, f := range top {
-				if judged[f] {
-					hit++
-				}
-			}
-			m.Judged10 += float64(hit) / float64(len(top))
+			m.Judged10 += judgedShare(top, judged)
 		}
 		if r.Unknown {
 			m.Unknown++

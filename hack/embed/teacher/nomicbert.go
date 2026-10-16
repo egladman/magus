@@ -257,13 +257,7 @@ func (c Config) forward(ids, mask *graph.Node, params []*graph.Node) *graph.Node
 		index[p.name] = i
 	}
 	p := func(name string) *graph.Node { return params[index[name]] }
-	ln := func(x, w, bias *graph.Node) *graph.Node {
-		mu := graph.ReduceAndKeep(x, graph.ReduceMean, -1)
-		d := graph.Sub(x, mu)
-		v := graph.ReduceAndKeep(graph.Square(d), graph.ReduceMean, -1)
-		return graph.Add(graph.Mul(graph.Mul(d, graph.Rsqrt(graph.AddScalar(v, c.Eps))), graph.Reshape(w, 1, 1, h)),
-			graph.Reshape(bias, 1, 1, h))
-	}
+	ln := func(x, w, bias *graph.Node) *graph.Node { return layerNorm(x, w, bias, c.Eps) }
 	proj := func(x, w *graph.Node) *graph.Node { return graph.Einsum("blh,oh->blo", x, w) }
 
 	x := graph.Gather(p("embeddings.word_embeddings.weight"), graph.ExpandAxes(ids, -1))
@@ -273,14 +267,7 @@ func (c Config) forward(ids, mask *graph.Node, params []*graph.Node) *graph.Node
 	cos, sin := c.rotary(l)
 	cosN := graph.Reshape(graph.Const(g, cos), 1, l, 1, hd/2)
 	sinN := graph.Reshape(graph.Const(g, sin), 1, l, 1, hd/2)
-	rot := func(t *graph.Node) *graph.Node {
-		t1 := graph.Slice(t, graph.AxisRange(), graph.AxisRange(), graph.AxisRange(), graph.AxisRange(0, hd/2))
-		t2 := graph.Slice(t, graph.AxisRange(), graph.AxisRange(), graph.AxisRange(), graph.AxisRange(hd/2, hd))
-		return graph.Concatenate([]*graph.Node{
-			graph.Sub(graph.Mul(t1, cosN), graph.Mul(t2, sinN)),
-			graph.Add(graph.Mul(t1, sinN), graph.Mul(t2, cosN)),
-		}, -1)
-	}
+	rot := func(t *graph.Node) *graph.Node { return rope(t, cosN, sinN) }
 	// Padding keys get -1e9 rather than -inf: softmax still gives them exactly 0, and a
 	// fully padded filler row stays finite.
 	keyBias := graph.Reshape(graph.MulScalar(graph.AddScalar(mask, -1), 1e9), b, 1, 1, l)
@@ -301,16 +288,43 @@ func (c Config) forward(ids, mask *graph.Node, params []*graph.Node) *graph.Node
 		m := proj(graph.Mul(y, graph.Mul(gate, graph.Sigmoid(gate))), lp("mlp.fc2.weight"))
 		x = ln(graph.Add(m, x), lp("norm2.weight"), lp("norm2.bias"))
 	}
-
-	var pooled *graph.Node
-	switch c.Pooling {
-	case PoolCLS:
-		pooled = graph.Reshape(graph.Slice(x, graph.AxisRange(), graph.AxisElem(0)), b, h)
-	default:
-		m := graph.ExpandAxes(mask, -1)
-		pooled = graph.Div(graph.ReduceSum(graph.Mul(x, m), 1), graph.ReduceSum(m, 1))
-	}
+	pooled := c.pool(x, mask)
 	return graph.Mul(pooled, graph.Rsqrt(graph.ReduceAndKeep(graph.Square(pooled), graph.ReduceSum, -1)))
+}
+
+// layerNorm normalizes x [B, L, H] over its last axis, then scales by w and shifts by
+// bias, both [H].
+func layerNorm(x, w, bias *graph.Node, eps float64) *graph.Node {
+	h := x.Shape().Dimensions[2]
+	mu := graph.ReduceAndKeep(x, graph.ReduceMean, -1)
+	d := graph.Sub(x, mu)
+	v := graph.ReduceAndKeep(graph.Square(d), graph.ReduceMean, -1)
+	return graph.Add(graph.Mul(graph.Mul(d, graph.Rsqrt(graph.AddScalar(v, eps))), graph.Reshape(w, 1, 1, h)),
+		graph.Reshape(bias, 1, 1, h))
+}
+
+// rope applies non-interleaved rotary position embedding to t [B, L, heads, hd]: its
+// first and second halves are rotated as pairs by the angles cos and sin [1, L, 1, hd/2]
+// hold.
+func rope(t, cos, sin *graph.Node) *graph.Node {
+	hd := t.Shape().Dimensions[3]
+	t1 := graph.Slice(t, graph.AxisRange(), graph.AxisRange(), graph.AxisRange(), graph.AxisRange(0, hd/2))
+	t2 := graph.Slice(t, graph.AxisRange(), graph.AxisRange(), graph.AxisRange(), graph.AxisRange(hd/2, hd))
+	return graph.Concatenate([]*graph.Node{
+		graph.Sub(graph.Mul(t1, cos), graph.Mul(t2, sin)),
+		graph.Add(graph.Mul(t1, sin), graph.Mul(t2, cos)),
+	}, -1)
+}
+
+// pool reduces the encoder output x [B, L, H] to one vector per text [B, H]: the CLS
+// position, or the mean over the tokens mask marks.
+func (c Config) pool(x, mask *graph.Node) *graph.Node {
+	if c.Pooling == PoolCLS {
+		b, h := x.Shape().Dimensions[0], x.Shape().Dimensions[2]
+		return graph.Reshape(graph.Slice(x, graph.AxisRange(), graph.AxisElem(0)), b, h)
+	}
+	m := graph.ExpandAxes(mask, -1)
+	return graph.Div(graph.ReduceSum(graph.Mul(x, m), 1), graph.ReduceSum(m, 1))
 }
 
 // rotary returns cos and sin tables [l][hd/2] computed the way torch does in float32:

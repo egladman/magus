@@ -109,16 +109,7 @@ func (ix *Index) candidates(q []int8, allow []uint64, r int) []int32 {
 		hist[s]++
 		live++
 	}
-	threshold, room := int32(-1), 0
-	if r < live {
-		above := 0
-		threshold = int32(len(hist) - 1)
-		for above+int(hist[threshold]) < r {
-			above += int(hist[threshold])
-			threshold--
-		}
-		room = r - above
-	}
+	threshold, room := topThreshold(hist, r, live)
 	out := make([]int32, 0, min(r, live))
 	for doc, s := range score {
 		switch {
@@ -130,6 +121,22 @@ func (ix *Index) candidates(q []int8, allow []uint64, r int) []int32 {
 		}
 	}
 	return out
+}
+
+// topThreshold reads, from hist of the live scores, the score T the r highest reach:
+// every score above T is taken, and room more at exactly T. When r covers every live
+// doc, T is -1 and every eligible doc is above it.
+func topThreshold(hist []int32, r, live int) (threshold int32, room int) {
+	if r >= live {
+		return -1, 0
+	}
+	above := 0
+	threshold = int32(len(hist) - 1)
+	for above+int(hist[threshold]) < r {
+		above += int(hist[threshold])
+		threshold--
+	}
+	return threshold, r - above
 }
 
 // byteSums tabulates, for each run of 8 dims, Σ q[j] over every subset of the run:

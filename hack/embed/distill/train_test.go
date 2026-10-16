@@ -369,44 +369,10 @@ func TestTrainDistillsAToyTeacher(t *testing.T) {
 		words[i] = fmt.Sprintf("w%03d", i)
 	}
 	teacher := newToyTeacher(rng, words, 96)
-	var docs textsFixture
-	var pairText pairsFixture
-	for i := range 1500 {
-		var ws []string
-		for range 3 + rng.IntN(10) {
-			// Squaring skews the draw toward low indexes, a rough Zipf.
-			f := rng.Float64()
-			ws = append(ws, words[int(f*f*float64(len(words)))])
-		}
-		body := strings.Join(ws, " ")
-		docs = append(docs, Text{ID: fmt.Sprint("t", i), Body: body})
-		if i%3 == 0 {
-			pairText = append(pairText, TextPair{Source: "toy", Query: strings.Join(ws[:2], " "), Doc: body})
-		}
-	}
-
+	docs, pairText := toyTexts(rng, words)
 	v, err := BuildVocab(docs, VocabOptions{MinCount: 2, MaxBytes: 32, Size: 64, Forced: []string{"w079"}})
 	require.NoError(t, err)
-	targets := map[string][]float32{}
-	ids := make([]string, len(docs))
-	for i, c := range docs {
-		targets[c.ID], ids[i] = teacher.embed(c.Body), c.ID
-	}
-	var sample [][]float32
-	for _, i := range SampleByHash(ids, 1000, "pca/v1:") {
-		sample = append(sample, targets[ids[i]])
-	}
-	pca, err := FitPCA(sample, 64)
-	require.NoError(t, err)
-
-	dirs := make([][]float64, v.Len())
-	for i, tok := range v.Tokens {
-		dirs[i] = pca.Project(teacher.embed(tok))
-	}
-	sif, err := CountSIF(v, 1e-3)
-	require.NoError(t, err)
-	m, err := NewModel(dirs, sif)
-	require.NoError(t, err)
+	m, pca, targets := toyStudent(t, v, teacher, docs)
 
 	ex, empty, err := Examples(v, docs, func(id string) ([]float64, bool) {
 		y, ok := targets[id]
@@ -443,13 +409,68 @@ func TestTrainDistillsAToyTeacher(t *testing.T) {
 	assert.Less(t, after, 0.75*before, "training cut the base distill's MSE by less than a quarter")
 	assert.Less(t, best.Valid, first.Valid)
 	assert.Less(t, best.MNRL, 0.6*first.MNRL)
+	assertTableMatchesStudent(t, m, v, docs[:200])
+}
 
+// toyTexts draws 1500 texts of 3 to 12 words, skewed toward low indexes, and pairs
+// every third text with its first two words as the query.
+func toyTexts(rng *rand.Rand, words []string) (textsFixture, pairsFixture) {
+	var docs textsFixture
+	var pairs pairsFixture
+	for i := range 1500 {
+		var ws []string
+		for range 3 + rng.IntN(10) {
+			// Squaring skews the draw toward low indexes, a rough Zipf.
+			f := rng.Float64()
+			ws = append(ws, words[int(f*f*float64(len(words)))])
+		}
+		body := strings.Join(ws, " ")
+		docs = append(docs, Text{ID: fmt.Sprint("t", i), Body: body})
+		if i%3 == 0 {
+			pairs = append(pairs, TextPair{Source: "toy", Query: strings.Join(ws[:2], " "), Doc: body})
+		}
+	}
+	return docs, pairs
+}
+
+// toyStudent embeds every text with teacher, fits a 64-dim PCA on a hash sample of
+// those targets, and starts the student from the projected token vectors with count
+// SIF weights. targets maps each text id to its teacher vector.
+func toyStudent(t *testing.T, v *Vocab, teacher *toyTeacher, docs textsFixture) (*Model, *PCA, map[string][]float32) {
+	t.Helper()
+	targets := map[string][]float32{}
+	ids := make([]string, len(docs))
+	for i, c := range docs {
+		targets[c.ID], ids[i] = teacher.embed(c.Body), c.ID
+	}
+	var sample [][]float32
+	for _, i := range SampleByHash(ids, 1000, "pca/v1:") {
+		sample = append(sample, targets[ids[i]])
+	}
+	pca, err := FitPCA(sample, 64)
+	require.NoError(t, err)
+
+	dirs := make([][]float64, v.Len())
+	for i, tok := range v.Tokens {
+		dirs[i] = pca.Project(teacher.embed(tok))
+	}
+	sif, err := CountSIF(v, 1e-3)
+	require.NoError(t, err)
+	m, err := NewModel(dirs, sif)
+	require.NoError(t, err)
+	return m, pca, targets
+}
+
+// assertTableMatchesStudent writes m as the int8 table, reads it back, and checks that
+// the runtime's embedding of each doc stays within cosine 0.99 of the student's.
+func assertTableMatchesStudent(t *testing.T, m *Model, v *Vocab, docs textsFixture) {
+	t.Helper()
 	var buf bytes.Buffer
 	require.NoError(t, WriteTable(&buf, m, v, testProvenance()))
 	tbl, err := textembed.ReadTable(buf.Bytes())
 	require.NoError(t, err)
 	var worst float64 = 1
-	for _, c := range docs[:200] {
+	for _, c := range docs {
 		q, ok := tbl.Embed([]textembed.Field{{Tokens: textrank.Tokens(c.Body), Weight: 1}})
 		require.True(t, ok)
 		worst = min(worst, cosine8(q.Q, m.Embed(v.Bag(c.Body))))

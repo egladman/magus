@@ -305,6 +305,77 @@ type Report struct {
 	BestEpoch int // the epoch whose parameters the model ends with, zero-based
 }
 
+// checkTrainingData checks every example's bag and target and every pair's bags
+// against m.
+func (m *Model) checkTrainingData(examples []Example, pairs []Pair) error {
+	for _, ex := range examples {
+		if err := m.checkBag(ex.Bag); err != nil {
+			return fmt.Errorf("example %q: %w", ex.ID, err)
+		}
+		if len(ex.Target) != m.dims {
+			return fmt.Errorf("example %q has a %d-dim target, the model %d", ex.ID, len(ex.Target), m.dims)
+		}
+	}
+	for i, p := range pairs {
+		if err := errors.Join(m.checkBag(p.Query), m.checkBag(p.Doc)); err != nil {
+			return fmt.Errorf("pair %d: %w", i, err)
+		}
+	}
+	return nil
+}
+
+// holdOut splits examples into the training split and the validation split, the
+// examples whose IDHash under validSalt falls on the held-out residue.
+func holdOut(examples []Example) (train, held []Example) {
+	for _, ex := range examples {
+		if IDHash(validSalt, ex.ID)%validModulus == 0 {
+			held = append(held, ex)
+		} else {
+			train = append(train, ex)
+		}
+	}
+	return train, held
+}
+
+// epoch runs one epoch of lazy Adam steps, each on one MSE batch and one pair batch,
+// cycling the set with fewer batches, and counts its steps in rep. The epoch's losses
+// are means over its steps; its Valid is left for the caller.
+func (tr *trainer) epoch(rep *Report, epoch int, train []Example, pairs []Pair) (Epoch, error) {
+	opts := tr.opts
+	rng := rand.New(rand.NewPCG(opts.Seed, uint64(epoch)))
+	exBatches := batchExamples(rng, train, opts.MSEBatch)
+	pairBatches, dropped := batchPairs(rng, pairs, opts.PairBatch)
+	steps := max(len(exBatches), len(pairBatches))
+	if steps == 0 {
+		return Epoch{}, fmt.Errorf("train: epoch %d has no batch: all %d pairs clash within a batch", epoch, dropped)
+	}
+	ep := Epoch{DroppedPairs: dropped}
+	for k := range steps {
+		var exb []Example
+		var pb []Pair
+		if len(exBatches) > 0 {
+			exb = exBatches[k%len(exBatches)]
+		}
+		if len(pairBatches) > 0 {
+			pb = pairBatches[k%len(pairBatches)]
+		}
+		l1, l2, g := tr.lossAndGrad(exb, pb)
+		loss := l1 + opts.Lambda*l2
+		if math.IsNaN(loss) || math.IsInf(loss, 0) {
+			return Epoch{}, fmt.Errorf("train: epoch %d step %d: loss is %v", epoch, k, loss)
+		}
+		tr.adam.step(tr.m, g, opts.LearningRate)
+		ep.MSE += l1
+		ep.MNRL += l2
+		ep.Loss += loss
+		rep.Steps++
+	}
+	ep.MSE /= float64(steps)
+	ep.MNRL /= float64(steps)
+	ep.Loss /= float64(steps)
+	return ep, nil
+}
+
 // Train fits m to examples (L1) and pairs (λ·L2) with lazy Adam. Each step takes one
 // MSE batch and one pair batch; an epoch runs as many steps as the larger set has
 // batches, cycling the smaller. Examples whose IDHash under validSalt falls on the
@@ -316,27 +387,10 @@ func Train(m *Model, examples []Example, pairs []Pair, opts TrainOptions) (Repor
 	if err := opts.validate(m.dims, len(examples), len(pairs)); err != nil {
 		return Report{}, fmt.Errorf("train: %w", err)
 	}
-	for _, ex := range examples {
-		if err := m.checkBag(ex.Bag); err != nil {
-			return Report{}, fmt.Errorf("train: example %q: %w", ex.ID, err)
-		}
-		if len(ex.Target) != m.dims {
-			return Report{}, fmt.Errorf("train: example %q has a %d-dim target, the model %d", ex.ID, len(ex.Target), m.dims)
-		}
+	if err := m.checkTrainingData(examples, pairs); err != nil {
+		return Report{}, fmt.Errorf("train: %w", err)
 	}
-	for i, p := range pairs {
-		if err := errors.Join(m.checkBag(p.Query), m.checkBag(p.Doc)); err != nil {
-			return Report{}, fmt.Errorf("train: pair %d: %w", i, err)
-		}
-	}
-	var train, held []Example
-	for _, ex := range examples {
-		if IDHash(validSalt, ex.ID)%validModulus == 0 {
-			held = append(held, ex)
-		} else {
-			train = append(train, ex)
-		}
-	}
+	train, held := holdOut(examples)
 	if len(train) == 0 && len(pairs) == 0 {
 		return Report{}, errors.New("train: every example is held out and there are no pairs")
 	}
@@ -345,37 +399,10 @@ func Train(m *Model, examples []Example, pairs []Pair, opts TrainOptions) (Repor
 	rep := Report{Train: len(train), Held: len(held), Pairs: len(pairs), BestEpoch: -1}
 	best, bestValid := m.Clone(), math.Inf(1)
 	for epoch := range opts.Epochs {
-		rng := rand.New(rand.NewPCG(opts.Seed, uint64(epoch)))
-		exBatches := batchExamples(rng, train, opts.MSEBatch)
-		pairBatches, dropped := batchPairs(rng, pairs, opts.PairBatch)
-		steps := max(len(exBatches), len(pairBatches))
-		if steps == 0 {
-			return rep, fmt.Errorf("train: epoch %d has no batch: all %d pairs clash within a batch", epoch, dropped)
+		ep, err := tr.epoch(&rep, epoch, train, pairs)
+		if err != nil {
+			return rep, err
 		}
-		ep := Epoch{DroppedPairs: dropped}
-		for k := range steps {
-			var exb []Example
-			var pb []Pair
-			if len(exBatches) > 0 {
-				exb = exBatches[k%len(exBatches)]
-			}
-			if len(pairBatches) > 0 {
-				pb = pairBatches[k%len(pairBatches)]
-			}
-			l1, l2, g := tr.lossAndGrad(exb, pb)
-			loss := l1 + opts.Lambda*l2
-			if math.IsNaN(loss) || math.IsInf(loss, 0) {
-				return rep, fmt.Errorf("train: epoch %d step %d: loss is %v", epoch, k, loss)
-			}
-			tr.adam.step(m, g, opts.LearningRate)
-			ep.MSE += l1
-			ep.MNRL += l2
-			ep.Loss += loss
-			rep.Steps++
-		}
-		ep.MSE /= float64(steps)
-		ep.MNRL /= float64(steps)
-		ep.Loss /= float64(steps)
 		ep.Valid = math.NaN()
 		if len(held) > 0 {
 			ep.Valid = tr.validLoss(held)

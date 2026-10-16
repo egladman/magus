@@ -130,51 +130,11 @@ func ReadIndex(r io.ReaderAt, size int64, t *Table) (*Index, error) {
 var errTruncatedIndex = errors.New("truncated index")
 
 func readIndex(r io.ReaderAt, size int64, t *Table) (*Index, error) {
-	if size < 0 {
-		return nil, fmt.Errorf("size %d is negative", size)
-	}
-	pre := make([]byte, min(size, int64(len(indexMagic)+2*binary.MaxVarintLen64)))
-	if err := readAt(r, pre, 0); err != nil {
+	h, headLen, err := readIndexHeader(r, size, t)
+	if err != nil {
 		return nil, err
 	}
-	if !bytes.HasPrefix(pre, indexMagic[:]) {
-		return nil, errors.New("not an embedding index (no MSEI magic)")
-	}
-	format, k := binary.Uvarint(pre[len(indexMagic):])
-	if k <= 0 {
-		return nil, errTruncatedIndex
-	}
-	if format != indexFormat {
-		return nil, fmt.Errorf("format %d, but this build reads only format %d", format, indexFormat)
-	}
-	hlen, k2 := binary.Uvarint(pre[len(indexMagic)+k:])
-	if k2 <= 0 || hlen > maxHeader {
-		return nil, errors.New("header length is malformed")
-	}
-	start := int64(len(indexMagic) + k + k2)
-	if start+int64(hlen) > size {
-		return nil, errTruncatedIndex
-	}
-	hdr := make([]byte, hlen)
-	if err := readAt(r, hdr, start); err != nil {
-		return nil, err
-	}
-	var h indexHeader
-	if err := json.UnmarshalStrict(hdr, &h); err != nil {
-		return nil, fmt.Errorf("header: %w", err)
-	}
-	if want := t.Digest(); h.TableDigest != want {
-		return nil, fmt.Errorf("index was embedded with table %s, not %s: rebuild it", h.TableDigest, want)
-	}
-	if h.Dims != t.dims {
-		return nil, fmt.Errorf("header names %d dims, the table %d", h.Dims, t.dims)
-	}
-	if h.Docs < 0 {
-		return nil, fmt.Errorf("header names %d docs", h.Docs)
-	}
-
 	ix := &Index{dims: t.dims, words: t.dims / 64, n: h.Docs, table: h.TableDigest}
-	headLen := start + int64(hlen)
 	perDoc := int64(4 + 8*ix.words + ix.dims)
 	room := size - headLen - sha256.Size
 	if room < 0 || int64(ix.n) > room/perDoc {
@@ -183,14 +143,71 @@ func readIndex(r io.ReaderAt, size int64, t *Table) (*Index, error) {
 	if want := headLen + sha256.Size + int64(ix.n)*perDoc; size != want {
 		return nil, fmt.Errorf("%d bytes, but %d docs of %d dims take %d", size, ix.n, ix.dims, want)
 	}
+	rowsAt, err := ix.readCodes(r, headLen)
+	if err != nil {
+		return nil, err
+	}
+	ix.rows = io.NewSectionReader(r, rowsAt, int64(ix.n)*int64(ix.dims))
+	return ix, nil
+}
 
+// readIndexHeader reads the magic, the format and the header, checks the header
+// against t, and returns it with the offset where the inverse norms start.
+func readIndexHeader(r io.ReaderAt, size int64, t *Table) (h indexHeader, headLen int64, err error) {
+	if size < 0 {
+		return h, 0, fmt.Errorf("size %d is negative", size)
+	}
+	pre := make([]byte, min(size, int64(len(indexMagic)+2*binary.MaxVarintLen64)))
+	if err := readAt(r, pre, 0); err != nil {
+		return h, 0, err
+	}
+	if !bytes.HasPrefix(pre, indexMagic[:]) {
+		return h, 0, errors.New("not an embedding index (no MSEI magic)")
+	}
+	format, k := binary.Uvarint(pre[len(indexMagic):])
+	if k <= 0 {
+		return h, 0, errTruncatedIndex
+	}
+	if format != indexFormat {
+		return h, 0, fmt.Errorf("format %d, but this build reads only format %d", format, indexFormat)
+	}
+	hlen, k2 := binary.Uvarint(pre[len(indexMagic)+k:])
+	if k2 <= 0 || hlen > maxHeader {
+		return h, 0, errors.New("header length is malformed")
+	}
+	start := int64(len(indexMagic) + k + k2)
+	if start+int64(hlen) > size {
+		return h, 0, errTruncatedIndex
+	}
+	hdr := make([]byte, hlen)
+	if err := readAt(r, hdr, start); err != nil {
+		return h, 0, err
+	}
+	if err := json.UnmarshalStrict(hdr, &h); err != nil {
+		return h, 0, fmt.Errorf("header: %w", err)
+	}
+	if want := t.Digest(); h.TableDigest != want {
+		return h, 0, fmt.Errorf("index was embedded with table %s, not %s: rebuild it", h.TableDigest, want)
+	}
+	if h.Dims != t.dims {
+		return h, 0, fmt.Errorf("header names %d dims, the table %d", h.Dims, t.dims)
+	}
+	if h.Docs < 0 {
+		return h, 0, fmt.Errorf("header names %d docs", h.Docs)
+	}
+	return h, start + int64(hlen), nil
+}
+
+// readCodes reads everything before the rows, checks its sha256, and decodes the
+// inverse norms and sign codes that start at headLen. It returns where the rows start.
+func (ix *Index) readCodes(r io.ReaderAt, headLen int64) (int64, error) {
 	head := make([]byte, headLen+int64(ix.n)*int64(4+8*ix.words)+sha256.Size)
 	if err := readAt(r, head, 0); err != nil {
-		return nil, err
+		return 0, err
 	}
 	body := head[:len(head)-sha256.Size]
 	if sum := sha256.Sum256(body); !bytes.Equal(sum[:], head[len(body):]) {
-		return nil, errors.New("sha256 does not match the head: the index is corrupt")
+		return 0, errors.New("sha256 does not match the head: the index is corrupt")
 	}
 	b := body[headLen:]
 	ix.invNorm = make([]uint32, ix.n)
@@ -208,12 +225,11 @@ func readIndex(r io.ReaderAt, size int64, t *Table) (*Index, error) {
 		}
 		for _, c := range ix.code(i) {
 			if c != 0 {
-				return nil, fmt.Errorf("doc %d has no vector (InvNorm 0) but a sign code", i)
+				return 0, fmt.Errorf("doc %d has no vector (InvNorm 0) but a sign code", i)
 			}
 		}
 	}
-	ix.rows = io.NewSectionReader(r, int64(len(head)), int64(ix.n)*int64(ix.dims))
-	return ix, nil
+	return int64(len(head)), nil
 }
 
 // readAt fills p from r at off, calling a short read with no error, or with io.EOF,

@@ -434,7 +434,6 @@ func runParity(args []string) error {
 			res.TokenMismatch++
 		}
 	}
-
 	var vecs [][]float32
 	for p := range *passes {
 		before := l.enc.Tokens()
@@ -449,23 +448,7 @@ func runParity(args []string) error {
 	timed := res.PassSeconds[len(res.PassSeconds)-1]
 	res.TextsPerSec = float64(len(texts)) / timed
 	res.TokensPerSec = float64(res.Tokens) / timed
-
-	cos := make([]float64, len(vecs))
-	res.MinCos = 2
-	for i, v := range vecs {
-		cos[i] = cosine(v, refs[i])
-		res.MeanCos += cos[i] / float64(len(vecs))
-		res.MinCos = math.Min(res.MinCos, cos[i])
-		if m, ok := res.MinCosSubset[sample[i].Subset]; !ok || cos[i] < m {
-			res.MinCosSubset[sample[i].Subset] = cos[i]
-		}
-		if cos[i] < *minCos {
-			res.Below++
-		}
-	}
-	sorted := slices.Clone(cos)
-	sort.Float64s(sorted)
-	res.P01Cos = sorted[len(sorted)/100]
+	res.scoreCosines(vecs, refs, sample, *minCos)
 
 	b, _ := json.MarshalIndent(res, "", " ")
 	fmt.Println(string(b))
@@ -477,6 +460,28 @@ func runParity(args []string) error {
 		return fmt.Errorf("%d rows below cosine %g, %d token mismatches", res.Below, *minCos, res.TokenMismatch)
 	}
 	return nil
+}
+
+// scoreCosines fills res's cosine agreement between each encoded row and its
+// reference: the mean, the minimum overall and per subset, the 1st percentile, and the
+// count of rows below minCos.
+func (res *parityResult) scoreCosines(vecs, refs [][]float32, sample []sampleRow, minCos float64) {
+	cos := make([]float64, len(vecs))
+	res.MinCos = 2
+	for i, v := range vecs {
+		cos[i] = cosine(v, refs[i])
+		res.MeanCos += cos[i] / float64(len(vecs))
+		res.MinCos = math.Min(res.MinCos, cos[i])
+		if m, ok := res.MinCosSubset[sample[i].Subset]; !ok || cos[i] < m {
+			res.MinCosSubset[sample[i].Subset] = cos[i]
+		}
+		if cos[i] < minCos {
+			res.Below++
+		}
+	}
+	sorted := slices.Clone(cos)
+	sort.Float64s(sorted)
+	res.P01Cos = sorted[len(sorted)/100]
 }
 
 func cosine(a, b []float32) float64 {

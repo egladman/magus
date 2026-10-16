@@ -25,25 +25,7 @@ func mnrlLoss(q, d, dq, dd [][]float64, prefixes []int, tau, scale float64, work
 			a[i], na[i] = unit(q[i][:m])
 			b[i], nb[i] = unit(d[i][:m])
 		}
-		parallel(n, workers, func(_, lo, hi int) {
-			for i := lo; i < hi; i++ {
-				zi := z[i]
-				top := math.Inf(-1)
-				for j := range n {
-					zi[j] = dot(a[i], b[j]) / tau
-					top = max(top, zi[j])
-				}
-				var sum float64
-				for _, x := range zi {
-					sum += math.Exp(x - top)
-				}
-				rowLoss[i] = top + math.Log(sum) - zi[i]
-				for j, x := range zi {
-					zi[j] = math.Exp(x-top) / sum / float64(n)
-				}
-				zi[i] -= 1 / float64(n)
-			}
-		})
+		crossEntropyRows(z, rowLoss, a, b, tau, workers)
 		for _, l := range rowLoss {
 			loss += l
 		}
@@ -70,6 +52,33 @@ func mnrlLoss(q, d, dq, dd [][]float64, prefixes []int, tau, scale float64, work
 		})
 	}
 	return loss / float64(n)
+}
+
+// crossEntropyRows is the forward pass of one prefix: row i's logits z_ij = a_i·b_j/τ,
+// its softmax cross-entropy against the positive j = i into rowLoss[i], computed as
+// logsumexp about the row max, then ∂(mean loss)/∂z_ij = (softmax_ij − [i = j])/n
+// over z[i].
+func crossEntropyRows(z [][]float64, rowLoss []float64, a, b [][]float64, tau float64, workers int) {
+	n := len(z)
+	parallel(n, workers, func(_, lo, hi int) {
+		for i := lo; i < hi; i++ {
+			zi := z[i]
+			top := math.Inf(-1)
+			for j := range n {
+				zi[j] = dot(a[i], b[j]) / tau
+				top = max(top, zi[j])
+			}
+			var sum float64
+			for _, x := range zi {
+				sum += math.Exp(x - top)
+			}
+			rowLoss[i] = top + math.Log(sum) - zi[i]
+			for j, x := range zi {
+				zi[j] = math.Exp(x-top) / sum / float64(n)
+			}
+			zi[i] -= 1 / float64(n)
+		}
+	})
 }
 
 // unit is x/‖x‖ and ‖x‖.
@@ -109,53 +118,66 @@ func batchPairs(rng *rand.Rand, pairs []Pair, size int) ([][]Pair, int) {
 	}
 	order := slices.Clone(pairs)
 	rng.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
-	type keyed struct {
-		p    Pair
-		q, d uint64
-	}
-	var out [][]Pair
-	var carry []keyed
-	var cur []Pair
-	seen := map[uint64]bool{}
-	fits := func(k keyed) bool { return !seen[k.q] && !seen[k.d] && k.q != k.d }
-	add := func(k keyed) {
-		cur = append(cur, k.p)
-		seen[k.q], seen[k.d] = true, true
-	}
-	flush := func() {
-		if len(cur) >= 2 {
-			out = append(out, cur)
-		}
-		cur, seen = nil, map[uint64]bool{}
-		waiting := carry[:0:0]
-		for _, k := range carry {
-			if len(cur) < size && fits(k) {
-				add(k)
-			} else {
-				waiting = append(waiting, k)
-			}
-		}
-		carry = waiting
-	}
+	b := &noDuplicates{size: size, seen: map[uint64]bool{}}
 	for _, p := range order {
-		k := keyed{p: p, q: p.Query.key(), d: p.Doc.key()}
-		if !fits(k) {
-			carry = append(carry, k)
+		k := keyedPair{p: p, q: p.Query.key(), d: p.Doc.key()}
+		if !b.fits(k) {
+			b.carry = append(b.carry, k)
 			continue
 		}
-		add(k)
-		if len(cur) == size {
-			flush()
+		b.add(k)
+		if len(b.cur) == size {
+			b.flush()
 		}
 	}
 	// Each flush takes cur's pairs out for good, so this ends; what stays in carry is
 	// only pairs whose query bag is their doc bag, which never fit.
-	for len(cur) > 0 {
-		flush()
+	for len(b.cur) > 0 {
+		b.flush()
 	}
 	dropped := len(pairs)
-	for _, b := range out {
-		dropped -= len(b)
+	for _, batch := range b.out {
+		dropped -= len(batch)
 	}
-	return out, dropped
+	return b.out, dropped
+}
+
+type keyedPair struct {
+	p    Pair
+	q, d uint64
+}
+
+// noDuplicates fills batches of up to size pairs in which no query or doc bag repeats,
+// carrying a pair that does not fit cur to the next batch it fits.
+type noDuplicates struct {
+	size  int
+	out   [][]Pair
+	carry []keyedPair
+	cur   []Pair
+	seen  map[uint64]bool
+}
+
+func (b *noDuplicates) fits(k keyedPair) bool { return !b.seen[k.q] && !b.seen[k.d] && k.q != k.d }
+
+func (b *noDuplicates) add(k keyedPair) {
+	b.cur = append(b.cur, k.p)
+	b.seen[k.q], b.seen[k.d] = true, true
+}
+
+// flush closes cur, keeping it only with two pairs or more, and opens the next batch
+// with every carried pair that fits it.
+func (b *noDuplicates) flush() {
+	if len(b.cur) >= 2 {
+		b.out = append(b.out, b.cur)
+	}
+	b.cur, b.seen = nil, map[uint64]bool{}
+	waiting := b.carry[:0:0]
+	for _, k := range b.carry {
+		if len(b.cur) < b.size && b.fits(k) {
+			b.add(k)
+		} else {
+			waiting = append(waiting, k)
+		}
+	}
+	b.carry = waiting
 }

@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"os"
 	"os/exec"
@@ -132,10 +133,40 @@ func runTexts(args []string) error {
 		return err
 	}
 
-	var texts []teacher.Text
-	forced := map[string]bool{}
-	var nFiles, nFigures int
-	var inputs []sourceRecord
+	mix := textMix{forced: map[string]bool{}}
+	if err := mix.addRepo(records, files, *rev, *sourcesPath, *maxBytes); err != nil {
+		return err
+	}
+	repo := len(mix.texts)
+
+	if err := mix.addCornstack(*cache, skipped, *ratio, *maxBytes); err != nil {
+		return err
+	}
+	sortByHash(mix.texts)
+	digest, err := mix.write(*out)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("files at %s; %d texts: %d chunks of %d files, %d figures, %d CoRNStack documents and %d queries; texts %s; %d forced tokens\n",
+		*rev, len(mix.texts), repo-mix.figures, mix.files, mix.figures, mix.docs, mix.queries, digest, len(mix.forced))
+	return nil
+}
+
+// textMix is the training texts as texts assembles them, the forced tokens, and the
+// counts it reports.
+type textMix struct {
+	texts          []teacher.Text
+	forced         map[string]bool
+	inputs         []sourceRecord
+	files, figures int
+	docs, queries  int
+}
+
+// addRepo adds the in-repo texts the manifest records: each train-split file, which
+// must hash to its pinned digest at rev, cut into chunks of at most maxBytes, and each
+// figure outside eval fold 0. It collects the forced tokens and the input records for
+// addCornstack.
+func (m *textMix) addRepo(records []sourceRecord, files map[string][]byte, rev, sourcesPath string, maxBytes int) error {
 	for _, r := range records {
 		switch r.Kind {
 		case "file":
@@ -143,32 +174,35 @@ func runTexts(args []string) error {
 				continue
 			}
 			if sha256Hex(files[r.Path]) != r.SHA256 {
-				return fmt.Errorf("%s at %s does not hash to the manifest's %s: regenerate %s", r.Path, *rev, r.SHA256, *sourcesPath)
+				return fmt.Errorf("%s at %s does not hash to the manifest's %s: regenerate %s", r.Path, rev, r.SHA256, sourcesPath)
 			}
-			nFiles++
-			for _, c := range chunks(string(files[r.Path]), *maxBytes) {
-				texts = append(texts, teacher.Text{ID: r.Path + ":" + c.span(), Text: c.text})
+			m.files++
+			for _, c := range chunks(string(files[r.Path]), maxBytes) {
+				m.texts = append(m.texts, teacher.Text{ID: r.Path + ":" + c.span(), Text: c.text})
 			}
 		case "figure":
 			if r.Fold != 0 {
-				nFigures++
-				texts = append(texts, teacher.Text{ID: "figure:" + r.ID, Text: r.Title + "\n" + r.Desc})
+				m.figures++
+				m.texts = append(m.texts, teacher.Text{ID: "figure:" + r.ID, Text: r.Title + "\n" + r.Desc})
 			}
 		case "forced":
 			for _, t := range r.Tokens {
-				forced[t] = true
+				m.forced[t] = true
 			}
 		case "input":
-			inputs = append(inputs, r)
+			m.inputs = append(m.inputs, r)
 		default:
-			return fmt.Errorf("%s: record kind %q", *sourcesPath, r.Kind)
+			return fmt.Errorf("%s: record kind %q", sourcesPath, r.Kind)
 		}
 	}
-	repo := len(texts)
+	return nil
+}
 
-	rows := int(math.Round(*ratio * float64(repo)))
-	var docs, queries int
-	for _, in := range inputs {
+// addCornstack adds ratio CoRNStack rows per text added so far, each a query and the
+// head of its document, read from the inputs in order until the rows are filled.
+func (m *textMix) addCornstack(cache string, skipped map[string]bool, ratio float64, maxBytes int) error {
+	rows := int(math.Round(ratio * float64(len(m.texts))))
+	for _, in := range m.inputs {
 		switch {
 		case skipped[in.Name]:
 			fmt.Printf("input %s: left out by -skip\n", in.Name)
@@ -179,28 +213,32 @@ func runTexts(args []string) error {
 			fmt.Printf("input %s: not read, the earlier inputs filled -cornstack\n", in.Name)
 			continue
 		}
-		path, err := verify(*cache, inputRecord{Name: in.Name, Path: in.Path, SHA256: in.SHA256})
+		path, err := verify(cache, inputRecord{Name: in.Name, Path: in.Path, SHA256: in.SHA256})
 		if err != nil {
 			return err
 		}
-		got, err := readCornstack(path, in.Name, rows, *maxBytes)
+		got, err := readCornstack(path, in.Name, rows, maxBytes)
 		if err != nil {
 			return err
 		}
 		for _, t := range got {
 			if strings.HasSuffix(t.ID, ":query") {
-				queries++
+				m.queries++
 			} else {
-				docs++
+				m.docs++
 			}
 		}
-		texts = append(texts, got...)
+		m.texts = append(m.texts, got...)
 		rows -= len(got) / 2
 	}
 	if rows > 0 {
-		return fmt.Errorf("the inputs hold %d CoRNStack rows too few for -cornstack %g", rows, *ratio)
+		return fmt.Errorf("the inputs hold %d CoRNStack rows too few for -cornstack %g", rows, ratio)
 	}
+	return nil
+}
 
+// sortByHash orders texts by IDHash under textsSalt, then by id.
+func sortByHash(texts []teacher.Text) {
 	slices.SortFunc(texts, func(a, b teacher.Text) int {
 		ha, hb := distill.IDHash(textsSalt, a.ID), distill.IDHash(textsSalt, b.ID)
 		if ha != hb {
@@ -211,31 +249,30 @@ func runTexts(args []string) error {
 		}
 		return strings.Compare(a.ID, b.ID)
 	})
+}
+
+// write writes texts.jsonl and the sorted forced.txt under out and returns the texts'
+// sha256.
+func (m *textMix) write(out string) (string, error) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
-	for _, t := range texts {
+	for _, t := range m.texts {
 		if err := enc.Encode(t); err != nil {
-			return err
+			return "", err
 		}
 	}
-	tokens := make([]string, 0, len(forced))
-	for t := range forced {
-		tokens = append(tokens, t)
+	tokens := slices.Sorted(maps.Keys(m.forced))
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		return "", err
 	}
-	slices.Sort(tokens)
-	if err := os.MkdirAll(*out, 0o755); err != nil {
-		return err
+	if err := writeAtomic(filepath.Join(out, "texts.jsonl"), buf.Bytes()); err != nil {
+		return "", err
 	}
-	if err := writeAtomic(filepath.Join(*out, "texts.jsonl"), buf.Bytes()); err != nil {
-		return err
+	if err := writeAtomic(filepath.Join(out, "forced.txt"), []byte(strings.Join(tokens, "\n")+"\n")); err != nil {
+		return "", err
 	}
-	if err := writeAtomic(filepath.Join(*out, "forced.txt"), []byte(strings.Join(tokens, "\n")+"\n")); err != nil {
-		return err
-	}
-	fmt.Printf("files at %s; %d texts: %d chunks of %d files, %d figures, %d CoRNStack documents and %d queries; texts %s; %d forced tokens\n",
-		*rev, len(texts), repo-nFigures, nFiles, nFigures, docs, queries, sha256Hex(buf.Bytes()), len(tokens))
-	return nil
+	return sha256Hex(buf.Bytes()), nil
 }
 
 func readSources(path string) ([]sourceRecord, error) {

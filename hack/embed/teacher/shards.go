@@ -106,6 +106,30 @@ type RunStats struct {
 	Elapsed                  time.Duration
 }
 
+// openRun opens the run under dir for appending: it returns the shards its manifest
+// records as done, by input digest, and the manifest, which it starts with spec's run
+// record when it is new. The caller closes the manifest.
+func openRun(dir string, spec RunSpec) (map[string]Record, *os.File, error) {
+	if err := os.MkdirAll(filepath.Join(dir, "objects"), 0o755); err != nil {
+		return nil, nil, err
+	}
+	done, err := readManifest(filepath.Join(dir, "manifest.jsonl"), spec)
+	if err != nil {
+		return nil, nil, err
+	}
+	man, err := os.OpenFile(filepath.Join(dir, "manifest.jsonl"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return nil, nil, err
+	}
+	if done == nil {
+		if err := appendRecord(man, Record{Kind: "run", Spec: &spec}); err != nil {
+			man.Close()
+			return nil, nil, err
+		}
+	}
+	return done, man, nil
+}
+
 // Run encodes texts shard by shard under dir, which holds manifest.jsonl and objects/.
 // Each finished shard is written atomically and then appended to the manifest, so a run
 // stopped at any point resumes from its last whole shard. maxShards > 0 stops after that
@@ -114,23 +138,11 @@ func Run(dir string, spec RunSpec, texts []Text, enc Embedder, maxShards int, pr
 	if spec.ShardSize < 1 || spec.Dim < 1 {
 		return RunStats{}, fmt.Errorf("run spec needs a shard size and dim: %+v", spec)
 	}
-	if err := os.MkdirAll(filepath.Join(dir, "objects"), 0o755); err != nil {
-		return RunStats{}, err
-	}
-	done, err := readManifest(filepath.Join(dir, "manifest.jsonl"), spec)
-	if err != nil {
-		return RunStats{}, err
-	}
-	man, err := os.OpenFile(filepath.Join(dir, "manifest.jsonl"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	done, man, err := openRun(dir, spec)
 	if err != nil {
 		return RunStats{}, err
 	}
 	defer man.Close()
-	if done == nil {
-		if err := appendRecord(man, Record{Kind: "run", Spec: &spec}); err != nil {
-			return RunStats{}, err
-		}
-	}
 
 	var st RunStats
 	start := time.Now()
