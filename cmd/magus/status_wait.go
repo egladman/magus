@@ -65,11 +65,11 @@ func reserveSeat(ctx context.Context, reader int, argv []string, claims []types.
 	var refused *broker.Error
 	switch {
 	case errors.Is(err, broker.ErrUnavailable), errors.As(err, &refused) && refused.Code == broker.CodeDraining:
-		slog.InfoContext(ctx, fmt.Sprintf("no seat is reserved for pid %d (%v); it asks the budget itself when it starts", reader, err),
-			attr.Notice(""), attr.Component("magus"))
+		slog.InfoContext(ctx, fmt.Sprintf("no seat is reserved for pid %d; it asks the budget itself when it starts", reader),
+			attr.Error(err), attr.Notice(""), attr.Component("magus"))
 		return nil
 	case errors.As(err, &refused) && refused.Code == broker.CodeUnknownType:
-		return fmt.Errorf("%w: the running broker predates seat reservations; `%s` stops it, and the next run starts a current one", err, hint.BinaryName()+" broker stop")
+		return fmt.Errorf("%w: the running broker predates seat reservations, so `%s` stops it and the next run starts a current one", err, hint.BinaryName()+" broker stop")
 	}
 	return err
 }
