@@ -30,14 +30,14 @@ const (
 	DottedFilename = ".magus.yaml"
 )
 
-// DefaultHistoryPath returns <xdg.StateDir>/magus/history/v1.json. The path is
+// DefaultHistoryPath returns <xdg.StateDir>/magus/history/history.jsonl. The path is
 // outside .magus/ so it is never swept into a build-cache GHA step.
 func DefaultHistoryPath() (string, error) {
 	base, err := xdg.StateDir()
 	if err != nil {
 		return "", fmt.Errorf("config: resolve the default history_path, set XDG_STATE_HOME to a writable absolute path or history_path: %w", err)
 	}
-	return filepath.Join(base, "magus", "history", "v1.json"), nil
+	return filepath.Join(base, "magus", "history", "history.jsonl"), nil
 }
 
 // withDefaultHistoryPath is [Defaults] with history_path resolved, the base every

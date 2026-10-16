@@ -92,8 +92,9 @@ type Config struct {
 	// exists for is the one where nobody is watching.
 	StallTimeout time.Duration `json:"stall_timeout" yaml:"stall_timeout"`
 
-	// HistoryPath is the path to the runtime-history JSON used by volatility detection,
-	// CI forecaster, graph timing, and bisect. Defaults to $XDG_STATE_HOME/magus/history/v1.json.
+	// HistoryPath is the path to the runtime-history JSON Lines store used by volatility
+	// detection, CI forecaster, graph timing, and bisect. Defaults to
+	// $XDG_STATE_HOME/magus/history/history.jsonl.
 	HistoryPath string `json:"history_path" yaml:"history_path"`
 
 	// DryRun prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1.

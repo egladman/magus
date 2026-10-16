@@ -127,7 +127,7 @@ func runHistoryImport(ctx context.Context, cfg config.Config, args []string) err
 	bindDisplayFlags(fs)
 	imf := flaggen.BindConfigHistoryImport(fs, flaggen.ConfigHistoryImportDefaults{History: cfg.HistoryPath})
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: magus config history import [--history <path>] <history.json>...")
+		fmt.Fprintln(os.Stderr, "Usage: magus config history import [--history <path>] <history.jsonl>...")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Merge runtime-history JSON files into the history (created if absent). For each")
 		fmt.Fprintln(os.Stderr, "(project, target) the freshest entry wins, so the per-shard histories one sharded")
