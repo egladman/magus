@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -106,6 +107,50 @@ func (a refusingAdmitter) Request(context.Context, types.MachineClaim) (types.Ma
 }
 
 func (refusingAdmitter) Release(context.Context, string) {}
+
+// groupAdmitter is a budget that also holds process groups, recording each hold and
+// release in order.
+type groupAdmitter struct {
+	*budgetAdmitter
+	events []string
+}
+
+func (a *groupAdmitter) HoldGroup(_ context.Context, claim string, pgid int, command string) (string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.events = append(a.events, fmt.Sprintf("hold %d (%s) on %s", pgid, command, claim))
+	return "hold-" + claim, nil
+}
+
+func (a *groupAdmitter) ReleaseHold(_ context.Context, id string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.events = append(a.events, "release "+id)
+}
+
+// A process group a step starts rides the step's own claim, and is let go before it.
+func TestAStepGroupRidesItsStepsClaim(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "")
+	b, _ := testBudget(t, 10_000, 8)
+	admit := &groupAdmitter{budgetAdmitter: &budgetAdmitter{budget: b}}
+	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(admit))
+	require.NoError(t, err)
+
+	_, err = c.RunAll(t.Context(), []Step{{ProjectPath: ".", Target: "go-test"}},
+		func(ctx context.Context, _ Step) error {
+			holdStepGroup(ctx, 4242, "sleep 30")()
+			return nil
+		})
+	require.NoError(t, err)
+
+	require.Len(t, admit.released, 1)
+	claim := admit.released[0]
+	assert.Equal(t, []string{"hold 4242 (sleep 30) on " + claim, "release hold-" + claim}, admit.events)
+
+	admit.events = nil
+	holdStepGroup(t.Context(), 4242, "sleep 30")()
+	assert.Empty(t, admit.events, "outside a claimed step there is no claim to ride")
+}
 
 // An admitter that refuses with an exit status refused the step: best-effort admits a
 // step only when nothing answered.

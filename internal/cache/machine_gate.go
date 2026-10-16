@@ -108,8 +108,15 @@ type machineGate struct {
 // A broker that dies, or a transport that breaks, admits the step and says so once
 // under best-effort; under required it refuses with MGS3022 (exit 69).
 func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func(), error) {
+	_, release, err := g.claim(ctx, c)
+	return release, err
+}
+
+// claim is acquire, also returning the id of the claim granted: "" when nothing
+// arbitrates the step.
+func (g *machineGate) claim(ctx context.Context, c types.MachineClaim) (string, func(), error) {
 	if g == nil || g.admit == nil {
-		return func() {}, nil
+		return "", func() {}, nil
 	}
 	for {
 		v, err := g.admit.Request(ctx, c)
@@ -117,26 +124,26 @@ func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func()
 			// An admitter that answers with an exit status refused the step itself (its
 			// workspace's admission config does not read), which no broker policy excuses.
 			if exit := (types.ExitError{}); errors.As(err, &exit) {
-				return nil, err
+				return "", nil, err
 			}
 			if g.required {
-				return nil, brokerUnavailableError(c, err)
+				return "", nil, brokerUnavailableError(c, err)
 			}
-			return g.admitOpen(ctx, err), nil
+			return "", g.admitOpen(ctx, err), nil
 		}
 		switch {
 		case v.Granted:
-			return g.releaser(v.ID), nil
+			return v.ID, g.releaser(v.ID), nil
 		case !v.Fits:
-			return nil, machineDoesNotFitError(c, v)
+			return "", nil, machineDoesNotFitError(c, v)
 		case v.OwnRun:
 			// Falls out of the switch to the wait below.
 		case blindToOwnAncestry(ctx):
 			// A nested magus that cannot name its ancestors cannot be excused from its own
 			// parent's claim, so the refusal names the fix rather than the holders.
-			return nil, machineBlindError(c, v)
+			return "", nil, machineBlindError(c, v)
 		default:
-			return nil, machineBusyError(c, v)
+			return "", nil, machineBusyError(c, v)
 		}
 		// The holders are this run's own steps, whose progress feeds the stall watchdog,
 		// or another invocation of this process or of this job tree holding its validation
@@ -144,7 +151,7 @@ func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func()
 		ProgressFromContext(ctx).Beat()
 		select {
 		case <-ctx.Done():
-			return nil, fmt.Errorf("machine budget: gave up waiting for %s %s: %w", displayProject(c.Project), c.Target, ctx.Err())
+			return "", nil, fmt.Errorf("machine budget: gave up waiting for %s %s: %w", displayProject(c.Project), c.Target, ctx.Err())
 		case <-time.After(machinePollEvery):
 		}
 	}
@@ -173,6 +180,59 @@ func (g *machineGate) releaser(id string) func() {
 		ctx, cancel := context.WithTimeout(context.Background(), machineReleaseTimeout)
 		defer cancel()
 		g.admit.Release(ctx, id)
+	}
+}
+
+// GroupHolder is an admitter that ends a step's process groups with the step's claim:
+// the broker stops a group still running when the claim is released, or when this
+// process's connection to it closes, as it does when the process dies.
+type GroupHolder interface {
+	HoldGroup(ctx context.Context, claim string, pgid int, command string) (string, error)
+	ReleaseHold(ctx context.Context, id string)
+}
+
+// stepGroups is where a claimed step's process groups are held: its admitter and claim.
+type stepGroups struct {
+	holder GroupHolder
+	claim  string
+}
+
+type stepGroupsKey struct{}
+
+// withStepGroups returns ctx holding the process groups started under it against claim,
+// when admit can hold them.
+func withStepGroups(ctx context.Context, admit MachineAdmitter, claim string) context.Context {
+	holder, ok := admit.(GroupHolder)
+	if !ok || claim == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, stepGroupsKey{}, stepGroups{holder: holder, claim: claim})
+}
+
+// holdStepGroup hands the machine budget process group pgid, which the step ctx admits
+// started, so the group ends with the step's claim: when the claim is released, or when
+// this process dies and its connection to the broker closes. Call release once the
+// group's leader has exited, before it is reaped: a stop after the reap could reach
+// another group that took the id. Outside a claimed step, or under an admitter that
+// cannot stop groups, it holds nothing.
+//
+// TODO: spawn.Exec does not call this yet, so no step's group rides its claim. It needs
+// a hook spawn calls with each group it starts, which claimMachine sets on ctx.
+func holdStepGroup(ctx context.Context, pgid int, command string) (release func()) {
+	g, ok := ctx.Value(stepGroupsKey{}).(stepGroups)
+	if !ok {
+		return func() {}
+	}
+	id, err := g.holder.HoldGroup(ctx, g.claim, pgid, command)
+	if err != nil {
+		slog.WarnContext(ctx, fmt.Sprintf("process group %d (%s) runs unheld: if this run dies, nothing stops it", pgid, command),
+			attr.Error(err))
+		return func() {}
+	}
+	return func() {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), machineReleaseTimeout)
+		defer cancel()
+		g.holder.ReleaseHold(ctx, id)
 	}
 }
 

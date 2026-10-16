@@ -1147,7 +1147,8 @@ func stepSlots(s Step, lim *Limiter) int {
 
 // claimMachine takes the machine-wide half of a step's admission: the concurrency slot
 // and the declared memory arbitrated across every magus on the host. It returns ctx
-// marked as holding the claim, plus the release that hands it back.
+// marked as holding the claim, plus the release that hands it back. A process group the
+// step hands holdStepGroup rides the claim and ends with it.
 //
 // Only a step that will execute takes it. A step whose entry is in the local store
 // ([Cache.localHitKey]) replays under its local slot alone: replay spends none of the
@@ -1181,7 +1182,7 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 	if held.machineClaim {
 		return ctx, func() {}, nil
 	}
-	release, err := c.machine.acquire(ctx, types.MachineClaim{
+	id, release, err := c.machine.claim(ctx, types.MachineClaim{
 		Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
 		MemoryMB: s.MemoryMB, Sizing: s.MemorySizing, Slots: slots,
 		PID: os.Getpid(), Dir: workingDir(),
@@ -1191,6 +1192,9 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 		return ctx, nil, err
 	}
 	held.machineClaim = true
+	if id != "" {
+		ctx = withStepGroups(ctx, c.machine.admit, id)
+	}
 	return held.on(ctx), release, nil
 }
 
