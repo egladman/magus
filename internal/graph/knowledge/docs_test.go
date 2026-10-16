@@ -53,9 +53,9 @@ func TestSectionBodiesSplitAtEveryHeading(t *testing.T) {
 	body := []byte("Lead paragraph.\n\n# Top\n\nintro text\n\n## Sub\n\nsub text\n```sh\n# not a heading\n```\n\n# Next\nlast\n")
 	got := sectionBodies(body, docHeadings(body))
 	assert.Equal(t, map[string]string{
-		"":    "Lead paragraph.",
-		"top": "intro text",
-		"sub": "sub text\n```sh\n# not a heading\n```",
+		"":     "Lead paragraph.",
+		"top":  "intro text",
+		"sub":  "sub text\n```sh\n# not a heading\n```",
 		"next": "last",
 	}, got, "a section ends at the next heading of any level; a fenced # is body; text before the first heading is the page's")
 }
