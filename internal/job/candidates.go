@@ -11,9 +11,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// DeletionCandidatesLimit is how many candidates a text rendering lists before it counts
-// the rest.
-const DeletionCandidatesLimit = 12
+// findingsLimit is how many entries a text rendering of a findings block lists before it
+// counts the rest.
+const findingsLimit = 12
 
 const deletionHeading = "deletion candidates in the write paths: nothing else names them"
 
@@ -46,24 +46,27 @@ func UnreferencedInPaths(row types.Job, unreferenced []types.UnreferencedEntry) 
 // RenderDeletionCandidates writes candidates as the block [Terms] renders, for a command
 // that prints no terms. Nothing is written for none.
 func RenderDeletionCandidates(w io.Writer, candidates []types.UnreferencedEntry) {
-	lines := deletionLines(candidates)
+	renderBlock(w, deletionHeading, deletionLines(candidates))
+}
+
+func renderBlock(w io.Writer, heading string, lines []string) {
 	if len(lines) == 0 {
 		return
 	}
-	fmt.Fprintln(w, deletionHeading)
+	fmt.Fprintln(w, heading)
 	for _, l := range lines {
 		fmt.Fprintf(w, "  %s\n", l)
 	}
 }
 
-// deletionLines is one line per candidate up to DeletionCandidatesLimit, then the caveat
+// deletionLines is one line per candidate up to findingsLimit, then the caveat
 // the measurement carries. The graph cannot see reflection, interface dispatch or a
 // consumer outside the workspace, so a candidate is a place to look before deleting.
 func deletionLines(candidates []types.UnreferencedEntry) []string {
 	if len(candidates) == 0 {
 		return nil
 	}
-	shown := candidates[:min(len(candidates), DeletionCandidatesLimit)]
+	shown := candidates[:min(len(candidates), findingsLimit)]
 	lines := make([]string, 0, len(shown)+2)
 	for _, c := range shown {
 		line := c.Label
@@ -82,10 +85,6 @@ func deletionLines(candidates []types.UnreferencedEntry) []string {
 		"finish each or delete it; reflection, interface dispatch and consumers outside this workspace are invisible to this list, so confirm before deleting")
 }
 
-// referencedOutsideLimit is how many files a text rendering lists before it counts the
-// rest.
-const referencedOutsideLimit = 12
-
 const referencedHeading = "referenced outside the write paths: files that use what the write paths define"
 
 // ReferencedFile is one file outside a job's write paths that references a symbol a write
@@ -94,7 +93,8 @@ type ReferencedFile struct {
 	// File is the write path to add when the job's change reaches it.
 	File  string `json:"file"  yaml:"file"`
 	Count int    `json:"count" yaml:"count"`
-	// Uses are the write paths whose symbols File references, in declaration order.
+	// Uses are the write paths, or the files under a glob or directory write path, whose
+	// symbols File references, in declaration order.
 	Uses []string `json:"uses" yaml:"uses"`
 }
 
@@ -171,21 +171,14 @@ func generatedFile(projects []*types.Project, file string) bool {
 // RenderReferencedOutside writes files as the block [Terms] renders, for a command that
 // prints no terms. Nothing is written for none.
 func RenderReferencedOutside(w io.Writer, files []ReferencedFile) {
-	lines := referencedLines(files)
-	if len(lines) == 0 {
-		return
-	}
-	fmt.Fprintln(w, referencedHeading)
-	for _, l := range lines {
-		fmt.Fprintf(w, "  %s\n", l)
-	}
+	renderBlock(w, referencedHeading, referencedLines(files))
 }
 
 func referencedLines(files []ReferencedFile) []string {
 	if len(files) == 0 {
 		return nil
 	}
-	shown := files[:min(len(files), referencedOutsideLimit)]
+	shown := files[:min(len(files), findingsLimit)]
 	lines := make([]string, 0, len(shown)+2)
 	for _, f := range shown {
 		kind := "uses"

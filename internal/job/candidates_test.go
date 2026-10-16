@@ -98,7 +98,7 @@ func TestRenderReferencedOutsideCapsAndSaysWhatToAdd(t *testing.T) {
 	assert.Empty(t, empty.String(), "nothing is written for none")
 
 	files := []ReferencedFile{{File: "a_test.go", Count: 2, Uses: []string{"a.go"}}}
-	for i := range referencedOutsideLimit + 1 {
+	for i := range findingsLimit + 1 {
 		files = append(files, ReferencedFile{File: fmt.Sprintf("f%02d.go", i), Count: 1, Uses: []string{"a.go#Run"}})
 	}
 	var out strings.Builder
@@ -119,7 +119,7 @@ func TestRenderDeletionCandidatesCapsAndCarriesTheCaveat(t *testing.T) {
 	assert.Empty(t, empty.String(), "nothing is written for none")
 
 	var many []types.UnreferencedEntry
-	for i := range DeletionCandidatesLimit + 3 {
+	for i := range findingsLimit + 3 {
 		many = append(many, unreferenced(fmt.Sprintf("f%02d", i), "Function", "a.go:1"))
 	}
 	var out strings.Builder
