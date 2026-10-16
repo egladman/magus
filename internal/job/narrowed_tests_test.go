@@ -61,7 +61,7 @@ func refuseNarrowedIn(root string, row types.Job) error {
 	var errs []error
 	for _, p := range narrowedTestProblems(&Store{root: root}, row) {
 		if p.Code != types.JobCheckUnrunnable {
-			return fmt.Errorf("code %s, want %s", p.Code, types.JobCheckUnrunnable)
+			return fmt.Errorf("code %s, want %s", string(p.Code), string(types.JobCheckUnrunnable))
 		}
 		errs = append(errs, errors.New(p.Message+": "+p.Fix))
 	}
