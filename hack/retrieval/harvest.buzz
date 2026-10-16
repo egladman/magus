@@ -1,0 +1,712 @@
+import "crypto";
+import "encoding/json";
+import "env";
+import "fs";
+import "path";
+import "std";
+import "vcs";
+
+final USAGE = "usage: magus buzz hack/retrieval/harvest.buzz <holdout-after YYYY-MM-DD> [out]";
+final SOURCE = "transcript";
+final WINDOW = 10;
+final VERBS = ["query", "refs", "explain"];
+final WRITE_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
+// The flags of magus, query, refs and run that take a value, so the value is not read as
+// a query term or a project.
+final VALUE_FLAGS = ["o", "output", "concurrency", "root", "config", "budget", "kind", "url", "limit", "rename", "timeout", "depth", "shard", "n-shards", "race", "skip"];
+
+final DATE = std\pattern(`^\d\d\d\d-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$`);
+final ASSIGNMENT = std\pattern(`^[A-Za-z_][A-Za-z0-9_]*=`);
+final DEFINITION = std\pattern(`^(\S+):\d+-\d+(\s|$)`);
+final FIELD_TERM = std\pattern(`^-?([a-z_]+(!=|=~|=)|(kind|project|relation|id):)`);
+final EXTENSION = std\pattern(`\.(go|buzz|ts|tsx|js|mjs|md|json|jsonl|yaml|yml|toml|proto|txt|txtar|sh|py|css|html|tmpl|lock|mod|sum|svg)$`);
+final IDENTIFIER = std\pattern(`^[A-Za-z_][A-Za-z0-9_.]*$`);
+final UPPER = std\pattern(`[A-Z]`);
+// An output ref older builds took as `magus query <ref>`: a log lookup, not a search.
+final RUN_REF = std\pattern(`^(out|grd|inv)[0-9a-f]+$`);
+
+export object Gold {
+    path: str,
+    cwd: str,
+    // hint is "file", "dir", or "auto" to ask the checkout which one path is.
+    hint: str,
+    grade: int,
+}
+
+export object Retrieval {
+    verb: str,
+    query: str,
+}
+
+// Step is one simple command or tool call worth judging. call is the ordinal of the tool
+// call it came from, so a window counts tool calls, not steps.
+export object Step {
+    call: int,
+    date: str,
+    retrieval: Retrieval?,
+    gold: [Gold],
+}
+
+object Call {
+    id: str,
+    tool: str,
+    date: str,
+    cwd: str,
+    command: str = "",
+    file: str = "",
+    ranged: bool = false,
+}
+
+object Outcome {
+    refused: bool,
+    errored: bool,
+    text: str,
+}
+
+export object Counts {
+    files: int = 0,
+    filesWithCalls: int = 0,
+    query: int = 0,
+    refs: int = 0,
+    explain: int = 0,
+    refused: int = 0,
+    written: int = 0,
+    dev: int = 0,
+    holdout: int = 0,
+    reformulations: int = 0,
+    noGold: int = 0,
+    dropped: int = 0,
+    duplicates: int = 0,
+}
+
+object Lexer {
+    segs: mut [[str]],
+    words: mut [str],
+    word: str = "",
+    started: bool = false,
+    redirect: bool = false,
+
+    fun endWord() > void {
+        if (this.started) {
+            if (this.redirect) {
+                this.redirect = false;
+            } else {
+                this.words.append(this.word);
+            }
+        }
+        this.word = "";
+        this.started = false;
+    }
+
+    fun endSegment() > void {
+        this.endWord();
+        if (this.words.len() > 0) {
+            this.segs.append(this.words);
+            this.words = mut [<str>];
+        }
+    }
+}
+
+fun isDigits(text: str) > bool {
+    if (text == "") {
+        return false;
+    }
+    for (var i = 0; i < text.len(); i = i + 1) {
+        final b = text.byte(i);
+        if (b < 48 or b > 57) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// segments splits a shell command into the words of each simple command. It honors quotes
+// and escapes, drops redirections, comments and heredoc bodies, and leaves expansions as
+// written: a heredoc that mentions magus must not read as a call.
+export fun segments(command: str) > [[str]] {
+    final lx = mut Lexer{ segs = mut [<[str]>], words = mut [<str>] };
+    final n = command.len();
+    var quote = "";
+    var heredoc = "";
+    var i = 0;
+    while (i < n) {
+        final c = command.sub(i, len: 1);
+        if (quote != "") {
+            if (c == quote) {
+                quote = "";
+            } else if (c == "\\" and quote == "\"" and i + 1 < n) {
+                lx.word = lx.word + command.sub(i + 1, len: 1);
+                i = i + 1;
+            } else {
+                lx.word = lx.word + c;
+            }
+            i = i + 1;
+            continue;
+        }
+        if (c == "'" or c == "\"") {
+            quote = c;
+            lx.started = true;
+        } else if (c == "\\" and i + 1 < n) {
+            final next = command.sub(i + 1, len: 1);
+            if (next != "\n") {
+                lx.word = lx.word + next;
+                lx.started = true;
+            }
+            i = i + 1;
+        } else if (c == "#" and !lx.started) {
+            while (i + 1 < n and command.sub(i + 1, len: 1) != "\n") {
+                i = i + 1;
+            }
+        } else if (c == "\n") {
+            lx.endSegment();
+            if (heredoc != "") {
+                var j = i + 1;
+                var closed = false;
+                while (j < n and !closed) {
+                    var k = j;
+                    while (k < n and command.sub(k, len: 1) != "\n") {
+                        k = k + 1;
+                    }
+                    closed = command.sub(j, len: k - j).trim() == heredoc;
+                    j = k + 1;
+                }
+                i = j - 1;
+                heredoc = "";
+            }
+        } else if (c == " " or c == "\t") {
+            lx.endWord();
+        } else if (c == ";" or c == "&" or c == "|" or c == "(" or c == ")") {
+            lx.endSegment();
+        } else if (c == "<" and i + 1 < n and command.sub(i + 1, len: 1) == "<") {
+            lx.endWord();
+            i = i + 2;
+            if (i < n and command.sub(i, len: 1) == "<") {
+                lx.redirect = true;
+            } else {
+                if (i < n and command.sub(i, len: 1) == "-") {
+                    i = i + 1;
+                }
+                while (i < n and command.sub(i, len: 1) == " ") {
+                    i = i + 1;
+                }
+                final start = i;
+                while (i < n and " \t\n;&|()".indexOf(command.sub(i, len: 1)) == null) {
+                    i = i + 1;
+                }
+                heredoc = command.sub(start, len: i - start).replace("'", with: "").replace("\"", with: "");
+                i = i - 1;
+            }
+        } else if (c == ">" or c == "<") {
+            if (isDigits(lx.word)) {
+                lx.word = "";
+                lx.started = false;
+            } else {
+                lx.endWord();
+            }
+            while (i + 1 < n and ">&".indexOf(command.sub(i + 1, len: 1)) != null) {
+                i = i + 1;
+            }
+            lx.redirect = true;
+        } else {
+            lx.word = lx.word + c;
+            lx.started = true;
+        }
+        i = i + 1;
+    }
+    lx.endSegment();
+    return lx.segs;
+}
+
+export object Invocation {
+    sub: str,
+    rest: [str],
+    flags: [str],
+}
+
+// invocation reads one simple command as a magus call: its subcommand, the positional
+// words after it, and the flag names it set. null when the command is not magus.
+export fun invocation(words: [str]) > Invocation? {
+    var i = 0;
+    while (i < words.len() and ASSIGNMENT.match(words[i]) != null) {
+        i = i + 1;
+    }
+    if (i >= words.len() or (words[i] != "magus" and !words[i].endsWith("/magus"))) {
+        return null;
+    }
+    final positional = mut [<str>];
+    final flags = mut [<str>];
+    i = i + 1;
+    while (i < words.len()) {
+        final w = words[i];
+        if (w == "--") {
+            break;
+        }
+        if (w.len() > 1 and w.startsWith("-") and w.indexOf(":") == null) {
+            var name = if (w.startsWith("--")) w.sub(2, len: w.len() - 2) else w.sub(1, len: w.len() - 1);
+            final eq = name.indexOf("=");
+            if (eq != null) {
+                name = name.sub(0, len: eq!);
+            } else if (VALUE_FLAGS.indexOf(name) != null) {
+                i = i + 1;
+            }
+            flags.append(name);
+        } else {
+            positional.append(w);
+        }
+        i = i + 1;
+    }
+    if (positional.len() == 0) {
+        return null;
+    }
+    return Invocation{ sub = positional[0], rest = positional.sub(1, len: positional.len() - 1), flags = flags };
+}
+
+// explainedPath is the path an explain names, workspace-relative when it is a file: or dir:
+// node id, or "" when it names another kind of node.
+fun explainedPath(arg: str) > str {
+    if (arg.startsWith("file:")) {
+        return arg.sub(5, len: arg.len() - 5);
+    }
+    if (arg.startsWith("dir:")) {
+        return arg.sub(4, len: arg.len() - 4);
+    }
+    if (arg.indexOf(":") != null) {
+        return "";
+    }
+    if (arg == "." or arg.indexOf("/") != null or EXTENSION.match(arg) != null) {
+        return arg;
+    }
+    return "";
+}
+
+fun blockText(content: any) > str {
+    if (content is str) {
+        return content;
+    }
+    final parts = mut [<str>];
+    foreach (block in content ?? []) {
+        if (block["type"] == "text") {
+            parts.append(block["text"] ?? "");
+        }
+    }
+    return parts.join("\n");
+}
+
+// commandSteps turns one shell command into its retrieval and run steps.
+fun commandSteps(call: Call, ordinal: int, outcome: Outcome?, workspace: str) > [Step] {
+    final steps = mut [<Step>];
+    foreach (words in segments(call.command)) {
+        final inv = invocation(words);
+        if (inv == null) {
+            continue;
+        }
+        final sub = inv!.sub;
+        final rest = inv!.rest;
+        if (sub == "run" and rest.len() > 1) {
+            final gold = mut [<Gold>];
+            foreach (project in rest.sub(1, len: rest.len() - 1)) {
+                if (project != "/" and project.indexOf("*") == null) {
+                    gold.append(Gold{ path = project, cwd = call.cwd, hint = "dir", grade = 1 });
+                }
+            }
+            steps.append(Step{ call = ordinal, date = call.date, retrieval = null, gold = gold });
+            continue;
+        }
+        if (VERBS.indexOf(sub) == null or rest.len() == 0) {
+            continue;
+        }
+        if (sub == "query" and (rest[0] == "output" or rest[0] == "invocation" or (rest.len() == 1 and RUN_REF.match(rest[0]) != null))) {
+            continue;
+        }
+        // refs --text greps: the words after its pattern scope the search, they are not asked for.
+        final query = if (sub == "refs" and inv!.flags.indexOf("text") != null) rest[0].trim() else rest.join(" ").trim();
+        if (query == "") {
+            continue;
+        }
+        final gold = mut [<Gold>];
+        if (sub == "explain") {
+            final named = explainedPath(rest[0]);
+            if (named != "") {
+                final base = if (rest[0].indexOf(":") != null) workspace else call.cwd;
+                gold.append(Gold{ path = named, cwd = base, hint = "auto", grade = 1 });
+            }
+        }
+        if (sub == "refs" and inv!.flags.indexOf("source") != null) {
+            if (outcome -> o) {
+                foreach (line in o.text.split("\n")) {
+                    final m = DEFINITION.match(line);
+                    if (m != null) {
+                        gold.append(Gold{ path = m![1], cwd = call.cwd, hint = "file", grade = 2 });
+                    }
+                }
+            }
+        }
+        steps.append(Step{ call = ordinal, date = call.date, retrieval = Retrieval{ verb = sub, query = query }, gold = gold });
+    }
+    return steps;
+}
+
+// fileSteps reads one transcript into its steps, in the order the calls were made. A call
+// the guard refused never ran, so it is no step, but it still counts toward a window.
+fun fileSteps(file: str, workspace: str, counts: mut Counts) > [Step] !> any {
+    final text = fs\readFile(file);
+    if (text.indexOf("magus") == null) {
+        return [<Step>];
+    }
+    final calls = mut [<Call>];
+    final needed = mut {<str: bool>};
+    final outcomes = mut {<str: Outcome>};
+    foreach (line in text.split("\n")) {
+        if (line.indexOf("\"tool_use\"") != null) {
+            final rec = json\parse(line) catch null;
+            if (rec == null or rec["type"] != "assistant") {
+                continue;
+            }
+            final msg = rec["message"];
+            if (msg == null or msg["content"] is str) {
+                continue;
+            }
+            final date = ((rec["timestamp"] as? str) ?? "").sub(0, len: 10);
+            final cwd = (rec["cwd"] as? str) ?? "";
+            foreach (block in msg["content"] ?? []) {
+                if (block["type"] != "tool_use") {
+                    continue;
+                }
+                final input = block["input"] ?? {<str: any>};
+                final id = (block["id"] as? str) ?? "";
+                final tool = (block["name"] as? str) ?? "";
+                final call = mut Call{ id = id, tool = tool, date = date, cwd = cwd };
+                if (tool == "Bash") {
+                    final command = (input["command"] as? str) ?? "";
+                    if (command.indexOf("magus") != null) {
+                        call.command = command;
+                        if (command.indexOf("refs") != null and command.indexOf("-source") != null) {
+                            needed[id] = true;
+                        }
+                    }
+                } else if (tool == "NotebookEdit") {
+                    call.file = (input["notebook_path"] as? str) ?? "";
+                } else if (tool == "Read" or WRITE_TOOLS.indexOf(tool) != null) {
+                    call.file = (input["file_path"] as? str) ?? "";
+                    call.ranged = input["offset"] != null or input["limit"] != null;
+                }
+                calls.append(call);
+            }
+        } else if (line.indexOf("\"tool_result\"") != null) {
+            final errored = line.indexOf("\"is_error\":true") != null or line.indexOf("\"is_error\": true") != null;
+            var wanted = errored;
+            if (!wanted) {
+                foreach (id, _ in needed) {
+                    if (line.indexOf(id) != null) {
+                        wanted = true;
+                        break;
+                    }
+                }
+            }
+            if (!wanted) {
+                continue;
+            }
+            final rec = json\parse(line) catch null;
+            final msg = if (rec != null) rec["message"] else null;
+            if (msg == null or msg["content"] is str) {
+                continue;
+            }
+            foreach (block in msg["content"] ?? []) {
+                if (block["type"] != "tool_result") {
+                    continue;
+                }
+                final id = (block["tool_use_id"] as? str) ?? "";
+                final body = blockText(block["content"]);
+                final failed = block["is_error"] == true;
+                outcomes[id] = Outcome{
+                    refused = failed and body.startsWith("PreToolUse:"),
+                    errored = failed,
+                    text = if (needed[id] != null) body else "",
+                };
+            }
+        }
+    }
+    final steps = mut [<Step>];
+    foreach (index, call in calls) {
+        final ordinal = index + 1;
+        final outcome = outcomes[call.id];
+        if (outcome != null and outcome!.refused) {
+            counts.refused = counts.refused + 1;
+            continue;
+        }
+        final errored = outcome != null and outcome!.errored;
+        if (call.command != "") {
+            foreach (step in commandSteps(call, ordinal: ordinal, outcome: outcome, workspace: workspace)) {
+                steps.append(step);
+            }
+        } else if (call.file != "" and !errored) {
+            final grade = if (WRITE_TOOLS.indexOf(call.tool) != null) 3 else if (call.ranged) 2 else 1;
+            steps.append(Step{
+                call = ordinal,
+                date = call.date,
+                retrieval = null,
+                gold = [Gold{ path = call.file, cwd = call.cwd, hint = "file", grade = grade }],
+            });
+        }
+    }
+    return steps;
+}
+
+// workspaceRel is p relative to the workspace, through any of its .claude/worktrees
+// checkouts, or null when p lies outside it.
+export fun workspaceRel(p: str, cwd: str, workspace: str) > str? {
+    var full = p;
+    if (!path\isAbs(full)) {
+        if (cwd == "") {
+            return null;
+        }
+        full = fs\join(cwd, name: full);
+    }
+    full = path\clean(full);
+    if (full == workspace) {
+        return ".";
+    }
+    if (!full.startsWith(workspace + "/")) {
+        return null;
+    }
+    final rel = full.sub(workspace.len() + 1, len: full.len() - workspace.len() - 1);
+    final trees = ".claude/worktrees/";
+    if (!rel.startsWith(trees)) {
+        return rel;
+    }
+    final inTree = rel.sub(trees.len(), len: rel.len() - trees.len());
+    final slash = inTree.indexOf("/");
+    if (slash == null) {
+        return ".";
+    }
+    return inTree.sub(slash! + 1, len: inTree.len() - slash! - 1);
+}
+
+fun graphId(rel: str, hint: str, checkout: str, kinds: mut {str: str}) > str {
+    if (hint != "auto") {
+        return "{hint}:{rel}";
+    }
+    if (kinds[rel] == null) {
+        final target = fs\join(checkout, name: rel);
+        final isDir = fs\isDir(target) catch false;
+        final isFile = fs\isFile(target) catch false;
+        kinds[rel] = if (isDir) "dir" else if (isFile or EXTENSION.match(rel) != null) "file" else "dir";
+    }
+    return "{kinds[rel]!}:{rel}";
+}
+
+export fun shapeOf(query: str) > str {
+    final terms = query.split(" ").filter(fun (index: int, t: str) > bool => t != "");
+    foreach (t in terms) {
+        if (FIELD_TERM.match(t) != null) {
+            return "field";
+        }
+    }
+    foreach (t in terms) {
+        if (t.indexOf("/") != null or EXTENSION.match(t) != null) {
+            return "path";
+        }
+    }
+    if (terms.len() == 1) {
+        final t = terms[0];
+        if (IDENTIFIER.match(t) != null and (UPPER.match(t) != null or t.indexOf("_") != null or t.indexOf(".") != null)) {
+            return "identifier";
+        }
+    }
+    return "prose";
+}
+
+fun sharesTerm(left: str, right: str) > bool {
+    final mine = mut {<str: bool>};
+    foreach (t in left.lower().split(" ")) {
+        if (t != "") {
+            mine[t] = true;
+        }
+    }
+    foreach (t in right.lower().split(" ")) {
+        if (mine[t] != null) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fun workspaceRoot(checkout: str) > str {
+    final marker = "/.claude/worktrees/";
+    final at = checkout.indexOf(marker);
+    return if (at != null) checkout.sub(0, len: at!) else checkout;
+}
+
+fun main(args: [str]) > void !> any {
+    if (args.len() < 1 or args.len() > 2) {
+        throw USAGE;
+    }
+    final after = args[0];
+    if (DATE.match(after) == null) {
+        throw "holdout-after must be a date as YYYY-MM-DD, got \"{after}\"\n{USAGE}";
+    }
+    final checkout = vcs\root();
+    if (!fs\exists(fs\join(checkout, name: "hack/retrieval/harvest.buzz"))) {
+        throw "run this from the magus repository that holds hack/retrieval/harvest.buzz; {checkout} does not";
+    }
+    final workspace = workspaceRoot(checkout);
+    final destination = if (args.len() == 2) path\abs(args[1]) else fs\join(checkout, name: "testdata/retrieval/judgments.jsonl");
+    final transcripts = fs\join(env\home(), name: ".claude/projects");
+    if (!fs\isDir(transcripts)) {
+        throw "no Claude Code transcripts at {transcripts}";
+    }
+
+    final files = mut [<str>];
+    foreach (p in fs\glob(fs\join(transcripts, name: "**/*.jsonl"))) {
+        files.append(p.value);
+    }
+    files.sort(fun (a: str, b: str) > bool => a < b);
+
+    final counts = mut Counts{};
+    final kinds = mut {<str: str>};
+    final rows = mut {<str: {str: any}>};
+    foreach (file in files) {
+        counts.files = counts.files + 1;
+        final steps = fileSteps(file, workspace: workspace, counts: counts);
+        var any_call = false;
+        foreach (s, step in steps) {
+            if (step.retrieval -> r) {
+                any_call = true;
+                if (r.verb == "query") {
+                    counts.query = counts.query + 1;
+                } else if (r.verb == "refs") {
+                    counts.refs = counts.refs + 1;
+                } else {
+                    counts.explain = counts.explain + 1;
+                }
+                final grades = mut {<str: int>};
+                var ended = -1;
+                var t = s + 1;
+                while (t < steps.len() and steps[t].call <= step.call + WINDOW) {
+                    foreach (g in steps[t].gold) {
+                        final rel = workspaceRel(g.path, cwd: g.cwd, workspace: workspace);
+                        if (rel == null) {
+                            counts.dropped = counts.dropped + 1;
+                            continue;
+                        }
+                        final id = graphId(rel!, hint: g.hint, checkout: checkout, kinds: kinds);
+                        if ((grades[id] ?? 0) < g.grade) {
+                            grades[id] = g.grade;
+                        }
+                    }
+                    if (steps[t].retrieval != null) {
+                        ended = t;
+                        break;
+                    }
+                    t = t + 1;
+                }
+                if (grades.len() == 0) {
+                    if (ended == s + 1 and steps[s + 1].call <= step.call + 1 and sharesTerm(r.query, right: steps[s + 1].retrieval!.query)) {
+                        counts.reformulations = counts.reformulations + 1;
+                    } else {
+                        counts.noGold = counts.noGold + 1;
+                    }
+                    continue;
+                }
+                final ids = grades.keys().cloneMutable();
+                ids.sort(fun (a: str, b: str) > bool => a < b);
+                final gold = mut {<str: int>};
+                foreach (id in ids) {
+                    gold[id] = grades[id]!;
+                }
+                final key = "{r.verb}\n{r.query}\n{json\stringify(gold)}";
+                final existing = rows[key];
+                if (existing != null) {
+                    counts.duplicates = counts.duplicates + 1;
+                    if (((existing!["date"] as? str) ?? "") <= step.date) {
+                        continue;
+                    }
+                }
+                final row = mut {<str: any>};
+                row["id"] = crypto\sha256Hex(key).sub(0, len: 16);
+                row["query"] = r.query;
+                row["verb"] = r.verb;
+                row["date"] = step.date;
+                row["source"] = SOURCE;
+                row["split"] = if (step.date > after) "holdout" else "dev";
+                row["shape"] = shapeOf(r.query);
+                row["gold"] = gold;
+                rows[key] = row;
+            }
+        }
+        if (any_call) {
+            counts.filesWithCalls = counts.filesWithCalls + 1;
+        }
+    }
+
+    final ordered = mut [<{str: any}>];
+    foreach (_, row in rows) {
+        ordered.append(row);
+        if (row["split"] == "holdout") {
+            counts.holdout = counts.holdout + 1;
+        } else {
+            counts.dev = counts.dev + 1;
+        }
+    }
+    ordered.sort(fun (a: {str: any}, b: {str: any}) > bool {
+        final ad: str = a["date"];
+        final bd: str = b["date"];
+        final ai: str = a["id"];
+        final bi: str = b["id"];
+        return ad < bd or (ad == bd and ai < bi);
+    });
+    counts.written = ordered.len();
+    final lines = mut [<str>];
+    foreach (row in ordered) {
+        lines.append(json\stringify(row));
+    }
+    fs\mkdirAll(fs\dirname(destination));
+    fs\writeLines(destination, lines: lines);
+
+    std\print("source {SOURCE}: {counts.files} files read, {counts.filesWithCalls} with retrieval calls");
+    std\print("  calls: query {counts.query}, refs {counts.refs}, explain {counts.explain}; refused by the guard and skipped: {counts.refused}");
+    std\print("  written {counts.written} (dev {counts.dev}, holdout after {after} {counts.holdout})");
+    std\print("  not written: reformulations {counts.reformulations}, no gold {counts.noGold}, duplicates {counts.duplicates}");
+    std\print("  gold paths dropped outside the workspace: {counts.dropped}");
+    std\print("wrote {destination}");
+}
+
+test "segments splits commands and drops redirections and heredoc bodies" {
+    final segs = segments("cd x && ./magus query 'kind=spell go' -o name 2>/dev/null | head\ncat <<'EOF'\nmagus refs Nope\nEOF\nmagus explain dir:internal/json");
+    std\assert(segs.len() == 5, message: "five simple commands, got {segs.len()}");
+    std\assert(segs[1].join("|") == "./magus|query|kind=spell go|-o|name", message: "redirection dropped: {segs[1].join("|")}");
+    std\assert(segs[4].join("|") == "magus|explain|dir:internal/json", message: "heredoc body skipped: {segs[4].join("|")}");
+}
+
+test "invocation drops flags and their values" {
+    final inv = invocation(["BAGGAGE=x", "./magus", "-o", "json", "refs", "--source", "Foo", "--limit=3"]);
+    std\assert(inv != null and inv!.sub == "refs", message: "refs call");
+    std\assert(inv!.rest.join(" ") == "Foo", message: "query is the symbol: {inv!.rest.join(" ")}");
+    std\assert(inv!.flags.indexOf("source") != null, message: "source flag seen");
+    std\assert(invocation(["git", "status"]) == null, message: "not magus");
+}
+
+test "DATE takes YYYY-MM-DD only" {
+    std\assert(DATE.match("2026-10-01") != null, message: "a date");
+    std\assert(DATE.match("2026-13-01") == null, message: "month 13");
+    std\assert(DATE.match("2026-10-1") == null, message: "one-digit day");
+}
+
+test "shapeOf" {
+    std\assert(shapeOf("kind=spell go") == "field", message: "field");
+    std\assert(shapeOf("internal/json") == "path", message: "path");
+    std\assert(shapeOf("magus.yaml") == "path", message: "extension");
+    std\assert(shapeOf("ReadJudgments") == "identifier", message: "camel");
+    std\assert(shapeOf("snake_case") == "identifier", message: "snake");
+    std\assert(shapeOf("guard lease rules") == "prose", message: "prose");
+    std\assert(shapeOf("lease") == "prose", message: "one plain word");
+}
+
+test "workspaceRel strips worktree checkouts" {
+    final ws = "/r/magus";
+    std\assert(workspaceRel("/r/magus/.claude/worktrees/w1/internal/a.go", cwd: "", workspace: ws) == "internal/a.go", message: "worktree path");
+    std\assert(workspaceRel("internal", cwd: "/r/magus/.claude/worktrees/w1", workspace: ws) == "internal", message: "relative to a worktree cwd");
+    std\assert(workspaceRel(".", cwd: "/r/magus", workspace: ws) == ".", message: "root");
+    std\assert(workspaceRel("/r/magus-other/a.go", cwd: "", workspace: ws) == null, message: "sibling repo is outside");
+    std\assert(workspaceRel("/tmp/a.go", cwd: "", workspace: ws) == null, message: "outside");
+}
