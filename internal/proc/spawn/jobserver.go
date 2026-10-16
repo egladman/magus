@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -199,4 +200,25 @@ func goEnviron(env []string, slots int) []string {
 	})
 	n := strconv.Itoa(slots)
 	return []string{"GOMAXPROCS=" + n, "GOFLAGS=" + strings.Join(append(words, "-p="+n), " ")}
+}
+
+// RestoreGoWidth gives this process the runtime's default GOMAXPROCS when the one it
+// started with is the width its parent magus step seated it at, and reports whether it
+// did. A magus that schedules its own steps takes its own claims, so the parent's width
+// is not its own. Only a magus binary's entry point may call it: a test binary or an SDK
+// consumer running inside a step is that step's tool, and the seat counted its work.
+//
+// The seat's width is a GOMAXPROCS under a parent magus that GOFLAGS ends with as -p,
+// the pair goEnviron writes, so one a person or a target set alone is left alone.
+func RestoreGoWidth() bool {
+	if !seatedGoWidth(CurrentLevel(), os.Getenv("GOMAXPROCS"), os.Getenv("GOFLAGS")) {
+		return false
+	}
+	runtime.SetDefaultGOMAXPROCS()
+	return true
+}
+
+func seatedGoWidth(level int, maxprocs, goflags string) bool {
+	words := strings.Fields(goflags)
+	return level > 0 && maxprocs != "" && len(words) > 0 && words[len(words)-1] == "-p="+maxprocs
 }

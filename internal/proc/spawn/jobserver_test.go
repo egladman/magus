@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -122,7 +123,6 @@ func TestASeatRunsGoAsWideAsItsSlots(t *testing.T) {
 
 	env, _ := childEnv(four, nil, nil)
 	assert.Equal(t, []string{"4", "-mod=mod -p=4"}, []string{lookupEnv(env, "GOMAXPROCS"), lookupEnv(env, "GOFLAGS")})
-
 	env, _ = childEnv(four, nil, []string{"GOMAXPROCS=2", "GOFLAGS=-race"})
 	assert.Equal(t, []string{"2", "-race"}, []string{lookupEnv(env, "GOMAXPROCS"), lookupEnv(env, "GOFLAGS")}, "a target's own env wins")
 
@@ -135,6 +135,37 @@ func TestASeatRunsGoAsWideAsItsSlots(t *testing.T) {
 	env, _ = childEnv(context.Background(), nil, nil)
 	assert.Equal(t, []string{"", "-mod=mod -p=16"}, []string{lookupEnv(env, "GOMAXPROCS"), lookupEnv(env, "GOFLAGS")},
 		"outside a step go keeps its defaults")
+}
+
+// A magus started inside a one-slot step inherits GOMAXPROCS=1 and would schedule its
+// own steps one core wide. It drops the width its parent's seat wrote, and keeps one a
+// person or a target set.
+func TestRestoreGoWidthDropsOnlyTheSeatsWidth(t *testing.T) {
+	prev := runtime.GOMAXPROCS(0)
+	t.Cleanup(func() { runtime.GOMAXPROCS(prev) })
+	runtime.SetDefaultGOMAXPROCS()
+	want := runtime.GOMAXPROCS(0)
+	if want == 1 {
+		t.Skip("a one-core host cannot tell a restored width from the seat's")
+	}
+	for _, kv := range goEnviron([]string{"GOFLAGS=-mod=mod"}, 1) {
+		name, value, _ := strings.Cut(kv, "=")
+		t.Setenv(name, value)
+	}
+
+	t.Setenv("MAGUS_LEVEL", "")
+	runtime.GOMAXPROCS(1)
+	assert.False(t, RestoreGoWidth(), "with no magus above it the width is a person's choice")
+	assert.Equal(t, 1, runtime.GOMAXPROCS(0))
+
+	t.Setenv("MAGUS_LEVEL", "1")
+	t.Setenv("GOFLAGS", "-race")
+	assert.False(t, RestoreGoWidth(), "a target that set its own GOFLAGS keeps the width beside it")
+	assert.Equal(t, 1, runtime.GOMAXPROCS(0))
+
+	t.Setenv("GOFLAGS", "-mod=mod -p=1")
+	assert.True(t, RestoreGoWidth())
+	assert.Equal(t, want, runtime.GOMAXPROCS(0))
 }
 
 func TestSeatJobserverSizesThePoolToTheSlots(t *testing.T) {
