@@ -153,7 +153,7 @@ magus\project({
         "internal/textrank/weights.json",
         // The retrieval eval's judgments, which the rankeval tests read.
         "internal/rankeval/testdata/*",
-        // The retrieval eval's fixture inputs.
+        // The retrieval eval's fixture documents.
         "testdata/retrieval/*",
         // Embedded in the binary, and no other glob matches it.
         "internal/selfupdate/release-keys.json",
@@ -2343,14 +2343,14 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/proofread/**/*.go",
                    "libs/diagnostics/**/*.go", "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go",
                    "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go", "libs/xdg/**/*.go",
-                   "libs/cmdline/**/*.go",
+                   "libs/cmdline/**/*.go", "hack/embed/**/*.go",
                    "console/**/*.ts", "docs/**/*.ts",
                    "docs/guides/integrations/agents/**/*.ts", "libs/textsearch/**/*.ts",
                    "**/*.buzz", "console/**/*.buzz", "docs/**/*.buzz",
                    "docs/guides/integrations/agents/**/*.buzz", "libs/conventions/**/*.buzz",
                    "libs/diagnostics/**/*.buzz", "libs/figure/**/*.buzz", "libs/gopherbuzz/**/*.buzz",
                    "libs/scipbuzz/**/*.buzz", "libs/testlayout/**/*.buzz", "libs/textsearch/**/*.buzz",
-                   "libs/xdg/**/*.buzz", "libs/cmdline/**/*.buzz",
+                   "libs/xdg/**/*.buzz", "libs/cmdline/**/*.buzz", "hack/embed/**/*.buzz",
                    "proto/**/*.buzz",
                    "**/*.css", "console/**/*.css", "docs/**/*.css",
                    "**/*.html", "console/**/*.html", "docs/**/*.html",
