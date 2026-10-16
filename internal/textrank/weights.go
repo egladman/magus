@@ -5,10 +5,11 @@ import (
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
+
+	"github.com/egladman/magus/internal/json"
 )
 
 //go:embed weights.json
@@ -100,9 +101,7 @@ func decodeWeights(data []byte) (Weights, error) {
 		return Weights{}, err
 	}
 	var w Weights
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&w); err != nil {
+	if err := json.UnmarshalStrict(data, &w); err != nil {
 		return Weights{}, err
 	}
 	if err := w.validate(); err != nil {
