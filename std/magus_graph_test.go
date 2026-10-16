@@ -536,3 +536,17 @@ func TestConformanceMisconfigurationIsAnError(t *testing.T) {
 	_, err = MagusConformance(types.WithWorkspace(t.Context(), ws))
 	assert.ErrorContains(t, err, "min_sample", "a policy that fails validation is an error even with no record to read")
 }
+
+// Every query names the weights it ranked under, and a reader context that could not be
+// read is stated beside the answer rather than dropped.
+func TestMagusQueryCarriesItsRanking(t *testing.T) {
+	q, err := MagusQuery(graphContext(t), "kind=target", types.KnowledgeQueryOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, q.Ranking)
+	assert.Equal(t, knowledge.ShippedWeights().Digest(), q.Ranking.Weights)
+	assert.Contains(t, q.Ranking.Skipped, "reader: workspacegraph: no root magus package linked to read the reader context")
+	require.NotEmpty(t, q.Matches)
+	for _, m := range q.Matches {
+		assert.NotNilf(t, m.Why, "match %s says why it ranked", m.ID)
+	}
+}

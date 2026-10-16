@@ -30,6 +30,7 @@ import (
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hostmodules"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/notes"
@@ -38,6 +39,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -59,6 +61,50 @@ func init() { //nolint:gochecknoinits // workspacegraph cannot import this packa
 		RecordedHumanOnly:    readRecordedHumanOnly,
 		RecordedStaleIndexes: readRecordedStaleIndexes,
 		UsePublishedShards:   usePublishedShards,
+		ReaderContext: func(ctx context.Context, _ types.Inspector, root string) ([]string, error) {
+			paths := map[string]bool{}
+			res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+			if err != nil {
+				return nil, err
+			}
+			// The default source means nothing claimed root: there is no checkout to diff.
+			if res.VCS != nil && res.Source != types.VCSSourceDisabled && res.Source != types.VCSSourceDefault {
+				changed, err := res.VCS.ChangedFiles(ctx, root, res.Base)
+				if err != nil {
+					return nil, err
+				}
+				for _, p := range changed {
+					paths[p] = true
+				}
+			}
+			// A dry run: a read verb must not write the sweep's verdicts into the job store.
+			loc := job.Location{Root: root, DryRun: true}
+			if lease, _ := job.RunLease(ctx, loc); lease != "" {
+				if loc.StateBase, err = xdg.StateDir(); err != nil {
+					return nil, err
+				}
+				rows, err := job.NewStore(loc).List()
+				if err != nil {
+					return nil, err
+				}
+				for _, row := range rows {
+					if row.ID != lease || !row.State.Live() {
+						continue
+					}
+					for _, wp := range row.WritePaths {
+						// A claim names a declaration in a file; a glob, its directory.
+						wp, _, _ = strings.Cut(wp, "#")
+						if i := strings.IndexAny(wp, "*?[{"); i >= 0 {
+							wp = filepath.ToSlash(filepath.Dir(wp[:i+1]))
+						}
+						if wp != "" && wp != "." {
+							paths[wp] = true
+						}
+					}
+				}
+			}
+			return slices.Sorted(maps.Keys(paths)), nil
+		},
 	})
 }
 

@@ -114,6 +114,12 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "with =~ (id=~build$). The : grammar (kind:spell, -kind:op) still works.")
 			fmt.Fprintln(os.Stderr, "  magus query kind=spell go")
 			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Field matchers filter; free text ranks. A match needs any one of the")
+			fmt.Fprintln(os.Stderr, "terms, ranked by BM25F over names, signatures, paths and docs, and one")
+			fmt.Fprintln(os.Stderr, "holding fewer terms than the query is a partial match. -o json says why")
+			fmt.Fprintln(os.Stderr, "each match ranked (terms held, lists, weights digest). A term holding a")
+			fmt.Fprintln(os.Stderr, "path separator must appear whole, and explain resolves only full matches.")
+			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintf(os.Stderr, "`%s <ref>` retrieves one target run's captured output by its\n", hint.QueryOutput.Leaf())
 			fmt.Fprintln(os.Stderr, "output ref (out1a2b3c), shown when the target ran:")
 			fmt.Fprintf(os.Stderr, "  %-38s print the exact bytes (pipe anywhere)\n", hint.QueryOutput.With("out1a2b3c"))
@@ -1043,6 +1049,12 @@ type explainResult struct {
 func searchGraph(ctx context.Context, ws graphWorkspace, cfg config.Config, read graphRead, refresh, global bool) (queryResult, error) {
 	tr := traceFromContext(ctx)
 	seeded := knowledge.SeedsLazyLayer(read.Input)
+	// A reader context the VCS cannot give ranks without it, and the ranking record says so:
+	// a shallow clone with no merge base still answers the query.
+	stop := tr.phase("query.reader_context")
+	reader, readerErr := workspacegraph.ReaderContext(ctx, ws, ws.Root())
+	stop()
+	ctx = knowledge.WithReader(ctx, reader)
 	var g *knowledge.Graph
 	var out types.KnowledgeQueryOutput
 	var err error
@@ -1066,8 +1078,14 @@ func searchGraph(ctx context.Context, ws graphWorkspace, cfg config.Config, read
 			return queryResult{}, err
 		}
 		stop = tr.phase("query.search")
-		out = g.Query(read.Input, read.Budget)
+		out, err = g.QueryRanked(read.Input, read.Budget, 0, 0, knowledge.RetrieveOptions{Reader: reader, Weights: knowledge.ShippedWeights()})
 		stop()
+		if err != nil {
+			return queryResult{}, err
+		}
+	}
+	if readerErr != nil && out.Ranking != nil {
+		out.Ranking.Skipped = append(out.Ranking.Skipped, "reader: "+readerErr.Error())
 	}
 	return answerQuery(ctx, g, read, out, seeded, measuredCoverage(ctx, ws, cfg)), nil
 }

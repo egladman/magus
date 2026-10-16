@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
@@ -111,7 +112,14 @@ func MagusQuery(ctx context.Context, query string, opts types.KnowledgeQueryOpti
 	if err != nil {
 		return types.KnowledgeQueryOutput{}, err
 	}
-	out := kg.QueryPage(query, opts.Budget, opts.Offset, opts.Limit)
+	reader, readerErr := workspacegraph.ReaderContext(ctx, types.WorkspaceFromContext(ctx), kg.Root())
+	out, err := kg.QueryRanked(query, opts.Budget, opts.Offset, opts.Limit, knowledge.RetrieveOptions{Reader: reader, Weights: knowledge.ShippedWeights()})
+	if err != nil {
+		return types.KnowledgeQueryOutput{}, err
+	}
+	if readerErr != nil {
+		out.Ranking.Skipped = append(out.Ranking.Skipped, "reader: "+readerErr.Error())
+	}
 	// The verdict judges the whole match set, not the page, so every page states the
 	// same coverage.
 	out.Answer = knowledge.Answer(query, out.MatchCount > 0, graphCoverage(ctx, g, query, seeded))

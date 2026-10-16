@@ -2,6 +2,7 @@ package workspacegraph
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -28,6 +29,7 @@ type Builders struct {
 	RecordedHumanOnly    func(ctx context.Context, ws types.Inspector, cfg config.Config) (types.HumanOnlyIndex, bool)
 	RecordedStaleIndexes func(ctx context.Context, ws types.Inspector, cfg config.Config) ([]types.KnowledgeStaleIndex, bool)
 	UsePublishedShards   func(ws types.Inspector, r knowledge.RemoteShards)
+	ReaderContext        func(ctx context.Context, ws types.Inspector, root string) ([]string, error)
 }
 
 var builders *Builders
@@ -122,6 +124,19 @@ func RecordedStaleIndexes(ctx context.Context, ws types.Inspector, cfg config.Co
 // is left alone: it has no store for r to back.
 func UsePublishedShards(ws types.Inspector, r knowledge.RemoteShards) {
 	linked().UsePublishedShards(ws, r)
+}
+
+// ReaderContext returns the workspace paths a reader at root is working on, sorted: the
+// files the working tree changed against the VCS base and, when the process acts for a
+// live lease, that job's write paths, a glob contributing its directory. Free-text
+// retrieval seeds its graph list with them. An error means the VCS or the job store could
+// not be asked, or that no root magus package is linked to ask them, as in a test of a
+// host module over a fake workspace; a caller ranks without the context and says why.
+func ReaderContext(ctx context.Context, ws types.Inspector, root string) ([]string, error) {
+	if builders == nil {
+		return nil, errors.New("workspacegraph: no root magus package linked to read the reader context")
+	}
+	return builders.ReaderContext(ctx, ws, root)
 }
 
 // SymbolOccurrenceRead is what SymbolOccurrences could read: the verified sites, the
