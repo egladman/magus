@@ -77,7 +77,7 @@ func observeClaim(rep types.JobResult) Observer {
 func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 	t.Parallel()
 
-	loc := declared(t, acceptRow())
+	loc := declared(t, coveredRow())
 	result := passingResult()
 	attempt := passingRun
 	attempt.Ref = result.Validation.OutputRef
@@ -138,6 +138,76 @@ func TestExitFilesEveryGoalForAWaitInAnotherCheckout(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, status.Verified, status.Violations)
 	require.Len(t, status.Gates, 2)
+}
+
+// coveredRow is acceptRow holding only what passingResult changes, so its exit narrows
+// nothing and the spec keeps its generation.
+func coveredRow() types.Job {
+	row := acceptRow()
+	row.WritePaths = []string{"internal/ledger", "cmd/magus/ledger.go"}
+	return row
+}
+
+// An exited job awaiting its wait holds only what its result changed, so a fork over a
+// file it never touched is not refused on its account; what it dropped is a release, and
+// the wait still grades the result clean. An abandonment keeps every path.
+func TestExitNarrowsToWhatTheResultChanged(t *testing.T) {
+	t.Parallel()
+
+	row := acceptRow()
+	loc := declared(t, row)
+	result := passingResult()
+	resolver := func(context.Context, string) (types.JobAttempt, error) {
+		attempt := passingRun
+		attempt.Ref, attempt.TimestampMs = result.Validation.OutputRef, 9_999_999_999_999
+		return attempt, nil
+	}
+
+	exited, err := Exit(t.Context(), boundStore(loc, row.ID), row.ID, &result, resolver)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"internal/ledger", "cmd/magus/ledger.go"}, exited.WritePaths, "a directory covers what is under it")
+	require.Len(t, exited.Releases, 1)
+	assert.Equal(t, "docs/reference/*.md", exited.Releases[0].Path)
+	assert.False(t, exited.Releases[0].Revoked, "the holder gave it up")
+	assert.Equal(t, 2, exited.Generation, "narrowing is a spec change")
+	assert.Equal(t, 2, exited.Result.ObservedGeneration, "the evidence proved the wider spec, so it grades the narrowed one")
+
+	status, err := Wait(t.Context(), NewStore(loc), row.ID, nil, nil, observeClaim(result), nil)
+	require.NoError(t, err)
+	assert.True(t, status.Verified, status.Violations)
+
+	t.Run("a claim covers its file", func(t *testing.T) {
+		t.Parallel()
+		claims := acceptRow()
+		claims.WritePaths = []string{"run.go#A", "run.go#B", "other.go#C"}
+		loc := declared(t, claims)
+		changed := passingResult()
+		changed.ChangedPaths = []string{"run.go"}
+		exited, err := Exit(t.Context(), boundStore(loc, claims.ID), claims.ID, &changed, resolver)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"run.go#A", "run.go#B"}, exited.WritePaths)
+	})
+
+	t.Run("a result covering none of the paths keeps them for the grade to name", func(t *testing.T) {
+		t.Parallel()
+		stray := acceptRow()
+		loc := declared(t, stray)
+		off := passingResult()
+		off.ChangedPaths = []string{"elsewhere.go"}
+		exited, err := Exit(t.Context(), boundStore(loc, stray.ID), stray.ID, &off, resolver)
+		require.NoError(t, err)
+		assert.Equal(t, stray.WritePaths, exited.WritePaths)
+		assert.Empty(t, exited.Releases)
+	})
+
+	t.Run("an abandonment keeps every path", func(t *testing.T) {
+		t.Parallel()
+		kept := acceptRow()
+		loc := declared(t, kept)
+		stored, err := Exit(t.Context(), boundStore(loc, kept.ID), kept.ID, nil, nil)
+		require.NoError(t, err)
+		assert.Equal(t, kept.WritePaths, stored.WritePaths)
+	})
 }
 
 func TestExitWithoutAResultRecordsNoReturn(t *testing.T) {
@@ -213,7 +283,7 @@ func TestWaitRecordsARejectionAndAPassClearsIt(t *testing.T) {
 func TestWaitNeverPassesOnEvidenceOfAnEarlierSpec(t *testing.T) {
 	t.Parallel()
 
-	loc := declared(t, acceptRow())
+	loc := declared(t, coveredRow())
 	result := passingResult()
 	attempt := passingRun
 	attempt.Ref, attempt.TimestampMs = result.Validation.OutputRef, 9_999_999_999_999

@@ -160,7 +160,7 @@ func wholeFileConfigClaimProblems(ctx context.Context, store *Store, row types.J
 			for _, holder := range liveHolders(f.Jobs, row.ID, file) {
 				// A parent holds its children's paths by design; it is not blocking them.
 				if !orderedPair(combined, row.ID, holder.ID) {
-					store.requestRelease(ctx, holder.ID, file, []string{file})
+					store.requestRelease(ctx, holder.ID, file, []string{file}, UnusedWritePaths(ctx, store, f.Jobs, holder))
 				}
 			}
 		}
@@ -231,8 +231,8 @@ func driverPattern(p string) string {
 // jobs at once, as WritePathFileShared: a candidate entry and a holder's entry name the same
 // file, still intersect (types.PathsIntersect), and neither row is the other's ancestor,
 // descendant, or depends_on partner. Each entry is reported once, against the first holder
-// found. When the file is a project's configuration, it also files one attention request
-// asking the holder to release it (see requestRelease).
+// found. The message names the holder's unused write paths ([UnusedWritePaths]), and one
+// attention request asks the holder to release what it does not edit (see requestRelease).
 //
 // Left alone: a same-checkout or not-yet-taken holder (CheckoutRoot == ""), which
 // sharedCheckoutProblems and the overlap report already watch; a holder that exited, whose
@@ -289,22 +289,21 @@ func sharedFileProblem(ctx context.Context, store *Store, rows, combined []types
 				continue
 			}
 			touched, unreadable := touchedDeclarations(ctx, store, rows, holder.ID, file)
-			if projectConfig(store.root, file) {
-				wanted := slices.DeleteFunc(slices.Clone(row.WritePaths), func(entry string) bool {
-					other, ok := literalClaimableFile(store.root, entry)
-					return !ok || other != file
-				})
-				store.requestRelease(ctx, holder.ID, file, wanted)
-			}
+			unused := UnusedWritePaths(ctx, store, rows, holder)
+			wanted := slices.DeleteFunc(slices.Clone(row.WritePaths), func(entry string) bool {
+				other, ok := literalClaimableFile(store.root, entry)
+				return !ok || other != file
+			})
+			store.requestRelease(ctx, holder.ID, file, wanted, unused)
 			return types.JobProblem{
 				Code: types.WritePathFileShared,
 				Message: fmt.Sprintf("%s declares %q, and %s (%s, updated %s ago) already holds %q. Both are live and neither"+
 					" is the other's parent, child, or depends_on partner, so %s has one owner unless the rows"+
-					" say otherwise. %s has touched %s in it so far",
+					" say otherwise. %s has touched %s in it so far. %s",
 					row.ID, mine, holder.ID, holder.State, updatedAgo(holder), theirs,
 					file,
-					holder.ID, describeTouched(touched, unreadable)),
-				Fix: splitAdvice(ctx, store, row, holder, file, touched),
+					holder.ID, describeTouched(touched, unreadable), describeUnused(holder.ID, unused)),
+				Fix: splitAdvice(ctx, store, row, holder, file, touched) + narrowAdvice(holder.ID, unused),
 			}, true
 		}
 	}

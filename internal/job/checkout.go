@@ -418,7 +418,14 @@ func sharedCheckoutProblems(store *Store, rows []types.Job, row types.Job) types
 	if len(held) == 0 {
 		return nil
 	}
-	var ps types.JobProblems
+	var (
+		ps       types.JobProblems
+		unused   []string
+		measured bool
+	)
+	holder := held[0]
+	// No caller passes a context here yet; the footprint read is the only thing that takes one.
+	ctx := context.Background()
 	reported := map[string]bool{}
 	// Read only once something else holds the checkout: the walk touches the tree, and a
 	// fork into an unshared checkout is the common case and must stay free.
@@ -428,15 +435,21 @@ func sharedCheckoutProblems(store *Store, rows []types.Job, row types.Job) types
 			continue
 		}
 		reported[declared] = true
+		if !measured {
+			unused, measured = UnusedWritePaths(ctx, store, rows, holder), true
+		}
+		store.requestRelease(ctx, holder.ID, load, []string{declared}, unused)
 		ps = append(ps, types.JobProblem{
 			Code:  types.CheckoutConfigHeld,
 			Field: fmt.Sprintf("write_paths[%d]", slices.Index(row.WritePaths, declared)),
-			Message: fmt.Sprintf("%s declares %q, which covers %s, and %s is live in this checkout (%s):"+
+			Message: fmt.Sprintf("%s declares %q, which covers %s, and %s (%s, updated %s ago) is live in this checkout (%s):"+
 				" a magusfile, magus.yaml or spell source that is half-saved stops the whole workspace loading,"+
-				" so every job here loses `magus run` until it lands, not just this one",
-				row.ID, declared, load, held[0].ID, store.root),
-			Fix: fmt.Sprintf("fork %s into its own worktree with `%s`, or drop %q from write_paths (`%s` names what else it covers)",
-				row.ID, hint.JobFork.With(row.ID, "--checkout", "<dir>"), declared, hint.DescribeFile.With(load)),
+				" so every job here loses `magus run` until it lands, not just this one. %s",
+				row.ID, declared, load, holder.ID, holder.State, updatedAgo(holder), store.root, describeUnused(holder.ID, unused)),
+			Fix: fmt.Sprintf("fork %s into its own worktree with `%s`, fork it with `--depends-on %s` to wait for the holder,"+
+				" or drop %q from write_paths (`%s` names what else it covers).%s",
+				row.ID, hint.JobFork.With(row.ID, "--checkout", "<dir>"), holder.ID, declared, hint.DescribeFile.With(load),
+				narrowAdvice(holder.ID, unused)),
 		})
 	}
 	return ps

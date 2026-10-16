@@ -336,6 +336,54 @@ func TestSharedCheckoutRefusalIgnoresAJobThatIsOver(t *testing.T) {
 	}
 }
 
+// The refusal names the live holder, how long since it wrote, the write paths it has not
+// used and the narrowing that frees them, and asks the holder to release them.
+func TestSharedCheckoutRefusalNamesTheHoldersUnusedPaths(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	root := loadableRepo(t)
+	s := NewStore(tmpLoc(t, root))
+	held, err := ForkMerge(ctx, s, "wave/worker-one", func(u *types.Job) {
+		u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"internal/job/store.go"}
+	}, config.Jobs{}, nil)
+	require.NoError(t, err)
+	_, err = s.Exec(ctx, held.ID)
+	require.NoError(t, err)
+	rows, err := s.List()
+	require.NoError(t, err)
+
+	ps := sharedCheckoutProblems(s, rows, types.Job{ID: "wave/worker-two", WritePaths: []string{"magusfile.buzz"}})
+	require.Len(t, ps, 1)
+	require.ErrorIs(t, ps.Err(), types.CheckoutConfigHeld)
+	assert.Contains(t, ps[0].Message, "wave/worker-one (running, updated")
+	assert.Contains(t, ps[0].Message, "wave/worker-one has changed nothing under internal/job/store.go")
+	assert.Contains(t, ps[0].Fix, "--depends-on wave/worker-one")
+	assert.Contains(t, ps[0].Fix, "the root narrows wave/worker-one to what it has changed with `magus job apply -f <record>`")
+
+	requests := releaseRequests(t, root)
+	require.Len(t, requests, 1)
+	assert.Equal(t, "magusfile.buzz", requests[0].Where)
+	assert.Equal(t, []types.FileRef{{Value: "magusfile.buzz"}}, requests[0].Files)
+	assert.Contains(t, requests[0].Message, "job wave/worker-one holds magusfile.buzz")
+
+	t.Run("a dry run files no request", func(t *testing.T) {
+		t.Parallel()
+		root := loadableRepo(t)
+		s := NewStore(tmpLoc(t, root))
+		held, err := ForkMerge(ctx, s, "wave/worker-one", func(u *types.Job) {
+			u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"internal/job/store.go"}
+		}, config.Jobs{}, nil)
+		require.NoError(t, err)
+		_, err = s.Exec(ctx, held.ID)
+		require.NoError(t, err)
+		rows, err := s.List()
+		require.NoError(t, err)
+		require.NotEmpty(t, sharedCheckoutProblems(s.dry(), rows, types.Job{ID: "wave/worker-two", WritePaths: []string{"magusfile.buzz"}}))
+		assert.Empty(t, releaseRequests(t, root))
+	})
+}
+
 // TestLeaseQueryResolvesInOneOrder pins the order every caller grades by. The claim ranks
 // last: it is the one answer a worker can rewrite from its own shell, so a claim that
 // outranked a record would let a worker bound to one job act under another's write paths.

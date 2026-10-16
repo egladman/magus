@@ -513,6 +513,7 @@ github.com/egladman/magus/std.MagusHasCharm func(ctx context.Context, name strin
 github.com/egladman/magus/std.MagusImpact func(ctx context.Context, base string, opts map[string]any) (github.com/egladman/magus/types.ImpactResult, error)
 github.com/egladman/magus/std.MagusImportGraph func(ctx context.Context) (github.com/egladman/magus/types.ImportGraph, error)
 github.com/egladman/magus/std.MagusInsight func(ctx context.Context, opts map[string]any) (github.com/egladman/magus/types.InsightReport, error)
+github.com/egladman/magus/std.MagusJobSchema func(ctx context.Context) (map[string]any, error)
 github.com/egladman/magus/std.MagusLayer func(ctx context.Context, name string) (github.com/egladman/magus/types.Layer, error)
 github.com/egladman/magus/std.MagusListJob func(ctx context.Context) (github.com/egladman/magus/types.JobList, error)
 github.com/egladman/magus/std.MagusNeighborhood func(ctx context.Context, focus string, opts map[string]any) (github.com/egladman/magus/types.KnowledgeNeighborhoodOutput, error)

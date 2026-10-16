@@ -15,9 +15,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// releaseSource is the attention source of a request asking a job to release part of a
-// project's configuration that a refused fork needed.
-const releaseSource = "magus/job-release"
+// ReleaseRequestSource is the attention source of a request asking a job to release write
+// paths a refused fork needed. The guard reads it to advise the holder.
+const ReleaseRequestSource = "magus/job-release"
 
 // projectConfig reports whether rel is a project's configuration this workspace loads: a
 // magusfile source or a magus.yaml among describe.WorkspaceLoadFiles, the set
@@ -167,12 +167,14 @@ func (s *Store) dry() *Store {
 }
 
 // requestRelease files one attention request (outcome waiting) asking holder to release
-// what it does not edit of file, which a refused fork wanted as the claims in wanted. The
-// request is keyed on holder and file alone (see [sessions.RequestID]), so every refusal over
-// the pair lands on one row until the holder or the root disposes of it; the claims ride
-// along as its files. A dry-run store files nothing, and neither does one that will not
-// take the request: the refusal is the answer either way.
-func (s *Store) requestRelease(ctx context.Context, holder, file string, wanted []string) {
+// what it does not edit of file, which a refused fork wanted as the claims in wanted. unused
+// are the holder's write paths its footprint has not touched, nil when it could not be read
+// (see [UnusedWritePaths]); the message lists them. The request is keyed on holder and file
+// alone (see [sessions.RequestID]), so every refusal over the pair lands on one row until the
+// holder or the root disposes of it; the claims ride along as its files. A dry-run store
+// files nothing, and neither does one that will not take the request: the refusal is the
+// answer either way.
+func (s *Store) requestRelease(ctx context.Context, holder, file string, wanted, unused []string) {
 	if s.dryRun {
 		return
 	}
@@ -187,12 +189,12 @@ func (s *Store) requestRelease(ctx context.Context, holder, file string, wanted 
 	_, _, _ = sessions.OpenRequest(dir, holder, sessions.AttentionOpen{
 		Outcome:  string(types.OutcomeWaiting),
 		Severity: string(types.SeverityWarning),
-		Source:   releaseSource,
+		Source:   ReleaseRequestSource,
 		Where:    file,
 		Lease:    s.Actor().Lease,
 		Files:    files,
 		Message: fmt.Sprintf("job %s holds %s, and a fork that needs part of it was refused (its claims are this request's files)."+
-			" %s narrows to the declarations it edits (`%s#<declaration>`) or exits; then `%s` closes this request",
-			holder, file, holder, file, hint.SessionDispose.With("<request>")),
+			" %s. %s narrows to what it edits (`%s#<declaration>`, or `%s` without the unused paths) or exits; then `%s` closes this request",
+			holder, file, describeUnused(holder, unused), holder, file, hint.JobApply.With("-f", "<record>"), hint.SessionDispose.With("<request>")),
 	}, sessions.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: s.root})
 }

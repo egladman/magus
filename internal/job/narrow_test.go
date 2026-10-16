@@ -183,6 +183,8 @@ func TestConfigRefusalRequestsOneRelease(t *testing.T) {
 	assert.Equal(t, "magusfile.buzz", requests[0].Where)
 	assert.Equal(t, []types.FileRef{{Value: "magusfile.buzz"}}, requests[0].Files)
 	assert.Contains(t, requests[0].Message, "job cfg holds magusfile.buzz")
+	assert.Contains(t, requests[0].Message, "cfg has changed nothing under **/*.buzz", "the request lists the holder's unused paths")
+	assert.Contains(t, requests[0].Message, "magus job apply -f <record>")
 	assert.Contains(t, requests[0].Message, "magus session dispose")
 
 	// MGS3032: a holder in another checkout already claims the key the fork wants.
@@ -194,6 +196,7 @@ func TestConfigRefusalRequestsOneRelease(t *testing.T) {
 	require.GreaterOrEqual(t, i, 0)
 	assert.Equal(t, []types.FileRef{{Value: "magusfile.buzz#project.name"}}, requests[i].Files)
 	assert.Contains(t, requests[i].Message, "job keys holds magusfile.buzz")
+	assert.Contains(t, requests[i].Message, "keys has changed nothing under magusfile.buzz#project.name")
 }
 
 // releaseRequests are the open release requests filed for the repository at root.
@@ -203,5 +206,5 @@ func releaseRequests(t *testing.T, root string) []sessions.AttentionRequest {
 	require.NoError(t, err)
 	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
-	return slices.DeleteFunc(sessions.AttentionQueue(fold), func(r sessions.AttentionRequest) bool { return r.Source != releaseSource })
+	return slices.DeleteFunc(sessions.AttentionQueue(fold), func(r sessions.AttentionRequest) bool { return r.Source != ReleaseRequestSource })
 }

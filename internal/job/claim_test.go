@@ -183,6 +183,47 @@ func TestExitedHolderClaimsNoFileShare(t *testing.T) {
 	}
 }
 
+// The refusal names what the holder has not used, the narrowing that would free it, and
+// asks the holder for it; a holder whose footprint nobody can read is said to be unknown.
+func TestUnorderedFileShareNamesTheHoldersUnusedPaths(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": claimGo, "notes.md": "# N\n"}
+	bRoot := testkit.NewRepo(t, files).Root()
+	aRepo := testkit.NewRepo(t, files)
+	aRev := aRepo.Head()
+	aRepo.WriteTree(map[string]string{"run.go": strings.Replace(claimGo, "a()", "a2()", 1)})
+
+	s := NewStore(tmpLoc(t, bRoot))
+	seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"run.go", "notes.md"}, Checkpoint: aRev, CheckoutRoot: aRepo.Root()})
+	rows, err := s.List()
+	require.NoError(t, err)
+
+	ps := unorderedFileShareProblems(t.Context(), s, rows, types.Job{ID: "B", WritePaths: []string{"run.go"}})
+	require.Len(t, ps, 1)
+	assert.Contains(t, ps[0].Message, "A (running, updated")
+	assert.Contains(t, ps[0].Message, "A has changed nothing under notes.md")
+	assert.Contains(t, ps[0].Fix, "--depends-on A")
+	assert.Contains(t, ps[0].Fix, "the root narrows A to what it has changed with `magus job apply -f <record>`, dropping notes.md")
+
+	requests := releaseRequests(t, bRoot)
+	require.Len(t, requests, 1, "a shared file that is not a project's configuration asks too")
+	assert.Equal(t, "run.go", requests[0].Where)
+	assert.Contains(t, requests[0].Message, "A has changed nothing under notes.md")
+
+	t.Run("an unreadable footprint is unknown, never all used", func(t *testing.T) {
+		t.Parallel()
+		s := NewStore(tmpLoc(t, bRoot))
+		seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"run.go"}, Checkpoint: "not-a-revision", CheckoutRoot: aRepo.Root()})
+		rows, err := s.List()
+		require.NoError(t, err)
+		ps := unorderedFileShareProblems(t.Context(), s, rows, types.Job{ID: "B", WritePaths: []string{"run.go"}})
+		require.Len(t, ps, 1)
+		assert.Contains(t, ps[0].Message, "A's footprint could not be read")
+		assert.NotContains(t, ps[0].Fix, "job apply")
+	})
+}
+
 // A re-fork that replaces a declared row is judged by the depends_on it declares, not by
 // the stored row it replaces: adding the dependency the refusal asked for is the fix.
 func TestRefuseUnorderedFileShareReadsTheReplacementsDependsOn(t *testing.T) {
@@ -283,7 +324,7 @@ func TestRefuseUnorderedFileSharePrintsTheClaimPair(t *testing.T) {
 		want  []string
 	}{
 		{"disjoint declarations", symbol("C"), []string{"run.go"}, []string{
-			"A has touched func A(ctx int) { in it so far:",
+			"A has touched func A(ctx int) { in it so far. A has changed something under every one of its write paths:",
 			"Claim `run.go#A` on A and `run.go#C` on B, which name different declarations (nothing was written to either row), or add `--depends-on A` to B, or fold B into A",
 		}},
 		{"the same declaration", symbol("A"), []string{"run.go"}, []string{

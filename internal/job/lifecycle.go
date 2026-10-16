@@ -54,7 +54,8 @@ func endedReason(prev types.Job, byHolder bool) string {
 // Exit records how a worker ended one job. A nil result is an abandonment, distinct from
 // a failed verification: nobody returned evidence at all. A non-nil result is filed with
 // the output attempt resolved in the worker's checkout, so a verifier in another
-// worktree does not need that checkout's cache to reopen the evidence.
+// worktree does not need that checkout's cache to reopen the evidence, and the row's write
+// paths narrow to the entries covering a path the result names. An abandonment keeps them.
 //
 // An abandonment is refused while any live job is below id, since ending id ends them;
 // [Abandon] ends a tree whose every member is named. A result is refused while a job
@@ -94,8 +95,21 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 		return types.Job{}, err
 	}
 	return store.Update(ctx, id, func(row *types.Job) {
-		// Stamped with the generation the write keeps: an exit declares nothing new.
-		generation := max(row.Generation, 1)
+		prev := row.Clone()
+		// A row awaiting `magus job wait` keeps only the entries covering a path the result
+		// names (a claim `F#d` covers F), so it stops holding files it never touched; Update
+		// records each dropped entry as a release with its digest. With no entry covering
+		// any, the grade rejects the result and the paths stay for it to name.
+		kept := slices.DeleteFunc(slices.Clone(row.WritePaths), func(entry string) bool {
+			file, _ := types.SplitClaim(entry)
+			return !slices.ContainsFunc(result.ChangedPaths, func(p string) bool { return types.PathWithin(p, file) })
+		})
+		if len(kept) > 0 {
+			row.WritePaths = kept
+		}
+		// Stamped with the generation the write keeps. Narrowing is a spec change, so the
+		// evidence is stamped with the narrowed spec's generation: it proved the wider one.
+		generation := nextGeneration(prev, *row, true, asDeclaration)
 		filed := *result
 		filed.ObservedGeneration = generation
 		row.Result = &filed
