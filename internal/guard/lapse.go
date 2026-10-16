@@ -19,8 +19,8 @@ import (
 
 // lapsedRules is what the built-in rules that read only the call say of it, for a judgment
 // that ran out of time: every rule Evaluate holds (busy-wait, sleep-poll, process-poll,
-// the destructive VCS verbs, raw tools), the waiter rules a watcher or a backgrounded call
-// meets, and spawn-waiter. None of them loads the workspace, reads the job store or opens
+// the destructive VCS verbs, raw tools), the waiter rules a watcher, a timer or a
+// backgrounded call meets, and spawn-waiter. None of them loads the workspace, reads the job store or opens
 // a run log, so a lapse skips only the rules that do; whatever these refuse stays refused.
 //
 // They are graded by the settings the judgment loaded when it got that far, else by the

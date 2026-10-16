@@ -57,6 +57,9 @@ func TestSleepTimerLine(t *testing.T) {
 		{"sleep 540", 540 * time.Second, true},
 		{"sleep 300 && echo tick", 300 * time.Second, true},
 		{"sleep 2m; echo tick; sleep 20", 2 * time.Minute, true},
+		{"sleep 120 && tail -5 out.log", 120 * time.Second, true},
+		{"for i in 1 2 3; do sleep 60; echo tick $i; done", time.Minute, true},
+		{"sleep 5; tail -f out.log", 0, false},
 		{"echo tick", 0, false},
 		{"sleep 30 && ./magus run test .", 0, false},
 		{"./magus run test .", 0, false},
@@ -111,9 +114,43 @@ func TestBackgroundedSleepIsATimerAndCountsTowardThePile(t *testing.T) {
 	v = judge(withSetting(string(denyRuleMonitorPile), builtin.Deny), "sleep 302")
 	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleMonitorPile)}, judgedAs(v), "the fifth is refused")
 
-	// A sleep in the foreground is not a waiter.
-	v = Judge(ctx, Dependencies{}, Request{Input: "sleep 302", Session: "timers", Host: "claude-code"})
+	// A settle in the foreground is not a waiter.
+	v = Judge(ctx, Dependencies{}, Request{Input: "sleep 2", Session: "timers", Host: "claude-code"})
 	assert.Equal(t, "pass", v.Decision)
+}
+
+func TestTimerIsRefusedAndWorkPasses(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	raised := withSetting(string(denyRuleSleepPoll), builtin.Deny)
+	for _, tt := range []struct {
+		line       string
+		background bool
+		deny       bool
+	}{
+		{"sleep 240; echo tick", true, true},
+		{"sleep 2", true, true},
+		{"sleep 120 && cat /tmp/out.log", true, true},
+		{"for i in 1 2 3; do sleep 60; echo tick; done", true, true},
+		{"sleep 240; echo tick", false, true},
+		{"sleep 30", false, true},
+		{"for i in 1 2 3; do sleep 60; echo tick; done", false, true},
+		{"sleep 2; cat out.log", false, false},
+		{"./magus run go-test .", true, false},
+		{"sleep 30 && ./magus run test .", true, false},
+		{"make build", false, false},
+	} {
+		name := tt.line
+		if tt.background {
+			name += " (background)"
+		}
+		v := Judge(ctx, raised, Request{Input: tt.line, Session: "timers-" + name, Host: "claude-code", CallBackground: tt.background})
+		if tt.deny {
+			assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSleepPoll)}, judgedAs(v), name)
+			assert.Contains(t, v.Reason, "wait for that notice or do other work", name)
+		} else {
+			assert.NotEqual(t, string(denyRuleSleepPoll), v.Rule, name)
+		}
+	}
 }
 
 func TestSpawnDuplicateRefusesASecondWorkerForAJob(t *testing.T) {

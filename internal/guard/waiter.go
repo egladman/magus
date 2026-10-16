@@ -40,9 +40,9 @@ var (
 	denySleepPollWhy = "Each call spends a turn and the sleep's tool slot to look once, and the next call looks again. " +
 		"A watch reads continuously and ends with its subject; a backgrounded command is announced when it ends. Both answer when the state changes, where a sleep answers on its own schedule."
 
-	denySleepTimer    = "a backgrounded call that only sleeps is a timer, and its notice says only that time passed; background the work itself and wait for its completion notice."
-	denySleepTimerWhy = "The host announces a backgrounded command when it ends, so the work's own call is the waiter: its notice arrives with the result. " +
-		"A timer wakes you on a guess, and every timer still pending wakes you again after the work is done."
+	denySleepTimer    = "a call that only sleeps is a timer; a backgrounded command already announces itself when it ends, so wait for that notice or do other work meanwhile."
+	denySleepTimerWhy = "The work's own backgrounded call is the waiter: its notice arrives with the result, where a timer's says only that time passed. " +
+		"A timer wakes you on a guess, every timer still pending wakes you again after the work is done, and a foreground sleep past the tool timeout is moved to the background and becomes one."
 )
 
 // sleepPollFires reports a line that sleeps at least sleepPollFloor and then reads a status
@@ -108,8 +108,9 @@ func statusProbe(c hint.Invocation) bool {
 	return probesForeignProcess(c)
 }
 
-// sleepTimerLine is the longest sleep on a line whose only work is sleeping and printing,
-// false for a line that does anything else or never sleeps.
+// sleepTimerLine is the longest sleep on a line whose only work is sleeping, printing and
+// reading a file once, false for a line that does anything else or never sleeps. A followed
+// tail never ends, so it is endlessWatch's.
 func sleepTimerLine(command string, d Dialect) (time.Duration, bool) {
 	cmds, ok := ParseCommandsDialect(command, d)
 	if !ok {
@@ -123,8 +124,12 @@ func sleepTimerLine(command string, d Dialect) (time.Duration, bool) {
 			continue
 		}
 		switch path.Base(c.Name) {
-		case "echo", "printf", "true", "date", ":":
+		case "echo", "printf", "true", "date", ":", "cat", "head", "wc", "ls":
 			continue
+		case "tail":
+			if !tailFollows(c) {
+				continue
+			}
 		}
 		return 0, false
 	}

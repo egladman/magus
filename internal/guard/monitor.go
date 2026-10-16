@@ -65,24 +65,22 @@ type waiterCheck struct {
 	worker bool
 }
 
-// waiterCall reads the call as a waiter it arms: a watcher, or a backgrounded command that
-// only sleeps or watches without end. false for any other call.
+// waiterCall reads the call as a waiter it arms: a watcher, a command that only sleeps
+// (backgrounded, or for at least sleepPollFloor in the foreground), or a backgrounded
+// command that watches without end. false for any other call.
 func waiterCall(ctx context.Context, deps Dependencies, facts hint.Gate, env hookRequest, background bool, actingLease, agent, command string, d Dialect, now time.Time) (waiterCheck, bool) {
-	switch {
-	case env.IsWatch:
+	if env.IsWatch {
 		subjects := watchSubjects(command, d)
 		return waiterCheck{watchCall: watchCall{
 			subject: strings.Join(subjects, "\n"),
 			expires: now.Add(env.WatchFor),
 			ownWork: watchesOwnWork(facts, agent, subjects),
 		}}, true
-	case !background:
-		return waiterCheck{}, false
 	}
-	if dur, ok := sleepTimerLine(command, d); ok {
+	if dur, ok := sleepTimerLine(command, d); ok && (background || dur >= sleepPollFloor) {
 		return waiterCheck{watchCall: watchCall{expires: now.Add(max(dur, time.Second)), timer: true}}, true
 	}
-	if !endlessWatch(command, d) {
+	if !background || !endlessWatch(command, d) {
 		return waiterCheck{}, false
 	}
 	me, leased := actingLiveLease(ctx, deps, actingLease)
@@ -99,7 +97,7 @@ type watchCall struct {
 	// ownWork is a subject the agent itself started in the background: a host task
 	// capture, or a process matching a command it backgrounded.
 	ownWork bool
-	// timer is a backgrounded call that only sleeps, which counts toward the pile and is
+	// timer is a call that only sleeps, which counts toward the pile and is
 	// never a duplicate.
 	timer bool
 	// endless is a backgrounded call that watches until it is killed, which nothing
@@ -116,7 +114,7 @@ func endlessWatch(command string, d Dialect) bool {
 		case "watch":
 			return true
 		case "tail":
-			return hasFlag(c.Args, 'f', "follow") || hasFlag(c.Args, 'F', "")
+			return tailFollows(c)
 		}
 		if !isMagusInvocation(c) {
 			return false
@@ -126,6 +124,10 @@ func endlessWatch(command string, d Dialect) bool {
 			return a == "--watch" || strings.HasPrefix(a, "--watch=") || a == "-watch" || strings.HasPrefix(a, "-watch=")
 		})
 	})
+}
+
+func tailFollows(c hint.Invocation) bool {
+	return hasFlag(c.Args, 'f', "follow") || hasFlag(c.Args, 'F', "")
 }
 
 // watchSubjects normalizes what a watcher's command waits on: the processes, pids, files,
