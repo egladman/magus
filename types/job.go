@@ -562,6 +562,10 @@ type JobStatus struct {
 	UnresolvedRisks []string     `json:"unresolved_risks,omitempty" yaml:"unresolved_risks,omitempty"`
 	Command         string       `json:"command,omitempty" yaml:"command,omitempty"`
 	Gates           []GateStatus `json:"gates,omitempty" yaml:"gates,omitempty"`
+	// Notes are what the grade passed over and says so rather than dropping silently, such
+	// as a changed path magus maintains itself outside the write paths. They never decide
+	// Verified.
+	Notes []string `json:"notes,omitempty" yaml:"notes,omitempty"`
 	// StaleIndexes are the projects whose symbol index was older than their sources when the
 	// job was described, so its symbol goals were not graded.
 	StaleIndexes []string `json:"stale_indexes,omitempty" yaml:"stale_indexes,omitempty"`

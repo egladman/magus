@@ -257,6 +257,31 @@ func TestVerifyNamesEveryViolation(t *testing.T) {
 	assert.Contains(t, strings.Join(v.Violations, "\n"), "internal/sessions/store.go")
 }
 
+// .gitattributes is regenerated beside a change to any output glob and no job declares it,
+// so a result naming it outside the write paths verifies, with a note saying it was passed
+// over; any other path outside them is still a violation.
+func TestVerifyNotesAMagusMaintainedPathOutsideTheWritePaths(t *testing.T) {
+	t.Parallel()
+
+	rep := passingResult()
+	rep.ChangedPaths = append(rep.ChangedPaths, ".gitattributes")
+	v := verifyClaim(acceptRow(), rep, passingRun, nil)
+	assert.True(t, v.Verified, "%q", v.Violations)
+	require.Len(t, v.Notes, 1)
+	assert.Contains(t, v.Notes[0], `".gitattributes"`)
+	assert.Contains(t, v.Notes[0], "magus maintains itself")
+
+	var out strings.Builder
+	RenderGates(&out, v)
+	assert.Contains(t, out.String(), "note: "+v.Notes[0]+"\n")
+
+	rep.ChangedPaths = append(rep.ChangedPaths, "internal/sessions/store.go")
+	v = verifyClaim(acceptRow(), rep, passingRun, nil)
+	assert.False(t, v.Verified)
+	assert.Equal(t, []string{`changed path "internal/sessions/store.go" is outside the job's write paths` +
+		` (internal/ledger, cmd/magus/ledger.go, docs/reference/*.md)`}, v.Violations)
+}
+
 // The result the coding-agent persona filed on 2026-09-11 and had ACCEPTED: nothing
 // changed, a ref from an unrelated codegen run, a self-asserted pass, and two fields
 // nobody asked for. Every one of them is now a named rejection, which is the whole of

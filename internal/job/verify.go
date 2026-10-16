@@ -310,9 +310,17 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 		v.Violations = append(v.Violations, fmt.Sprintf("job %s is not read-only and the result claims no changed paths at all", row.ID))
 	default:
 		for _, p := range rep.ChangedPaths {
-			if _, ok := matching(row.WritePaths, p); !ok {
-				v.Violations = append(v.Violations, fmt.Sprintf("changed path %q is outside the job's write paths (%s)", p, strings.Join(row.WritePaths, ", ")))
+			if _, ok := matching(row.WritePaths, p); ok {
+				continue
 			}
+			// magus rewrites such a file beside a job's change (the merge driver writes
+			// .gitattributes from the output globs), so no job declares it.
+			if types.IsMagusMaintained(p) {
+				v.Notes = append(v.Notes, fmt.Sprintf("changed path %q is outside the job's write paths and is one magus maintains itself,"+
+					" regenerated beside the change, so it was not graded against them", p))
+				continue
+			}
+			v.Violations = append(v.Violations, fmt.Sprintf("changed path %q is %s (%s)", p, outsideWritePaths, strings.Join(row.WritePaths, ", ")))
 		}
 	}
 	if !row.ReadOnly {
