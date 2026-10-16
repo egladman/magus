@@ -448,7 +448,7 @@ func TestLoadKnowledgeVCSHistory(t *testing.T) {
 	writeCommit(t, repo, "café.buzz", "u\n") // non-ASCII path
 
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
-	entries := loadKnowledgeVCS(context.Background(), cfg, root, slog.Default())
+	entries, _ := loadKnowledgeVCS(context.Background(), cfg, root, slog.Default())
 	require.NotEmpty(t, entries)
 
 	byPath := map[string]int{}
@@ -473,11 +473,15 @@ func TestLoadKnowledgeVCSDisabledAndNonGit(t *testing.T) {
 	// Disabled: no scan, nil result, even in a git repo.
 	repo := testkit.NewRepo(t, nil)
 	writeCommit(t, repo, "a.buzz", "x\n")
-	assert.Nil(t, loadKnowledgeVCS(context.Background(), config.Config{}, repo.Root(), slog.Default()))
+	entries, couplings := loadKnowledgeVCS(context.Background(), config.Config{}, repo.Root(), slog.Default())
+	assert.Nil(t, entries)
+	assert.Nil(t, couplings)
 
 	// Enabled but not a git repo: best-effort nil, no error.
 	enabled := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
-	assert.Nil(t, loadKnowledgeVCS(context.Background(), enabled, t.TempDir(), slog.Default()))
+	entries, couplings = loadKnowledgeVCS(context.Background(), enabled, t.TempDir(), slog.Default())
+	assert.Nil(t, entries)
+	assert.Nil(t, couplings)
 }
 
 // TestBuildKnowledgeGraphChurnIsStableAcrossBuilds pins the property that makes caching the
@@ -538,30 +542,35 @@ func TestLoadKnowledgeVCSCached(t *testing.T) {
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
 	path := filepath.Join(cacheDir, "knowledge", "inputs", "vcs.json")
 
-	first := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
+	first, firstCouplings := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
 	require.NotEmpty(t, first)
 	require.FileExists(t, path)
-	assert.Equal(t, first, loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default()), "a hit returns the scan verbatim")
+	hit, hitCouplings := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
+	assert.Equal(t, first, hit, "a hit returns the scan verbatim")
+	assert.Equal(t, firstCouplings, hitCouplings, "a hit returns the couplings verbatim")
 
 	// A new commit is new history, so the key moves and the walk re-runs.
 	writeCommit(t, repo, "b.buzz", "y\n")
-	moved := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
+	moved, _ := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
 	assert.NotEqual(t, first, moved, "a moved HEAD is a different history")
 	assert.Len(t, moved, 2)
 
 	// A widened window is a different history too, even where the result would coincide.
 	widened := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true, MaxCommits: 1}}}
-	assert.Len(t, loadKnowledgeVCSCached(ctx, widened, root, cacheDir, false, slog.Default()), 1, "a narrowed window re-walks")
+	narrowed, _ := loadKnowledgeVCSCached(ctx, widened, root, cacheDir, false, slog.Default())
+	assert.Len(t, narrowed, 1, "a narrowed window re-walks")
 
 	// Garbage on disk degrades to a walk rather than to an empty history. Reading a
 	// corrupt file as "no commits" would be the same silent-zero failure in a new place.
 	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o644))
-	assert.Equal(t, moved, loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default()), "a corrupt cache is not an answer")
+	recovered, _ := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
+	assert.Equal(t, moved, recovered, "a corrupt cache is not an answer")
 
 	// --refresh distrusts the cache even on a matching key, and repairs it on the way out,
 	// so the distrust costs one walk rather than every walk.
 	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o644))
-	assert.Equal(t, moved, loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, true, slog.Default()))
+	refreshed, _ := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, true, slog.Default())
+	assert.Equal(t, moved, refreshed)
 	b, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.NotContains(t, string(b), "not json", "a refresh rewrites the cache it bypassed")
@@ -583,13 +592,16 @@ func TestLoadKnowledgeVCSCachedWritesNothingWhenReadOnly(t *testing.T) {
 		Cache:     config.Cache{Write: config.CacheWrite{Enabled: &no}},
 		Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}},
 	}
-	require.NotEmpty(t, loadKnowledgeVCSCached(ctx, ro, root, cacheDir, false, slog.Default()))
+	entries, _ := loadKnowledgeVCSCached(ctx, ro, root, cacheDir, false, slog.Default())
+	require.NotEmpty(t, entries)
 	assert.NoFileExists(t, path, "a read-only cache is never written")
 
 	// Not a git repo: nothing to key on, so nothing is cached.
 	bare, bareCache := t.TempDir(), t.TempDir()
 	rw := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
-	assert.Nil(t, loadKnowledgeVCSCached(ctx, rw, bare, bareCache, false, slog.Default()))
+	entries, couplings := loadKnowledgeVCSCached(ctx, rw, bare, bareCache, false, slog.Default())
+	assert.Nil(t, entries)
+	assert.Nil(t, couplings)
 	assert.NoFileExists(t, filepath.Join(bareCache, "knowledge", "inputs", "vcs.json"))
 }
 
@@ -603,7 +615,7 @@ func TestLoadKnowledgeVCSNestedWorkspace(t *testing.T) {
 	writeCommit(t, repo, "sub/proj/app.buzz", "nested\n")
 
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
-	entries := loadKnowledgeVCS(context.Background(), cfg, sub, slog.Default())
+	entries, _ := loadKnowledgeVCS(context.Background(), cfg, sub, slog.Default())
 	require.NotEmpty(t, entries)
 
 	paths := map[string]bool{}
@@ -713,7 +725,7 @@ func TestVCSHistoryFormatKeysTheCache(t *testing.T) {
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
 	path := filepath.Join(cacheDir, "knowledge", "inputs", "vcs.json")
 
-	want := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
+	want, _ := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
 	require.NotEmpty(t, want)
 	require.False(t, want[0].LastModified.IsZero())
 
@@ -724,8 +736,8 @@ func TestVCSHistoryFormatKeysTheCache(t *testing.T) {
 		hex.EncodeToString(prev.Sum(nil)))
 	require.NoError(t, os.WriteFile(path, []byte(stale), 0o644))
 
-	assert.Equal(t, want, loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default()),
-		"a file in the old shape must miss, not decode as zeros")
+	got, _ := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
+	assert.Equal(t, want, got, "a file in the old shape must miss, not decode as zeros")
 }
 
 // unreachableRegistry is a host nothing listens on, so a fetch fails at connect. Port 1 is
