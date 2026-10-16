@@ -207,6 +207,7 @@ magus refs <name> --definition             # the definition's exact lines, as pa
 magus refs <name> --source                 # the definition's body itself
 magus explain "symbol:<id>"                # the node's `source` is the definition's path:line
 magus explain "file:<path>"                # a file's `lines` and `bytes`
+magus explain <dir>                        # the dir's public API: what files outside it use
 magus query "kind=symbol <name>" -o json   # each match's `.source` is "path:line"
 ```
 
