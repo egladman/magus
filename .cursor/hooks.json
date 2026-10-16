@@ -2,59 +2,59 @@
   "hooks": {
     "beforeMCPExecution": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
         "failClosed": true,
         "timeout": 10
       }
     ],
     "beforeShellExecution": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
         "timeout": 10
       }
     ],
     "beforeSubmitPrompt": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
         "timeout": 10
       }
     ],
     "postToolUse": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
         "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch|MCP:.*",
         "timeout": 10
       }
     ],
     "postToolUseFailure": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
         "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch|MCP:.*",
         "timeout": 10
       }
     ],
     "preCompact": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
         "timeout": 10
       }
     ],
     "preToolUse": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
         "matcher": "*",
         "timeout": 10
       }
     ],
     "sessionEnd": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
         "timeout": 10
       }
     ],
     "sessionStart": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
         "timeout": 10
       }
     ],
@@ -67,7 +67,7 @@
     ],
     "subagentStart": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --reports-skills --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
         "timeout": 10
       }
     ]
