@@ -10,7 +10,7 @@ import (
 
 func TestPeakRSSTakesTheMaximumNotTheSum(t *testing.T) {
 	t.Parallel()
-	ctx := WithPeakRSS(context.Background())
+	ctx := WithExecCost(context.Background())
 
 	// A target that forks a compiler, a linker and a test binary reached its
 	// high-water mark in whichever one peaked. Summing would describe a machine
@@ -31,7 +31,7 @@ func TestPeakRSSDistinguishesUnmeasuredFromZero(t *testing.T) {
 	// this, and a process that never started reports nothing either, all of
 	// which arrive as 0. A planner that reads 0 as "cheap" would co-schedule
 	// precisely the targets it knows least about.
-	ctx := WithPeakRSS(context.Background())
+	ctx := WithExecCost(context.Background())
 	got := PeakRSS(ctx)
 	assert.Zero(t, got)
 
@@ -56,10 +56,10 @@ func TestPeakRSSWithoutACollectorIsANoOp(t *testing.T) {
 
 func TestPeakRSSNestedCollectorsAreIndependent(t *testing.T) {
 	t.Parallel()
-	outer := WithPeakRSS(context.Background())
+	outer := WithExecCost(context.Background())
 	RecordPeakRSS(outer, 1<<30)
 
-	inner := WithPeakRSS(outer)
+	inner := WithExecCost(outer)
 	RecordPeakRSS(inner, 8<<30)
 
 	// An inner unit's peak does not leak outward: the outer figure would
@@ -73,7 +73,7 @@ func TestPeakRSSNestedCollectorsAreIndependent(t *testing.T) {
 func TestPeakRSSIsConcurrencySafe(t *testing.T) {
 	t.Parallel()
 	// Targets fan out across spells, so reports race by construction.
-	ctx := WithPeakRSS(context.Background())
+	ctx := WithExecCost(context.Background())
 	var wg sync.WaitGroup
 	for i := 1; i <= 64; i++ {
 		wg.Add(1)
@@ -86,4 +86,31 @@ func TestPeakRSSIsConcurrencySafe(t *testing.T) {
 
 	got := PeakRSS(ctx)
 	assert.Equal(t, int64(64<<20), got)
+}
+
+func TestCPUMsSumsAcrossProcesses(t *testing.T) {
+	t.Parallel()
+	ctx := WithExecCost(context.Background())
+	var wg sync.WaitGroup
+	for range 64 {
+		wg.Go(func() { RecordCPUMs(ctx, 10) })
+	}
+	wg.Wait()
+	RecordCPUMs(ctx, 0)
+	RecordCPUMs(ctx, -5)
+
+	assert.Equal(t, int64(640), CPUMs(ctx), "the sum of every positive report")
+	assert.Zero(t, PeakRSS(ctx), "CPU time is not a peak")
+}
+
+func TestCPUMsNestedCollectorsAreIndependent(t *testing.T) {
+	t.Parallel()
+	outer := WithExecCost(context.Background())
+	RecordCPUMs(outer, 100)
+	inner := WithExecCost(outer)
+	RecordCPUMs(inner, 7)
+
+	assert.Equal(t, int64(100), CPUMs(outer))
+	assert.Equal(t, int64(7), CPUMs(inner))
+	assert.Zero(t, CPUMs(context.Background()), "no collector, no figure")
 }

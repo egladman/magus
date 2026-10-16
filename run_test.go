@@ -2072,6 +2072,46 @@ func TestRun_MemoryClaimFollowsTheRunsShape(t *testing.T) {
 	assert.Equal(t, shape.ArgsHash, outcomes[3].ArgsHash)
 }
 
+// TestRun_OutcomeRecordsTheTargetsCPUTime pins that the CPU time every exec under a
+// target reports lands on that target's outcome, and that a target which executed
+// nothing, as a cache replay executes nothing, records none.
+func TestRun_OutcomeRecordsTheTargetsCPUTime(t *testing.T) {
+	spellName := register.Spell(t, "zzz-cpu-time-spell",
+		spells.WithTargets("spent", "replayed"),
+		spells.WithInvoker(func(ctx context.Context, req spells.InvokeRequest) (any, error) {
+			if req.Target == "spent" {
+				types.RecordCPUMs(ctx, 1_200)
+				types.RecordCPUMs(ctx, 300)
+			}
+			return nil, nil
+		}),
+	)
+
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
+	historyPath := filepath.Join(root, "history.json")
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName), WithTarget("spent"), WithTarget("replayed"))
+	cfg := config.Defaults()
+	cfg.HistoryPath = historyPath
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: "spent"}, {Path: ".", Name: "replayed"}}))
+
+	var got forecast.History
+	require.NoError(t, got.Load(context.Background(), historyPath))
+	spent := got.Projects["."][spellName+"/spent"].RecentOutcomes
+	require.Len(t, spent, 1)
+	assert.Equal(t, int64(1_500), spent[0].CPUMs, "the sum of every exec's CPU time")
+	replayed := got.Projects["."][spellName+"/replayed"].RecentOutcomes
+	require.Len(t, replayed, 1)
+	assert.Zero(t, replayed[0].CPUMs)
+}
+
 // TestUndeclaredScopeEvent pins the scope event MGS1028 rides to the console: which
 // targets produce one, that a project is reported once however many targets it
 // contributed, and the input/not-input split the notification tier keys on.

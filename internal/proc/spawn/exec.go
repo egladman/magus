@@ -111,6 +111,14 @@ type ExecResult struct {
 	// The maximum of the two cannot be smaller than what magus reported before
 	// sampling existed, and is a floor rather than a true peak either way.
 	MaxRSSBytes int64
+	// CPUMs is the CPU time this process spent, user plus system, in milliseconds,
+	// or 0 when the host cannot report it or the process never ran.
+	//
+	// On unix it is wait4's rusage, which includes every descendant the process
+	// itself waited for: the test binaries `go test` forks count, a daemon that
+	// outlived it or a group member killed after it exited does not. On windows it
+	// is the process alone. A floor on what the tree spent, never more.
+	CPUMs int64
 }
 
 // BuzzObject renders the shared exec result shape.
@@ -264,6 +272,8 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		// carries a target's high-water mark to it. A no-op when nothing
 		// installed a collector, which is every call outside a target run.
 		types.RecordPeakRSS(ctx, res.MaxRSSBytes)
+		res.CPUMs = (c.ProcessState.UserTime() + c.ProcessState.SystemTime()).Milliseconds()
+		types.RecordCPUMs(ctx, res.CPUMs)
 	} else {
 		res.Code = -1 // process never started (binary not found, permission denied, etc.)
 	}

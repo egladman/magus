@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-// Peak resident memory, collected per target execution.
+// Peak resident memory and CPU time, collected per target execution.
 //
 // The exec layer already knows this number (the kernel counted it, and
 // spawn.ExecResult.MaxRSSBytes reads it off the same ProcessState the exit code
@@ -33,19 +33,24 @@ import (
 // sampled total of the live process tree, and reports the larger. A figure here is
 // still a FLOOR, because sampling only sees the instants it looks at, but it no
 // longer misses concurrency by construction.
+//
+// CPU time rides the same collector; see spawn.ExecResult.CPUMs for what each exec
+// counts.
 
-type peakRSSKey struct{}
+type execCostKey struct{}
 
-type peakRSS struct {
-	mu  sync.Mutex
-	max int64
+type execCost struct {
+	mu    sync.Mutex
+	max   int64
+	cpuMs int64
 }
 
-// WithPeakRSS returns a context that collects the peak resident memory of every
-// process executed under it. Install it once per unit of work you want a figure
-// for; nested installs are independent, so an inner one does not feed its outer.
-func WithPeakRSS(ctx context.Context) context.Context {
-	return context.WithValue(ctx, peakRSSKey{}, &peakRSS{})
+// WithExecCost returns a context that collects the peak resident memory and the
+// CPU time of every process executed under it. Install it once per unit of work
+// you want figures for; nested installs are independent, so an inner one does not
+// feed its outer.
+func WithExecCost(ctx context.Context) context.Context {
+	return context.WithValue(ctx, execCostKey{}, &execCost{})
 }
 
 // RecordPeakRSS reports one process's peak resident memory in bytes. Calls with
@@ -57,7 +62,7 @@ func RecordPeakRSS(ctx context.Context, bytes int64) {
 	if bytes <= 0 {
 		return
 	}
-	c, ok := ctx.Value(peakRSSKey{}).(*peakRSS)
+	c, ok := ctx.Value(execCostKey{}).(*execCost)
 	if !ok {
 		return
 	}
@@ -72,11 +77,39 @@ func RecordPeakRSS(ctx context.Context, bytes int64) {
 // collected. RecordPeakRSS drops non-positive figures, so 0 already means "no
 // process reported one" and a second return value would distinguish nothing.
 func PeakRSS(ctx context.Context) int64 {
-	c, ok := ctx.Value(peakRSSKey{}).(*peakRSS)
+	c, ok := ctx.Value(execCostKey{}).(*execCost)
 	if !ok {
 		return 0
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.max
+}
+
+// RecordCPUMs adds one process's CPU time, user plus system, in milliseconds.
+// Unlike the peak it sums: a compile then a link spent both, and so did two
+// processes running at once. A non-positive value is ignored, like a peak.
+func RecordCPUMs(ctx context.Context, ms int64) {
+	if ms <= 0 {
+		return
+	}
+	c, ok := ctx.Value(execCostKey{}).(*execCost)
+	if !ok {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cpuMs += ms
+}
+
+// CPUMs returns the CPU milliseconds reported under ctx, summed, or 0 when no
+// process reported any.
+func CPUMs(ctx context.Context) int64 {
+	c, ok := ctx.Value(execCostKey{}).(*execCost)
+	if !ok {
+		return 0
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cpuMs
 }

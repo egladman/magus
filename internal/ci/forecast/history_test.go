@@ -78,7 +78,7 @@ func TestHistorySchemaLockIsStructural(t *testing.T) {
 		},
 		reflect.TypeOf(Outcome{}): {
 			"result": true, "affected": true, "duration_ms": true, "at": true,
-			"attempts": true, "max_rss_bytes": true, "charms": true, "args_hash": true,
+			"attempts": true, "max_rss_bytes": true, "cpu_ms": true, "charms": true, "args_hash": true,
 		},
 	}
 	for typ, keys := range allowed {
@@ -123,7 +123,7 @@ func TestHistorySchemaLock(t *testing.T) {
 					RecentOutcomes: []Outcome{
 						{Result: "pass", AffectedByDiff: true, DurationMs: 11_000, At: time.Now(), Attempts: 1},
 						{Result: "volatile", AffectedByDiff: false, DurationMs: 22_000, At: time.Now(), Attempts: 2,
-							MaxRSSBytes: 1 << 30, Charms: []string{"rw"}, ArgsHash: ArgsHash([]string{"-run", "X"})},
+							MaxRSSBytes: 1 << 30, CPUMs: 41_000, Charms: []string{"rw"}, ArgsHash: ArgsHash([]string{"-run", "X"})},
 					},
 				},
 			},
@@ -198,6 +198,9 @@ func TestHistorySchemaLock(t *testing.T) {
 		// adds no key at all to a history written where the platform cannot
 		// report it.
 		"max_rss_bytes": true,
+		// int64: CPU milliseconds the kernel counted for the target's processes.
+		// A magnitude about the run, the same safety profile as duration_ms.
+		"cpu_ms": true,
 		// []string: the run's active charms. Names a workspace declares, the same
 		// safety profile as the target names this history is already keyed by.
 		"charms": true,
@@ -874,6 +877,41 @@ func TestSaveThenLoad(t *testing.T) {
 	// The instant round-tripped; its location need not, so compare the rest whole.
 	got.UpdatedAt = orig.UpdatedAt
 	assert.Equal(t, orig, got)
+}
+
+// An unmeasured outcome writes no cpu_ms at all, so a reader cannot take a replay
+// or a host that cannot report CPU time for a run that spent none.
+func TestOutcomeCPUMsRoundTripsAndIsOmittedWhenUnmeasured(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "history.json")
+	orig := History{Version: HistoryVersion, Projects: map[string]map[string]Stats{
+		"svc": {"go-test": {RecentOutcomes: []Outcome{
+			{Result: OutcomePass, DurationMs: 1_000, CPUMs: 3_500},
+			{Result: OutcomePass, DurationMs: 20},
+		}}},
+	}}
+	require.NoError(t, orig.Save(context.Background(), path))
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var keys struct {
+		Projects map[string]map[string]struct {
+			RecentOutcomes []map[string]json.RawMessage `json:"recent_outcomes"`
+		} `json:"projects"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &keys))
+	written := keys.Projects["svc"]["go-test"].RecentOutcomes
+	require.Len(t, written, 2)
+	assert.Contains(t, written[0], "cpu_ms")
+	assert.NotContains(t, written[1], "cpu_ms", "an unmeasured outcome carries no key")
+
+	var got History
+	require.NoError(t, got.Load(context.Background(), path))
+	outcomes := got.Projects["svc"]["go-test"].RecentOutcomes
+	require.Len(t, outcomes, 2)
+	assert.Equal(t, int64(3_500), outcomes[0].CPUMs)
+	assert.Zero(t, outcomes[1].CPUMs)
 }
 
 // TestLoad_versionTooNew rejects a history whose schema version exceeds the

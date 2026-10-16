@@ -2728,11 +2728,11 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	eligible := p.TargetPolicies[name].RetryOnVolatile
 	affected := rt.IsAffected(p.Path)
 	start := time.Now()
-	// Collect the peak resident memory of every process this target runs, so the
-	// outcome recorded below carries a memory figure alongside its duration. The
+	// Collect the peak resident memory and CPU time of every process this target
+	// runs, so the outcome recorded below carries them alongside its duration. The
 	// collector is installed here rather than higher up because the unit that
 	// has to fit on one runner is the target, not the invocation.
-	ctx = types.WithPeakRSS(ctx)
+	ctx = types.WithExecCost(ctx)
 	resp, err := s.Invoke(types.WithEvalMemo(ctx), req)
 	// Only a SUCCESSFUL invocation's value is recorded. A failed attempt is not
 	// snapshotted, so its value has no consumer, and recording it would survive
@@ -2778,6 +2778,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 		At:             time.Now(),
 		Attempts:       attempts,
 		MaxRSSBytes:    peakRSS,
+		CPUMs:          types.CPUMs(ctx),
 		Charms:         shape.Charms,
 		ArgsHash:       shape.ArgsHash,
 	})

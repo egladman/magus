@@ -130,7 +130,7 @@ func streamOp(t *testing.T, script string, quiet bool) (res spawn.ExecResult, st
 func TestRunCommandQuietCaptureReturnsOutputWithoutStreaming(t *testing.T) {
 	res, stdout, stderr, err := streamOp(t, `echo '{"Module":{}}'; echo note >&2`, true)
 	require.NoError(t, err)
-	res.MaxRSSBytes = 0
+	res.MaxRSSBytes, res.CPUMs = 0, 0
 	assert.Equal(t, spawn.ExecResult{Stdout: "{\"Module\":{}}\n", Stderr: "note\n", Code: 0, Started: true}, res)
 	assert.Empty(t, stdout, "a quiet op's stdout belongs to its caller, not the step log")
 	assert.Empty(t, stderr, "a quiet op that succeeds writes nothing to the step log")

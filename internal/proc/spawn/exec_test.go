@@ -303,6 +303,33 @@ func TestExecStderrPassthrough(t *testing.T) {
 	assert.Equal(t, "err\n", out)
 }
 
+// A shell that only waits on two spinning children reports their CPU time as its own.
+// Compared against the same spin run in the shell itself, not against the wall clock:
+// CPU time is the same work on a loaded machine, while CPU over wall only exceeds 1
+// when the two children get a core each, which a full test run does not promise.
+func TestExecCPUMsCountsWaitedForChildren(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("'sh' not available")
+	}
+	ctx := types.WithExecCost(t.Context())
+	cpuMs := func(script string) int64 {
+		spin := `spin() { i=0; while [ "$i" -lt 100000 ]; do i=$((i + 1)); done; }; `
+		res, err := Exec(ctx, "sh", []string{"-c", spin + script}, ExecOptions{Dir: t.TempDir(), Quiet: true})
+		require.NoError(t, err)
+		return res.CPUMs
+	}
+	inShell := cpuMs("spin")
+	inChildren := cpuMs("spin & spin & wait")
+	unwaited := cpuMs("spin &")
+
+	require.GreaterOrEqual(t, inShell, int64(10), "the spin must be long enough to measure")
+	// Twice inShell is expected; half of it leaves room for one spin landing on an
+	// efficiency core and another on a performance one.
+	assert.Greater(t, inChildren, inShell/2, "a shell that only waited reports its children's CPU time")
+	assert.Less(t, unwaited, inShell/2, "a child killed with the group after the shell exited is not counted")
+	assert.Equal(t, inShell+inChildren+unwaited, types.CPUMs(ctx), "Exec reports each process's CPU time to the collector")
+}
+
 func TestExecNonZeroExit(t *testing.T) {
 	t.Parallel()
 	if _, err := exec.LookPath("sh"); err != nil {
