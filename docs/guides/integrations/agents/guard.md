@@ -254,12 +254,12 @@ or `bash -c '...'` all reach the same verdict as the bare command.
 
   What each host can carry:
 
-  | Host        | Refuses a subagent's stop | Advises at the root's stop | Bounds a backgrounded command |
-  | ----------- | ------------------------- | -------------------------- | ----------------------------- |
-  | Claude Code | yes (SubagentStop `decision: block`) | yes (Stop) | yes (`run_in_background`) |
-  | Codex       | no: SubagentStop reaches magus, but its rollout records no background task in a shape the rule reads | no, for the same reason | no: its shell call carries no background flag |
-  | Cursor      | no: `subagentStop` never fired in probes, and its transcript has no tool ids, results or times | no: `stop` never fires under `-p`, and the transcript cannot say what is live | no: the wiring reports no background flag |
-  | OpenCode    | no: the plugin sees session events, not a stop it can refuse | no | no: its bash tool has no background mode |
+  | Host        | Refuses a subagent's stop                                                                            | Advises at the root's stop                                                    | Bounds a backgrounded command                 |
+  | ----------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------- |
+  | Claude Code | yes (SubagentStop `decision: block`)                                                                 | yes (Stop)                                                                    | yes (`run_in_background`)                     |
+  | Codex       | no: SubagentStop reaches magus, but its rollout records no background task in a shape the rule reads | no, for the same reason                                                       | no: its shell call carries no background flag |
+  | Cursor      | no: `subagentStop` never fired in probes, and its transcript has no tool ids, results or times       | no: `stop` never fires under `-p`, and the transcript cannot say what is live | no: the wiring reports no background flag     |
+  | OpenCode    | no: the plugin sees session events, not a stop it can refuse                                         | no                                                                            | no: its bash tool has no background mode      |
 
   A host the rule cannot read is never refused: the rule says nothing rather than
   guess.

@@ -18,7 +18,7 @@ window. One file carries all of it. Everything below was checked against OpenCod
 | skills          | `.opencode/skills/` (it also reads `.claude/skills/`)                                          |
 | guard wiring    | `~/.config/opencode/plugins/` or `.opencode/plugins/`                                          |
 | shell commands  | `bash`: deny and advise both reach the model                                                   |
-| file writes     | `edit`, `write` and `apply_patch`: deny and advise both reach the model                       |
+| file writes     | `edit`, `write` and `apply_patch`: deny and advise both reach the model                        |
 | MCP calls       | the magus server's tools, matched by the `<server>_<tool>` id: deny and advise reach the model |
 | subagent spawns | the `task` tool: judged before, the child's id recorded after; a child's calls name their root |
 | typed messages  | the `chat.message` hook records them with `magus shell --message`                              |
