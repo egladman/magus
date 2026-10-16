@@ -1,5 +1,5 @@
 // Tier 2, measured shape: an ENFORCED metric fails only what the record does not list, and
-// `magus run format .` deletes what no longer violates.
+// `magus run format .` deletes what no longer violates and follows a renamed or moved item.
 // Tier 3, judgment: every other metric is advice.
 namespace conformanceratchet;
 
@@ -66,6 +66,7 @@ export fun judge(report: {str: any}) > [Finding] !> any {
         return found;
     }
 
+    final why = uncarried(report);
     final rows: [any] = report["rows"] ?? [<any>];
     foreach (row in rows) {
         final key: {str: any} = row["key"];
@@ -82,7 +83,7 @@ export fun judge(report: {str: any}) > [Finding] !> any {
             final id: str = v["id"] ?? "";
             final measure = std\toInt(v["measure"]);
             found.append(Finding{ path = at.path, line = at.line,
-                message = "{label}: {id} measures {measure}, past the {origin} ceiling of {value}",
+                message = "{label}: {id} measures {measure}, past the {origin} ceiling of {value}" + because(why, metric: metric, items: [id]),
                 fix = "Bring it under {value}, or add it to a known entry in " + RATCHET + " with a reason a reviewer can check." });
         }
     }
@@ -93,27 +94,73 @@ export fun judge(report: {str: any}) > [Finding] !> any {
             continue;
         }
         found.append(Finding{ path = RATCHET,
-            message = "a {metric} known entry names {staleNames(k)}, which no longer violates",
+            message = "a {metric} known entry names {staleNames(k)}, which no longer violates" + because(why, metric: metric, items: names(k["items"])),
             fix = "Run `magus run format .`: it deletes what no longer violates." });
     }
     return found;
 }
 
+// uncarried is why a known item matching no sample was not followed to a new ID, keyed by
+// its metric and the old ID, and by its metric and each candidate: a carry needs exactly
+// one unlisted item sharing the recorded shape, claimed by no other known item.
+fun uncarried(report: {str: any}) > {str: str} {
+    final why = mut {<str: str>};
+    final pairs: [any] = report["ambiguous"] ?? [<any>];
+    foreach (p in pairs) {
+        final metric: str = p["metric"] ?? "";
+        final old: str = p["from"] ?? "";
+        final to = names(p["to"]);
+        final reason = "not carried from {old}: its recorded shape matches {to.join(", ")}, and a rename or a move is followed only to one item no other known item claims";
+        why["{metric} {old}"] = reason;
+        foreach (id in to) {
+            why["{metric} {id}"] = reason;
+        }
+    }
+    return why;
+}
+
+// because is the reasons of why that name items of metric, as a clause to append, or "".
+fun because(why: {str: str}, metric: str, items: [str]) > str {
+    final reasons = mut [<str>];
+    foreach (item in items) {
+        if (why["{metric} {item}"] -> reason) {
+            if (reasons.indexOf(reason) == null) {
+                reasons.append(reason);
+            }
+        }
+    }
+    if (reasons.len() == 0) {
+        return "";
+    }
+    return " (" + reasons.join("; ") + ")";
+}
+
+fun names(items: any) > [str] {
+    final list: [any] = items ?? [<any>];
+    final strs = mut [<str>];
+    foreach (item in list) {
+        strs.append("{item}");
+    }
+    return strs;
+}
+
 // staleNames joins a stale known entry's items.
 fun staleNames(entry: any) > str {
-    final items: [any] = entry["items"] ?? [<any>];
-    final names = mut [<str>];
-    foreach (item in items) {
-        names.append("{item}");
-    }
-    return names.join(", ");
+    return names(entry["items"]).join(", ");
 }
 
 // advice is a line per violation, and per stale known entry, of a metric ENFORCED leaves
 // out. A stale entry of such a metric never fails: shrinking a long function must not cost
 // more than the advice its length earned.
+// A carried item passes under its new ID, and its line names the re-key format makes.
 fun advice(report: {str: any}) > [str] {
     final lines = mut [<str>];
+    final carried: [any] = report["carried"] ?? [<any>];
+    foreach (c in carried) {
+        final metric: str = c["metric"] ?? "";
+        final old: str = c["from"] ?? "";
+        lines.append("advice: a {metric} known entry names {old}, judged as {names(c["to"]).join(", ")}, its rename or move; `magus run format .` re-keys it in " + RATCHET);
+    }
     final stale: [any] = report["stale"] ?? [<any>];
     foreach (k in stale) {
         final metric: str = k["metric"] ?? "";
@@ -243,4 +290,28 @@ test "a scoped key names its scope" {
     assert\equal(keyLabel({"metric": "dep-fanout", "population": "source", "scope": "cmd/magus"}),
         want: "dep-fanout source cmd/magus", message: "scope");
     assert\equal(keyLabel({"metric": "file-lines", "population": "test"}), want: "file-lines test", message: "no scope");
+}
+
+test "a carried item passes and is printed as advice" {
+    final carried: [any] = [{"metric": "func-lines", "from": "a.go#Long", "to": ["a.go#Renamed"]}];
+    final r = report([fresh()], rows: [<any>], stale: [<any>]).cloneMutable();
+    r["carried"] = carried;
+    assert\equal(judge(r).len(), want: 0, message: "the lens judged it known");
+    final printed = advice(r);
+    assert\equal(printed.len(), want: 1, message: "one advice line");
+    assert\equal(printed[0].indexOf("judged as a.go#Renamed") != null, want: true, message: printed[0]);
+}
+
+test "an item not carried says why at its violation and at the stale entry" {
+    final ambiguous: [any] = [{"metric": "func-lines", "from": "a.go#Long", "to": ["a.go#Renamed", "b.go#Twin"]}];
+    final rows: [any] = [conformanceRow("func-lines", violations: [violation("a.go#Renamed", source: "a.go:1", measure: 60.0)])];
+    final entry: {str: any} = {"metric": "func-lines", "items": ["a.go#Long"], "reason": "long on purpose"};
+    final r = report([fresh()], rows: rows, stale: [entry]).cloneMutable();
+    r["ambiguous"] = ambiguous;
+    final got = judge(r);
+    assert\equal(got.len(), want: 2, message: "the violation and the stale entry");
+    foreach (f in got) {
+        assert\equal(f.message.indexOf("not carried from a.go#Long: its recorded shape matches a.go#Renamed, b.go#Twin") != null,
+            want: true, message: f.message);
+    }
 }
