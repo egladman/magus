@@ -6,8 +6,14 @@ import "path";
 import "std";
 import "vcs";
 
-final USAGE = "usage: magus buzz hack/retrieval/harvest.buzz <holdout-after YYYY-MM-DD> [out]";
+final USAGE = "usage: magus buzz hack/retrieval/harvest.buzz [out]";
 final SOURCE = "transcript";
+final EVAL_SET = "agent-agreement";
+// Why a gold id is dropped, in report order. dir:. is credited to every root-level hit;
+// explain-self gold is the explained path itself; refs-output gold is a definition line
+// the ranker printed, not a file an agent used; a query holding $ is an unexpanded
+// shell variable.
+final REASONS = ["dir:.", "explain-self", "refs-output", "$"];
 final WINDOW = 10;
 final VERBS = ["query", "refs", "explain"];
 final WRITE_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
@@ -15,7 +21,6 @@ final WRITE_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
 // a query term or a project.
 final VALUE_FLAGS = ["o", "output", "concurrency", "root", "config", "budget", "kind", "url", "limit", "rename", "timeout", "depth", "shard", "n-shards", "race", "skip"];
 
-final DATE = std\pattern(`^\d\d\d\d-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$`);
 final ASSIGNMENT = std\pattern(`^[A-Za-z_][A-Za-z0-9_]*=`);
 final DEFINITION = std\pattern(`^(\S+):\d+-\d+(\s|$)`);
 final FIELD_TERM = std\pattern(`^-?([a-z_]+(!=|=~|=)|(kind|project|relation|id):)`);
@@ -31,6 +36,22 @@ export object Gold {
     // hint is "file", "dir", or "auto" to ask the checkout which one path is.
     hint: str,
     grade: int,
+    // origin is how the agent reached path: "write", "ranged", "read", "run",
+    // "explained", or "refs-output" for a definition line refs --source printed.
+    origin: str,
+}
+
+// Hit is one gold id a window credits to a retrieval.
+export object Hit {
+    id: str,
+    grade: int,
+    origin: str,
+}
+
+// Cleaned is a retrieval's gold with the dropped ids gone, and which REASONS fired.
+export object Cleaned {
+    gold: {str: int},
+    reasons: {str: bool},
 }
 
 export object Retrieval {
@@ -43,6 +64,7 @@ export object Retrieval {
 export object Step {
     call: int,
     date: str,
+    session: str,
     retrieval: Retrieval?,
     gold: [Gold],
 }
@@ -51,6 +73,7 @@ object Call {
     id: str,
     tool: str,
     date: str,
+    session: str,
     cwd: str,
     command: str = "",
     file: str = "",
@@ -71,12 +94,14 @@ export object Counts {
     explain: int = 0,
     refused: int = 0,
     written: int = 0,
-    dev: int = 0,
-    holdout: int = 0,
     reformulations: int = 0,
     noGold: int = 0,
     dropped: int = 0,
-    duplicates: int = 0,
+    // raw counts the rows the harvest wrote before cleaning, deduped by verb, query and
+    // gold, so its reason counts compare with a review of that file.
+    raw: int = 0,
+    emptied: int = 0,
+    merged: int = 0,
 }
 
 object Lexer {
@@ -306,10 +331,10 @@ fun commandSteps(call: Call, ordinal: int, outcome: Outcome?, workspace: str) > 
             final gold = mut [<Gold>];
             foreach (project in rest.sub(1, len: rest.len() - 1)) {
                 if (project != "/" and project.indexOf("*") == null) {
-                    gold.append(Gold{ path = project, cwd = call.cwd, hint = "dir", grade = 1 });
+                    gold.append(Gold{ path = project, cwd = call.cwd, hint = "dir", grade = 1, origin = "run" });
                 }
             }
-            steps.append(Step{ call = ordinal, date = call.date, retrieval = null, gold = gold });
+            steps.append(Step{ call = ordinal, date = call.date, session = call.session, retrieval = null, gold = gold });
             continue;
         }
         if (VERBS.indexOf(sub) == null or rest.len() == 0) {
@@ -328,7 +353,7 @@ fun commandSteps(call: Call, ordinal: int, outcome: Outcome?, workspace: str) > 
             final named = explainedPath(rest[0]);
             if (named != "") {
                 final base = if (rest[0].indexOf(":") != null) workspace else call.cwd;
-                gold.append(Gold{ path = named, cwd = base, hint = "auto", grade = 1 });
+                gold.append(Gold{ path = named, cwd = base, hint = "auto", grade = 1, origin = "explained" });
             }
         }
         if (sub == "refs" and inv!.flags.indexOf("source") != null) {
@@ -336,12 +361,12 @@ fun commandSteps(call: Call, ordinal: int, outcome: Outcome?, workspace: str) > 
                 foreach (line in o.text.split("\n")) {
                     final m = DEFINITION.match(line);
                     if (m != null) {
-                        gold.append(Gold{ path = m![1], cwd = call.cwd, hint = "file", grade = 2 });
+                        gold.append(Gold{ path = m![1], cwd = call.cwd, hint = "file", grade = 2, origin = "refs-output" });
                     }
                 }
             }
         }
-        steps.append(Step{ call = ordinal, date = call.date, retrieval = Retrieval{ verb = sub, query = query }, gold = gold });
+        steps.append(Step{ call = ordinal, date = call.date, session = call.session, retrieval = Retrieval{ verb = sub, query = query }, gold = gold });
     }
     return steps;
 }
@@ -367,6 +392,7 @@ fun fileSteps(file: str, workspace: str, counts: mut Counts) > [Step] !> any {
                 continue;
             }
             final date = ((rec["timestamp"] as? str) ?? "").sub(0, len: 10);
+            final session = (rec["sessionId"] as? str) ?? fs\basename(file);
             final cwd = (rec["cwd"] as? str) ?? "";
             foreach (block in msg["content"] ?? []) {
                 if (block["type"] != "tool_use") {
@@ -375,7 +401,7 @@ fun fileSteps(file: str, workspace: str, counts: mut Counts) > [Step] !> any {
                 final input = block["input"] ?? {<str: any>};
                 final id = (block["id"] as? str) ?? "";
                 final tool = (block["name"] as? str) ?? "";
-                final call = mut Call{ id = id, tool = tool, date = date, cwd = cwd };
+                final call = mut Call{ id = id, tool = tool, date = date, session = session, cwd = cwd };
                 if (tool == "Bash") {
                     final command = (input["command"] as? str) ?? "";
                     if (command.indexOf("magus") != null) {
@@ -440,12 +466,15 @@ fun fileSteps(file: str, workspace: str, counts: mut Counts) > [Step] !> any {
                 steps.append(step);
             }
         } else if (call.file != "" and !errored) {
-            final grade = if (WRITE_TOOLS.indexOf(call.tool) != null) 3 else if (call.ranged) 2 else 1;
+            final written = WRITE_TOOLS.indexOf(call.tool) != null;
+            final grade = if (written) 3 else if (call.ranged) 2 else 1;
+            final origin = if (written) "write" else if (call.ranged) "ranged" else "read";
             steps.append(Step{
                 call = ordinal,
                 date = call.date,
+                session = call.session,
                 retrieval = null,
-                gold = [Gold{ path = call.file, cwd = call.cwd, hint = "file", grade = grade }],
+                gold = [Gold{ path = call.file, cwd = call.cwd, hint = "file", grade = grade, origin = origin }],
             });
         }
     }
@@ -537,20 +566,52 @@ fun workspaceRoot(checkout: str) > str {
     return if (at != null) checkout.sub(0, len: at!) else checkout;
 }
 
-fun main(args: [str]) > void !> any {
-    if (args.len() < 1 or args.len() > 2) {
-        throw USAGE;
+// clean drops from a retrieval's hits the gold REASONS name, keeping each id's highest
+// grade among the hits left. An id reached both through refs output and by the agent
+// keeps the agent's grade. A query holding $ keeps no gold at all.
+export fun clean(verb: str, query: str, hits: [Hit]) > Cleaned {
+    final gold = mut {<str: int>};
+    final reasons = mut {<str: bool>};
+    final unexpanded = query.indexOf("$") != null;
+    if (unexpanded) {
+        reasons["$"] = true;
     }
-    final after = args[0];
-    if (DATE.match(after) == null) {
-        throw "holdout-after must be a date as YYYY-MM-DD, got \"{after}\"\n{USAGE}";
+    foreach (h in hits) {
+        final colon = h.id.indexOf(":") ?? -1;
+        final path = h.id.sub(colon + 1, len: h.id.len() - colon - 1);
+        if (h.id == "dir:.") {
+            reasons["dir:."] = true;
+        } else if (h.origin == "refs-output") {
+            reasons["refs-output"] = true;
+        } else if (verb == "explain" and query.indexOf(path) != null) {
+            reasons["explain-self"] = true;
+        } else if (!unexpanded and (gold[h.id] ?? 0) < h.grade) {
+            gold[h.id] = h.grade;
+        }
+    }
+    return Cleaned{ gold = gold, reasons = reasons };
+}
+
+fun sortedGold(grades: {str: int}) > {str: int} {
+    final ids = grades.keys().cloneMutable();
+    ids.sort(fun (a: str, b: str) > bool => a < b);
+    final sorted = mut {<str: int>};
+    foreach (id in ids) {
+        sorted[id] = grades[id]!;
+    }
+    return sorted;
+}
+
+fun main(args: [str]) > void !> any {
+    if (args.len() > 1) {
+        throw USAGE;
     }
     final checkout = vcs\root();
     if (!fs\exists(fs\join(checkout, name: "hack/retrieval/harvest.buzz"))) {
         throw "run this from the magus repository that holds hack/retrieval/harvest.buzz; {checkout} does not";
     }
     final workspace = workspaceRoot(checkout);
-    final destination = if (args.len() == 2) path\abs(args[1]) else fs\join(checkout, name: "testdata/retrieval/judgments.jsonl");
+    final destination = if (args.len() == 1) path\abs(args[0]) else fs\join(checkout, name: "testdata/retrieval/judgments.jsonl");
     final transcripts = fs\join(env\home(), name: ".claude/projects");
     if (!fs\isDir(transcripts)) {
         throw "no Claude Code transcripts at {transcripts}";
@@ -565,6 +626,11 @@ fun main(args: [str]) > void !> any {
     final counts = mut Counts{};
     final kinds = mut {<str: str>};
     final rows = mut {<str: {str: any}>};
+    final rawKeys = mut {<str: bool>};
+    final byReason = mut {<str: int>};
+    foreach (reason in REASONS) {
+        byReason[reason] = 0;
+    }
     foreach (file in files) {
         counts.files = counts.files + 1;
         final steps = fileSteps(file, workspace: workspace, counts: counts);
@@ -580,6 +646,7 @@ fun main(args: [str]) > void !> any {
                     counts.explain = counts.explain + 1;
                 }
                 final grades = mut {<str: int>};
+                final hits = mut [<Hit>];
                 var ended = -1;
                 var t = s + 1;
                 while (t < steps.len() and steps[t].call <= step.call + WINDOW) {
@@ -590,6 +657,7 @@ fun main(args: [str]) > void !> any {
                             continue;
                         }
                         final id = graphId(rel!, hint: g.hint, checkout: checkout, kinds: kinds);
+                        hits.append(Hit{ id = id, grade = g.grade, origin = g.origin });
                         if ((grades[id] ?? 0) < g.grade) {
                             grades[id] = g.grade;
                         }
@@ -608,19 +676,41 @@ fun main(args: [str]) > void !> any {
                     }
                     continue;
                 }
-                final ids = grades.keys().cloneMutable();
-                ids.sort(fun (a: str, b: str) > bool => a < b);
-                final gold = mut {<str: int>};
-                foreach (id in ids) {
-                    gold[id] = grades[id]!;
-                }
-                final key = "{r.verb}\n{r.query}\n{json\stringify(gold)}";
-                final existing = rows[key];
-                if (existing != null) {
-                    counts.duplicates = counts.duplicates + 1;
-                    if (((existing!["date"] as? str) ?? "") <= step.date) {
-                        continue;
+                final cleaned = clean(r.verb, query: r.query, hits: hits);
+                final rawKey = "{r.verb}\n{r.query}\n{json\stringify(sortedGold(grades))}";
+                if (rawKeys[rawKey] == null) {
+                    rawKeys[rawKey] = true;
+                    counts.raw = counts.raw + 1;
+                    foreach (reason, _ in cleaned.reasons) {
+                        byReason[reason] = byReason[reason]! + 1;
                     }
+                }
+                if (cleaned.gold.len() == 0) {
+                    counts.emptied = counts.emptied + 1;
+                    continue;
+                }
+                final key = "{r.verb}\n{r.query}";
+                final existing = rows[key];
+                if (existing -> e) {
+                    counts.merged = counts.merged + 1;
+                    final union = mut {<str: int>};
+                    final before: {str: int} = e["gold"];
+                    foreach (id, grade in before) {
+                        union[id] = grade;
+                    }
+                    foreach (id, grade in cleaned.gold) {
+                        if ((union[id] ?? 0) < grade) {
+                            union[id] = grade;
+                        }
+                    }
+                    final merged = e.cloneMutable();
+                    merged["gold"] = sortedGold(union);
+                    if (step.date < ((e["date"] as? str) ?? "")) {
+                        merged["date"] = step.date;
+                        merged["session"] = step.session;
+                    }
+                    rows[key] = merged;
+                    continue;
                 }
                 final row = mut {<str: any>};
                 row["id"] = crypto\sha256Hex(key).sub(0, len: 16);
@@ -628,9 +718,10 @@ fun main(args: [str]) > void !> any {
                 row["verb"] = r.verb;
                 row["date"] = step.date;
                 row["source"] = SOURCE;
-                row["split"] = if (step.date > after) "holdout" else "dev";
+                row["session"] = step.session;
+                row["eval_set"] = EVAL_SET;
                 row["shape"] = shapeOf(r.query);
-                row["gold"] = gold;
+                row["gold"] = sortedGold(cleaned.gold);
                 rows[key] = row;
             }
         }
@@ -642,11 +733,6 @@ fun main(args: [str]) > void !> any {
     final ordered = mut [<{str: any}>];
     foreach (_, row in rows) {
         ordered.append(row);
-        if (row["split"] == "holdout") {
-            counts.holdout = counts.holdout + 1;
-        } else {
-            counts.dev = counts.dev + 1;
-        }
     }
     ordered.sort(fun (a: {str: any}, b: {str: any}) > bool {
         final ad: str = a["date"];
@@ -665,8 +751,12 @@ fun main(args: [str]) > void !> any {
 
     std\print("source {SOURCE}: {counts.files} files read, {counts.filesWithCalls} with retrieval calls");
     std\print("  calls: query {counts.query}, refs {counts.refs}, explain {counts.explain}; refused by the guard and skipped: {counts.refused}");
-    std\print("  written {counts.written} (dev {counts.dev}, holdout after {after} {counts.holdout})");
-    std\print("  not written: reformulations {counts.reformulations}, no gold {counts.noGold}, duplicates {counts.duplicates}");
+    std\print("  rows before cleaning, deduped by verb, query and gold: {counts.raw}");
+    final reasons = REASONS.map(fun (index: int, reason: str) > str => "{reason} {byReason[reason]!}");
+    std\print("  rows holding gold dropped, by reason: {reasons.join(", ")}");
+    std\print("  rows left with no gold: {counts.emptied}; rows merged by verb and query: {counts.merged}");
+    std\print("  written {counts.written} as eval set {EVAL_SET}");
+    std\print("  not written: reformulations {counts.reformulations}, no gold {counts.noGold}");
     std\print("  gold paths dropped outside the workspace: {counts.dropped}");
     std\print("wrote {destination}");
 }
@@ -686,10 +776,25 @@ test "invocation drops flags and their values" {
     std\assert(invocation(["git", "status"]) == null, message: "not magus");
 }
 
-test "DATE takes YYYY-MM-DD only" {
-    std\assert(DATE.match("2026-10-01") != null, message: "a date");
-    std\assert(DATE.match("2026-13-01") == null, message: "month 13");
-    std\assert(DATE.match("2026-10-1") == null, message: "one-digit day");
+test "clean drops dir:., refs output and explain-self gold" {
+    final hits = [
+        Hit{ id = "dir:.", grade = 1, origin = "run" },
+        Hit{ id = "file:a.go", grade = 2, origin = "refs-output" },
+        Hit{ id = "file:b.go", grade = 2, origin = "refs-output" },
+        Hit{ id = "file:b.go", grade = 1, origin = "read" },
+        Hit{ id = "file:c.go", grade = 3, origin = "write" },
+        Hit{ id = "file:c.go", grade = 1, origin = "read" },
+    ];
+    final c = clean("query", query: "lease rules", hits: hits);
+    std\assert(json\stringify(sortedGold(c.gold)) == `{"file:b.go":1,"file:c.go":3}`, message: "kept: {json\stringify(c.gold)}");
+    std\assert(c.reasons["dir:."] == true and c.reasons["refs-output"] == true, message: "reasons fired");
+    std\assert(c.reasons["explain-self"] == null, message: "not an explain");
+
+    final self = clean("explain", query: "file:internal/a.go", hits: [Hit{ id = "file:internal/a.go", grade = 1, origin = "read" }, Hit{ id = "dir:internal", grade = 1, origin = "run" }]);
+    std\assert(self.gold.len() == 0 and self.reasons["explain-self"] == true, message: "the explained path and its dir are the query: {json\stringify(self.gold)}");
+
+    final shell = clean("refs", query: "$q", hits: [Hit{ id = "file:x.go", grade = 2, origin = "ranged" }]);
+    std\assert(shell.gold.len() == 0 and shell.reasons["$"] == true, message: "an unexpanded variable keeps no gold");
 }
 
 test "shapeOf" {
