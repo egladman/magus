@@ -407,7 +407,7 @@ const denyRuleWorkerCheckOnly denyRuleName = "worker-check-only"
 // workers to a raw `go test` that nothing graded at all. An install passes because a fresh
 // worktree can run nothing, its check included, until its dependencies are there. Every
 // other run it lets through, the check included, is held to the write paths under the rw
-// charm by denyRewriteOutsideLease.
+// charm. rowJudge decides all of it, so a brief is refused exactly when its worker would be.
 //
 // Silent where there is nothing to hold the run to: no lease, no live row, the checkout's
 // integrator, which builds, regenerates and gates there, or a row declaring no check at
@@ -439,28 +439,23 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		return denial{}
 	}
 	at := hookLocation(ctx, deps)
-	produces := sync.OnceValue(func() func(target, project string) bool {
-		return leaseProducers(ctx, deps, at.workspace, me.WritePaths)
-	})
-	composes := sync.OnceValue(func() func(target, project string) bool {
-		return checksCompose(ctx, deps, at.workspace, checks)
-	})
-	workspace := lazyWorkspace(ctx, deps, at.workspace)
+	judge := newRowJudge(ctx, deps, me, at, lazyWorkspace(ctx, deps, at.workspace))
 	for _, r := range runs {
-		if r.allowed(checks, produces) || r.composedByCheck(composes) {
-			if d := denyRewriteOutsideLease(r, me, deps.DefaultCharms, workspace); d.refused() {
-				return d
-			}
+		v := judge.verdict(r)
+		switch {
+		case v.unchecked != nil:
+			return uncheckedDenial(v, me, checks, deps.DefaultCharms)
+		case len(v.outside) > 0:
+			return rewriteDenial(v, me, deps.DefaultCharms)
+		case v.permitted:
 			continue
 		}
-		if r.installs(deps) {
-			continue
-		}
+		r = v.run
 		commands := make([]string, len(checks))
 		for i, c := range checks {
 			commands[i] = "`" + checkCommand(c) + "`"
 		}
-		if buildsCheckoutBinary(ctx, deps, at.workspace, r) {
+		if buildsCheckoutBinary(ctx, judge.workspace, r) {
 			return denial{
 				Say: fmt.Sprintf("magus workspace: `%s` builds ./magus, the binary judging lease %s's calls; %s.", r.target, me.ID, workerBuildVerdict),
 				Why: onePerBase + "\n" +
@@ -478,44 +473,110 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 	return denial{}
 }
 
-// lazyWorkspace opens the workspace at root on its first call and keeps it; nil when it
-// cannot be opened.
-func lazyWorkspace(ctx context.Context, deps Dependencies, root string) func() types.WorkspaceReader {
-	return sync.OnceValue(func() types.WorkspaceReader {
+// lazyWorkspace opens the workspace at root on its first call and keeps it, or the error
+// opening it. It is the only opener a judgment uses: one open costs seconds inside the
+// hook's deadline.
+func lazyWorkspace(ctx context.Context, deps Dependencies, root string) func() (types.WorkspaceRepository, error) {
+	return sync.OnceValues(func() (types.WorkspaceRepository, error) {
 		ws, err := deps.inspect(ctx, root)
-		if err != nil || ws == nil {
-			return nil
+		if err == nil && ws == nil {
+			err = fmt.Errorf("opening the workspace at %s found none", root)
 		}
-		return ws
+		return ws, err
 	})
 }
 
-// denyRewriteOutsideLease refuses a run the worker may make once the rw charm would have it
-// write past the row's write paths: a glob its target's declarations write that no write
-// path covers. A leased `dprint:rw` rewrote console/README.md, which is why a formatter
-// declares what it rewrites. A target whose chain declares no write passes, since nothing
-// says what it touches: refusing it refused every read-only check (go-vet) under
-// default_charms [rw]. defaults are the workspace's default_charms, which put rw on a
-// plain run as well. A workspace that cannot be read leaves the run to the rest of the
-// rule, as leaseProducers does.
-func denyRewriteOutsideLease(r targetRun, me types.Job, defaults []string, workspace func() types.WorkspaceReader) denial {
-	if r.verb != "run" || !r.rewrites(defaults) {
-		return denial{}
+// rowJudge judges the runs a row's worker would make, for the worker's own call and for a
+// brief teaching them. Every lookup reads the one workspace it is handed, on first use.
+type rowJudge struct {
+	deps   Dependencies
+	row    types.Job
+	checks []types.LeaseCheck
+	// root is the workspace, and dir the directory the runs are made in.
+	root, dir string
+	workspace func() (types.WorkspaceRepository, error)
+	produces  lazyProducers
+	composes  lazyProducers
+}
+
+func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at location, workspace func() (types.WorkspaceRepository, error)) rowJudge {
+	checks := rowChecks(row)
+	return rowJudge{
+		deps: deps, row: row, checks: checks, root: at.workspace, dir: at.dir, workspace: workspace,
+		produces: sync.OnceValue(func() func(target, project string) bool {
+			return leaseProducers(ctx, workspace, row.WritePaths)
+		}),
+		composes: sync.OnceValue(func() func(target, project string) bool {
+			return checksCompose(ctx, workspace, checks)
+		}),
 	}
-	ws := workspace()
-	if ws == nil {
-		return denial{}
+}
+
+// runVerdict is how a row's rule judges one run its worker would make.
+type runVerdict struct {
+	// run has the projects it selects resolved.
+	run targetRun
+	// permitted is the row's check, a slice of what the check composes, a target declaring
+	// an output in the write paths, or a dependency install.
+	permitted bool
+	// outside are the globs a permitted run writes past the write paths under the rw charm.
+	outside []string
+	// unchecked is why the run could not be judged: the workspace it is read against did
+	// not load.
+	unchecked error
+}
+
+// verdict judges r. A permitted run under the rw charm, named on its target or carried by
+// default_charms, is held to the write paths; a target whose chain declares no write
+// passes, since nothing says what it touches.
+func (j rowJudge) verdict(r targetRun) runVerdict {
+	r, err := r.fromDir(j.root, j.dir, j.workspace)
+	v := runVerdict{run: r}
+	switch {
+	case err != nil:
+		v.unchecked = err
+	case r.allowed(j.checks, j.produces) || r.composedByCheck(j.composes):
+		v.permitted = true
+		if r.verb != "run" || !r.rewrites(j.deps.DefaultCharms) {
+			break
+		}
+		ws, err := j.workspace()
+		if err != nil {
+			v.unchecked = fmt.Errorf("reading what %s writes: %w", r.target, err)
+			break
+		}
+		v.outside = r.writesOutside(ws, j.row.WritePaths)
+	case r.installs(j.deps):
+		v.permitted = true
 	}
-	outside := r.writesOutside(ws, me.WritePaths)
-	if len(outside) == 0 {
-		return denial{}
-	}
-	next := r.readOnly()
+	return v
+}
+
+// rewriteDenial words the refusal of a run the rw charm would have write past the row's
+// write paths.
+func rewriteDenial(v runVerdict, me types.Job, defaults []string) denial {
+	r, next := v.run, v.run.readOnly(defaults)
 	return denial{
 		Say: fmt.Sprintf("magus workspace: `%s` rewrites files outside lease %s's write paths; run `%s`.", r.target, me.ID, next),
 		Why: fmt.Sprintf("Under the rw charm `%s` writes `%s`, which lease %s's write paths (%s) do not cover.\n"+
 			"`%s` reports the same drift without writing it. The checkout's integrator, "+integratorIs+", rewrites the rest after it integrates the units; name the files in your result's unresolved risks if the unit needs them.",
-			r.target, strings.Join(outside, "`, `"), me.ID, strings.Join(me.WritePaths, ", "), next),
+			r.target, strings.Join(v.outside, "`, `"), me.ID, strings.Join(me.WritePaths, ", "), next),
+	}
+}
+
+// uncheckedDenial words the refusal of a run the rule could not judge. It refuses rather
+// than pass the run unchecked: no silent default stands in for the write paths. The next
+// run is judged without the workspace: a permitted run without the rw charm, or the check,
+// which names its project.
+func uncheckedDenial(v runVerdict, me types.Job, checks []types.LeaseCheck, defaults []string) denial {
+	next := checkCommand(checks[0])
+	if v.permitted {
+		next = v.run.readOnly(defaults)
+	}
+	return denial{
+		Say: fmt.Sprintf("magus workspace: `%s` could not be judged against lease %s's write paths: the workspace did not load; run `%s`.", v.run.target, me.ID, next),
+		Why: fmt.Sprintf("%v.\nWithout the workspace's declarations nothing says which project `%s` selects or what it writes, so it is refused rather than run unchecked. Once the workspace loads, the run is judged as usual.",
+			v.unchecked, v.run.target),
 	}
 }
 
@@ -543,7 +604,7 @@ func denyWorkerRawTool(ctx context.Context, deps Dependencies, actingLease, comm
 	op := match.spell + "::" + match.operation
 	why := "A bound worker runs its work through targets, where the cache, the sandbox and the rules that hold it to its row all apply."
 	project := cmp.Or(checks[0].Project, ".")
-	if checksCompose(ctx, deps, hookLocation(ctx, deps).workspace, checks)(op, project) {
+	if checksCompose(ctx, lazyWorkspace(ctx, deps, hookLocation(ctx, deps).workspace), checks)(op, project) {
 		why += " The check composes " + op + ", so a narrower run of it passes too: `" + hint.Run.With(op, project) + "`, with the tool's own flags after `--`."
 	} else {
 		why += " If the unit needs " + op + ", name it in your result's unresolved risks."
@@ -561,6 +622,11 @@ type targetRun struct {
 	verb     string
 	target   string
 	projects []string
+	// cwdProject is the project a run naming none selects from its directory, when one
+	// holds that directory (see fromDir).
+	cwdProject string
+	// forwarded are the arguments after `--`, passed to the target's tools.
+	forwarded []string
 	// noDefaultCharms is --no-default-charms, which keeps the workspace's default_charms
 	// off this run.
 	noDefaultCharms bool
@@ -580,11 +646,12 @@ func parseTargetRun(c hint.Invocation) (targetRun, bool) {
 	}
 	var r targetRun
 	skip := false
-	for _, a := range c.Args {
+	for i, a := range c.Args {
 		switch {
 		case skip:
 			skip = false
 		case a == "--":
+			r.forwarded = c.Args[i+1:]
 			return r, r.target != ""
 		case len(a) > 1 && a[0] == '-':
 			name, value, joined := strings.Cut(strings.TrimLeft(a, "-"), "=")
@@ -631,7 +698,7 @@ func verbFlagTakesValue(verb, name string) bool {
 //
 // `affected` is never a check: it picks its projects from the diff, and a check names one.
 func (r targetRun) allowed(checks []types.LeaseCheck, produces lazyProducers) bool {
-	projects := r.projectsOrRoot()
+	projects := r.selection()
 	if r.verb == "run" && slices.ContainsFunc(checks, func(c types.LeaseCheck) bool {
 		return sameTarget(c.Target, r.target) && !slices.ContainsFunc(projects, func(p string) bool { return path.Clean(p) != path.Clean(c.Project) })
 	}) {
@@ -644,98 +711,129 @@ func (r targetRun) allowed(checks []types.LeaseCheck, produces lazyProducers) bo
 	return !slices.ContainsFunc(projects, func(p string) bool { return !writes(r.target, p) })
 }
 
-// projectsOrRoot is the projects a run names, or the root a run naming none runs in.
-func (r targetRun) projectsOrRoot() []string {
-	if len(r.projects) == 0 {
-		return []string{"."}
+// selection is the projects a run selects: the ones it names, else the project fromDir
+// found holding its directory, else every project, which is what `magus run` picks from
+// the root or from a directory no project holds.
+func (r targetRun) selection() []string {
+	switch {
+	case len(r.projects) > 0:
+		return r.projects
+	case r.cwdProject != "":
+		return []string{r.cwdProject}
 	}
-	return r.projects
+	return []string{"/"}
+}
+
+// fromDir resolves the project a run naming none selects from dir, the innermost project
+// holding it, as `magus run` does. It opens the workspace only for a dir below root, and
+// errs when that open fails, since the run's projects are then unknown.
+func (r targetRun) fromDir(root, dir string, workspace func() (types.WorkspaceRepository, error)) (targetRun, error) {
+	if len(r.projects) > 0 || r.verb != "run" || dir == "" || filepath.Clean(dir) == filepath.Clean(root) {
+		return r, nil
+	}
+	ws, err := workspace()
+	if err != nil {
+		return r, fmt.Errorf("finding the project %s selects from %s: %w", r.target, dir, err)
+	}
+	if p, ok := ws.Where(dir); ok {
+		r.cwdProject = p.Path
+	}
+	return r, nil
 }
 
 // composedByCheck reports a run of a target one of the row's checks composes, on every
-// project it names: part of the check's own work, however its forwarded arguments narrow it.
-func (r targetRun) composedByCheck(composes func() func(target, project string) bool) bool {
+// project it selects: part of the check's own work, however its forwarded arguments narrow it.
+func (r targetRun) composedByCheck(composes lazyProducers) bool {
 	if r.verb != "run" {
 		return false
 	}
 	composed := composes()
-	return !slices.ContainsFunc(r.projectsOrRoot(), func(p string) bool { return !composed(r.target, p) })
+	return !slices.ContainsFunc(r.selection(), func(p string) bool { return !composed(r.target, p) })
+}
+
+// parse splits the run's target into its spell filter and the target with its charms.
+func (r targetRun) parse() (spell string, t types.Target, err error) {
+	spell, name := splitSpell(r.target)
+	t, err = types.ParseTarget(name)
+	return spell, t, err
 }
 
 // rewrites reports a run under the rw charm: named on its target, or carried by defaults,
 // the workspace's default_charms, on a `magus run` without --no-default-charms.
 func (r targetRun) rewrites(defaults []string) bool {
-	_, t := splitSpell(r.target)
-	parsed, err := types.ParseTarget(t)
+	_, t, err := r.parse()
 	if err != nil {
 		return false
 	}
-	if slices.Contains(parsed.Charms, types.CharmReadWrite) {
+	if slices.Contains(t.Charms, types.CharmReadWrite) {
 		return true
 	}
-	return r.verb == "run" && !r.noDefaultCharms && slices.ContainsFunc(defaults, func(c string) bool {
+	return r.verb == "run" && !r.noDefaultCharms && defaultsRewrite(defaults)
+}
+
+// defaultsRewrite reports default_charms carrying the rw charm.
+func defaultsRewrite(defaults []string) bool {
+	return slices.ContainsFunc(defaults, func(c string) bool {
 		return types.NormalizeCharm(c) == types.CharmReadWrite
 	})
 }
 
-// readOnly is the run's command without the rw charm, and with no default charms that
-// could put it back.
-func (r targetRun) readOnly() string {
-	spell, t := splitSpell(r.target)
-	name, charms, _ := strings.Cut(t, ":")
-	kept := slices.DeleteFunc(strings.Split(charms, ","), func(c string) bool {
-		return c == "" || types.NormalizeCharm(c) == types.CharmReadWrite
-	})
-	if len(kept) > 0 {
+// readOnly is the run's command without the rw charm, keeping its other charms, its
+// projects and its forwarded arguments. It adds --no-default-charms only when defaults
+// would put rw back, so a default charm that does not write stays on.
+func (r targetRun) readOnly(defaults []string) string {
+	spell, t, _ := r.parse()
+	name := t.Name
+	if kept := slices.DeleteFunc(slices.Clone(t.Charms), func(c string) bool { return c == types.CharmReadWrite }); len(kept) > 0 {
 		name += ":" + strings.Join(kept, ",")
 	}
 	if spell != "" {
 		name = spell + "::" + name
 	}
-	return hint.Run.With(append(append([]string{name}, r.projects...), "--no-default-charms")...)
+	args := append([]string{name}, r.projects...)
+	if r.noDefaultCharms || defaultsRewrite(defaults) {
+		args = append(args, "--no-default-charms")
+	}
+	if len(r.forwarded) > 0 {
+		args = append(append(args, "--"), r.forwarded...)
+	}
+	return hint.Run.With(args...)
 }
 
 // writesOutside reads what a run under the rw charm writes from the workspace's
-// declarations, in every project the run names: its target's ctx.writesFiles and
+// declarations, in every project the run selects: its target's ctx.writesFiles and
 // ctx.modifiesExistingFiles globs, and the ctx.modifiesExistingFiles globs of each step
 // its ctx.needs chain reaches in that project. It returns the rooted globs no write path
 // covers.
 //
 // A needed step's outputs and another project's steps are left out: they build what the
-// run consumes, and another project's ci settles its own formatting. Counting them refused
-// every `go-test .` check, whose chain reaches libs/proofread's proofread-build and format.
+// run consumes, and another project's ci settles its own formatting.
 func (r targetRun) writesOutside(ws types.WorkspaceReader, writePaths []string) (outside []string) {
 	var projects []*types.Project
-	if slices.Contains(r.projects, "/") {
+	if slices.Contains(r.selection(), "/") {
 		projects = ws.All()
 	} else {
-		for _, p := range r.projectsOrRoot() {
+		for _, p := range r.selection() {
 			if found := ws.Get(path.Clean(p)); found != nil {
 				projects = append(projects, found)
 			}
 		}
 	}
+	name := targetName(r.target)
 	for _, p := range projects {
-		_ = types.WalkChain(p, targetName(r.target), ws.Get, func(v types.ChainVisit) error {
-			if v.Project.Path != p.Path {
-				return types.ErrSkipChain
+		var globs []types.Glob
+		for _, ref := range p.TargetOutputs[name] {
+			globs = append(globs, ref.Rooted(p.Path))
+		}
+		for _, ref := range p.TargetUpdates[name] {
+			globs = append(globs, ref.Rooted(p.Path))
+		}
+		// A nil lookup keeps the chain in p.
+		for _, g := range append(globs, types.ChainUpdates(p, name, nil)...) {
+			if !leaseCoversGlob(writePaths, g.Pattern) && !slices.Contains(outside, g.Pattern) {
+				outside = append(outside, g.Pattern)
 			}
-			var globs []types.Glob
-			if v.Depth == 0 {
-				for _, ref := range v.Project.TargetOutputs[v.Target] {
-					globs = append(globs, ref.Rooted(v.Project.Path))
-				}
-			}
-			for _, ref := range v.Project.TargetUpdates[v.Target] {
-				globs = append(globs, ref.Rooted(v.Project.Path))
-			}
-			for _, g := range globs {
-				if !leaseCoversGlob(writePaths, g.Pattern) && !slices.Contains(outside, g.Pattern) {
-					outside = append(outside, g.Pattern)
-				}
-			}
-			return nil
-		})
+		}
 	}
 	return outside
 }
@@ -808,10 +906,10 @@ func (r targetRun) installs(deps Dependencies) bool {
 // reaches through ctx.needs, in its own project or another, and every spell op those
 // targets call, read from the workspace's static target graph. A workspace that cannot
 // be read composes nothing, which leaves each run to the check alone.
-func checksCompose(ctx context.Context, deps Dependencies, workspace string, checks []types.LeaseCheck) func(target, project string) bool {
+func checksCompose(ctx context.Context, workspace func() (types.WorkspaceRepository, error), checks []types.LeaseCheck) func(target, project string) bool {
 	none := func(string, string) bool { return false }
-	ws, err := deps.inspect(ctx, workspace)
-	if err != nil || ws == nil {
+	ws, err := workspace()
+	if err != nil {
 		return none
 	}
 	graph, err := ws.TargetGraph(ctx)
@@ -860,25 +958,26 @@ const checkoutBinary = "magus"
 
 // buildsCheckoutBinary reports a run of a target the workspace declares as the producer
 // of ./magus: only a workspace that builds magus itself declares one.
-func buildsCheckoutBinary(ctx context.Context, deps Dependencies, workspace string, r targetRun) bool {
+func buildsCheckoutBinary(ctx context.Context, workspace func() (types.WorkspaceRepository, error), r targetRun) bool {
 	if r.verb != "run" {
 		return false
 	}
-	ws, err := deps.inspect(ctx, workspace)
-	if err != nil || ws == nil {
+	ws, err := workspace()
+	if err != nil {
 		return false
 	}
 	files, err := ws.ClassifyFiles(ctx, []string{checkoutBinary})
 	if err != nil {
 		return false
 	}
+	selected := r.selection()
 	for _, f := range files {
 		if path.Clean(f.Path) != checkoutBinary {
 			continue
 		}
 		for _, c := range f.Claims {
 			if c.Role == "output" && targetName(c.Target) == targetName(r.target) &&
-				slices.Contains(r.projectsOrRoot(), path.Clean(cmp.Or(c.Project, "."))) {
+				(slices.Contains(selected, "/") || slices.Contains(selected, path.Clean(cmp.Or(c.Project, ".")))) {
 				return true
 			}
 		}
@@ -933,15 +1032,16 @@ func targetName(s string) string {
 //
 // A workspace that cannot be read falls back to this repository's producer spelling, a
 // `-generate` name or a charm such as `:rw`: a rule the guard cannot evaluate must not
-// block a tool call.
-func leaseProducers(ctx context.Context, deps Dependencies, workspace string, writePaths []string) func(target, project string) bool {
+// block a tool call. A run under the rw charm is still refused by rowJudge, which reads
+// the same workspace to hold it to the write paths.
+func leaseProducers(ctx context.Context, workspace func() (types.WorkspaceRepository, error), writePaths []string) func(target, project string) bool {
 	looksGenerating := func(target, _ string) bool {
 		name := targetName(target)
 		_, t := splitSpell(target)
 		return name == "generate" || strings.HasSuffix(name, "-generate") || strings.Contains(t, ":")
 	}
-	ws, err := deps.inspect(ctx, workspace)
-	if err != nil || ws == nil {
+	ws, err := workspace()
+	if err != nil {
 		return looksGenerating
 	}
 	paths := make([]string, 0, len(writePaths))

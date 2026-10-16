@@ -711,7 +711,11 @@ func TestWorkerCheckOnlyHoldsARewriteToTheWritePaths(t *testing.T) {
 	ws.EXPECT().Get(".").Return(root).Maybe()
 	ws.EXPECT().Get("libs/md").Return(&types.Project{Path: "libs/md", TargetUpdates: map[string][]types.UpdateRef{"format": {{Glob: "**/*.go"}}}}).Maybe()
 	ws.EXPECT().All().Return([]*types.Project{root}).Maybe()
-	deps := Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
+	opens := 0
+	deps := Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) {
+		opens++
+		return ws, nil
+	}}
 
 	lease := func(writePaths ...string) types.Job {
 		return types.Job{
@@ -740,7 +744,13 @@ func TestWorkerCheckOnlyHoldsARewriteToTheWritePaths(t *testing.T) {
 	} {
 		row := lease(tt.writePaths...)
 		ctx, _ := fleetFixture(t, row)
+		opens = 0
 		reason := denyWorkerCheckOnly(ctx, deps, row.ID, tt.command)
+		if strings.Contains(tt.command, ":rw") {
+			assert.Equal(t, 1, opens, "%s: one judgment opens the workspace once", tt.name)
+		} else {
+			assert.LessOrEqual(t, opens, 1, "%s: one judgment opens the workspace at most once", tt.name)
+		}
 		if tt.outside == "" {
 			assert.Empty(t, reason, tt.name)
 			continue
@@ -748,8 +758,9 @@ func TestWorkerCheckOnlyHoldsARewriteToTheWritePaths(t *testing.T) {
 		require.NotEmpty(t, reason, tt.name)
 		assert.Contains(t, reason.Say, "rewrites files outside lease docs/jobs's write paths; run `", tt.name)
 		_, next, _ := strings.Cut(reason.Say, "; run `")
-		assert.True(t, strings.HasSuffix(next, " . --no-default-charms`."), "%s: the next run drops the charm: %s", tt.name, next)
+		assert.True(t, strings.HasSuffix(next, " .`."), "%s: the next run drops the charm: %s", tt.name, next)
 		assert.NotContains(t, next, ":rw", "%s: the next run drops the charm", tt.name)
+		assert.NotContains(t, next, "--no-default-charms", "%s: no default charm puts rw back", tt.name)
 		assert.Contains(t, reason.Why, tt.outside, tt.name)
 	}
 
@@ -759,7 +770,7 @@ func TestWorkerCheckOnlyHoldsARewriteToTheWritePaths(t *testing.T) {
 	reason := denyWorkerCheckOnly(ctx, deps, everywhere.ID, "./magus run format:rw /")
 	require.NotEmpty(t, reason, "a run over every project reads every project's declarations")
 	assert.Contains(t, reason.Why, "`docs/**/*.md`")
-	assert.Contains(t, reason.Say, " run format / --no-default-charms`.")
+	assert.Contains(t, reason.Say, " run format /`.")
 }
 
 // TestWorkerCheckOnlyJudgesTheDefaultCharms: default_charms [rw] make a plain `magus run`
@@ -797,13 +808,100 @@ func TestWorkerCheckOnlyJudgesTheDefaultCharms(t *testing.T) {
 		}
 		require.NotEmpty(t, reason, tt.name)
 		assert.Contains(t, reason.Why, "`docs/**/*.md`", tt.name)
-		assert.Contains(t, reason.Say, " run dprint docs --no-default-charms`.", tt.name)
+		next := " run dprint docs`."
+		if defaultsRewrite(tt.defaults) {
+			next = " run dprint docs --no-default-charms`."
+		}
+		assert.Contains(t, reason.Say, next, "%s: --no-default-charms only when the defaults carry rw", tt.name)
+	}
+}
+
+// TestWorkerCheckOnlyRefusesAnUncheckedRewrite: with a workspace that does not load, nothing
+// says what a run under the rw charm writes. The run is refused, naming the load error and
+// the run without the charm, which passes; a brief teaching it is refused the same way.
+func TestWorkerCheckOnlyRefusesAnUncheckedRewrite(t *testing.T) {
+	row := figuresLease()
+	ctx, root := fleetFixture(t, row)
+	deps := Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) {
+		return nil, fmt.Errorf("magusfile: line 3: unexpected token")
+	}}
+
+	reason := denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run figures-generate:rw docs")
+	require.True(t, reason.refused(), "a rewrite the guard cannot check is refused")
+	assert.Contains(t, reason.Say, "the workspace did not load; run `")
+	assert.Contains(t, reason.Say, " run figures-generate docs`.")
+	assert.Contains(t, reason.Why, "unexpected token")
+	assert.Empty(t, denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run figures-generate docs"), "without the charm nothing is written")
+
+	defaults := deps
+	defaults.DefaultCharms = []string{"rw"}
+	reason = denyWorkerCheckOnly(ctx, defaults, row.ID, "./magus run diagrams_generate docs")
+	require.True(t, reason.refused(), "default_charms [rw] rewrite the check too")
+	assert.Contains(t, reason.Say, " docs --no-default-charms`.")
+	assert.Empty(t, denyWorkerCheckOnly(ctx, defaults, row.ID, "./magus run diagrams_generate docs --no-default-charms"))
+
+	judge := newRowJudge(ctx, deps, row, location{workspace: root, dir: root}, lazyWorkspace(ctx, deps, root))
+	off, v, found := briefOffCheck(briefRuns("Regenerate with `./magus run figures-generate:rw docs`."), judge)
+	require.True(t, found, "the brief is refused as its worker's run is")
+	assert.Contains(t, briefOffCheckDeny(row, off, v), "the workspace did not load")
+	assert.Contains(t, briefOffCheckWhy(row, v, nil), "unexpected token")
+}
+
+// TestWorkerCheckOnlyJudgesTheCwdProject: `magus run` with no project runs the project
+// holding the caller's directory, so the rule judges that project, not the root.
+func TestWorkerCheckOnlyJudgesTheCwdProject(t *testing.T) {
+	row := types.Job{
+		ID: "docs/jobs", Criteria: "document jobs", WritePaths: []string{"docs/guides/jobs.md"},
+		Check: &types.LeaseCheck{Target: "format", Project: "docs"}, State: types.StateRunning, Registered: 1,
+	}
+	ctx, root := fleetFixture(t, row)
+	at := hookLocation(ctx, Dependencies{})
+	at.dir = filepath.Join(root, "docs")
+	ctx = context.WithValue(ctx, locationKey{}, at)
+
+	ws := typestest.NewMockWorkspaceRepository(t)
+	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{Projects: []types.TargetGraphProject{
+		{Path: "docs", Nodes: []types.TargetGraphNode{{Name: "format", Spells: []types.TargetSpellUse{{Spell: "dprint", Ops: []string{"dprint"}}}}}},
+	}}, nil).Maybe()
+	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	docs := &types.Project{Path: "docs", TargetUpdates: map[string][]types.UpdateRef{"dprint": {{Glob: "**/*.md"}}}}
+	ws.EXPECT().Where(at.dir).Return(docs, true).Maybe()
+	ws.EXPECT().Get("docs").Return(docs).Maybe()
+	deps := Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
+
+	assert.Empty(t, denyWorkerCheckOnly(ctx, deps, row.ID, "../magus run format"), "the check, run from its project")
+	reason := denyWorkerCheckOnly(ctx, deps, row.ID, "../magus run dprint:rw")
+	require.True(t, reason.refused())
+	assert.Contains(t, reason.Say, "rewrites files outside lease docs/jobs's write paths")
+	assert.Contains(t, reason.Why, "`docs/**/*.md`")
+}
+
+// TestReadOnlyKeepsWhatTheRunAsked: the run offered in place of a rewrite drops only the rw
+// charm. It keeps other charms and forwarded arguments, and turns default charms off only
+// when they would put rw back.
+func TestReadOnlyKeepsWhatTheRunAsked(t *testing.T) {
+	for _, tt := range []struct {
+		command  string
+		defaults []string
+		want     string
+	}{
+		{"./magus run dprint:rw docs -- --check", []string{"verbose"}, " run dprint docs -- --check"},
+		{"./magus run dprint:rw,verbose docs", nil, " run dprint:verbose docs"},
+		{"./magus run dprint docs", []string{"rw"}, " run dprint docs --no-default-charms"},
+		{"./magus run go::go-fmt:rw .", nil, " run go::go-fmt ."},
+	} {
+		cmds, ok := ParseCommands(tt.command)
+		require.True(t, ok, tt.command)
+		r, ok := parseTargetRun(cmds[0])
+		require.True(t, ok, tt.command)
+		got := r.readOnly(tt.defaults)
+		assert.True(t, strings.HasSuffix(got, tt.want), "%s: %s", tt.command, got)
 	}
 }
 
 // TestLeaseCoversGlob pins how a glob a target writes is held to the write paths: a
-// declaration matching its text covers a single-segment wildcard, and only a whole tree
-// covers `**`.
+// declaration matching its text covers a single-segment wildcard, and only a whole tree, or
+// a `<dir>/**/<tail>` holding the glob's prefix and ending it, covers `**`.
 func TestLeaseCoversGlob(t *testing.T) {
 	for _, tt := range []struct {
 		writePaths []string
@@ -855,7 +953,9 @@ func TestWorkerCheckOnlyStaysQuiet(t *testing.T) {
 	}
 	t.Run("a workspace that cannot load falls back to the producer spelling", func(t *testing.T) {
 		row := figuresLease()
-		assert.Empty(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run generate:rw docs"))
+		assert.Contains(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run generate:rw docs").Say, "the workspace did not load",
+			"a rewrite is never let through unchecked")
+		assert.Empty(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run generate docs"))
 		assert.Empty(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run figures-generate docs"))
 		assert.NotEmpty(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run lint docs"))
 	})

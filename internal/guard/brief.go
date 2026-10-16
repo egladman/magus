@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
@@ -205,18 +204,18 @@ func judgeBriefOffCheck(deps Dependencies, brief briefInput) ShellVerdict {
 	}
 	var notes []string
 	workspace := lazyWorkspace(ctx, deps, at.workspace)
+	// A worker starts at its checkout's root, wherever the spawn was made from.
+	at.dir = at.workspace
 	for _, row := range graded {
-		produces := lazyProducers(sync.OnceValue(func() func(target, project string) bool {
-			return leaseProducers(ctx, deps, at.workspace, row.WritePaths)
-		}))
-		if off, rewrite, found := briefOffCheck(runs, row, produces, deps.DefaultCharms, workspace); found {
+		judge := newRowJudge(ctx, deps, row, at, workspace)
+		if off, v, found := briefOffCheck(runs, judge); found {
 			return ShellVerdict{
-				Deny: briefOffCheckDeny(row, off, rewrite),
-				Why:  rewrite.Why,
+				Deny: briefOffCheckDeny(row, off, v),
+				Why:  briefOffCheckWhy(row, v, deps.DefaultCharms),
 				Rule: denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleWorkerCheckOnly)},
 			}
 		}
-		notes = append(notes, briefPassNotes(runs, row, produces)...)
+		notes = append(notes, briefPassNotes(runs, judge)...)
 	}
 	return briefPassVerdict(notes)
 }
@@ -286,8 +285,7 @@ func briefRunLabel(r briefRun) string {
 // could take for an oversight: the line forbids it, it is described in running text rather
 // than taught, or the target regenerates the row's write paths. A run of the row's own check
 // needs no words.
-func briefPassNotes(runs []briefRun, row types.Job, produces lazyProducers) []string {
-	checks := rowChecks(row)
+func briefPassNotes(runs []briefRun, judge rowJudge) []string {
 	var notes []string
 	for _, r := range runs {
 		line := briefRunLabel(r)
@@ -302,11 +300,12 @@ func briefPassNotes(runs []briefRun, row types.Job, produces lazyProducers) []st
 			notes = append(notes, line+" is not graded: it describes a run in running text, and a brief teaches a command in a code span or a shell block")
 			continue
 		}
-		if r.run.allowed(checks, noProducers) {
+		run, err := r.run.fromDir(judge.root, judge.dir, judge.workspace)
+		if err != nil || run.allowed(judge.checks, noProducers) {
 			continue
 		}
-		if r.run.allowed(checks, produces) {
-			notes = append(notes, line+" is allowed: it regenerates job "+row.ID+"'s write paths")
+		if run.allowed(judge.checks, judge.produces) {
+			notes = append(notes, line+" is allowed: it regenerates job "+judge.row.ID+"'s write paths")
 		}
 	}
 	return notes
@@ -329,10 +328,13 @@ func briefPassVerdict(notes []string) ShellVerdict {
 }
 
 // briefOffCheckDeny words the refusal, quoting the line the brief would have the worker follow.
-// A refused rewrite names the files it would write past the write paths in its Why.
-func briefOffCheckDeny(row types.Job, off briefRun, rewrite denial) string {
+func briefOffCheckDeny(row types.Job, off briefRun, v runVerdict) string {
 	line, target := off.line, off.run.target
-	if rewrite.refused() {
+	switch {
+	case v.unchecked != nil:
+		return fmt.Sprintf("this brief tells job %s's worker to run `%s`, which could not be judged against its write paths: the workspace did not load [%s].\nThe line: %q",
+			row.ID, target, denyRuleWorkerCheckOnly, elideCommand(strings.TrimSpace(line)))
+	case len(v.outside) > 0:
 		return fmt.Sprintf("this brief tells job %s's worker to run `%s`, which rewrites files outside its write paths [%s]; fix the brief.\nThe line: %q",
 			row.ID, target, denyRuleWorkerCheckOnly, elideCommand(strings.TrimSpace(line)))
 	}
@@ -376,23 +378,32 @@ func briefRow(ids []string, rows []types.Job) (types.Job, bool) {
 // describes a run as often as it asks for one ("the guard refused magus run lint"), and no
 // parser can tell the two apart, so it is noted and never refused.
 //
-// A run row allows is still held to its write paths under the rw charm, named on the target
-// or carried by defaults, as denyRewriteOutsideLease holds the worker's own run; rewrite is
-// that refusal when it is the reason.
-func briefOffCheck(runs []briefRun, row types.Job, produces lazyProducers, defaults []string, workspace func() types.WorkspaceReader) (off briefRun, rewrite denial, found bool) {
-	checks := rowChecks(row)
+// Each run is judged by the verdict the worker's own run meets, so a brief is refused
+// exactly when its worker would be; v is that verdict.
+func briefOffCheck(runs []briefRun, judge rowJudge) (off briefRun, v runVerdict, found bool) {
 	for _, r := range runs {
 		if r.negated || r.prose || strings.ContainsAny(r.run.target, "<>$") {
 			continue
 		}
-		if !r.run.allowed(checks, produces) {
-			return r, denial{}, true
-		}
-		if d := denyRewriteOutsideLease(r.run, row, defaults, workspace); d.refused() {
-			return r, d, true
+		if v := judge.verdict(r.run); v.unchecked != nil || !v.permitted || len(v.outside) > 0 {
+			return r, v, true
 		}
 	}
-	return briefRun{}, denial{}, false
+	return briefRun{}, runVerdict{}, false
+}
+
+// briefOffCheckWhy is the rationale for whoever spawns the worker: what to change in the
+// brief or the row. A plain off-check run needs none beyond the refusal.
+func briefOffCheckWhy(row types.Job, v runVerdict, defaults []string) string {
+	switch {
+	case v.unchecked != nil:
+		return fmt.Sprintf("%v.\nWithout the workspace's declarations nothing says which project the run selects or what it writes, and the worker would be refused it for the same reason.", v.unchecked)
+	case len(v.outside) > 0:
+		return fmt.Sprintf("Under the rw charm `%s` writes `%s`, which job %s's write paths (%s) do not cover.\n"+
+			"Narrow the brief's command to `%s`, which reports the same drift without writing it, or widen the row's write paths to cover those globs.",
+			v.run.target, strings.Join(v.outside, "`, `"), row.ID, strings.Join(row.WritePaths, ", "), v.run.readOnly(defaults))
+	}
+	return ""
 }
 
 // briefRun is one run a brief presents, with the line presenting it.
