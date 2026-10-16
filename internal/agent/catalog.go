@@ -426,7 +426,11 @@ import (
 //
 // 141: magus-query says free text is ranked by BM25F, a partial match is labeled,
 // and each match says why it ranked; magus-multi-agent fits 500 lines again.
-const SkillVersion = 141
+//
+// 142: magus-multi-agent checks a record with `magus job fork --stdin --dry-run` before
+// forking, and teaches the claim breadth bounds (MGS3043), the outputs a fork refuses to
+// leave unregenerated (MGS3044) and the waivers for both.
+const SkillVersion = 142
 
 const skillLicense = "GPL-3.0-or-later"
 
