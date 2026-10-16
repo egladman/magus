@@ -39,12 +39,17 @@ func conformancePkg(pkg string, files []string, importers ...string) types.Knowl
 // lensFixture is a module with a library pair under internal/, a command, a test, a
 // platform-twin pair, a generated package, a declared output and an excluded tree.
 func lensFixture() *Graph {
+	return assembleLens(lensSymbols())
+}
+
+// lensSymbols are lensFixture's records, for a test that edits one before assembling.
+func lensSymbols() []types.KnowledgeSymbol {
 	const (
 		a, b, gen, tool, third      = "/internal/a", "/internal/b", "/internal/a/gen", "/cmd/tool", "/third"
 		aGo, aTest, linux, darwin   = "internal/a/a.go", "internal/a/a_test.go", "internal/a/fs_linux.go", "internal/a/fs_darwin.go"
 		bGo, bString, genGo, mainGo = "internal/b/b.go", "internal/b/b_string.go", "internal/a/gen/gen.go", "cmd/tool/main.go"
 	)
-	syms := []types.KnowledgeSymbol{
+	return []types.KnowledgeSymbol{
 		conformancePkg("", []string{"root.go"}),
 		conformancePkg(a, []string{aGo, aTest, linux, darwin}, mainGo),
 		conformancePkg(b, []string{bGo, bString}, aGo, mainGo),
@@ -68,6 +73,10 @@ func lensFixture() *Graph {
 		conformanceSym(tool, "Run().", mainGo, 32, 34, 60, "", 0),
 		conformanceSym(third, "Third().", "third/t.go", 3, 12, 15, "S1", 90),
 	}
+}
+
+// assembleLens is a graph of syms, the records lensSymbols returns after a test's edit.
+func assembleLens(syms []types.KnowledgeSymbol) *Graph {
 	return mergeAll([]Shard{assembleSymbols(".", syms, nil)})
 }
 
@@ -223,6 +232,74 @@ func TestConformanceKnownCloneGroup(t *testing.T) {
 	clones = conformanceRowFor(t, g.Conformance(o), types.ConformanceCloneTokens, types.ConformancePopSource, "")
 	assert.Zero(t, clones.Known)
 	assert.Len(t, clones.Violations, 1)
+}
+
+// A known item is matched by ID alone: its measure is never compared with anything, so
+// growth past its value is not a violation.
+func TestConformanceKnownItemIgnoresItsMeasure(t *testing.T) {
+	key := types.ConformanceKey{Metric: types.ConformanceFileLines, Population: types.ConformancePopSource}
+	o := types.ConformanceOptions{Ratchet: types.ConformanceRatchet{Schema: 1,
+		Thresholds: []types.ConformanceThreshold{{ConformanceKey: key, Value: 30}},
+		Known:      []types.ConformanceKnown{{Metric: types.ConformanceFileLines, Items: []string{"pkg/f00.go"}, Reason: "split pending"}},
+	}}
+	out := conformanceSizedFiles(300, 10).Conformance(o)
+	row := conformanceRowFor(t, out, types.ConformanceFileLines, types.ConformancePopSource, "")
+	assert.Equal(t, 1, row.Known, "f00.go at 10x the value")
+	assert.Empty(t, row.Violations)
+	assert.Empty(t, out.Stale)
+}
+
+// A renamed or moved item matches no sample: its old ID is stale, and its new ID, if still
+// past the value, is a violation.
+func TestConformanceKnownIDMatchingNoSampleIsStale(t *testing.T) {
+	key := types.ConformanceKey{Metric: types.ConformanceFileLines, Population: types.ConformancePopSource}
+	known := types.ConformanceKnown{Metric: types.ConformanceFileLines, Items: []string{"pkg/old.go"}, Reason: "split pending", Line: 3}
+	o := types.ConformanceOptions{Ratchet: types.ConformanceRatchet{Schema: 1,
+		Thresholds: []types.ConformanceThreshold{{ConformanceKey: key, Value: 30}},
+		Known:      []types.ConformanceKnown{known},
+	}}
+	out := conformanceSizedFiles(300, 10).Conformance(o)
+	assert.Equal(t, []types.ConformanceKnown{known}, out.Stale)
+	assert.Equal(t, []types.ConformanceItem{{ID: "pkg/f00.go", Source: "pkg/f00.go:1", Measure: 300}},
+		conformanceRowFor(t, out, types.ConformanceFileLines, types.ConformancePopSource, "").Violations)
+}
+
+// A known export goes stale when a caller is added from another package, a change to a
+// file the entry does not name.
+func TestConformanceKnownExportGoesStaleOnAnOutsideCaller(t *testing.T) {
+	known := types.ConformanceKnown{Metric: types.ConformanceExportScope, Items: []string{"internal/a/a.go#T"}, Reason: "stacked change", Line: 20}
+	o := lensFixtureOptions()
+	o.Ratchet.Known = []types.ConformanceKnown{known}
+
+	before := lensFixture().Conformance(o)
+	assert.Equal(t, 1, conformanceRowFor(t, before, types.ConformanceExportScope, types.ConformancePopSource, "").Known)
+	assert.Empty(t, before.Stale)
+
+	syms := lensSymbols()
+	for i := range syms {
+		if syms[i].Key == conformanceNS("/internal/a")+"T#" {
+			syms[i].Refs = append(syms[i].Refs, types.KnowledgeSymbolRef{Path: "cmd/tool/main.go", Count: 1})
+		}
+	}
+	after := assembleLens(syms).Conformance(o)
+	assert.Zero(t, conformanceRowFor(t, after, types.ConformanceExportScope, types.ConformancePopSource, "").Known)
+	assert.Equal(t, []types.ConformanceKnown{known}, after.Stale, "only cmd/tool/main.go changed")
+}
+
+// A new copy joining a known clone group makes the whole group one violation, located at
+// its first member, a file the new copy did not touch.
+func TestConformanceNewCopyFailsAKnownCloneGroupAtItsFirstMember(t *testing.T) {
+	o := lensFixtureOptions()
+	o.Ratchet.Known = []types.ConformanceKnown{{Metric: types.ConformanceCloneTokens, Items: []string{"internal/a/a.go#F", "internal/b/b.go#G"}, Reason: "one home pending"}}
+
+	syms := append(lensSymbols(), conformanceSym("/internal/b", "H().", "internal/b/b.go", 14, 23, 20, "S1", 90))
+	out := assembleLens(syms).Conformance(o)
+	clones := conformanceRowFor(t, out, types.ConformanceCloneTokens, types.ConformancePopSource, "")
+	assert.Zero(t, clones.Known)
+	assert.Equal(t, []types.ConformanceItem{
+		{ID: "internal/a/a.go#F, internal/b/b.go#G, internal/b/b.go#H", Source: "internal/a/a.go:3", Measure: 90},
+	}, clones.Violations, "H was added to b.go; the finding points at a.go")
+	assert.Empty(t, out.Stale, "the entry still shares two members with the group")
 }
 
 func TestCloneGroupsSkipsPlatformTwins(t *testing.T) {

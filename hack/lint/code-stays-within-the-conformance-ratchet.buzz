@@ -189,6 +189,13 @@ test "a known entry that no longer violates fails at the ratchet" {
     assert\equal(got[0].message.indexOf("vcs/hg.go#hgVCS.Bisect") != null, want: true, message: got[0].message);
 }
 
+test "a stale entry of an advice metric fails like an enforced one" {
+    final entry: {str: any} = {"metric": "func-lines", "items": ["internal/guard/guard.go#Judge"], "reason": "split pending"};
+    final got = judge(report([fresh()], rows: [<any>], stale: [entry]));
+    assert\equal(got.len(), want: 1, message: "func-lines is advice, yet its stale entry fails");
+    assert\equal(got[0].path, want: RATCHET, message: "points at the ratchet");
+}
+
 test "a stale index or an unknown answer fails instead of passing on what it lacks" {
     final stale: {str: any} = {"project": {"path": "libs/x"}, "language": "go", "freshness": "out-of-date"};
     final behind = judge(report([fresh(), stale], rows: [<any>], stale: [<any>]));
