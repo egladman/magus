@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -26,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/sys/pipepeer"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
@@ -147,21 +149,82 @@ func status(ctx context.Context, args []string) error {
 }
 
 // awaitBudget is `status --wait`. The gate goes up before anything slow, since the run
-// reading the pipe looks for it once, on its way to its locks.
+// reading the pipe looks for it once, on its way to its locks. A magus reading stdout
+// gets the seat reserved for it; anything else is only told the budget has room.
 func awaitBudget(ctx context.Context, rootOverride string) error {
 	if root, err := workspace.FindRoot(rootOverride); err == nil {
 		pipe.Gate(root, globalCfg)
 	}
 	start := time.Now()
 	waited := false
-	err := cache.AwaitMachine(ctx, queryCapacity, pipedRunClaims(ctx, rootOverride), func(msg string) {
+	waiting := func(msg string) {
 		waited = true
 		slog.InfoContext(ctx, msg, attr.Notice(""), attr.Component("magus"), attr.Elapsed(time.Since(start)))
-	})
+	}
+	reader, argv := pipedReader(ctx)
+	claims := pipedRunClaims(ctx, rootOverride, argv)
+	var err error
+	if reader == 0 {
+		err = cache.AwaitMachine(ctx, queryCapacity, claims, waiting)
+	} else {
+		err = reserveSeat(ctx, reader, argv, claims, waiting)
+	}
 	if err == nil && waited {
 		slog.InfoContext(ctx, fmt.Sprintf("the build budget can seat it now, after %s", time.Since(start).Round(time.Second)), attr.Notice(""), attr.Component("magus"))
 	}
 	return err
+}
+
+// reserveSeat waits until the broker can seat claims and has it hold the seat for the
+// magus reader, whose command argv is. With no broker, or one shutting down, nothing
+// holds a seat and the run admits itself; that is said rather than assumed.
+func reserveSeat(ctx context.Context, reader int, argv []string, claims []types.MachineClaim, waiting func(string)) error {
+	client := broker.NewClient(broker.DefaultAddr())
+	defer func() { _ = client.Close() }()
+	command := strings.Join(argv, " ")
+	reserve := func(ctx context.Context, c types.MachineClaim, reader int) (types.MachineVerdict, error) {
+		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+		c.Command = command
+		return client.Reserve(ctx, c, reader)
+	}
+	err := cache.ReserveMachine(ctx, reserve, claims, reader, waiting)
+	var refused *broker.Error
+	switch {
+	case errors.Is(err, broker.ErrUnavailable), errors.As(err, &refused) && refused.Code == broker.CodeDraining:
+		slog.InfoContext(ctx, fmt.Sprintf("no seat is reserved for pid %d (%v); it asks the budget itself when it starts", reader, err),
+			attr.Notice(""), attr.Component("magus"))
+		return nil
+	case errors.As(err, &refused) && refused.Code == broker.CodeUnknownType:
+		return fmt.Errorf("%w: the running broker predates seat reservations; `%s` stops it, and the next run starts a current one", err, hint.BinaryName()+" broker stop")
+	}
+	return err
+}
+
+// pipedReader is the pid and argv of the magus reading this process's stdout, 0 and nil
+// when nothing proven to be magus reads it.
+func pipedReader(ctx context.Context) (int, []string) {
+	argv, ok := pipe.ReaderArgv(ctx, os.Stdout)
+	if !ok {
+		return 0, nil
+	}
+	p, err := pipepeer.WriteEnd(os.Getpid(), int(os.Stdout.Fd()))
+	if err != nil {
+		return 0, nil
+	}
+	readers, err := p.Readers()
+	if err != nil {
+		return 0, nil
+	}
+	for _, reader := range readers {
+		if reader == os.Getpid() {
+			continue
+		}
+		if got, state := p.ReaderExec(reader); state == pipepeer.ExecSame && slices.Equal(got, argv) {
+			return reader, argv
+		}
+	}
+	return 0, nil
 }
 
 func queryCapacity(ctx context.Context) (types.MachineSnapshot, error) {
@@ -169,13 +232,12 @@ func queryCapacity(ctx context.Context) (types.MachineSnapshot, error) {
 	return st.Capacity, err
 }
 
-// pipedRunClaims is what the magus run reading stdout will claim, read from its argv the
-// way run reads its own. Anything else, or nothing, reading stdout waits for one free
-// slot, as does a run this cannot follow: that run reports its own error once it starts.
-func pipedRunClaims(ctx context.Context, rootOverride string) []types.MachineClaim {
+// pipedRunClaims is what the magus run whose argv is argv will claim, read the way run
+// reads its own. Anything else, or nothing, reading stdout waits for one free slot, as
+// does a run this cannot follow: that run reports its own error once it starts.
+func pipedRunClaims(ctx context.Context, rootOverride string, argv []string) []types.MachineClaim {
 	slot := []types.MachineClaim{{Slots: 1}}
-	argv, ok := pipe.ReaderArgv(ctx, os.Stdout)
-	if !ok || len(argv) == 0 {
+	if len(argv) == 0 {
 		return slot
 	}
 	sub, subArgs := peekSub(argv[1:])

@@ -316,7 +316,8 @@ var machineAwaitEvery = 500 * time.Millisecond
 // AwaitMachine blocks until the budget snapshot reads would admit every claim in claims
 // beside what it holds, each on its own: a run's steps wait on one another rather than
 // refuse. It takes and holds nothing, so a run started once it returns can still lose
-// the budget to another invocation that asks first.
+// the budget to another invocation that asks first; ReserveMachine holds the seat for a
+// known reader.
 //
 // It returns nil at once when snapshot fails, since no broker means nothing refuses the
 // run; the MGS3009 refusal for a claim larger than the whole budget, which no wait
@@ -341,17 +342,71 @@ func AwaitMachine(ctx context.Context, snapshot func(context.Context) (types.Mac
 		if !budget.fits(blocked, 0, 0) {
 			return machineDoesNotFitError(blocked, v)
 		}
-		if !announced && waiting != nil {
-			waiting(fmt.Sprintf("waiting for this machine's build budget to seat %s %s: %s, and %s. %s",
-				displayProject(blocked.Project), blocked.Target, describeMachineDeclaration(blocked),
-				describeMachineRemaining(v), describeMachineHolders(v.Holders)))
-			announced = true
+		if err := awaitTurn(ctx, blocked, v, &announced, waiting); err != nil {
+			return err
 		}
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("machine budget: gave up waiting for %s %s: %w", displayProject(blocked.Project), blocked.Target, ctx.Err())
-		case <-time.After(machineAwaitEvery):
+	}
+}
+
+// ReserveMachine blocks until the budget can seat the widest of claims, then holds that
+// seat for process reader and returns nil: the seat is the reader's until its first
+// claim takes it, the reader exits, or it claims nothing within the broker's bound (see
+// MachineBudget.Reserve). Unlike AwaitMachine, the run started once it returns does not
+// race other invocations for the seat it waited on.
+//
+// reserve is one ask of the broker. Its error is returned wrapped, so the caller decides
+// what an absent broker means. A claim larger than the whole budget is refused with
+// MGS3009 at once, and ctx ending returns its error. waiting is called once, when the
+// first ask keeps it out.
+func ReserveMachine(ctx context.Context, reserve func(context.Context, types.MachineClaim, int) (types.MachineVerdict, error), claims []types.MachineClaim, reader int, waiting func(msg string)) error {
+	seat := widestSeat(claims)
+	announced := false
+	for {
+		v, err := reserve(ctx, seat, reader)
+		switch {
+		case err != nil:
+			return fmt.Errorf("machine budget: reserving a seat for pid %d: %w", reader, err)
+		case v.Granted:
+			return nil
+		case !v.Fits:
+			return machineDoesNotFitError(seat, v)
 		}
+		if err := awaitTurn(ctx, seat, v, &announced, waiting); err != nil {
+			return err
+		}
+	}
+}
+
+// widestSeat is the one seat that admits every claim of a run on its own: the largest
+// memory claim, taking the most slots any claim takes. A run's later steps wait on its
+// earlier ones, so it needs room for its largest step, not for their sum.
+func widestSeat(claims []types.MachineClaim) types.MachineClaim {
+	var seat types.MachineClaim
+	slots := 1
+	for i, c := range claims {
+		if i == 0 || c.MemoryMB > seat.MemoryMB {
+			seat = c
+		}
+		slots = max(slots, c.Slots)
+	}
+	seat.Slots = slots
+	return seat
+}
+
+// awaitTurn says once, through waiting, what keeps blocked out, then waits one
+// machineAwaitEvery. It returns ctx's error, wrapped, if ctx ends first.
+func awaitTurn(ctx context.Context, blocked types.MachineClaim, v types.MachineVerdict, announced *bool, waiting func(msg string)) error {
+	if !*announced && waiting != nil {
+		waiting(fmt.Sprintf("waiting for this machine's build budget to seat %s %s: %s, and %s. %s",
+			displayProject(blocked.Project), blocked.Target, describeMachineDeclaration(blocked),
+			describeMachineRemaining(v), describeMachineHolders(v.Holders)))
+		*announced = true
+	}
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("machine budget: gave up waiting for %s %s: %w", displayProject(blocked.Project), blocked.Target, ctx.Err())
+	case <-time.After(machineAwaitEvery):
+		return nil
 	}
 }
 

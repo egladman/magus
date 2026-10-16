@@ -103,6 +103,58 @@ func TestMachineGateAwaitStopsWithItsContext(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
+func reserveOf(b *MachineBudget) func(context.Context, types.MachineClaim, int) (types.MachineVerdict, error) {
+	return func(_ context.Context, c types.MachineClaim, reader int) (types.MachineVerdict, error) {
+		return b.Reserve(c, reader), nil
+	}
+}
+
+// TestMachineGateReserveHoldsTheSeatItWaitedFor: once the wait returns, the seat is the
+// reader's, so a bare run asking first is refused and the reader's claim is granted.
+func TestMachineGateReserveHoldsTheSeatItWaitedFor(t *testing.T) {
+	fastAwait(t)
+	b, _ := testBudget(t, 0, 4)
+	liveReaders(b, 500)
+	id := b.Assert(types.MachineClaim{Project: "docs", Target: "ci", Slots: 4, PID: 100})
+
+	done := make(chan error, 1)
+	go func() {
+		done <- ReserveMachine(t.Context(), reserveOf(b), []types.MachineClaim{{Project: ".", Target: "go-test", Slots: 4}}, 500, nil)
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("returned (%v) while pid 100 held every slot", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	b.Release(id)
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("never returned after the holder released")
+	}
+	assert.False(t, b.Request(types.MachineClaim{Target: "test", Slots: 4, PID: 600}).Granted, "the seat is held for the reader")
+	assert.True(t, b.Request(types.MachineClaim{Target: "go-test", Slots: 4, PID: 500}).Granted)
+}
+
+func TestMachineGateReserveSeatsTheWidestClaim(t *testing.T) {
+	seat := widestSeat([]types.MachineClaim{
+		{Project: "a", Target: "test", MemoryMB: 6000, Slots: 1},
+		{Project: "b", Target: "go-test", MemoryMB: 1000, Slots: 4},
+	})
+	assert.Equal(t, types.MachineClaim{Project: "a", Target: "test", MemoryMB: 6000, Slots: 4}, seat)
+	assert.Equal(t, 1, widestSeat(nil).Slots, "nothing to size still takes a slot")
+}
+
+func TestMachineGateReserveRefusesWhatCanNeverFit(t *testing.T) {
+	b, _ := testBudget(t, 0, 4)
+	liveReaders(b, 500)
+	err := ReserveMachine(t.Context(), reserveOf(b), []types.MachineClaim{{Target: "test", Slots: 8}}, 500, nil)
+	var stated interface{ ExitCode() int }
+	require.ErrorAs(t, err, &stated)
+	assert.Equal(t, ExitCodeMachineDeclaration, stated.ExitCode())
+}
+
 // refusingAdmitter answers every request with err.
 type refusingAdmitter struct{ err error }
 
