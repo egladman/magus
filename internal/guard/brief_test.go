@@ -193,6 +193,11 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 	assert.True(t, rewrite.refused())
 	_, _, found = briefOffCheck(briefRuns("Check with `./magus run figures-generate docs --no-default-charms`."), row, produces, []string{"rw"}, workspace)
 	assert.False(t, found, "--no-default-charms keeps the defaults off")
+
+	vet := figuresLease()
+	vet.Check = &types.LeaseCheck{Target: "go-vet", Project: "docs"}
+	_, _, found = briefOffCheck(briefRuns("Check with `./magus run go::go-vet docs`."), vet, produces, []string{"rw"}, workspace)
+	assert.False(t, found, "a check declaring no write passes under default rw")
 }
 
 // agentEnvelope is a spawn in a session of its own, since a repeated deny is shortened.

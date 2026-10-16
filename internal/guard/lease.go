@@ -492,11 +492,12 @@ func lazyWorkspace(ctx context.Context, deps Dependencies, root string) func() t
 
 // denyRewriteOutsideLease refuses a run the worker may make once the rw charm would have it
 // write past the row's write paths: a glob its target's declarations write that no write
-// path covers, or a target declaring no write at all. A leased `dprint:rw` rewrote
-// console/README.md this way, and the audit that saw it could only report the write after
-// it landed. defaults are the workspace's default_charms, which put rw on a plain run as
-// well. A workspace that cannot be read leaves the run to the rest of the rule, as
-// leaseProducers does.
+// path covers. A leased `dprint:rw` rewrote console/README.md, which is why a formatter
+// declares what it rewrites. A target whose chain declares no write passes, since nothing
+// says what it touches: refusing it refused every read-only check (go-vet) under
+// default_charms [rw]. defaults are the workspace's default_charms, which put rw on a
+// plain run as well. A workspace that cannot be read leaves the run to the rest of the
+// rule, as leaseProducers does.
 func denyRewriteOutsideLease(r targetRun, me types.Job, defaults []string, workspace func() types.WorkspaceReader) denial {
 	if r.verb != "run" || !r.rewrites(defaults) {
 		return denial{}
@@ -505,24 +506,16 @@ func denyRewriteOutsideLease(r targetRun, me types.Job, defaults []string, works
 	if ws == nil {
 		return denial{}
 	}
-	outside, undeclared := r.writesOutside(ws, me.WritePaths)
-	if len(outside) == 0 && len(undeclared) == 0 {
+	outside := r.writesOutside(ws, me.WritePaths)
+	if len(outside) == 0 {
 		return denial{}
 	}
-	var why []string
-	if len(outside) > 0 {
-		why = append(why, fmt.Sprintf("Under the rw charm `%s` writes `%s`, which lease %s's write paths (%s) do not cover.",
-			r.target, strings.Join(outside, "`, `"), me.ID, strings.Join(me.WritePaths, ", ")))
-	}
-	if len(undeclared) > 0 {
-		why = append(why, fmt.Sprintf("`%s` declares no write (ctx.writesFiles or ctx.modifiesExistingFiles) and composes nothing, so nothing says what it touches under the rw charm.",
-			strings.Join(undeclared, "`, `")))
-	}
 	next := r.readOnly()
-	why = append(why, fmt.Sprintf("`%s` reports the same drift without writing it. The checkout's integrator, "+integratorIs+", rewrites the rest after it integrates the units; name the files in your result's unresolved risks if the unit needs them.", next))
 	return denial{
 		Say: fmt.Sprintf("magus workspace: `%s` rewrites files outside lease %s's write paths; run `%s`.", r.target, me.ID, next),
-		Why: strings.Join(why, "\n"),
+		Why: fmt.Sprintf("Under the rw charm `%s` writes `%s`, which lease %s's write paths (%s) do not cover.\n"+
+			"`%s` reports the same drift without writing it. The checkout's integrator, "+integratorIs+", rewrites the rest after it integrates the units; name the files in your result's unresolved risks if the unit needs them.",
+			r.target, strings.Join(outside, "`, `"), me.ID, strings.Join(me.WritePaths, ", "), next),
 	}
 }
 
@@ -703,35 +696,38 @@ func (r targetRun) readOnly() string {
 }
 
 // writesOutside reads what a run under the rw charm writes from the workspace's
-// declarations: every ctx.writesFiles and ctx.modifiesExistingFiles glob of its target,
-// and of each step the target's ctx.needs chain reaches, in every project the run names.
-// outside holds the rooted globs no write path covers. undeclared holds each target that
-// declares no write and composes nothing, so nothing records what it touches.
-func (r targetRun) writesOutside(ws types.WorkspaceReader, writePaths []string) (outside, undeclared []string) {
+// declarations, in every project the run names: its target's ctx.writesFiles and
+// ctx.modifiesExistingFiles globs, and the ctx.modifiesExistingFiles globs of each step
+// its ctx.needs chain reaches in that project. It returns the rooted globs no write path
+// covers.
+//
+// A needed step's outputs and another project's steps are left out: they build what the
+// run consumes, and another project's ci settles its own formatting. Counting them refused
+// every `go-test .` check, whose chain reaches libs/proofread's proofread-build and format.
+func (r targetRun) writesOutside(ws types.WorkspaceReader, writePaths []string) (outside []string) {
 	var projects []*types.Project
 	if slices.Contains(r.projects, "/") {
 		projects = ws.All()
 	} else {
 		for _, p := range r.projectsOrRoot() {
-			found := ws.Get(path.Clean(p))
-			if found == nil {
-				undeclared = append(undeclared, path.Clean(p)+":"+targetName(r.target))
-				continue
+			if found := ws.Get(path.Clean(p)); found != nil {
+				projects = append(projects, found)
 			}
-			projects = append(projects, found)
 		}
 	}
 	for _, p := range projects {
 		_ = types.WalkChain(p, targetName(r.target), ws.Get, func(v types.ChainVisit) error {
-			globs := make([]types.Glob, 0, len(v.Project.TargetOutputs[v.Target])+len(v.Project.TargetUpdates[v.Target]))
-			for _, ref := range v.Project.TargetOutputs[v.Target] {
-				globs = append(globs, ref.Rooted(v.Project.Path))
+			if v.Project.Path != p.Path {
+				return types.ErrSkipChain
+			}
+			var globs []types.Glob
+			if v.Depth == 0 {
+				for _, ref := range v.Project.TargetOutputs[v.Target] {
+					globs = append(globs, ref.Rooted(v.Project.Path))
+				}
 			}
 			for _, ref := range v.Project.TargetUpdates[v.Target] {
 				globs = append(globs, ref.Rooted(v.Project.Path))
-			}
-			if len(globs) == 0 && len(v.Project.TargetChains[v.Target]) == 0 {
-				undeclared = append(undeclared, v.Project.Path+":"+v.Target)
 			}
 			for _, g := range globs {
 				if !leaseCoversGlob(writePaths, g.Pattern) && !slices.Contains(outside, g.Pattern) {
@@ -741,7 +737,7 @@ func (r targetRun) writesOutside(ws types.WorkspaceReader, writePaths []string) 
 			return nil
 		})
 	}
-	return outside, undeclared
+	return outside
 }
 
 // leaseCoversGlob reports whether writePaths cover every path glob can match.
