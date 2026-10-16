@@ -229,7 +229,7 @@ func (r Report) Text() string {
 			name, m.Queries, m.Unscorable, m.DroppedGold, m.Recall5, m.Recall10, m.Recall50,
 			m.MRR, m.NDCG10, m.ZeroResult, m.Unknown, m.LatencyP50, m.LatencyP95, m.MeanBytes)
 	}
-	w.Flush()
+	_ = w.Flush()
 	return b.String()
 }
 

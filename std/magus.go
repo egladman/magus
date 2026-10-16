@@ -1953,7 +1953,7 @@ func MagusClearJob(ctx context.Context) (int, error) {
 // MagusJobSchema is the JSON Schema `magus job fork --schema` prints, decoded, for the
 // magus\job.schema method that lets a caller with no CLI read the record it must put. It
 // needs no workspace.
-func MagusJobSchema(ctx context.Context) (map[string]any, error) {
+func MagusJobSchema(_ context.Context) (map[string]any, error) {
 	var schema map[string]any
 	if err := json.Unmarshal([]byte(job.DeclarationSchema), &schema); err != nil {
 		return nil, fmt.Errorf("decode the job record schema: %w", err)
