@@ -591,7 +591,7 @@ func TestJobForkFromStdinMakesTheCheckoutTheFlagNames(t *testing.T) {
 	})
 	root := repo.Root()
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
-	_, err := store.Update(t.Context(), "live", func(cur *types.Job) { cur.CheckoutRoot = root })
+	_, err := store.Exec(t.Context(), "live")
 	require.NoError(t, err)
 	record := func(id, checkout string) string {
 		return fmt.Sprintf(`{"schema_version": %d, "id": %q, "checkout": %q, "write_paths": ["magus.yaml"],`+
