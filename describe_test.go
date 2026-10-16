@@ -828,6 +828,47 @@ func TestClassifyFiles_DeclaredBeatsMaintained(t *testing.T) {
 	}, out[0])
 }
 
+// TestClassifyFiles_DeclaredGitattributesByChange pins the other half of the precedence:
+// a project that declares .gitattributes still sees a hand edit as a source change, but a
+// change confined to the section magus writes is magus's own, so it reads as maintained.
+func TestClassifyFiles_DeclaredGitattributesByChange(t *testing.T) {
+	// Not parallel: mutates the global spell registry.
+	spellName := register.Spell(t, "zzz-df-attrs-change", spells.WithSources(".gitattributes"))
+
+	const user = "*.png binary\n"
+	section := func(body string) string {
+		return "# BEGIN magus-generated - do not edit this section manually\n" + body + "# END magus-generated\n"
+	}
+	committed := user + "\n" + section("a.go merge=magus\n")
+
+	tests := []struct {
+		name    string
+		working string
+		want    string
+	}{
+		{name: "unchanged", working: committed, want: "source"},
+		{name: "section rewritten", working: user + "\n" + section("a.go merge=magus\nb.go merge=magus\n"), want: "maintained"},
+		{name: "hand edit outside the section", working: user + "*.jpg binary\n\n" + section("a.go merge=magus\n"), want: "source"},
+		{name: "hand edit and section rewritten", working: "*.jpg binary\n\n" + section("b.go merge=magus\n"), want: "source"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := testkit.NewRepo(t, map[string]string{".gitattributes": committed, "magusfile.buzz": ""})
+			repo.Write(".gitattributes", tt.working)
+
+			reg := NewWorkspaceRegistry()
+			reg.RegisterProject(".", WithSpell(spellName))
+			ws, err := Inspect(context.Background(), repo.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+			require.NoError(t, err, "Inspect")
+
+			out, err := ws.ClassifyFiles(context.Background(), []string{".gitattributes"})
+			require.NoError(t, err, "ClassifyFiles")
+			require.Len(t, out, 1)
+			assert.Equal(t, tt.want, out[0].Role)
+		})
+	}
+}
+
 // TestInspectorMethods_HonorCancelledContext pins that a context cancelled BEFORE
 // an Inspector method's outer walk begins is REPORTED, not silently swallowed: the
 // method returns a non-nil error satisfying errors.Is(err, context.Canceled)
