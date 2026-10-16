@@ -31,6 +31,9 @@ func TestMain(m *testing.M) {
 	if addr := os.Getenv(holderEnv); addr != "" {
 		os.Exit(holdUntilKilled(addr))
 	}
+	if addr := os.Getenv(groupHolderEnv); addr != "" {
+		os.Exit(holdAGroupUntilKilled(addr))
+	}
 	if addr := os.Getenv(activatedEnv); addr != "" {
 		os.Exit(serveActivated(addr))
 	}

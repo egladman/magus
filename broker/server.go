@@ -482,6 +482,7 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 		delete(sess.claims, req.ClaimID)
 		s.mu.Unlock()
 		if mine {
+			s.stopRiders(sess, req.ClaimID)
 			s.budget.Release(req.ClaimID)
 			s.noteRelease()
 		}
@@ -489,12 +490,18 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 
 	case typeHold:
 		var req holdRequest
-		if err := decodeBody(f, &req); err != nil || req.Hold.PGID <= 0 || req.Hold.Deadline.IsZero() {
-			fail(CodeMalformed, "broker: a hold needs a process group and a deadline")
+		if err := decodeBody(f, &req); err != nil || req.Hold.PGID <= 0 || (req.Hold.Deadline.IsZero() && req.Hold.Claim == "") {
+			fail(CodeMalformed, "broker: a hold needs a process group and a deadline or a claim")
 			return
 		}
 		s.mu.Lock()
-		if s.draining {
+		if _, mine := sess.claims[req.Hold.Claim]; req.Hold.Claim != "" && !mine {
+			s.mu.Unlock()
+			fail(CodeMalformed, "broker: process group %d rides claim %q, which this connection does not hold", req.Hold.PGID, req.Hold.Claim)
+			return
+		}
+		// A group riding a claim belongs to a step already seated, which a drain lets finish.
+		if s.draining && req.Hold.Claim == "" {
 			s.mu.Unlock()
 			_ = w.write(typeError, f.ID, s.drainingError())
 			return

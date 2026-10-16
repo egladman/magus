@@ -20,10 +20,11 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Hold is one command a client runs under a deadline and hands the broker to watch:
-// `magus job exec --timeout`. The broker stops the command's whole process group when
-// the deadline passes, or when the client's connection closes while the group still
-// runs, since nothing is left then to wait on it.
+// Hold is a process group a client hands the broker to watch: a command `magus job exec
+// --timeout` runs under a deadline, or a group a step started under a budget claim. The
+// broker stops the whole group when its deadline passes or its claim is released, or
+// when the client's connection closes while the group still runs, since nothing is left
+// then to wait on it.
 type Hold struct {
 	// Lease is the job lease the command was started under, "" for none.
 	Lease string `json:"lease,omitempty"`
@@ -35,7 +36,11 @@ type Hold struct {
 	// Root is the workspace the command ran in; an ending is filed in its attention queue.
 	Root     string    `json:"root,omitempty"`
 	Slots    int       `json:"slots,omitzero"`
-	Deadline time.Time `json:"deadline"`
+	Deadline time.Time `json:"deadline,omitzero"`
+	// Claim is the budget claim, on the same connection, of the step that started the
+	// group. The group then charges nothing of its own and needs no deadline: it ends
+	// with the claim.
+	Claim string `json:"claim,omitempty"`
 }
 
 // WorkKind is what kind of thing a [Work] is.
@@ -120,8 +125,17 @@ type heldWork struct {
 }
 
 // holdLocked records h for sess, charges its slots to the budget unasked (the command
-// already runs), and arms its deadline. Callers hold s.mu.
+// already runs), and arms its deadline. A group riding a claim is only recorded. Callers
+// hold s.mu.
 func (s *server) holdLocked(sess *session, h Hold) string {
+	if h.Claim != "" {
+		h.Lease = sess.hello.Lease
+		id := h.Claim + "/pgid " + strconv.Itoa(h.PGID)
+		sess.holds[id] = &heldWork{hold: h, work: Work{
+			Kind: WorkRun, Lease: h.Lease, PID: sess.hello.PID, Dir: sess.hello.Dir, Command: h.Command, Since: time.Now(),
+		}}
+		return id
+	}
 	slots := max(h.Slots, 1)
 	id := s.budget.Assert(types.MachineClaim{
 		Target: "job exec", Slots: slots, PID: sess.hello.PID, Dir: sess.hello.Dir, Command: h.Command,
@@ -141,7 +155,7 @@ func (s *server) releaseHold(sess *session, id string) {
 	hw, ok := sess.holds[id]
 	delete(sess.holds, id)
 	s.mu.Unlock()
-	if !ok {
+	if !ok || hw.claim == "" {
 		return
 	}
 	hw.timer.Stop()
@@ -162,17 +176,43 @@ func (s *server) expire(sess *session, id string) {
 	s.stopGroup(hw, hw.hold.DeadlineReason())
 }
 
-// reapOrphan stops a held command its connection left behind, and returns its slots.
+// reapOrphan stops a held group its connection left behind, and returns its slots.
 func (s *server) reapOrphan(hw *heldWork) {
+	if hw.claim == "" {
+		s.stopIfAlive(hw, "outlived the magus run whose step started it")
+		return
+	}
 	hw.timer.Stop()
+	s.stopIfAlive(hw, "outlived the magus job exec that ran it")
+	s.budget.Release(hw.claim)
+}
+
+// stopRiders stops the groups riding claim that still run: the step that started them
+// handed its claim back, so nothing waits on them any more.
+func (s *server) stopRiders(sess *session, claim string) {
+	var riders []*heldWork
+	s.mu.Lock()
+	for id, hw := range sess.holds {
+		if hw.hold.Claim == claim {
+			riders = append(riders, hw)
+			delete(sess.holds, id)
+		}
+	}
+	s.mu.Unlock()
+	for _, hw := range riders {
+		s.stopIfAlive(hw, "outlived the step whose claim it rode")
+	}
+}
+
+// stopIfAlive stops hw's group once, if anything in it still runs.
+func (s *server) stopIfAlive(hw *heldWork, why string) {
 	s.mu.Lock()
 	stop := !hw.stopped && groupAlive(hw.hold.PGID)
 	hw.stopped = hw.stopped || stop
 	s.mu.Unlock()
 	if stop {
-		s.stopGroup(hw, "outlived the magus job exec that ran it")
+		s.stopGroup(hw, why)
 	}
-	s.budget.Release(hw.claim)
 }
 
 // stopGroup asks hw's process group to stop, kills what is left after killGrace, and
@@ -220,7 +260,10 @@ func (s *server) work() WorkReport {
 			continue
 		}
 		for _, hw := range sess.holds {
-			r.Running = append(r.Running, hw.work)
+			// A group riding a claim is part of the run listed below.
+			if hw.hold.Claim == "" {
+				r.Running = append(r.Running, hw.work)
+			}
 		}
 		if len(sess.claims) == 0 {
 			continue
@@ -314,6 +357,23 @@ func (c *Client) Hold(ctx context.Context, h Hold) (string, error) {
 		return "", err
 	}
 	return reply.ID, nil
+}
+
+var _ cache.GroupHolder = (*Client)(nil)
+
+// HoldGroup hands the broker process group pgid, which a step holding claim (an id
+// [Client.Request] granted) started, so the group ends with the claim: when it is
+// released, or when this connection closes. [Client.ReleaseHold] takes the id it
+// returns, once the group's leader has exited. Like a hold, it is not re-asserted on a
+// broker that replaces this one.
+func (c *Client) HoldGroup(ctx context.Context, claim string, pgid int, command string) (string, error) {
+	c.mu.Lock()
+	h, ok := c.held[claim]
+	c.mu.Unlock()
+	if !ok || h.remote == "" {
+		return "", fmt.Errorf("broker: hold process group %d: this client holds no claim %q", pgid, claim)
+	}
+	return c.Hold(ctx, Hold{Claim: h.remote, PGID: pgid, Command: command})
 }
 
 // ReleaseHold says the held command ended on its own. A broker that is gone already
