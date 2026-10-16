@@ -158,7 +158,35 @@ type TargetResult struct {
 	Lease          string `json:"lease,omitempty"`
 	// LeaseFrom repeats the start's, for the reason Lease does.
 	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
+
+	// What the target claimed and what it cost, so sizing can be learned from the
+	// store. Each is omitted when unmeasured, and a record written before they existed
+	// reads as zero with an empty Sizing.
+
+	// StartedMs is when the target was admitted and began, in unix milliseconds.
+	StartedMs int64 `json:"started_ms,omitzero"`
+	// Slots and MemoryMB are the machine claim the target was granted; both are zero on
+	// a replay, which claims nothing.
+	Slots    int    `json:"slots,omitzero"`
+	MemoryMB int    `json:"memory_mb,omitzero"`
+	Sizing   Sizing `json:"sizing,omitzero"`
+	// WaitedMs is how long the target queued for its machine claim and local slots.
+	WaitedMs int64 `json:"waited_ms,omitzero"`
+	// MaxRSSBytes and CPUMs are the run's peak resident memory and CPU time; see
+	// types.WithExecCost. A replay ran nothing and carries neither.
+	MaxRSSBytes int64 `json:"max_rss_bytes,omitzero"`
+	CPUMs       int64 `json:"cpu_ms,omitzero"`
 }
+
+// Sizing is where a [TargetResult]'s MemoryMB came from.
+type Sizing string
+
+// Sizing values. Empty means the record predates the field.
+const (
+	SizingDeclared Sizing = "declared" // the target's own memory_mb
+	SizingMeasured Sizing = "measured" // narrowed from recorded peaks
+	SizingNone     Sizing = "none"     // no memory claimed: undeclared, or a replay
+)
 
 // UnmarshalJSON decodes a result, reading a duration written under either spelling.
 //
