@@ -40,8 +40,8 @@ func WithReader(ctx context.Context, paths []string) context.Context {
 	return context.WithValue(ctx, readerKey{}, paths)
 }
 
-// ReaderFrom returns the reader paths WithReader put on ctx, nil when there are none.
-func ReaderFrom(ctx context.Context) []string {
+// readersOn returns the reader paths WithReader put on ctx, nil when there are none.
+func readersOn(ctx context.Context) []string {
 	paths, _ := ctx.Value(readerKey{}).([]string)
 	return paths
 }
@@ -120,8 +120,8 @@ func queryTokens(terms []compiledTerm) (score, need []string) {
 	return score, need
 }
 
-// matchedOf counts the tokens of need that h holds.
-func matchedOf(h textrank.Hit, need []string) int {
+// termsHeld counts the tokens of need that h holds.
+func termsHeld(h textrank.Hit, need []string) int {
 	held := map[string]bool{}
 	for _, ts := range h.Terms {
 		held[ts.Term] = true
@@ -206,7 +206,7 @@ func (g *Graph) rankText(ix *searchIndex, cq *compiledQuery, tokens, need []stri
 	})
 
 	why := func(c *candidate) *types.KnowledgeMatchWhy {
-		return &types.KnowledgeMatchWhy{Matched: matchedOf(c.hit, need), Of: len(need), Terms: termScores(c.hit.Terms), Prior: c.prior}
+		return &types.KnowledgeMatchWhy{Matched: termsHeld(c.hit, need), Of: len(need), Terms: termScores(c.hit.Terms), Prior: c.prior}
 	}
 	seedsOf := map[string][]string{}
 	graph, err := g.graphList(cands, opts, ranking, seedsOf)

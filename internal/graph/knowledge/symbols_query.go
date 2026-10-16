@@ -158,7 +158,7 @@ func (s *Store) QuerySymbols(ctx context.Context, g *Graph, input string, budget
 	}
 	// Ranked over the in-memory index, as Graph.Query over the fully merged graph is, so the
 	// two answers stay byte for byte the same.
-	opts := RetrieveOptions{Reader: ReaderFrom(ctx), Weights: ShippedWeights()}
+	opts := RetrieveOptions{Reader: readersOn(ctx), Weights: ShippedWeights()}
 	if names == nil || (relationOnly && len(q.terms) == 0) {
 		if err := s.MergeSymbolShards(ctx, g); err != nil {
 			return types.KnowledgeQueryOutput{}, nil, err

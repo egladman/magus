@@ -393,7 +393,6 @@ func TestQueryPageMatchesResolve(t *testing.T) {
 	}
 }
 
-
 // TestResolveGlobLoweringIsIdempotent pins the assumption the index rests on: the scan
 // lowercases a glob's subject once, at build time, where globMatch lowercases it per call.
 // The two agree only when lowering twice is lowering once.
