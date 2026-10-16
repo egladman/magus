@@ -313,7 +313,7 @@ func TestSkillReadIsRecordedAndJudged(t *testing.T) {
 		judged = append(judged, req)
 		return types.GuardVerdict{Decision: types.GuardAllow}, nil
 	}}
-	v := Judge(ctx, deps, Request{Input: read, Host: "cursor", ReportsSkills: true})
+	v := Judge(ctx, deps, Request{Input: read, Host: "cursor", ObservesSkillLoads: true})
 	assert.Equal(t, "pass", v.Decision)
 	assert.True(t, skillLoaded(hint.NewGate(cacheDir, hookAttribution{Host: "cursor", Session: "c1"}.skillsKey()), agent.MustSkill("magus-run")))
 	require.Len(t, judged, 1, "the read reaches the command rules")

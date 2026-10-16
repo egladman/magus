@@ -106,7 +106,7 @@ fun codex_entries() > [any] {
         {
             "path": ["hooks", "PreToolUse"],
             "entries": [
-                // No entry declares --reports-skills: Codex has no skill tool to match, so a
+                // No entry declares --observes-skill-loads: Codex has no skill tool to match, so a
                 // rule that requires a skill load has nothing to read and must stand down.
                 codex_pretool_entry(EVERY_TOOL, codex_guard_command(), "magus guard: checking the call"),
             ],
@@ -546,11 +546,11 @@ test "harness_entries covers the tool, subagent, session, Stop and message event
         "the glue tells a message from a call by the event's shape");
 }
 
-test "no codex entry declares reports-skills, since Codex has no hook on a skill load" {
+test "no codex entry declares observes-skill-loads, since Codex has no hook on a skill load" {
     foreach (block in codex_entries()) {
         foreach (entry in block["entries"] as [any]) {
             foreach (hook in entry["hooks"] as [any]) {
-                assert\isTrue("{hook["command"]}".indexOf("--reports-skills") == null,
+                assert\isTrue("{hook["command"]}".indexOf("--observes-skill-loads") == null,
                     "a rule that requires a skill would deny forever: {hook["command"]}");
             }
         }

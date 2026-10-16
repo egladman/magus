@@ -36,7 +36,7 @@
 // `-- --agent-name <host>` and HOST_SESSION_PATH work exactly as they do in
 // magus-command.buzz: the host name is REQUIRED on this script's argv, and both are
 // attribution recorded on the activity event, never an input to the verdict. So does
-// `-- --reports-skills`, the one capability an entry here may declare.
+// `-- --observes-skill-loads`, the one capability an entry here may declare.
 //
 // Every knob this file reads, each meaning what its magus-command.buzz twin means:
 //
@@ -143,7 +143,7 @@ final AGENT_NAME_FLAG = "--agent-name";
 // The `magus shell` flags an entry may declare, as in magus-command.buzz's SUPPORTED_FLAGS:
 // a config that also matches its host's skill tool says so, and a rule that wants a skill
 // read before a write can then hold the write.
-final SUPPORTED_FLAGS = ["--reports-skills"];
+final SUPPORTED_FLAGS = ["--observes-skill-loads"];
 
 // EntryArgs is what this script's argv says: the host, and the supported flags it named.
 object EntryArgs {

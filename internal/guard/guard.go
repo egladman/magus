@@ -523,16 +523,16 @@ type Request struct {
 	// guard remembers for a caller no host delivered a session for, and is never recorded
 	// as a session: a terminal window is not a host's conversation.
 	Window string
-	// ReportsSkills is the one CAPABILITY on this struct rather than attribution: the
-	// host's wiring reports skill loads to magus, so a rule may require one. It is set by
+	// ObservesSkillLoads is the one CAPABILITY on this struct rather than attribution:
+	// the host's wiring lets magus observe skill loads, so a rule may require one. It is set by
 	// the wiring that provides the observation, never inferred from Host, because guard
 	// code may not branch on a host's name and a name would not prove the wiring anyway.
 	//
 	// False is the safe answer: rules that need it stand down, which is what keeps them
 	// from denying forever on a host that can never satisfy them.
-	ReportsSkills bool
+	ObservesSkillLoads bool
 	// Tools is the host's own tool table, as the directory the wiring names reads back:
-	// what each tool can do where the shape of its input cannot say. Like ReportsSkills
+	// what each tool can do where the shape of its input cannot say. Like ObservesSkillLoads
 	// it comes from the wiring, never from Host.
 	Tools agent.ToolRows
 	// RendersAsk is the second capability: the wiring puts an ask verdict in front of the
@@ -922,12 +922,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		// reason: the two above answer whether this agent may touch the file at all, and
 		// there is nothing to learn before a write that is refused anyway.
 		if verdict.Decision != decisionDeny {
-			if reason := denyBuzzWriteWithoutSkill(skills, req.ReportsSkills, location.workspace, input); reason != "" {
+			if reason := denyBuzzWriteWithoutSkill(skills, req.ObservesSkillLoads, location.workspace, input); reason != "" {
 				refuse(denyBuzzUnbriefed, reason)
 			}
 		}
 		if verdict.Decision != decisionDeny {
-			if reason := denyArchitectureWithoutSkill(facts, skills, req.ReportsSkills, location.workspace, newSourceDir(location.workspace, input)); reason != "" {
+			if reason := denyArchitectureWithoutSkill(facts, skills, req.ObservesSkillLoads, location.workspace, newSourceDir(location.workspace, input)); reason != "" {
 				refuse(denyArchitectureUnbriefed, reason)
 			}
 		}
@@ -1012,7 +1012,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		// kind anyway, because the kind is also the NAME a verdict reports.
 		//
 		// Quiet for an agent whose host reported it loaded the skill this text sends it to.
-		if verdict.Decision == decisionPass && !spoken && (!req.ReportsSkills || !skillLoaded(skills, architectureSkill)) {
+		if verdict.Decision == decisionPass && !spoken && (!req.ObservesSkillLoads || !skillLoaded(skills, architectureSkill)) {
 			if a := adviseNewSourceDir(location.workspace, input); a.Say != "" {
 				said, adviceKind = a.Say, advisoryNewSourceDir
 				whys[a.Say] = a.Why
@@ -1054,7 +1054,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		v := judgeShellLine(ctx, deps, location, callDir, input, shellD)
 		// Outside judgeShellLine: it reads session state (which skills have loaded) rather
 		// than the line alone, and a remedy graded by that function never writes Buzz.
-		v = deps.rankGraded(v, denyBuzzUnbriefed, denyBuzzAuthorWithoutSkill(skills, req.ReportsSkills, location.workspace, input, shellD), rankBuzzAuthor)
+		v = deps.rankGraded(v, denyBuzzUnbriefed, denyBuzzAuthorWithoutSkill(skills, req.ObservesSkillLoads, location.workspace, input, shellD), rankBuzzAuthor)
 		// The rules below read and spend the caller's own session record, which is why they
 		// sit here rather than in the pure rule set a remedy is graded by.
 		now := time.Now()
@@ -1072,7 +1072,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		if v.Deny == "" {
 			v = stronger(v, deps.grade(judgeHeredocWrites(ctx, deps, req, who, callDir, actingLease, input, shellD)))
 		}
-		switch v = deps.rankGraded(v, denyArchitectureUnbriefed, denyArchitectureWithoutSkill(facts, skills, req.ReportsSkills, location.workspace, ""), rankArchitectureUnbriefed); {
+		switch v = deps.rankGraded(v, denyArchitectureUnbriefed, denyArchitectureWithoutSkill(facts, skills, req.ObservesSkillLoads, location.workspace, ""), rankArchitectureUnbriefed); {
 		case v.Deny != "":
 			// These are the denies that hold for everyone, so a pre-authorization does not
 			// reach them: whole-tree VCS, a pipe or redirect of magus's own output, a raw

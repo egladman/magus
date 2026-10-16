@@ -103,14 +103,14 @@ Read the input as a message the person typed, without judging it: it records the
 \fB\-\-observe\fR
 Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass
 .TP
+\fB\-\-observes\-skill\-loads\fR
+This hook wiring observes the host loading a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down
+.TP
 \fB\-\-path\fR
 Judge the input as a file path an edit is about to write, not as a shell command
 .TP
 \fB\-\-renders\-ask\fR
 This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny
-.TP
-\fB\-\-reports\-skills\fR
-This hook wiring reports when the host loads a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down
 .TP
 \fB\-\-session\fR \fIstring\fR
 The host's own session id for this invocation

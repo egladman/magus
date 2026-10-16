@@ -609,12 +609,12 @@ const (
 	FlagShellMessage = "message"
 	// shell: --observe
 	FlagShellObserve = "observe"
+	// shell: --observes-skill-loads
+	FlagShellObservesSkillLoads = "observes-skill-loads"
 	// shell: --path
 	FlagShellPath = "path"
 	// shell: --renders-ask
 	FlagShellRendersAsk = "renders-ask"
-	// shell: --reports-skills
-	FlagShellReportsSkills = "reports-skills"
 	// shell: --session
 	FlagShellSession = "session"
 	// shell: --tool-rows
@@ -930,7 +930,7 @@ type ShellFlags struct {
 	Agent               string // --agent
 	Transcript          string // --transcript
 	Event               string // --event
-	ReportsSkills       bool   // --reports-skills
+	ObservesSkillLoads  bool   // --observes-skill-loads
 	ToolRows            string // --tool-rows
 	RendersAsk          bool   // --renders-ask
 	CallBackground      bool   // --call-background
@@ -952,7 +952,7 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	fs.StringVar(&f.Agent, FlagShellAgent, "", "The host's id for the subagent making this call, empty for the main conversation; a subagent magus saw spawned is graded under its job")
 	fs.StringVar(&f.Transcript, FlagShellTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
 	fs.StringVar(&f.Event, FlagShellEvent, "", "The host's hook event name (e.g. PreToolUse)")
-	fs.BoolVar(&f.ReportsSkills, FlagShellReportsSkills, false, "This hook wiring reports when the host loads a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down")
+	fs.BoolVar(&f.ObservesSkillLoads, FlagShellObservesSkillLoads, false, "This hook wiring observes the host loading a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down")
 	fs.StringVar(&f.ToolRows, FlagShellToolRows, "", "The directory, relative to the workspace root, holding the host's tool rows that `magus agent harness install` writes; without it no tool is known and each call whose input shape names no command, path, search, prompt or skill is unjudged")
 	fs.BoolVar(&f.RendersAsk, FlagShellRendersAsk, false, "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny")
 	fs.BoolVar(&f.CallBackground, FlagShellCallBackground, false, "The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused")

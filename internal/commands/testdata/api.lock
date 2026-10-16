@@ -227,9 +227,9 @@ flag shell/foreground-max-ms
 flag shell/lease
 flag shell/message
 flag shell/observe
+flag shell/observes-skill-loads
 flag shell/path
 flag shell/renders-ask
-flag shell/reports-skills
 flag shell/session
 flag shell/tool-rows
 flag shell/transcript

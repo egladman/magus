@@ -42,10 +42,10 @@ fun cursor_skills_paths() > [str] {
 // declaration rather than written into the file. The command is an argv: Cursor splits
 // it and runs magus itself, the same way Claude Code runs its glue, so there is no shell.
 //
-// --reports-skills: Cursor loads a skill by reading its SKILL.md, and the preToolUse
+// --observes-skill-loads: Cursor loads a skill by reading its SKILL.md, and the preToolUse
 // matcher covers Read, so every load reaches the guard.
 fun cursor_guard_command() > str {
-    return "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name {mgs_getName()} --reports-skills --tool-rows {cursor_tools_dir()}";
+    return "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name {mgs_getName()} --observes-skill-loads --tool-rows {cursor_tools_dir()}";
 }
 
 // Where `magus agent harness install` writes this host's tool rows, beside its hooks.
@@ -320,7 +320,7 @@ test "guard command is the shipped Cursor Buzz port, not a shell script" {
     assert\isTrue(cmd.indexOf("cursor-hook.buzz") != null, "names the Cursor guard template");
     assert\isTrue(cmd.indexOf("docs/guides/integrations/agents/") != null, "lives with the other host glue");
     assert\isTrue(cmd.indexOf(" -- --agent-name {mgs_getName()}") != null, "names this host on the script argv");
-    assert\isTrue(cmd.indexOf(" --reports-skills") != null, "a SKILL.md Read reaches preToolUse, so skill loads are reported");
+    assert\isTrue(cmd.indexOf(" --observes-skill-loads") != null, "a SKILL.md Read reaches preToolUse, so skill loads are reported");
 }
 
 test "harness_entries covers every Cursor event magus uses" {

@@ -182,7 +182,7 @@ var guardInputs = []string{"command", "path", "mcp"}
 // the workspace root (`magus buzz -C <root>`). magus-session.buzz is new, and sets the
 // session's PATH that a shell line in the config used to.
 //
-// 21: magus-path.buzz accepts --reports-skills, which a config written for 21 passes
+// 21: magus-path.buzz accepts --observes-skill-loads, which a config written for 21 passes
 // on every judging entry, and magus-command.buzz records a message the person typed. Under that
 // config a 20 copy reports the flag as unsupported and every skill gate stands down.
 //
@@ -206,11 +206,11 @@ var guardInputs = []string{"command", "path", "mcp"}
 // continue reply and records the message through `magus shell --message`. Under a config
 // written for 24, a 23 copy prints nothing for beforeSubmitPrompt, which records no message.
 //
-// 25: cursor-hook.buzz accepts --reports-skills, gates the shell on preToolUse and files
+// 25: cursor-hook.buzz accepts --observes-skill-loads, gates the shell on preToolUse and files
 // each verdict for the event after the call. magus-command.buzz answers PostToolUse and
 // SubagentStop in their own shapes, and magus-rehydrate.buzz answers SubagentStart.
 // proofread-reply.buzz answers one more host's replies. Under a config written for 25, a 24
-// copy reports --reports-skills as unsupported, so a skill load goes unseen; and answers
+// copy reports --observes-skill-loads as unsupported, so a skill load goes unseen; and answers
 // another host's PostToolUse in the PreToolUse shape, which that host discards.
 //
 // 26: magus-command.buzz answers Stop and SubagentStop with a block or a system message, so

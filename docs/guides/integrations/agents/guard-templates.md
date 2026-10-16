@@ -156,7 +156,7 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 //   -- <flags>       `magus shell` flags this entry declares, one argv word each, parsed
 //                    against SUPPORTED_FLAGS below. Capabilities, not policy: a config
 //                    that also matches its host's skill tool passes
-//                    `-- --reports-skills`, and rules that require a skill load
+//                    `-- --observes-skill-loads`, and rules that require a skill load
 //                    stand down where it is absent. An argument this file does not know
 //                    is REPORTED on stderr and left out, and the call is judged anyway:
 //                    a misconfigured entry must not block work, and must not be silent
@@ -339,7 +339,7 @@ final ENVELOPE_PREFIX = "\{";
 // cannot state for itself, which today is one thing, whether the config also matches its
 // host's skill tool. Policy stays in the workspace's own rules, where a reader can see it
 // and magus can change it without every installed config being edited.
-final SUPPORTED_FLAGS = ["--reports-skills"];
+final SUPPORTED_FLAGS = ["--observes-skill-loads"];
 
 // The valued flags an entry may declare: the host's foreground limits in milliseconds, the
 // timeout a shell command that names none gets and the longest one it may name. They are
@@ -547,7 +547,7 @@ object Guard {
 }
 
 // The entry's own flags ride in `extra` with everything else, so the unattributed retry
-// drops them too. Keeping them there meant a binary too old for `--reports-skills`
+// drops them too. Keeping them there meant a binary too old for `--observes-skill-loads`
 // failed BOTH attempts and the spawn entry could never recover where the Bash entry did, and a
 // binary too old to accept the flag cannot report a skill load to begin with.
 fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
@@ -887,7 +887,7 @@ wasteful, not destructive.
 // `-- --agent-name <host>` and HOST_SESSION_PATH work exactly as they do in
 // magus-command.buzz: the host name is REQUIRED on this script's argv, and both are
 // attribution recorded on the activity event, never an input to the verdict. So does
-// `-- --reports-skills`, the one capability an entry here may declare.
+// `-- --observes-skill-loads`, the one capability an entry here may declare.
 //
 // Every knob this file reads, each meaning what its magus-command.buzz twin means:
 //
@@ -994,7 +994,7 @@ final AGENT_NAME_FLAG = "--agent-name";
 // The `magus shell` flags an entry may declare, as in magus-command.buzz's SUPPORTED_FLAGS:
 // a config that also matches its host's skill tool says so, and a rule that wants a skill
 // read before a write can then hold the write.
-final SUPPORTED_FLAGS = ["--reports-skills"];
+final SUPPORTED_FLAGS = ["--observes-skill-loads"];
 
 // EntryArgs is what this script's argv says: the host, and the supported flags it named.
 object EntryArgs {

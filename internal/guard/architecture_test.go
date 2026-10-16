@@ -84,7 +84,7 @@ func newArchSession(t *testing.T, deps Dependencies, observes bool) archSession 
 }
 
 func (s archSession) judge(event string) types.GuardJudgment {
-	return Judge(s.ctx, s.deps, Request{Input: event, Host: "claude-code", Form: "buzz", ReportsSkills: s.observes})
+	return Judge(s.ctx, s.deps, Request{Input: event, Host: "claude-code", Form: "buzz", ObservesSkillLoads: s.observes})
 }
 
 func (s archSession) message(text string) types.GuardJudgment {

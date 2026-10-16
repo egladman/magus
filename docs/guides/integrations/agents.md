@@ -269,7 +269,7 @@ above explicitly marks them proven.
 | subagent context size       | `SubagentStop`                             | `SubagentStop`                                                     | not expressible: `subagentStop` names no subagent id                      | not wired                         |
 | read observation            | `PreToolUse` `Read`                        | not wired                                                          | not wired                                                                 | not wired                         |
 | tool-failure hint           | not wired                                  | not wired                                                          | `postToolUseFailure.additional_context`                                   | not wired                         |
-| skill load                  | `PreToolUse` `Skill`                       | not expressible: no hook on a skill load                           | `preToolUse` `Read` of a `SKILL.md`, with `--reports-skills`              | not wired                         |
+| skill load                  | `PreToolUse` `Skill`                       | not expressible: no hook on a skill load                           | `preToolUse` `Read` of a `SKILL.md`, with `--observes-skill-loads`        | not wired                         |
 | session-load adapter        | ships one                                  | ships one                                                          | ships one (`magus-session-load-cursor.buzz`)                              | ships one                         |
 
 The reply check is on no host by default. It judges how your agent writes, which is

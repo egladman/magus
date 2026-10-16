@@ -73,13 +73,13 @@ fun claude_glue_command(input: str, flags: [str]) > str {
 // are reported, so the wiring that reports them is what declares it; a harness that does
 // not see skill loads passes nothing and those rules stand down rather than denying forever. It is the one thing an
 // entry knows that the event cannot say, which is why it is the one thing written on it.
-final REPORTS_SKILLS = "--reports-skills";
+final OBSERVES_SKILL_LOADS = "--observes-skill-loads";
 
 // The entries that judge no tool call before it runs (a finished spawn, a stop, the
 // person's message) take this one string. Each reaches `magus shell` whole, and magus reads
 // what it is off the event, so there is nothing else to write on it.
 fun claude_guard_command() > str {
-    return claude_glue_command("command", flags: [REPORTS_SKILLS]);
+    return claude_glue_command("command", flags: [OBSERVES_SKILL_LOADS]);
 }
 
 // Claude Code's Bash tool waits 120000 ms on a command that names no timeout and lets one
@@ -96,7 +96,7 @@ final FOREGROUND_MAX_MS = 600000;
 // mode.
 fun claude_call_command() > str {
     return claude_glue_command("command", flags: [
-        REPORTS_SKILLS,
+        OBSERVES_SKILL_LOADS,
         "--foreground-default-ms", "{FOREGROUND_DEFAULT_MS}",
         "--foreground-max-ms", "{FOREGROUND_MAX_MS}",
         "--tool-rows", claude_tools_dir(),
@@ -227,7 +227,7 @@ fun claude_observe_command() > str {
 
 // Every tool, so magus judges every call by its tool and the shape of its input, and a tool
 // no rule can read is named rather than run unseen (the unjudged-tool rule). Skill loads
-// ride it too, which is what lets the judging entries declare --reports-skills.
+// ride it too, which is what lets the judging entries declare --observes-skill-loads.
 final EVERY_TOOL = "*";
 
 // Both names the spawn tool has had across Claude Code releases, matched after the call:
@@ -593,7 +593,7 @@ test "no entry carries an environment assignment" {
 }
 
 test "the one per-entry flag rides after the argv separator" {
-    assert\equal(claude_guard_command(), claude_glue_command("command", flags: [<str>]) + " " + REPORTS_SKILLS,
+    assert\equal(claude_guard_command(), claude_glue_command("command", flags: [<str>]) + " " + OBSERVES_SKILL_LOADS,
         "the guard entry is the named glue command plus one forwarded flag");
 }
 
@@ -651,7 +651,7 @@ test "every glue entry names this host, and the rehydrate wrapper takes no argum
 // meets reports them. Left to a comment, narrowing the catch-all leaves the claim standing,
 // and every skill gate then denies over a load the host can no longer report. Derived from
 // the entries rather than pinned as a pair, so the coupling is what fails when it breaks.
-test "every judging entry declares reports-skills exactly while a matcher reports them" {
+test "every judging entry declares observes-skill-loads exactly while a matcher reports them" {
     var reports_loads = false;
     foreach (entry in claude_entries()[0]["entries"] as [any]) {
         final matcher = (entry["matcher"] as? str) ?? "";
@@ -661,7 +661,7 @@ test "every judging entry declares reports-skills exactly while a matcher report
         foreach (entry in block["entries"] as [any]) {
             foreach (hook in entry["hooks"] as [any]) {
                 final command = (hook["command"] as? str) ?? "";
-                final claims = command.indexOf(REPORTS_SKILLS) != null;
+                final claims = command.indexOf(OBSERVES_SKILL_LOADS) != null;
                 if (command.indexOf("magus-command.buzz") != null or command.indexOf("magus-path.buzz") != null) {
                     assert\equal(claims, reports_loads,
                         "a judging entry declares the flag exactly when a matcher reports loads: {command}");

@@ -217,10 +217,10 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		Window:     window,
 		Transcript: sf.Transcript,
 		Event:      sf.Event,
-		// Declared by the wiring, because only a host that reports skill loads can
-		// honestly say it does. See guard.denySpawnWithoutBrief.
-		ReportsSkills: sf.ReportsSkills,
-		Tools:         shellToolRows(sf.ToolRows),
+		// Declared by the wiring, because only a host whose skill loads magus observes can
+		// honestly say so. See guard.denySpawnWithoutBrief.
+		ObservesSkillLoads: sf.ObservesSkillLoads,
+		Tools:              shellToolRows(sf.ToolRows),
 		// Declared by the wiring for the same reason: only a glue that renders the host's
 		// approval prompt can say so, and one that predates ask renders it as an allow.
 		RendersAsk: sf.RendersAsk,

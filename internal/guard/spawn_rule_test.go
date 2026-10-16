@@ -150,7 +150,7 @@ func TestSpawnRuleIsNotAskedAboutACommand(t *testing.T) {
 func TestSpawnRuleCannotLiftABuiltInDeny(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	probe := &spawnRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAllow}}
-	v := Judge(ctx, strict(Dependencies{SpawnRule: probe.rule()}), Request{Input: claudeSpawnEnvelope, Host: "claude-code", ReportsSkills: true})
+	v := Judge(ctx, strict(Dependencies{SpawnRule: probe.rule()}), Request{Input: claudeSpawnEnvelope, Host: "claude-code", ObservesSkillLoads: true})
 	assert.Equal(t, verdictWithRule("deny", string(denySpawnUnbriefed)), unworded(v), "the built-in reason stands")
 	assert.Empty(t, probe.asked)
 }
@@ -160,7 +160,7 @@ func TestSpawnRuleCannotLiftABuiltInDeny(t *testing.T) {
 func TestSpawnDenyIsTheVerdictAndARef(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	deps := strict(Dependencies{})
-	req := Request{Input: claudeSpawnEnvelope, Host: "claude-code", ReportsSkills: true}
+	req := Request{Input: claudeSpawnEnvelope, Host: "claude-code", ObservesSkillLoads: true}
 
 	stored := shortDeny(t, cacheDir, Judge(ctx, deps, req), denySpawnUnbriefed,
 		"spawning before the magus-multi-agent skill loaded; load Skill(magus-multi-agent), then retry.")
@@ -178,7 +178,7 @@ func TestSpawnDenyIsTheVerdictAndARef(t *testing.T) {
 func TestSpawnDenyTrailRowCarriesTheVerdictRef(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	deps := strict(Dependencies{})
-	req := Request{Input: claudeSpawnEnvelope, Host: "claude-code", ReportsSkills: true}
+	req := Request{Input: claudeSpawnEnvelope, Host: "claude-code", ObservesSkillLoads: true}
 
 	first := Judge(ctx, deps, req)
 	repeat := Judge(ctx, deps, req)
@@ -197,7 +197,7 @@ func TestSpawnDenyTrailRowCarriesTheVerdictRef(t *testing.T) {
 
 func TestSpawnUnbriefedAdvisesByDefault(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	req := Request{Input: claudeSpawnEnvelope, Host: "claude-code", ReportsSkills: true}
+	req := Request{Input: claudeSpawnEnvelope, Host: "claude-code", ObservesSkillLoads: true}
 
 	first := Judge(ctx, Dependencies{}, req)
 	// The context is the advice prose; the reason stays empty, which the comparison pins.

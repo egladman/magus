@@ -1594,7 +1594,7 @@ func TestHarnessConfigsWirePromptAndSpawnHooksAndLeaveTheReplyCheckToThePerson(t
 			requireWired(t, config, "SubagentStop", "", guard)
 			for _, event := range []string{"Stop", "UserPromptSubmit", "PreToolUse", "PostToolUse", "SubagentStart", "SubagentStop"} {
 				for _, h := range wiredOn(t, config, event) {
-					assert.NotContains(t, h.Command, "--reports-skills",
+					assert.NotContains(t, h.Command, "--observes-skill-loads",
 						"Codex documents no hook on a skill load, so a rule that requires one would deny forever")
 				}
 			}
@@ -1611,7 +1611,7 @@ func TestHarnessConfigsWirePromptAndSpawnHooksAndLeaveTheReplyCheckToThePerson(t
 		requireWired(t, config, "postToolUseFailure", "Shell", "cursor-hook.buzz")
 		for _, event := range []string{"preToolUse", "postToolUse", "postToolUseFailure"} {
 			for _, h := range wiredOn(t, config, event) {
-				assert.Contains(t, h.Command, "--reports-skills",
+				assert.Contains(t, h.Command, "--observes-skill-loads",
 					"Cursor installs the skills, so each tool event reports which one loaded")
 			}
 		}

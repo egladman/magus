@@ -113,14 +113,14 @@ not block every tool call.
 **--observe**
 : Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass
 
+**--observes-skill-loads**
+: This hook wiring observes the host loading a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down
+
 **--path**
 : Judge the input as a file path an edit is about to write, not as a shell command
 
 **--renders-ask**
 : This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny
-
-**--reports-skills**
-: This hook wiring reports when the host loads a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down
 
 **--session** *string*
 : The host's own session id for this invocation

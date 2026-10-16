@@ -107,7 +107,7 @@ claude-code` prints it, in the place it lands in `.claude/settings.json`:
         "hooks": [{
           "type": "command",
           "timeout": 10,
-          "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --reports-skills --foreground-default-ms 120000 --foreground-max-ms 600000 --tool-rows .claude/magus/tools"
+          "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --observes-skill-loads --foreground-default-ms 120000 --foreground-max-ms 600000 --tool-rows .claude/magus/tools"
         }]
       }
     ]
@@ -379,7 +379,7 @@ hands a [`magus\guard.spawn`](../../../reference/guard-spawn.md) rule as
 A spawn's payload is a prompt, a `subagent_type`, and an optional `model`, not one
 string, and the event goes whole as every call's does. The one capability written on
 every entry that judges is the flag after `--`, which `magus buzz` forwards to the
-script as its own argv: `--reports-skills` says that THIS config matches the host's
+script as its own argv: `--observes-skill-loads` says that THIS config matches the host's
 `Skill` tool too, which the catch-all does, so a rule that requires a skill before a
 spawn, a write or a command has loads to read. A load counts for the
 agent that made it: a subagent loads a skill itself, and its parent's load does not

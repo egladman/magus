@@ -216,7 +216,7 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 	}
 	// Whether the multi-agent brief was read before work was handed out: a marker file,
 	// no prose, which is what lets it live on this path.
-	if reason := denySpawnWithoutBrief(hint.NewGate(at.cacheDir, who.skillsKey()), req.ReportsSkills, at.workspace); reason != "" {
+	if reason := denySpawnWithoutBrief(hint.NewGate(at.cacheDir, who.skillsKey()), req.ObservesSkillLoads, at.workspace); reason != "" {
 		return refused(denySpawnUnbriefed, denial{Say: reason}), ""
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())

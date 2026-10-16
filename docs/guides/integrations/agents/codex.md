@@ -355,7 +355,7 @@ the command glue on a spawn too, which magus judges the way it judges Claude Cod
 `spawn_agent|collaborationspawn_agent|Agent`: a matcher made only of letters, digits
 and underscores is an exact list of tool names, and v2 models call the tool
 `collaborationspawn_agent`, which a bare `spawn_agent` entry never fires on. `Agent` is
-the alias Codex's docs name. No entry declares `--reports-skills`: Codex has
+the alias Codex's docs name. No entry declares `--observes-skill-loads`: Codex has
 no hook on a skill load, so a rule that requires one has nothing to read and stands
 down instead of denying forever.
 
@@ -465,19 +465,19 @@ envelope and pipe it to `magus session notify`, exactly as the other hosts do; s
 
 Codex supports twelve hook events. This harness wires eight:
 
-| event                       | wired | what runs                                                                                                  |
-| --------------------------- | ----- | ---------------------------------------------------------------------------------------------------------- |
-| `PreToolUse`                | yes   | every tool (`*`): commands, patches, MCP calls and spawns, judged by the shape of the whole event          |
-| `PermissionRequest`         | yes   | answers the push approval                                                                                  |
-| `PostToolUse`               | yes   | the finished spawn, which names the child by `task_name` (v2) or `agent_id` (v1)                           |
-| `SubagentStart`             | yes   | hands the child the checkout's brief as `additionalContext`, and joins its id to the spawn before it      |
-| `SubagentStop`              | yes   | files the child's context size from the last `token_count` record of its rollout                           |
-| `SessionStart`              | yes   | `compact` only, the post-compaction brief                                                                  |
-| `Stop`                      | yes   | the checkpoint; the reply check is a second entry you add on purpose                                       |
-| `UserPromptSubmit`          | yes   | records your message                                                                                       |
-| `PreCompact`, `PostCompact` | no    | their output schema carries no `hookSpecificOutput`, so nothing can steer compaction                       |
-| `Interrupt`                 | no    | nothing consumes it                                                                                        |
-| `SessionEnd`                | no    | `Stop` already records the checkpoint each turn                                                            |
+| event                       | wired | what runs                                                                                            |
+| --------------------------- | ----- | ---------------------------------------------------------------------------------------------------- |
+| `PreToolUse`                | yes   | every tool (`*`): commands, patches, MCP calls and spawns, judged by the shape of the whole event    |
+| `PermissionRequest`         | yes   | answers the push approval                                                                            |
+| `PostToolUse`               | yes   | the finished spawn, which names the child by `task_name` (v2) or `agent_id` (v1)                     |
+| `SubagentStart`             | yes   | hands the child the checkout's brief as `additionalContext`, and joins its id to the spawn before it |
+| `SubagentStop`              | yes   | files the child's context size from the last `token_count` record of its rollout                     |
+| `SessionStart`              | yes   | `compact` only, the post-compaction brief                                                            |
+| `Stop`                      | yes   | the checkpoint; the reply check is a second entry you add on purpose                                 |
+| `UserPromptSubmit`          | yes   | records your message                                                                                 |
+| `PreCompact`, `PostCompact` | no    | their output schema carries no `hookSpecificOutput`, so nothing can steer compaction                 |
+| `Interrupt`                 | no    | nothing consumes it                                                                                  |
+| `SessionEnd`                | no    | `Stop` already records the checkpoint each turn                                                      |
 
 ## Verify
 
