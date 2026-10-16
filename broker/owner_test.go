@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 )
 
@@ -110,8 +111,20 @@ func TestValidationScopeReadsTheWorkspacesCap(t *testing.T) {
 }
 
 // groupHolderEnv makes the test binary a run that dies holding a claim and the process
-// group its step left behind (see holdAGroupUntilKilled).
-const groupHolderEnv = "MAGUS_BROKER_TEST_GROUP_HOLDER"
+// group its step left behind (see holdAGroupUntilKilled); groupRootEnv names the
+// workspace it runs in.
+const (
+	groupHolderEnv = "MAGUS_BROKER_TEST_GROUP_HOLDER"
+	groupRootEnv   = "MAGUS_BROKER_TEST_GROUP_ROOT"
+)
+
+// rootedWorkspace is a workspace that answers only its root, as a run's context carries.
+type rootedWorkspace struct {
+	types.WorkspaceRepository
+	root string
+}
+
+func (w rootedWorkspace) Root() string { return w.root }
 
 // startOrphanGroup starts what a step can leave behind: a leader that exits at once, and
 // the background sleep it started, still running in the leader's process group. The
@@ -142,7 +155,7 @@ func orphanGroup(t *testing.T) int {
 // group's id, and holds both until stdin closes. The test kills it first; a test binary
 // that dies closes the pipe, so this process never outlives it.
 func holdAGroupUntilKilled(addr string) int {
-	ctx := context.Background()
+	ctx := types.WithWorkspace(context.Background(), rootedWorkspace{root: os.Getenv(groupRootEnv)})
 	c, err := Dial(ctx, addr)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -177,9 +190,10 @@ func TestAStepGroupEndsWhenItsRunIsKilled(t *testing.T) {
 	}
 	addr := testAddr(t)
 	serve(t, addr, WithCapacity(1000, 4))
+	root := t.TempDir()
 
 	cmd := exec.Command(os.Args[0])
-	cmd.Env = append(os.Environ(), groupHolderEnv+"="+addr)
+	cmd.Env = append(os.Environ(), groupHolderEnv+"="+addr, groupRootEnv+"="+root)
 	stdin, err := cmd.StdinPipe()
 	require.NoError(t, err)
 	out, err := cmd.StdoutPipe()
@@ -206,6 +220,17 @@ func TestAStepGroupEndsWhenItsRunIsKilled(t *testing.T) {
 	wd, err := os.Getwd()
 	require.NoError(t, err)
 	assert.Equal(t, Ended{Work: Work{Kind: WorkRun, PID: got.PID, Dir: wd, Command: "sleep 30", Since: got.Since}, Reason: got.Reason, At: got.At}, got)
+
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	var queue []sessions.AttentionRequest
+	require.Eventually(t, func() bool {
+		fold, err := sessions.ReadAll(dir)
+		queue = sessions.AttentionQueue(fold)
+		return err == nil && len(queue) > 0
+	}, 5*time.Second, 20*time.Millisecond, "the ending is filed in the run's workspace")
+	require.Len(t, queue, 1)
+	assert.Contains(t, queue[0].Message, "outlived the magus run whose step started it")
 }
 
 // A claim handed back while a group it carries still runs takes the group with it.

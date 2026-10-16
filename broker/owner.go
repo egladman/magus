@@ -365,7 +365,8 @@ var _ cache.GroupHolder = (*Client)(nil)
 // [Client.Request] granted) started, so the group ends with the claim: when it is
 // released, or when this connection closes. [Client.ReleaseHold] takes the id it
 // returns, once the group's leader has exited. Like a hold, it is not re-asserted on a
-// broker that replaces this one.
+// broker that replaces this one. A group the broker stops is filed in the attention
+// queue of the workspace ctx carries (see [types.WithWorkspace]); with none, nowhere.
 func (c *Client) HoldGroup(ctx context.Context, claim string, pgid int, command string) (string, error) {
 	c.mu.Lock()
 	h, ok := c.held[claim]
@@ -373,7 +374,11 @@ func (c *Client) HoldGroup(ctx context.Context, claim string, pgid int, command 
 	if !ok || h.remote == "" {
 		return "", fmt.Errorf("broker: hold process group %d: this client holds no claim %q", pgid, claim)
 	}
-	return c.Hold(ctx, Hold{Claim: h.remote, PGID: pgid, Command: command})
+	var root string
+	if ws := types.WorkspaceFromContext(ctx); ws != nil {
+		root = ws.Root()
+	}
+	return c.Hold(ctx, Hold{Claim: h.remote, PGID: pgid, Command: command, Root: root})
 }
 
 // ReleaseHold says the held command ended on its own. A broker that is gone already
