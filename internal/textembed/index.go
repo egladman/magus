@@ -112,11 +112,11 @@ func (ix *Index) head() ([]byte, error) {
 	return buf, nil
 }
 
-// ReadIndex decodes an index WriteTo wrote, from size bytes of r, strictly: the magic,
-// the format, the header, a table digest equal to t.Digest(), dims equal to t.Dims(),
-// a size exactly what the header implies, the sha256 over everything before the rows,
-// and no doc with InvNorm 0 but a sign code must all check out, or ReadIndex returns
-// an error naming the first that does not. It reads the inverse norms and codes into
+// ReadIndex decodes an index WriteTo wrote, from size bytes of r, strictly. The magic,
+// the format and the header must check out. So must a table digest equal to t.Digest(),
+// dims equal to t.Dims(), a size exactly what the header implies, the sha256 over
+// everything before the rows, and no doc with InvNorm 0 but a sign code. ReadIndex
+// returns an error naming the first that does not. It reads the inverse norms and codes into
 // memory and keeps r for the rows, which it does not read or verify; the caller must
 // keep r open and unchanged while the Index is in use.
 func ReadIndex(r io.ReaderAt, size int64, t *Table) (*Index, error) {
