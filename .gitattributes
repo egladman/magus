@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-758-gf849f2244-dirty (commit f849f22440edb9cd4a77b820139453cd9387b06e, 2026-10-15T17:34:18-04:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-854-g5ada99511 (commit 5ada99511d07eb6061af92ab39856f67e8a0ca94, 2026-10-16T04:08:02-04:00)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -124,6 +124,9 @@ gen/site/assets/go-coverage.svg merge=magus linguist-generated
 gen/site/assets/typescript-coverage.svg merge=magus linguist-generated
 gen/symbol-index.json merge=magus linguist-generated
 gen/target-graph.json merge=magus linguist-generated
+hack/embed/gen/corpus.jsonl merge=magus linguist-generated
+hack/embed/gen/holdout.jsonl merge=magus linguist-generated
+hack/embed/gen/pairs.jsonl merge=magus linguist-generated
 internal/commands/testdata/api-go.lock merge=magus linguist-generated
 internal/commands/testdata/api.lock merge=magus linguist-generated
 internal/config/gen/*.go merge=magus linguist-generated
