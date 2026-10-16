@@ -536,15 +536,16 @@ func wordByte(b byte) bool {
 
 // ForkNotes are what a fork that passed owes its reader, one line each. A write-path claim
 // that names no declaration of its file yet is allowed, since the declaration may not be
-// written, and is echoed so a typo shows. A file row shares with a job in the same
-// checkout, or not yet taken (write_proof overlapping), gets the claim pair that would
-// split it. Nothing is written to a row. A nil store, or one with no workspace root, has
+// written, and is echoed so a typo shows. A row claiming declarations of a project's
+// configuration is given every claim its change there lacks (see unclaimedTouches). A
+// file row shares with a job in the same checkout, or not yet taken (write_proof
+// overlapping), gets the claim pair that would split it. Nothing is written to a row. A nil store, or one with no workspace root, has
 // no tree to read and returns nil.
 func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Job) []string {
 	if store == nil || store.root == "" {
 		return nil
 	}
-	var notes []string
+	var notes, configs []string
 	for _, entry := range row.WritePaths {
 		file, ok := literalClaimableFile(store.root, entry)
 		if !ok {
@@ -553,6 +554,9 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 		_, decl := types.SplitClaim(entry)
 		if decl == "" || decl == types.Preamble {
 			continue
+		}
+		if projectConfig(store.root, file) {
+			configs = appendUnique(configs, file)
 		}
 		driver, drivers, err := claimDrivers(ctx, store.root, []string{file})
 		if err != nil || drivers[file] == "" {
@@ -564,6 +568,11 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 			notes = append(notes, fmt.Sprintf("%s does not exist yet in this checkout, so %q names a declaration once it is written", file, entry))
 		case len(namedDeclarations(decl, all)) == 0:
 			notes = append(notes, fmt.Sprintf("%q names no declaration of %s yet; it holds one once written, so check the spelling", entry, file))
+		}
+	}
+	for _, file := range configs {
+		if note := unclaimedTouches(ctx, store, rows, row, file); note != "" {
+			notes = append(notes, note)
 		}
 	}
 	here, _ := filepath.Abs(store.root)
@@ -596,6 +605,39 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 		}
 	}
 	return notes
+}
+
+// unclaimedTouches names every declaration of file, a project's configuration row claims
+// by declaration, that row's change since its checkpoint touches and no claim of row names,
+// each as the claim that adds it. One answer carries the whole key list, where a claim per
+// refusal sent a worker back for each key. Empty when every touched declaration is claimed,
+// and when no checkout has taken row, since nothing has changed yet.
+func unclaimedTouches(ctx context.Context, store *Store, rows []types.Job, row types.Job, file string) string {
+	if row.CheckoutRoot == "" {
+		return ""
+	}
+	current := append(slices.DeleteFunc(slices.Clone(rows), func(r types.Job) bool { return r.ID == row.ID }), row)
+	touched, err := touchedDeclarations(ctx, store, current, row.ID, file)
+	if err != nil {
+		return fmt.Sprintf("the declarations %s's change touches in %s could not be read (%v), so the claims it lacks there are not listed", row.ID, file, err)
+	}
+	held := claimsOnFile(row, file)
+	var all []string
+	if driver, _ := resolveDriver(ctx, store.root); driver != nil {
+		all, _ = readDeclarations(ctx, driver, store.root, file)
+	}
+	var claims []string
+	for _, d := range touched {
+		if d == types.Preamble || slices.ContainsFunc(held, func(c string) bool { return types.NamesDeclaration(c, d) }) {
+			continue
+		}
+		claims = appendUnique(claims, "`"+file+"#"+claimWord(d, all)+"`")
+	}
+	if len(claims) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s's change touches %d declaration(s) of %s that no claim of it names; claim them all at once: %s",
+		row.ID, len(claims), file, strings.Join(claims, ", "))
 }
 
 // updatedAgo is how long ago row last wrote itself, as a refusal names it.

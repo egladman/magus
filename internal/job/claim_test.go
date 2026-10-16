@@ -364,6 +364,32 @@ func TestForkNotes(t *testing.T) {
 	})
 }
 
+// A row claiming one key of a magusfile whose change already touches others is told every
+// claim it lacks in one note, rather than one refusal per key.
+func TestForkNotesListEveryConfigDeclarationTheChangeTouches(t *testing.T) {
+	t.Parallel()
+
+	repo := testkit.NewRepo(t, configFiles)
+	rev := repo.Head()
+	repo.WriteTree(map[string]string{"magusfile.buzz": strings.NewReplacer(
+		`"demo"`, `"demo2"`,
+		`"5m"`, `"9m"`,
+		"> void {\n}", "> void {\n    ctx.log(\"x\");\n}",
+	).Replace(configMagusfile)})
+	s := NewStore(tmpLoc(t, repo.Root()))
+	row := types.Job{ID: "B", State: types.StateRunning, WritePaths: []string{"magusfile.buzz#project.targets.test"}, Checkpoint: rev, CheckoutRoot: repo.Root()}
+
+	got := ForkNotes(t.Context(), s, nil, row)
+	assert.Equal(t, []string{"B's change touches 2 declaration(s) of magusfile.buzz that no claim of it names;" +
+		" claim them all at once: `magusfile.buzz#build`, `magusfile.buzz#project.name`"}, got)
+
+	row.WritePaths = append(row.WritePaths, "magusfile.buzz#project.name", "magusfile.buzz#build")
+	assert.Empty(t, ForkNotes(t.Context(), s, nil, row), "a row claiming every declaration it touched lacks none")
+
+	row.WritePaths, row.CheckoutRoot = []string{"magusfile.buzz#project.targets.test"}, ""
+	assert.Empty(t, ForkNotes(t.Context(), s, nil, row), "a row no checkout has taken has changed nothing")
+}
+
 // strPtr returns a pointer to s, for a test table field that must tell "not given" (nil)
 // apart from "given as empty".
 func strPtr(s string) *string { return &s }
