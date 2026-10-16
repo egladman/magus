@@ -151,9 +151,8 @@ func unrunGoal(project, target string, taken map[string]bool) types.Goal {
 
 const unrunHeading = "not run by the check or any goal, and run by ci over your write paths"
 
-// RenderUnrunGates writes gates as the block [Terms] renders, for a command that prints no
-// terms. Nothing is written for none.
-func RenderUnrunGates(w io.Writer, gates []UnrunGate) {
+// renderUnrunGates writes gates as the block [Terms] renders. Nothing is written for none.
+func renderUnrunGates(w io.Writer, gates []UnrunGate) {
 	lines := unrunLines(gates)
 	if len(lines) == 0 {
 		return

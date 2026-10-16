@@ -158,9 +158,8 @@ func VCSIgnored(ctx context.Context, root string) func([]string) []string {
 
 const regeneratedHeading = "regenerated outside the write paths, from sources inside them"
 
-// RenderRegenerated writes outputs as the block [Terms] renders, for a command that prints
-// no terms. Nothing is written for none.
-func RenderRegenerated(w io.Writer, outputs []RegeneratedOutput) {
+// renderRegenerated writes outputs as the block [Terms] renders. Nothing is written for none.
+func renderRegenerated(w io.Writer, outputs []RegeneratedOutput) {
 	lines := regeneratedLines(outputs)
 	if len(lines) == 0 {
 		return

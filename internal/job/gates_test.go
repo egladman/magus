@@ -160,7 +160,7 @@ func TestRenderUnrunGatesCapsTheListAndPrintsTheGoals(t *testing.T) {
 		gates = append(gates, UnrunGate{Target: fmt.Sprintf("t%d", i), Project: ".", Source: "**/*.go", Goal: unrunGoal(".", fmt.Sprintf("t%d", i), taken)})
 	}
 	var buf bytes.Buffer
-	RenderUnrunGates(&buf, gates)
+	renderUnrunGates(&buf, gates)
 	out := buf.String()
 	assert.Contains(t, out, unrunHeading)
 	assert.Contains(t, out, "t0 . (reads **/*.go)")
@@ -169,6 +169,6 @@ func TestRenderUnrunGatesCapsTheListAndPrintsTheGoals(t *testing.T) {
 	assert.Contains(t, out, `goals to add: [{"id":"t0","kind":"check"`)
 
 	buf.Reset()
-	RenderUnrunGates(&buf, nil)
+	renderUnrunGates(&buf, nil)
 	assert.Empty(t, buf.String(), "nothing to say prints no heading")
 }

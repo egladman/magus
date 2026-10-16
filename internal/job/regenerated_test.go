@@ -182,7 +182,7 @@ func TestRenderRegeneratedCapsTheListing(t *testing.T) {
 		RegeneratedOutput{Output: "MAGUS.md", Target: ".:index-generate", Source: "**/*.go"},
 	)
 	var b strings.Builder
-	RenderRegenerated(&b, outputs)
+	renderRegenerated(&b, outputs)
 
 	want := "regenerated outside the write paths, from sources inside them\n"
 	for i := range RegeneratedLimit {
@@ -193,6 +193,6 @@ func TestRenderRegeneratedCapsTheListing(t *testing.T) {
 	assert.Equal(t, want, b.String())
 
 	b.Reset()
-	RenderRegenerated(&b, nil)
+	renderRegenerated(&b, nil)
 	assert.Empty(t, b.String(), "nothing to say prints nothing")
 }
