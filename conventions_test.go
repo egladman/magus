@@ -989,7 +989,7 @@ func tempOnly() { _, _ = osx.CreateTemp(".", "x") }
 var appendAllowed = map[string]string{
 	"cmd/magus/log_other.go:redirectStdio":                  "a log: the process's stderr, held open as an fd",
 	"cmd/magus/log_windows.go:redirectStdio":                "a log: the process's stderr, held open as an fd",
-	"cmd/magus/output.go:outputDstTo":                       "--tee mirrors a stream into a file held open for the command",
+	"cmd/magus/output.go:outputDestination":                 "--tee mirrors a stream into a file held open for the command",
 	"cmd/magus/output.go:lazyFile.Write":                    "--tee mirrors a stream into a file held open for the command",
 	"cmd/magus/server.go:spawnDetached":                     "a log: the daemon's stdio, handed to the child",
 	"internal/guard/unfinished.go:judgmentMark.recordLapse": "a one-byte tally read back by its size after the write",
