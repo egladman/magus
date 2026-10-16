@@ -157,12 +157,12 @@ var nextIDRe = regexp.MustCompile(`breadcrumb\("([a-z-]+)"`)
 // Several calls per function, because capNext trims to three: one fixture per function
 // would leave the fourth template of a family unrendered and unguarded, which is exactly
 // the hole the id sweep below closes.
-func servedNextTemplates(t *testing.T) map[string]string {
+func servedNextTemplates(t *testing.T) map[string]types.NextStep {
 	t.Helper()
-	rendered := map[string]string{}
+	rendered := map[string]types.NextStep{}
 	add := func(next []types.NextStep) {
 		for _, n := range next {
-			rendered[n.ID] = n.Run
+			rendered[n.ID] = n
 		}
 	}
 	add(hint.NextForQuery(types.KnowledgeQueryOutput{Matches: []types.KnowledgeMatch{
@@ -355,11 +355,16 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 		{"worker with narrow write paths", worker.ID},
 		{"reviewer", reviewer.ID},
 	} {
-		for id, run := range templates {
-			t.Run(role.name+"/"+id, func(t *testing.T) { grade(t, id, run, role.name, role.lease) })
+		kind, writePaths := hint.LeaseRole([]types.Job{worker, reviewer}, role.lease)
+		for id, n := range templates {
+			// Graded as served: a narrow worker is never served `generate:rw .`, which the
+			// guard refuses it once the workspace cannot vouch for what the run writes.
+			if len(hint.ServableTo(kind, writePaths, []types.NextStep{n})) == 0 {
+				continue
+			}
+			t.Run(role.name+"/"+id, func(t *testing.T) { grade(t, id, n.Run, role.name, role.lease) })
 		}
 		t.Run(role.name+"/scripts", func(t *testing.T) {
-			kind, writePaths := hint.LeaseRole([]types.Job{worker, reviewer}, role.lease)
 			served := hint.ServableTo(kind, writePaths, []types.NextStep{readScript, writeScript})
 			require.Contains(t, served, readScript, "a read script is served to every role")
 			if kind == hint.RoleReviewer {
@@ -429,7 +434,8 @@ func scriptNexts(t *testing.T, root string) (read, write types.NextStep) {
 // mode measured across the templates on 2026-09-11: 30 of 30 templates cleared the guard and
 // the ones carrying `<path>` broke on the reader's own redirect.
 func TestServedNextTemplatesAreRunnable(t *testing.T) {
-	for id, run := range servedNextTemplates(t) {
+	for id, n := range servedNextTemplates(t) {
+		run := n.Run
 		assert.NotContains(t, run, "<", "the %q breadcrumb still carries a placeholder: %q", id, run)
 		cmds, ok := ParseCommands(run)
 		require.True(t, ok, "the %q breadcrumb does not parse as a shell command: %q", id, run)
