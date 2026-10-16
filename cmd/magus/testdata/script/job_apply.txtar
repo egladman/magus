@@ -1,7 +1,8 @@
 # `magus job apply -f -` reads records from stdin the way `kubectl apply -f -` does. A new
 # id creates the job; a second stream upserts its spec and creates another, keeping the
 # first job's state; --dry-run prints the spec diff and writes nothing; a record adding a
-# directory (MGS3018) is refused and leaves the row as it was.
+# directory (MGS3018) is refused and leaves the row as it was, and a stream with problems in
+# several records lists them all.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 exec magus init -local -vcs git
@@ -32,6 +33,16 @@ exec magus describe job wave/a -o json
 stdout 'src/pkg/other\.go'
 ! stdout '"src/pkg"'
 
+# Every record's problems come back at once, and none of the records is written.
+! exec magus job apply -f $WORK/two.jsonl
+! stdout .
+stderr '^wave/a:$'
+stderr '^wave/b:$'
+stderr '\[MGS3018\]'
+stderr '\[MGS3040\]'
+exec magus describe job wave/b -o json
+! stdout 'nosuch'
+
 # The edit loop is describe, edit, apply: the record describe prints carries the store's own
 # members (write_proof, created, updated, checkout_root and the like), and apply takes them
 # back and ignores them. A misspelled declared member is still refused.
@@ -55,5 +66,8 @@ package pkg
 {"schema_version":11,"id":"wave/a","write_paths":["src/pkg/code.go"],"check":{"target":"test","project":"."}}
 -- typo.json --
 {"schema_version":11,"id":"wave/a","write_pathz":["src/pkg/code.go"],"check":{"target":"test","project":"."}}
+-- two.jsonl --
+{"schema_version":11,"id":"wave/a","write_paths":["src/pkg/code.go","src/pkg/other.go","src/pkg"],"check":{"target":"test","project":"."}}
+{"schema_version":11,"id":"wave/b","write_paths":["src/fresh"],"check":{"target":"nosuch","project":"."}}
 -- dir.json --
 {"schema_version":11,"id":"wave/a","write_paths":["src/pkg/code.go","src/pkg/other.go","src/pkg"],"check":{"target":"test","project":"."}}

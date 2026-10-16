@@ -14,8 +14,8 @@ cp $WORK/console.buzz console/magusfile.buzz
 ! exec magus job fork wave/dir --check 'test .' --write-paths src/pkg
 stderr 'MGS3018'
 stderr '"src/pkg", inside project "."'
-stderr 'A write path names files'
-stderr 'List the files the job will edit'
+stderr 'a write path names files'
+stderr 'fix: list the files the job will edit in its place'
 ! exec magus job fork wave/glob --check 'test .' --write-paths 'src/**'
 stderr '"src/\*\*" \(matching the directory "src"\)'
 
@@ -23,7 +23,7 @@ stdin $WORK/root.json
 ! exec magus job fork --stdin
 stderr 'MGS3018'
 stderr '"\.", the workspace root'
-stderr 'A write path names files'
+stderr 'a write path names files'
 stdin $WORK/console.json
 ! exec magus job fork --stdin
 stderr 'MGS3018'

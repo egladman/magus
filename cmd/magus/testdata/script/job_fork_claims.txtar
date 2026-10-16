@@ -55,9 +55,14 @@ exec magus ls jobs -o name
 stdout '^wave/open$'
 stdout '^wave/new$'
 
-# A job holding every Buzz file by a pattern, in a third checkout.
+# A job holding every Buzz file by a pattern, in a third checkout. A leading ** is refused
+# as too broad (MGS3043) unless the record waives it.
 cd ../cara
-exec magus job fork wave/cfg --criteria 'tune buzz' --write-paths '**/*.buzz' --check 'lint .'
+! exec magus job fork wave/cfg --criteria 'tune buzz' --write-paths '**/*.buzz' --check 'lint .'
+stderr 'MGS3043'
+stderr 'waive'
+stdin $WORK/cfg.json
+exec magus job fork --stdin
 exec magus job exec wave/cfg
 
 # The magusfile whole is refused with the claims it has (MGS3036), and the holder is asked
@@ -76,6 +81,10 @@ exec magus job fork wave/slots --criteria 'lint timeout' --write-paths 'magusfil
 stderr 'MGS3031'
 stderr '"magusfile.buzz#project.targets" names 2 declarations of magusfile.buzz'
 
+-- cfg.json --
+{"schema_version": 11, "id": "wave/cfg", "criteria": "tune buzz", "write_paths": ["**/*.buzz"],
+ "check": {"target": "lint", "project": "."},
+ "waivers": [{"code": "MGS3043", "subject": "**/*.buzz", "reason": "the job tunes every magusfile"}]}
 -- site/.gitignore --
 .magus/
 -- site/.gitattributes --

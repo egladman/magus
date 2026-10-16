@@ -2289,7 +2289,11 @@ them and magus describe job prints one job's terms.`,
 				"its magus.yaml, or a spell source a magusfile imports) while another live job with write paths is bound " +
 				"to this checkout, because a half-saved one of those stops the workspace loading for every job here at " +
 				"once: give that job its own worktree. Every other fork records what it could prove about its write paths against " +
-				"the jobs already here, in write_proof, which `magus ls jobs` prints.",
+				"the jobs already here, in write_proof, which `magus ls jobs` prints. The whole record is validated at once: " +
+				"a fork with problems lists every one with its code and fix and stores nothing, and the global --dry-run " +
+				"does the same without forking, printing the record as it would be stored and exiting 1 while a problem " +
+				"remains. A waiver in the record keeps a broad write path, an output a target regenerates outside the " +
+				"write paths, or a ci target the job does not run.",
 			Flags: []cmdline.Flag{
 				{Name: "schema", Kind: cmdline.Bool, Doc: "Print the JSON schema a job must satisfy, and exit"},
 				{Name: "stdin", Kind: cmdline.Bool, Doc: "Read one job as JSON on stdin instead of taking it from flags"},
@@ -2315,7 +2319,8 @@ them and magus describe job prints one job's terms.`,
 				"field it leaves out is cleared, except an omitted checkpoint or timeout, which keeps the job's. Status is " +
 				"never written: the job keeps its state, holder and registration, and a record carrying state is refused. " +
 				"A new id creates the job. -f - reads stdin, and a stream holds one JSON job, an array, or one job per " +
-				"line; every record is checked, with fork's rules for what it adds, before any is written. A path the " +
+				"line; every record is checked, with fork's rules for what it adds, before any is written, and every record's " +
+				"problems are listed at once with their codes. A path the " +
 				"orchestrator drops from a taken job is recorded as a revoked release carrying the digest of what the job " +
 				"left. Widening is the orchestrator's; a session holding a lease may apply only a spec that releases some " +
 				"of its own paths. The global --dry-run prints the spec diff and writes nothing.",

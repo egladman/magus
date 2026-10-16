@@ -28,6 +28,7 @@ import (
 	qtypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/txtar"
@@ -654,6 +655,9 @@ export fun harness_limits(target: Target, cb: fun(any)) > {str: any} {
 }
 `
 
+// testTarget is the `test` target the fork's check names, which the workspace must have.
+const testTarget = "\nexport fun test(ctx: magus\\Context, args: [str]) > void {\n}\n"
+
 // A fork notes a check whose last real run took longer than a wired host lets a foreground
 // call wait, naming both numbers, and says nothing when no wired host declares a limit.
 func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
@@ -671,9 +675,9 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 	for _, tt := range []struct {
 		name, magusfile, want string
 	}{
-		{"a wired host with a limit", "import \"magus\";\nimport \"spells/limit-host\" as host;\nmagus\\harness.provider(host);\n",
+		{"a wired host with a limit", "import \"magus\";\nimport \"spells/limit-host\" as host;\nmagus\\harness.provider(host);\n" + testTarget,
 			"the check `" + hint.Run.With("test", ".") + "` last ran 14m0s here, past the 10m0s a foreground call may wait"},
-		{"no wired host", "import \"magus\";\n", ""},
+		{"no wired host", "import \"magus\";\n" + testTarget, ""},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			resetWorkspaceMemo(t)
@@ -1316,8 +1320,15 @@ func TestJobForkRefusesACheckThatSkipsATestOfItsPackage(t *testing.T) {
 	require.Len(t, rows, 1, "the refused fork wrote no row")
 }
 
+// goModule makes a fixture repository a Go module, which the go spell the deny-rule
+// magusfiles bind needs for the checks they name to exist.
+const goModule = "module example.com/w\n\ngo 1.25\n"
+
 // denyWorkerBuildRule is a magusfile whose command rule denies a worker the go-build target.
 const denyWorkerBuildRule = `import "magus";
+import "magus/spell/go";
+
+magus\project({"spells": [go]});
 
 magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     foreach (c in req.commands) {
@@ -1336,7 +1347,7 @@ func TestJobForkRefusesACheckTheGuardDeniesItsWorker(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
-	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "run.go": "package run\n"}).Root()
+	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
 	installCheckGrader(t, newCheckGrader())
@@ -1473,6 +1484,9 @@ func TestGradeCheckSkipsAWorkspaceThatDidNotLoad(t *testing.T) {
 // denyEveryWorkerRule is a magusfile whose command rule denies a worker every command, the
 // way the stale-binary rule does: it describes the binary, not the check.
 const denyEveryWorkerRule = `import "magus";
+import "magus/spell/go";
+
+magus\project({"spells": [go]});
 
 magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     if (req.role == "worker") {
@@ -1488,7 +1502,7 @@ func TestJobForkIsNotRefusedByADenyThatHoldsForEveryCommand(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
-	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyEveryWorkerRule, "run.go": "package run\n"}).Root()
+	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyEveryWorkerRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
 	row := types.Job{ID: "w", WritePaths: []string{"run.go"}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
@@ -1524,7 +1538,7 @@ func TestJobForkGradesWithTheInstalledGrader(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
-	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "run.go": "package run\n"}).Root()
+	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
 	var graded []string
@@ -1594,4 +1608,65 @@ func TestJobModelCellFallsBackToTheAssignedTier(t *testing.T) {
 			assert.Equal(t, tt.want, jobModelCell(tt.row))
 		})
 	}
+}
+
+// dryRunFork runs a fork under the global --dry-run in a workspace whose go spell gives the
+// checks they name something to resolve against.
+func dryRunFork(t *testing.T, format string, args ...string) (stdout string, store *job.Store, err error) {
+	t.Helper()
+	t.Cleanup(snapshotGlobals())
+	testkit.Isolate(t)
+	global = globalFlags{}
+	if format != "" {
+		args = append([]string{"-o", format}, args...)
+	}
+	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
+	resetWorkspaceMemo(t)
+	t.Chdir(root)
+	installCheckGrader(t, newCheckGrader())
+	globalCfg.DryRun = true
+	t.Cleanup(func() { globalCfg.DryRun = false })
+	cacheDir, cacheErr := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+	require.NoError(t, cacheErr)
+	store = job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
+	stdout = captureStdout(t, func() { err = jobFork(t.Context(), root, args) })
+	return stdout, store, err
+}
+
+func TestJobForkDryRunListsEveryProblemAndWritesNothing(t *testing.T) {
+	out, store, err := dryRunFork(t, "", "w", "--write-paths", "run.go", "--check", "nosuch .")
+
+	require.Error(t, err)
+	assert.Equal(t, exit.Failure, exit.Code(err))
+	assert.True(t, exit.AlreadyReported(err), "the list is printed, not repeated as an error")
+	assert.Contains(t, out, "1 problem:")
+	assert.Contains(t, out, "[MGS3040]")
+	assert.Contains(t, out, "     fix: name one of its targets")
+	assert.Contains(t, out, "would store:")
+	assert.Contains(t, out, "dry run: nothing written")
+	rows, err := store.List()
+	require.NoError(t, err)
+	assert.Empty(t, rows)
+}
+
+func TestJobForkDryRunOfACleanRecordPrintsItAndExitsZero(t *testing.T) {
+	out, store, err := dryRunFork(t, "", "w", "--write-paths", "run.go", "--check", "go::go-vet .")
+
+	require.NoError(t, err)
+	assert.Contains(t, out, "no problems\nwould store:\n")
+	assert.Contains(t, out, `"id": "w"`)
+	rows, err := store.List()
+	require.NoError(t, err)
+	assert.Empty(t, rows)
+}
+
+func TestJobForkDryRunEmitsTheValidationForAStructuredFormat(t *testing.T) {
+	out, _, err := dryRunFork(t, "json", "w", "--write-paths", "run.go", "--check", "nosuch .")
+
+	require.Error(t, err)
+	var v types.JobValidation
+	require.NoError(t, json.Unmarshal([]byte(out), &v), out)
+	assert.Equal(t, "w", v.Job.ID)
+	require.Len(t, v.Problems, 1)
+	assert.Equal(t, types.JobCheckUnrunnable, v.Problems[0].Code)
 }

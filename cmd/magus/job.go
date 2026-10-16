@@ -1120,11 +1120,13 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "A session holding a lease may only fork a CHILD of its own job, inside its own")
 			fmt.Fprintln(os.Stderr, "paths; widening a boundary is the forking session's.")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "A writing job's fork lists the declared outputs a target regenerates from sources")
-			fmt.Fprintln(os.Stderr, "inside its write paths that sit outside them, each with its target: widen the")
-			fmt.Fprintln(os.Stderr, "paths, or regenerate them yourself after integration. It reads declarations only,")
-			fmt.Fprintln(os.Stderr, "so a coupling none records (a version constant a test pins) is not listed.")
-			fmt.Fprintln(os.Stderr, "It also notes a check whose last real run took longer than a wired agent host")
+			fmt.Fprintln(os.Stderr, "The whole record is validated at once, and a fork with problems lists every one,")
+			fmt.Fprintln(os.Stderr, "each with its code and fix, and writes nothing. The global --dry-run does the")
+			fmt.Fprintln(os.Stderr, "same without forking: it prints the problems, the record as it would be stored,")
+			fmt.Fprintln(os.Stderr, "the waived problems and the checks that could not run, and exits 1 while any")
+			fmt.Fprintln(os.Stderr, "problem remains. A waiver in the record keeps a broad write path, an output a")
+			fmt.Fprintln(os.Stderr, "target regenerates outside the write paths, or a ci target the job does not run.")
+			fmt.Fprintln(os.Stderr, "A fork also notes a check whose last real run took longer than a wired agent host")
 			fmt.Fprintln(os.Stderr, "lets a foreground call wait, which its holder cannot wait on.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "A --stdin record carrying only id and `enter` ENTERS a live job instead: it")
@@ -1209,11 +1211,38 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	store = store.InWorkspace(jobWorkspace(ctx, root))
+	jobWS := jobWorkspace(ctx, root)
+	store = store.InWorkspace(jobWS)
 	// The reader loads the graph only when a gate names a symbol, or when the deletion
 	// candidates ask for it, and the two share one load.
 	graph := newJobGraph(root, true)
+	reader := graphSymbolReader(graph.load)
 	merge := job.Declare(row, globalCfg.Jobs.DefaultTimeout)
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	// A job that works in its own checkout shares none, which the standing placeholder says.
+	// Validating before the worktree is made leaves nothing behind for a record with problems.
+	judged := merge
+	if row.Checkout != "" {
+		judged = func(u *types.Job) {
+			merge(u)
+			u.Worktree = &types.JobWorktree{Root: row.Checkout}
+		}
+	}
+	if globalCfg.DryRun || row.Checkout != "" {
+		validation, err := job.ValidateFork(ctx, store, row.ID, judged, globalCfg.Jobs, reader)
+		if err != nil {
+			return err
+		}
+		if globalCfg.DryRun {
+			return forkDryRun(opts, validation)
+		}
+		if len(validation.Problems) > 0 {
+			return refuseFork(validation)
+		}
+	}
 	var worktree types.JobWorktree
 	made := false
 	if row.Checkout != "" {
@@ -1231,7 +1260,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			u.Worktree = &worktree
 		}
 	}
-	stored, err := job.ForkMerge(ctx, store, row.ID, merge, globalCfg.Jobs, graphSymbolReader(graph.load))
+	stored, err := job.ForkMerge(ctx, store, row.ID, merge, globalCfg.Jobs, reader)
 	switch {
 	case err != nil && made:
 		err = errors.Join(err, store.DiscardWorktree(ctx, worktree))
@@ -1245,16 +1274,16 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	case errors.As(err, &refused):
 		return err
 	case err != nil:
+		// The fork stored nothing, so the validation is read again for the list it joined.
+		if v, verr := job.ValidateFork(ctx, store, row.ID, merge, globalCfg.Jobs, reader); verr == nil && len(v.Problems) > 0 {
+			return refuseFork(v)
+		}
 		return exit.Usagef("magus job fork: %s", err)
 	}
 	var asked types.Job
 	row.Apply(&asked)
 	derived := slices.DeleteFunc(slices.Clone(stored.WritePaths), func(p string) bool { return slices.Contains(asked.WritePaths, p) })
 
-	opts, err := outputOptionsOrDefault()
-	if err != nil {
-		return err
-	}
 	if opts.Format == outputName {
 		return emitNames([]string{stored.ID})
 	}
@@ -1262,6 +1291,13 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	plan, err := store.List()
 	if err != nil {
 		return err
+	}
+	overrun, err := forkOverrun(ctx, root, stored)
+	switch {
+	case err != nil:
+		warnWorkspaceUnloaded(ctx, err)
+	case jobWS.Unavailable != "" && !stored.ReadOnly && len(stored.WritePaths) > 0:
+		warnWorkspaceUnloaded(ctx, errors.New(jobWS.Unavailable))
 	}
 	switch opts.Format {
 	case outputText:
@@ -1279,20 +1315,17 @@ func jobFork(ctx context.Context, root string, args []string) error {
 				fmt.Printf("  %s\n", claim)
 			}
 		}
-		notes := jobNotes(ctx, root, []types.Job{stored})[stored.ID]
-		job.RenderRegenerated(os.Stdout, notes.RegeneratedOutside)
-		job.RenderUnrunGates(os.Stdout, notes.UnrunGates)
 		job.RenderDeletionCandidates(os.Stdout, deletionCandidates(ctx, graph.load, stored))
-		job.RenderForegroundOverrun(os.Stdout, notes.ForegroundOverrun)
+		job.RenderForegroundOverrun(os.Stdout, overrun)
 		pointAtConsole(ctx, stored.ID)
 		return nil
 	default:
-		notes := jobNotes(ctx, root, []types.Job{stored})[stored.ID]
 		return emitFormatted(opts, forkReport{
 			forkOutput{
-				Job: stored, RegeneratedOutside: notes.RegeneratedOutside, UnrunGates: notes.UnrunGates,
-				DeletionCandidates: deletionCandidates(ctx, graph.load, stored), ForegroundOverrun: notes.ForegroundOverrun,
-				ClaimNotes: job.ForkNotes(ctx, store, plan, stored),
+				Job:                stored,
+				DeletionCandidates: deletionCandidates(ctx, graph.load, stored),
+				ForegroundOverrun:  overrun,
+				ClaimNotes:         job.ForkNotes(ctx, store, plan, stored),
 			},
 			derived,
 		})
@@ -2283,9 +2316,9 @@ func jobApply(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "record carrying state is refused. A new id creates the job, as fork would.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Every record is checked before any is written, with fork's rules for what it")
-			fmt.Fprintln(os.Stderr, "adds. It prints what changed per job; the global --dry-run prints it and writes")
-			fmt.Fprintln(os.Stderr, "nothing. `"+hint.JobFork.With("--schema")+"` prints the record. A job whose write")
-			fmt.Fprintln(os.Stderr, "or deny paths changed also gets fork's list of outputs regenerated outside them.")
+			fmt.Fprintln(os.Stderr, "adds, and every record's problems are listed at once with their codes. It prints")
+			fmt.Fprintln(os.Stderr, "what changed per job; the global --dry-run prints it and writes nothing.")
+			fmt.Fprintln(os.Stderr, "`"+hint.JobFork.With("--schema")+"` prints the record, waivers included.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Example:")
 			fmt.Fprintln(os.Stderr, "  magus job apply -f jobs.jsonl --dry-run")
@@ -2328,14 +2361,30 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	store = store.InWorkspace(jobWorkspace(ctx, root))
+	jobWS := jobWorkspace(ctx, root)
+	store = store.InWorkspace(jobWS)
 	checkpoint := func() string {
 		token, _ := checkoutBaseToken(ctx, root)
 		return token
 	}
 	applied, err := job.Apply(ctx, store, records, globalCfg.Jobs, jobSymbolReader(root, true), checkpoint, globalCfg.DryRun)
 	if err != nil {
-		return exit.Usagef("magus job apply: %s", err)
+		ids := make([]string, len(records))
+		for i, rec := range records {
+			ids[i] = rec.ID
+		}
+		validations, ok := job.ApplyValidations(err, ids)
+		if !ok {
+			return exit.Usagef("magus job apply: %s", err)
+		}
+		for _, v := range validations {
+			fmt.Fprintf(os.Stderr, "%s:\n", v.Job.ID)
+			job.RenderValidation(os.Stderr, v, false)
+		}
+		return listedProblems{err}
+	}
+	if jobWS.Unavailable != "" && slices.ContainsFunc(applied, func(a job.Applied) bool { return !a.Next.ReadOnly && len(a.Next.WritePaths) > 0 }) {
+		warnWorkspaceUnloaded(ctx, errors.New(jobWS.Unavailable))
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -2349,16 +2398,9 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		}
 		return emitNames(ids)
 	}
-	var reshaped []types.Job
-	for _, a := range applied {
-		if a.Created || slices.Contains(a.Changed, "write_paths") || slices.Contains(a.Changed, "deny_paths") {
-			reshaped = append(reshaped, a.Next)
-		}
-	}
-	notes := jobNotes(ctx, root, reshaped)
 	claims := applyClaimNotes(ctx, store, applied)
 	if opts.Format == outputText {
-		printJobApply(os.Stdout, applied, notes, claims, globalCfg.DryRun)
+		printJobApply(os.Stdout, applied, claims, globalCfg.DryRun)
 		if len(applied) == 1 && !globalCfg.DryRun {
 			pointAtConsole(ctx, applied[0].Next.ID)
 		}
@@ -2366,7 +2408,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	}
 	report := applyReport{DryRun: globalCfg.DryRun}
 	for _, a := range applied {
-		report.Jobs = append(report.Jobs, applyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed, RegeneratedOutside: notes[a.Next.ID].RegeneratedOutside, UnrunGates: notes[a.Next.ID].UnrunGates, ClaimNotes: claims[a.Next.ID]})
+		report.Jobs = append(report.Jobs, applyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed, ClaimNotes: claims[a.Next.ID]})
 	}
 	return emitFormatted(opts, report)
 }
@@ -2413,8 +2455,8 @@ type applyEntry struct {
 	ClaimNotes []string `json:"claim_notes,omitempty" yaml:"claim_notes,omitempty"`
 }
 
-// printJobApply prints each row's change, then what the workspace notes for it.
-func printJobApply(out io.Writer, applied []job.Applied, notes map[string]rowNotes, claims map[string][]string, dryRun bool) {
+// printJobApply prints each row's change, then the claim notes for it.
+func printJobApply(out io.Writer, applied []job.Applied, claims map[string][]string, dryRun bool) {
 	for _, a := range applied {
 		switch {
 		case a.Created && dryRun:
@@ -2437,8 +2479,6 @@ func printJobApply(out io.Writer, applied []job.Applied, notes map[string]rowNot
 			}
 		}
 		printClaimNotes(out, claims[a.Next.ID])
-		job.RenderRegenerated(out, notes[a.Next.ID].RegeneratedOutside)
-		job.RenderUnrunGates(out, notes[a.Next.ID].UnrunGates)
 	}
 	if dryRun {
 		fmt.Fprintln(out, "dry run: nothing written; rerun without --dry-run to write it")
