@@ -66,12 +66,20 @@ func TestExecKillsWhatOutlivesTheChild(t *testing.T) {
 	}
 }
 
+// testPidEnv names this test process to a shell loop, which runs only while `kill -0
+// "$TEST_PID"` succeeds. A go test killed between Start and the group kill runs no
+// cleanup, so a loop that only the group kill ends would outlive it and fork forever.
+func testPidEnv() string {
+	return "TEST_PID=" + strconv.Itoa(os.Getpid())
+}
+
 // Members that fork without pause all die with the group, wherever their forks fall
 // against the kill.
 func TestKillGroupLeavesNoMemberAlive(t *testing.T) {
 	deadline := time.Now().Add(30 * time.Second)
 	for round := 0; round < 25 && time.Now().Before(deadline); round++ {
-		cmd := exec.Command("sh", "-c", `for i in 1 2 3 4; do (while :; do : & wait; done) & done; sleep 0.05`)
+		cmd := exec.Command("sh", "-c", `for i in 1 2 3 4; do (while kill -0 "$TEST_PID" 2>/dev/null; do : & wait; done) & done; sleep 0.05`)
+		cmd.Env = append(os.Environ(), testPidEnv())
 		SetupProcessGroup(cmd)
 		require.NoError(t, cmd.Start())
 		pgid := cmd.Process.Pid
@@ -95,8 +103,8 @@ func TestExecGivesACancelledChildItsGraceThenKillsTheGroup(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	res, err := Exec(ctx, "sh", []string{"-c", `trap 'echo term > got' TERM; (trap '' TERM; sleep 3; touch late) & while :; do sleep 0.05; done`},
-		ExecOptions{Dir: dir, CancelGrace: 500 * time.Millisecond, Quiet: true})
+	res, err := Exec(ctx, "sh", []string{"-c", `trap 'echo term > got' TERM; (trap '' TERM; sleep 3; touch late) & while kill -0 "$TEST_PID" 2>/dev/null; do sleep 0.05; done`},
+		ExecOptions{Dir: dir, Env: []string{testPidEnv()}, CancelGrace: 500 * time.Millisecond, Quiet: true})
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.True(t, res.Started)
 	elapsed := time.Since(start)
