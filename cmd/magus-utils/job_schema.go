@@ -62,6 +62,17 @@ const (
 	// leaseIDMarker is the `schema:"leaseid"` tag: this field holds a lease id, so the
 	// pattern and length types.ValidJobID enforces are published with it.
 	leaseIDMarker = "leaseid"
+	// The other markers a field may carry; each is a string constraint a struct tag cannot
+	// spell on its own. A marker on a []string constrains the items.
+	writePathMarker = "writepath"
+	durationMarker  = "duration"
+	absPathMarker   = "abspath"
+	targetMarker    = "target"
+	nonBlankMarker  = "nonblank"
+	// leaseCheckStruct is the one record rendered as a choice between two shapes.
+	leaseCheckStruct = "LeaseCheck"
+	// absPathPattern is what filepath.IsAbs accepts on the platforms magus ships for.
+	absPathPattern = "^/"
 )
 
 // closedSets are the named types whose values are a published vocabulary, keyed by the
@@ -114,8 +125,10 @@ func runJobSchema(args []string) error {
 //     decoder takes any version up to its own;
 //   - a field typed by a closed set carries that set as an enum, plus "" when the field
 //     is omitempty and an absent value is therefore legal;
-//   - a field marked `schema:"leaseid"` carries the pattern and maxLength the id
-//     validator enforces;
+//   - a field marked `schema:"..."` carries the string constraint that marker names (a lease
+//     id, a write path, a duration, an absolute path, a target, a non-blank string); on a
+//     []string the items carry it;
+//   - LeaseCheck is a choice between a target and a script, since its struct cannot say so;
 //   - a description is the doc comment's first paragraph, so the rationale a later
 //     paragraph carries stays in the source.
 func renderJobSchema(rec jobRecord, d *goDecls) ([]byte, error) {
@@ -210,19 +223,16 @@ func properties(structName string, st *ast.StructType, d *goDecls, version int) 
 }
 
 func property(f *ast.Field, structName, field, name string, omitempty bool, d *goDecls, version int) (node, error) {
-	prop, err := typeMembers(f.Type, omitempty, d, version)
+	tag := ""
+	if f.Tag != nil {
+		tag = f.Tag.Value
+	}
+	prop, err := typeMembers(f.Type, omitempty, godecl.Tag(tag, "schema"), d, version)
 	if err != nil {
 		return nil, fmt.Errorf("%s.%s: %w", structName, field, err)
 	}
 	if name == versionProperty {
 		prop = append(prop, member{"minimum", 1}, member{"maximum", version})
-	}
-	tag := ""
-	if f.Tag != nil {
-		tag = f.Tag.Value
-	}
-	if godecl.Tag(tag, "schema") == leaseIDMarker {
-		prop = append(prop, member{"pattern", leaseIDPattern()}, member{"maxLength", types.MaxJobIDLen})
 	}
 	if doc := d.docs[structName+"."+field]; doc != "" {
 		prop = append(prop, member{"description", doc})
@@ -230,55 +240,111 @@ func property(f *ast.Field, structName, field, name string, omitempty bool, d *g
 	return prop, nil
 }
 
-// typeMembers is the JSON shape of one Go type.
-func typeMembers(expr ast.Expr, omitempty bool, d *goDecls, version int) (node, error) {
+// typeMembers is the JSON shape of one Go type. A schema marker constrains the string it
+// sits on, or the items of a []string, since the array itself has no charset.
+func typeMembers(expr ast.Expr, omitempty bool, marker string, d *goDecls, version int) (node, error) {
 	switch t := expr.(type) {
 	case *ast.StarExpr:
-		return typeMembers(t.X, omitempty, d, version)
+		return typeMembers(t.X, omitempty, marker, d, version)
 	case *ast.ArrayType:
-		items, err := typeMembers(t.Elt, false, d, version)
+		items, err := typeMembers(t.Elt, false, marker, d, version)
 		if err != nil {
 			return nil, err
 		}
 		return node{{"type", "array"}, {"items", items}}, nil
 	case *ast.SelectorExpr:
-		return namedType(t.Sel.Name, omitempty, d, version)
+		return namedType(t.Sel.Name, omitempty, marker, d, version)
 	case *ast.Ident:
 		switch t.Name {
 		case "string":
-			return node{{"type", "string"}}, nil
+			members, err := markerMembers(marker)
+			return append(node{{"type", "string"}}, members...), err
 		case "int", "int64":
-			return node{{"type", "integer"}}, nil
+			return withoutMarker(node{{"type", "integer"}}, marker)
 		case "bool":
-			return node{{"type", "boolean"}}, nil
+			return withoutMarker(node{{"type", "boolean"}}, marker)
 		}
-		return namedType(t.Name, omitempty, d, version)
+		return namedType(t.Name, omitempty, marker, d, version)
 	}
 	return nil, fmt.Errorf("%T is not a type this generator can publish", expr)
 }
 
-func namedType(name string, omitempty bool, d *goDecls, version int) (node, error) {
+// markerMembers is what a `schema:"..."` marker publishes for a string. An unknown marker
+// is an error, since a typo would otherwise publish the field with no constraint.
+func markerMembers(marker string) (node, error) {
+	switch marker {
+	case "":
+		return nil, nil
+	case leaseIDMarker:
+		return node{{"pattern", leaseIDPattern()}, {"maxLength", types.MaxJobIDLen}}, nil
+	case writePathMarker:
+		return node{{"pattern", writePathPattern()}}, nil
+	case durationMarker:
+		return node{{"pattern", durationPattern()}}, nil
+	case absPathMarker:
+		return node{{"pattern", absPathPattern}}, nil
+	case nonBlankMarker:
+		return node{{"minLength", 1}}, nil
+	case targetMarker:
+		return node{{"pattern", targetPattern()}}, nil
+	}
+	return nil, fmt.Errorf("schema marker %q is not one this generator publishes", marker)
+}
+
+// withoutMarker refuses a marker on a type with no string to constrain.
+func withoutMarker(shape node, marker string) (node, error) {
+	if marker != "" {
+		return nil, fmt.Errorf("schema marker %q marks a string, and this field is not one", marker)
+	}
+	return shape, nil
+}
+
+func namedType(name string, omitempty bool, marker string, d *goDecls, version int) (node, error) {
 	if set, ok := closedSets[name]; ok {
 		values := set
 		if omitempty {
 			values = append([]string{""}, set...)
 		}
-		return node{{"type", "string"}, {"enum", values}}, nil
+		return withoutMarker(node{{"type", "string"}, {"enum", values}}, marker)
 	}
 	st, ok := d.structs[name]
 	if !ok {
 		return nil, fmt.Errorf("type %s is neither a struct nor a closed set these sources declare", name)
 	}
+	if marker != "" {
+		return nil, fmt.Errorf("schema marker %q marks a string, and %s is a record", marker, name)
+	}
 	props, required, err := properties(name, st, d, version)
 	if err != nil {
 		return nil, err
 	}
-	return node{
-		{"type", "object"},
-		{"additionalProperties", false},
-		{"required", required},
-		{"properties", props},
-	}, nil
+	shape := node{{"type", "object"}, {"additionalProperties", false}}
+	if name == leaseCheckStruct {
+		// The struct cannot say "one of": target is required there only because its tag
+		// has no omitempty, and a script check leaves it empty.
+		required = slices.DeleteFunc(required, func(r string) bool { return r == "target" })
+		if len(required) > 0 {
+			shape = append(shape, member{"required", required})
+		}
+		return append(shape, member{"properties", props}, member{"oneOf", leaseCheckChoice()}), nil
+	}
+	return append(shape, member{"required", required}, member{"properties", props}), nil
+}
+
+// leaseCheckChoice is the either-or Declaration.Problems enforces on a check: a target
+// and no script, or a script and no target. "No" is absent or empty, because a Go-encoded
+// script check carries an empty target.
+func leaseCheckChoice() []node {
+	return []node{
+		{{"required", []string{"target"}}, {"properties", node{
+			{"target", node{{"minLength", 1}}},
+			{"script", node{{"maxLength", 0}}},
+		}}},
+		{{"required", []string{"script"}}, {"properties", node{
+			{"script", node{{"minLength", 1}}},
+			{"target", node{{"maxLength", 0}}},
+		}}},
+	}
 }
 
 // goDecls is what the sources declare: every struct, the first paragraph of every type
@@ -403,6 +469,48 @@ func leaseIDPattern() string {
 	return "^[" + charClass(accepted) + "]+$"
 }
 
+// writePathPattern is the write path shape that needs no workspace: a non-empty,
+// workspace-relative path, optionally followed by `#<declaration>`. It refuses a leading
+// `~` or `/`, a `..` segment, a trailing `/`, a bare `.` and a final `**` segment. Segments
+// are spelled out positively because the pattern must run under both ECMAScript and RE2,
+// and neither shares a lookahead. `\#` keeps a `#` inside the path, as types.SplitClaim
+// reads it.
+func writePathPattern() string {
+	const ch = `(?:\\#|[^/#])`
+	const dotted = `\.(?:[^/#.]` + ch + `*)?|\.\.` + ch + `+`
+	anySeg := `(?:[^/#.]` + ch + `*|` + dotted + `)`
+	firstSeg := `(?:[^/#.~]` + ch + `*|` + dotted + `)`
+	// A last segment is not `**`: a lone `*`, `*x` and `**x` are all allowed.
+	const starts = `\*(?:[^*/#]` + ch + `*)?|\*\*` + ch + `+`
+	lastSeg := `(?:[^/#.*]` + ch + `*|` + starts + `|` + dotted + `)`
+	// A path of one segment is also the first, and a lone `.` is the workspace itself.
+	onlySeg := `(?:[^/#.*~]` + ch + `*|` + starts + `|\.[^/#.]` + ch + `*|\.\.` + ch + `+)`
+	return `^(?:` + onlySeg + `|` + firstSeg + `(?:/` + anySeg + `)*/` + lastSeg + `)(?:#[^#]+)?$`
+}
+
+// durationPattern is a Go duration with a positive total, or empty. The nonzero component
+// is spelled out because ParseJobTimeout refuses `0s` and a pattern cannot compare.
+func durationPattern() string {
+	const unit = `(?:ns|us|µs|μs|ms|s|m|h)`
+	const number = `(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)`
+	const nonzero = `(?:[0-9]*[1-9][0-9]*(?:\.[0-9]*)?|[0-9]*\.[0-9]*[1-9][0-9]*)`
+	return `^(?:(?:` + number + unit + `)*` + nonzero + unit + `(?:` + number + unit + `)*)?$`
+}
+
+// targetPattern is a target name, optionally behind the `<spell>::` filter a check row
+// carries. The charset is asked of types.ValidateTargetName for the same reason as the
+// lease id's. It admits the empty string, which a script check leaves.
+func targetPattern() string {
+	var accepted []rune
+	for r := rune(0); r < 0x80; r++ {
+		if types.ValidateTargetName(string(r)) == nil {
+			accepted = append(accepted, r)
+		}
+	}
+	class := "[" + charClass(accepted) + "]"
+	return "^(?:" + class + "+::" + class + "+|" + class + "*)$"
+}
+
 // charClass renders accepted runes as a regexp character class: alphanumeric runs
 // collapse to a range and everything else is listed, with `-` last so it cannot read as
 // one. The runes come in ascending order.
@@ -463,6 +571,21 @@ func writeValue(b *strings.Builder, v any, indent string) error {
 	switch val := v.(type) {
 	case node:
 		return writeNode(b, val, indent)
+	case []node:
+		b.WriteString("[\n")
+		inner := indent + "  "
+		for i, n := range val {
+			b.WriteString(inner)
+			if err := writeNode(b, n, inner); err != nil {
+				return err
+			}
+			if i < len(val)-1 {
+				b.WriteByte(',')
+			}
+			b.WriteByte('\n')
+		}
+		b.WriteString(indent + "]")
+		return nil
 	case []string:
 		b.WriteByte('[')
 		for i, s := range val {

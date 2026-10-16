@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -216,5 +218,180 @@ func TestJobRecordsRenderFromTheirDeclaredSources(t *testing.T) {
 		body, err := renderJobSchema(rec, decls)
 		require.NoError(t, err, rec.File)
 		assert.Contains(t, string(body), `"$id": "https://magus.invalid/job/`+rec.File+`"`)
+	}
+}
+
+func TestWritePathPatternMatchesTheValidator(t *testing.T) {
+	t.Parallel()
+
+	pattern := regexp.MustCompile(writePathPattern())
+	cases := []struct {
+		path   string
+		accept bool
+	}{
+		{"cmd/magus/job.go", true},
+		{"internal/job/*.go", true},
+		{"internal/**/*.go", true},
+		{"**/gen/*.go", true},
+		{"./a/b.go", true},
+		{"a/./b.go", true},
+		{".github/workflows/ci.yml", true},
+		{"...", true},
+		{"..x/y", true},
+		{"cmd/magus/job.go#jobFork", true},
+		{`notes/a\#b.md#Intro`, true},
+		{"", false},
+		{".", false},
+		{"~/x", false},
+		{"~x", false},
+		{"/abs/x", false},
+		{"..", false},
+		{"../x", false},
+		{"a/../b", false},
+		{"a/..", false},
+		{"a/", false},
+		{"internal/**", false},
+		{"**", false},
+		{"a#", false},
+		{"#decl", false},
+		{"a#b#c", false},
+	}
+	for _, tc := range cases {
+		assert.Equal(t, tc.accept, pattern.MatchString(tc.path), "%q", tc.path)
+
+		// The schema is the narrower of the two: what it accepts, the record check accepts.
+		if !tc.accept {
+			continue
+		}
+		for _, p := range (types.Declaration{ID: "j", WritePaths: []string{tc.path}}).Problems() {
+			assert.NotContains(t, p.Field, "write_paths", "%q: %s", tc.path, p.Message)
+		}
+	}
+	for _, refused := range []string{"~/x", "/abs/x", "../x"} {
+		problems := types.Declaration{ID: "j", WritePaths: []string{refused}}.Problems()
+		assert.NotEmpty(t, problems, "the validator accepts %q, and the pattern refuses it", refused)
+	}
+}
+
+func TestDurationPatternMatchesParseJobTimeout(t *testing.T) {
+	t.Parallel()
+
+	pattern := regexp.MustCompile(durationPattern())
+	for _, s := range []string{
+		"", "30m", "2h", "1h30m", "1.5h", ".5s", "5.s", "100ms", "250us", "250µs", "7ns", "0m5s", "10s0m",
+		"0s", "0", "00s", "0.0h", "5", "-5m", "1d", "1x", "m", "s5", "1h 30m", "1..5s",
+	} {
+		_, err := types.ParseJobTimeout(s)
+		assert.Equal(t, err == nil, pattern.MatchString(s), "%q", s)
+	}
+}
+
+func TestTargetPatternMatchesTheValidator(t *testing.T) {
+	t.Parallel()
+
+	pattern := regexp.MustCompile(targetPattern())
+	for _, name := range []string{"test", "go-test", "go_test", "T1"} {
+		assert.NoError(t, types.ValidateTargetName(name), "%q", name)
+		assert.True(t, pattern.MatchString(name), "%q", name)
+	}
+	assert.True(t, pattern.MatchString("go::go-test"), "a spell filter prefixes the target")
+	for _, name := range []string{"go test", "go:test", "::test", "a::b::c", "te$t", "go::"} {
+		assert.False(t, pattern.MatchString(name), "%q", name)
+	}
+}
+
+// markerFixture marks one field of each shape a marker can sit on, and names a LeaseCheck
+// so the either-or rule applies to it.
+const markerFixture = `
+package fixture
+
+const FixtureSchemaVersion = 1
+
+type Fixture struct {
+	Parent    string      @json:"parent,omitempty" schema:"leaseid"@
+	DependsOn []string    @json:"depends_on,omitempty" schema:"leaseid"@
+	Paths     []string    @json:"paths,omitempty" schema:"writepath"@
+	Timeout   string      @json:"timeout,omitempty" schema:"duration"@
+	Dir       string      @json:"dir,omitempty" schema:"abspath"@
+	Reason    string      @json:"reason,omitempty" schema:"nonblank"@
+	Check     *LeaseCheck @json:"check,omitempty"@
+}
+
+type LeaseCheck struct {
+	Target string @json:"target" schema:"target"@
+	Script string @json:"script,omitempty"@
+}
+`
+
+func renderMarkerFixture(t *testing.T, src string) (map[string]any, error) {
+	t.Helper()
+
+	decls, err := loadGoDecls(writeRecordFixture(t, src))
+	require.NoError(t, err)
+	body, err := renderJobSchema(fixtureRecord, decls)
+	if err != nil {
+		return nil, err
+	}
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(body, &doc))
+	return doc, nil
+}
+
+func TestMarkersConstrainTheStringOrItsItems(t *testing.T) {
+	t.Parallel()
+
+	doc, err := renderMarkerFixture(t, markerFixture)
+	require.NoError(t, err)
+	props := doc["properties"].(map[string]any)
+	prop := func(name string) map[string]any { return props[name].(map[string]any) }
+
+	assert.Equal(t, leaseIDPattern(), prop("parent")["pattern"])
+	assert.EqualValues(t, types.MaxJobIDLen, prop("parent")["maxLength"])
+
+	deps := prop("depends_on")
+	assert.NotContains(t, deps, "pattern", "the array has no charset, its items do")
+	items := deps["items"].(map[string]any)
+	assert.Equal(t, leaseIDPattern(), items["pattern"])
+	assert.EqualValues(t, types.MaxJobIDLen, items["maxLength"])
+
+	assert.Equal(t, writePathPattern(), prop("paths")["items"].(map[string]any)["pattern"])
+	assert.Equal(t, durationPattern(), prop("timeout")["pattern"])
+	assert.Equal(t, absPathPattern, prop("dir")["pattern"])
+	assert.EqualValues(t, 1, prop("reason")["minLength"])
+}
+
+func TestLeaseCheckIsATargetOrAScript(t *testing.T) {
+	t.Parallel()
+
+	doc, err := renderMarkerFixture(t, markerFixture)
+	require.NoError(t, err)
+	check := doc["properties"].(map[string]any)["check"].(map[string]any)
+
+	assert.NotContains(t, check, "required", "the oneOf chooses the target, the struct does not require it")
+	assert.Equal(t, targetPattern(), check["properties"].(map[string]any)["target"].(map[string]any)["pattern"])
+
+	choices := check["oneOf"].([]any)
+	require.Len(t, choices, 2)
+	assert.Equal(t, []any{"target"}, choices[0].(map[string]any)["required"])
+	assert.Equal(t, []any{"script"}, choices[1].(map[string]any)["required"])
+}
+
+func TestAMarkerThatMarksNothingIsRefused(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct{ field, want string }{
+		"an unknown marker":      {`Name string @json:"name" schema:"leaseld"@`, `schema marker "leaseld"`},
+		"a marker on an integer": {`Count int @json:"count" schema:"leaseid"@`, "marks a string"},
+		"a marker on a record":   {`Inner Inner @json:"inner" schema:"leaseid"@`, "is a record"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			src := "package fixture\nconst FixtureSchemaVersion = 1\ntype Inner struct{}\ntype Fixture struct {\n\t" + tc.field + "\n}\n"
+			_, err := renderMarkerFixture(t, src)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.want)
+		})
 	}
 }
