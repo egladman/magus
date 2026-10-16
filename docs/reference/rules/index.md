@@ -58,7 +58,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [vcs-off-switch](vcs-off-switch.md)                   | an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads                     |
 | [whole-tree](whole-tree.md)                           | a whole-tree VCS reset, checkout, restore or clean, which cannot be undone                           |
 | [worker-background-run](worker-background-run.md)     | a bound worker running a magus target in the background                                              |
-| [worker-check-only](worker-check-only.md)             | a bound worker running a target other than its row's check or one writing its write paths            |
+| [worker-check-only](worker-check-only.md)             | a bound worker running a target but its check or a writer of its write paths, or writing past them   |
 | [worktree-remove](worktree-remove.md)                 | removing a worktree magus cannot prove holds nothing that would be lost                              |
 
 ## Advises by default
