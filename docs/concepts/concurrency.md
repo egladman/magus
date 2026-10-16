@@ -198,6 +198,11 @@ of this run in a pipe, to finish with the projects this run needs before taking 
 
 `magus status` lists such a run under "waiting on a pipe upstream".
 
+`magus status --wait | magus run ...` reserves the seat it sized for the run reading it:
+the broker holds it until that run's first claim takes it, the run exits, or 30 seconds
+pass without a claim. Without a magus reader, `--wait` holds nothing. A bare run still
+refuses at once with [MGS3009](../reference/codes/sandbox/MGS3009.md).
+
 Stages on different projects run at once and stream. A downstream run waits only until
 the upstream has taken its locks, then starts as soon as it sees they do not overlap
 with its own. A read-only upstream, like `magus ls` or `magus status --watch`, never

@@ -43,7 +43,7 @@ Proc server to report on, as a unix:// URL or bare path; default: MAGUS_PROC_SOC
 Include the expensive symbol\-index freshness scan
 .TP
 \fB\-\-wait\fR
-Exit 0 once the build budget can seat the magus run reading this pipe (a free slot when none does); holds that run until then
+Exit 0 once the build budget can seat the magus run reading this pipe (a free slot when none does); holds that run until then, then reserves the seat for it until its first claim
 .TP
 \fB\-\-watch\fR \fIduration\fR
 Poll and reprint at this interval (minimum 15s; 0 means one\-shot)

@@ -53,7 +53,7 @@ its own it waits for a free slot. A claim larger than the whole budget exits
 : Include the expensive symbol-index freshness scan
 
 **--wait**
-: Exit 0 once the build budget can seat the magus run reading this pipe (a free slot when none does); holds that run until then
+: Exit 0 once the build budget can seat the magus run reading this pipe (a free slot when none does); holds that run until then, then reserves the seat for it until its first claim
 
 **--watch** *duration*
 : Poll and reprint at this interval (minimum 15s; 0 means one-shot)
