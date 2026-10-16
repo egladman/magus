@@ -1603,6 +1603,13 @@ func jobExit(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "fails at the end if any could not be ended. To end every job nobody is working in")
 			fmt.Fprintln(os.Stderr, "one call, use `magus job prune`.")
 			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Ending a job ends every live job below it, so a job with one is refused, naming")
+			fmt.Fprintln(os.Stderr, "each, until each is named in the same call. One holding uncommitted work or a")
+			fmt.Fprintln(os.Stderr, "running check also waits on a person to dispose the attention request the")
+			fmt.Fprintln(os.Stderr, "refusal names. --stdin is refused while a job below is still working.")
+			fmt.Fprintln(os.Stderr, "Once a job ends, magus restores what it wrote in the job's checkout and removes")
+			fmt.Fprintln(os.Stderr, "the checkout unless it holds work, naming the uncommitted paths that keep it.")
+			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Examples:")
 			fmt.Fprintln(os.Stderr, "  magus job exit refactor/pricing --stdin < result.json")
 			fmt.Fprintln(os.Stderr, "  magus job exit scout-a scout-b scout-c")
@@ -1662,34 +1669,52 @@ func jobExit(ctx context.Context, root string, args []string) error {
 	}
 }
 
-// abandonJobs ends every named job as no_return, printing one line per job with the
-// end_reason the store recorded for it. A job that cannot
-// be ended does not stop the rest: each is tried, and the command fails afterwards naming
-// every one that was refused.
+// abandonJobs ends every named job as no_return (see [job.Abandon]), printing one line per
+// job with the end_reason the store recorded for it. A job that cannot be ended does not
+// stop the rest: each is tried, and the command fails afterwards naming every refusal.
 func abandonJobs(ctx context.Context, store *job.Store, ids []string) error {
-	var refused []string
-	for _, id := range ids {
-		stored, err := job.Exit(ctx, store, id, nil, nil)
-		if err != nil {
-			refused = append(refused, err.Error())
-			continue
-		}
+	ended, refused := job.Abandon(ctx, store, ids)
+	endedIDs := make([]string, len(ended))
+	for i, stored := range ended {
+		endedIDs[i] = stored.ID
 		fmt.Printf("ended %s, recorded %s: %s\n", stored.ID, stored.State, stored.EndReason)
 	}
-	ended := endWorktrees(ctx, os.Stdout, store)
+	removed := endWorktrees(ctx, os.Stdout, store, endedIDs...)
 	if len(refused) > 0 {
-		return errors.Join(exit.Usagef("magus job exit: %d of %d jobs not ended:\n  %s", len(refused), len(ids), strings.Join(refused, "\n  ")), ended)
+		reasons := make([]string, len(refused))
+		for i, err := range refused {
+			reasons[i] = err.Error()
+		}
+		return errors.Join(exit.Usagef("magus job exit: %d of %d jobs not ended:\n  %s", len(ids)-len(ended), len(ids), strings.Join(reasons, "\n  ")), removed)
 	}
-	return ended
+	return removed
 }
 
-// endWorktrees removes the checkouts that jobs which ended own, and prints what became of
-// each one whose record changed: removed, or kept and why.
-func endWorktrees(ctx context.Context, out io.Writer, store *job.Store) error {
+// endWorktrees removes the checkouts that jobs which ended own, and the linked checkout each
+// job in ended was taken in, restoring what magus wrote in them first, and prints what
+// became of each one: removed, or kept and why.
+func endWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ...string) error {
 	if globalCfg.DryRun {
 		return nil
 	}
-	changed, err := store.EndWorktrees(ctx)
+	written := func(ctx context.Context, checkout string, paths []string) ([]string, error) {
+		ws, err := magus.Inspect(ctx, checkout, append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
+		if err != nil {
+			return nil, err
+		}
+		files, err := ws.ClassifyFiles(ctx, paths)
+		if err != nil {
+			return nil, err
+		}
+		var out []string
+		for _, f := range files {
+			if f.Role == types.DiffRoleOutput || f.Role == types.DiffRoleMaintained {
+				out = append(out, f.Path)
+			}
+		}
+		return out, nil
+	}
+	changed, err := store.EndCheckouts(ctx, written, ended...)
 	for _, row := range changed {
 		printJobWorktree(out, row)
 	}
@@ -2459,7 +2484,7 @@ func jobPrune(ctx context.Context, root string, args []string) error {
 	pos, err := cmdParse("job prune", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&all, "all", false, "Also end a job a holder took and nobody touched within jobs.stale_after")
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus job prune [--all] [flags]")
+			fmt.Fprintln(os.Stderr, "Usage: magus job prune [--all] [<job>...] [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "End, as "+string(types.StateNoReturn)+", every job the store can show nobody is working:")
 			fmt.Fprintln(os.Stderr, "exited and never collected with `"+hint.JobWait.String()+"`, overdue, orphaned by an")
@@ -2468,6 +2493,10 @@ func jobPrune(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "A job a holder took and touched within jobs.stale_after is never ended, nor is")
 			fmt.Fprintln(os.Stderr, "its parent. --all also ends a taken job nobody touched within jobs.stale_after.")
+			fmt.Fprintln(os.Stderr, "A job that would end only because an ancestor this prune ends does is named and")
+			fmt.Fprintln(os.Stderr, "the prune refused, until each such <job> is restated as an argument; one holding")
+			fmt.Fprintln(os.Stderr, "uncommitted work or a running check also waits on a person to dispose the")
+			fmt.Fprintln(os.Stderr, "attention request the refusal names.")
 			fmt.Fprintln(os.Stderr, "The global --dry-run lists what would end and ends nothing.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Example:")
@@ -2480,16 +2509,17 @@ func jobPrune(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if len(pos) > 0 {
-		return exit.Usagef("magus job prune: takes no arguments (got %q)", pos[0])
-	}
 	store, err := openJobs(ctx, resolveRootOrEmpty(root), jobOpen{})
 	if err != nil {
 		return err
 	}
-	ended, err := store.Prune(ctx, job.PruneOptions{All: all, DryRun: globalCfg.DryRun})
+	ended, err := store.Prune(ctx, job.PruneOptions{All: all, DryRun: globalCfg.DryRun}, pos...)
 	if err != nil {
 		return fmt.Errorf("magus job prune: %w", err)
+	}
+	endedIDs := make([]string, len(ended))
+	for i, e := range ended {
+		endedIDs[i] = e.ID
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -2498,14 +2528,10 @@ func jobPrune(ctx context.Context, root string, args []string) error {
 	}
 	switch opts.Format {
 	case outputName:
-		ids := make([]string, len(ended))
-		for i, e := range ended {
-			ids[i] = e.ID
-		}
-		return emitNames(ids)
+		return emitNames(endedIDs)
 	case outputText:
 		printPruned(os.Stdout, ended, globalCfg.DryRun)
-		return endWorktrees(ctx, os.Stdout, store)
+		return endWorktrees(ctx, os.Stdout, store, endedIDs...)
 	default:
 		if ended == nil {
 			ended = []job.Ending{}

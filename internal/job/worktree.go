@@ -197,45 +197,16 @@ func WrongCheckout(row types.Job, here string) error {
 // and records on the row that it did, or why it kept it. It returns the rows whose record
 // changed. A checkout this store's own workspace sits in is kept, saying so, for a later
 // call from elsewhere, since removing it would pull the directory out from under the caller.
+// It is [Store.EndCheckouts] restoring nothing and given no ended job.
 func (s *Store) EndWorktrees(ctx context.Context) ([]types.Job, error) {
-	rows, err := s.List()
-	if err != nil {
-		return nil, err
-	}
-	here, _ := filepath.Abs(s.root)
-	var changed []types.Job
-	for _, row := range rows {
-		wt := row.Worktree
-		if !row.State.Terminal() || !wt.Standing() {
-			continue
-		}
-		var kept string
-		if here != "" && within(here, wt.Root) {
-			kept = "this call runs in it; `" + hint.JobWait.With(row.ID) + "` from another checkout removes it"
-		} else {
-			kept = removeWorktree(ctx, *wt)
-		}
-		if kept != "" && kept == wt.Kept {
-			continue
-		}
-		now := time.Now().Unix()
-		stored, err := s.writeWorktree(ctx, row.ID, func(w *types.JobWorktree) {
-			w.Kept = kept
-			if kept == "" {
-				w.Removed = now
-			}
-		})
-		if err != nil {
-			return changed, err
-		}
-		changed = append(changed, stored)
-	}
-	return changed, nil
+	return s.EndCheckouts(ctx, nil)
 }
 
-// removeWorktree removes wt and returns "", or returns why it may not: it holds a change
-// nobody committed, or a commit nothing but it names. A fact that cannot be read keeps it.
-func removeWorktree(ctx context.Context, wt types.JobWorktree) string {
+// removeWorktree removes wt, the checkout ended job id worked in, and returns "", or
+// returns why it may not: it holds a change nobody committed, or a commit nothing but it
+// names. A fact that cannot be read keeps it. With written, what magus wrote in it is
+// restored first (see [restoreWritten]).
+func removeWorktree(ctx context.Context, id string, wt types.JobWorktree, written WrittenPaths) string {
 	drv, why := resolveDriver(ctx, wt.Source)
 	if drv == nil {
 		return "whether it holds work cannot be read: " + why
@@ -251,10 +222,22 @@ func removeWorktree(ctx context.Context, wt types.JobWorktree) string {
 		return "its status cannot be read: " + err.Error()
 	}
 	dirty = slices.DeleteFunc(dirty, func(p string) bool { return wt.Binary != "" && p == binaryName })
-	if len(dirty) > 0 {
-		return fmt.Sprintf("%d path(s) in it are modified or untracked, first %s", len(dirty), dirty[0])
+	if len(dirty) > 0 && written != nil {
+		restored, err := restoreWritten(ctx, drv, wt.Root, dirty, written)
+		if err != nil {
+			return "restoring what magus wrote in it failed: " + err.Error()
+		}
+		dirty = slices.DeleteFunc(dirty, func(p string) bool { return slices.Contains(restored, p) })
 	}
-	stranded, err := drv.StrandedRevisions(ctx, wt.Root, wt.Base)
+	if len(dirty) > 0 {
+		return fmt.Sprintf("%d path(s) in it hold uncommitted work (%s): commit them on a branch or hand them back, and `%s` removes it",
+			len(dirty), listPaths(dirty), hint.JobWait.With(id))
+	}
+	var bases []string
+	if wt.Base != "" {
+		bases = append(bases, wt.Base)
+	}
+	stranded, err := drv.StrandedRevisions(ctx, wt.Root, bases...)
 	if err != nil {
 		return "which of its commits a branch or bookmark holds cannot be read: " + err.Error()
 	}

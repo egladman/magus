@@ -1,0 +1,42 @@
+# Ending a job ends every live job below it, so `magus job exit` refuses a job with one,
+# naming each, until each is named in the same call. Descendants end before ancestors.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+cd shop
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'shop'
+
+exec magus job fork plan --read-only --criteria 'plan the pricing work'
+exec magus job fork plan/a --parent plan --read-only --criteria 'read the pricing code'
+exec magus job fork plan/b --parent plan --read-only --criteria 'read the tax code'
+
+! exec magus job exit plan
+stderr 'ending plan would end 2 live job\(s\) below it: plan/a \(declared, session holder, never taken\); plan/b \(declared, session holder, never taken\)'
+stderr 'magus job exit plan plan/a plan/b'
+! stdout .
+
+! exec magus job exit plan plan/a
+stdout '^ended plan/a, recorded no_return'
+! stdout '^ended plan,'
+stderr '1 of 2 jobs not ended'
+stderr 'ending plan would end 1 live job\(s\) below it: plan/b'
+
+exec magus job exit plan plan/b
+stdout '^ended plan/b, recorded no_return'
+stdout '^ended plan, recorded no_return'
+
+-- shop/.gitignore --
+.magus/
+-- shop/magus.yaml --
+concurrency: 2
+-- shop/magusfile.buzz --
+import "magus";
+
+// test has nothing to check; the jobs here only read.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+}

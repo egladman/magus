@@ -1040,14 +1040,21 @@ func TestJobPruneEndsOnlyRowsNobodyIsWorking(t *testing.T) {
 		{ID: "done/c", Reason: "parent done ended as no_return, and its tree ends with it"},
 	}
 	tests := []struct {
-		name string
-		all  bool
-		want []Ending
+		name     string
+		all      bool
+		restated []string
+		refused  string
+		want     []Ending
 	}{
-		{name: "the default ends what is provably not worked", want: defaults},
 		{
-			name: "all also ends a taken job nobody touched, and the root above it",
-			all:  true,
+			name:    "the default names a job that would end only with its ancestor, and ends nothing",
+			refused: "prune would end 1 live job(s) only because an ancestor it ends does: done/c (declared, session holder, never taken). Restate each to end it too: `magus job prune done/c`",
+		},
+		{name: "restating that job ends it with what is provably not worked", restated: []string{"done/c"}, want: defaults},
+		{
+			name:     "all also ends a taken job nobody touched, and the root above it",
+			all:      true,
+			restated: []string{"done/c"},
 			want: append(slices.Clone(defaults[:4]),
 				Ending{ID: "idle", Reason: taken},
 				Ending{ID: "old-plan", Reason: "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
@@ -1063,8 +1070,12 @@ func TestJobPruneEndsOnlyRowsNobodyIsWorking(t *testing.T) {
 			rows := pruneRows(now)
 			plant(t, s, rows...)
 
-			got, err := s.Prune(t.Context(), PruneOptions{All: tt.all})
-			require.NoError(t, err)
+			got, err := s.Prune(t.Context(), PruneOptions{All: tt.all}, tt.restated...)
+			if tt.refused != "" {
+				require.ErrorContains(t, err, tt.refused)
+			} else {
+				require.NoError(t, err)
+			}
 			assert.Equal(t, tt.want, got)
 			assert.Empty(t, notices.String(), "prune reports its endings to its caller, not as sweep notices")
 

@@ -55,6 +55,10 @@ func endedReason(prev types.Job, byHolder bool) string {
 // a failed verification: nobody returned evidence at all. A non-nil result is filed with
 // the output attempt resolved in the worker's checkout, so a verifier in another
 // worktree does not need that checkout's cache to reopen the evidence.
+//
+// An abandonment is refused while any live job is below id, since ending id ends them;
+// [Abandon] ends a tree whose every member is named. A result is refused while a job
+// below id is still working.
 func Exit(ctx context.Context, store *Store, id string, result *types.JobResult, resolve AttemptResolver) (types.Job, error) {
 	// Update declares a row it does not find, so an exit naming a mistyped or never-forked
 	// id would mint a job only to end it. Nobody declared it, so there is nothing to end.
@@ -74,6 +78,9 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 		}
 		return types.Job{}, fmt.Errorf("job: %s already ended %s %s ago%s, so there is nothing to end, `%s` lists it",
 			id, ended.State, updatedAgo(ended), reason, hint.LsJobs.With("--all"))
+	}
+	if err := refuseLiveDescendants(ctx, rows, id, result != nil); err != nil {
+		return types.Job{}, err
 	}
 	if result == nil {
 		return store.Update(ctx, id, func(row *types.Job) { row.State = types.StateNoReturn })
@@ -1047,8 +1054,13 @@ type PruneOptions struct {
 // any ancestor of such a row, since its tree would end with it. Server rows and rows this
 // magus cannot write are left alone, as the sweep leaves them.
 //
+// A row that would end only because an ancestor this prune ends does is not ended
+// unseen: the prune is refused, naming each, until restated names them all, and until a
+// person confirms when one holds uncommitted work or a running check (see
+// [Store.refuseTreeEndings]). A dry run lists them and refuses nothing.
+//
 // A bound actor is refused: pruning ends other leases' rows.
-func (s *Store) Prune(ctx context.Context, opts PruneOptions) ([]Ending, error) {
+func (s *Store) Prune(ctx context.Context, opts PruneOptions, restated ...string) ([]Ending, error) {
 	if actor := s.Actor(); actor.Bound() {
 		return nil, refuse(actor, actor.Lease, "pruning ends other leases' rows, so it belongs to whoever declared the plan")
 	}
@@ -1070,6 +1082,22 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions) ([]Ending, error) 
 	}
 	// Probed outside the file lock, as the sweep does: the probe runs the VCS.
 	w.landed = s.landings(f.Jobs, w.now)
+	// So is the work a row ending with its tree holds, read in its checkout. The write
+	// below holds the verdict against a fresh read, so a row that joined a tree since
+	// is refused rather than ended on this view.
+	var taken []types.Job
+	if !opts.DryRun {
+		preview, err := w.prunable(f.Jobs, window, opts.All)
+		if err != nil {
+			return nil, err
+		}
+		if taken, err = w.treeEndings(f.Jobs, preview, window); err != nil {
+			return nil, err
+		}
+		if err := s.refuseTreeEndings(ctx, taken, restated); err != nil {
+			return nil, err
+		}
+	}
 
 	var out []Ending
 	var ended endings
@@ -1081,6 +1109,15 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions) ([]Ending, error) 
 		}
 		if opts.DryRun || len(out) == 0 {
 			return file.ErrSkipWrite
+		}
+		fresh, err := w.treeEndings(cur.Jobs, out, window)
+		if err != nil {
+			return err
+		}
+		for _, row := range fresh {
+			if !slices.ContainsFunc(taken, func(r types.Job) bool { return r.ID == row.ID }) {
+				return fmt.Errorf("job: %s joined a tree this prune ends after it was read, so nothing was ended; prune again to see it", row.ID)
+			}
 		}
 		for _, e := range out {
 			i := slices.IndexFunc(cur.Jobs, func(r types.Job) bool { return r.ID == e.ID })
