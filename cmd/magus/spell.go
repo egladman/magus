@@ -113,7 +113,7 @@ func spellBuild(ctx context.Context, root string, args []string) error {
 		}
 	}
 	if opts.Format == outputText || opts.Format == outputName {
-		return emitNames([]string{res.Digest.String()})
+		return emitNames(os.Stdout, []string{res.Digest.String()})
 	}
 	return emitFormatted(opts, res)
 }
@@ -258,7 +258,7 @@ func spellPush(ctx context.Context, root string, args []string) error {
 	res.Reference = pinned.String()
 	res.Tags = append([]string{dest.Tag}, tags...)
 	if opts.Format == outputText || opts.Format == outputName {
-		return emitNames([]string{res.Reference})
+		return emitNames(os.Stdout, []string{res.Reference})
 	}
 	return emitFormatted(opts, res)
 }
@@ -384,9 +384,9 @@ func ejectSpell(root, name, dst string) (res spellPullResult, next string, err e
 func emitPull(opts output.Options, res spellPullResult) error {
 	switch opts.Format {
 	case outputText:
-		return emitNames([]string{res.Reference, res.Dir})
+		return emitNames(os.Stdout, []string{res.Reference, res.Dir})
 	case outputName:
-		return emitNames([]string{res.Reference})
+		return emitNames(os.Stdout, []string{res.Reference})
 	default:
 		return emitFormatted(opts, res)
 	}
@@ -507,7 +507,7 @@ func spellLock(ctx context.Context, root string, args []string) error {
 		res.Spells = append(res.Spells, spellLockEntry{Path: path, Tag: e.Tag, Digest: e.Digest})
 	}
 	if opts.Format == outputText || opts.Format == outputName {
-		return emitItemNames(res.Spells, func(e spellLockEntry) string { return e.Path + "@" + e.Digest.String() })
+		return emitItemNames(os.Stdout, res.Spells, func(e spellLockEntry) string { return e.Path + "@" + e.Digest.String() })
 	}
 	return emitFormatted(opts, res)
 }
@@ -623,7 +623,7 @@ func spellLs(ctx context.Context, root string, args []string) error {
 			return fmt.Errorf("spell ls: %w", err)
 		}
 		if opts.Format == outputText || opts.Format == outputName {
-			return emitItemNames(shipped, func(s shippedSpell) string { return s.Reference })
+			return emitItemNames(os.Stdout, shipped, func(s shippedSpell) string { return s.Reference })
 		}
 		return emitFormatted(opts, shippedSpellsResult{Spells: shipped})
 	}
@@ -643,7 +643,7 @@ func spellLs(ctx context.Context, root string, args []string) error {
 	}
 	switch opts.Format {
 	case outputText, outputName:
-		return emitNames(tags)
+		return emitNames(os.Stdout, tags)
 	default:
 		return emitFormatted(opts, spellLsResult{Repository: repo.String(), Tags: tags})
 	}

@@ -114,7 +114,7 @@ func configCacheKeyGenerate(ctx context.Context, args []string) error {
 	// on stderr that the seed went nowhere, since it cannot be recovered afterwards.
 	if opts.Format == outputName {
 		slog.WarnContext(ctx, "-o name prints the keyid only; this key's seed was NOT emitted and cannot be recovered. Rerun with -o json or -o template='{{.seed}}' to capture one.", attr.Notice(""))
-		return emitNames([]string{km.KeyID})
+		return emitNames(os.Stdout, []string{km.KeyID})
 	}
 	if opts.Format != outputText {
 		// Warnings to stderr so a pipe gets only the requested field. Printed BEFORE

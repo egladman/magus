@@ -175,7 +175,7 @@ func invocationList(ctx context.Context, root string, args []string) error {
 		for _, s := range summaries {
 			names = append(names, s.Invocation)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 	out := map[string]any{
 		"invocations": summaries,

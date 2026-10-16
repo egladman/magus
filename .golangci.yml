@@ -479,10 +479,10 @@ linters:
           module: github.com/egladman/magus
           package: github.com/egladman/magus/cmd/magus
           case-ident: outputName
-          emitters: [emitNames, emitItemNames, outputDst]
+          emitters: [emitNames, emitItemNames, outputDestination]
           hint: >-
-            the destination is --tee's; a single value is emitNames([]string{v}), a slice of
-            records is emitItemNames(records, func(r T) string { return r.Field })
+            the destination is --tee's; a single value is emitNames(out, []string{v}), a slice of
+            records is emitItemNames(out, records, func(r T) string { return r.Field })
 
       testisolation:
         type: module

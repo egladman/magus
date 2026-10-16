@@ -1034,7 +1034,7 @@ func emitCheckpoint(cp types.VCSCheckpoint) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, cp)
 	case outputName:
-		return emitNames([]string{cp.Token()})
+		return emitNames(os.Stdout, []string{cp.Token()})
 	}
 	fmt.Println(checkpointLine(cp))
 	return nil
@@ -1462,7 +1462,7 @@ func emitStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool, 
 	case outputName:
 		// The paths that were staged, which is what the plan is a plan OF. Dropped paths
 		// are deliberately absent: this is the list a caller feeds forward.
-		return emitNames(v.Staged)
+		return emitNames(os.Stdout, v.Staged)
 	}
 	reportStaging(v, dropped, untracked, dryRun, review)
 	return nil

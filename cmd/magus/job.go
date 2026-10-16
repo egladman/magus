@@ -437,7 +437,7 @@ func lsJobs(root string, args []string) error {
 		for i, one := range list.Jobs {
 			ids[i] = one.ID
 		}
-		return emitNames(ids)
+		return emitNames(os.Stdout, ids)
 	case outputText:
 		printJobTree(os.Stdout, list)
 		fmt.Fprintln(os.Stdout)
@@ -905,7 +905,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	}
 	switch opts.Format {
 	case outputName:
-		return emitNames([]string{row.ID})
+		return emitNames(os.Stdout, []string{row.ID})
 	case outputText:
 		fmt.Print(brief.String())
 		printJobWorktree(os.Stdout, row)
@@ -1287,7 +1287,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	derived := slices.DeleteFunc(slices.Clone(stored.WritePaths), func(p string) bool { return slices.Contains(asked.WritePaths, p) })
 
 	if opts.Format == outputName {
-		return emitNames([]string{stored.ID})
+		return emitNames(os.Stdout, []string{stored.ID})
 	}
 	// The notes compare the row with its peers, which the merge read and did not return.
 	plan, err := store.List()
@@ -1385,7 +1385,7 @@ func jobEnter(ctx context.Context, store *job.Store, id, rel string) error {
 	}
 	switch opts.Format {
 	case outputName:
-		return emitNames([]string{stored.ID})
+		return emitNames(os.Stdout, []string{stored.ID})
 	case outputText:
 		fmt.Println(job.EntryAdvice(stored, rel))
 		pointAtConsole(ctx, stored.ID)
@@ -1503,7 +1503,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	}
 	switch opts.Format {
 	case outputName:
-		return emitNames([]string{stored.ID})
+		return emitNames(os.Stdout, []string{stored.ID})
 	case outputText:
 		fmt.Println(job.BaseAdvice(stored))
 		fmt.Printf("took %s in %s; read the terms with `%s`\n", stored.ID, root, hint.DescribeJob.With(stored.ID))
@@ -1714,7 +1714,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 	}
 	switch opts.Format {
 	case outputName:
-		return emitNames([]string{stored.ID})
+		return emitNames(os.Stdout, []string{stored.ID})
 	case outputText:
 		fmt.Printf("exited %s, recorded %s, with its result filed. Whoever forked it verifies with `%s`\n",
 			stored.ID, stored.State, hint.JobWait.With(stored.ID))
@@ -1931,7 +1931,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	told := io.Discard
 	switch opts.Format {
 	case outputName:
-		err = emitNames([]string{status.Job})
+		err = emitNames(os.Stdout, []string{status.Job})
 	case outputText:
 		printJobStatus(os.Stdout, status)
 		pointAtConsole(ctx, status.Job)
@@ -1966,7 +1966,7 @@ func jobWaitIntegration(ctx context.Context, store *job.Store, root, id string, 
 	}
 	switch opts.Format {
 	case outputName:
-		err = emitNames([]string{id})
+		err = emitNames(os.Stdout, []string{id})
 	case outputText:
 		verdict := "fails"
 		if grade.Verified {
@@ -2303,7 +2303,7 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 	}
 	switch opts.Format {
 	case outputName:
-		return emitNames([]string{dropped.ID})
+		return emitNames(os.Stdout, []string{dropped.ID})
 	case outputText:
 		fmt.Printf("removed %s (%s); the plan it was part of is archived beside it\n", dropped.ID, orDash(string(dropped.State)))
 		return nil
@@ -2410,7 +2410,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		for i, a := range applied {
 			ids[i] = a.Next.ID
 		}
-		return emitNames(ids)
+		return emitNames(os.Stdout, ids)
 	}
 	claims := applyClaimNotes(ctx, store, applied)
 	if opts.Format == outputText {
@@ -2592,7 +2592,7 @@ func jobPrune(ctx context.Context, root string, args []string) error {
 	}
 	switch opts.Format {
 	case outputName:
-		return emitNames(endedIDs)
+		return emitNames(os.Stdout, endedIDs)
 	case outputText:
 		printPruned(os.Stdout, ended, globalCfg.DryRun)
 		return endWorktrees(ctx, os.Stdout, store, endedIDs...)

@@ -130,7 +130,7 @@ func emitDoctorChecks(opts output.Options, checks []doctor.CheckInfo) error {
 		for _, c := range checks {
 			names = append(names, c.Name)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	fmt.Printf("%d checks, in the order `magus doctor` reports them:\n\n", len(checks))
@@ -162,7 +162,7 @@ func emitDoctor(opts output.Options, out types.DoctorReport) error {
 				names = append(names, c.Name)
 			}
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// Doctor's report stays on stdout (it is the command's primary output, meant to be

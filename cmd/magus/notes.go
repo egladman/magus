@@ -327,7 +327,7 @@ func notesList(root string, args []string) error {
 		for i, n := range found {
 			names[i] = n.Name
 		}
-		if err := emitNames(names); err != nil {
+		if err := emitNames(os.Stdout, names); err != nil {
 			return err
 		}
 		return notesIssuesError(issues, false)
@@ -384,7 +384,7 @@ func notesGet(root string, args []string) error {
 		return err
 	}
 	if opts.Format == outputName {
-		return emitNames([]string{n.Name})
+		return emitNames(os.Stdout, []string{n.Name})
 	}
 	if opts.Format != outputText {
 		return emitFormatted(opts, scopedNote{
@@ -601,7 +601,7 @@ func notesVerify(ctx context.Context, root string, args []string) error {
 	// the reader would act on next: the note each issue is about (its file, for an issue
 	// about the store rather than a note). A clean store prints nothing.
 	if opts.Format == outputName {
-		if err := emitNames(notesIssueSubjects(report.Issues)); err != nil {
+		if err := emitNames(os.Stdout, notesIssueSubjects(report.Issues)); err != nil {
 			return err
 		}
 		return notesIssuesError(report.Issues, strict)

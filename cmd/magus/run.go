@@ -492,7 +492,7 @@ func emitProjectNames(m *magus.Magus, selection []types.Target) error {
 	for i, p := range projects {
 		names[i] = p.Path
 	}
-	return emitNames(names)
+	return emitNames(os.Stdout, names)
 }
 
 // runSelection is how one run's project selection is named on the command line: the
@@ -721,7 +721,7 @@ func emitSavedPlanDryRun(ctx context.Context, p planOutput, target string, shard
 		}
 		return nil
 	case outputName:
-		return emitNames(planProjects(shards))
+		return emitNames(os.Stdout, planProjects(shards))
 	default:
 		if opts.Format == outputTemplate {
 			p.Summary = planSummaryMarkdown(p)

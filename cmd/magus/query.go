@@ -287,7 +287,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		}
 		return exitForQuery(out)
 	case outputName:
-		if err := emitItemNames(out.Matches, func(m types.KnowledgeMatch) string { return m.ID }); err != nil {
+		if err := emitItemNames(os.Stdout, out.Matches, func(m types.KnowledgeMatch) string { return m.ID }); err != nil {
 			return err
 		}
 		if err := reportIndexStaleness(noticeLines{ctx: ctx, level: slog.LevelError}, out.Answer); err != nil {
@@ -589,7 +589,7 @@ func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, ou
 		}
 		return emitFormatted(out, rec)
 	case outputName:
-		return emitNames([]string{header.ID})
+		return emitNames(os.Stdout, []string{header.ID})
 	}
 
 	fmt.Printf("inv:     %s\n", header.ID)
@@ -690,7 +690,7 @@ func showOutputIdentity(ctx context.Context, m *magus.Magus, ref string, out out
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(out, outputIdentityRecord{OutputDescriptor: desc, Invocation: inv, ClassDigests: digests})
 	case outputName:
-		return emitNames([]string{desc.Ref})
+		return emitNames(os.Stdout, []string{desc.Ref})
 	}
 	fmt.Printf("ref:     %s\n", desc.Ref)
 	fmt.Printf("project: %s\n", desc.Project)
@@ -916,7 +916,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 			KnowledgeExplainOutput: out, Next: next, AgentSessions: sessionContact(root, out.Node),
 		})
 	case outputName:
-		return emitNames([]string{out.Node.ID})
+		return emitNames(os.Stdout, []string{out.Node.ID})
 	}
 
 	return writeExplainText(os.Stdout, root, pos[0], nx, next, res)

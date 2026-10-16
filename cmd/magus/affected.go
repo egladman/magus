@@ -870,7 +870,7 @@ func emitPlan(opts output.Options, out planOutput) error {
 	case outputText, outputJSON:
 		return emitFormatted(output.Options{Format: outputJSON}, out)
 	case outputName:
-		return emitItemNames(out.Matrix, func(s planShard) string { return s.Shard })
+		return emitItemNames(os.Stdout, out.Matrix, func(s planShard) string { return s.Shard })
 	default:
 		if opts.Format == outputTemplate {
 			out.Summary = planSummaryMarkdown(out)
@@ -1131,7 +1131,7 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 		for _, p := range out.AffectedProjects {
 			names = append(names, p.Path)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	return printImpactText(out)
@@ -1404,9 +1404,9 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 		// empty file is the point: `-o name` piped into xargs should see nothing rather
 		// than a blank line.
 		if !out.Affected {
-			return emitNames(nil)
+			return emitNames(os.Stdout, nil)
 		}
-		return emitNames([]string{out.Project})
+		return emitNames(os.Stdout, []string{out.Project})
 	}
 
 	// text and wide

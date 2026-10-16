@@ -83,7 +83,7 @@ func cleanCmd(ctx context.Context, root string, args []string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, report)
 	case outputName:
-		return emitNames(report.Removed)
+		return emitNames(os.Stdout, report.Removed)
 	}
 
 	for _, path := range report.Removed {

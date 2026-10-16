@@ -74,7 +74,7 @@ func describeTools(ctx context.Context, root string, args []string) error {
 		for _, t := range report.Tools {
 			names = append(names, t.Project+"/"+t.Bin)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide

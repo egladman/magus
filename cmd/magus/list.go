@@ -144,7 +144,7 @@ func lsProjects(ctx context.Context, root string) error {
 		for _, p := range out.Projects {
 			names = append(names, p.Path)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// ls ENUMERATES; describe EXPLAINS one thing in full. That split is the whole
@@ -268,7 +268,7 @@ func lsTargets(ctx context.Context, root string, projectArgs []string) error {
 			}
 		}
 		slices.Sort(names)
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	for _, p := range out.Projects {

@@ -280,20 +280,20 @@ func TestWriteJSONL(t *testing.T) {
 	assert.Equal(t, proj{Path: "web", Pack: "typescript"}, p1)
 }
 
-func TestOutputDstNoTee(t *testing.T) {
-	// With no --tee set, outputDst returns os.Stdout.
+func TestOutputDestinationNoTee(t *testing.T) {
+	// With no --tee set, outputDestination returns the writer it was handed.
 	prev := global.tee
 	global.tee = ""
 	defer func() { global.tee = prev }()
 
-	w, cleanup, err := outputDst()
+	w, cleanup, err := outputDestination(os.Stdout)
 	require.NoError(t, err)
 	defer cleanup()
 	assert.Equal(t, os.Stdout, w)
 }
 
-func TestOutputDstTeeWritesBoth(t *testing.T) {
-	// With --tee set, outputDst returns a MultiWriter that writes to both
+func TestOutputDestinationTeeWritesBoth(t *testing.T) {
+	// With --tee set, outputDestination returns a MultiWriter that writes to both
 	// stdout and the named file.
 	f, err := os.CreateTemp(t.TempDir(), "tee-*.json")
 	require.NoError(t, err)
@@ -304,7 +304,7 @@ func TestOutputDstTeeWritesBoth(t *testing.T) {
 	global.tee = teeTarget
 	defer func() { global.tee = prev }()
 
-	w, cleanup, err := outputDst()
+	w, cleanup, err := outputDestination(os.Stdout)
 	require.NoError(t, err)
 	defer cleanup()
 
@@ -319,18 +319,18 @@ func TestOutputDstTeeWritesBoth(t *testing.T) {
 	assert.Contains(t, string(got), `"X": 42`)
 }
 
-func TestOutputDstTeeAppends(t *testing.T) {
+func TestOutputDestinationTeeAppends(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
-	// Repeated calls to outputDst with the same tee path append (not overwrite).
+	// Repeated calls to outputDestination with the same tee path append (not overwrite).
 	dir := t.TempDir()
 	teeTarget := dir + "/out.json"
 
 	for i := range 2 {
 		prev := global.tee
 		global.tee = teeTarget
-		w, cleanup, err := outputDst()
+		w, cleanup, err := outputDestination(os.Stdout)
 		global.tee = prev
-		require.NoError(t, err, "outputDst call %d", i)
+		require.NoError(t, err, "outputDestination call %d", i)
 		v := struct {
 			N int `json:"N"`
 		}{N: i}
@@ -345,12 +345,12 @@ func TestOutputDstTeeAppends(t *testing.T) {
 	assert.Contains(t, string(got), `"N": 1`)
 }
 
-func TestOutputDstTeeBadPath(t *testing.T) {
+func TestOutputDestinationTeeBadPath(t *testing.T) {
 	prev := global.tee
 	global.tee = "/nonexistent-dir-that-should-not-exist/out.json"
 	defer func() { global.tee = prev }()
 
-	_, _, err := outputDst()
+	_, _, err := outputDestination(os.Stdout)
 	require.Error(t, err, "expected error for bad --tee path")
 	assert.Contains(t, err.Error(), "--tee", "error should mention --tee")
 }
@@ -519,7 +519,7 @@ func TestParseTarget(t *testing.T) {
 	assertTarget("::lint", "", "lint") // empty spell — treated as no filter
 }
 
-func TestOutputDstSilentTee(t *testing.T) {
+func TestOutputDestinationSilentTee(t *testing.T) {
 	const record = "{\n  \"N\": 7\n}\n"
 	cases := []struct {
 		name       string

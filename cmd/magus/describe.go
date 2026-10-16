@@ -200,7 +200,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 				names = append(names, n.Name)
 			}
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	case outputDot:
 		return render.WriteTargetGraphDOT(os.Stdout, out)
 	case outputMarkdown:
@@ -357,7 +357,7 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 		for _, t := range inventory {
 			names = append(names, t.Name)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide
@@ -567,7 +567,7 @@ func describeCharms(ctx context.Context, root string, args []string) error {
 		for _, c := range charms {
 			names = append(names, c.Name)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide
@@ -870,7 +870,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		for _, r := range reports {
 			names = append(names, r.Ref)
 		}
-		if err := emitNames(names); err != nil {
+		if err := emitNames(os.Stdout, names); err != nil {
 			return err
 		}
 		if mismatched {
@@ -1078,7 +1078,7 @@ func describeTargets(ctx context.Context, root string) error {
 		for _, t := range targets {
 			names = append(names, t.Name)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide
@@ -1148,7 +1148,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 			for _, p := range out.Projects {
 				names = append(names, p.Path)
 			}
-			return emitNames(names)
+			return emitNames(os.Stdout, names)
 		}
 
 		// text / wide
@@ -1226,7 +1226,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 		for _, p := range out.Projects {
 			names = append(names, p.Path)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide
@@ -1293,7 +1293,7 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 		for _, e := range out {
 			names = append(names, e.Project+":"+e.Target)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide
@@ -1448,7 +1448,7 @@ func describeWorkspaces(ctx context.Context, root string, args []string) error {
 		for _, w := range out {
 			names = append(names, w.Root)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide
@@ -1549,7 +1549,7 @@ func describeMCPTools(args []string) error {
 		for _, t := range out.MCPTools {
 			names = append(names, t.Name)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide
@@ -1624,7 +1624,7 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 		for i, f := range files {
 			names[i] = f.Path
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide

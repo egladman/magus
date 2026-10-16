@@ -109,7 +109,7 @@ func attentionList(root string, args []string) error {
 		for _, req := range requests {
 			names = append(names, req.ID)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 	return emitFormatted(opts, attentionListOutput{Requests: requests, Store: dir})
 }

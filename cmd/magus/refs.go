@@ -176,7 +176,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		for _, r := range out.Refs {
 			names = append(names, r.File)
 		}
-		if err := emitNames(names); err != nil {
+		if err := emitNames(os.Stdout, names); err != nil {
 			return err
 		}
 		return reportIndexStaleness(noticeLines{ctx: ctx, level: slog.LevelError}, out.Answer)
@@ -522,7 +522,7 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 				}
 			}
 		}
-		if err := emitNames(names); err != nil {
+		if err := emitNames(os.Stdout, names); err != nil {
 			return err
 		}
 		// Filtering to verified sites is what makes this format safe to pipe, and it is also
@@ -770,7 +770,7 @@ func emitDefinitions(ctx context.Context, w io.Writer, opts output.Options, out 
 				names = append(names, definitionRange(s))
 			}
 		}
-		if err := emitNames(names); err != nil {
+		if err := emitNames(w, names); err != nil {
 			return err
 		}
 		if stale > 0 {
@@ -923,7 +923,7 @@ func refsRenameCmd(ctx context.Context, root string, opts output.Options, g *kno
 		for _, f := range out.Files {
 			names = append(names, f.Path)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	default:
 		return emitFormatted(opts, out)
 	}

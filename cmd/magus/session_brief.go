@@ -206,7 +206,7 @@ func sessionBriefCmd(ctx context.Context, root string) error {
 		if brief.Revision == "" {
 			return nil
 		}
-		return emitNames([]string{brief.Revision})
+		return emitNames(os.Stdout, []string{brief.Revision})
 	}
 	return emitFormatted(opts, brief)
 }

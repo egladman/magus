@@ -54,7 +54,7 @@ func forkDryRun(opts output.Options, v types.JobValidation) error {
 	switch opts.Format {
 	case outputName:
 		if len(v.Problems) == 0 {
-			err = emitNames([]string{v.Job.ID})
+			err = emitNames(os.Stdout, []string{v.Job.ID})
 		}
 	case outputText:
 		job.RenderValidation(os.Stdout, v, true)

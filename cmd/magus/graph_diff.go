@@ -187,7 +187,7 @@ func diffNames(d types.KnowledgeGraphDiff) error {
 	for _, c := range d.NodesChanged {
 		names = append(names, c.ID)
 	}
-	return emitNames(names)
+	return emitNames(os.Stdout, names)
 }
 
 // diffText prints a plain-text summary of a graph diff.

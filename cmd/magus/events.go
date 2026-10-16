@@ -97,12 +97,12 @@ func eventsCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	dst, cleanup, err := outputDst()
+	destination, cleanup, err := outputDestination(os.Stdout)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = cleanup() }()
-	w := eventstream.NewWriter(dst, filter)
+	w := eventstream.NewWriter(destination, filter)
 	defer func() { _ = w.Close() }()
 
 	f := eventstream.NewFollower(filepath.Join(cacheDir, cache.RunsDir), workspace)

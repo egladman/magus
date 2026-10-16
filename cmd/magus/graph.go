@@ -465,7 +465,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		for _, n := range out.Nodes {
 			names = append(names, n.ID)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide: a routing summary, not a data dump (counts by kind and relation).
@@ -568,7 +568,7 @@ func graphStats(ctx context.Context, root string, args []string) error {
 		for _, god := range out.Gods {
 			names = append(names, god.ID)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 	return statsText(out)
 }
@@ -780,7 +780,7 @@ func renderWorkspaceGraph(ctx context.Context, ws types.WorkspaceRepository, opt
 		for _, n := range out.Nodes {
 			names = append(names, n.Path)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	case outputDot:
 		return render.WriteGraphDOT(os.Stdout, magus.ComposeGraph(ws, composeOpts...))
 	}

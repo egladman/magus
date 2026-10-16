@@ -205,7 +205,7 @@ func describeHarness(ctx context.Context, rootOverride string, args []string) er
 		}
 		return emitFormatted(opts, plans)
 	case outputName:
-		return emitItemNames(plans, func(p types.HarnessPlan) string { return p.ID })
+		return emitItemNames(os.Stdout, plans, func(p types.HarnessPlan) string { return p.ID })
 	}
 	for i, plan := range plans {
 		if i > 0 {

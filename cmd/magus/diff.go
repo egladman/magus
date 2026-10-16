@@ -510,13 +510,13 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.
 		// Narrowed to hunks, a name is a hunk: one path:start-end each, so a loop reaches
 		// every unread hunk rather than every file that holds one.
 		if rev.Unread != nil {
-			return emitNames(review.HunkNames(types.Diff{Files: shown}))
+			return emitNames(os.Stdout, review.HunkNames(types.Diff{Files: shown}))
 		}
 		paths := make([]string, 0, len(shown))
 		for _, f := range shown {
 			paths = append(paths, f.Path)
 		}
-		return emitNames(paths)
+		return emitNames(os.Stdout, paths)
 	}
 	if rev.Unread != nil {
 		if rev.Unread.ReadState == types.DiffReadStateUnknown {
@@ -617,12 +617,12 @@ func printThread(ctx context.Context, m *magus.Magus, t threadPrint) error {
 			for _, f := range in.Changeset.Files {
 				for _, h := range f.Hunks {
 					if f.Path == rec.Path && h.Index == rec.Hunk.Index {
-						return emitNames([]string{changeset.NewRange(f.Path, h.NewStart, h.NewCount)})
+						return emitNames(os.Stdout, []string{changeset.NewRange(f.Path, h.NewStart, h.NewCount)})
 					}
 				}
 			}
 		}
-		return emitNames([]string{rec.Path})
+		return emitNames(os.Stdout, []string{rec.Path})
 	}
 	for _, line := range review.ThreadLines(rec) {
 		fmt.Println(line)

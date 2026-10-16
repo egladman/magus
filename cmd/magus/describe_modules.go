@@ -69,7 +69,7 @@ func describeModules(ctx context.Context, args []string) error {
 		for _, m := range out {
 			names = append(names, m.Name)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide

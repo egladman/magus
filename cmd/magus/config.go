@@ -92,7 +92,7 @@ func runConfigView(cfg config.Config, args []string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, cfg)
 	case outputName:
-		return emitNames(config.KnownKeys())
+		return emitNames(os.Stdout, config.KnownKeys())
 	}
 
 	// text / wide: human-readable layout.

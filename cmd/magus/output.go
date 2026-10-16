@@ -36,14 +36,9 @@ func structuredStdout(out io.Writer) io.Writer {
 	return out
 }
 
-// outputDst returns the writer for structured output; mirrors to --tee file when set.
-func outputDst() (io.Writer, func() error, error) {
-	return outputDstTo(os.Stdout)
-}
-
-// outputDstTo is outputDst over the writer a command was handed, for the commands whose
-// caller captures the output instead of reading the process stdout.
-func outputDstTo(out io.Writer) (io.Writer, func() error, error) {
+// outputDestination returns the writer for structured output over out, mirrored to the
+// --tee file when set; the caller runs the returned close once it is done writing.
+func outputDestination(out io.Writer) (io.Writer, func() error, error) {
 	if global.tee == "" {
 		return out, func() error { return nil }, nil
 	}
@@ -100,11 +95,11 @@ func (l *lazyFile) Close() error {
 }
 
 // emitFormatted renders v with opts to the structured-output destination (stdout,
-// mirrored to --tee) and closes it. It owns the outputDst/cleanup pair so every
+// mirrored to --tee) and closes it. It owns the outputDestination/cleanup pair so every
 // command's `-o json|yaml|jsonl|template` arm is one call instead of repeating the
-// same dst/defer/writeFormatted dance.
+// same destination/defer/writeFormatted dance.
 func emitFormatted(opts output.Options, v any) error {
-	w, cleanup, err := outputDst()
+	w, cleanup, err := outputDestination(os.Stdout)
 	if err != nil {
 		return err
 	}
@@ -112,19 +107,13 @@ func emitFormatted(opts output.Options, v any) error {
 	return writeFormatted(w, opts, v)
 }
 
-// emitNames writes the `-o name` form: one bare token per line, to the structured-output
-// destination (stdout, mirrored to --tee).
+// emitNames writes the `-o name` form: one bare token per line, to out mirrored to --tee.
 //
 // The output package does not render -o name and cannot: which field IS the identity of
 // a record is the command's to say, not the renderer's. So a command that offers -o name
 // renders it through here.
-func emitNames(names []string) error {
-	return emitNamesTo(os.Stdout, names)
-}
-
-// emitNamesTo is emitNames over the writer a command was handed.
-func emitNamesTo(out io.Writer, names []string) error {
-	w, cleanup, err := outputDstTo(out)
+func emitNames(out io.Writer, names []string) error {
+	w, cleanup, err := outputDestination(out)
 	if err != nil {
 		return err
 	}
@@ -143,12 +132,12 @@ func emitNamesTo(out io.Writer, names []string) error {
 // loop, append, emit -- and most `-o name` arms skipped it and wrote fmt.Println instead.
 // That silently bypassed --tee: the flag was accepted, no file was written, and nothing
 // said so. A helper only prevents that when using it is shorter than not using it.
-func emitItemNames[T any](items []T, name func(T) string) error {
+func emitItemNames[T any](out io.Writer, items []T, name func(T) string) error {
 	names := make([]string, 0, len(items))
 	for _, item := range items {
 		names = append(names, name(item))
 	}
-	return emitNames(names)
+	return emitNames(out, names)
 }
 
 // outputWriter renders json, yaml, jsonl and template through magus's one JSON codec,
