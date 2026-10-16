@@ -86,16 +86,18 @@ func TestIndexScoreSaturatesPerDocument(t *testing.T) {
 	assert.Less(t, hits[0].Score, perField)
 }
 
-func TestIndexScoreRanksAllTermMatchesFirst(t *testing.T) {
+func TestIndexScoreRanksByScoreNotMatchedTerms(t *testing.T) {
+	pad := []string{"pad", "pad", "pad", "pad", "pad", "pad", "pad", "pad"}
 	ix := NewIndex([]Document{
 		{ID: "many", Fields: map[string][]string{FieldName: {"leaf", "leaf", "leaf"}}},
-		{ID: "both", Fields: map[string][]string{FieldBody: {"leaf", "lower", "pad", "pad", "pad"}}},
+		{ID: "both", Fields: map[string][]string{FieldBody: append([]string{"leaf", "lower"}, pad...)}},
+		{ID: "lower", Fields: map[string][]string{FieldBody: {"lower"}}},
 	})
 	hits := ix.Score([]string{"leaf", "lower", "leaf"}, fixtureWeights())
-	require.Len(t, hits, 2)
-	assert.Equal(t, "both", hits[0].ID)
-	assert.Equal(t, 2, hits[0].Matched)
-	assert.Equal(t, 1, hits[1].Matched, "a repeated query term counts once")
+	require.Len(t, hits, 3)
+	assert.Equal(t, []string{"many", "lower", "both"}, []string{hits[0].ID, hits[1].ID, hits[2].ID})
+	assert.Equal(t, 1, hits[0].Matched, "a repeated query term counts once")
+	assert.Equal(t, 2, hits[2].Matched, "matching more terms does not lift a lower score")
 }
 
 func TestIndexScoreIgnoresInputOrder(t *testing.T) {

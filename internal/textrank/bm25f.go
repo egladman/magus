@@ -131,8 +131,9 @@ func (ix *Index) Len() int { return len(ix.ids) }
 // term repeated across fields saturates once per document. IDF is over the whole index.
 // A repeated query term counts once. A field w names no weight for is not scored.
 //
-// Hits are sorted by Matched descending, then Score descending, then ID ascending, so a
-// document holding every term outranks one holding fewer however often it repeats them.
+// Hits are sorted by Score descending, then ID ascending. Matched does not order them:
+// ranking by matched terms first lost 13 to 51 NDCG@10 points to score order on the CoIR
+// code-search sets and won on no subset or query class.
 func (ix *Index) Score(query []string, w BM25F) []Hit {
 	weight := make([]float64, len(ix.fields))
 	norm := make([]float64, len(ix.fields))
@@ -201,9 +202,6 @@ func (ix *Index) Score(query []string, w BM25F) []Hit {
 	}
 	sort.Slice(out, func(i, j int) bool {
 		a, b := out[i], out[j]
-		if a.Matched != b.Matched {
-			return a.Matched > b.Matched
-		}
 		if a.Score != b.Score {
 			return a.Score > b.Score
 		}
