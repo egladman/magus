@@ -88,7 +88,7 @@ func TestHistorySchemaLockIsStructural(t *testing.T) {
 		},
 		reflect.TypeOf(Outcome{}): {
 			"result": true, "affected": true, "duration_ms": true, "at": true,
-			"attempts": true, "max_rss_bytes": true, "cpu_ms": true, "charms": true, "args_hash": true,
+			"attempts": true, "max_rss_bytes": true, "cpu_ms": true, "slots": true, "charms": true, "args_hash": true,
 		},
 	}
 	for typ, keys := range allowed {
@@ -133,7 +133,7 @@ func TestHistorySchemaLock(t *testing.T) {
 					RecentOutcomes: []Outcome{
 						{Result: "pass", AffectedByDiff: true, DurationMs: 11_000, At: time.Now(), Attempts: 1},
 						{Result: "volatile", AffectedByDiff: false, DurationMs: 22_000, At: time.Now(), Attempts: 2,
-							MaxRSSBytes: 1 << 30, CPUMs: 41_000, Charms: []string{"rw"}, ArgsHash: ArgsHash([]string{"-run", "X"})},
+							MaxRSSBytes: 1 << 30, CPUMs: 41_000, Slots: 4, Charms: []string{"rw"}, ArgsHash: ArgsHash([]string{"-run", "X"})},
 					},
 				},
 			},
@@ -246,6 +246,9 @@ func TestHistorySchemaLock(t *testing.T) {
 		// int64: CPU milliseconds the kernel counted for the target's processes.
 		// A magnitude about the run, the same safety profile as duration_ms.
 		"cpu_ms": true,
+		// int: the slots the run's claim held. A count magus sized, the same safety
+		// profile as attempts.
+		"slots": true,
 		// []string: the run's active charms. Names a workspace declares, the same
 		// safety profile as the target names this history is already keyed by.
 		"charms": true,
