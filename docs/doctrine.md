@@ -178,8 +178,6 @@ gives every line its strict decoder. Nothing refuses a new JSON document, so
 the rule holds in review alone. The stores that do not follow it yet, as
 found on 2026-10-14, are debt or exceptions:
 
-- **Runtime history** was one rewritten JSON document and is now converted to
-  a JSON Lines store (`$XDG_STATE_HOME/magus/history/history.jsonl`).
 - **Runtime records** are a capped log kept as one rewritten JSON array in the
   knowledge graph store. The state cannot be rebuilt, so this is debt owed a
   conversion to appended lines.
