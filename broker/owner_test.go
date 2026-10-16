@@ -126,32 +126,71 @@ type rootedWorkspace struct {
 
 func (w rootedWorkspace) Root() string { return w.root }
 
-// startOrphanGroup starts what a step can leave behind: a leader that exits at once, and
-// the background sleep it started, still running in the leader's process group. The
-// sleep ends by itself within 30 seconds whatever a test does.
-func startOrphanGroup() (int, error) {
-	cmd := exec.Command("sh", "-c", "sleep 30 &")
+// startStepGroup starts what a step runs: a command leading its own process group. It
+// ends by itself within 30 seconds whatever a test does.
+func startStepGroup() (*exec.Cmd, error) {
+	cmd := exec.Command("sleep", "30")
 	InOwnGroup(cmd)
-	if err := cmd.Run(); err != nil {
-		return 0, err
-	}
-	return cmd.Process.Pid, nil
+	return cmd, cmd.Start()
 }
 
-// orphanGroup is startOrphanGroup for a test, which kills the group when it ends.
+// stepGroup is startStepGroup for a test, with a channel closed once its leader is
+// reaped. Unless it already exited, the test kills the group when it ends.
+func stepGroup(t *testing.T) (int, <-chan struct{}) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("process groups are a unix thing")
+	}
+	cmd, err := startStepGroup()
+	require.NoError(t, err)
+	done := make(chan struct{})
+	go func() {
+		_ = cmd.Wait()
+		close(done)
+	}()
+	t.Cleanup(func() {
+		select {
+		case <-done:
+		default:
+			_ = SignalGroup(cmd.Process.Pid, true)
+			<-done
+		}
+	})
+	return cmd.Process.Pid, done
+}
+
+// exitsWithin reports whether done closes within d.
+func exitsWithin(done <-chan struct{}, d time.Duration) bool {
+	select {
+	case <-done:
+		return true
+	case <-time.After(d):
+		return false
+	}
+}
+
+// orphanGroup starts what a step can leave behind: a leader that exits at once, and the
+// background sleep it started, still running in the leader's process group. The test
+// kills the sleep when it ends, and it ends by itself within 30 seconds anyway.
 func orphanGroup(t *testing.T) int {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("a process group outliving its leader is a unix thing")
 	}
-	pgid, err := startOrphanGroup()
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = SignalGroup(pgid, true) })
+	cmd := exec.Command("sh", "-c", "sleep 30 &")
+	InOwnGroup(cmd)
+	require.NoError(t, cmd.Run())
+	pgid := cmd.Process.Pid
+	t.Cleanup(func() {
+		if groupAlive(pgid) {
+			_ = SignalGroup(pgid, true)
+		}
+	})
 	require.True(t, groupAlive(pgid), "the background sleep outlives its leader")
 	return pgid
 }
 
-// holdAGroupUntilKilled claims a slot, starts an orphan group under the claim, prints the
+// holdAGroupUntilKilled claims a slot, starts a step group under the claim, prints the
 // group's id, and holds both until stdin closes. The test kills it first; a test binary
 // that dies closes the pipe, so this process never outlives it.
 func holdAGroupUntilKilled(addr string) int {
@@ -166,13 +205,15 @@ func holdAGroupUntilKilled(addr string) int {
 		fmt.Fprintln(os.Stderr, "claim not granted", err)
 		return 2
 	}
-	pgid, err := startOrphanGroup()
+	cmd, err := startStepGroup()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 2
 	}
+	pgid := cmd.Process.Pid
 	if _, err := c.HoldGroup(ctx, v.ID, pgid, "sleep 30"); err != nil {
 		_ = SignalGroup(pgid, true)
+		_ = cmd.Wait()
 		fmt.Fprintln(os.Stderr, err)
 		return 2
 	}
@@ -205,7 +246,14 @@ func TestAStepGroupEndsWhenItsRunIsKilled(t *testing.T) {
 	require.NoError(t, err)
 	pgid, err := strconv.Atoi(strings.TrimSpace(line))
 	require.NoError(t, err, "the holder prints its group, not %q", line)
-	t.Cleanup(func() { _ = SignalGroup(pgid, true) })
+	// Not this test's child, so it cannot reap it; it kills the group only while the
+	// group is still the one the holder printed.
+	printed := time.Now()
+	t.Cleanup(func() {
+		if checkLeader(pgid, printed) == nil {
+			_ = SignalGroup(pgid, true)
+		}
+	})
 	require.True(t, groupAlive(pgid))
 
 	require.NoError(t, cmd.Process.Kill())
@@ -238,7 +286,7 @@ func TestAStepGroupEndsWithItsClaim(t *testing.T) {
 	addr := testAddr(t)
 	serve(t, addr, WithCapacity(1000, 4))
 	c := dial(t, addr)
-	pgid := orphanGroup(t)
+	pgid, done := stepGroup(t)
 
 	v, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", Slots: 1})
 	require.NoError(t, err)
@@ -251,20 +299,20 @@ func TestAStepGroupEndsWithItsClaim(t *testing.T) {
 	require.True(t, groupAlive(pgid), "a held group runs until its claim ends")
 
 	c.Release(t.Context(), v.ID)
-	assert.Eventually(t, func() bool { return !groupAlive(pgid) }, 5*time.Second, 20*time.Millisecond)
+	require.True(t, exitsWithin(done, 5*time.Second), "the group ends with its claim")
 	r, err = c.Work(t.Context())
 	require.NoError(t, err)
 	require.Len(t, r.Ended, 1)
 	assert.Contains(t, r.Ended[0].Reason, "outlived the step whose claim it rode")
 }
 
-// A group whose leader ended is released before its claim, and the claim's release then
-// signals nothing: by then the group's id may name another group.
+// A step releases its group once the leader ends, before its claim, and the claim's
+// release then signals nothing: by then the group's id may name another group.
 func TestAReleasedStepGroupIsLeftAlone(t *testing.T) {
 	addr := testAddr(t)
 	serve(t, addr, WithCapacity(1000, 4))
 	c := dial(t, addr)
-	pgid := orphanGroup(t)
+	pgid, _ := stepGroup(t)
 
 	v, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", Slots: 1})
 	require.NoError(t, err)
@@ -279,6 +327,55 @@ func TestAReleasedStepGroupIsLeftAlone(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, r.Ended)
 	assert.True(t, groupAlive(pgid), "a released group is never stopped")
+}
+
+// A stale hold whose group emptied names whatever group takes the id next. That group's
+// leader started after the hold, so the claim's release leaves it alone.
+func TestAGroupThatTookAHeldIdIsLeftAlone(t *testing.T) {
+	addr := testAddr(t)
+	serve(t, addr, WithCapacity(1000, 4))
+	c := dial(t, addr)
+	pgid, done := stepGroup(t)
+
+	v, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", Slots: 1})
+	require.NoError(t, err)
+	_, err = c.Hold(t.Context(), Hold{Claim: v.ID, PGID: pgid, Command: "sleep 30", Held: time.Now().Add(-time.Hour)})
+	require.NoError(t, err)
+
+	c.Release(t.Context(), v.ID)
+	assert.False(t, exitsWithin(done, 500*time.Millisecond), "the group that took the id runs on")
+	r, err := c.Work(t.Context())
+	require.NoError(t, err)
+	assert.Empty(t, r.Ended)
+}
+
+// A held group whose leader exited has no process left to say whose group it is, so the
+// broker leaves it running and tells the workspace why.
+func TestALeaderlessStepGroupIsLeftRunning(t *testing.T) {
+	addr := testAddr(t)
+	serve(t, addr, WithCapacity(1000, 4))
+	c := dial(t, addr)
+	root := t.TempDir()
+	pgid := orphanGroup(t)
+
+	v, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", Slots: 1})
+	require.NoError(t, err)
+	_, err = c.HoldGroup(types.WithWorkspace(t.Context(), rootedWorkspace{root: root}), v.ID, pgid, "sleep 30")
+	require.NoError(t, err)
+
+	c.Release(t.Context(), v.ID)
+	r, err := c.Work(t.Context())
+	require.NoError(t, err)
+	assert.Empty(t, r.Ended)
+	assert.True(t, groupAlive(pgid))
+
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	fold, err := sessions.ReadAll(dir)
+	require.NoError(t, err)
+	queue := sessions.AttentionQueue(fold)
+	require.Len(t, queue, 1)
+	assert.Contains(t, queue[0].Message, "outlived the step whose claim it rode, but its leader has exited")
 }
 
 // A group rides only a claim its own connection holds.

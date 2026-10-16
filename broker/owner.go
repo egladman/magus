@@ -1,12 +1,17 @@
 package broker
 
 import (
+	"bytes"
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -41,6 +46,10 @@ type Hold struct {
 	// group. The group then charges nothing of its own and needs no deadline: it ends
 	// with the claim.
 	Claim string `json:"claim,omitempty"`
+	// Held is when the client first handed the group over, while its leader still ran;
+	// zero is when the broker records it. A process that started after it leads another
+	// group under a reused id, so the broker never signals it.
+	Held time.Time `json:"held,omitzero"`
 }
 
 // WorkKind is what kind of thing a [Work] is.
@@ -128,11 +137,14 @@ type heldWork struct {
 // already runs), and arms its deadline. A group riding a claim is only recorded. Callers
 // hold s.mu.
 func (s *server) holdLocked(sess *session, h Hold) string {
+	if now := time.Now(); h.Held.IsZero() || h.Held.After(now) {
+		h.Held = now
+	}
 	if h.Claim != "" {
 		h.Lease = sess.hello.Lease
 		id := h.Claim + "/pgid " + strconv.Itoa(h.PGID)
 		sess.holds[id] = &heldWork{hold: h, work: Work{
-			Kind: WorkRun, Lease: h.Lease, PID: sess.hello.PID, Dir: sess.hello.Dir, Command: h.Command, Since: time.Now(),
+			Kind: WorkRun, Lease: h.Lease, PID: sess.hello.PID, Dir: sess.hello.Dir, Command: h.Command, Since: h.Held,
 		}}
 		return id
 	}
@@ -142,7 +154,7 @@ func (s *server) holdLocked(sess *session, h Hold) string {
 	})
 	hw := &heldWork{hold: h, claim: id, work: Work{
 		Kind: WorkExec, Lease: h.Lease, Spawner: h.Spawner, PID: sess.hello.PID,
-		Dir: cmp.Or(h.Root, sess.hello.Dir), Command: h.Command, Since: time.Now(), Slots: slots, Deadline: h.Deadline,
+		Dir: cmp.Or(h.Root, sess.hello.Dir), Command: h.Command, Since: h.Held, Slots: slots, Deadline: h.Deadline,
 	}}
 	hw.timer = time.AfterFunc(time.Until(h.Deadline), func() { s.expire(sess, id) })
 	sess.holds[id] = hw
@@ -217,16 +229,17 @@ func (s *server) stopIfAlive(hw *heldWork, why string) {
 
 // stopGroup asks hw's process group to stop, kills what is left after killGrace, and
 // records the ending once: in this broker's memory and in the workspace's attention queue.
+// Each signal goes only to the group hw held (see [checkLeader]).
 func (s *server) stopGroup(hw *heldWork, why string) {
 	pgid := hw.hold.PGID
+	if err := checkLeader(pgid, hw.hold.Held); err != nil {
+		s.leaveGroup(hw, why, err)
+		return
+	}
 	if err := SignalGroup(pgid, false); err != nil {
 		s.opts.log.DebugContext(s.ctx, "signal a held command's group", slog.Int("pgid", pgid), attr.Error(err))
 	}
-	time.AfterFunc(killGrace, func() {
-		if groupAlive(pgid) {
-			_ = SignalGroup(pgid, true)
-		}
-	})
+	time.AfterFunc(killGrace, func() { s.killGroup(hw, why) })
 	s.mu.Lock()
 	s.ended = append(s.ended, Ended{Work: hw.work, Reason: why, At: time.Now()})
 	if over := len(s.ended) - endedKeep; over > 0 {
@@ -236,6 +249,165 @@ func (s *server) stopGroup(hw *heldWork, why string) {
 	s.opts.log.InfoContext(s.ctx, "stopped a held command", slog.Int("pgid", pgid),
 		slog.String("owner", hw.work.Owner()), slog.String("why", why))
 	job.NoteEnded(s.ctx, hw.hold.Root, hw.hold.Lease, EndedMessage(hw.hold, why))
+}
+
+// killGroup kills what is left of hw's group once its grace passed.
+func (s *server) killGroup(hw *heldWork, why string) {
+	pgid := hw.hold.PGID
+	if !groupAlive(pgid) {
+		return
+	}
+	if err := checkLeader(pgid, hw.hold.Held); err != nil {
+		s.leaveGroup(hw, why, err)
+		return
+	}
+	if err := SignalGroup(pgid, true); err != nil {
+		s.opts.log.DebugContext(s.ctx, "kill a held command's group", slog.Int("pgid", pgid), attr.Error(err))
+	}
+}
+
+// leaveGroup leaves hw's group running, because err says it may not be the group hw
+// held. A group that took a freed id is no business of magus; one magus cannot tell is
+// said, in the log and in the workspace's attention queue, unless nothing is left of it.
+func (s *server) leaveGroup(hw *heldWork, why string, err error) {
+	pgid := hw.hold.PGID
+	switch {
+	case errors.Is(err, errGroupReused):
+		s.opts.log.InfoContext(s.ctx, "left alone a group that took a held group's id", slog.Int("pgid", pgid),
+			slog.String("owner", hw.work.Owner()), attr.Error(err))
+		return
+	case errors.Is(err, errLeaderGone) && !groupAlive(pgid):
+		return
+	}
+	s.opts.log.WarnContext(s.ctx, "left a held command running: magus cannot tell it is still the group it held",
+		slog.Int("pgid", pgid), slog.String("owner", hw.work.Owner()), slog.String("why", why), attr.Error(err))
+	job.NoteEnded(s.ctx, hw.hold.Root, hw.hold.Lease, fmt.Sprintf(
+		"magus left `%s` (pid group %d, owner %s) running: it %s, but %v, so magus cannot tell it is still that group",
+		hw.hold.Command, pgid, hw.work.Owner(), why, err))
+}
+
+var (
+	// errGroupReused is a held group's id naming another group.
+	errGroupReused = errors.New("another group took its id")
+	// errLeaderGone is a held group whose leader exited, which leaves no process whose
+	// start time says whose group it is.
+	errLeaderGone = errors.New("its leader has exited")
+)
+
+// checkLeader returns nil when process group pgid is still the group a hold made at held
+// names: its leader runs, leads it, and started no later than held. An id is free again
+// only once its group empties, so the leader of a group that reused it started after
+// that. An error wrapping errGroupReused means another group has the id; any other
+// means magus cannot tell, and must not signal it.
+func checkLeader(pgid int, held time.Time) error {
+	started, group, err := inspectProcess(pgid)
+	if err != nil {
+		return err
+	}
+	if group != pgid {
+		return fmt.Errorf("its leader, process %d, moved to group %d", pgid, group)
+	}
+	if started.After(held) {
+		return fmt.Errorf("%w: process %d started at %s, after the hold at %s", errGroupReused, pgid,
+			started.UTC().Format(time.RFC3339), held.UTC().Format(time.RFC3339))
+	}
+	return nil
+}
+
+// inspectTimeout bounds one ps run on darwin.
+const inspectTimeout = 5 * time.Second
+
+// inspectProcess is when process pid started, to the second at worst, and the process
+// group it is in. The error wraps errLeaderGone when no process pid exists.
+func inspectProcess(pid int) (started time.Time, group int, err error) {
+	switch runtime.GOOS {
+	case "linux":
+		return inspectLinuxProcess(pid)
+	case "darwin":
+		return inspectDarwinProcess(pid)
+	default:
+		return time.Time{}, 0, fmt.Errorf("magus cannot read when a process started on %s", runtime.GOOS)
+	}
+}
+
+// inspectLinuxProcess reads /proc/<pid>/stat: the group is its fifth field and the
+// start, in clock ticks after boot, its twenty-second.
+func inspectLinuxProcess(pid int) (time.Time, int, error) {
+	stat, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return time.Time{}, 0, errLeaderGone
+	}
+	if err != nil {
+		return time.Time{}, 0, err
+	}
+	// The second field is the command name in parentheses, which may hold spaces and
+	// parentheses of its own, so the rest is counted from the last ')'.
+	end := bytes.LastIndexByte(stat, ')')
+	fields := strings.Fields(string(stat[end+1:]))
+	if end < 0 || len(fields) < 20 {
+		return time.Time{}, 0, fmt.Errorf("read process %d: unexpected /proc stat %q", pid, stat)
+	}
+	group, err := strconv.Atoi(fields[2])
+	if err != nil {
+		return time.Time{}, 0, fmt.Errorf("read process %d's group: %w", pid, err)
+	}
+	ticks, err := strconv.ParseInt(fields[19], 10, 64)
+	if err != nil {
+		return time.Time{}, 0, fmt.Errorf("read process %d's start: %w", pid, err)
+	}
+	boot, err := linuxBootTime()
+	if err != nil {
+		return time.Time{}, 0, err
+	}
+	// The ticks are USER_HZ, which is 100 on every architecture Go builds Linux for.
+	return boot.Add(time.Duration(ticks) * (time.Second / 100)), group, nil
+}
+
+// linuxBootTime is the btime line of /proc/stat, in whole seconds.
+func linuxBootTime() (time.Time, error) {
+	stat, err := os.ReadFile("/proc/stat")
+	if err != nil {
+		return time.Time{}, err
+	}
+	for line := range strings.Lines(string(stat)) {
+		if rest, ok := strings.CutPrefix(line, "btime "); ok {
+			secs, err := strconv.ParseInt(strings.TrimSpace(rest), 10, 64)
+			if err != nil {
+				return time.Time{}, fmt.Errorf("read the boot time: %w", err)
+			}
+			return time.Unix(secs, 0), nil
+		}
+	}
+	return time.Time{}, errors.New("read the boot time: /proc/stat has no btime line")
+}
+
+// inspectDarwinProcess asks ps, whose lstart is the start to the second; UTC and the C
+// locale make it parse the same everywhere.
+func inspectDarwinProcess(pid int) (time.Time, int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), inspectTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "/bin/ps", "-o", "pgid=", "-o", "lstart=", "-p", strconv.Itoa(pid))
+	cmd.Env = append(os.Environ(), "LC_ALL=C", "TZ=UTC")
+	out, err := cmd.Output()
+	fields := strings.Fields(string(out))
+	var exit *exec.ExitError
+	switch {
+	case len(fields) == 0 && errors.As(err, &exit) && exit.ExitCode() == 1:
+		return time.Time{}, 0, errLeaderGone
+	case err != nil:
+		return time.Time{}, 0, fmt.Errorf("ps -p %d: %w", pid, err)
+	case len(fields) < 2:
+		return time.Time{}, 0, fmt.Errorf("ps -p %d: unexpected output %q", pid, out)
+	}
+	group, err := strconv.Atoi(fields[0])
+	if err != nil {
+		return time.Time{}, 0, fmt.Errorf("ps -p %d: read the group: %w", pid, err)
+	}
+	started, err := time.ParseInLocation("Mon Jan 2 15:04:05 2006", strings.Join(fields[1:], " "), time.UTC)
+	if err != nil {
+		return time.Time{}, 0, fmt.Errorf("ps -p %d: read the start: %w", pid, err)
+	}
+	return started, group, nil
 }
 
 // DeadlineReason is why a hold stopped at its deadline, as [EndedMessage] takes it.
@@ -382,13 +554,16 @@ func (c *Client) HoldGroup(ctx context.Context, claim string, pgid int, command 
 }
 
 // ReleaseHold says the held command ended on its own. A broker that is gone already
-// released it with the connection.
+// released it with the connection. A release the broker does not answer is logged: the
+// broker still holds the group then, and signals it only while it is the group it held.
 func (c *Client) ReleaseHold(ctx context.Context, id string) {
 	cn := c.live()
 	if cn == nil || id == "" {
 		return
 	}
-	_, _ = cn.call(ctx, c.next(), typeHoldRelease, holdReleaseRequest{ID: id})
+	if err := cn.roundTrip(ctx, c.next(), typeHoldRelease, holdReleaseRequest{ID: id}, typeHoldReply, nil, nil); err != nil {
+		slog.WarnContext(ctx, "the broker may still hold a process group that ended", slog.String("hold", id), attr.Error(err))
+	}
 }
 
 // Work is what runs against the broker, by owner, and what it stopped lately.
