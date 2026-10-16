@@ -13,7 +13,7 @@ import (
 func TestValidate_ValidMinimal(t *testing.T) {
 	// ci.max_shards must be -1 (unlimited) or in [1,256]; use -1 for a minimal valid config.
 	// The duplication and conformance thresholds have no valid zero, so they carry their defaults.
-	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge}
+	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
 	require.NoError(t, Validate(cfg), "Validate(minimal valid Config)")
 }
 
@@ -25,7 +25,7 @@ func TestValidate_InvalidConcurrency(t *testing.T) {
 // jsonl withholds every target's output for a report stream only -o jsonl opens, so a
 // magus.yaml asking for it would drop per-target results with nowhere to send them.
 func TestValidate_LogFormatRefusesJSONL(t *testing.T) {
-	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge}
+	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
 	cfg.Log.Format = "jsonl"
 	require.ErrorContains(t, Validate(cfg), "log.format")
 	cfg.Log.Format = "json"
@@ -46,7 +46,7 @@ func TestValidationError_Error(t *testing.T) {
 // A registry entry that no reference could match, or that names no credential, fails
 // at load: a silently unused credential is a push that later reads as a permissions bug.
 func TestValidate_SpellRegistries(t *testing.T) {
-	valid := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge}
+	valid := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
 	valid.Spells.Registries = []SpellRegistry{
 		{Host: "ghcr.io", Username: "ci", Password: "GITHUB_TOKEN"},
 		{Host: "localhost:5000", Username: "me", Password: "op://dev/registry/token"},
@@ -92,7 +92,7 @@ func TestValidate_SpellRegistries(t *testing.T) {
 // A spell declaration magus could not honor fails at load: an entry the resolver
 // would skip is a remote import that later reads as undeclared.
 func TestValidate_SpellImports(t *testing.T) {
-	valid := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge}
+	valid := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
 	valid.Spells.Imports = map[string]SpellImport{
 		"ghcr.io/egladman/magus/spells/cursor": {Tag: "1.4"},
 		"localhost:5000/team/spells/lint":      {Path: "vendor/lint"},
@@ -174,7 +174,7 @@ func TestValidate_CacheTierWrites(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge}
+			cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
 			cfg.Cache.Write.Enabled = tc.local
 			cfg.Cache.Remote.Write.Enabled = tc.remote
 			assert.Equal(t, tc.wantLocal, cfg.Cache.WriteEnabled(), "WriteEnabled")
@@ -211,7 +211,7 @@ func TestValidate_MCPHTTP(t *testing.T) {
 		"mcp on explicitly, http on": {enabled: on, http: on, wantHTTP: true},
 	} {
 		t.Run(name, func(t *testing.T) {
-			cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge}
+			cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
 			cfg.MCP.Enabled, cfg.MCP.HTTP = tc.enabled, tc.http
 			assert.Equal(t, tc.wantHTTP, cfg.MCP.HTTPEnabled())
 
@@ -240,7 +240,7 @@ func TestSpellsConfigRegistry(t *testing.T) {
 // A knowledge.conformance value magus could not honor fails at load: a check keyed by a
 // metric nothing measures would pass without anyone noticing.
 func TestValidate_Conformance(t *testing.T) {
-	valid := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge}
+	valid := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
 	require.NoError(t, Validate(valid))
 
 	for name, tc := range map[string]struct {
@@ -351,7 +351,7 @@ func TestValidate_ConformanceScalars(t *testing.T) {
 		"gates.max":        {func(c *ConformanceConfig) { c.Gates.MaxFindings = 0 }, "max_findings"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge}
+			cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
 			cfg.Knowledge.Conformance = conformanceDefaults()
 			tc.edit(&cfg.Knowledge.Conformance)
 			var ve *ValidationError
