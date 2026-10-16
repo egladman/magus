@@ -39,12 +39,9 @@ const maxInputBytes = 1 << 20
 // opposed to understood and rejected. `magus job wait` exits 2 for this and 1 for a
 // rejection.
 func DecodeResult(r io.Reader) (types.JobResult, error) {
-	raw, invalid, err := readInput(r, "result")
-	switch {
-	case err != nil:
+	raw, err := readInput(r, "result")
+	if err != nil {
 		return types.JobResult{}, err
-	case invalid != nil:
-		return types.JobResult{}, invalid
 	}
 	if err := checkVersion(raw, "result", types.JobResultSchema); err != nil {
 		return types.JobResult{}, err
@@ -63,12 +60,10 @@ func DecodeResult(r io.Reader) (types.JobResult, error) {
 // finds. A newer schema_version, or a requirement this magus lacks, is no defect of the
 // record and fails as a plain error naming the update.
 func DecodeDeclaration(r io.Reader) (types.Declaration, error) {
-	raw, invalid, err := readInput(r, "job")
+	raw, err := readInput(r, "job")
 	switch {
 	case err != nil:
-		return types.Declaration{}, err
-	case invalid != nil:
-		return types.Declaration{}, recordInvalid("", invalid).Err()
+		return types.Declaration{}, asRecordInvalid(err)
 	case !json.Valid(raw):
 		return types.Declaration{}, recordInvalid("", errors.New("the job is not JSON")).Err()
 	}
@@ -192,12 +187,9 @@ func objectMembers(raw []byte) (map[string]json.RawMessage, bool) {
 // failure names the record by its position, so nothing is applied from a stream with one
 // bad record in it.
 func DecodeDeclarations(r io.Reader) ([]types.Declaration, error) {
-	raw, invalid, err := readInput(r, "records")
-	switch {
-	case err != nil:
-		return nil, err
-	case invalid != nil:
-		return nil, recordInvalid("", invalid).Err()
+	raw, err := readInput(r, "records")
+	if err != nil {
+		return nil, asRecordInvalid(err)
 	}
 	var parts []json.RawMessage
 	trimmed := strings.TrimSpace(string(raw))
@@ -238,20 +230,39 @@ func DecodeDeclarations(r io.Reader) ([]types.Declaration, error) {
 	return rows, nil
 }
 
-// readInput reads what r holds. invalid says why the input is no record at all (blank, or
-// larger than any), and err that it could not be read.
-func readInput(r io.Reader, what string) (raw []byte, invalid, err error) {
-	raw, err = io.ReadAll(io.LimitReader(r, maxInputBytes+1))
+// readInput reads what r holds. It fails as an *invalidInput when the input is no record at
+// all (blank, or larger than any), and as a plain error when r could not be read.
+func readInput(r io.Reader, what string) ([]byte, error) {
+	raw, err := io.ReadAll(io.LimitReader(r, maxInputBytes+1))
 	if err != nil {
-		return nil, nil, fmt.Errorf("job: read the %s: %w", what, err)
+		return nil, fmt.Errorf("job: read the %s: %w", what, err)
 	}
 	if len(raw) > maxInputBytes {
-		return nil, fmt.Errorf("job: the %s is larger than %d bytes, which no %s is", what, maxInputBytes, what), nil
+		return nil, &invalidInput{what: what, reason: fmt.Sprintf("is larger than %d bytes, which no %s is", maxInputBytes, what)}
 	}
 	if len(strings.TrimSpace(string(raw))) == 0 {
-		return nil, fmt.Errorf("job: the %s is empty", what), nil
+		return nil, &invalidInput{what: what, reason: "is empty"}
 	}
-	return raw, nil, nil
+	return raw, nil
+}
+
+// invalidInput is readInput's failure for input that is no record at all, a defect of the
+// record rather than of reading it.
+type invalidInput struct {
+	what, reason string
+}
+
+func (e *invalidInput) Error() string {
+	return "job: the " + e.what + " " + e.reason
+}
+
+// asRecordInvalid is err as a JobRecordInvalid problem when it is an *invalidInput, and err
+// itself otherwise.
+func asRecordInvalid(err error) error {
+	if invalid := (*invalidInput)(nil); errors.As(err, &invalid) {
+		return recordInvalid("", invalid).Err()
+	}
+	return err
 }
 
 // missingVersion is checkVersion's failure for a record that names no schema_version, the

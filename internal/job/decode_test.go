@@ -1,10 +1,12 @@
 package job
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
@@ -264,6 +266,25 @@ func TestDecodeRefusesAnEmptyInput(t *testing.T) {
 	_, err := DecodeDeclaration(strings.NewReader("  \n"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "empty")
+}
+
+// Input that is no record at all is the record's defect; input that cannot be read is not.
+func TestReadInputTypesTheRecordsDefect(t *testing.T) {
+	t.Parallel()
+
+	for name, in := range map[string]string{"blank": "  \n", "oversized": strings.Repeat("x", maxInputBytes+1)} {
+		_, err := readInput(strings.NewReader(in), "job")
+		var invalid *invalidInput
+		require.ErrorAs(t, err, &invalid, name)
+	}
+
+	_, err := readInput(iotest.ErrReader(errors.New("pipe closed")), "job")
+	require.ErrorContains(t, err, "job: read the job: pipe closed")
+	var invalid *invalidInput
+	assert.NotErrorAs(t, err, &invalid)
+
+	_, err = DecodeResult(strings.NewReader(""))
+	require.EqualError(t, err, "job: the result is empty")
 }
 
 // A declaration REPLACES: an omitted field is cleared, which is what a person typing the
