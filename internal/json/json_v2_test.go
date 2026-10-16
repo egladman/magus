@@ -116,21 +116,10 @@ func TestNoDirectEncodingJSONImport(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	require.NoError(t, err)
 	allowed := map[string]bool{
-		"internal/json/json_v2.go":                  true,
-		"libs/gopherbuzz/internal/codec/json.go":    true,
-		"libs/gopherbuzz/internal/codec/json_v2.go": true,
+		"internal/json/json_v2.go": true,
 		// mcp-go puts every frame on the wire through encoding/json, so this test re-encodes
 		// with the codec the binary actually ships to prove structured content survives it.
 		"internal/handler/mcp/mcp_test.go": true,
-		// proofread lives in its own module and ships as its own binary; it cannot import
-		// this one without the magus module depending on repo policy. A key ending in "/"
-		// allows every file directly in that directory.
-		"libs/proofread/cmd/proofread/":      true,
-		"libs/proofread/internal/calibrate/": true,
-		"libs/proofread/":                    true,
-		// libs/cmdline is its own module too; output encodes through the Codec its caller
-		// passes and uses encoding/json only to indent and as its tests' codec.
-		"libs/cmdline/output/": true,
 	}
 	importers, err := encodingJSONImporters(root, allowed)
 	require.NoError(t, err)
@@ -180,7 +169,7 @@ func encodingJSONImporters(root string, allowed map[string]bool) ([]string, erro
 			return nil
 		}
 		rel, err := filepath.Rel(root, path)
-		if err != nil || allowed[rel] || allowed[filepath.Dir(rel)+"/"] {
+		if err != nil || allowed[rel] {
 			return err
 		}
 		f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
