@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/egladman/magus/types"
 )
@@ -90,6 +91,44 @@ func (g *Graph) FileFacts(relPath string) FileFacts {
 		return cmp.Compare(a.ID, b.ID)
 	})
 	return ff
+}
+
+// Referrers is each file referencing a symbol the workspace-relative relPath defines,
+// with its occurrence count, relPath itself included when it uses its own symbols. A
+// non-empty declaration narrows it to the symbols that declaration names: one whose label
+// is the declaration's last word, split on spaces and dots, so `Graph.FileFacts` and
+// `export fun ci` name `FileFacts` and `ci`. It reads the SCIP `references` edges
+// FileFacts counts, and a graph with no symbol shards merged answers nil.
+func (g *Graph) Referrers(relPath, declaration string) map[string]int {
+	g.ensureAdj()
+	word := declaration
+	if i := strings.LastIndexAny(declaration, " ."); i >= 0 {
+		word = declaration[i+1:]
+	}
+	var out map[string]int
+	for _, e := range g.out[fileID(relPath)] {
+		if e.Relation != types.RelationDefines {
+			continue
+		}
+		sn, ok := g.node(e.Target)
+		if !ok || sn.Kind != types.KindSymbol || (declaration != "" && sn.Label != word) {
+			continue
+		}
+		for _, in := range g.in[sn.ID] {
+			if in.Relation != types.RelationReferences {
+				continue
+			}
+			count, _, ok := parseRefProvenance(in.Provenance)
+			if !ok {
+				continue
+			}
+			if out == nil {
+				out = map[string]int{}
+			}
+			out[strings.TrimPrefix(in.Source, types.KindFile+":")] += count
+		}
+	}
+	return out
 }
 
 // readCoverage reads the covered/total ratio the @coverage overlay folded onto a node,

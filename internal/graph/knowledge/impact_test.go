@@ -50,6 +50,33 @@ func TestFileFactsAbsent(t *testing.T) {
 	require.Equal(t, FileFacts{}, g.FileFacts("missing.go"))
 }
 
+func TestReferrers(t *testing.T) {
+	g := NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: fileID("a.go"), Kind: types.KindFile, Label: "a.go"})
+	g.AddNode(types.KnowledgeNode{ID: symbolID("a.Foo"), Kind: types.KindSymbol, Label: "Foo", Source: "a.go:3"})
+	g.AddNode(types.KnowledgeNode{ID: symbolID("a.Graph#Bar"), Kind: types.KindSymbol, Label: "Bar", Source: "a.go:20"})
+	g.AddEdge(types.KnowledgeEdge{Source: fileID("a.go"), Target: symbolID("a.Foo"), Relation: types.RelationDefines})
+	g.AddEdge(types.KnowledgeEdge{Source: fileID("a.go"), Target: symbolID("a.Graph#Bar"), Relation: types.RelationDefines})
+	g.AddEdge(types.KnowledgeEdge{Source: fileID("a.go"), Target: symbolID("a.Foo"), Relation: types.RelationReferences, Provenance: "scip count=1 lines=9"})
+	g.AddEdge(types.KnowledgeEdge{Source: fileID("x.go"), Target: symbolID("a.Foo"), Relation: types.RelationReferences, Provenance: "scip count=2 lines=10,20"})
+	g.AddEdge(types.KnowledgeEdge{Source: fileID("x.go"), Target: symbolID("a.Graph#Bar"), Relation: types.RelationReferences, Provenance: "scip count=1 lines=30"})
+	g.AddEdge(types.KnowledgeEdge{Source: fileID("y_test.go"), Target: symbolID("a.Graph#Bar"), Relation: types.RelationReferences, Provenance: "scip count=4"})
+	// A references edge with no SCIP count is no file using the symbol.
+	g.AddEdge(types.KnowledgeEdge{Source: charmID("rw"), Target: symbolID("a.Foo"), Relation: types.RelationReferences, Provenance: "charm"})
+
+	t.Run("a whole file sums every symbol it defines", func(t *testing.T) {
+		assert.Equal(t, map[string]int{"a.go": 1, "x.go": 3, "y_test.go": 4}, g.Referrers("a.go", ""))
+	})
+	t.Run("a declaration names its symbols by the last word", func(t *testing.T) {
+		assert.Equal(t, map[string]int{"x.go": 1, "y_test.go": 4}, g.Referrers("a.go", "Graph.Bar"))
+		assert.Equal(t, map[string]int{"a.go": 1, "x.go": 2}, g.Referrers("a.go", "Foo"))
+	})
+	t.Run("an unknown file or declaration has none", func(t *testing.T) {
+		assert.Nil(t, g.Referrers("missing.go", ""))
+		assert.Nil(t, g.Referrers("a.go", "Baz"))
+	})
+}
+
 func TestSymbolAt(t *testing.T) {
 	g := NewGraph()
 	g.AddNode(types.KnowledgeNode{ID: fileID("a.go"), Kind: types.KindFile, Label: "a.go"})
