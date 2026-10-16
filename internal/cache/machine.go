@@ -103,7 +103,7 @@ func (b *MachineBudget) Request(c types.MachineClaim) types.MachineVerdict {
 	}
 
 	for id, e := range b.claims {
-		if e.reservedFor(c) {
+		if e.reserves(c) {
 			delete(b.claims, id)
 		}
 	}
@@ -175,10 +175,10 @@ func (b *MachineBudget) pruneLocked() {
 	}
 }
 
-// reservedFor reports whether e is a seat reserved for the process taking c: c's own, or
+// reserves reports whether e is a seat reserved for the process taking c: c's own, or
 // the outermost invocation c runs under, which is the reader when the claim comes from a
 // nested magus or from the daemon adopting the reader's run.
-func (e *machineEntry) reservedFor(c types.MachineClaim) bool {
+func (e *machineEntry) reserves(c types.MachineClaim) bool {
 	if e.reader == 0 {
 		return false
 	}
@@ -290,7 +290,7 @@ func (b *MachineBudget) sum(skip func(id string, c types.MachineClaim) bool) (mb
 func (b *MachineBudget) excused(c types.MachineClaim) map[string]bool {
 	out := map[string]bool{}
 	for id, e := range b.claims {
-		if isMachineAncestor(e.claim.Invocation, c.Ancestors) || e.reservedFor(c) {
+		if isMachineAncestor(e.claim.Invocation, c.Ancestors) || e.reserves(c) {
 			out[id] = true
 		}
 	}
