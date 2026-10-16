@@ -82,6 +82,9 @@ type Inputs struct {
 	// the workspace is a git repo). It folds onto existing file nodes in the @vcs shard
 	// as attrs: deterministic per commit, so remote-shareable.
 	VCS []types.KnowledgeVCS
+	// CoChanges are file pairs that changed in the same commits, from the same scan as VCS.
+	// They become `co_changes` edges in the @vcs shard.
+	CoChanges []types.KnowledgeCoChange
 	// DeclaredSpells is the set of spell names some project declares in its magusfile
 	// `spells:` list (the union over projects). It lets the orphan lens tell a genuinely
 	// dead spell (declared here, nothing runs it) from a compiled-in builtin that is
@@ -339,7 +342,7 @@ func assembleDomain(in Inputs) []Shard {
 		}
 		// Git history folds onto the file nodes just built; a path with no file node
 		// (VCS metadata for a file the graph does not model) is dropped, no phantom.
-		if v := assembleVCS(in.VCS, fileNodePaths, in.VCSAuthorship); len(v.Nodes) > 0 {
+		if v := assembleVCS(in.VCS, in.CoChanges, fileNodePaths, in.VCSAuthorship); len(v.Nodes) > 0 || len(v.Edges) > 0 {
 			shards = append(shards, v)
 		}
 		// Notes last among the path-bearing shards: their file nodes are already present,
