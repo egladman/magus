@@ -84,6 +84,15 @@ Every drawn directory needs a symbol index, so run `magus graph build` first.
 drawn by a box or a group, or left out with `except(dirs, why:)`, which is for a
 true exclusion. A figure with no code behind it says so with `unscoped(why:)`.
 
+To find the directories a question touches, ask the graph before writing the
+scope: `magus query 'kind=~^(dir|project|package)$ how does a target reach the cache'`.
+To check whether a figure already answers it, ask for figures:
+`magus query 'kind=figure how does the Buzz engine load a spell'`. The graph
+reads each figure's id, title, eyebrow and description from its `figure\of`
+call, and links the figure to every directory a `magus\dir` call in the same
+function names. The query only suggests. A figure draws what its source names,
+so rendering never reads the ranking and the same source draws the same figure.
+
 ## Findings
 
 Nothing is drawn until the figure is clean. Each finding names the call to
