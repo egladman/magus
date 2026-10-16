@@ -150,6 +150,12 @@ type Shard struct {
 	// family. Build fails on it; like Dropped it is never fingerprinted.
 	Err error
 
+	// Text maps a node id to the prose the lexical index reads for it, such as a doc
+	// section's body. It never rides on a node, so explain, export and loading the graph
+	// never pay for it; the store keeps it in the shard's lexical sidecar. Like Dropped it
+	// is never fingerprinted, so the sidecar carries its own digest.
+	Text map[string]string `json:"-"`
+
 	// canonical marks Nodes and Edges as already deduplicated and sorted the way a merge
 	// into a fresh Graph leaves them, so fingerprinting and writing can skip that merge.
 	canonical bool

@@ -42,11 +42,50 @@ func TestDocsDanglingCodeReferenceMGS7002(t *testing.T) {
 func TestDocHeadingsAnchorsMatchGoldmark(t *testing.T) {
 	got := docHeadings([]byte("# Output reference\n\n## MAGUS.md\n\n### One-off\n\n# CI\n"))
 	assert.Equal(t, []docHeading{
-		{level: 1, text: "Output reference", anchor: "output-reference"},
-		{level: 2, text: "MAGUS.md", anchor: "magusmd"},
-		{level: 3, text: "One-off", anchor: "one-off"},
-		{level: 1, text: "CI", anchor: "ci"},
+		{level: 1, text: "Output reference", anchor: "output-reference", start: 0, end: 19},
+		{level: 2, text: "MAGUS.md", anchor: "magusmd", start: 20, end: 32},
+		{level: 3, text: "One-off", anchor: "one-off", start: 33, end: 45},
+		{level: 1, text: "CI", anchor: "ci", start: 46, end: 51},
 	}, got)
+}
+
+func TestSectionBodiesSplitAtEveryHeading(t *testing.T) {
+	body := []byte("Lead paragraph.\n\n# Top\n\nintro text\n\n## Sub\n\nsub text\n```sh\n# not a heading\n```\n\n# Next\nlast\n")
+	got := sectionBodies(body, docHeadings(body))
+	assert.Equal(t, map[string]string{
+		"":    "Lead paragraph.",
+		"top": "intro text",
+		"sub": "sub text\n```sh\n# not a heading\n```",
+		"next": "last",
+	}, got, "a section ends at the next heading of any level; a fenced # is body; text before the first heading is the page's")
+}
+
+func TestSectionBodiesSetextAndEmptySections(t *testing.T) {
+	body := []byte("Title\n=====\n\n## Empty\n\n## Full\nwords here")
+	got := sectionBodies(body, docHeadings(body))
+	assert.Equal(t, map[string]string{"full": "words here"}, got,
+		"a setext underline belongs to its heading, and a section with no text has no entry")
+}
+
+func TestSectionBodiesWithoutHeadingsGoToThePage(t *testing.T) {
+	body := []byte("just prose\n")
+	assert.Equal(t, map[string]string{"": "just prose"}, sectionBodies(body, docHeadings(body)))
+	assert.Empty(t, sectionBodies([]byte("  \n"), nil))
+}
+
+func TestAssembleDocsFillsSectionText(t *testing.T) {
+	ws := testkit.NewWorkspace(t)
+	ws.Write("docs/guide.md", "---\ntitle: Guide\n---\nopening words\n# Top\n\nintro\n\n## Sub\n\nbody\n")
+
+	sh := docShard(ws.Root(), nil, "")
+	assert.Equal(t, map[string]string{
+		"doc:docs/guide.md":            "opening words",
+		"docsection:docs/guide.md#top": "intro",
+		"docsection:docs/guide.md#sub": "body",
+	}, sh.Text, "the frontmatter is no one's text")
+	for _, n := range sh.Nodes {
+		assert.NotContains(t, n.Doc, "intro", "a body never rides on a node")
+	}
 }
 
 func TestDocHeadingsDedupsRepeatedAnchors(t *testing.T) {
