@@ -3598,6 +3598,11 @@ func ObjectJobStatus(v types.JobStatus) vm.Value {
 		itemsGates[indexGates] = ObjectGateStatus(v.Gates[indexGates])
 	}
 	out.MapSet("gates", vm.ListValue(itemsGates))
+	itemsNotes := make([]vm.Value, len(v.Notes))
+	for indexNotes := range v.Notes {
+		itemsNotes[indexNotes] = vm.StrValue(v.Notes[indexNotes])
+	}
+	out.MapSet("notes", vm.ListValue(itemsNotes))
 	itemsStaleIndexes := make([]vm.Value, len(v.StaleIndexes))
 	for indexStaleIndexes := range v.StaleIndexes {
 		itemsStaleIndexes[indexStaleIndexes] = vm.StrValue(v.StaleIndexes[indexStaleIndexes])

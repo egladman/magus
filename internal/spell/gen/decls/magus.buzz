@@ -1350,6 +1350,7 @@ export object JobStatus {
     unresolvedRisks: [str] = [],
     command: str = "",
     gates: [GateStatus] = [],
+    notes: [str] = [],
     staleIndexes: [str] = [],
     footprint: [RegionChange] = [],
     footprintKnown: bool = false,
