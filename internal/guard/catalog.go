@@ -815,6 +815,23 @@ var ruleDocSpawnUnplaced = types.RuleDoc{
 	Why:     "Advice, not a refusal: the caller may be no worker at all, and spawns wait for their child up to two minutes.",
 }
 
+var ruleDocSpawnUnvalidated = types.RuleDoc{
+	Name:    string(denyRuleSpawnUnvalidated),
+	Catches: "a spawn for a job whose record was never validated",
+	Why: "A spawn titled `<parent>/<role> <job>` hands that job to its child, and `magus job fork` and `magus job apply` are the doors that validate a record whole and stamp the row. " +
+		"A row with no stamp skipped that check, so its problems would surface in the worker, after the work began. " +
+		"A title naming no live row is spawn-unplaced's, not this rule's. " +
+		"It cannot tell a row an older magus wrote, before rows were stamped, from one a test or a catalog seeded straight into the store: both carry no stamp, and both are re-validated by applying the record again.",
+}
+
+var ruleDocReleaseRequested = types.RuleDoc{
+	Name:    string(advisoryReleaseRequested),
+	Catches: "a job holding write paths another fork was refused for, with a release request open",
+	Why: "A fork refused for a file a live job holds (MGS3032, MGS3036, MGS3046) files an attention request naming that job and the write paths its diff has not touched. " +
+		"The holder is told once a session, on its own calls and never on a deny, which fork wanted what and the `magus job apply -f <record>` that narrows it. " +
+		"It reads the attention queue, never a diff, and a session with no lease never sees it. Disposing of the request silences it.",
+}
+
 var ruleDocFocus = types.RuleDoc{
 	Name:    string(advisoryFocus),
 	Catches: "a read or write outside the paths the running job declared",

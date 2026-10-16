@@ -519,6 +519,7 @@ func tierFixture(t *testing.T, set *types.ModelTierSet, rows ...types.Job) conte
 	}
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root, ModelTiers: set, ModelTierMatrix: matrix})
 	for _, row := range rows {
+		row.Validated = 1
 		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 		require.NoError(t, err)
 	}

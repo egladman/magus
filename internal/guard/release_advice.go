@@ -7,7 +7,6 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/types"
 )
 
 const advisoryReleaseRequested hint.MarkerKind = "release-requested"
@@ -57,12 +56,4 @@ func adviseReleaseRequested(at location, actingLease string) advice {
 		Why: "A fork that needs a file this job holds is refused until the job narrows to what it edits, exits, or the fork waits on it. " +
 			"The request names the paths the job's diff has not touched, so releasing them costs the job nothing.",
 	}
-}
-
-var ruleDocReleaseRequested = types.RuleDoc{
-	Name:    string(advisoryReleaseRequested),
-	Catches: "a job holding write paths another fork was refused for, with a release request open",
-	Why: "A fork refused for a file a live job holds (MGS3032, MGS3036, MGS3046) files an attention request naming that job and the write paths its diff has not touched. " +
-		"The holder is told once a session, on its own calls and never on a deny, which fork wanted what and the `magus job apply -f <record>` that narrows it. " +
-		"It reads the attention queue, never a diff, and a session with no lease never sees it. Disposing of the request silences it.",
 }

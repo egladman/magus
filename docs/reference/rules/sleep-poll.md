@@ -1,20 +1,20 @@
 ---
-title: "sleep-poll: a sleep before a one-shot status read, or a call that only sleeps (a timer)"
-description: "A deny rule by default: it refuses a sleep before a one-shot status read, or a call that only sleeps (a timer), and names what to run instead."
+title: "sleep-poll: a sleep before a status read, a call that only sleeps, or a worker waiting for the build budget"
+description: "A deny rule by default: it refuses a sleep before a status read, a call that only sleeps, or a worker waiting for the build budget, and names what to run instead."
 tags: [guard, rules, sleep-poll, deny]
 ---
 
 # sleep-poll
 
-A deny rule by default: it refuses a sleep before a one-shot status read, or a call that only sleeps (a timer), and names what to run instead.
+A deny rule by default: it refuses a sleep before a status read, a call that only sleeps, or a worker waiting for the build budget, and names what to run instead.
 
 ## What it catches
 
-A sleep before a one-shot status read, or a call that only sleeps (a timer).
+A sleep before a status read, a call that only sleeps, or a worker waiting for the build budget.
 
 ## Why
 
-Both are a wait whose loop is the caller's own next call. A sleep of ten seconds or more followed on the same line by a status read (`kill -0`, the process table, `magus status` or a job row, a pull request's checks, a CI run) looks once and leaves the next look to the next call. A call whose only work is sleeping, printing and reading a file once (`sleep 300; echo tick`, `sleep 120 && tail -5 out.log`, a `for` loop of sleeps and echoes) is a timer: its notice says only that time passed, where the work's own backgrounded call is announced with its result. Backgrounded it is refused at any length; in the foreground from ten seconds, since a foreground sleep past the tool timeout is moved to the background and becomes one. A shorter foreground sleep is a settle, and a line that also builds, tests or runs a script is work. A watch (`--watch`) is not a status read, and a loop is busy-wait's. It cannot tell a one-off settle before a single check from the tenth look of a poll; the served watch answers both.
+Both are a wait whose loop is the caller's own next call. A sleep of ten seconds or more followed on the same line by a status read (`kill -0`, the process table, `magus status` or a job row, a pull request's checks, a CI run) looks once and leaves the next look to the next call. A call whose only work is sleeping, printing and reading a file once (`sleep 300; echo tick`, `sleep 120 && tail -5 out.log`, a `for` loop of sleeps and echoes) is a timer: its notice says only that time passed, where the work's own backgrounded call is announced with its result. Backgrounded it is refused at any length; in the foreground from ten seconds, since a foreground sleep past the tool timeout is moved to the background and becomes one. A shorter foreground sleep is a settle, and a line that also builds, tests or runs a script is work. A watch (`--watch`) is not a status read, and a loop is busy-wait's. A worker (a session whose lease is a child row or a subagent's) never waits for the build budget, in a shell call or a watcher: `magus status --wait` or `--watch`, a status read beside a sleep or inside a watcher, or a magus run after a sleep of ten seconds or more. It commits, reports to its orchestrator that its check found no seat, and stops; the orchestrator waits once for every worker, and a spawn or `magus job fork` into a full budget tells it how full the budget is and which run has held it longest. It cannot tell a one-off settle before a single check from the tenth look of a poll; the served watch answers both.
 
 ## Default and override
 

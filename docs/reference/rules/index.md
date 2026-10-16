@@ -49,9 +49,10 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [process-poll](process-poll.md)                       | a process table inspected to wait on magus work the lock already reports                             |
 | [push-ungated](push-ungated.md)                       | a push at a commit with no green gate: the person is asked, a leased worker refused                  |
 | [shared-stash](shared-stash.md)                       | a bare stash push or pop, on a stack every worktree shares                                           |
-| [sleep-poll](sleep-poll.md)                           | a sleep before a one-shot status read, or a call that only sleeps (a timer)                          |
+| [sleep-poll](sleep-poll.md)                           | a sleep before a status read, a call that only sleeps, or a worker waiting for the build budget      |
 | [spawn-above-parent-tier](spawn-above-parent-tier.md) | a subagent spawned on a model whose tier ranks above its spawner's                                   |
 | [spawn-duplicate](spawn-duplicate.md)                 | a spawn for a job that already has a worker                                                          |
+| [spawn-unvalidated](spawn-unvalidated.md)             | a spawn for a job whose record was never validated                                                   |
 | [stale-binary](stale-binary.md)                       | a call that changes state while the magus judging it cannot load this tree's guard policy            |
 | [token-state](token-state.md)                         | an agent reading or writing the token secrets: the operator token file or the token store            |
 | [vcs-off-switch](vcs-off-switch.md)                   | an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads                     |
@@ -108,6 +109,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [read-paging](read-paging.md)                           | a mapped file read window by window, past two windows of it                                        |
 | [read-symbol](read-symbol.md)                           | a bounded read inside one indexed declaration, which refs --definition --source prints checked     |
 | [regen-source](regen-source.md)                         | a hand edit to a file a target regenerates                                                         |
+| [release-requested](release-requested.md)               | a job holding write paths another fork was refused for, with a release request open                |
 | [revert-classify](revert-classify.md)                   | a revert that has not classified what it is reverting                                              |
 | [scope-drift](scope-drift.md)                           | a write into a project this session has no dependency edge to                                      |
 | [scripted-rewrite](scripted-rewrite.md)                 | a scripted substitute-and-write, which cannot tell your symbol from a dependency's                 |

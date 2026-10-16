@@ -403,6 +403,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 				if row.State == types.StateRunning && row.CheckoutRoot == "" {
 					row.CheckoutRoot = hookLocation(ctx, Dependencies{}).workspace
 				}
+				row.Validated = 1
 				_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 				require.NoError(t, err)
 			}
