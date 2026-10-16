@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/libs/conventions/stderrprint"
 	"github.com/egladman/magus/libs/conventions/stutter"
 	"github.com/egladman/magus/libs/conventions/testisolation"
+	"github.com/egladman/magus/libs/conventions/testloops"
 	"github.com/golangci/plugin-module-register/register"
 	"golang.org/x/tools/go/analysis"
 )
@@ -44,6 +45,7 @@ func init() { //nolint:gochecknoinits // golangci-lint's plugin-module-register 
 	register.Plugin("stderrprint", plugin("stderrprint", stderrprint.New))
 	register.Plugin("stutter", plugin("stutter", stutter.New))
 	register.Plugin("testisolation", plugin("testisolation", testisolation.New))
+	register.Plugin("testloops", plugin("testloops", testloops.New))
 }
 
 // plugin builds a constructor that decodes a settings block straight into the

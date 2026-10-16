@@ -41,6 +41,7 @@ func TestPluginsRegister(t *testing.T) {
 		},
 		"stutter":       map[string]any{"min-package-len": 3},
 		"testisolation": map[string]any{"package": "a", "calls": []any{"testkit.Main"}, "hint": "see docs"},
+		"testloops":     map[string]any{"markers": []any{"Setpgid"}, "hint": "see docs"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			build, err := register.GetPlugin(name)

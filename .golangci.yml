@@ -118,6 +118,7 @@ linters:
     - providerio
     - fieldwise
     - globalrestore
+    - testloops
     - diagmsg
     - errmsg
     - stderrprint
@@ -578,6 +579,16 @@ linters:
           package: github.com/egladman/magus/cmd/magus
           vars: [global, globalCfg]
           hint: add t.Cleanup(snapshotGlobals()) at the top of the test
+
+      # A cancelled go test runs no cleanup, so a shell loop in a process group of its own
+      # outlived the spawn tests that started one, and forked until the machine hung.
+      testloops:
+        type: module
+        description: requires a test's endless shell loop in its own process group to check the test is alive
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          markers: [Setpgid, SetupProcessGroup]
+          hint: pass the loop TEST_PID=<os.Getpid()> in its environment, as testPidEnv in internal/proc/spawn/reap_unix_test.go does
 
     testifylint:
       disable-all: true
