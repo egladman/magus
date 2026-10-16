@@ -191,6 +191,70 @@ func TestSpawnDuplicateRefusesASecondWorkerForAJob(t *testing.T) {
 	}
 }
 
+// A worker that finds the build budget full reports to its orchestrator and stops; it
+// never waits for a seat, whichever tool would run the wait.
+func TestSleepPollRefusesAWorkersWaitForTheBuildBudget(t *testing.T) {
+	worker := figuresLease()
+	worker.Parent = "figures"
+	ctx, _ := fleetFixture(t, worker)
+	waits := []string{
+		"./magus status --wait | ./magus run diagrams_generate docs",
+		"./magus status -wait",
+		"./magus status --watch=15s",
+		"./magus status -W 15s",
+		"sleep 60; ./magus run diagrams_generate docs",
+	}
+	for i, line := range waits {
+		bash := Judge(ctx, Dependencies{}, Request{Input: line, Lease: worker.ID})
+		assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(bash), "Bash: %s", line)
+		if i == 0 {
+			assert.Contains(t, bash.Reason, "report to your orchestrator", "a repeat is shortened to the rule's name")
+		}
+		watcher := Judge(ctx, Dependencies{}, Request{Input: monitorCall(t, "", line), Lease: worker.ID, Host: "claude-code"})
+		assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(watcher), "Monitor: %s", line)
+	}
+	watched := Judge(ctx, Dependencies{}, Request{Input: monitorCall(t, "", "./magus status"), Lease: worker.ID, Host: "claude-code"})
+	assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(watched), "a watcher repeats even a one-shot read")
+
+	for _, line := range []string{"./magus status", "./magus run diagrams_generate docs", "sleep 2; ./magus run diagrams_generate docs"} {
+		v := Judge(ctx, Dependencies{}, Request{Input: line, Lease: worker.ID})
+		assert.NotEqual(t, string(denyRuleSleepPoll), v.Rule, "a worker reads the pool once and runs its check: %s", line)
+	}
+}
+
+// The orchestrator is who waits for the build budget, so the same lines pass for it.
+func TestSleepPollLeavesTheOrchestratorsBudgetWait(t *testing.T) {
+	root := figuresLease()
+	ctx, _ := fleetFixture(t, root)
+	for _, line := range []string{
+		"./magus status --wait | ./magus run diagrams_generate docs",
+		"./magus status --watch=15s",
+		"sleep 60; ./magus run diagrams_generate docs",
+	} {
+		bash := Judge(ctx, Dependencies{}, Request{Input: line, Lease: root.ID, Session: "root", Host: "claude-code"})
+		assert.NotEqual(t, string(denyRuleSleepPoll), bash.Rule, "Bash: %s", line)
+		unleased := Judge(ctx, Dependencies{}, Request{Input: line})
+		assert.NotEqual(t, string(denyRuleSleepPoll), unleased.Rule, "no lease: %s", line)
+		watcher := Judge(ctx, Dependencies{}, Request{Input: monitorCall(t, "", line), Lease: root.ID, Host: "claude-code"})
+		assert.NotEqual(t, string(denyRuleSleepPoll), watcher.Rule, "Monitor: %s", line)
+	}
+}
+
+func TestBudgetFullSaysHowFullAndWhatHoldsIt(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	assert.Empty(t, BudgetFull(types.MachineSnapshot{}, now), "an unmeasured budget")
+	assert.Empty(t, BudgetFull(types.MachineSnapshot{BudgetSlots: 4, HeldSlots: 3, BudgetMB: 8192, HeldMB: 1024}, now))
+
+	full := BudgetFull(types.MachineSnapshot{BudgetSlots: 4, HeldSlots: 2, BudgetMB: 8192, HeldMB: 8192, Holders: []types.MachineClaimant{
+		{Target: "go-test", Dir: "/w/a", Since: now.Add(-90 * time.Second)},
+	}}, now)
+	assert.Contains(t, full, "the build budget is full (mem ")
+	assert.NotContains(t, full, "slots", "only the half that is spent")
+	assert.Contains(t, full, "held by 1 run(s); the oldest, go-test . in /w/a, has held its seat 1m30s")
+	assert.Contains(t, full, hint.Status.With("--watch=15s"))
+}
+
 func TestSpawnWaiterAndNestedWaiter(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	spawn := func(agent, description string) types.GuardJudgment {

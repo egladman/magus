@@ -1630,3 +1630,52 @@ func TestAnExitedBindingYieldsToABaggageClaim(t *testing.T) {
 		})
 	}
 }
+
+// No guard test reads this machine's broker: a full budget there would advise on every
+// root spawn the tests expect to pass.
+func init() {
+	budgetSnapshot = func(context.Context) (types.MachineSnapshot, error) {
+		return types.MachineSnapshot{}, errors.New("no broker in a guard test")
+	}
+}
+
+// standBudget makes s the budget every spawn reads until the test ends. Callers never run
+// in parallel, since the reader is the package's.
+func standBudget(t *testing.T, s types.MachineSnapshot) {
+	t.Helper()
+	was := budgetSnapshot
+	budgetSnapshot = func(context.Context) (types.MachineSnapshot, error) { return s, nil }
+	t.Cleanup(func() { budgetSnapshot = was })
+}
+
+// The orchestrator waits for the build budget so its workers never do: a spawn into a
+// full budget is told how full it is and what holds it, and a worker's own spawn is not.
+func TestSpawnIntoAFullBuildBudgetIsAdvised(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	spawn := func(session, agent string) types.GuardJudgment {
+		env := map[string]any{
+			"session_id": session, "hook_event_name": "PreToolUse", "tool_name": "Agent",
+			"tool_input": map[string]any{"description": "orchestrator/impl pricing", "prompt": "Carry it out."},
+		}
+		if agent != "" {
+			env["agent_id"] = agent
+		}
+		return Judge(ctx, Dependencies{}, Request{Input: hookJSON(t, env), Host: "claude-code"})
+	}
+	since := time.Now().Add(-6 * time.Minute)
+	full := types.MachineSnapshot{BudgetSlots: 2, HeldSlots: 2, Holders: []types.MachineClaimant{
+		{Project: ".", Target: "go-test", Dir: "/w/a", Since: since},
+		{Project: "docs", Target: "lint", Dir: "/w/b", Since: since.Add(time.Minute)},
+	}}
+
+	standBudget(t, types.MachineSnapshot{BudgetSlots: 2, HeldSlots: 1})
+	assert.Equal(t, "pass", spawn("budget-room", "").Decision, "a free slot says nothing")
+
+	standBudget(t, full)
+	v := spawn("budget-full", "")
+	require.Equal(t, types.GuardJudgment{Decision: "advise", Rule: string(denyRuleSleepPoll)}, judgedAs(v))
+	assert.Contains(t, v.Context, "slots 2/2")
+	assert.Contains(t, v.Context, "go-test . in /w/a, has held its seat 6m")
+	assert.Equal(t, "advise", spawn("budget-full", "").Decision, "each spawn into a full budget hears it")
+	assert.Equal(t, "pass", spawn("budget-worker", "a1b2c3").Decision, "a worker reports a full budget rather than waiting on it")
+}

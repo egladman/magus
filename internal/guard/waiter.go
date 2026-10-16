@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"cmp"
 	"context"
 	"path"
 	"regexp"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/broker"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
@@ -43,7 +46,113 @@ var (
 	denySleepTimer    = "a call that only sleeps is a timer; a backgrounded command already announces itself when it ends, so wait for that notice or do other work meanwhile."
 	denySleepTimerWhy = "The work's own backgrounded call is the waiter: its notice arrives with the result, where a timer's says only that time passed. " +
 		"A timer wakes you on a guess, every timer still pending wakes you again after the work is done, and a foreground sleep past the tool timeout is moved to the background and becomes one."
+
+	denySlotWait = "a worker never waits for the build budget: when it is full, commit what you have, report to your orchestrator that your check found no seat (`" +
+		hint.Status.String() + "` reads the pool once), and stop; the orchestrator waits and resumes you."
+	denySlotWaitWhy = "The orchestrator sees every worker and the pool, so it waits once for all of them; workers waiting each race for the same seat, and `status --wait` " +
+		"reporting a seat free does not reserve it, so the run after it can still be refused with MGS3009. A worker looping on that refusal spends turns no one who can free a seat sees."
+
+	budgetFullWhy = "Every worker's check needs a seat in the build budget, and a worker that finds none reports and stops instead of waiting, so spawning into a full budget spends a worker's turns on a report. " +
+		"The budget is the machine's, shared by every worktree, so it frees only as the runs holding it end."
 )
+
+// slotWaitLine reports a line that waits for room in the build budget: `magus status
+// --wait` or `--watch`, a status read beside a sleep or inside a watcher, or a magus run
+// after a sleep of at least sleepPollFloor, which retries a run the budget refused.
+func slotWaitLine(command string, d Dialect, watcher bool) bool {
+	cmds, ok := ParseCommandsDialect(command, d)
+	if !ok {
+		return false
+	}
+	var slept time.Duration
+	napped := false
+	for _, c := range cmds {
+		if dur, ok := sleepDuration(c); ok {
+			slept, napped = max(slept, dur), true
+		}
+	}
+	return slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
+		if !isMagusInvocation(c) {
+			return false
+		}
+		words := magusSubcommandWords(c.Args)
+		if len(words) == 0 {
+			return false
+		}
+		switch words[0] {
+		case "status":
+			return watcher || napped || waitsOnBudget(c.Args)
+		case "run", "affected":
+			return slept >= sleepPollFloor
+		}
+		return false
+	})
+}
+
+// waitsOnBudget reports a status argv that blocks on the pool: --wait, or --watch in any
+// spelling Go's flag package reads.
+func waitsOnBudget(args []string) bool {
+	return slices.ContainsFunc(args, func(a string) bool {
+		name, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		return strings.HasPrefix(a, "-") && (name == "wait" || name == "watch" || name == "W")
+	})
+}
+
+// budgetReadTimeout bounds the broker read a spawn makes, so a wedged broker costs a
+// spawn at most this.
+const budgetReadTimeout = time.Second
+
+// budgetSnapshot reads this user's machine build budget from its broker. A var so a test
+// stands a budget in without a broker.
+var budgetSnapshot = func(ctx context.Context) (types.MachineSnapshot, error) {
+	ctx, cancel := context.WithTimeout(ctx, budgetReadTimeout)
+	defer cancel()
+	st, err := broker.QueryStatus(ctx, broker.DefaultAddr())
+	return st.Capacity, err
+}
+
+// BudgetFull words a full machine build budget for whoever is about to start more work on
+// it: how full, who holds it, and that it frees as those runs end. "" when a slot and
+// memory are both free, or the budget is unmeasured. Holders are read oldest first, as
+// the broker serves them.
+func BudgetFull(s types.MachineSnapshot, now time.Time) string {
+	var held []string
+	if s.BudgetSlots > 0 && s.HeldSlots >= s.BudgetSlots {
+		held = append(held, "slots "+strconv.Itoa(s.HeldSlots)+"/"+strconv.Itoa(s.BudgetSlots))
+	}
+	if s.BudgetMB > 0 && s.HeldMB >= s.BudgetMB {
+		held = append(held, "mem "+cache.FormatMB(s.HeldMB)+"/"+cache.FormatMB(s.BudgetMB))
+	}
+	if len(held) == 0 {
+		return ""
+	}
+	text := "the build budget is full (" + strings.Join(held, ", ") + ")"
+	if len(s.Holders) > 0 {
+		h := s.Holders[0]
+		text += ", held by " + strconv.Itoa(len(s.Holders)) + " run(s); the oldest, " + h.Target + " " + cmp.Or(h.Project, ".")
+		if h.Dir != "" {
+			text += " in " + h.Dir
+		}
+		if !h.Since.IsZero() {
+			text += ", has held its seat " + now.Sub(h.Since).Round(time.Second).String()
+		}
+	}
+	return text + ". A seat frees as each run ends: wait for one (`" + hint.Status.With("--watch=15s") +
+		"` shows the pool) before starting a worker, since a worker whose check finds no seat reports and stops."
+}
+
+// adviseBudgetFull is the advisory for an orchestrator spawning into a full build budget,
+// "" when the budget has room or no broker answers.
+func adviseBudgetFull(ctx context.Context, now time.Time) advice {
+	s, err := budgetSnapshot(ctx)
+	if err != nil {
+		return advice{}
+	}
+	if note := BudgetFull(s, now); note != "" {
+		return advice{Say: "magus workspace: " + note, Why: budgetFullWhy}
+	}
+	return advice{}
+}
 
 // sleepPollFires reports a line that sleeps at least sleepPollFloor and then reads a status
 // once: a poll whose loop is the caller's own next call. A loop is busy-wait's.

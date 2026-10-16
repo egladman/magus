@@ -63,12 +63,21 @@ func envelopeWatch(input map[string]any) (time.Duration, bool) {
 type waiterCheck struct {
 	watchCall
 	worker bool
+	// slotWait is a worker's wait for room in the build budget, which is refused
+	// whatever else the call arms.
+	slotWait bool
 }
 
-// waiterCall reads the call as a waiter it arms: a watcher, a command that only sleeps
-// (backgrounded, or for at least sleepPollFloor in the foreground), or a backgrounded
-// command that watches without end. false for any other call.
+// waiterCall reads the call as a waiter it arms: a worker's wait for the build budget, a
+// watcher, a command that only sleeps (backgrounded, or for at least sleepPollFloor in
+// the foreground), or a backgrounded command that watches without end. false for any
+// other call.
 func waiterCall(ctx context.Context, deps Dependencies, facts hint.Gate, env hookRequest, background bool, actingLease, agent, command string, d Dialect, now time.Time) (waiterCheck, bool) {
+	if actingLease != "" && slotWaitLine(command, d, env.IsWatch) {
+		if me, leased := actingLiveLease(ctx, deps, actingLease); leased && workerRole(me, deps.caller) != "" {
+			return waiterCheck{worker: true, slotWait: true}, true
+		}
+	}
 	if env.IsWatch {
 		subjects := watchSubjects(command, d)
 		return waiterCheck{watchCall: watchCall{
@@ -289,10 +298,14 @@ func gradeWatch(facts hint.Gate, agent string, worker bool, w watchCall, now tim
 	return ShellVerdict{}
 }
 
-// gradeWaiter is the graded verdict on arming waiter: gradeWatch's, and for a timer the
+// gradeWaiter is the graded verdict on arming waiter: sleep-poll's deny for a worker's
+// wait on the build budget, else gradeWatch's, and for a timer the
 // sleep-poll deny, which yields to the pile's own word when the workspace only advises
 // against it, since the pile says more: how many are already live.
 func gradeWaiter(deps Dependencies, facts hint.Gate, agent string, waiter waiterCheck, now time.Time) ShellVerdict {
+	if waiter.slotWait {
+		return deps.grade(ShellVerdict{Deny: denySlotWait, Why: denySlotWaitWhy, Rule: denyRule{Name: denyRuleSleepPoll}})
+	}
 	w := deps.grade(gradeWatch(facts, agent, waiter.worker, waiter.watchCall, now))
 	if waiter.timer {
 		if t := deps.grade(ShellVerdict{Deny: denySleepTimer, Why: denySleepTimerWhy, Rule: denyRule{Name: denyRuleSleepPoll}}); t.Deny != "" || w.Deny == "" && w.Context == "" {

@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 27717
-skill_short_bytes: 20424
+skill_full_bytes: 27937
+skill_short_bytes: 20644
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `139` |
+| `agent-skill-version` | `140` |
 | `knowledge-schema-version` | `22` |
-| `skill-content` | `a03f8a1050b4` |
+| `skill-content` | `edb5b5162ae7` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -167,9 +167,9 @@ worktrees are available.
   - `default_timeout` bounds a fork that names no `--timeout`.
   - Honor a cap the user states the same way.
 - Editing costs the workspace nothing; VALIDATION contends: the magus runs a job
-  triggers. Read the live pool (`magus status`) before starting a validation, not
-  before starting an agent. Serialize validations that share a worktree, even when
-  their write sets are disjoint.
+  triggers, which share the machine's build budget. The root waits for that budget,
+  never a worker; a spawn or `magus job fork` into a full one says how full it is.
+  Serialize validations that share a worktree, even when their write sets are disjoint.
 
 Assign the check from the pipeline the workspace composed, not from convention.
 `magus describe target ci <project>` names what `ci` chains and in what order.
@@ -378,6 +378,7 @@ any cap the user set for the tree. Require the worker to:
   set;
 - preserve unrelated changes, stay inside write paths, and avoid generated outputs;
 - run only its assigned magus target, in the foreground with a timeout that covers it, and never end its turn while a run is pending;
+- never wait for the build budget. When a full budget refuses its check, it commits, reports that the check found no seat, and stops; you rerun it once one frees;
 - never exit its row or report back while it waits on a reply from you: an answer that lands after the row ended reaches nobody.
 
 End every brief with the step that files the result, as the worker's LAST act before
@@ -617,9 +618,9 @@ worktrees are available.
   - `default_timeout` bounds a fork that names no `--timeout`.
   - Honor a cap the user states the same way.
 - Editing costs the workspace nothing; VALIDATION contends: the magus runs a job
-  triggers. Read the live pool (`magus status`) before starting a validation, not
-  before starting an agent. Serialize validations that share a worktree, even when
-  their write sets are disjoint.
+  triggers, which share the machine's build budget. The root waits for that budget,
+  never a worker; a spawn or `magus job fork` into a full one says how full it is.
+  Serialize validations that share a worktree, even when their write sets are disjoint.
 
 Assign the check from the pipeline the workspace composed, not from convention.
 `magus describe target ci <project>` names what `ci` chains and in what order.
@@ -871,6 +872,7 @@ any cap the user set for the tree. Require the worker to:
   verdict is ever keyed on them;
 - preserve unrelated changes, stay inside write paths, and avoid generated outputs;
 - run only its assigned magus target, in the foreground with a timeout that covers it, and never end its turn while a run is pending;
+- never wait for the build budget. When a full budget refuses its check, it commits, reports that the check found no seat, and stops; you rerun it once one frees;
 - never exit its row or report back while it waits on a reply from you: an answer that lands after the row ended reaches nobody.
 
 End every brief with the step that files the result, as the worker's LAST act before

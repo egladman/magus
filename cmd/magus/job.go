@@ -1128,6 +1128,8 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "target regenerates outside the write paths, or a ci target the job does not run.")
 			fmt.Fprintln(os.Stderr, "A fork also notes a check whose last real run took longer than a wired agent host")
 			fmt.Fprintln(os.Stderr, "lets a foreground call wait, which its holder cannot wait on.")
+			fmt.Fprintln(os.Stderr, "When this machine's build budget is full it says how full and which run has held")
+			fmt.Fprintln(os.Stderr, "it longest: wait before starting the job's worker, which never waits for a seat.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "A --stdin record carrying only id and `enter` ENTERS a live job instead: it")
 			fmt.Fprintln(os.Stderr, "acknowledges one write into that path by somebody other than its holder, and the")
@@ -1317,6 +1319,14 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		}
 		job.RenderDeletionCandidates(os.Stdout, deletionCandidates(ctx, graph.load, stored))
 		job.RenderForegroundOverrun(os.Stdout, overrun)
+		// The forker waits for the build budget so the job's holder never does.
+		if globalCfg.Broker.Resolved() != types.BrokerOff {
+			if capacity, err := queryCapacity(ctx); err == nil {
+				if full := guard.BudgetFull(capacity, time.Now()); full != "" {
+					fmt.Println(full)
+				}
+			}
+		}
 		pointAtConsole(ctx, stored.ID)
 		return nil
 	default:

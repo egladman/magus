@@ -420,7 +420,10 @@ import (
 //
 // 139: magus-multi-agent and magus-sdk move their rationale into full-only blocks, so
 // their short forms are compressed too.
-const SkillVersion = 139
+//
+// 140: magus-multi-agent says the root waits for the build budget and a worker never
+// does: a worker whose check finds the budget full commits, reports and stops.
+const SkillVersion = 140
 
 const skillLicense = "GPL-3.0-or-later"
 
