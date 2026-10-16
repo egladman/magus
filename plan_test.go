@@ -118,7 +118,7 @@ func TestPlanRejectsBothSources(t *testing.T) {
 func TestPlanReportsAnUnreadableHistory(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{
 		"magusfile.buzz": "",
-		"history.json":   "{ this is not json",
+		"history.json":   "{ this is not json\n",
 	})
 	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)

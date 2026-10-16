@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -43,7 +44,7 @@ func tierOutcomes(tier string, kind types.JobKind, source types.ModelTierSource,
 		if i >= passed {
 			state = types.StateFail
 		}
-		o := types.JobOutcome{Job: tier + "-job", ModelTier: tier, Kind: kind, Source: source, Reason: reason, State: state}
+		o := types.JobOutcome{Job: fmt.Sprintf("%s-%s-%s-job-%d", tier, kind, source, i), ModelTier: tier, Kind: kind, Source: source, Reason: reason, State: state}
 		if source == types.ModelTierSourceMatrix {
 			o.Site = "magusfile.buzz:40"
 		}
