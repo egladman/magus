@@ -62,14 +62,12 @@ func TestShellStdinJudgesWithOnlyTheFlagsItIsGiven(t *testing.T) {
 	global.quiet = true
 	ctx := guard.WithLocation(context.Background(), t.TempDir(), "/repo/magus", "")
 
-	var err error
-	out := captureStdout(t, func() {
-		err = shellStdin(ctx, strings.NewReader("git stash"), io.Discard, []string{"-o", "name"})
-	})
+	var out bytes.Buffer
+	err := shellStdin(ctx, strings.NewReader("git stash"), &out, []string{"-o", "name"})
 
 	var silent reportedExit
 	require.ErrorAs(t, err, &silent)
-	assert.Equal(t, "deny\n", out)
+	assert.Equal(t, "deny\n", out.String())
 	assert.True(t, global.quiet, "the caller's flags are back once the call returns")
 }
 
@@ -266,16 +264,29 @@ func TestShellJudgesAnOperandTheSameAsStdin(t *testing.T) {
 	global = globalFlags{}
 	ctx := guard.WithLocation(context.Background(), t.TempDir(), "/repo/magus", "")
 
-	fromStdin := captureStdout(t, func() {
-		require.Error(t, shellStdin(ctx, strings.NewReader("git stash"), io.Discard, []string{"-o", "name"}))
-	})
-	fromOperand := captureStdout(t, func() {
-		require.Error(t, shellCmdWithErrorWriter(ctx, strings.NewReader(""), io.Discard, os.Stderr,
-			[]string{"git stash", "-o", "name"}))
-	})
+	var fromStdin, fromOperand strings.Builder
+	require.Error(t, shellStdin(ctx, strings.NewReader("git stash"), &fromStdin, []string{"-o", "name"}))
+	require.Error(t, shellCmdWithErrorWriter(ctx, strings.NewReader(""), &fromOperand, os.Stderr,
+		[]string{"git stash", "-o", "name"}))
 
-	assert.Equal(t, "deny\n", fromStdin)
-	assert.Equal(t, fromStdin, fromOperand, "one evaluator, whichever door the command arrived through")
+	assert.Equal(t, "deny\n", fromStdin.String())
+	assert.Equal(t, fromStdin.String(), fromOperand.String(), "one evaluator, whichever door the command arrived through")
+}
+
+// TestWriteGuardVerdictNameGoesToTheHandedWriterAndTheTee: -o name was routed through the
+// process stdout, so a caller that handed in its own writer read an empty verdict.
+func TestWriteGuardVerdictNameGoesToTheHandedWriterAndTheTee(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	global = globalFlags{tee: filepath.Join(t.TempDir(), "verdict")}
+
+	var out bytes.Buffer
+	require.NoError(t, writeGuardVerdict(&out, output.Options{Format: outputName},
+		types.GuardJudgment{Decision: "deny"}))
+
+	assert.Equal(t, "deny\n", out.String())
+	teed, err := os.ReadFile(global.tee)
+	require.NoError(t, err)
+	assert.Equal(t, "deny\n", string(teed))
 }
 
 // TestShellRefusesAnUnquotedCommand: several operands means the quotes were left off, and

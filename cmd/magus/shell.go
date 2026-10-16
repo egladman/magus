@@ -678,7 +678,7 @@ func writeGuardVerdict(out io.Writer, opts output.Options, verdict types.GuardJu
 		}
 		return nil
 	case outputName:
-		return emitNames([]string{verdict.Decision})
+		return emitNamesTo(out, []string{verdict.Decision})
 	}
 	return writeFormatted(out, opts, verdict)
 }

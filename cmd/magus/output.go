@@ -29,23 +29,29 @@ const (
 // structuredStdout is where structured output goes besides the --tee file. --silent
 // with --tee means the caller captures the record in the file and wants stdout empty,
 // so it does not pay for the same record twice in its context.
-func structuredStdout() io.Writer {
+func structuredStdout(out io.Writer) io.Writer {
 	if global.silent && global.tee != "" {
 		return io.Discard
 	}
-	return os.Stdout
+	return out
 }
 
 // outputDst returns the writer for structured output; mirrors to --tee file when set.
 func outputDst() (io.Writer, func() error, error) {
+	return outputDstTo(os.Stdout)
+}
+
+// outputDstTo is outputDst over the writer a command was handed, for the commands whose
+// caller captures the output instead of reading the process stdout.
+func outputDstTo(out io.Writer) (io.Writer, func() error, error) {
 	if global.tee == "" {
-		return os.Stdout, func() error { return nil }, nil
+		return out, func() error { return nil }, nil
 	}
 	f, err := os.OpenFile(global.tee, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
 	if err != nil {
 		return nil, nil, fmt.Errorf("--tee: %w", err)
 	}
-	return io.MultiWriter(structuredStdout(), f), f.Close, nil
+	return io.MultiWriter(structuredStdout(out), f), f.Close, nil
 }
 
 // openSink builds the invocation's one sink for its -o format, over stdout (mirrored to
@@ -55,7 +61,7 @@ func openSink(ctx context.Context, opts output.Options) (*magus.Sink, func() err
 	stdout := io.Writer(os.Stdout)
 	tee := &lazyFile{path: global.tee}
 	if global.tee != "" {
-		stdout = io.MultiWriter(structuredStdout(), tee)
+		stdout = io.MultiWriter(structuredStdout(os.Stdout), tee)
 	}
 	sinkOpts := []magus.SinkOption{magus.WithSinkLevel(globalCfg.Log.SlogLevel()), magus.WithSinkFilter(globalCfg.Report.Filter)}
 	if opts.Format == outputText && pipeStageFromContext(ctx).writesRecords() {
@@ -113,7 +119,12 @@ func emitFormatted(opts output.Options, v any) error {
 // a record is the command's to say, not the renderer's. So a command that offers -o name
 // renders it through here.
 func emitNames(names []string) error {
-	w, cleanup, err := outputDst()
+	return emitNamesTo(os.Stdout, names)
+}
+
+// emitNamesTo is emitNames over the writer a command was handed.
+func emitNamesTo(out io.Writer, names []string) error {
+	w, cleanup, err := outputDstTo(out)
 	if err != nil {
 		return err
 	}
