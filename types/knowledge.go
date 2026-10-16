@@ -39,7 +39,7 @@ import (
 // because shards load lazily and an edge legitimately arrives before the node that gives
 // its endpoint a kind. Graph.UndeclaredEdges reports violations, and a test over this
 // workspace's own graph fails when a producer widens the vocabulary without declaring it.
-const KnowledgeSchemaVersion = 22
+const KnowledgeSchemaVersion = 23
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
 // generates. Four renderers write one of these spellings: the target-graph index
@@ -255,7 +255,7 @@ var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
 		endpointShapes(KindProject, KindTarget, KindDir, KindFile, KindDoc),
 		endpointShapes(KindDir, KindDir, KindFile, KindDoc),
 		endpointShapes(KindSpell, KindOp), endpointShapes(KindModule, KindMethod),
-		endpointShapes(KindFile, KindFunction, KindMarker), endpointShapes(KindDoc, KindDocSection, KindMarker),
+		endpointShapes(KindFile, KindFunction, KindMarker, KindFigure), endpointShapes(KindDoc, KindDocSection, KindMarker),
 		endpointShapes(KindDocSection, KindDocSection))},
 	{ID: RelationUses, Description: "invokes or executes an operation, spell, or program", ForwardLabel: "uses", ReverseLabel: "used by", Shapes: joinEndpointShapes(
 		endpointShapes(KindTarget, KindSpell, KindOp), endpointShapes(KindSpell, KindTool), endpointShapes(KindOp, KindTool))},
@@ -299,12 +299,13 @@ var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
 	{ID: RelationProduces, Description: "declares a generated file or document output", ForwardLabel: "produces", ReverseLabel: "produced by", Shapes: endpointShapes(KindTarget, KindFile, KindDoc)},
 	{ID: RelationConsumes, Description: "declares a file or document input", ForwardLabel: "consumes", ReverseLabel: "consumed by", Shapes: endpointShapes(KindTarget, KindFile, KindDoc)},
 	{ID: RelationAuthored, Description: "attributes a file to a git contributor", ForwardLabel: "authored", ReverseLabel: "authored by", Shapes: endpointShapes(KindAuthor, KindFile)},
+	{ID: RelationDepicts, Description: "draws a directory or project in a diagram", ForwardLabel: "depicts", ReverseLabel: "depicted by", Shapes: endpointShapes(KindFigure, KindDir, KindProject)},
 	{ID: RelationCoChanges, Description: "changed in the same commits, from git history", ForwardLabel: "changes with", ReverseLabel: "changes with", Symmetric: true, Shapes: endpointShapes(KindFile, KindFile)},
 	{ID: RelationAnnotates, Description: "attaches a human-authored note to an existing entity", ForwardLabel: "is about", ReverseLabel: "NOTE", Shapes: endpointShapes(KindNote,
 		KindProject, KindTarget, KindSpell, KindOp, KindTool, KindCharm, KindModule,
 		KindMethod, KindDiagnostic, KindDoc, KindDocSection, KindFile, KindDir,
 		KindFunction, KindImport, KindRationale, KindOwner, KindSymbol, KindAuthor,
-		KindNote, KindPackage, KindLink, KindMarker)},
+		KindNote, KindPackage, KindLink, KindMarker, KindFigure)},
 }
 
 // KnowledgeRelationDefinitions returns a deep copy of the canonical relation

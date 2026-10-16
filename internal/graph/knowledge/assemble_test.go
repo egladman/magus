@@ -563,6 +563,15 @@ fun helper() > void {
 	write("docs/figures.md", "# Figures\n\n## Share\n\n<!--diagram:share-->\n")
 	write("pkg/b/b.go", "package b\n")
 	write("pkg/a/client.go", "package a\n\n// magus:diagram share\n// magus:calls pkg/b http\n")
+	// contains file->figure, and depicts in both shapes: pkg/a is a dir and, holding a
+	// magusfile, a project.
+	write("pkg/a/figure.buzz", `import "magus";
+import "magus/figure";
+
+fun aFigure() > figure\Figure !> any {
+    return figure\of("a", title: "A").box(magus\dir("pkg/a"), label: "a");
+}
+`)
 
 	// produces and consumes: both resolve a target's declared globs against the file and
 	// doc nodes already minted, so each glob here names a path written above.

@@ -97,11 +97,13 @@
 {"bucket":0,"path":"changes/unreleased/guard-root-removes-worker-worktrees.md"}
 {"bucket":0,"path":"changes/unreleased/guard-stale-graph.md"}
 {"bucket":1,"path":"changes/unreleased/guard-symbol-search-covers-alternations.md"}
+{"bucket":0,"path":"changes/unreleased/holder-advised-to-release.md"}
 {"bucket":1,"path":"changes/unreleased/interrupt-arms-for-work.md"}
 {"bucket":0,"path":"changes/unreleased/job-attempts-prior.md"}
 {"bucket":0,"path":"changes/unreleased/job-claim-guard.md"}
 {"bucket":1,"path":"changes/unreleased/job-previous-attempt.md"}
 {"bucket":0,"path":"changes/unreleased/job-prune.md"}
+{"bucket":1,"path":"changes/unreleased/job-schema-patterns.md"}
 {"bucket":1,"path":"changes/unreleased/job-store-correctness.md"}
 {"bucket":0,"path":"changes/unreleased/job-verb-help-ends-with-an-example.md"}
 {"bucket":1,"path":"changes/unreleased/job-wait-accepts-a-same-second-run.md"}
@@ -253,6 +255,7 @@
 {"bucket":1,"path":"cmd/magus/gen/cli_flags.go"}
 {"bucket":1,"path":"cmd/magus/init.go"}
 {"bucket":1,"path":"cmd/magus/job_test.go"}
+{"bucket":0,"path":"cmd/magus/job_workspace.go"}
 {"bucket":0,"path":"cmd/magus/list.go"}
 {"bucket":1,"path":"cmd/magus/main_test.go"}
 {"bucket":0,"path":"cmd/magus/notify_test.go"}
@@ -480,6 +483,7 @@
 {"bucket":0,"path":"docs/reference/rules/precedent-search.md"}
 {"bucket":1,"path":"docs/reference/rules/raw-tool.md"}
 {"bucket":0,"path":"docs/reference/rules/read-paging.md"}
+{"bucket":1,"path":"docs/reference/rules/release-requested.md"}
 {"bucket":1,"path":"docs/reference/rules/revert-classify.md"}
 {"bucket":1,"path":"docs/reference/rules/root-repeat.md"}
 {"bucket":0,"path":"docs/reference/rules/search-translation.md"}
@@ -525,6 +529,8 @@
 {"bucket":0,"path":"hack/dev/show-feedback.buzz"}
 {"bucket":0,"path":"hack/dev/summarize-transcript.buzz"}
 {"bucket":1,"path":"hack/embed/corpus.buzz"}
+{"bucket":1,"path":"hack/embed/distill/vocab.go"}
+{"bucket":1,"path":"hack/embed/distill/vocab_test.go"}
 {"bucket":0,"path":"hack/lint/landing-rotator-slots-match-headline-count.buzz"}
 {"bucket":0,"path":"hack/lint/magusfile-modules-have-no-main.buzz"}
 {"bucket":1,"path":"hack/lint/markdown-carries-no-mermaid.buzz"}
@@ -631,6 +637,7 @@
 {"bucket":1,"path":"internal/graph/knowledge/precedent_signature.go"}
 {"bucket":0,"path":"internal/graph/knowledge/precedent_test.go"}
 {"bucket":0,"path":"internal/graph/knowledge/query_test.go"}
+{"bucket":1,"path":"internal/graph/knowledge/retrieve_test.go"}
 {"bucket":0,"path":"internal/graph/knowledge/routing_test.go"}
 {"bucket":1,"path":"internal/graph/knowledge/session.go"}
 {"bucket":1,"path":"internal/graph/knowledge/signature_test.go"}
@@ -657,6 +664,7 @@
 {"bucket":1,"path":"internal/guard/native_test.go"}
 {"bucket":0,"path":"internal/guard/push.go"}
 {"bucket":0,"path":"internal/guard/read_test.go"}
+{"bucket":0,"path":"internal/guard/release_advice.go"}
 {"bucket":1,"path":"internal/guard/rewrite_test.go"}
 {"bucket":1,"path":"internal/guard/search_test.go"}
 {"bucket":1,"path":"internal/guard/shell_test.go"}
@@ -749,6 +757,7 @@
 {"bucket":1,"path":"internal/job/plan_test.go"}
 {"bucket":0,"path":"internal/job/snapshot.go"}
 {"bucket":1,"path":"internal/job/terms.go"}
+{"bucket":0,"path":"internal/job/validate.go"}
 {"bucket":1,"path":"internal/job/worktree.go"}
 {"bucket":0,"path":"internal/json/json_v2_test.go"}
 {"bucket":0,"path":"internal/json/requires_jsonv2.go"}
@@ -802,6 +811,7 @@
 {"bucket":0,"path":"internal/race/race.go"}
 {"bucket":1,"path":"internal/race/race_test.go"}
 {"bucket":0,"path":"internal/rankeval/metrics_test.go"}
+{"bucket":0,"path":"internal/rankeval/replay.go"}
 {"bucket":0,"path":"internal/readlog/read_log.go"}
 {"bucket":0,"path":"internal/render/graph_ir.go"}
 {"bucket":1,"path":"internal/render/knowledge_graph_test.go"}
@@ -883,6 +893,9 @@
 {"bucket":1,"path":"internal/sys/mem/watch_test.go"}
 {"bucket":0,"path":"internal/sys/pipepeer/doc.go"}
 {"bucket":0,"path":"internal/sys/pipepeer/pipe_darwin.go"}
+{"bucket":1,"path":"internal/textembed/index.go"}
+{"bucket":0,"path":"internal/textembed/index_test.go"}
+{"bucket":0,"path":"internal/textembed/search_test.go"}
 {"bucket":1,"path":"internal/textindex/mmap_unix.go"}
 {"bucket":0,"path":"internal/textrank/fuse.go"}
 {"bucket":1,"path":"internal/textrank/tokens_test.go"}
@@ -931,6 +944,8 @@
 {"bucket":0,"path":"libs/conventions/testisolation/testdata/src/guarded/guarded.go"}
 {"bucket":1,"path":"libs/conventions/testisolation/testdata/src/pure/pure_test.go"}
 {"bucket":1,"path":"libs/conventions/testisolation/testdata/src/sockdir/sockdir.go"}
+{"bucket":0,"path":"libs/conventions/testloops/testdata/src/clean/clean.go"}
+{"bucket":0,"path":"libs/conventions/testloops/testdata/src/unmarked/unmarked_test.go"}
 {"bucket":0,"path":"libs/diagnostics/diagnostics.go"}
 {"bucket":0,"path":"libs/gopherbuzz/README.md"}
 {"bucket":1,"path":"libs/gopherbuzz/ast/ast.go"}

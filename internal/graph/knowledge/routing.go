@@ -16,6 +16,7 @@ var routingKindOrder = []string{
 	types.KindTool, types.KindCharm, types.KindModule, types.KindMethod, types.KindDiagnostic,
 	types.KindDoc, types.KindDir, types.KindFile, types.KindFunction, types.KindImport,
 	types.KindRationale, types.KindOwner, types.KindPackage, types.KindLink, types.KindMarker,
+	types.KindFigure,
 }
 
 // maxAnchors caps how many high-degree anchor nodes a routing row lists.
