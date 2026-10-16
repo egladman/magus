@@ -94,7 +94,7 @@ func ApplyValidations(err error, ids []string) ([]types.JobValidation, bool) {
 			v = &types.JobValidation{Job: types.Job{ID: ids[i]}}
 			byID[ids[i]] = v
 		}
-		v.Problems = append(v.Problems, types.JobProblem{Code: types.DiagnosticCode(diag.Code), Message: strings.TrimPrefix(diag.Msg, ids[i]+": ")})
+		v.Problems = append(v.Problems, types.JobProblem{Code: diag.Code, Message: strings.TrimPrefix(diag.Msg, ids[i]+": ")})
 	}
 	var out []types.JobValidation
 	for _, id := range ids {

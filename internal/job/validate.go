@@ -407,7 +407,7 @@ func resolveProblem(err error) types.JobProblem {
 		Fix: fmt.Sprintf("declare each signature goal's signature, or write the symbol, run `%s` and fork again", hint.GraphBuild)}
 	var coded *types.DiagnosticError
 	if errors.As(err, &coded) {
-		p.Code, p.Message = types.DiagnosticCode(coded.Code), coded.Msg
+		p.Code, p.Message = coded.Code, coded.Msg
 		if p.Code == types.WritePathClaimUngradable {
 			p.Field, p.Fix = "write_paths", "claim the declaration in write_paths yourself"
 		}
