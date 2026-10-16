@@ -3,8 +3,8 @@ title: magus-sdk
 generated_from: internal/agent/skills/magus-sdk/SKILL.md
 description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them."
 tags: [agents, skills, magus-sdk]
-skill_full_bytes: 14013
-skill_short_bytes: 11009
+skill_full_bytes: 14014
+skill_short_bytes: 10182
 ---
 
 # magus-sdk
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `138` |
 | `knowledge-schema-version` | `21` |
-| `skill-content` | `556fa547ef21` |
+| `skill-content` | `4fec34cfe5e8` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -56,10 +56,9 @@ magus agent install --tar | tar -xO -f - magus-sdk/SKILL.md
 ```markdown
 # Consuming magus as a Go library
 
-This skill's reader has never run `magus` and does not know its subcommands. They
-found `github.com/egladman/magus` on pkg.go.dev or in an import line. They want to
-call it from their own Go program. Ground every answer in the actual exported API,
-never in what the CLI does, which this reader cannot see:
+The reader has never run `magus`; they found `github.com/egladman/magus` on
+pkg.go.dev and want to call it from Go. Ground every answer in the exported API,
+never the CLI:
 
 - `magus.go`, `register.go`, `run.go`, `judge.go`, `knowledge.go`, `describe.go`
 - `types/repository.go`, `types/describe.go`
@@ -73,9 +72,7 @@ the origin (`git ls-remote --tags origin` lists `libs/gopherbuzz/v0.2.0` and
 `libs/diagnostics/v0.2.0`).
 
 Say `go get` succeeds only for a version you ran it against, and say how: a scratch
-module, `go get github.com/egladman/magus@<version>`, then `go build ./...`. A worked
-example that compiles for you inside the module but fails for them is worse than
-admitting you did not check.
+module, `go get github.com/egladman/magus@<version>`, then `go build ./...`.
 
 ## Entry points
 
@@ -84,9 +81,8 @@ admitting you did not check.
 | `magus.Open(ctx, root, opts...)` | `*magus.Magus` | builds one | the caller will `Run` targets or read cached results |
 | `magus.Inspect(ctx, root, opts...)` | `types.WorkspaceRepository` | none | pure introspection: list/describe/classify, never execute |
 
-Both discover the root's projects and evaluate magusfiles the same way. `Open` calls
-the same `load()` as `Inspect`, then also opens the on-disk cache. A caller who later needs
-`Run` switches to `Open`; it never type-asserts its way there.
+A caller who later needs
+`Run` switches to `Open`, never type-asserts.
 
 Both require `magus.WithSpawnRule(magus.TierCeiling)` (it has no default), and
 a workspace with a magusfile needs `import _ "github.com/egladman/magus/buzzengine"`.
@@ -102,8 +98,7 @@ does; an empty `dir` is an error, not the working directory.
 | `std.MagusPutJob`, `MagusQuery`, `MagusRefs`, `MagusTrailRead`, ... | the Buzz host modules' Go doors, with typed options (`types.JobPut`, `types.KnowledgeQueryOptions`, ...); `std` is in the Go API lock |
 
 The lease a call acts under rides `ctx` (`types.WithJobLease`). The SDK never retries,
-re-grades or routes around a refusal. It has no agent loop: it answers what a loop asks
-and never decides what runs next.
+re-grades or routes around a refusal.
 
 ## The interface hierarchy: depend on the narrowest role
 
@@ -148,7 +143,7 @@ DIFFERENT representations:
   workspace-rooted globs, joined against the project path with magusfile globs
   folded in.
 
-Reading one where the other was meant silently mismatches every glob it feeds. The
+The
 field comment on `ProjectEntry.Sources` in `types/describe.go` is the one place this
 is documented. Read it before writing code that consumes both.
 
@@ -157,9 +152,7 @@ is documented. Read it before writing code that consumes both.
 Every `Inspector` method takes `ctx` first and returns `error` last, the read-only
 `List*` calls included. A cancelled walk returns an error, never a truncated slice.
 
-- `describeCancelled` in `describe.go` names the walk and how far it got
-  (`"describe projects: cancelled after 2 of 8: context canceled"`).
-- It wraps `ctx.Err()`, so `errors.Is(err, context.Canceled)` and
+- The error wraps `ctx.Err()`, so `errors.Is(err, context.Canceled)` and
   `errors.Is(err, context.DeadlineExceeded)` both hold.
 
 Never treat an empty or short `List*`/`Evaluate*` result as "the workspace has
@@ -196,9 +189,8 @@ before you add a type.
   (`ProjectsOutput`, `TargetGraphOutput`).
 - `Report` means rebuilt at the render edge from a plain slice the method returned
   (`FileReport`, `CharmReport`).
-- `ListProjects`/`EvaluateProjects` are the deliberate exceptions. They still return
-  their `*Output` type directly, because they carry a real `Workspace` field a
-  `{definition, count, items}` envelope cannot derive.
+- `ListProjects`/`EvaluateProjects` are the deliberate exceptions: they return their
+  `*Output` type directly.
 
 **Evaluating a magusfile needs the Buzz engine linked.** A program that loads
 magusfiles blank-imports `github.com/egladman/magus/buzzengine`, as `cmd/magus` does.
@@ -394,7 +386,7 @@ Every `Inspector` method takes `ctx` first and returns `error` last, the read-on
 
 - `describeCancelled` in `describe.go` names the walk and how far it got
   (`"describe projects: cancelled after 2 of 8: context canceled"`).
-- It wraps `ctx.Err()`, so `errors.Is(err, context.Canceled)` and
+- The error wraps `ctx.Err()`, so `errors.Is(err, context.Canceled)` and
   `errors.Is(err, context.DeadlineExceeded)` both hold.
 - VERIFIED: cancelling before `ListProjects` on a one-project workspace produces
   exactly that message, and `errors.Is` returns true.
@@ -439,8 +431,8 @@ before you add a type; guess at the pattern instead and you misname it.
   (`ProjectsOutput`, `TargetGraphOutput`).
 - `Report` means rebuilt at the render edge from a plain slice the method returned
   (`FileReport`, `CharmReport`).
-- `ListProjects`/`EvaluateProjects` are the deliberate exceptions. They still return
-  their `*Output` type directly, because they carry a real `Workspace` field a
+- `ListProjects`/`EvaluateProjects` are the deliberate exceptions: they return their
+  `*Output` type directly, because they carry a real `Workspace` field a
   `{definition, count, items}` envelope cannot derive.
 
 **Evaluating a magusfile needs the Buzz engine linked.** A program that loads

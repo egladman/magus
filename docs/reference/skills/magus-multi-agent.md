@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 27497
-skill_short_bytes: 21353
+skill_full_bytes: 27717
+skill_short_bytes: 20424
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `138` |
 | `knowledge-schema-version` | `21` |
-| `skill-content` | `4bca0b0e9b8d` |
+| `skill-content` | `a03f8a1050b4` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -78,7 +78,7 @@ magus affected ci --plan --stdin            # plan PROPOSED paths, before editin
 You do not need to be asked to split work: several disjoint write sets
 you can name are reason enough.
 
-Fan-out is not inherently expensive. Say what a round
+Say what a round
 costs when the user is deciding, and prefer the smallest fan-out that covers the work.
 
 Fan out only after the collision check below REPORTS the jobs disjoint; looking
@@ -147,10 +147,9 @@ A job's `breaks` list names the flags, JSON keys, exported symbols or stored for
 you approved it breaking. A worker that finds a break outside it stops and reports.
 Each unreferenced symbol `magus job fork` lists in the write paths
 (`deletion_candidates`) or `magus job wait` reports is finished or deleted. Confirm
-first: the graph cannot see reflection, interface dispatch or outside consumers.
+first.
 
-Check each declared name with `magus refs` before forking. A bare name that resolves
-to more than one definition is graded against one of them, silently.
+Check each declared name with `magus refs` before forking.
 
 This applies with zero workers. A solo change across several call sites is a one-job
 tree. Skipping the declaration because nothing is forked is the same failure.
@@ -225,8 +224,7 @@ that names one.
 When the tier is unclear, start at economy. A job that fails its criteria there is
 re-forked one tier up, not retried at the same one.
 
-Tiers are the workspace's: a magusfile enum (`magus\job.modelTiers`, shipped as economy,
-standard, principal) maps each to every harness's model alias. `--model` takes a tier or a
+Tiers are the workspace's. `--model` takes a tier or a
 model. magus never picks a model live: re-fork to change a tier.
 
 | Shipped tier | Assign |
@@ -273,11 +271,7 @@ magus affected <target> --plan
 ```
 
 For a proposed change whose paths are known but not yet edited, plan those paths
-instead of the current diff:
-
-```sh
-printf '%s\n' <repo-relative-path>... | magus affected <target> --stdin --plan
-```
+instead of the current diff (`--stdin --plan`, one repo-relative path per line).
 
 Read the JSON fields `count`, `max_parallel`, `source`, and `matrix`.
 Use a shard only as the first partition. If paths are unknown, query the task's symbols,
@@ -318,7 +312,7 @@ ONE WORKTREE PER WORKER wherever a write path touches workspace configuration: a
 project's magusfile, its `magus.yaml`, or a spell source a magusfile imports.
 
 magus READS those files to load the workspace. A half-saved one stops the workspace
-loading for everybody in that checkout at once.
+loading for everybody in that checkout.
 When `magus job fork` refuses one, the answer is a separate worktree, not a narrower
 boundary: fork with `--checkout <dir>` outside the workspace, never by hand.
 
@@ -372,8 +366,7 @@ regenerate itself, or leave them out and regenerate them after integration.
 
 Render the prompt FROM the row; never type it. `magus describe job <job>` prints the
 job's own criteria, boundary and check, plus what the workspace knows and nobody wrote
-down. Two renders of one
-row are byte-identical, which hand-typed prompts are not.
+down.
 
 The guard grades every command a brief presents in a shell fence or a code span. One
 it would deny refuses the spawn. A line that names a command to forbid it ("never ...") is not graded.
@@ -389,18 +382,9 @@ any cap the user set for the tree. Require the worker to:
 
 End every brief with the step that files the result, as the worker's LAST act before
 it reports back. A brief that leaves it out gets a prose report and a row that never
-moves. The step, with the shape `magus job exit --schema`
-prints:
-
-```sh
-magus job exit <job> --stdin <<'EOF'
-{"schema_version": 2, "job": "<job>",
- "changed_paths": ["api/store.go", "api/store_test.go"],
- "validation": {"command": "magus run go-test api -- -run TestStore", "output_ref": "<ref>"},
- "descendants": [],
- "unresolved_risks": ["what is left, or what the worker could not verify"]}
-EOF
-```
+moves. The step: `magus job exit <job> --stdin` with a record of `schema_version` 2, `job`,
+`changed_paths`, `validation` (`command` and `output_ref`), `descendants` and
+`unresolved_risks`; `magus job exit --schema` prints the shape.
 
 Keep unresolved risks mandatory.
 
@@ -457,18 +441,14 @@ The root never builds. The integrator is a role, never a check: spawned `<parent
    a result that will not decode exits 2. A holder does not verify its own job, or a
    sibling's.
 
-   Then reopen the evidence yourself (`magus query output <ref>`). Wait proves the ref
-   names a passing run of this job's own check, never that the work meets the job's
-   GOAL. A worker's prose about its criteria is not that evidence.
+   Then reopen the evidence yourself (`magus query output <ref>`). A worker's prose about its criteria is not that evidence.
 3. Resolve cross-job API changes centrally; never assign the same seam twice.
 4. Regenerate declared outputs once, after source work converges and before the full
    test run, or a drift test fails for nothing.
 5. Re-run `magus affected <target> --plan` over the actual diff. If its shape
    invalidates the original partition, stop parallel integration and reconcile.
 6. Read the integrated changeset with `magus diff --impact` before landing it.
-   It shows reach, other recent editors, a rebuild estimate from recorded run times,
-   advisors and anchored notes. It is context, never a verdict: nothing gates on it. An
-   empty section means nobody could measure it, not that nothing was found.
+   It is context, never a verdict: nothing gates on it.
 7. Validate once per wave, not once per fix:
    - After a failed full run, read it (`magus query output <ref>`). Rerun only the
      failing tests, with the runner's filter after `--`, until green; `magus-run`
@@ -712,7 +692,7 @@ re-forked one tier up, not retried at the same one. "Only ever spawn something
 weaker" was tried and withdrawn, because same-strength offload is legitimate, so this
 is a starting point and not a ceiling.
 
-Tiers are the workspace's: a magusfile enum (`magus\job.modelTiers`, shipped as economy,
+Tiers are the workspace's. A magusfile enum (`magus\job.modelTiers`, shipped as economy,
 standard, principal) maps each to every harness's model alias. `--model` takes a tier or a
 model. The row records tier, rank, source (row, matrix, default) and why, and the guard
 compares a spawn's tier by rank. magus never picks a model live: re-fork to change a tier.
@@ -763,7 +743,7 @@ magus affected <target> --plan
 ```
 
 For a proposed change whose paths are known but not yet edited, plan those paths
-instead of the current diff:
+instead of the current diff (`--stdin --plan`, one repo-relative path per line).
 
 ```sh
 printf '%s\n' <repo-relative-path>... | magus affected <target> --stdin --plan
@@ -897,8 +877,9 @@ End every brief with the step that files the result, as the worker's LAST act be
 it reports back. A brief that leaves it out gets a prose report and a row that never
 moves: the store keeps the write paths held, `magus job wait`
 has nothing to verify, and nobody notices until a sibling is refused over a path
-the finished worker no longer needs. The step, with the shape `magus job exit --schema`
-prints:
+the finished worker no longer needs. The step: `magus job exit <job> --stdin` with a record of `schema_version` 2, `job`,
+`changed_paths`, `validation` (`command` and `output_ref`), `descendants` and
+`unresolved_risks`; `magus job exit --schema` prints the shape.
 
 ```sh
 magus job exit <job> --stdin <<'EOF'

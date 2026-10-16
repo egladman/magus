@@ -45,9 +45,9 @@ external is an actor the figure draws but no directory holds. look defaults to
 
 ### of
 
-of starts an empty figure. direction defaults to Direction.across; generated marks a
+of starts an empty figure. direction defaults to Direction.across.
 
-**Signature:** `figure\of(id, [title], [eyebrow], [desc], [direction], [generated]) -> mut Figure`
+**Signature:** `figure\of(id, [title], [eyebrow], [desc], [direction]) -> mut Figure`
 
 | Parameter   | Type  | Optional | Description |
 | ----------- | ----- | -------- | ----------- |
@@ -56,7 +56,6 @@ of starts an empty figure. direction defaults to Direction.across; generated mar
 | `eyebrow`   | `any` | yes      |             |
 | `desc`      | `any` | yes      |             |
 | `direction` | `any` | yes      |             |
-| `generated` | `any` | yes      |             |
 
 **Returns:** any
 
