@@ -116,7 +116,7 @@ const NOTES: NoteSpec[] = [
       "that read the field has to change with it, and two of them are not Go.",
   },
   // DRIFTED + OUTRUN, and the timeline is what caused it: verify.go changed 92 minutes ago in this
-  // very changeset, so the fingerprint this note recorded no longer matches. The app's staleness
+  // very changeset, so the signature this note recorded no longer matches. The app's staleness
   // tiers are demonstrated by the timeline rather than by an unrelated coincidence.
   {
     name: "verification-asserts-on-audience",
@@ -131,7 +131,7 @@ const NOTES: NoteSpec[] = [
         target: "m identity/token/Verify().",
         status: AnchorStatus.DRIFTED,
         detail:
-          "The anchored code still exists and no longer matches the fingerprint recorded here.",
+          "The anchored code still exists and no longer matches the signature recorded here.",
       },
     ],
     staleness: Staleness.OUTRUN,
@@ -170,9 +170,9 @@ const NOTES: NoteSpec[] = [
       "propose this should find this note rather than the empty space where s2s.go was.",
   },
   // The multi-anchor note, and the one that explains the second half of the blast radius: why a Go
-  // contract change took down a TypeScript typecheck. BODY_CHANGED is the subtle verdict - the
-  // declaration held, the implementation moved - and the NOTE anchor makes the store a graph rather
-  // than a list.
+  // contract change took down a TypeScript typecheck. The parseClaims anchor reads RESOLVES
+  // although its body was edited: anchors are graded by signature, so only a signature change
+  // reads DRIFTED. The NOTE anchor makes the store a graph rather than a list.
   {
     name: "the-dashboard-reads-claims-directly",
     editedDaysAgo: 9,
@@ -185,9 +185,7 @@ const NOTES: NoteSpec[] = [
       {
         kind: AnchorKind.SYMBOL,
         target: "m dashboard/session/parseClaims().",
-        status: AnchorStatus.BODY_CHANGED,
-        detail:
-          "This changed inside a declaration that did not, which usually leaves prose about the interface standing. Re-read only if the note claims something about the implementation.",
+        status: AnchorStatus.RESOLVES,
       },
       {
         kind: AnchorKind.NOTE,

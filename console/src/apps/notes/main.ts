@@ -97,7 +97,6 @@ const ANCHOR_COPY: Record<number, { label: string; status: Status }> = {
   [AnchorStatus.DANGLING]: { label: "dangling", status: "danger" },
   [AnchorStatus.DRIFTED]: { label: "drifted", status: "warning" },
   [AnchorStatus.UNVERIFIED]: { label: "unverified", status: "neutral" },
-  [AnchorStatus.BODY_CHANGED]: { label: "body changed", status: "info" },
 };
 
 const ANCHOR_KIND_NAME: Record<number, string> = {
@@ -179,7 +178,6 @@ function worstAnchor(n: Note): { label: string; status: Status; count: number } 
     AnchorStatus.DANGLING,
     AnchorStatus.DRIFTED,
     AnchorStatus.UNVERIFIED,
-    AnchorStatus.BODY_CHANGED,
   ]) {
     const hits = n.anchors.filter((a) => a.status === status);
     const copy = ANCHOR_COPY[status];
