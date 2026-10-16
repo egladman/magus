@@ -252,7 +252,7 @@ type Outcome struct {
 	// Zero therefore means UNMEASURED, never "used nothing". A consumer that
 	// treats it as a small number will read the targets it knows least about as
 	// the cheapest ones to co-schedule, which is precisely backwards.
-	MaxRSSBytes int64 `json:"max_rss_bytes,omitempty"`
+	MaxRSSBytes int64 `json:"max_rss_bytes,omitzero"`
 	// CPUMs is the CPU time, user plus system, in milliseconds, summed over every
 	// process the target ran and every descendant each of those waited for (see
 	// spawn.ExecResult.CPUMs). Over DurationMs it is the parallelism the run used.

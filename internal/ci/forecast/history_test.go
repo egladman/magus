@@ -879,9 +879,9 @@ func TestSaveThenLoad(t *testing.T) {
 	assert.Equal(t, orig, got)
 }
 
-// An unmeasured outcome writes no cpu_ms at all, so a reader cannot take a replay
-// or a host that cannot report CPU time for a run that spent none.
-func TestOutcomeCPUMsRoundTripsAndIsOmittedWhenUnmeasured(t *testing.T) {
+// An unmeasured outcome writes no cpu_ms or max_rss_bytes at all, so a reader
+// cannot take a replay or a host that cannot measure for a run that spent nothing.
+func TestOutcomeCostRoundTripsAndIsOmittedWhenUnmeasured(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "history.json")
@@ -905,6 +905,7 @@ func TestOutcomeCPUMsRoundTripsAndIsOmittedWhenUnmeasured(t *testing.T) {
 	require.Len(t, written, 2)
 	assert.Contains(t, written[0], "cpu_ms")
 	assert.NotContains(t, written[1], "cpu_ms", "an unmeasured outcome carries no key")
+	assert.NotContains(t, written[1], "max_rss_bytes", "an unmeasured outcome carries no key")
 
 	var got History
 	require.NoError(t, got.Load(context.Background(), path))
