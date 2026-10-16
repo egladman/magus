@@ -899,6 +899,7 @@ github.com/egladman/magus/types.Bundler type interface
 github.com/egladman/magus/types.Bundler.Bundle imethod func(ctx context.Context, root string, file string, r BundleRange) error
 github.com/egladman/magus/types.Bundler.Unbundle imethod func(ctx context.Context, root string, file string) error
 github.com/egladman/magus/types.BuzzObject type map[string]any
+github.com/egladman/magus/types.CPUMs func(ctx context.Context) int64
 github.com/egladman/magus/types.CacheBackend type interface
 github.com/egladman/magus/types.CacheBackend.Active imethod func(ctx context.Context) bool
 github.com/egladman/magus/types.CacheBackend.GetArtifact imethod func(ctx context.Context, namespace string, key string) (io.ReadCloser, error)
@@ -3815,6 +3816,7 @@ github.com/egladman/magus/types.ReasonCoverageUnknown const KnowledgeUnknownReas
 github.com/egladman/magus/types.ReasonIndexStale const KnowledgeUnknownReason = "index-stale"
 github.com/egladman/magus/types.ReasonSymbolIndexMissing const KnowledgeUnknownReason = "symbol-index-missing"
 github.com/egladman/magus/types.ReasonSymbolsNotLoaded const KnowledgeUnknownReason = "symbols-not-loaded"
+github.com/egladman/magus/types.RecordCPUMs func(ctx context.Context, ms int64)
 github.com/egladman/magus/types.RecordPeakRSS func(ctx context.Context, bytes int64)
 github.com/egladman/magus/types.RecordReturn func(ctx context.Context, project string, target string, v any)
 github.com/egladman/magus/types.RecordedReturn func(ctx context.Context, project string, target string) (any, bool)
@@ -4914,6 +4916,7 @@ github.com/egladman/magus/types.WithCharms func(ctx context.Context, charms []st
 github.com/egladman/magus/types.WithDependencyWait func(ctx context.Context) context.Context
 github.com/egladman/magus/types.WithDiagnosticSink func(ctx context.Context, s DiagnosticSink) context.Context
 github.com/egladman/magus/types.WithEvalMemo func(ctx context.Context) context.Context
+github.com/egladman/magus/types.WithExecCost func(ctx context.Context) context.Context
 github.com/egladman/magus/types.WithExitCapture func(ctx context.Context) (context.Context, func() (int, bool))
 github.com/egladman/magus/types.WithGraphObserver func(o Observer) GraphOption
 github.com/egladman/magus/types.WithInstallRunner func(ctx context.Context, r InstallRunner) context.Context
@@ -4922,7 +4925,6 @@ github.com/egladman/magus/types.WithJobLease func(ctx context.Context, lease str
 github.com/egladman/magus/types.WithMagusBuild func(ctx context.Context, b MagusBuild) context.Context
 github.com/egladman/magus/types.WithMagusVersion func(ctx context.Context, version string) context.Context
 github.com/egladman/magus/types.WithOutputCacheDir func(ctx context.Context, cacheDir string) context.Context
-github.com/egladman/magus/types.WithPeakRSS func(ctx context.Context) context.Context
 github.com/egladman/magus/types.WithReturnCapture func(ctx context.Context) (context.Context, func(target string) Returns)
 github.com/egladman/magus/types.WithTrace func(ctx context.Context) context.Context
 github.com/egladman/magus/types.WithWorkspace func(ctx context.Context, ws WorkspaceRepository) context.Context
