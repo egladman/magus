@@ -1,0 +1,537 @@
+import "std";
+import "fs";
+import "vcs";
+import "magus";
+import "crypto";
+import "encoding/json";
+import "holdout";
+
+export object CorpusFile {
+    path: str,
+    slice: str,
+    language: str,
+    generated: bool,
+    bytes: int,
+    sha256: str,
+    holdout: bool,
+}
+
+// Corpus is the tracked tree at one commit plus the graph slices every miner reads.
+// lines caches file reads; spans index into them 1-based.
+export object Corpus {
+    root: str,
+    files: [CorpusFile],
+    byPath: {str: CorpusFile},
+    symbols: [magus\KnowledgeNode],
+    symbolsByFile: {str: [magus\KnowledgeNode]},
+    refLinks: [magus\KnowledgeEdge],
+    cache: mut {str: [str]},
+
+    fun lines(path: str) > [str] !> any {
+        if (this.cache[path] -> hit) {
+            return hit;
+        }
+        final read = fs\readLines(fs\join(this.root, name: path));
+        this.cache[path] = read;
+        return read;
+    }
+
+    fun line(path: str, n: int) > str !> any {
+        final ls = this.lines(path);
+        if (n < 1 or n > ls.len()) {
+            return "";
+        }
+        return ls[n - 1];
+    }
+
+    fun isHoldout(path: str) > bool {
+        if (this.byPath[path] -> f) {
+            return f.holdout;
+        }
+        return holdout\isHoldout(path);
+    }
+
+    fun isGenerated(path: str) > bool {
+        if (this.byPath[path] -> f) {
+            return f.generated;
+        }
+        return false;
+    }
+
+    fun has(path: str) > bool {
+        return this.byPath[path] != null;
+    }
+}
+
+final languages = {".go": "go", ".buzz": "buzz", ".md": "markdown", ".ts": "typescript", ".tsx": "typescript"};
+
+// Files past this are minified bundles or fixtures, not prose or code worth a token.
+final maxBytes = 1048576;
+
+fun sliceOf(path: str, language: str) > str {
+    if (path.startsWith("libs/gopherbuzz/")) {
+        return "gopherbuzz";
+    }
+    if (language == "markdown") {
+        return "docs";
+    }
+    return "magus";
+}
+
+// Dot directories hold harness copies of internal/agent/skills and host config; a
+// second copy of a skill would only weight its tokens twice.
+fun inDotDir(path: str) > bool {
+    foreach (seg in path.split("/")) {
+        if (seg.startsWith(".")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fun trackedPaths() > [str] !> any {
+    if (vcs\name() != "git") {
+        throw "corpus: lists the tree with git ls-files; this checkout is {vcs\name()}";
+    }
+    final listing = vcs\cmd(["-c", "core.quotepath=off", "ls-files", "--full-name", "--", ":/"], opts: {"quiet": true}).stdout;
+    final keep: mut [str] = mut [];
+    foreach (p in listing.split("\n")) {
+        if (p == "" or inDotDir(p)) {
+            continue;
+        }
+        if (languages[fs\ext(p)] != null) {
+            keep.append(p);
+        }
+    }
+    keep.sort(fun (a: str, b: str) > bool => a < b);
+    return keep;
+}
+
+fun everyNode(kind: str) > magus\QueryResult !> any {
+    final probe: magus\QueryResult = magus\query("kind={kind}", opts: {"limit": 1, "budget": 1});
+    return magus\query("kind={kind}", opts: {"limit": probe.matchCount, "budget": probe.matchCount * 4 + 1000});
+}
+
+// nodes is every graph node of kind, sorted by id.
+export fun nodes(kind: str) > [magus\KnowledgeNode] !> any {
+    final found: mut [magus\KnowledgeNode] = mut [];
+    foreach (n in everyNode(kind).nodes) {
+        if (n.kind == kind) {
+            found.append(n);
+        }
+    }
+    found.sort(fun (a: magus\KnowledgeNode, b: magus\KnowledgeNode) > bool => a.id < b.id);
+    return found;
+}
+
+// load reads the tracked tree and the symbol index. It refuses a partial index: a
+// project the index could not read would silently drop its pairs.
+export fun load() > Corpus !> any {
+    final root = vcs\root();
+    final paths = trackedPaths();
+    final described = magus\describe.file(paths);
+    final generated: mut {str: bool} = mut {};
+    foreach (d in described.files) {
+        generated[d.path] = d.role == "output";
+    }
+    final files: mut [CorpusFile] = mut [];
+    final byPath: mut {str: CorpusFile} = mut {};
+    foreach (p in paths) {
+        final abs = fs\join(root, name: p);
+        final size = fs\size(abs);
+        if (size > maxBytes) {
+            continue;
+        }
+        final language = languages[fs\ext(p)] ?? "";
+        final f = CorpusFile{
+            path = p,
+            slice = sliceOf(p, language: language),
+            language = language,
+            generated = generated[p] ?? false,
+            bytes = size,
+            sha256 = crypto\sha256File(abs),
+            holdout = holdout\isHoldout(p),
+        };
+        files.append(f);
+        byPath[p] = f;
+    }
+
+    final digest = magus\symbolIndexDigest();
+    if (!digest.indexed or digest.gaps.len() > 0) {
+        throw "corpus: the symbol index is missing or partial ({digest.gaps.len()} gaps); run `magus graph build`";
+    }
+    final q = everyNode("symbol");
+    final symbols: mut [magus\KnowledgeNode] = mut [];
+    final byFile: mut {str: mut [magus\KnowledgeNode]} = mut {};
+    foreach (n in q.nodes) {
+        if (n.kind != "symbol" or n.source == "") {
+            continue;
+        }
+        symbols.append(n);
+        final path = spanPath(n.source);
+        if (byFile[path] == null) {
+            byFile[path] = mut [];
+        }
+        byFile[path]!.append(n);
+    }
+    symbols.sort(fun (a: magus\KnowledgeNode, b: magus\KnowledgeNode) > bool => a.id < b.id);
+    final refLinks: mut [magus\KnowledgeEdge] = mut [];
+    foreach (e in q.links) {
+        if (e.relation == "references" and e.source.startsWith("file:") and e.target.startsWith("symbol:")) {
+            refLinks.append(e);
+        }
+    }
+    refLinks.sort(fun (a: magus\KnowledgeEdge, b: magus\KnowledgeEdge) > bool => if (a.target == b.target) a.source < b.source else a.target < b.target);
+    final frozen: mut {str: [magus\KnowledgeNode]} = mut {};
+    foreach (k, v in byFile) {
+        frozen[k] = v;
+    }
+    return Corpus{
+        root = root,
+        files = files,
+        byPath = byPath,
+        symbols = symbols,
+        symbolsByFile = frozen,
+        refLinks = refLinks,
+        cache = mut {},
+    };
+}
+
+// spanPath is the path part of a graph source, "path:line" or "path#anchor".
+export fun spanPath(source: str) > str {
+    final hash = source.indexOf("#");
+    if (hash -> h) {
+        return source.sub(0, len: h);
+    }
+    final parts = source.split(":");
+    if (parts.len() > 1 and std\parseInt(parts[parts.len() - 1]) != null) {
+        return parts.sub(0, len: parts.len() - 1).join(":");
+    }
+    return source;
+}
+
+// spanLine is the line of a "path:line" graph source, or 0.
+export fun spanLine(source: str) > int {
+    final parts = source.split(":");
+    return std\parseInt(parts[parts.len() - 1]) ?? 0;
+}
+
+// quoted is every double-quoted literal on line, in order, without its quotes.
+export fun quoted(line: str) > [str] {
+    final found: mut [str] = mut [];
+    final parts = line.split("\"");
+    var i = 1;
+    while (i < parts.len() - 1) {
+        found.append(parts[i]);
+        i = i + 2;
+    }
+    return found;
+}
+
+fun indentOf(line: str) > int {
+    var n = 0;
+    while (n < line.len() and (line.sub(n, len: 1) == " " or line.sub(n, len: 1) == "\t")) {
+        n = n + 1;
+    }
+    return n;
+}
+
+// blockEnd is the line closing the brace block a declaration opens at line: the
+// first later line at the declaration's indent that starts with "}". A declaration
+// that opens no block ends where it starts.
+export fun blockEnd(c: Corpus, path: str, line: int) > int !> any {
+    final ls = c.lines(path);
+    final head = ls[line - 1];
+    final trimmed = head.trim();
+    if (!trimmed.endsWith("\{") and !trimmed.endsWith("(")) {
+        return line;
+    }
+    final indent = indentOf(head);
+    var n = line + 1;
+    while (n <= ls.len()) {
+        final l = ls[n - 1];
+        if (indentOf(l) == indent and (l.trim().startsWith("}") or l.trim().startsWith(")"))) {
+            return n;
+        }
+        n = n + 1;
+    }
+    return line;
+}
+
+// commentAbove is the first line of the // block that ends right above line, or 0
+// when the line above is not a comment.
+export fun commentAbove(c: Corpus, path: str, line: int) > int !> any {
+    var n = line - 1;
+    while (n >= 1 and c.line(path, n: n).trim().startsWith("//")) {
+        n = n - 1;
+    }
+    return if (n == line - 1) 0 else n + 1;
+}
+
+export object Heading {
+    line: int,
+    level: int,
+    text: str,
+}
+
+// headings lists a Markdown file's ATX headings outside fenced code, in order, with
+// trailing #s and backticks dropped from the text the graph labels them by.
+export fun headings(c: Corpus, path: str) > [Heading] !> any {
+    final found: mut [Heading] = mut [];
+    var fenced = false;
+    foreach (i, l in c.lines(path)) {
+        final t = l.trim();
+        if (t.startsWith("```") or t.startsWith("~~~")) {
+            fenced = !fenced;
+            continue;
+        }
+        if (fenced or !t.startsWith("#")) {
+            continue;
+        }
+        var level = 0;
+        while (level < t.len() and t.sub(level, len: 1) == "#") {
+            level = level + 1;
+        }
+        if (level > 6 or level >= t.len() or t.sub(level, len: 1) != " ") {
+            continue;
+        }
+        var text = t.sub(level + 1, len: t.len() - level - 1).trim();
+        while (text.endsWith("#")) {
+            text = text.sub(0, len: text.len() - 1).trim();
+        }
+        found.append(Heading{line = i + 1, level = level, text = text.replace("`", with: "")});
+    }
+    return found;
+}
+
+// sectionEnd is the last non-blank line of the section heading h opens: up to the next
+// heading at h's level or above, or to the next heading at all when lead is set.
+export fun sectionEnd(c: Corpus, path: str, hs: [Heading], h: Heading, lead: bool) > int !> any {
+    var end = c.lines(path).len();
+    foreach (o in hs) {
+        if (o.line > h.line and (lead or o.level <= h.level)) {
+            end = o.line - 1;
+            break;
+        }
+    }
+    while (end > h.line and c.line(path, n: end).trim() == "") {
+        end = end - 1;
+    }
+    return end;
+}
+
+// sectionSpan is the "path:a-b" span of the heading labelled label at level, or "".
+export fun sectionSpan(c: Corpus, path: str, label: str, level: int) > str !> any {
+    if (!c.has(path)) {
+        return "";
+    }
+    final hs = headings(c, path: path);
+    foreach (h in hs) {
+        if (h.text == label.replace("`", with: "") and (level == 0 or h.level == level)) {
+            return "{path}:{h.line}-{sectionEnd(c, path: path, hs: hs, h: h, lead: false)}";
+        }
+    }
+    return "";
+}
+
+// The forced vocabulary: sets every table must carry whatever their corpus counts.
+// Each names the declaration it was read from.
+fun literalSet(c: Corpus, name: str, file: str) > {str: any} !> any {
+    foreach (s in c.symbolsByFile[file] ?? []) {
+        if (s.label == name and s.attrs["symbol_kind"] == "Variable") {
+            final start = spanLine(s.source);
+            final end = blockEnd(c, path: file, line: start);
+            final tokens: mut [str] = mut [];
+            for (var n = start + 1; n < end; n = n + 1) {
+                final ln = c.line(file, n: n).trim();
+                if (ln.startsWith("//")) {
+                    continue;
+                }
+                foreach (q in quoted(ln)) {
+                    tokens.append(q);
+                }
+            }
+            return {"ref": "{file}:{start}-{end}", "symbol": s.id, "tokens": uniqueSorted(tokens)};
+        }
+    }
+    throw "corpus: {file} declares no variable {name}; the forced set lost its source of truth";
+}
+
+fun withField(key: str, value: str, record: {str: any}) > {str: any} {
+    final m: mut {str: any} = mut {};
+    m[key] = value;
+    foreach (k, v in record) {
+        m[k] = v;
+    }
+    return m;
+}
+
+fun tagged(kind: str, record: {str: any}) > {str: any} {
+    return withField("kind", value: kind, record: record);
+}
+
+export fun splitOf(held: bool) > str {
+    return if (held) "holdout" else "train";
+}
+
+export fun uniqueSorted(xs: [str]) > [str] {
+    final seen: mut {str: bool} = mut {};
+    final keep: mut [str] = mut [];
+    foreach (x in xs) {
+        if (x != "" and seen[x] == null) {
+            seen[x] = true;
+            keep.append(x);
+        }
+    }
+    keep.sort(fun (a: str, b: str) > bool => a < b);
+    return keep;
+}
+
+// buzzName is the method name in a host signature: `archive\readFile(src, ...)`.
+export fun buzzName(signature: str) > str {
+    final slash = signature.indexOf("\\") ?? -1;
+    final paren = signature.indexOf("(") ?? signature.len();
+    if (slash < 0 or paren <= slash) {
+        return "";
+    }
+    return signature.sub(slash + 1, len: paren - slash - 1);
+}
+
+fun forcedSets(c: Corpus) > [{str: any}] !> any {
+    final sets: mut [{str: any}] = mut [];
+    final keywords = literalSet(c, name: "keywords", file: "libs/gopherbuzz/token/token.go");
+    sets.append(withField("set", value: "buzz-keywords", record: keywords));
+    final reserved = literalSet(c, name: "reservedIdents", file: "libs/gopherbuzz/parser.go");
+    sets.append(withField("set", value: "buzz-reserved", record: reserved));
+    final builtins = literalSet(c, name: "builtinMethodNames", file: "libs/gopherbuzz/vm/operators.go");
+    sets.append(withField("set", value: "buzz-builtin-methods", record: builtins));
+
+    final std: mut [str] = mut [];
+    foreach (f in c.files) {
+        if (f.path.startsWith("libs/gopherbuzz/std/") and f.language == "buzz" and f.path.split("/").len() == 4) {
+            std.append(fs\basename(f.path).replace(".buzz", with: ""));
+        }
+    }
+    foreach (n in nodes("function")) {
+        if (n.id.startsWith("function:libs/gopherbuzz/std/") and n.attrs["exported"] == "true") {
+            std.append(n.label);
+        }
+    }
+    sets.append({"set": "buzz-std", "ref": "libs/gopherbuzz/std/*.buzz", "tokens": uniqueSorted(std)});
+
+    final host: mut [str] = mut [];
+    foreach (m in nodes("module")) {
+        host.append(m.label);
+    }
+    foreach (m in nodes("method")) {
+        final name = buzzName(m.attrs["buzz"] ?? "");
+        if (name != "") {
+            host.append(name);
+        }
+    }
+    sets.append({"set": "host-modules", "ref": "kind=module kind=method", "tokens": uniqueSorted(host)});
+
+    final codes: mut [str] = mut [];
+    foreach (d in nodes("diagnostic")) {
+        codes.append(d.label);
+    }
+    foreach (s in c.symbolsByFile["libs/gopherbuzz/diagnostics.go"] ?? []) {
+        foreach (q in quoted(s.attrs["signature"] ?? "")) {
+            if (q.startsWith("BZZ")) {
+                codes.append(q);
+            }
+        }
+    }
+    sets.append({"set": "diagnostic-codes", "ref": "kind=diagnostic libs/gopherbuzz/diagnostics.go", "tokens": uniqueSorted(codes)});
+
+    final names: mut [str] = mut [];
+    foreach (s in nodes("spell")) {
+        names.append(s.label);
+    }
+    foreach (o in nodes("op")) {
+        names.append(o.label);
+    }
+    foreach (d in nodes("doc")) {
+        final prefix = "doc:docs/reference/manpage/magus-";
+        if (d.id.startsWith(prefix) and d.id.endsWith(".md")) {
+            final verb = d.id.sub(prefix.len(), len: d.id.len() - prefix.len() - 3);
+            foreach (w in verb.split("-")) {
+                names.append(w);
+            }
+        }
+    }
+    sets.append({"set": "graph-names", "ref": "kind=spell kind=op docs/reference/manpage", "tokens": uniqueSorted(names)});
+    return sets;
+}
+
+// The approved downloads, pinned by the HF revision and the LFS sha256 the hub serves.
+// path is relative to the cache root (XDG_CACHE_HOME/magus-embed). CoRNStack-Go takes
+// shards in filename order until 300k pairs: 100,000 rows each.
+final cornstackRev = "570a654bad26af77c7a9f8d719ff3549105da5f9";
+final finewebRev = "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9";
+
+fun inputs() > [{str: any}] {
+    final cornstack = [
+        ["shard-00000.jsonl.gz", "37579396d1d7837e5ae77cebfb36b54cf2f1abbf9c81861f8733757f2eb98ccc", "1139142206"],
+        ["shard-00001.jsonl.gz", "7ba01b8db7db37a652aea3ebf807fa1eb1bde85244dd726955e6ddeab9ba686a", "1108145875"],
+        ["shard-00002.jsonl.gz", "fd59ce8ab687db0c1f582ebe10cc4b818384f0a34328a4dbf4e4ce3d1ff0d1a7", "1099894127"],
+    ];
+    final found: mut [{str: any}] = mut [];
+    foreach (s in cornstack) {
+        found.append({
+            "name": "cornstack-go-v1/{s[0]}",
+            "source": "https://huggingface.co/datasets/nomic-ai/cornstack-go-v1/resolve/{cornstackRev}/{s[0]}",
+            "revision": cornstackRev,
+            "sha256": s[1],
+            "size": std\parseInt(s[2]) ?? 0,
+            "license": "Apache-2.0",
+            "path": "datasets/cornstack-go-v1/{cornstackRev}/{s[0]}",
+            "rows": 100000,
+            "use": "MNRL pairs (query, document) and Tokenlearn targets",
+        });
+    }
+    found.append({
+        "name": "fineweb-edu/sample/10BT/013_00000.parquet",
+        "source": "https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu/resolve/{finewebRev}/sample/10BT/013_00000.parquet",
+        "revision": finewebRev,
+        "sha256": "b393f51fefab26cd6f4c8f65707c1924f6666c4961a0ebebe04bb57f7ec832de",
+        "size": 540632672,
+        "license": "ODC-By-1.0",
+        "path": "datasets/fineweb-edu/{finewebRev}/sample/10BT/013_00000.parquet",
+        "use": "vocab coverage and Tokenlearn targets for prose: the first 131,072 passages",
+    });
+    return found;
+}
+
+// write emits gen/corpus.jsonl: the pinned downloads, the forced vocabulary sets, the
+// figures and every corpus file, each line tagged by kind and sorted within it. A
+// file's sha256 pins the blob every pairs.jsonl span indexes into.
+export fun write(c: Corpus, figures: [{str: any}], target: str) > {str: int} !> any {
+    final lines: mut [str] = mut [];
+    foreach (pin in inputs()) {
+        lines.append(json\stringify(tagged("input", record: pin)));
+    }
+    foreach (s in forcedSets(c)) {
+        lines.append(json\stringify(tagged("forced", record: s)));
+    }
+    foreach (f in figures) {
+        lines.append(json\stringify(tagged("figure", record: f)));
+    }
+    final counts: mut {str: int} = mut {};
+    foreach (f in c.files) {
+        lines.append(json\stringify({
+            "kind": "file",
+            "path": f.path,
+            "slice": f.slice,
+            "language": f.language,
+            "generated": f.generated,
+            "bytes": f.bytes,
+            "sha256": f.sha256,
+            "split": splitOf(f.holdout),
+        }));
+        final key = f.slice + "/" + splitOf(f.holdout);
+        counts[key] = (counts[key] ?? 0) + 1;
+    }
+    fs\writeFile(target, content: lines.join("\n") + "\n");
+    return counts;
+}

@@ -1,5 +1,11 @@
+import "std";
+import "fs";
 import "magus";
+import "project/../.." as workspace;
 import "../../hack/magusfile/advisories" as advisories;
+import "corpus";
+import "holdout";
+import "pairs";
 
 import "magus/spell/go";
 
@@ -45,6 +51,29 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
     final inheritedFatal = advisories\inheritedFatal(args);
     ctx.needs(format);
     advisories\govulncheck(ctx, go: go, inheritedFatal: inheritedFatal);
+}
+
+// Mines gen/: the corpus (tracked files, the pinned downloads, the forced vocabulary,
+// the figures), the holdout files and the training pairs, all read off the tracked
+// tree and the knowledge graph. symbol-index.json keys the cache on the symbol index.
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(workspace\symbol_digest_generate);
+    ctx.readsFiles("corpus.buzz", "holdout.buzz", "pairs.buzz",
+        workspace\file("gen/symbol-index.json"), workspace\file("**/*.go"), workspace\file("**/*.buzz"),
+        workspace\file("**/*.md"), workspace\file("**/*.ts"), workspace\file("**/*.tsx"),
+        workspace\file("docs/assets/gen/diagram-*-light.svg"));
+    ctx.writesFiles("gen/corpus.jsonl", "gen/holdout.jsonl", "gen/pairs.jsonl");
+    fs\mkdirAll("gen");
+    final c = corpus\load();
+    final paths: mut [str] = mut [];
+    foreach (f in c.files) {
+        paths.append(f.path);
+    }
+    final held = holdout\write(paths, target: fs\join("gen", name: "holdout.jsonl"));
+    final figs = pairs\figures(c);
+    final files = corpus\write(c, figures: figs, target: fs\join("gen", name: "corpus.jsonl"));
+    final mined = pairs\write(c, figs: figs, target: fs\join("gen", name: "pairs.jsonl"));
+    std\print("corpus {files}; holdout files {held}; pairs {mined}");
 }
 
 // Downloads every input inputs.jsonl pins, verifying each sha256. Args after -- name

@@ -1,0 +1,57 @@
+import "std";
+import "crypto";
+import "fs";
+import "encoding/json";
+
+// The version in the salt lets a later split re-deal files without colliding with
+// tables trained on this one.
+final salt = "embed-holdout/v1:";
+final hexDigits = "0123456789abcdef";
+
+fun prefixValue(digest: str) > int {
+    var v = 0;
+    for (var i = 0; i < 8; i = i + 1) {
+        v = v * 16 + (hexDigits.indexOf(digest.sub(i, len: 1)) ?? 0);
+    }
+    return v;
+}
+
+// bucket is the first 8 hex digits of sha256(salt + path), read as a uint32, mod 10.
+export fun bucket(path: str) > int {
+    return prefixValue(crypto\sha256Hex(salt + path)) % 10;
+}
+
+// isHoldout reports whether path is evaluation-only: about 20% of files, every
+// language alike. Its text never reaches the vocab counts, the targets or a train pair.
+export fun isHoldout(path: str) > bool {
+    return bucket(path) < 2;
+}
+
+// figureFold deals a figure into one of 3 folds by sha256 of its id; fold 0 evaluates.
+export fun figureFold(id: str) > int {
+    return prefixValue(crypto\sha256Hex(id)) % 3;
+}
+
+// write records every holdout path among paths, sorted, one {"path", "bucket"} per line.
+export fun write(paths: [str], target: str) > int !> any {
+    final held: mut [str] = mut [];
+    foreach (p in paths) {
+        if (isHoldout(p)) {
+            held.append(p);
+        }
+    }
+    held.sort(fun (a: str, b: str) > bool => a < b);
+    final lines: mut [str] = mut [];
+    foreach (p in held) {
+        lines.append(json\stringify({"path": p, "bucket": bucket(p)}));
+    }
+    fs\writeFile(target, content: lines.join("\n") + "\n");
+    return held.len();
+}
+
+test "bucket is stable and in range" {
+    std\assert(bucket("internal/textrank/tokens.go") == bucket("internal/textrank/tokens.go"), message: "stable");
+    std\assert(bucket("a") >= 0 and bucket("a") < 10, message: "range");
+    std\assert(prefixValue("0000000a") == 10, message: "hex prefix");
+    std\assert(prefixValue("ffffffff") == 4294967295, message: "uint32");
+}
