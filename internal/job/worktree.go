@@ -39,10 +39,13 @@ func MirroredBinary(exe, root string) string {
 
 // ForkWorktree makes the checkout a fork of job id names at dir, from the revision
 // checkpoint names (the forking checkout's when it names none), and places binary in it when binary is
-// not "". made is false when the job already owns the checkout at dir, which is returned
-// as it stands. A job owning another standing checkout, a checkpoint carrying uncommitted
-// changes the new checkout would not hold, and a version control that cannot make one are
-// refused.
+// not "". binary is the running magus (see [MirroredBinary]), whose build ctx carries, and it
+// is placed only in a checkout at the commit it was built at: anywhere else its guard cannot
+// load the tree and the job could change nothing. made is false when the job already owns
+// the checkout at dir, which is returned as it stands. A job owning another standing
+// checkout, a checkpoint carrying uncommitted changes the new checkout would not hold, a
+// binary built elsewhere or from uncommitted changes, and a version control that cannot make
+// one are refused.
 //
 // Nothing is written to the store: the caller records the result once the fork lands, and
 // discards it with [Store.DiscardWorktree] when the fork is refused.
@@ -86,6 +89,25 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 	base, err := drv.FindCommit(ctx, source, revision)
 	if err != nil {
 		return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout starts at %s, which %s cannot find: %w", id, revision, drv.Name(), err)
+	}
+	if binary != "" {
+		build := types.MagusBuildFromContext(ctx)
+		switch {
+		case build.Commit == "" || build.Commit == "unknown":
+			return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout would get %s, which records no commit it was built from, so whether it loads the checkout at %s cannot be told: rebuild ./magus with `magus run go-build .`",
+				id, binary, base.ID)
+		case strings.HasSuffix(build.Version, "-dirty"):
+			return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout would get %s, built from changes to %s nobody committed, which a checkout at %s would not hold: commit them and rebuild ./magus first",
+				id, binary, build.Commit, base.ID)
+		}
+		built, err := drv.FindCommit(ctx, source, build.Commit)
+		if err != nil {
+			return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout would get %s, built at %s, which %s cannot find: %w", id, binary, build.Commit, drv.Name(), err)
+		}
+		if built.ID != base.ID {
+			return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout would start at %s, and %s, which it places there, was built at %s, so the job could change nothing there until a binary built at %s is placed: fork at `--checkpoint %s`, or rebuild ./magus at %s first",
+				id, base.ID, binary, built.ID, base.ID, built.ID, base.ID)
+		}
 	}
 	if err := drv.CreateCheckout(ctx, source, dir, base.ID); err != nil {
 		return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout at %s: %w", id, dir, err)

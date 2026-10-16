@@ -1,6 +1,7 @@
 package job
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -76,20 +77,90 @@ func TestMirroredBinaryIsOnlyTheForkingCheckoutsOwnMagus(t *testing.T) {
 	assert.Empty(t, MirroredBinary(onPath, t.TempDir()), "a checkout holding no ./magus has none to mirror")
 }
 
-func TestForkWorktreePlacesTheForkersBinary(t *testing.T) {
-	t.Parallel()
-	s, _, _ := worktreeStore(t)
+// forkersBinary is a stand-in ./magus, and a context saying the running magus was built as
+// build.
+func forkersBinary(t *testing.T, build types.MagusBuild) (string, context.Context) {
+	t.Helper()
 	bin := filepath.Join(t.TempDir(), "magus")
 	require.NoError(t, os.WriteFile(bin, []byte("build 1\n"), 0o755))
+	return bin, types.WithMagusBuild(t.Context(), build)
+}
 
-	row := forkInto(t, s, "w1", bin)
-	assert.Equal(t, filepath.Join(row.Worktree.Root, "magus"), row.Worktree.Binary)
-	body, err := os.ReadFile(row.Worktree.Binary)
+func TestForkWorktreePlacesTheForkersBinary(t *testing.T) {
+	t.Parallel()
+	s, _, repo := worktreeStore(t)
+	bin, ctx := forkersBinary(t, types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: repo.Head()})
+
+	wt, made, err := s.ForkWorktree(ctx, "w1", filepath.Join(t.TempDir(), "w1"), "", bin)
+	require.NoError(t, err)
+	require.True(t, made)
+	assert.Equal(t, filepath.Join(wt.Root, "magus"), wt.Binary)
+	body, err := os.ReadFile(wt.Binary)
 	require.NoError(t, err)
 	assert.Equal(t, "build 1\n", string(body))
-	info, err := os.Stat(row.Worktree.Binary)
+	info, err := os.Stat(wt.Binary)
 	require.NoError(t, err)
 	assert.NotZero(t, info.Mode()&0o111, "the placed binary runs")
+}
+
+// A worker whose ./magus was built at another commit than its checkout cannot load the tree,
+// so its guard denies every change it makes: the fork refuses to make that worker, before any
+// checkout exists, and places the binary at the commit it was built at.
+func TestForkWorktreePlacesTheBinaryOnlyAtTheCommitItWasBuiltAt(t *testing.T) {
+	t.Parallel()
+	s, _, repo := worktreeStore(t)
+	built := repo.Head()
+	later := repo.Commit("later", map[string]string{"b.txt": "b\n"})
+
+	for name, tc := range map[string]struct {
+		build      types.MagusBuild
+		checkpoint string
+		want       string
+	}{
+		"the forker's revision is past the build": {
+			build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built},
+			want:  "would start at " + later + ", and ",
+		},
+		"a checkpoint past the build": {
+			build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built}, checkpoint: later,
+			want: "was built at " + built + ", so the job could change nothing there until a binary built at " + later + " is placed: fork at `--checkpoint " + built + "`",
+		},
+		"a checkpoint before the build": {
+			build: types.MagusBuild{Version: "v0.5.0-2-gdef", Commit: later}, checkpoint: built,
+			want: "was built at " + later,
+		},
+		"an unstamped build": {
+			build: types.MagusBuild{Version: "unknown", Commit: "unknown"}, checkpoint: built,
+			want: "records no commit it was built from",
+		},
+		"a build from uncommitted changes": {
+			build: types.MagusBuild{Version: "v0.5.0-1-gabc-dirty", Commit: built}, checkpoint: built,
+			want: "built from changes to " + built + " nobody committed",
+		},
+		"a build at a commit this repository lacks": {
+			build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: "0123456789abcdef0123456789abcdef01234567"}, checkpoint: built,
+			want: "built at 0123456789abcdef0123456789abcdef01234567, which git cannot find",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			bin, ctx := forkersBinary(t, tc.build)
+			dir := filepath.Join(t.TempDir(), "w1")
+			_, _, err := s.ForkWorktree(ctx, "w1", dir, tc.checkpoint, bin)
+			require.ErrorContains(t, err, tc.want)
+			assert.NoDirExists(t, dir, "nothing is made for a worker that could change nothing")
+		})
+	}
+
+	bin, ctx := forkersBinary(t, types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built[:9]})
+	wt, made, err := s.ForkWorktree(ctx, "w2", filepath.Join(t.TempDir(), "w2"), built, bin)
+	require.NoError(t, err, "an abbreviated build commit resolves to the checkpoint")
+	require.True(t, made)
+	assert.Equal(t, built, wt.Base)
+	assert.FileExists(t, wt.Binary)
+
+	_, made, err = s.ForkWorktree(t.Context(), "w3", filepath.Join(t.TempDir(), "w3"), "", "")
+	require.NoError(t, err, "a forker running magus from PATH places nothing, so nothing is compared")
+	assert.True(t, made)
 }
 
 func TestExecTakesAJobInItsOwnCheckoutAndNowhereElse(t *testing.T) {
