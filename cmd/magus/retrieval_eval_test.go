@@ -57,7 +57,7 @@ func TestRetrievalEval(t *testing.T) {
 	r.symbols, err = loadWorkspaceGraph(ctx, m, cfg, false, false, true)
 	require.NoError(t, err)
 	r.known = make(map[string]string)
-	for _, n := range r.domain.Nodes() {
+	for _, n := range r.symbols.Nodes() {
 		r.known[n.ID] = n.Source
 	}
 
@@ -98,7 +98,8 @@ func readRetrievalJudgments(t *testing.T, file string) []rankeval.Judgment {
 // and symbols, the default graph with every symbol shard merged, which is what
 // searchGraph, explainNode and loadRefsGraph load per call for a read that seeds the
 // symbol layer. coverage measures the symbol indexes once rather than per read, which
-// walks the tree. known maps each default graph node id to its Source. Safe for
+// walks the tree. known maps each node id of symbols to its Source: a Go file's file:
+// and dir: nodes, which most gold names, exist only in the symbol shards. Safe for
 // concurrent use: a knowledge.Graph is safe for concurrent reads.
 type replayer struct {
 	root     string
