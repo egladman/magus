@@ -1,5 +1,5 @@
 // Tier 2, measured shape: an ENFORCED metric fails only what the record does not list, and
-// `magus run format .` deletes what no longer violates and follows a renamed or moved item.
+// `magus run format .` deletes what no longer violates and follows a renamed or moved item whose recorded shape names exactly one candidate.
 // Tier 3, judgment: every other metric is advice.
 namespace conformanceratchet;
 
