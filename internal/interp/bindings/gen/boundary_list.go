@@ -210,6 +210,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ProjectEntry", Zero: types.ProjectEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectEntry(v.(types.ProjectEntry)) }},
 	{Name: "ProjectRef", Zero: types.ProjectRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectRef(v.(types.ProjectRef)) }},
 	{Name: "Projects", Zero: types.ProjectsOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectsOutput(v.(types.ProjectsOutput)) }},
+	{Name: "PublicSymbol", Zero: types.PublicSymbol{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPublicSymbol(v.(types.PublicSymbol)) }},
 	{Name: "QueryResult", Zero: types.KnowledgeQueryOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeQueryOutput(v.(types.KnowledgeQueryOutput), enums)
 	}},

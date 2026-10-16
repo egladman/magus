@@ -785,6 +785,16 @@ func ObjectKnowledgeEdgeRef(v types.KnowledgeEdgeRef) vm.Value {
 	return out
 }
 
+func ObjectPublicSymbol(v types.PublicSymbol) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("label", vm.StrValue(v.Label))
+	out.MapSet("dir", vm.StrValue(v.Dir))
+	out.MapSet("signature", vm.StrValue(v.Signature))
+	out.MapSet("usedBy", vm.IntValue(int64(v.UsedBy)))
+	return out
+}
+
 func ObjectKnowledgeExplainOutput(v types.KnowledgeExplainOutput, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StrValue(v.Definition))
@@ -803,6 +813,12 @@ func ObjectKnowledgeExplainOutput(v types.KnowledgeExplainOutput, enums ffi.Enum
 	out.MapSet("in", vm.ListValue(itemsIn))
 	out.MapSet("docsURL", vm.StrValue(v.DocsURL))
 	out.MapSet("resolution", enums.Case("KnowledgeResolution", string(v.Resolution)))
+	itemsPublicAPI := make([]vm.Value, len(v.PublicAPI))
+	for indexPublicAPI := range v.PublicAPI {
+		itemsPublicAPI[indexPublicAPI] = ObjectPublicSymbol(v.PublicAPI[indexPublicAPI])
+	}
+	out.MapSet("publicAPI", vm.ListValue(itemsPublicAPI))
+	out.MapSet("publicAPIGap", vm.StrValue(v.PublicAPIGap))
 	return out
 }
 

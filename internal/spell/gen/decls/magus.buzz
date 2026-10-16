@@ -398,6 +398,14 @@ export object EdgeRef {
     attrs: {str: str} = {},
 }
 
+export object PublicSymbol {
+    id: str = "",
+    label: str = "",
+    dir: str = "",
+    signature: str = "",
+    usedBy: int = 0,
+}
+
 export object ExplainResult {
     definition: str = "",
     schemaVersion: int = 0,
@@ -407,6 +415,8 @@ export object ExplainResult {
     @"in": [EdgeRef] = [],
     docsURL: str = "",
     resolution: KnowledgeResolution = KnowledgeResolution.none,
+    publicAPI: [PublicSymbol] = [],
+    publicAPIGap: str = "",
 }
 
 export object ImpactSymbol {

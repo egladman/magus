@@ -2693,6 +2693,11 @@ github.com/egladman/magus/types.KnowledgeAnswer.StaleIndexDetails field []Knowle
 github.com/egladman/magus/types.KnowledgeAnswer.StaleIndexes field []string "json:\"stale_indexes,omitempty\" yaml:\"stale_indexes,omitempty\""
 github.com/egladman/magus/types.KnowledgeAnswer.Text field *KnowledgeTextPresence "json:\"text,omitempty\"          yaml:\"text,omitempty\""
 github.com/egladman/magus/types.KnowledgeAnswer.Verdict field KnowledgeVerdict "json:\"verdict\"                 yaml:\"verdict\""
+github.com/egladman/magus/types.KnowledgeCoChange type struct
+github.com/egladman/magus/types.KnowledgeCoChange.A field string "json:\"a\""
+github.com/egladman/magus/types.KnowledgeCoChange.B field string "json:\"b\""
+github.com/egladman/magus/types.KnowledgeCoChange.Confidence field float64 "json:\"confidence\""
+github.com/egladman/magus/types.KnowledgeCoChange.Support field int "json:\"support\""
 github.com/egladman/magus/types.KnowledgeDefinitionSite type struct
 github.com/egladman/magus/types.KnowledgeDefinitionSite.EndLine field int "json:\"end_line,omitempty\" yaml:\"end_line,omitempty\""
 github.com/egladman/magus/types.KnowledgeDefinitionSite.File field string "json:\"file\" yaml:\"file\""
@@ -2741,6 +2746,8 @@ github.com/egladman/magus/types.KnowledgeExplainOutput.DocsURL field string "jso
 github.com/egladman/magus/types.KnowledgeExplainOutput.In field []KnowledgeEdgeRef "json:\"in,omitempty\"   yaml:\"in,omitempty\""
 github.com/egladman/magus/types.KnowledgeExplainOutput.Node field KnowledgeNode "json:\"node\"           yaml:\"node\""
 github.com/egladman/magus/types.KnowledgeExplainOutput.Out field []KnowledgeEdgeRef "json:\"out,omitempty\"  yaml:\"out,omitempty\""
+github.com/egladman/magus/types.KnowledgeExplainOutput.PublicAPI field []PublicSymbol "json:\"public_api,omitempty\" yaml:\"public_api,omitempty\""
+github.com/egladman/magus/types.KnowledgeExplainOutput.PublicAPIGap field string "json:\"public_api_gap,omitempty\" yaml:\"public_api_gap,omitempty\""
 github.com/egladman/magus/types.KnowledgeExplainOutput.Resolution field KnowledgeResolution "json:\"resolution,omitempty\" yaml:\"resolution,omitempty\""
 github.com/egladman/magus/types.KnowledgeExplainOutput.SchemaVersion field int "json:\"schema_version\" yaml:\"schema_version\""
 github.com/egladman/magus/types.KnowledgeFold type struct
@@ -3687,6 +3694,12 @@ github.com/egladman/magus/types.ProjectsOutput.Workspace field string "json:\"wo
 github.com/egladman/magus/types.ProvidedBy func(spellName string) ProjectOrigin
 github.com/egladman/magus/types.ProviderPathRejected const DiagnosticCode = "MGS1023"
 github.com/egladman/magus/types.ProviderProjectShadowed const DiagnosticCode = "MGS1024"
+github.com/egladman/magus/types.PublicSymbol type struct
+github.com/egladman/magus/types.PublicSymbol.Dir field string "json:\"dir\"                 yaml:\"dir\""
+github.com/egladman/magus/types.PublicSymbol.ID field string "json:\"id\"                  yaml:\"id\""
+github.com/egladman/magus/types.PublicSymbol.Label field string "json:\"label\"               yaml:\"label\""
+github.com/egladman/magus/types.PublicSymbol.Signature field string "json:\"signature,omitempty\" yaml:\"signature,omitempty\""
+github.com/egladman/magus/types.PublicSymbol.UsedBy field int "json:\"used_by\" yaml:\"used_by\""
 github.com/egladman/magus/types.PushLease type struct
 github.com/egladman/magus/types.PushLease.Expected field string
 github.com/egladman/magus/types.PushLease.Ref field string
@@ -3768,6 +3781,7 @@ github.com/egladman/magus/types.RegisteredCheckout.Root field string
 github.com/egladman/magus/types.RelationAnnotates const RelationID = "annotates"
 github.com/egladman/magus/types.RelationAuthored const RelationID = "authored"
 github.com/egladman/magus/types.RelationCalls const RelationID = "calls"
+github.com/egladman/magus/types.RelationCoChanges const RelationID = "co_changes"
 github.com/egladman/magus/types.RelationConsumes const RelationID = "consumes"
 github.com/egladman/magus/types.RelationContains const RelationID = "contains"
 github.com/egladman/magus/types.RelationDefines const RelationID = "defines"
