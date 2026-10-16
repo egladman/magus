@@ -153,7 +153,7 @@ func TestListJobs_ReturnsEveryRegisteredJob(t *testing.T) {
 // vocabulary, so a reader never asks which door to knock on for which kind.
 func TestListJobs_ReturnsCatalogAndDelegatedJobs(t *testing.T) {
 	dir := t.TempDir()
-	store := jobstore.NewStore(jobstore.Location{CacheDir: dir, Root: dir})
+	store := jobstore.NewStore(jobstore.Location{StateBase: t.TempDir(), CacheDir: dir, Root: dir})
 	_, err := store.Update(t.Context(), "wave3/merge", func(row *types.Job) {
 		row.State = types.StateRunning
 		row.Model = "opus"
