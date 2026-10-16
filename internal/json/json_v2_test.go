@@ -169,6 +169,11 @@ func encodingJSONImporters(root string, allowed map[string]bool) ([]string, erro
 			if skipJSONScanDir(d.Name()) {
 				return filepath.SkipDir
 			}
+			// A nested module ships apart from magus and cannot import this package
+			// without the magus module depending on repo policy.
+			if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil && path != root {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if !strings.HasSuffix(path, ".go") {
