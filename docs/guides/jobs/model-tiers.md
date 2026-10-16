@@ -80,8 +80,8 @@ magus\job.modelTiers(ModelTier, default: ModelTier.standard,
     bounds: bounds, skills: skills);
 ```
 
-- **The enum is yours.** Its order is the rank, cheapest first. A typo such as
-  `.standrd` fails `magus check`, like any other enum.
+- **The enum is yours.** Its order is the rank, cheapest first. A misspelled
+  tier fails `magus check`, like any other enum.
 - **Every mapping is a `match` over the enum.** Add a tier and `magus check`
   fails until `hosts`, `bounds` and `skills` each cover it.
 - **`hosts` is keyed by harness.** `magus\harness.provider` returns a
