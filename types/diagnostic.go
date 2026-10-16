@@ -596,8 +596,8 @@ const WritePathConfigWholeFile DiagnosticCode = "MGS3036"
 
 // JobRecordInvalid is a job record field that fails its own shape: an id, parent or
 // depends_on that is not a lease id, an unknown state, a timeout that is not a positive
-// duration, a negative max_attempts, a relative checkout, a path outside the workspace, a
-// blank breaks entry, a field spelled both ways, enter mixed with a declaration, an
+// duration, a negative max_attempts, a relative checkout, or a path outside the workspace.
+// So is a blank breaks entry, a field spelled both ways, enter mixed with a declaration, an
 // unknown member, or a waiver on a code that cannot be waived or with no reason.
 const JobRecordInvalid DiagnosticCode = "MGS3037"
 
