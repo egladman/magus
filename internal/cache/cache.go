@@ -329,6 +329,18 @@ type Result struct {
 	CPUMs       int64
 }
 
+// sizing names where c's memory came from, as a journal result spells it.
+func (c StepClaim) sizing() string {
+	switch {
+	case c.MemoryMB == 0:
+		return journal.SizingNone
+	case c.Sizing.Measured():
+		return journal.SizingMeasured
+	default:
+		return journal.SizingDeclared
+	}
+}
+
 // StepClaim is the admission a step was granted before it ran.
 type StepClaim struct {
 	// Started is when the step held every seat it needed and began.
@@ -816,7 +828,7 @@ func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, 
 		}
 	}
 	if ref == "" {
-		ref = c.recordOutput(ctx, s, hash, logData, result.Duration, nil, true)
+		ref = c.recordOutput(ctx, s, hash, logData, result, nil, true)
 	} else {
 		// recordOutput is skipped, so nothing reaches the journal otherwise; a cache hit
 		// is still a target OUTCOME, and a fully-cached run would show no results.
@@ -830,6 +842,7 @@ func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, 
 			Status:     journal.StatusCached,
 			Ref:        ref,
 			DurationMs: result.Duration.Milliseconds(),
+			Sizing:     journal.SizingNone,
 		})
 	}
 	attrs := append(netAttrs(netRec),
@@ -885,7 +898,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	fail := func(err error) (Result, error) {
 		result.Duration = time.Since(start)
 		c.errs.Add(1)
-		ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, err, false)
+		ref := c.recordOutput(ctx, s, hash, rawOutput, result, err, false)
 		result.Ref = ref
 		c.log.ErrorContext(ctx,
 			"cache.error",
@@ -961,7 +974,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 
 	result.Duration = time.Since(start)
 	c.misses.Add(1)
-	ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, nil, false)
+	ref := c.recordOutput(ctx, s, hash, rawOutput, result, nil, false)
 	result.Ref = ref
 
 	// Stored AFTER recordOutput, never before: the remote entry ships this run's output
@@ -1067,8 +1080,9 @@ func (c *Cache) actingLease(ctx context.Context) string {
 // warning and yields an empty ref, so the run's own outcome never hinges on it. runErr
 // nil means the step passed; non-nil means it failed. cacheHit is a separate axis and
 // must come from the caller: by this point a hit and a fresh pass look identical.
-func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []byte, dur time.Duration, runErr error, cacheHit bool) string {
+func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []byte, r Result, runErr error, cacheHit bool) string {
 	nowMs := time.Now().UnixMilli()
+	dur := r.Duration
 	inv := journal.InvocationIDFromContext(ctx)
 	target := reproTarget(s)
 
@@ -1135,6 +1149,11 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 		Ts: nowMs, Project: s.ProjectPath, Target: target, Kind: journal.KindResult,
 		Level: "info", Status: journal.StatusPass, DurationMs: dur.Milliseconds(), Inv: inv, Ref: ref,
 		CacheKey: hash,
+		Slots:    r.Claim.Slots, MemoryMB: r.Claim.MemoryMB, Sizing: r.Claim.sizing(),
+		WaitedMs: r.Claim.Waited.Milliseconds(), MaxRSSBytes: r.MaxRSSBytes, CPUMs: r.CPUMs,
+	}
+	if !r.Claim.Started.IsZero() {
+		result.StartedMs = r.Claim.Started.UnixMilli()
 	}
 	if cacheHit {
 		result.Status = journal.StatusCached

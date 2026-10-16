@@ -60,6 +60,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -183,9 +184,9 @@ type Sizing string
 
 // Sizing values. Empty means the record predates the field.
 const (
-	SizingDeclared Sizing = "declared" // the target's own memory_mb
-	SizingMeasured Sizing = "measured" // narrowed from recorded peaks
-	SizingNone     Sizing = "none"     // no memory claimed: undeclared, or a replay
+	SizingDeclared Sizing = journal.SizingDeclared
+	SizingMeasured Sizing = journal.SizingMeasured
+	SizingNone     Sizing = journal.SizingNone
 )
 
 // UnmarshalJSON decodes a result, reading a duration written under either spelling.

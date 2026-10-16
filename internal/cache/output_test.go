@@ -174,7 +174,7 @@ func TestRecordOutputStampsTheActingLease(t *testing.T) {
 	root, cdir, c := newMutableCache(t)
 	recordIn := func(ctx context.Context) OutputDescriptor {
 		t.Helper()
-		ref := c.recordOutput(ctx, Step{ProjectPath: "api", Target: "test", WorkspaceRoot: root}, "deadbeefcafef00d", []byte("ok\n"), time.Second, nil, false)
+		ref := c.recordOutput(ctx, Step{ProjectPath: "api", Target: "test", WorkspaceRoot: root}, "deadbeefcafef00d", []byte("ok\n"), Result{Duration: time.Second}, nil, false)
 		require.NotEmpty(t, ref)
 		_, d, err := c.outputs.ByRef(ref)
 		require.NoError(t, err)

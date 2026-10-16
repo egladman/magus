@@ -88,6 +88,13 @@ func (h *FactHandler) Handle(ctx context.Context, r slog.Record) error {
 		DiagnosticCode: e.DiagnosticCode,
 		Lease:          h.start.Lease,
 		LeaseFrom:      h.start.LeaseFrom,
+		StartedMs:      e.StartedMs,
+		Slots:          e.Slots,
+		MemoryMB:       e.MemoryMB,
+		Sizing:         Sizing(e.Sizing),
+		WaitedMs:       e.WaitedMs,
+		MaxRSSBytes:    e.MaxRSSBytes,
+		CPUMs:          e.CPUMs,
 	}); err != nil {
 		// One failed append means the store is unwritable (a full disk, a read-only
 		// state dir); retrying per target would repeat the same failure once per
