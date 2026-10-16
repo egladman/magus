@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"cmp"
+	"iter"
 	"slices"
 	"strconv"
 	"strings"
@@ -59,26 +60,9 @@ func (g *Graph) FileFacts(relPath string) FileFacts {
 	if fn, ok := g.node(fid); ok {
 		ff.Coverage = readCoverage(fn)
 	}
-	for _, e := range g.out[fid] {
-		if e.Relation != types.RelationDefines {
-			continue
-		}
-		sn, ok := g.node(e.Target)
-		if !ok || sn.Kind != types.KindSymbol {
-			continue
-		}
+	for sn := range g.definedSymbols(relPath) {
 		sf := SymbolFacts{ID: sn.ID, Label: sn.Label, Coverage: readCoverage(sn)}
-		for _, in := range g.in[sn.ID] {
-			if in.Relation != types.RelationReferences {
-				continue
-			}
-			// Only a SCIP-ingested reference edge carries the count provenance; a
-			// non-SCIP references edge (e.g. charm->target) is skipped rather than
-			// counted as a phantom count-0 caller, mirroring Graph.Refs.
-			count, _, ok := parseRefProvenance(in.Provenance)
-			if !ok {
-				continue
-			}
+		for _, count := range g.symbolReferences(sn.ID) {
 			sf.RefCount += count
 			sf.FileCount++
 		}
@@ -106,29 +90,51 @@ func (g *Graph) Referrers(relPath, declaration string) map[string]int {
 		word = declaration[i+1:]
 	}
 	var out map[string]int
-	for _, e := range g.out[fileID(relPath)] {
-		if e.Relation != types.RelationDefines {
+	for sn := range g.definedSymbols(relPath) {
+		if declaration != "" && sn.Label != word {
 			continue
 		}
-		sn, ok := g.node(e.Target)
-		if !ok || sn.Kind != types.KindSymbol || (declaration != "" && sn.Label != word) {
-			continue
+		for file, count := range g.symbolReferences(sn.ID) {
+			if out == nil {
+				out = map[string]int{}
+			}
+			out[file] += count
 		}
-		for _, in := range g.in[sn.ID] {
+	}
+	return out
+}
+
+// definedSymbols yields each symbol node the workspace-relative relPath defines. The
+// caller runs ensureAdj first.
+func (g *Graph) definedSymbols(relPath string) iter.Seq[types.KnowledgeNode] {
+	return func(yield func(types.KnowledgeNode) bool) {
+		for _, e := range g.out[fileID(relPath)] {
+			if e.Relation != types.RelationDefines {
+				continue
+			}
+			if sn, ok := g.node(e.Target); ok && sn.Kind == types.KindSymbol && !yield(sn) {
+				return
+			}
+		}
+	}
+}
+
+// symbolReferences yields each file referencing the symbol id, with its occurrence count.
+// Only a SCIP-ingested references edge carries the count; any other references edge (a
+// charm->target one) is skipped rather than counted as a phantom count-0 caller, as in
+// Graph.Refs. The caller runs ensureAdj first.
+func (g *Graph) symbolReferences(id string) iter.Seq2[string, int] {
+	return func(yield func(string, int) bool) {
+		for _, in := range g.in[id] {
 			if in.Relation != types.RelationReferences {
 				continue
 			}
 			count, _, ok := parseRefProvenance(in.Provenance)
-			if !ok {
-				continue
+			if ok && !yield(strings.TrimPrefix(in.Source, types.KindFile+":"), count) {
+				return
 			}
-			if out == nil {
-				out = map[string]int{}
-			}
-			out[strings.TrimPrefix(in.Source, types.KindFile+":")] += count
 		}
 	}
-	return out
 }
 
 // readCoverage reads the covered/total ratio the @coverage overlay folded onto a node,
