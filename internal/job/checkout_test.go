@@ -141,6 +141,44 @@ func TestForkRefusesAWorkspaceLoadWritePathInASharedCheckout(t *testing.T) {
 	})
 }
 
+// TestForkIntoItsOwnCheckoutJudgesThatCheckout is why a `--checkout` fork may claim a load
+// file beside a live job: the new job edits its own checkout, where nobody holds anything.
+func TestForkIntoItsOwnCheckoutJudgesThatCheckout(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	root := loadableRepo(t)
+	s := NewStore(tmpLoc(t, root))
+	limits := config.Jobs{}
+
+	held, err := ForkMerge(ctx, s, "wave/worker-one", func(u *types.Job) {
+		u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"internal/job/store.go"}
+	}, limits, nil)
+	require.NoError(t, err)
+	_, err = s.Exec(ctx, held.ID)
+	require.NoError(t, err)
+
+	own := filepath.Join(t.TempDir(), "worker-two")
+	loadClaim := func(u *types.Job) {
+		u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"magusfile.buzz"}
+	}
+
+	t.Run("a fork naming a checkout passes", func(t *testing.T) {
+		stored, err := ForkMerge(ctx, s, "wave/worker-two", func(u *types.Job) {
+			loadClaim(u)
+			u.Worktree = &types.JobWorktree{Root: own}
+		}, limits, nil)
+		require.NoError(t, err)
+		assert.Equal(t, types.WriteProofAlone, stored.WriteProof, "nobody else works in %s", own)
+	})
+
+	t.Run("the same fork without one is still refused", func(t *testing.T) {
+		_, err := ForkMerge(ctx, s, "wave/worker-three", loadClaim, limits, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "wave/worker-one")
+	})
+}
+
 // TestForkRecordsWhetherTheWritePathsWereProvenDisjoint pins the third half of the collision
 // proof: the orchestrator is ADVISED to prove the write paths disjoint, and the row records
 // whether they are, so a plan read later says which forks were proven and which were not.
