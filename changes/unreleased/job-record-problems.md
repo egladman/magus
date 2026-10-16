@@ -1,12 +1,3 @@
-### Added
-
-- **`waivers` on a job record.** A record may waive a write path that is too broad
-  (MGS3043), a regenerated output outside its write paths (MGS3044) or a ci gate it
-  does not run (MGS3045), naming the subject and a reason. No other code is waivable.
-- **Diagnostic codes MGS3039 to MGS3046** for job records that nothing would grade,
-  checks that cannot run, checkpoints that cannot be placed, fork limits, and a
-  workspace configuration file held in a shared checkout.
-
 ### Changed
 
 - **A job record reports every problem at once, each with a code.** `magus job fork`
