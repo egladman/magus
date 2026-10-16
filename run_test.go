@@ -1,16 +1,21 @@
 package magus
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -24,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
@@ -169,16 +175,7 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 
 	// A real broker, and a second client holding the whole host: the refusal crosses the
 	// wire exactly as it does between two worktrees.
-	sockDir, err := os.MkdirTemp("", "brk")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
-	addr := "unix://" + filepath.Join(sockDir, broker.SocketName)
-	ln, err := broker.Listen(t.Context(), addr)
-	require.NoError(t, err)
-	serveCtx, stopServe := context.WithCancel(context.Background())
-	served := make(chan error, 1)
-	go func() { served <- broker.Serve(serveCtx, ln, broker.WithCapacity(10_000, 4)) }()
-	t.Cleanup(func() { stopServe(); <-served })
+	addr := serveBroker(t)
 
 	const holderPID = 4242
 	other, err := broker.Dial(t.Context(), addr)
@@ -233,6 +230,104 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 		Message: diag.Message, // the text is checked for the holder below
 	}, diag, "stream:\n%s", stream.String())
 	assert.Contains(t, diag.Message, holder)
+}
+
+// serveBroker serves a broker with room for 4 slots until the test ends, and returns its
+// address.
+func serveBroker(t *testing.T) string {
+	t.Helper()
+	sockDir, err := os.MkdirTemp("", "brk")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
+	addr := "unix://" + filepath.Join(sockDir, broker.SocketName)
+	ln, err := broker.Listen(t.Context(), addr)
+	require.NoError(t, err)
+	serveCtx, stopServe := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() { served <- broker.Serve(serveCtx, ln, broker.WithCapacity(10_000, 4)) }()
+	t.Cleanup(func() { stopServe(); <-served })
+	return addr
+}
+
+// killedRunArg, followed by a broker's address, makes the test binary the run
+// TestRun_AKilledRunTakesItsStepGroups kills (see runAStepUntilKilled). An argument
+// rather than a variable, because TestMain clears the environment it does not keep.
+const killedRunArg = "killed-run-broker"
+
+// A run killed mid-step runs no release, and the process group its step started is
+// orphaned with it: the broker ends the group when the run's connection closes. Groups
+// that outlived their runs forked for days and stalled the host on 2026-10-15.
+func TestRun_AKilledRunTakesItsStepGroups(t *testing.T) {
+	if args := flag.Args(); len(args) == 2 && args[0] == killedRunArg {
+		os.Exit(runAStepUntilKilled(t, args[1]))
+	}
+	require.Empty(t, flag.Args(), "a run started with arguments it does not take must not start another")
+	if runtime.GOOS == "windows" {
+		t.Skip("windows starts a step's group unwatched")
+	}
+	addr := serveBroker(t)
+
+	run := exec.Command(os.Args[0], "-test.run=^TestRun_AKilledRunTakesItsStepGroups$", killedRunArg, addr)
+	run.Env = append(os.Environ(), "MAGUS_LEVEL=")
+	var stderr bytes.Buffer
+	run.Stderr = &stderr
+	out, err := run.StdoutPipe()
+	require.NoError(t, err)
+	require.NoError(t, run.Start())
+	t.Cleanup(func() { _ = run.Process.Kill(); _ = run.Wait() })
+
+	stdout := bufio.NewReader(out)
+	line, _ := stdout.ReadString('\n')
+	pgid, err := strconv.Atoi(strings.TrimSpace(line))
+	if err != nil {
+		rest, _ := io.ReadAll(stdout)
+		t.Fatalf("the run printed no group:\n%s%s\nstderr:\n%s", line, rest, &stderr)
+	}
+	t.Cleanup(func() { _ = broker.SignalGroup(pgid, true) })
+	require.True(t, groupAlive(pgid), "the step's group runs while its run does")
+
+	require.NoError(t, run.Process.Kill())
+	_ = run.Wait()
+	assert.Eventually(t, func() bool { return !groupAlive(pgid) }, 15*time.Second, 50*time.Millisecond,
+		"the step's group ends with the run that started it")
+}
+
+// runAStepUntilKilled runs one step that starts a group whose leader waits on a
+// background sleep, and prints the group's id once the step's claim holds it. The test
+// kills it first; otherwise the sleep ends within 30 seconds and the run with it.
+func runAStepUntilKilled(t *testing.T, addr string) int {
+	spellName := register.Spell(t, "zzz-killed-run-spell",
+		spells.WithTargets("build"),
+		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
+			// Watching inside the step's own watch, so the print comes after the claim's hold.
+			ctx = spawn.WithGroupWatch(ctx, func(pgid int, _ string) func() {
+				fmt.Println(pgid)
+				return func() {}
+			})
+			_, err := spawn.Exec(ctx, "sh", []string{"-c", "sleep 30 & wait"}, spawn.ExecOptions{Quiet: true})
+			return nil, err
+		}),
+	)
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	m, err := Open(context.Background(), w.Root(), WithWorkspaceRegistry(reg), WithBroker(broker.NewClient(addr)),
+		WithBrokerPolicy(types.BrokerRequired), WithSpawnRule(TierCeiling))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	if err := m.Run(context.Background(), []types.Target{{Path: ".", Name: "build"}}); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	return 0
+}
+
+// groupAlive reports whether any process is left in group pgid.
+func groupAlive(pgid int) bool {
+	return exec.Command("sh", "-c", `kill -0 -- "-$1" 2>/dev/null`, "sh", strconv.Itoa(pgid)).Run() == nil
 }
 
 // TestRun_NoCacheReexecutesAndRefreshesEntry guards the A7 fix: magus run
