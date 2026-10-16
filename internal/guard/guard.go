@@ -2104,34 +2104,22 @@ func leaseRows(ctx context.Context, at location) ([]types.Job, error) {
 	return job.NewStore(at.jobs()).List()
 }
 
-// sessionCopy is copySessionState's copy and the release that removes it, which also runs
-// once ctx is done. A dry run nested in a hook judgment that runs out of time is still
-// running when JudgeWithin answers unjudged and the process exits, so its deferred release
-// never runs.
-func sessionCopy(ctx context.Context, cacheDir string, keys ...string) (string, func()) {
-	dir := copySessionState(cacheDir, keys...)
-	if dir == "" {
-		return "", func() {}
-	}
-	remove := func() { _ = os.RemoveAll(dir) }
-	stop := context.AfterFunc(ctx, remove)
-	return dir, func() {
-		stop()
-		remove()
-	}
-}
-
-// copySessionState copies into a new temporary directory what the gates keyed on keys hold
-// under cacheDir, and the served-next journal, keeping modification times, since an
-// anonymous marker expires on its age. "" when there is nothing to copy or the copy cannot
-// be made: a dry run then reads a session nothing was told yet, rather than write the real one.
-func copySessionState(cacheDir string, keys ...string) string {
+// sessionCopy copies into a new temporary directory what the gates keyed on keys hold under
+// cacheDir, and the served-next journal, keeping modification times, since an anonymous
+// marker expires on its age. "" when there is nothing to copy or the copy cannot be made: a
+// dry run then reads a session nothing was told yet, rather than write the real one.
+//
+// release removes the copy, which also happens once ctx is done. A dry run nested in a hook
+// judgment that runs out of time is still running when JudgeWithin answers unjudged and the
+// process exits, so its deferred release never runs.
+func sessionCopy(ctx context.Context, cacheDir string, keys ...string) (dir string, release func()) {
+	release = func() {}
 	if cacheDir == "" {
-		return ""
+		return "", release
 	}
 	dir, err := os.MkdirTemp("", "magus-guard-dry-run-")
 	if err != nil {
-		return ""
+		return "", release
 	}
 	copyFile := func(src, dst string) error {
 		info, err := os.Stat(src)
@@ -2173,9 +2161,14 @@ func copySessionState(cacheDir string, keys ...string) string {
 	}
 	if copyAll() != nil {
 		_ = os.RemoveAll(dir)
-		return ""
+		return "", release
 	}
-	return dir
+	remove := func() { _ = os.RemoveAll(dir) }
+	stop := context.AfterFunc(ctx, remove)
+	return dir, func() {
+		stop()
+		remove()
+	}
 }
 
 // withRegisteredBase is registerAgentBase for a check: the row is registered in the pinned
