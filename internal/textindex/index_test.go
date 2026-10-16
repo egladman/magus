@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"strings"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,140 +23,79 @@ func (c memTree) read(path string) ([]byte, error) {
 	return body, nil
 }
 
+// paths is sorted so a failure names the same file every run.
 func (c memTree) paths() []string {
 	out := make([]string, 0, len(c))
 	for p := range c {
 		out = append(out, p)
 	}
-	// Sorted so a failure names the same file every run.
-	for i := range out {
-		for j := i + 1; j < len(out); j++ {
-			if out[j] < out[i] {
-				out[i], out[j] = out[j], out[i]
-			}
-		}
-	}
+	sort.Strings(out)
 	return out
 }
 
-func buildFrom(t *testing.T, c memTree) *Index {
-	t.Helper()
-	ix, err := Build(c.paths(), c.read)
-	require.NoError(t, err)
-	return ix
-}
-
-// scanAll is the reference implementation: no index, every file, same match shape. The
-// index is only ever allowed to be FASTER than this, never different.
-func scanAll(c memTree, pattern string) []Match {
-	var out []Match
-	for _, p := range c.paths() {
-		out = append(out, matchesIn(p, c[p], []byte(pattern))...)
-	}
-	return out
-}
-
-// TestSearchAgreesWithABruteForceScan is the correctness gate. A trigram index is an
-// optimization, and an optimization that returns a different answer is a bug however
-// fast it is, so the index is graded against the scan it replaces rather than against a
-// hand-written expectation.
-func TestSearchAgreesWithABruteForceScan(t *testing.T) {
-	rng := rand.New(rand.NewSource(1))
-	alphabet := "abcdefg \n{}();"
-	tree := memTree{}
-	for f := range 40 {
-		var sb strings.Builder
-		for range 400 + rng.Intn(400) {
-			sb.WriteByte(alphabet[rng.Intn(len(alphabet))])
-		}
-		tree[fmt.Sprintf("file%02d.txt", f)] = []byte(sb.String())
-	}
-	// A planted needle proves the index finds what a random tree would rarely contain.
-	tree["file07.txt"] = append(tree["file07.txt"], []byte("\nplanted_needle_value\n")...)
-
-	ix := buildFrom(t, tree)
-
-	patterns := []string{"planted_needle_value", "abc", "a", "ab", "zzz", "();", "\n{", "gfedcba"}
-	for f := range 25 {
-		body := tree[fmt.Sprintf("file%02d.txt", f)]
-		start := rng.Intn(len(body) - 12)
-		patterns = append(patterns, string(body[start:start+3+rng.Intn(9)]))
-	}
-
-	for _, p := range patterns {
-		got, err := ix.SearchLiteral(p)
-		require.NoError(t, err, "pattern %q", p)
-		assert.Equal(t, scanAll(tree, p), got,
-			"the index must return exactly what a full scan returns, for pattern %q", p)
-	}
-}
-
-// TestSearchReportsLineAndColumn pins the coordinates a reader acts on. An off-by-one
+// TestScanReportsLineAndColumn pins the coordinates a reader acts on. An off-by-one
 // here sends someone to the wrong line, which is worse than no answer.
-func TestSearchReportsLineAndColumn(t *testing.T) {
+func TestScanReportsLineAndColumn(t *testing.T) {
 	tree := memTree{"a.go": []byte("package a\n\nfunc Target() {}\nvar x = Target\n")}
-	ix := buildFrom(t, tree)
 
-	got, err := ix.SearchLiteral("Target")
+	got, err := Scan(tree.paths(), tree.read, "Target", false)
 	require.NoError(t, err)
-	require.Len(t, got, 2)
 
-	assert.Equal(t, Match{Path: "a.go", Line: 3, Col: 6, Text: "func Target() {}"}, got[0])
-	assert.Equal(t, Match{Path: "a.go", Line: 4, Col: 9, Text: "var x = Target"}, got[1])
+	assert.Equal(t, []Match{
+		{Path: "a.go", Line: 3, Col: 6, Text: "func Target() {}"},
+		{Path: "a.go", Line: 4, Col: 9, Text: "var x = Target"},
+	}, got)
 }
 
-// TestShortPatternStillSearches covers the shape with no trigram to look up. Returning
-// nothing there would be a silent wrong answer: the pattern is unindexable, not absent.
-func TestShortPatternStillSearches(t *testing.T) {
+func TestScanFindsAOneBytePattern(t *testing.T) {
 	tree := memTree{"a.txt": []byte("xy\nzy\n")}
-	ix := buildFrom(t, tree)
 
-	got, err := ix.SearchLiteral("y")
+	got, err := Scan(tree.paths(), tree.read, "y", false)
 	require.NoError(t, err)
-	assert.Len(t, got, 2, "a pattern under the trigram floor falls back to scanning, never to silence")
+	assert.Len(t, got, 2)
 }
 
-// TestAbsentTrigramEndsTheQuery is the property the index exists for: one trigram no
-// file holds settles the whole question without reading a single file.
-func TestAbsentTrigramEndsTheQuery(t *testing.T) {
-	tree := memTree{"a.txt": []byte("hello world\n")}
-	reads := 0
-	counting := func(p string) ([]byte, error) {
-		reads++
-		return tree.read(p)
-	}
-	ix, err := Build(tree.paths(), counting)
-	require.NoError(t, err)
+func TestScanOrdersByPathThenLine(t *testing.T) {
+	tree := memTree{"b.txt": []byte("hit\n"), "a.txt": []byte("x\nhit\n")}
 
-	before := reads
-	got, err := ix.SearchLiteral("qqq")
+	got, err := Scan(tree.paths(), tree.read, "hit", false)
+	require.NoError(t, err)
+	assert.Equal(t, []Match{
+		{Path: "a.txt", Line: 2, Col: 1, Text: "hit"},
+		{Path: "b.txt", Line: 1, Col: 1, Text: "hit"},
+	}, got)
+}
+
+// TestScanFoldReportsTheOriginalLine: folding is for comparison only, so the reported
+// line keeps its case.
+func TestScanFoldReportsTheOriginalLine(t *testing.T) {
+	tree := memTree{"a.go": []byte("one\nfunc LeafScore() {}\n")}
+
+	got, err := Scan(tree.paths(), tree.read, "leafscore", true)
+	require.NoError(t, err)
+	assert.Equal(t, []Match{{Path: "a.go", Line: 2, Col: 6, Text: "func LeafScore() {}"}}, got)
+
+	got, err = Scan(tree.paths(), tree.read, "leafscore", false)
 	require.NoError(t, err)
 	assert.Empty(t, got)
-	assert.Equal(t, before, reads, "an absent trigram must answer from the index alone, reading no file")
 }
 
-// TestEmptyPatternIsRefused keeps the API honest: everything is not an answer.
-func TestEmptyPatternIsRefused(t *testing.T) {
-	ix := buildFrom(t, memTree{"a.txt": []byte("x")})
-	_, err := ix.SearchLiteral("")
+func TestScanRefusesAnEmptyPattern(t *testing.T) {
+	tree := memTree{"a.txt": []byte("x")}
+	_, err := Scan(tree.paths(), tree.read, "", false)
 	require.Error(t, err)
 }
 
-// TestBuildSkipsAnUnreadableFile pins the live-tree case: a file can vanish between the
-// walk and the read, and one such file must not cost the whole index.
-func TestBuildSkipsAnUnreadableFile(t *testing.T) {
+// TestScanSkipsAnUnreadableFile pins the live-tree case: a file can vanish between the
+// walk and the read, and one such file must not cost the whole search.
+func TestScanSkipsAnUnreadableFile(t *testing.T) {
 	tree := memTree{"a.txt": []byte("findme here\n")}
-	ix, err := Build([]string{"a.txt", "gone.txt"}, tree.read)
-	require.NoError(t, err)
-	assert.Equal(t, 1, ix.Len())
 
-	got, err := ix.SearchLiteral("findme")
+	got, err := Scan([]string{"a.txt", "gone.txt"}, tree.read, "findme", false)
 	require.NoError(t, err)
 	assert.Len(t, got, 1)
 }
 
-// benchTree is sized to make the candidate-narrowing visible: many files, one holding
-// the needle. That is the shape of a real precedent hunt.
 func benchTree(files, size int) memTree {
 	rng := rand.New(rand.NewSource(7))
 	alphabet := "abcdefghijklmnopqrstuvwxyz \n"
@@ -173,25 +112,16 @@ func benchTree(files, size int) memTree {
 }
 
 // The benchmark names carry the package, because -bench applies to every package in the
-// run: a bare BenchmarkBuild here also selects the graph packages' own, and the tree-wide
+// run: a bare BenchmarkScan here also selects any other package's own, and the tree-wide
 // run that produces is what a scoped-looking invocation actually launches.
-func BenchmarkTextIndexSearchIndexed(b *testing.B) {
+func BenchmarkTextIndexScan(b *testing.B) {
 	c := benchTree(1000, 4096)
-	ix, err := Build(c.paths(), c.read)
-	require.NoError(b, err)
+	paths := c.paths()
 	b.ResetTimer()
 	for b.Loop() {
-		if _, err := ix.SearchLiteral("HandleRequestPayload"); err != nil {
+		if _, err := Scan(paths, c.read, "HandleRequestPayload", false); err != nil {
 			b.Fatal(err)
 		}
-	}
-}
-
-func BenchmarkTextIndexSearchBruteForce(b *testing.B) {
-	c := benchTree(1000, 4096)
-	b.ResetTimer()
-	for b.Loop() {
-		scanAll(c, "HandleRequestPayload")
 	}
 }
 
@@ -247,12 +177,12 @@ func TestReaderHandlesAnEmptyFile(t *testing.T) {
 	assert.Empty(t, body)
 }
 
-func BenchmarkTextIndexBuildFromDiskMapped(b *testing.B) {
+func BenchmarkTextIndexScanFromDiskMapped(b *testing.B) {
 	paths := writeTree(b, 200, 64<<10)
 	b.ResetTimer()
 	for b.Loop() {
 		r := NewReader()
-		if _, err := Build(paths, r.Read); err != nil {
+		if _, err := Scan(paths, r.Read, "HandleRequestPayload", false); err != nil {
 			b.Fatal(err)
 		}
 		if err := r.Close(); err != nil {
@@ -261,22 +191,11 @@ func BenchmarkTextIndexBuildFromDiskMapped(b *testing.B) {
 	}
 }
 
-func BenchmarkTextIndexBuildFromDiskCopied(b *testing.B) {
+func BenchmarkTextIndexScanFromDiskCopied(b *testing.B) {
 	paths := writeTree(b, 200, 64<<10)
 	b.ResetTimer()
 	for b.Loop() {
-		if _, err := Build(paths, readFileOnly); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func BenchmarkTextIndexBuild(b *testing.B) {
-	c := benchTree(1000, 4096)
-	paths := c.paths()
-	b.ResetTimer()
-	for b.Loop() {
-		if _, err := Build(paths, c.read); err != nil {
+		if _, err := Scan(paths, readFileOnly, "HandleRequestPayload", false); err != nil {
 			b.Fatal(err)
 		}
 	}
