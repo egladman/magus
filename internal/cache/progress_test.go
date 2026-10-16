@@ -97,6 +97,7 @@ func TestRunAsideIsAccountedLikeABatchStep(t *testing.T) {
 		Ts: results[0].Ts, Inv: results[0].Inv, // the clock and the run's id
 		Project: "test/pkg", Target: "settle", Kind: journal.KindResult, Level: "info", Status: journal.StatusPass,
 		Ref: results[0].Ref, DurationMs: results[0].DurationMs, CacheKey: results[0].CacheKey,
+		Sizing: journal.SizingNone,
 	}, results[0])
 }
 
