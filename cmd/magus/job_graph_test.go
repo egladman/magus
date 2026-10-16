@@ -49,7 +49,7 @@ func TestJobGraphReadsUnderAStaleIndexOnlyWhenItsChangesMissTheWritePaths(t *tes
 			if tc.domain {
 				got = graph.loadDomain(t.Context(), tc.paths)
 			} else {
-				got = graph.loadFor(tc.paths)(t.Context())
+				got = graph.loadScoped(tc.paths)(t.Context())
 			}
 			assert.Equal(t, tc.reads, got != nil)
 			assert.Equal(t, tc.reads, loads == 1)
