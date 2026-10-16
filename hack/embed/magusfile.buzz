@@ -101,15 +101,21 @@ export fun vocab(ctx: magus\Context, args: [str]) > void !> any {
 
 // Embeds the vocabulary's token texts, then the training texts, each into resumable,
 // content-addressed shards under the cache root's teacher/, and appends each run's
-// totals to runs.jsonl. A rerun skips finished shards. CodeRankEmbed unless args after
-// -- name another, e.g. `-- -model nomic-embed-text-v1.5`; manual, never part of ci.
+// totals to runs.jsonl. A rerun skips finished shards. Args after -- go to `embed
+// teacher`; the model is CodeRankEmbed unless they name another with `-model <name>`.
+// Manual, never part of ci.
 export fun teacher(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(vocab);
     final cache = fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), name: "magus-embed");
-    final model = ["-model", "CodeRankEmbed"] + args;
+    var model = "CodeRankEmbed";
+    foreach (i, arg in args) {
+        if (arg == "-model" and i + 1 < args.len()) {
+            model = args[i + 1];
+        }
+    }
     foreach (name in ["tokens.jsonl", "texts.jsonl"]) {
-        final run = ["-cache", cache, "-max-len", "256", "-texts", fs\join(cache, "corpus", name)] + model;
-        go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "teacher"] + run});
+        final run = ["-cache", cache, "-max-len", "256", "-texts", fs\join(cache, "corpus", name), "-model", model];
+        go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "teacher"] + run + args});
         go["go-run"](ctx, {"args": ["./cmd/embed", "record", "-out", "runs.jsonl"] + run});
     }
 }
