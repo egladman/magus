@@ -91,17 +91,31 @@ func TestMemoryDeclarationsNeverReportsOverDeclaration(t *testing.T) {
 	assert.Empty(t, got.Details)
 }
 
-// The arm that grows the declared set: an undeclared target counts as zero against
-// its peers, which is exactly the blind spot machine-wide admission cannot cover.
-func TestMemoryDeclarationsReportsAHeavyUndeclaredTarget(t *testing.T) {
-	path := historyWith(t, "console", map[string]int64{"typescript/test": 5312 * mb})
-	got := newRunner(path).checkMemoryDeclarations([]*types.Project{
-		projectWith("console", nil),
-	})
+// An undeclared target claims 1.25 times its highest passing peak, so it wants a
+// declaration only when those peaks spread wider than that headroom. A failed run's
+// early death is no spread: a claim is never sized from it.
+func TestMemoryDeclarationsReportsAnUnstableUndeclaredTarget(t *testing.T) {
+	check := func(outcomes ...forecast.Outcome) types.Check {
+		h := forecast.History{
+			Version:  forecast.HistoryVersion,
+			Projects: map[string]map[string]forecast.Stats{"console": {"typescript/test": {RecentOutcomes: outcomes}}},
+		}
+		path := filepath.Join(t.TempDir(), "history.json")
+		require.NoError(t, h.Save(context.Background(), path))
+		return newRunner(path).checkMemoryDeclarations([]*types.Project{projectWith("console", nil)})
+	}
+	run := func(result forecast.OutcomeResult, peakMB int64) forecast.Outcome {
+		return forecast.Outcome{Result: result, MaxRSSBytes: peakMB * mb}
+	}
 
+	got := check(run(forecast.OutcomePass, 2900), run(forecast.OutcomePass, 5312), run(forecast.OutcomeVolatile, 4000))
 	assert.Equal(t, types.CheckAdvice, got.Status)
 	require.Len(t, got.Details, 1)
-	assert.Contains(t, got.Details[0], "declares no memory_mb anywhere in what it runs and reached at least 5312MB")
+	assert.Contains(t, got.Details[0], "declares no memory_mb anywhere in what it runs and its passing runs reached from 2900MB to 5312MB")
+
+	got = check(run(forecast.OutcomePass, 5000), run(forecast.OutcomePass, 5312), run(forecast.OutcomeFail, 900))
+	assert.Equal(t, types.CheckOK, got.Status, "a stable heavy target is sized from its runs")
+	assert.Empty(t, got.Details)
 }
 
 // Noise control. A report that fires on every small target is one nobody reads, and

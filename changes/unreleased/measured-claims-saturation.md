@@ -10,3 +10,6 @@
 - **A build budget refusal says how the slots were sized.** It names them declared,
   measured over N runs, unmeasured, or taken for the memory claim, beside how the memory
   was sized.
+- **`magus doctor` advises declaring `memory_mb` only for an unstable target.** An
+  undeclared target now claims its measured peak, so MGS1030 reports one only when its
+  passing peaks spread more than a quarter apart.
