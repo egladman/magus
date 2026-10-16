@@ -81,7 +81,7 @@ func TestJobListFlagsOverdueOrphansAndStaleJobs(t *testing.T) {
 	assert.Empty(t, unset.Stale, "an unset stale_after flags nothing")
 }
 
-func TestRefuseForkLimitsNamesTheKey(t *testing.T) {
+func TestForkLimitProblemsNameTheKey(t *testing.T) {
 	t.Parallel()
 
 	rows := []types.Job{
@@ -91,24 +91,25 @@ func TestRefuseForkLimitsNamesTheKey(t *testing.T) {
 		{ID: "other", State: types.StateRunning},
 	}
 
-	err := RefuseForkLimits(rows, "root/a/deep", "root/a", config.Jobs{MaxDepth: 1})
-	require.Error(t, err)
+	err := forkLimitProblems(rows, "root/a/deep", "root/a", config.Jobs{MaxDepth: 1}).Err()
+	require.ErrorIs(t, err, types.JobForkLimitExceeded)
 	assert.Contains(t, err.Error(), "jobs.max_depth")
 	assert.Contains(t, err.Error(), "root/a/deep")
-	require.NoError(t, RefuseForkLimits(rows, "root/c", "root", config.Jobs{MaxDepth: 1}))
+	assert.Empty(t, forkLimitProblems(rows, "root/c", "root", config.Jobs{MaxDepth: 1}))
 
-	err = RefuseForkLimits(rows, "root/c", "root", config.Jobs{MaxLive: 2})
-	require.Error(t, err)
+	err = forkLimitProblems(rows, "root/c", "root", config.Jobs{MaxLive: 2}).Err()
+	require.ErrorIs(t, err, types.JobForkLimitExceeded)
 	assert.Contains(t, err.Error(), "jobs.max_live")
-	require.NoError(t, RefuseForkLimits(rows, "root/c", "root", config.Jobs{MaxLive: 3}),
+	assert.Empty(t, forkLimitProblems(rows, "root/c", "root", config.Jobs{MaxLive: 3}),
 		"a finished job and another root's jobs do not count")
-	require.NoError(t, RefuseForkLimits(rows, "root/a", "root", config.Jobs{MaxLive: 2}),
+	assert.Empty(t, forkLimitProblems(rows, "root/a", "root", config.Jobs{MaxLive: 2}),
 		"re-declaring a live job is not a new one")
+	assert.Len(t, forkLimitProblems(rows, "root/a/deep", "root/a", config.Jobs{MaxDepth: 1, MaxLive: 2}), 2, "both limits at once")
 
-	require.NoError(t, RefuseForkLimits(rows, "root/a/deep/deeper", "root/a/deep", config.Jobs{}), "unset is unlimited")
+	assert.Empty(t, forkLimitProblems(rows, "root/a/deep/deeper", "root/a/deep", config.Jobs{}), "unset is unlimited")
 }
 
-func TestRefuseAmbiguousSymbolsNamesEveryDefinition(t *testing.T) {
+func TestAmbiguousSymbolProblemsNameEveryDefinition(t *testing.T) {
 	t.Parallel()
 
 	read := func(_ context.Context, name, _ string) (SymbolFact, bool) {
@@ -127,14 +128,16 @@ func TestRefuseAmbiguousSymbolsNamesEveryDefinition(t *testing.T) {
 		}
 	}
 
-	err := RefuseAmbiguousSymbols(t.Context(), gate("Declare", "Validate"), read)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `"Validate"`)
-	assert.Contains(t, err.Error(), "internal/config/validate.go")
-	assert.Contains(t, err.Error(), "types/job.go")
+	ps := ambiguousSymbolProblems(t.Context(), gate("Declare", "Validate"), read)
+	require.Len(t, ps, 1)
+	assert.Equal(t, types.JobGoalInvalid, ps[0].Code)
+	assert.Equal(t, "goals[1].symbols[1]", ps[0].Field)
+	assert.Contains(t, ps[0].Message, `"Validate"`)
+	assert.Contains(t, ps[0].Message, "internal/config/validate.go")
+	assert.Contains(t, ps[0].Message, "types/job.go")
 
-	require.NoError(t, RefuseAmbiguousSymbols(t.Context(), gate("Declare", "Cold"), read), "a name the graph cannot read fails open at declaration")
-	require.NoError(t, RefuseAmbiguousSymbols(t.Context(), gate("Declare"), nil))
+	assert.Empty(t, ambiguousSymbolProblems(t.Context(), gate("Declare", "Cold"), read), "a name the graph cannot read fails open at declaration")
+	assert.Empty(t, ambiguousSymbolProblems(t.Context(), gate("Declare"), nil))
 }
 
 type cannedSymbolGraph struct {
@@ -619,7 +622,7 @@ func TestForkMergeRefusesAnUngradableDenyPathAddedToARowThatExists(t *testing.T)
 }
 
 // A job that writes is held to something wait can grade; one that writes nothing is not.
-func TestRefuseUngradedHoldsAWritingJobToACheckOrAGoal(t *testing.T) {
+func TestUngradedProblemsHoldAWritingJobToACheckOrAGoal(t *testing.T) {
 	t.Parallel()
 
 	check := types.LeaseCheck{Target: "test", Project: "."}
@@ -637,12 +640,12 @@ func TestRefuseUngradedHoldsAWritingJobToACheckOrAGoal(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			err := RefuseUngraded(tc.row)
+			err := ungradedProblems(tc.row).Err()
 			if !tc.refused {
 				require.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
+			require.ErrorIs(t, err, types.JobUngraded)
 			assert.Contains(t, err.Error(), `declares neither a check nor a goal`)
 			assert.Contains(t, err.Error(), `"goals"`, "the refusal names what to add")
 		})
@@ -655,7 +658,7 @@ func TestRefuseUngradedHoldsAWritingJobToACheckOrAGoal(t *testing.T) {
 
 // A forked row is read-only or handed write paths: an empty write set bounds nothing, and
 // a check does not stand in for one.
-func TestRefuseUnscopedHoldsANewRowToABoundary(t *testing.T) {
+func TestUnscopedProblemsHoldANewRowToABoundary(t *testing.T) {
 	t.Parallel()
 
 	check := types.LeaseCheck{Target: "test", Project: "."}
@@ -673,12 +676,12 @@ func TestRefuseUnscopedHoldsANewRowToABoundary(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			err := RefuseUnscoped(tc.row)
+			err := unscopedProblems(tc.row).Err()
 			if !tc.refused {
 				require.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
+			require.ErrorIs(t, err, types.JobUngraded)
 			assert.Contains(t, err.Error(), "s names no write paths and is not read-only")
 			assert.Contains(t, err.Error(), `{"check": {"script": "<probe>.buzz"}}`, "the refusal names the check a scout passes by")
 			assert.Contains(t, err.Error(), "`"+hint.JobExit.With("s")+"`", "and how a scout without one ends")
@@ -739,6 +742,8 @@ func TestApplyWidensALiveJobAndKeepsItsState(t *testing.T) {
 	want.Widenings = 1
 	want.WriteProof = types.WriteProofAlone // moved paths are proved again
 	want.Generation = before[0].Generation + 1
+	assert.NotZero(t, got[0].Next.Validated, "a written record is stamped validated")
+	want.Validated = got[0].Next.Validated
 	assert.Equal(t, want, got[0].Next)
 	assert.Equal(t, types.StateRunning, got[0].Next.State)
 }
@@ -845,7 +850,9 @@ func TestApplyCreatesANewJob(t *testing.T) {
 		Validation: forkCheck().String(),
 		State:      types.StateDeclared,
 		WriteProof: got[0].Next.WriteProof, // what the fork could prove is the plan's, not this record's
+		Validated:  got[0].Next.Validated,
 	}, got[0].Next), got[0].Next)
+	assert.NotZero(t, got[0].Next.Validated, "a written record is stamped validated")
 }
 
 func TestApplyGradesEveryGoalCheckItAdds(t *testing.T) {

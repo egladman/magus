@@ -24,13 +24,13 @@ func TestRefuseUngradableClaims(t *testing.T) {
 	}{
 		{"no claim below a file reads nothing", []string{"run.go", "notes.txt"}, ""},
 		{"a declaration of a driven file", []string{"run.go#executeStages", "docs/new.md#Usage"}, ""},
-		{"a file with no driver", []string{"notes.txt#Intro"}, "\"notes.txt\" has no diff driver, so no changed line of it can be placed in a declaration; give `*.txt` one in .gitattributes"},
+		{"a file with no driver", []string{"notes.txt#Intro"}, "\"notes.txt\" has no diff driver, so no changed line of it can be placed in a declaration: give `*.txt` one in .gitattributes"},
 		{"an empty declaration", []string{"run.go#"}, `"run.go#" names no declaration after its #`},
 		{"a pattern", []string{"*.go#executeStages"}, `"*.go#executeStages" claims a declaration of a pattern`},
-		{"every bad entry at once", []string{"run.go#", "Makefile#all"}, `"run.go#" names no declaration after its #`},
+		{"every bad entry at once", []string{"run.go#", "Makefile#all"}, `"Makefile" has no diff driver`},
 		{"a path holding # spelled as a path", []string{"./notes/a#b.md", `notes/a\#b.md`, `notes/a\#b.md#A`}, ""},
 		{"a path holding # left ambiguous", []string{"notes/a#b.md"},
-			"\"notes/a#b.md\" is a path in this tree and also reads as a claim on \"notes/a\"; spell the path `./notes/a#b.md` or `notes/a\\#b.md`"},
+			"\"notes/a#b.md\" is a path in this tree and also reads as a claim on \"notes/a\", since an unescaped # starts a claimed declaration: spell the path `./notes/a#b.md` or `notes/a\\#b.md`"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -80,9 +80,22 @@ func TestRefuseUngradableClaims(t *testing.T) {
 	t.Run("a checkout with no version control", func(t *testing.T) {
 		t.Parallel()
 		s := NewStore(tmpLoc(t, t.TempDir()))
-		err := RefuseUngradableClaims(context.Background(), s, types.Job{ID: "wave/job", WritePaths: []string{"run.go#executeStages"}})
-		require.ErrorIs(t, err, types.WritePathClaimUngradable)
-		assert.Contains(t, err.Error(), `"run.go": `)
+		ps := ungradableClaimProblems(context.Background(), s, types.Job{ID: "wave/job", WritePaths: []string{"run.go#executeStages"}})
+		require.Len(t, ps, 1)
+		assert.Equal(t, types.WritePathClaimUngradable, ps[0].Code)
+		assert.Equal(t, "write_paths[0]", ps[0].Field)
+		assert.Contains(t, ps[0].Message, `"run.go": `)
+	})
+
+	t.Run("every bad entry is its own problem", func(t *testing.T) {
+		t.Parallel()
+		ps := ungradableClaimProblems(context.Background(), NewStore(tmpLoc(t, root)), types.Job{ID: "wave/job",
+			WritePaths: []string{"run.go", "run.go#", "notes.txt#Intro"}, DenyPaths: []string{"*.go#x"}})
+		fields := make([]string, len(ps))
+		for i, p := range ps {
+			fields[i] = p.Field
+		}
+		assert.Equal(t, []string{"write_paths[1]", "deny_paths[0]", "write_paths[2]"}, fields)
 	})
 }
 
@@ -130,13 +143,13 @@ func TestRefuseUnorderedFileShare(t *testing.T) {
 			require.NoError(t, err)
 
 			candidate := types.Job{ID: "B", WritePaths: tc.bWrite, Parent: tc.bParent, DependsOn: tc.bDependsOn}
-			refErr := RefuseUnorderedFileShare(context.Background(), s, rows, candidate)
+			refErr := unorderedFileShareProblems(context.Background(), s, rows, candidate).Err()
 			if !tc.wantRefused {
 				require.NoError(t, refErr)
 				return
 			}
 			require.ErrorIs(t, refErr, types.WritePathFileShared)
-			assert.Contains(t, refErr.Error(), `job: B declares "magusfile.buzz", and A`)
+			assert.Contains(t, refErr.Error(), `B declares "magusfile.buzz", and A`)
 			assert.Contains(t, refErr.Error(), "none yet")
 			assert.Contains(t, refErr.Error(), "Claim `magusfile.buzz#<declaration>`")
 			assert.Contains(t, refErr.Error(), "--depends-on A")
@@ -161,7 +174,7 @@ func TestExitedHolderClaimsNoFileShare(t *testing.T) {
 		rows, err := s.List()
 		require.NoError(t, err)
 
-		err = RefuseUnorderedFileShare(context.Background(), s, rows, types.Job{ID: "B", WritePaths: []string{"magusfile.buzz"}})
+		err = unorderedFileShareProblems(context.Background(), s, rows, types.Job{ID: "B", WritePaths: []string{"magusfile.buzz"}}).Err()
 		if refused {
 			require.ErrorIs(t, err, types.WritePathFileShared, state)
 			continue
@@ -188,9 +201,9 @@ func TestRefuseUnorderedFileShareReadsTheReplacementsDependsOn(t *testing.T) {
 	require.NoError(t, err)
 
 	replacement := types.Job{ID: "B", WritePaths: []string{"magusfile.buzz"}, DependsOn: []string{"A"}}
-	require.NoError(t, RefuseUnorderedFileShare(context.Background(), s, rows, replacement))
+	assert.Empty(t, unorderedFileShareProblems(context.Background(), s, rows, replacement))
 	replacement.DependsOn = nil
-	require.ErrorIs(t, RefuseUnorderedFileShare(context.Background(), s, rows, replacement), types.WritePathFileShared)
+	require.ErrorIs(t, unorderedFileShareProblems(context.Background(), s, rows, replacement).Err(), types.WritePathFileShared)
 }
 
 const claimGo = `package run
@@ -226,13 +239,13 @@ func TestRefuseUngradableClaimsAmbiguousWord(t *testing.T) {
 		{"the whole declaration line", []string{"run.go#func C() {"}, ""},
 		{"a declaration not written yet", []string{"run.go#helper"}, ""},
 		{"a word several declarations share", []string{"run.go#ctx"},
-			"\"run.go#ctx\" names 2 declarations of run.go (such as `func A(ctx int) {`), and a claim guards exactly one; use a word only one of them has, such as `A`, `B`"},
+			"\"run.go#ctx\" names 2 declarations of run.go (such as `func A(ctx int) {`), and a claim guards exactly one: use a word only one of them has, such as `A`, `B`"},
 		{"a word every declaration shares", []string{"run.go#func"}, `"run.go#func" names 3 declarations of run.go`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			s := NewStore(tmpLoc(t, root))
-			err := RefuseUngradableClaims(context.Background(), s, types.Job{ID: "wave/job", WritePaths: tc.paths})
+			err := ungradableClaimProblems(context.Background(), s, types.Job{ID: "wave/job", WritePaths: tc.paths}).Err()
 			if tc.want == "" {
 				require.NoError(t, err)
 				return
@@ -244,7 +257,7 @@ func TestRefuseUngradableClaimsAmbiguousWord(t *testing.T) {
 
 	t.Run("a deny path is held to it", func(t *testing.T) {
 		t.Parallel()
-		err := RefuseUngradableClaims(context.Background(), NewStore(tmpLoc(t, root)), types.Job{ID: "wave/job", DenyPaths: []string{"run.go#ctx"}})
+		err := ungradableClaimProblems(context.Background(), NewStore(tmpLoc(t, root)), types.Job{ID: "wave/job", DenyPaths: []string{"run.go#ctx"}}).Err()
 		require.ErrorIs(t, err, types.WritePathClaimUngradable)
 		assert.Contains(t, err.Error(), `deny path "run.go#ctx" names 2 declarations of run.go`)
 	})
@@ -270,7 +283,7 @@ func TestRefuseUnorderedFileSharePrintsTheClaimPair(t *testing.T) {
 		want  []string
 	}{
 		{"disjoint declarations", symbol("C"), []string{"run.go"}, []string{
-			"A has touched func A(ctx int) { in it so far.",
+			"A has touched func A(ctx int) { in it so far:",
 			"Claim `run.go#A` on A and `run.go#C` on B, which name different declarations (nothing was written to either row), or add `--depends-on A` to B, or fold B into A",
 		}},
 		{"the same declaration", symbol("A"), []string{"run.go"}, []string{
@@ -290,7 +303,7 @@ func TestRefuseUnorderedFileSharePrintsTheClaimPair(t *testing.T) {
 			rows, err := s.List()
 			require.NoError(t, err)
 
-			err = RefuseUnorderedFileShare(context.Background(), s, rows, types.Job{ID: "B", WritePaths: []string{"run.go"}, Goals: tc.goals})
+			err = unorderedFileShareProblems(context.Background(), s, rows, types.Job{ID: "B", WritePaths: []string{"run.go"}, Goals: tc.goals}).Err()
 			require.ErrorIs(t, err, types.WritePathFileShared)
 			for _, want := range tc.want {
 				assert.Contains(t, err.Error(), want)
@@ -306,7 +319,7 @@ func TestRefuseUnorderedFileSharePrintsTheClaimPair(t *testing.T) {
 		rows, err := s.List()
 		require.NoError(t, err)
 
-		err = RefuseUnorderedFileShare(context.Background(), s, rows, types.Job{ID: "B", WritePaths: []string{"run.go"}})
+		err = unorderedFileShareProblems(context.Background(), s, rows, types.Job{ID: "B", WritePaths: []string{"run.go"}}).Err()
 		require.ErrorIs(t, err, types.WritePathFileShared)
 		assert.Contains(t, err.Error(), "Claim `run.go#<declaration>` on both rows, add `--depends-on A` to B, or fold B into A")
 	})
@@ -414,7 +427,7 @@ func TestRefuseUnorderedFileShareTransitiveDependsOn(t *testing.T) {
 	require.NoError(t, err)
 
 	candidate := types.Job{ID: "B", WritePaths: []string{"magusfile.buzz"}, DependsOn: []string{"M"}}
-	require.NoError(t, RefuseUnorderedFileShare(context.Background(), s, rows, candidate))
+	assert.Empty(t, unorderedFileShareProblems(context.Background(), s, rows, candidate))
 }
 
 func TestDescribeTouched(t *testing.T) {

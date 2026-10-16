@@ -16,109 +16,117 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// RefuseUngradableClaims refuses a fork whose write or deny paths claim a declaration
-// (`run.go#executeStages`, see types.SplitClaim) that the footprint could never grade
-// (MGS3031): an empty declaration, a claim on a glob rather than one file, a checkout whose
-// version control does not place changed lines, or a file whose extension has no diff
-// driver. An entry that names an existing path as written (`notes/a#b.md`) is refused as
-// ambiguous, naming the two spellings that mean the path. A claim word that names more than
-// one existing declaration of its file (`ctx`, `String`) is refused too, with words that
-// name one; a word that names none is accepted, as the declaration may not be written yet
-// (see ForkNotes). A claim nothing checks reads as a boundary and is none, so it is an error rather
-// than a note on the row. A deny path is held to the same rules because the guard grades
-// it by the same placement, and one it cannot place denies the whole file while the row
-// names one declaration.
+// ungradableClaimProblems is every write or deny path of row that claims a declaration
+// (`run.go#executeStages`, see types.SplitClaim) no footprint could grade, as
+// WritePathClaimUngradable: an empty declaration, a claim on a glob rather than one file, a
+// checkout whose version control does not place changed lines, or a file whose extension has
+// no diff driver. An entry that names an existing path as written (`notes/a#b.md`) is
+// ambiguous, and the problem names the two spellings that mean the path. So is a claim word
+// that names more than one existing declaration of its file (`ctx`, `String`), and the
+// problem names words that name one; a word that names none passes, as the declaration may
+// not be written yet (see ForkNotes). A claim nothing checks reads as a boundary and is none.
+// A deny path is held to the same rules because the guard grades it by the same placement,
+// and one it cannot place denies the whole file while the row names one declaration.
 //
-// Only a fork with a `#` entry reads the version control; any other fork refuses nothing
-// here. A nil store, or one with no workspace root, has no tree to ask and refuses nothing.
-func RefuseUngradableClaims(ctx context.Context, store *Store, row types.Job) error {
+// Only a row with a `#` entry reads the version control. A nil store, or one with no
+// workspace root, has no tree to ask and finds nothing.
+func ungradableClaimProblems(ctx context.Context, store *Store, row types.Job) types.JobProblems {
 	if store == nil || store.root == "" {
 		return nil
 	}
-	type claimedFile struct{ field, path, decl string }
-	var claimed []claimedFile
-	var refused []string
+	type claimedFile struct{ label, field, path, decl string }
+	var (
+		claimed []claimedFile
+		ps      types.JobProblems
+	)
+	refuse := func(field, message, fix string) {
+		ps = append(ps, types.JobProblem{Code: types.WritePathClaimUngradable, Field: field, Message: message, Fix: fix})
+	}
 	for _, list := range []struct {
-		field   string
-		entries []string
-	}{{"", row.WritePaths}, {"deny path ", row.DenyPaths}} {
-		for _, entry := range list.entries {
+		label, field string
+		entries      []string
+	}{{"", "write_paths", row.WritePaths}, {"deny path ", "deny_paths", row.DenyPaths}} {
+		for i, entry := range list.entries {
 			if !types.HasClaim(entry) {
 				continue
 			}
+			field := fmt.Sprintf("%s[%d]", list.field, i)
 			p, decl := types.SplitClaim(entry)
 			literal := strings.TrimSpace(entry)
 			if _, err := os.Lstat(filepath.Join(store.root, filepath.FromSlash(literal))); err == nil {
-				refused = append(refused, list.field+fmt.Sprintf("%q is a path in this tree and also reads as a claim on %q; spell the path `./%s` or `%s`,"+
-					" since an unescaped # starts a claimed declaration", entry, p, literal, strings.ReplaceAll(literal, "#", `\#`)))
+				refuse(field, list.label+fmt.Sprintf("%q is a path in this tree and also reads as a claim on %q, since an unescaped # starts a claimed declaration", entry, p),
+					fmt.Sprintf("spell the path `./%s` or `%s`", literal, strings.ReplaceAll(literal, "#", `\#`)))
 				continue
 			}
 			switch {
 			case decl == "":
-				refused = append(refused, list.field+fmt.Sprintf("%q names no declaration after its #", entry))
+				refuse(field, list.label+fmt.Sprintf("%q names no declaration after its #", entry),
+					fmt.Sprintf("name the declaration after the #, or claim the whole file %q", p))
 			case p == "" || strings.ContainsAny(p, globMeta):
-				refused = append(refused, list.field+fmt.Sprintf("%q claims a declaration of a pattern, and a declaration lives in one file", entry))
+				refuse(field, list.label+fmt.Sprintf("%q claims a declaration of a pattern, and a declaration lives in one file", entry),
+					fmt.Sprintf("claim the declaration in the one file that holds it, or the pattern %q whole", p))
 			default:
-				claimed = append(claimed, claimedFile{list.field, path.Clean(p), decl})
+				claimed = append(claimed, claimedFile{list.label, field, path.Clean(p), decl})
 			}
 		}
 	}
-	if len(refused) == 0 && len(claimed) > 0 {
-		files := make([]string, len(claimed))
-		for i, c := range claimed {
-			files[i] = c.path
-		}
-		driver, drivers, err := claimDrivers(ctx, store.root, files)
-		placed := map[string][]string{}
-		for _, c := range claimed {
-			switch {
-			case err != nil:
-				refused = append(refused, c.field+fmt.Sprintf("%q: %v", c.path, err))
-			case drivers[c.path] == "":
-				refused = append(refused, c.field+fmt.Sprintf("%q has no diff driver, so no changed line of it can be placed in a declaration;"+
-					" give %s one in .gitattributes (`magus doctor` lists the managed ones)", c.path, driverPattern(c.path)))
-			default:
-				all, ok := placed[c.path]
-				if !ok {
-					all, _ = readDeclarations(ctx, driver, store.root, c.path)
-					placed[c.path] = all
-				}
-				if matched := namedDeclarations(c.decl, all); len(matched) > 1 {
-					refused = append(refused, c.field+ambiguousClaim(c.path, c.decl, matched, all))
-				}
+	if len(claimed) == 0 {
+		return ps
+	}
+	files := make([]string, len(claimed))
+	for i, c := range claimed {
+		files[i] = c.path
+	}
+	driver, drivers, err := claimDrivers(ctx, store.root, files)
+	placed := map[string][]string{}
+	for _, c := range claimed {
+		switch {
+		case err != nil:
+			refuse(c.field, c.label+fmt.Sprintf("%q: %v", c.path, err), fmt.Sprintf("claim the whole file %q", c.path))
+		case drivers[c.path] == "":
+			refuse(c.field, c.label+fmt.Sprintf("%q has no diff driver, so no changed line of it can be placed in a declaration", c.path),
+				fmt.Sprintf("give %s one in .gitattributes (`magus doctor` lists the managed ones), or claim the whole file %q", driverPattern(c.path), c.path))
+		default:
+			all, ok := placed[c.path]
+			if !ok {
+				all, _ = readDeclarations(ctx, driver, store.root, c.path)
+				placed[c.path] = all
+			}
+			if matched := namedDeclarations(c.decl, all); len(matched) > 1 {
+				message, fix := ambiguousClaimProblem(c.path, c.decl, matched, all)
+				refuse(c.field, c.label+message, fix)
 			}
 		}
 	}
-	if len(refused) == 0 {
-		return nil
-	}
-	return types.DiagnosticErrorf(types.WritePathClaimUngradable,
-		"job: %s claims a declaration no footprint can grade: %s. Claim the whole file instead, or fix what is named",
-		row.ID, strings.Join(refused, "; "))
+	return ps
 }
 
 // maxListedClaims bounds the claims an MGS3036 refusal lists: a root magusfile can hold
 // hundreds of declarations, and a dozen show the form.
 const maxListedClaims = 12
 
-// RefuseWholeFileConfigClaims refuses a fork whose write paths name a project's
-// configuration whole (MGS3036): a literal path, with no glob and no `#`, to a magusfile
-// source or a magus.yaml the workspace loads (see projectConfig). Every job that changes
-// the workspace's configuration writes that file, a target's slots or a source glob being
-// one line of it, so one job holding it whole blocks every other for that line. The
-// refusal lists claims the file has, magusfile project keys first
+// wholeFileConfigClaimProblems is every write path of row that names a project's
+// configuration whole, as WritePathConfigWholeFile: a literal path, with no glob and no `#`,
+// to a magusfile source or a magus.yaml the workspace loads (see projectConfig). Every job
+// that changes the workspace's configuration writes that file, a target's slots or a source
+// glob being one line of it, so one job holding it whole blocks every other for that line.
+// The fix lists claims the file has, magusfile project keys first
 // (`magusfile.buzz#project.targets.test`, `magus.yaml#jobs.stale_after`).
 //
 // A file whose lines this checkout cannot place, or that declares nothing yet, is left
-// alone, since nothing smaller than it could be claimed. When another live job holds a refused file, one attention request
-// asks it to release what it does not edit (see requestRelease); a dry-run store files
-// none. A nil store, or one with no workspace root, refuses nothing.
-func RefuseWholeFileConfigClaims(ctx context.Context, store *Store, row types.Job) error {
+// alone, since nothing smaller than it could be claimed. When another live job holds such a
+// file, one attention request asks it to release what it does not edit (see
+// requestRelease); a dry-run store files none. A nil store, or one with no workspace root,
+// finds nothing.
+func wholeFileConfigClaimProblems(ctx context.Context, store *Store, row types.Job) types.JobProblems {
 	if store == nil || store.root == "" {
 		return nil
 	}
-	var refused, files []string
-	for _, entry := range row.WritePaths {
+	var (
+		ps    types.JobProblems
+		files []string
+	)
+	for i, entry := range row.WritePaths {
 		if types.HasClaim(entry) {
 			continue
 		}
@@ -134,10 +142,16 @@ func RefuseWholeFileConfigClaims(ctx context.Context, store *Store, row types.Jo
 		if !ok || len(all) == 0 {
 			continue
 		}
-		refused = append(refused, fmt.Sprintf("%q, such as %s", entry, listClaims(file, all)))
+		ps = append(ps, types.JobProblem{
+			Code:  types.WritePathConfigWholeFile,
+			Field: fmt.Sprintf("write_paths[%d]", i),
+			Message: fmt.Sprintf("%q holds a project's configuration whole, and every job that changes the workspace's configuration"+
+				" writes that file, so a whole-file hold blocks them all for one line", entry),
+			Fix: "claim the declarations and keys the job changes instead, such as " + listClaims(file, all),
+		})
 		files = append(files, file)
 	}
-	if len(refused) == 0 {
+	if len(ps) == 0 {
 		return nil
 	}
 	if f, err := store.read(); err == nil {
@@ -151,11 +165,7 @@ func RefuseWholeFileConfigClaims(ctx context.Context, store *Store, row types.Jo
 			}
 		}
 	}
-	return types.DiagnosticErrorf(types.WritePathConfigWholeFile,
-		"job: %s holds a project's configuration whole: %s. Every job that changes the workspace's configuration"+
-			" writes that file, so a whole-file hold blocks them all for one line; claim the declarations and keys"+
-			" the job changes instead",
-		row.ID, strings.Join(refused, "; "))
+	return ps
 }
 
 // listClaims renders the claims on file that each name one of its declarations all, project
@@ -216,81 +226,94 @@ func driverPattern(p string) string {
 	return "`" + path.Base(p) + "`"
 }
 
-// RefuseUnorderedFileShare refuses a fork whose write paths would hand one claimable file
+// unorderedFileShareProblems is every write path of row that would hand one claimable file
 // (no glob, not a directory, not a project root, with a diff driver) to two live, unordered
-// jobs at once (MGS3032): a candidate entry and a holder's entry name the same file, still
-// intersect (types.PathsIntersect), and neither row is the other's ancestor, descendant, or
-// depends_on partner. When the file is a project's configuration, the refusal also files
-// one attention request asking the holder to release it (see requestRelease).
+// jobs at once, as WritePathFileShared: a candidate entry and a holder's entry name the same
+// file, still intersect (types.PathsIntersect), and neither row is the other's ancestor,
+// descendant, or depends_on partner. Each entry is reported once, against the first holder
+// found. When the file is a project's configuration, it also files one attention request
+// asking the holder to release it (see requestRelease).
 //
 // Left alone: a same-checkout or not-yet-taken holder (CheckoutRoot == ""), which
-// RefuseSharedCheckout and the overlap report already watch; a holder that exited, whose
+// sharedCheckoutProblems and the overlap report already watch; a holder that exited, whose
 // editing is over (see [Editing]); a holder blocked on
 // depends_on, which owns none of its write paths yet (types.JobBlockedOn); and a file with
 // no diff driver, for which depends_on is the only move.
-func RefuseUnorderedFileShare(ctx context.Context, store *Store, rows []types.Job, row types.Job) error {
+func unorderedFileShareProblems(ctx context.Context, store *Store, rows []types.Job, row types.Job) types.JobProblems {
 	if store == nil || store.root == "" || len(row.WritePaths) == 0 {
 		return nil
 	}
 	here, _ := filepath.Abs(store.root)
 	// A re-fork replaces its stored row, so the pair is ordered by what it declares now.
 	combined := append(slices.DeleteFunc(slices.Clone(rows), func(r types.Job) bool { return r.ID == row.ID }), row)
-	for _, mine := range row.WritePaths {
-		file, ok := literalClaimableFile(store.root, mine)
-		if !ok {
-			continue
-		}
-		if _, driven := types.MatchDiffDriver(file); !driven {
-			continue
-		}
-		for _, holder := range rows {
-			if holder.ID == row.ID || !Editing(holder) || len(holder.WritePaths) == 0 {
-				continue
-			}
-			// A row nobody has taken yet is not in a different checkout from anyone.
-			if holder.CheckoutRoot == "" || (here != "" && holder.CheckoutRoot == here) {
-				continue
-			}
-			// Blocked means holder owns none of its write paths yet; the fork that
-			// unblocks it runs this same check again, against whatever holds the file then.
-			if _, blocked := types.JobBlockedOn(rows, holder); blocked {
-				continue
-			}
-			if orderedPair(combined, row.ID, holder.ID) {
-				continue
-			}
-			for _, theirs := range holder.WritePaths {
-				if other, ok := literalClaimableFile(store.root, theirs); !ok || other != file {
-					continue
-				}
-				if !types.PathsIntersect(mine, theirs) {
-					continue
-				}
-				touched, unreadable := touchedDeclarations(ctx, store, rows, holder.ID, file)
-				if projectConfig(store.root, file) {
-					wanted := slices.DeleteFunc(slices.Clone(row.WritePaths), func(entry string) bool {
-						other, ok := literalClaimableFile(store.root, entry)
-						return !ok || other != file
-					})
-					store.requestRelease(ctx, holder.ID, file, wanted)
-				}
-				return types.DiagnosticErrorf(types.WritePathFileShared,
-					"job: %s declares %q, and %s (%s, updated %s ago) already holds %q. Both are live and neither"+
-						" is the other's parent, child, or depends_on partner, so %s has one owner unless the rows"+
-						" say otherwise. %s has touched %s in it so far. %s",
-					row.ID, mine, holder.ID, holder.State, updatedAgo(holder), theirs,
-					file,
-					holder.ID, describeTouched(touched, unreadable),
-					splitAdvice(ctx, store, row, holder, file, touched))
-			}
+	var ps types.JobProblems
+	for i, mine := range row.WritePaths {
+		if p, ok := sharedFileProblem(ctx, store, rows, combined, row, here, mine); ok {
+			p.Field = fmt.Sprintf("write_paths[%d]", i)
+			ps = append(ps, p)
 		}
 	}
-	return nil
+	return ps
+}
+
+// sharedFileProblem is unorderedFileShareProblems for the one write path mine.
+func sharedFileProblem(ctx context.Context, store *Store, rows, combined []types.Job, row types.Job, here, mine string) (types.JobProblem, bool) {
+	file, ok := literalClaimableFile(store.root, mine)
+	if !ok {
+		return types.JobProblem{}, false
+	}
+	if _, driven := types.MatchDiffDriver(file); !driven {
+		return types.JobProblem{}, false
+	}
+	for _, holder := range rows {
+		if holder.ID == row.ID || !Editing(holder) || len(holder.WritePaths) == 0 {
+			continue
+		}
+		// A row nobody has taken yet is not in a different checkout from anyone.
+		if holder.CheckoutRoot == "" || (here != "" && holder.CheckoutRoot == here) {
+			continue
+		}
+		// Blocked means holder owns none of its write paths yet; the fork that
+		// unblocks it runs this same check again, against whatever holds the file then.
+		if _, blocked := types.JobBlockedOn(rows, holder); blocked {
+			continue
+		}
+		if orderedPair(combined, row.ID, holder.ID) {
+			continue
+		}
+		for _, theirs := range holder.WritePaths {
+			if other, ok := literalClaimableFile(store.root, theirs); !ok || other != file {
+				continue
+			}
+			if !types.PathsIntersect(mine, theirs) {
+				continue
+			}
+			touched, unreadable := touchedDeclarations(ctx, store, rows, holder.ID, file)
+			if projectConfig(store.root, file) {
+				wanted := slices.DeleteFunc(slices.Clone(row.WritePaths), func(entry string) bool {
+					other, ok := literalClaimableFile(store.root, entry)
+					return !ok || other != file
+				})
+				store.requestRelease(ctx, holder.ID, file, wanted)
+			}
+			return types.JobProblem{
+				Code: types.WritePathFileShared,
+				Message: fmt.Sprintf("%s declares %q, and %s (%s, updated %s ago) already holds %q. Both are live and neither"+
+					" is the other's parent, child, or depends_on partner, so %s has one owner unless the rows"+
+					" say otherwise. %s has touched %s in it so far",
+					row.ID, mine, holder.ID, holder.State, updatedAgo(holder), theirs,
+					file,
+					holder.ID, describeTouched(touched, unreadable)),
+				Fix: splitAdvice(ctx, store, row, holder, file, touched),
+			}, true
+		}
+	}
+	return types.JobProblem{}, false
 }
 
 // literalClaimableFile is the file entry names, whole or by declaration, cleaned and
 // workspace-relative, or "" when entry is a glob, the whole tree, or an existing
-// directory: none of those can be shared by a claim, so RefuseUnorderedFileShare
+// directory: none of those can be shared by a claim, so unorderedFileShareProblems
 // has nothing to compare them against.
 func literalClaimableFile(root, entry string) (string, bool) {
 	p, _ := types.SplitClaim(entry)
@@ -475,13 +498,20 @@ func namedDeclarations(claim string, all []string) []string {
 // ambiguousClaim is the MGS3031 reason for a claim naming several declarations of file:
 // the guard and `job wait` would hold every one of them, not the one its author meant.
 func ambiguousClaim(file, claim string, matched, all []string) string {
+	message, fix := ambiguousClaimProblem(file, claim, matched, all)
+	return message + "; " + fix
+}
+
+// ambiguousClaimProblem is ambiguousClaim as a problem's message and fix.
+func ambiguousClaimProblem(file, claim string, matched, all []string) (message, fix string) {
 	shown := matched[:min(len(matched), 3)]
 	alternatives := make([]string, 0, len(shown))
 	for _, d := range shown {
 		alternatives = append(alternatives, "`"+claimWord(d, all)+"`")
 	}
-	return fmt.Sprintf("%q names %d declarations of %s (such as `%s`), and a claim guards exactly one; use a word only one of them has, such as %s",
-		file+"#"+claim, len(matched), file, strings.TrimSpace(matched[0]), strings.Join(alternatives, ", "))
+	message = fmt.Sprintf("%q names %d declarations of %s (such as `%s`), and a claim guards exactly one",
+		file+"#"+claim, len(matched), file, strings.TrimSpace(matched[0]))
+	return message, "use a word only one of them has, such as " + strings.Join(alternatives, ", ")
 }
 
 // claimWord is the shortest word of declaration that names it and no other entry of all:

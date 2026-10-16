@@ -37,25 +37,28 @@ func TestStoreGradesAgainstItsOwnRoot(t *testing.T) {
 	t.Parallel()
 
 	s, rec := graderStore(t, CheckVerdict{})
-	require.NoError(t, RefuseDeniedCheck(t.Context(), s, types.Job{ID: "w", Check: forkCheck()}))
+	assert.Empty(t, deniedCheckProblems(t.Context(), s, types.Job{ID: "w", Check: forkCheck()}))
 	assert.Equal(t, []string{s.root}, rec.roots)
 	assert.Nil(t, tmpStore(t, t.TempDir()).grader, "a Location that names no grader grades nothing")
 }
 
-func TestRefuseDeniedCheckQuotesTheVerdictAndNamesATargetThatCompiles(t *testing.T) {
+func TestDeniedCheckProblemsQuoteTheVerdictAndNameATargetThatCompiles(t *testing.T) {
 	t.Parallel()
 
 	s, rec := graderStore(t, CheckVerdict{Denied: true, Rule: "worker-builds-magus", Reason: "a worker does not build magus;\nask the main session"})
 	build := &types.LeaseCheck{Target: "go-build", Project: "."}
 
 	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.WritePaths, u.Check = []string{"pkg/b.go"}, build }, config.Jobs{}, nil)
-	require.Error(t, err)
-	assert.NotContains(t, err.Error(), "\n", "an error is one line")
+	require.ErrorIs(t, err, types.JobCheckUnrunnable)
+	ps := deniedCheckProblems(t.Context(), s, types.Job{ID: "w", WritePaths: []string{"pkg/b.go"}, Check: build})
+	require.Len(t, ps, 1)
+	assert.Equal(t, "check", ps[0].Field)
+	assert.NotContains(t, ps[0].Message, "\n", "a message is one line")
 	assert.Contains(t, err.Error(), "w's check `magus run go-build .` would be denied to its worker by the guard (worker-builds-magus)")
 	assert.Contains(t, err.Error(), "a worker does not build magus; ask the main session", "the verdict is quoted")
 	assert.Contains(t, err.Error(), "`go::go-vet .`", "the remedy names a target that compiles without linking the binary")
 	assert.Contains(t, err.Error(), "--check 'go::go-vet .'")
-	require.Len(t, rec.graded, 1)
+	require.Len(t, rec.graded, 2)
 	assert.Equal(t, "w", rec.graded[0].ID, "the grader is handed the row, its id the lease to grade under")
 	assert.Equal(t, build, rec.graded[0].Check)
 
@@ -67,7 +70,7 @@ func TestRefuseDeniedCheckQuotesTheVerdictAndNamesATargetThatCompiles(t *testing
 	require.ErrorContains(t, err, "would be denied to its worker", "job apply grades too")
 }
 
-func TestRefuseDeniedCheckAcceptsWhatTheGuardLets(t *testing.T) {
+func TestDeniedCheckProblemsAcceptWhatTheGuardLets(t *testing.T) {
 	t.Parallel()
 
 	s, rec := graderStore(t, CheckVerdict{})
@@ -83,7 +86,7 @@ func TestRefuseDeniedCheckAcceptsWhatTheGuardLets(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, rec.graded, 2, "a changed check is")
 
-	require.NoError(t, RefuseDeniedCheck(t.Context(), tmpStore(t, t.TempDir()), types.Job{ID: "w", Check: forkCheck()}), "a store with no grader refuses nothing")
+	assert.Empty(t, deniedCheckProblems(t.Context(), tmpStore(t, t.TempDir()), types.Job{ID: "w", Check: forkCheck()}), "a store with no grader finds nothing")
 	_, err = ForkMerge(t.Context(), s, "scout", func(u *types.Job) { u.ReadOnly = true }, config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.Len(t, rec.graded, 2, "a job with no check has nothing to grade")
@@ -105,20 +108,21 @@ func humanOnlyGrader(t *testing.T) (*Store, *gradeRecorder) {
 	return NewStore(loc), rec
 }
 
-func TestRefuseDeniedCheckWordsAHumanOnlyCheckAsOneAPersonRuns(t *testing.T) {
+func TestDeniedCheckProblemsWordAHumanOnlyCheckAsOneAPersonRuns(t *testing.T) {
 	t.Parallel()
 
 	s, _ := humanOnlyGrader(t)
-	err := RefuseDeniedCheck(t.Context(), s, types.Job{ID: "w", Check: &types.LeaseCheck{Target: "bench", Project: "."}})
-	require.Error(t, err)
-	assert.NotContains(t, err.Error(), "\n", "an error is one line")
-	assert.Contains(t, err.Error(), "w's check `magus run bench .` is a target a person runs (human-only)")
-	assert.Contains(t, err.Error(), "launches paid sessions", "the guard's reason is quoted")
-	assert.Contains(t, err.Error(), "declare a check its worker may run in its place, with `magus job fork w --check '<target> <project>'`")
-	assert.NotContains(t, err.Error(), "go-vet", "compiling is no stand-in for a run a person owns")
+	ps := deniedCheckProblems(t.Context(), s, types.Job{ID: "w", Check: &types.LeaseCheck{Target: "bench", Project: "."}})
+	require.Len(t, ps, 1)
+	assert.Equal(t, types.JobCheckUnrunnable, ps[0].Code)
+	assert.NotContains(t, ps[0].Message, "\n", "a message is one line")
+	assert.Contains(t, ps[0].Message, "w's check `magus run bench .` is a target a person runs (human-only)")
+	assert.Contains(t, ps[0].Message, "launches paid sessions", "the guard's reason is quoted")
+	assert.Equal(t, "declare a check its worker may run in its place, with `magus job fork w --check '<target> <project>'`", ps[0].Fix)
+	assert.NotContains(t, ps[0].Fix, "go-vet", "compiling is no stand-in for a run a person owns")
 }
 
-func TestRefuseDeniedCheckGradesEveryGoalCheck(t *testing.T) {
+func TestDeniedCheckProblemsGradeEveryGoalCheck(t *testing.T) {
 	t.Parallel()
 
 	s, rec := humanOnlyGrader(t)
@@ -127,16 +131,23 @@ func TestRefuseDeniedCheckGradesEveryGoalCheck(t *testing.T) {
 		{ID: "again", Kind: types.GoalKindCheck, Check: lint},
 		{ID: "paid", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "bench", Project: "."}},
 	}}
-	err := RefuseDeniedCheck(t.Context(), s, row)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "w's goal paid's check `magus run bench .` is a target a person runs (human-only)")
+	ps := deniedCheckProblems(t.Context(), s, row)
+	require.Len(t, ps, 1)
+	assert.Equal(t, "goals[1].check", ps[0].Field)
+	assert.Contains(t, ps[0].Message, "w's goal paid's check `magus run bench .` is a target a person runs (human-only)")
 	require.Len(t, rec.graded, 2, "a check two goals share is graded once")
 	assert.Equal(t, &lint, rec.graded[0].Check)
 	assert.Equal(t, "bench", rec.graded[1].Check.Target, "a goal's check is graded as the row with that check")
 	assert.Equal(t, row.Goals, rec.graded[1].Goals)
 
 	goalsOnly := types.Job{ID: "g", Goals: []types.Goal{{ID: "paid", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "bench", Project: "."}}}}
-	require.ErrorContains(t, RefuseDeniedCheck(t.Context(), s, goalsOnly), "g's goal paid's check", "a row with no check of its own still has its goals graded")
+	require.ErrorContains(t, deniedCheckProblems(t.Context(), s, goalsOnly).Err(), "g's goal paid's check", "a row with no check of its own still has its goals graded")
 
-	require.NoError(t, RefuseDeniedCheck(t.Context(), s, types.Job{ID: "ok", Check: &lint}), "an ordinary check passes")
+	assert.Empty(t, deniedCheckProblems(t.Context(), s, types.Job{ID: "ok", Check: &lint}), "an ordinary check passes")
+
+	both := types.Job{ID: "b", Goals: []types.Goal{
+		{ID: "paid", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "bench", Project: "."}},
+		{ID: "paid-too", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "bench", Project: "docs"}},
+	}}
+	assert.Len(t, deniedCheckProblems(t.Context(), s, both), 2, "every denied check is found, not the first")
 }

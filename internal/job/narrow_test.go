@@ -49,12 +49,12 @@ func TestRefuseWholeFileConfigClaims(t *testing.T) {
 		want  string
 	}{
 		{"the root magusfile whole", []string{"magusfile.buzz"},
-			"\"magusfile.buzz\", such as `magusfile.buzz#project.name`, `magusfile.buzz#project.targets.test`, `magusfile.buzz#build`"},
-		{"a project's magusfile whole", []string{"libs/lib/magusfile.buzz"}, "\"libs/lib/magusfile.buzz\", such as `libs/lib/magusfile.buzz#project.name`"},
+			"instead, such as `magusfile.buzz#project.name`, `magusfile.buzz#project.targets.test`, `magusfile.buzz#build`"},
+		{"a project's magusfile whole", []string{"libs/lib/magusfile.buzz"}, "\"libs/lib/magusfile.buzz\" holds a project's configuration whole"},
 		{"a key claim", []string{"magusfile.buzz#project.targets.test"}, ""},
 		{"a key not written yet", []string{"magusfile.buzz#project.targets.lint"}, ""},
 		{"a pattern", []string{"**/*.buzz"}, ""},
-		{"magus.yaml whole", []string{"magus.yaml"}, "\"magus.yaml\", such as `magus.yaml#jobs.stale_after`"},
+		{"magus.yaml whole", []string{"magus.yaml"}, "instead, such as `magus.yaml#jobs.stale_after`"},
 		{"a magus.yaml key claim", []string{"magus.yaml#jobs.stale_after"}, ""},
 		{"a Buzz file no project loads", []string{"notes.buzz"}, ""},
 	} {
@@ -95,13 +95,13 @@ func TestRefuseWholeFileConfigClaims(t *testing.T) {
 	t.Run("a checkout that places no line of either", func(t *testing.T) {
 		t.Parallel()
 		bare := testkit.NewRepo(t, map[string]string{"magusfile.buzz": configMagusfile, "magus.yaml": "jobs:\n  stale_after: 2h\n"}).Root()
-		require.NoError(t, RefuseWholeFileConfigClaims(t.Context(), NewStore(tmpLoc(t, bare)), types.Job{ID: "wave/job", WritePaths: []string{"magusfile.buzz", "magus.yaml"}}))
+		assert.Empty(t, wholeFileConfigClaimProblems(t.Context(), NewStore(tmpLoc(t, bare)), types.Job{ID: "wave/job", WritePaths: []string{"magusfile.buzz", "magus.yaml"}}))
 	})
 
 	t.Run("a magus.yaml that declares nothing yet", func(t *testing.T) {
 		t.Parallel()
 		empty := testkit.NewRepo(t, map[string]string{".gitattributes": "*.yaml diff=yaml\n", "magus.yaml": "{}\n"}).Root()
-		require.NoError(t, RefuseWholeFileConfigClaims(t.Context(), NewStore(tmpLoc(t, empty)), types.Job{ID: "wave/job", WritePaths: []string{"magus.yaml"}}))
+		assert.Empty(t, wholeFileConfigClaimProblems(t.Context(), NewStore(tmpLoc(t, empty)), types.Job{ID: "wave/job", WritePaths: []string{"magus.yaml"}}))
 	})
 }
 

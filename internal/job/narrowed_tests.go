@@ -22,10 +22,10 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// RefuseNarrowedTests refuses a job whose go test check, or any check goal, narrows the run
-// with -run or -skip to a set that leaves out a Test function defined in the Go packages of
-// the job's write paths. A hand-picked pattern passes while a test it never ran fails in the
-// root's gate.
+// narrowedTestProblems is every go test check of row, its own or a check goal's, that
+// narrows the run with -run or -skip to a set that leaves out a Test function defined in the
+// Go packages of the job's write paths, as JobCheckUnrunnable. A hand-picked pattern passes
+// while a test it never ran fails in the root's gate.
 //
 // Pure path math: the packages are the directories of the .go write paths (globs
 // expanded), the tests are the top-level `func TestXxx(*testing.T)` declarations of the
@@ -35,10 +35,11 @@ import (
 // tests. A pattern that does not
 // compile is left to go test, which refuses it itself. The paths are relative to the
 // store's workspace root; a nil store, or one with no root, has no tree to read.
-func RefuseNarrowedTests(store *Store, row types.Job) error {
+func narrowedTestProblems(store *Store, row types.Job) types.JobProblems {
 	if store == nil || store.root == "" {
 		return nil
 	}
+	var ps types.JobProblems
 	for _, g := range row.EffectiveGoals() {
 		if g.Kind != types.GoalKindCheck {
 			continue
@@ -47,34 +48,36 @@ func RefuseNarrowedTests(store *Store, row types.Job) error {
 		if g.ID != types.PrimaryGoalID {
 			named = fmt.Sprintf("%s's goal %q", row.ID, g.ID)
 		}
-		if err := refuseNarrowedCheck(store.root, named, g.Check, row.WritePaths); err != nil {
-			return err
+		if p, ok := narrowedCheckProblem(store.root, named, g.Check, row.WritePaths); ok {
+			p.Field = goalCheckField(row, g)
+			ps = append(ps, p)
 		}
 	}
-	return nil
+	return ps
 }
 
-// refuseNarrowedCheck is [RefuseNarrowedTests] for one check, named as the refusal names it.
-func refuseNarrowedCheck(root, named string, check types.LeaseCheck, writePaths []string) error {
+// narrowedCheckProblem is [narrowedTestProblems] for one check, named as the problem names
+// it, and false when the check leaves no test out.
+func narrowedCheckProblem(root, named string, check types.LeaseCheck, writePaths []string) (types.JobProblem, bool) {
 	if !runsGoTest(check) {
-		return nil
+		return types.JobProblem{}, false
 	}
 	runArg, hasRun := goTestFlag(check.Args, "run")
 	skipArg, hasSkip := goTestFlag(check.Args, "skip")
 	if !hasRun && !hasSkip {
-		return nil
+		return types.JobProblem{}, false
 	}
 	var run, skip *testFilter
 	if hasRun {
 		var ok bool
 		if run, ok = parseTestFilter(runArg); !ok {
-			return nil
+			return types.JobProblem{}, false
 		}
 	}
 	if hasSkip {
 		var ok bool
 		if skip, ok = parseTestFilter(skipArg); !ok {
-			return nil
+			return types.JobProblem{}, false
 		}
 	}
 	tags, _ := goTestFlag(check.Args, "tags")
@@ -101,7 +104,7 @@ func refuseNarrowedCheck(root, named string, check types.LeaseCheck, writePaths 
 		}
 	}
 	if len(packages) == 0 {
-		return nil
+		return types.JobProblem{}, false
 	}
 	var fixes []string
 	if len(notRun) > 0 {
@@ -110,9 +113,12 @@ func refuseNarrowedCheck(root, named string, check types.LeaseCheck, writePaths 
 	if len(skipped) > 0 {
 		fixes = append(fixes, narrowSkipFix(skipArg, skipped))
 	}
-	return fmt.Errorf("job: %s `%s` leaves out tests defined in the packages of its write paths,"+
-		" so a break they would catch passes unchecked: %s, to fix it %s",
-		named, check.String(), strings.Join(packages, " and "), strings.Join(fixes, " and "))
+	return types.JobProblem{
+		Code: types.JobCheckUnrunnable,
+		Message: fmt.Sprintf("%s `%s` leaves out tests defined in the packages of its write paths,"+
+			" so a break they would catch passes unchecked: %s", named, check.String(), strings.Join(packages, " and ")),
+		Fix: strings.Join(fixes, " and "),
+	}, true
 }
 
 // runsGoTest reports whether check's -run and -skip select Go tests: the go spell's go-test

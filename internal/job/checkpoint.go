@@ -20,15 +20,16 @@ const checkpointDigestLen = 32
 // the full revision this checkout's version control resolves it to, its digest kept, so
 // the row compares with the base `magus job exec` reads.
 //
-// It refuses a token whose revision resolves to nothing, which includes every token where
-// no version control answers at the store's root; a revision that is neither this
-// checkout's HEAD nor an ancestor of it, since no work here started from it; and a digest
-// that is not the shape [types.VCSCheckpoint.Token] writes. At HEAD it also refuses a
-// digest the live tree does not reproduce. At an older revision the patch behind a digest
-// is gone, so that digest is kept unverified. An empty token, or the checkpoint row id
-// already holds in rows, comes back unchanged: a row may name none, and one it already
-// holds was settled when it was written.
-func (s *Store) DeclaredCheckpoint(ctx context.Context, rows []types.Job, id, token string) (string, error) {
+// It finds a JobCheckpointUnplaceable problem at field checkpoint for a token whose
+// revision resolves to nothing, which includes every token where no version control answers
+// at the store's root; a revision that is neither this checkout's HEAD nor an ancestor of
+// it, since no work here started from it; and a digest that is not the shape
+// [types.VCSCheckpoint.Token] writes. At HEAD it also finds one for a digest the live tree
+// does not reproduce. At an older revision the patch behind a digest is gone, so that digest
+// is kept unverified. An empty token, or the checkpoint row id already holds in rows, comes
+// back unchanged: a row may name none, and one it already holds was settled when it was
+// written. With a problem, the token comes back as it was given.
+func (s *Store) DeclaredCheckpoint(ctx context.Context, rows []types.Job, id, token string) (string, types.JobProblems) {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return "", nil
@@ -37,36 +38,41 @@ func (s *Store) DeclaredCheckpoint(ctx context.Context, rows []types.Job, id, to
 		return token, nil
 	}
 	real := hint.VCSCheckpoint.With("-o name")
+	unplaceable := func(fix, format string, args ...any) (string, types.JobProblems) {
+		return token, types.JobProblems{{Code: types.JobCheckpointUnplaceable, Field: "checkpoint", Message: fmt.Sprintf(format, args...), Fix: fix}}
+	}
+	realFix := fmt.Sprintf("name the checkpoint `%s` prints, or leave it out", real)
 	rev, digest := types.ParseCheckpointToken(token)
 	if strings.Contains(token, "+") && !isCheckpointDigest(digest) {
-		return "", fmt.Errorf("job: checkpoint %q carries the digest %q where a checkpoint carries %d lowercase hex characters, `%s` prints a real one",
-			token, digest, checkpointDigestLen, real)
+		return unplaceable(realFix, "checkpoint %q carries the digest %q where a checkpoint carries %d lowercase hex characters",
+			token, digest, checkpointDigestLen)
 	}
 	driver, full, err := s.fullRevision(ctx, rev)
 	if err != nil {
-		return "", fmt.Errorf("checkpoint %q names no revision this repository holds, `%s` prints a real one: %w", token, real, err)
+		return unplaceable(realFix, "checkpoint %q names no revision this repository holds (%v)", token, err)
 	}
 	head, err := driver.FindCommit(ctx, s.root, "")
 	if err != nil {
-		return "", fmt.Errorf("job: checkpoint %q cannot be placed against this checkout's HEAD: %w", token, err)
+		return unplaceable(realFix, "checkpoint %q cannot be placed against this checkout's HEAD (%v)", token, err)
 	}
 	if full != head.ID {
 		ancestor, err := driver.IsAncestor(ctx, s.root, full, head.ID)
 		switch {
 		case err != nil:
-			return "", fmt.Errorf("job: checkpoint %q cannot be placed against this checkout's HEAD %s: %w", token, shortRevision(head), err)
+			return unplaceable(realFix, "checkpoint %q cannot be placed against this checkout's HEAD %s (%v)", token, shortRevision(head), err)
 		case !ancestor:
-			return "", fmt.Errorf("job: checkpoint %q is neither this checkout's HEAD %s nor an ancestor of it, so no work here started from it, `%s` prints the one this tree is on",
-				token, shortRevision(head), real)
+			return unplaceable(realFix, "checkpoint %q is neither this checkout's HEAD %s nor an ancestor of it, so no work here started from it",
+				token, shortRevision(head))
 		}
 	} else if digest != "" {
 		live, err := s.CheckoutToken(ctx)
 		if err != nil {
-			return "", fmt.Errorf("checkpoint %q carries a digest, and this checkout's tree could not be read to check it: %w", token, err)
+			return unplaceable("name the checkpoint without its digest, or leave it out",
+				"checkpoint %q carries a digest, and this checkout's tree could not be read to check it (%v)", token, err)
 		}
 		if _, liveDigest := types.ParseCheckpointToken(live); liveDigest != digest {
-			return "", fmt.Errorf("job: checkpoint %q is HEAD with the digest %q, and this checkout's tree reads %q, `%s` prints the one this tree is on",
-				token, digest, live, real)
+			return unplaceable(realFix, "checkpoint %q is HEAD with the digest %q, and this checkout's tree reads %q",
+				token, digest, live)
 		}
 	}
 	if digest == "" {
@@ -138,8 +144,9 @@ func (s *Store) checkoutTokenIfReadable(ctx context.Context) string {
 // declaredMerge is merge with the checkpoint it writes onto row id held to
 // [Store.DeclaredCheckpoint], storing that checkpoint expanded. A merge declaring a writing
 // row (a new one, or one that ended) that names none records the checkout's own; where none
-// can be read the row is written without one.
-func (s *Store) declaredMerge(ctx context.Context, rows []types.Job, id string, merge func(*types.Job)) (func(*types.Job), error) {
+// can be read the row is written without one. A checkpoint it cannot place comes back as a
+// problem with merge unchanged.
+func (s *Store) declaredMerge(ctx context.Context, rows []types.Job, id string, merge func(*types.Job)) (func(*types.Job), types.JobProblems) {
 	next, updates := mergeBase(rows, id, merge)
 	merge(&next)
 	written := next.Checkpoint
@@ -155,9 +162,9 @@ func (s *Store) declaredMerge(ctx context.Context, rows []types.Job, id string, 
 			}
 		}, nil
 	}
-	full, err := s.DeclaredCheckpoint(ctx, rows, id, written)
-	if err != nil || full == written {
-		return merge, err
+	full, ps := s.DeclaredCheckpoint(ctx, rows, id, written)
+	if len(ps) > 0 || full == written {
+		return merge, ps
 	}
 	return func(u *types.Job) {
 		merge(u)

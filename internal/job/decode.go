@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
@@ -37,9 +39,12 @@ const maxInputBytes = 1 << 20
 // opposed to understood and rejected. `magus job wait` exits 2 for this and 1 for a
 // rejection.
 func DecodeResult(r io.Reader) (types.JobResult, error) {
-	raw, err := readInput(r, "result")
-	if err != nil {
+	raw, invalid, err := readInput(r, "result")
+	switch {
+	case err != nil:
 		return types.JobResult{}, err
+	case invalid != nil:
+		return types.JobResult{}, invalid
 	}
 	if err := checkVersion(raw, "result", types.JobResultSchema); err != nil {
 		return types.JobResult{}, err
@@ -52,23 +57,66 @@ func DecodeResult(r io.Reader) (types.JobResult, error) {
 }
 
 // DecodeDeclaration reads one declared job. See [DecodeResult] for the rules; this is the
-// same two passes over the job's schema.
+// same two passes over the job's schema. A record that is not a job (blank, too large, no
+// schema_version, an unknown member) fails as JobRecordInvalid problems, each unknown member
+// its own, and a job that decodes fails with every problem [types.Declaration.Problems]
+// finds. A newer schema_version, or a requirement this magus lacks, is no defect of the
+// record and fails as a plain error naming the update.
 func DecodeDeclaration(r io.Reader) (types.Declaration, error) {
-	raw, err := readInput(r, "job")
-	if err != nil {
+	raw, invalid, err := readInput(r, "job")
+	switch {
+	case err != nil:
 		return types.Declaration{}, err
+	case invalid != nil:
+		return types.Declaration{}, recordInvalid("", invalid).Err()
+	case !json.Valid(raw):
+		return types.Declaration{}, recordInvalid("", errors.New("the job is not JSON")).Err()
 	}
 	if err := checkVersion(raw, "job", types.DeclarationSchema); err != nil {
+		if missing := (*missingVersion)(nil); errors.As(err, &missing) {
+			return types.Declaration{}, recordInvalid("schema_version", err).Err()
+		}
 		return types.Declaration{}, err
 	}
 	var row types.Declaration
 	if err := json.UnmarshalStrict(raw, &row); err != nil {
-		return types.Declaration{}, fmt.Errorf("job: the input is not a version %d job: %w", types.JobSchemaVersion, err)
+		return types.Declaration{}, memberProblems(raw, err).Err()
 	}
-	if err := row.FoldLegacyNames(); err != nil {
-		return types.Declaration{}, err
+	return row, errors.Join(row.FoldLegacyNames(), row.Validate())
+}
+
+// recordInvalid is err, the reason a record could not be read as a job, as its one problem.
+func recordInvalid(field string, err error) types.JobProblems {
+	return types.JobProblems{{
+		Code:    types.JobRecordInvalid,
+		Field:   field,
+		Message: strings.TrimPrefix(err.Error(), "job: "),
+		Fix:     fmt.Sprintf("send one JSON job; `%s` prints its fields", hint.JobFork.With("--schema")),
+	}}
+}
+
+// memberProblems is the strict decode's failure err on raw as problems: one per member
+// [types.Declaration] does not declare, or err itself when every member is known and a
+// value is what failed.
+func memberProblems(raw []byte, err error) types.JobProblems {
+	members, _ := objectMembers(raw)
+	known := jsonMembers(reflect.TypeFor[types.Declaration]())
+	var ps types.JobProblems
+	for _, name := range slices.Sorted(maps.Keys(members)) {
+		if slices.Contains(known, name) {
+			continue
+		}
+		ps = append(ps, types.JobProblem{
+			Code:    types.JobRecordInvalid,
+			Field:   name,
+			Message: fmt.Sprintf("%q is an unknown member of a version %d job", name, types.JobSchemaVersion),
+			Fix:     fmt.Sprintf("drop it, or spell the field `%s` prints", hint.JobFork.With("--schema")),
+		})
 	}
-	return row, row.Validate()
+	if len(ps) > 0 {
+		return ps
+	}
+	return recordInvalid("", fmt.Errorf("the input is not a version %d job: %w", types.JobSchemaVersion, err))
 }
 
 // storeStamped are the members of a stored row that the store computes and a declaration
@@ -144,9 +192,12 @@ func objectMembers(raw []byte) (map[string]json.RawMessage, bool) {
 // failure names the record by its position, so nothing is applied from a stream with one
 // bad record in it.
 func DecodeDeclarations(r io.Reader) ([]types.Declaration, error) {
-	raw, err := readInput(r, "records")
-	if err != nil {
+	raw, invalid, err := readInput(r, "records")
+	switch {
+	case err != nil:
 		return nil, err
+	case invalid != nil:
+		return nil, recordInvalid("", invalid).Err()
 	}
 	var parts []json.RawMessage
 	trimmed := strings.TrimSpace(string(raw))
@@ -165,7 +216,7 @@ func DecodeDeclarations(r io.Reader) ([]types.Declaration, error) {
 		}
 	}
 	if len(parts) == 0 {
-		return nil, errors.New("job: the records hold no job")
+		return nil, recordInvalid("", errors.New("the records hold no job")).Err()
 	}
 	rows := make([]types.Declaration, 0, len(parts))
 	seen := map[string]int{}
@@ -187,18 +238,31 @@ func DecodeDeclarations(r io.Reader) ([]types.Declaration, error) {
 	return rows, nil
 }
 
-func readInput(r io.Reader, what string) ([]byte, error) {
-	raw, err := io.ReadAll(io.LimitReader(r, maxInputBytes+1))
+// readInput reads what r holds. invalid says why the input is no record at all (blank, or
+// larger than any), and err that it could not be read.
+func readInput(r io.Reader, what string) (raw []byte, invalid, err error) {
+	raw, err = io.ReadAll(io.LimitReader(r, maxInputBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("job: read the %s: %w", what, err)
+		return nil, nil, fmt.Errorf("job: read the %s: %w", what, err)
 	}
 	if len(raw) > maxInputBytes {
-		return nil, fmt.Errorf("job: the %s is larger than %d bytes, which no %s is", what, maxInputBytes, what)
+		return nil, fmt.Errorf("job: the %s is larger than %d bytes, which no %s is", what, maxInputBytes, what), nil
 	}
 	if len(strings.TrimSpace(string(raw))) == 0 {
-		return nil, fmt.Errorf("job: the %s is empty", what)
+		return nil, fmt.Errorf("job: the %s is empty", what), nil
 	}
-	return raw, nil
+	return raw, nil, nil
+}
+
+// missingVersion is checkVersion's failure for a record that names no schema_version, the
+// one version failure that is the record's own defect rather than this magus's age.
+type missingVersion struct {
+	what      string
+	supported int
+}
+
+func (e *missingVersion) Error() string {
+	return fmt.Sprintf("job: the %s carries no schema_version, this magus accepts versions 1 through %d", e.what, e.supported)
 }
 
 // checkVersion reads the envelope that decides whether the rest can be read at all.
@@ -213,7 +277,7 @@ func checkVersion(raw []byte, what string, ledger types.SchemaLedger) error {
 	supported := ledger.Version
 	switch v := envelope.Version; {
 	case v <= 0:
-		return fmt.Errorf("job: the %s carries no schema_version, this magus accepts versions 1 through %d", what, supported)
+		return &missingVersion{what: what, supported: supported}
 	case v > supported:
 		return fmt.Errorf("job: the %s is schema_version %d and this magus accepts versions 1 through %d:"+
 			" a newer record is not readable by an older magus, update magus or send version %d", what, v, supported, supported)

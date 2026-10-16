@@ -394,8 +394,9 @@ func heldHere(rows []types.Job, root, forking string) []types.Job {
 	return slices.DeleteFunc(HeldIn(rows, root), func(row types.Job) bool { return row.ID == forking })
 }
 
-// RefuseSharedCheckout refuses a fork whose write paths cover a file the WORKSPACE has to
-// load, while another live job with write paths is already working in this checkout.
+// sharedCheckoutProblems is every write path of row that covers a file the WORKSPACE has to
+// load while another live job with write paths is already working in this checkout, as
+// CheckoutConfigHeld, each reported against the first load file it covers.
 //
 // THE ONE COLLISION A WORKER CANNOT SEE. Two jobs overlapping costs the two workers
 // involved a conflict they can read; a half-saved magusfile costs every worker in the
@@ -409,7 +410,7 @@ func heldHere(rows []types.Job, root, forking string) []types.Job {
 // recorded, see WriteProof), nothing about a checkout holding no other live job, and
 // nothing about a job whose write paths cover no load file. Refusing more than magus can
 // prove is how a guard becomes something to route around.
-func RefuseSharedCheckout(store *Store, rows []types.Job, row types.Job) error {
+func sharedCheckoutProblems(store *Store, rows []types.Job, row types.Job) types.JobProblems {
 	if store == nil || len(row.WritePaths) == 0 {
 		return nil
 	}
@@ -417,41 +418,48 @@ func RefuseSharedCheckout(store *Store, rows []types.Job, row types.Job) error {
 	if len(held) == 0 {
 		return nil
 	}
+	var ps types.JobProblems
+	reported := map[string]bool{}
 	// Read only once something else holds the checkout: the walk touches the tree, and a
 	// fork into an unshared checkout is the common case and must stay free.
 	for _, load := range describe.WorkspaceLoadFiles(store.root) {
 		declared, covered := writePathCovering(row.WritePaths, load)
-		if !covered {
+		if !covered || reported[declared] {
 			continue
 		}
-		return fmt.Errorf("job: %s declares %q, which covers %s, and %s is live in this checkout (%s):"+
-			" a magusfile, magus.yaml or spell source that is half-saved stops the whole workspace loading,"+
-			" so every job here loses `magus run` until it lands, not just this one,"+
-			" give %s its own worktree and fork it there, or leave %s out of its write paths,"+
-			" `%s` names what else that write path covers",
-			row.ID, declared, load, held[0].ID, store.root, row.ID, load, hint.DescribeFile.With(load))
+		reported[declared] = true
+		ps = append(ps, types.JobProblem{
+			Code:  types.CheckoutConfigHeld,
+			Field: fmt.Sprintf("write_paths[%d]", slices.Index(row.WritePaths, declared)),
+			Message: fmt.Sprintf("%s declares %q, which covers %s, and %s is live in this checkout (%s):"+
+				" a magusfile, magus.yaml or spell source that is half-saved stops the whole workspace loading,"+
+				" so every job here loses `magus run` until it lands, not just this one",
+				row.ID, declared, load, held[0].ID, store.root),
+			Fix: fmt.Sprintf("fork %s into its own worktree with `%s`, or drop %q from write_paths (`%s` names what else it covers)",
+				row.ID, hint.JobFork.With(row.ID, "--checkout", "<dir>"), declared, hint.DescribeFile.With(load)),
+		})
 	}
-	return nil
+	return ps
 }
 
-// RefuseDirectoryWritePaths refuses a fork whose write paths name an existing directory
-// (MGS3018), project roots and the workspace root included. A write path names files: a
-// directory claims every file beneath it, so the job overlaps every job that edits anything
-// there, and the overlap report fills with pairs that share no file. Every fork door runs
-// it, and there is no override.
+// directoryWritePathProblems is every write path of row that names an existing directory,
+// as WritePathIsDirectory, project roots and the workspace root included. A write path names
+// files: a directory claims every file beneath it, so the job overlaps every job that edits
+// anything there, and the overlap report fills with pairs that share no file. Every fork door
+// runs it, and there is no waiver.
 //
 // Declarable: a file, and a path that does not exist yet, which the job creates. A glob
 // whose last segments are only wildcards (`docs/**`, `docs/*`, `docs/**/*`) names everything
 // under its directory, so it is judged as that directory, each match when the directory
 // part is itself a pattern. Any other glob (`docs/*.md`) names files and passes.
 //
-// A nil store, or one with no workspace root, has no tree to read and refuses nothing.
-func RefuseDirectoryWritePaths(store *Store, row types.Job) error {
+// A nil store, or one with no workspace root, has no tree to read and finds nothing.
+func directoryWritePathProblems(store *Store, row types.Job) types.JobProblems {
 	if store == nil || store.root == "" {
 		return nil
 	}
-	var refused []string
-	for _, decl := range row.WritePaths {
+	var ps types.JobProblems
+	for i, decl := range row.WritePaths {
 		for _, dir := range claimedDirs(store.root, decl) {
 			named := fmt.Sprintf("%q", decl)
 			if dir != path.Clean(strings.TrimSpace(decl)) {
@@ -465,21 +473,20 @@ func RefuseDirectoryWritePaths(store *Store, row types.Job) error {
 			default:
 				named += fmt.Sprintf(", inside project %q", enclosingProject(store.root, dir))
 			}
-			refused = append(refused, named)
+			ps = append(ps, types.JobProblem{
+				Code:  types.WritePathIsDirectory,
+				Field: fmt.Sprintf("write_paths[%d]", i),
+				Message: named + " is a directory, and a write path names files: a directory claims every file under it," +
+					" so the job would overlap every job editing anything there",
+				Fix: "list the files the job will edit in its place, and name each file it creates by its path",
+			})
 		}
 	}
-	if len(refused) == 0 {
-		return nil
-	}
-	return types.DiagnosticErrorf(types.WritePathIsDirectory,
-		"job: %s declares a directory as a write path: %s. A write path names files: a directory, a project"+
-			" root included, claims every file under it, so the job would overlap every job editing anything there."+
-			" List the files the job will edit, and name each file it creates by its path",
-		row.ID, strings.Join(refused, "; "))
+	return ps
 }
 
 // claimedDirs returns the existing directories, workspace-relative, that the write path
-// decl claims whole. See [RefuseDirectoryWritePaths] for how a glob is read.
+// decl claims whole. See [directoryWritePathProblems] for how a glob is read.
 func claimedDirs(root, decl string) []string {
 	decl, _ = types.SplitClaim(decl)
 	if decl == "" {

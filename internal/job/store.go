@@ -115,6 +115,9 @@ type Store struct {
 	owners          func(context.Context, []string) ([]string, error)
 	// priceContext is Location.PriceContext.
 	priceContext func(calls []types.AgentFacts) (tokens int64, usd float64, ok bool)
+	// workspace is what validation reads the record against (see [Store.InWorkspace]);
+	// nil names those checks unchecked.
+	workspace *Workspace
 }
 
 // Location is where a Store lives: the repository whose rows these are, the state base

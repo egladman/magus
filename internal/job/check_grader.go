@@ -70,13 +70,13 @@ func CompilingCheck() types.LeaseCheck {
 // person runs.
 const humanOnlyRule = "human-only"
 
-// RefuseDeniedCheck refuses a job whose declared check, or the check of any of its goals
-// of kind check, the guard would deny its holder. The holder runs every check under the
-// lease, so a denied one leaves the job unable to verify itself and ends it unverified.
-// Each check is graded as the row with that check, the first deny refuses, and a check
-// two goals share is graded once. A Store with no grader of its own grades with the one
-// [SetCheckGrader] installed; with neither, and for a job with no check, nothing is refused.
-func RefuseDeniedCheck(ctx context.Context, store *Store, row types.Job) error {
+// deniedCheckProblems is every check of row, its own or a check goal's, the guard would deny
+// its holder, as JobCheckUnrunnable. The holder runs every check under the lease, so a
+// denied one leaves the job unable to verify itself and ends it unverified. Each check is
+// graded as the row with that check, and a check two goals share is graded once. A Store
+// with no grader of its own grades with the one [SetCheckGrader] installed; with neither,
+// and for a job with no check, nothing is found.
+func deniedCheckProblems(ctx context.Context, store *Store, row types.Job) types.JobProblems {
 	if store == nil {
 		return nil
 	}
@@ -84,7 +84,10 @@ func RefuseDeniedCheck(ctx context.Context, store *Store, row types.Job) error {
 	if grader == nil {
 		return nil
 	}
-	var graded []types.LeaseCheck
+	var (
+		graded []types.LeaseCheck
+		ps     types.JobProblems
+	)
 	for _, goal := range row.EffectiveGoals() {
 		if goal.Kind != types.GoalKindCheck || goal.Check.Target == "" && goal.Check.Script == "" {
 			continue
@@ -103,22 +106,27 @@ func RefuseDeniedCheck(ctx context.Context, store *Store, row types.Job) error {
 		if goal.ID != types.PrimaryGoalID {
 			which = "goal " + goal.ID + "'s check"
 		}
-		return deniedCheckError(row.ID, which, goal.Check, verdict)
+		p := deniedCheckProblem(row.ID, which, goal.Check, verdict)
+		p.Field = goalCheckField(row, goal)
+		ps = append(ps, p)
 	}
-	return nil
+	return ps
 }
 
-// deniedCheckError words the refusal of row id's check, which names it in the row. A
-// target a person runs is no check a worker could ever run, so that refusal names the
+// deniedCheckProblem words the problem with row id's check, which names it in the row. A
+// target a person runs is no check a worker could ever run, so that problem names the
 // rule's reason and asks for another check; any other deny recommends the compiling check,
 // which the guard lets a worker it keeps from building run.
-func deniedCheckError(id, which string, check types.LeaseCheck, verdict CheckVerdict) error {
+func deniedCheckProblem(id, which string, check types.LeaseCheck, verdict CheckVerdict) types.JobProblem {
 	reason := strings.Join(strings.Fields(verdict.Reason), " ")
 	if verdict.Rule == humanOnlyRule {
-		return fmt.Errorf("job: %s's %s `%s` is a target a person runs (%s): %s,"+
-			" and a worker is refused it whoever asks, so it can never verify the job;"+
-			" declare a check its worker may run in its place, with `magus job fork %s --check '<target> <project>'`",
-			id, which, check.String(), humanOnlyRule, reason, id)
+		return types.JobProblem{
+			Code: types.JobCheckUnrunnable,
+			Message: fmt.Sprintf("%s's %s `%s` is a target a person runs (%s): %s,"+
+				" and a worker is refused it whoever asks, so it can never verify the job",
+				id, which, check.String(), humanOnlyRule, reason),
+			Fix: fmt.Sprintf("declare a check its worker may run in its place, with `magus job fork %s --check '<target> <project>'`", id),
+		}
 	}
 	rule := ""
 	if verdict.Rule != "" {
@@ -126,9 +134,12 @@ func deniedCheckError(id, which string, check types.LeaseCheck, verdict CheckVer
 	}
 	compiling := CompilingCheck()
 	recommended := compiling.Target + " " + compiling.Project
-	return fmt.Errorf("job: %s's %s `%s` would be denied to its worker by the guard%s: %s,"+
-		" and the holder runs the check under its lease, so a denied one can never verify the job,"+
-		" declare a target that compiles without building the binary, such as `%s`,"+
-		" with `magus job fork %s --check '%s'`",
-		id, which, check.String(), rule, reason, recommended, id, recommended)
+	return types.JobProblem{
+		Code: types.JobCheckUnrunnable,
+		Message: fmt.Sprintf("%s's %s `%s` would be denied to its worker by the guard%s: %s,"+
+			" and the holder runs the check under its lease, so a denied one can never verify the job",
+			id, which, check.String(), rule, reason),
+		Fix: fmt.Sprintf("declare a target that compiles without building the binary, such as `%s`,"+
+			" with `magus job fork %s --check '%s'`", recommended, id, recommended),
+	}
 }

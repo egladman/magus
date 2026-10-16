@@ -267,7 +267,7 @@ func TestForkRefusesADirectoryWritePath(t *testing.T) {
 		{"the workspace root, itself a project", []string{"."}, `".", the workspace root`},
 		{"the workspace root spelled as a glob", []string{"**"}, `"**" (matching the directory "."), the workspace root`},
 		{"a wildcard subtree of a project root", []string{"libs/lib/**"}, `"libs/lib/**" (matching the directory "libs/lib"), the root of project "libs/lib"`},
-		{"every bad path at once", []string{"internal", "libs/lib/src"}, `"internal", inside project "."; "libs/lib/src"`},
+		{"every bad path at once", []string{"internal", "libs/lib/src"}, `"libs/lib/src", inside project "libs/lib" is a directory`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -282,8 +282,8 @@ func TestForkRefusesADirectoryWritePath(t *testing.T) {
 			}
 			require.ErrorIs(t, err, types.WritePathIsDirectory)
 			assert.Contains(t, err.Error(), tc.want)
-			assert.Contains(t, err.Error(), "A write path names files")
-			assert.Contains(t, err.Error(), "List the files the job will edit")
+			assert.Contains(t, err.Error(), "a write path names files")
+			assert.Contains(t, err.Error(), "list the files the job will edit")
 			rows, lerr := s.List()
 			require.NoError(t, lerr)
 			assert.Empty(t, rows, "a refused fork writes no row")

@@ -1890,13 +1890,28 @@ func MagusPutJob(ctx context.Context, id string, put types.JobPut) (types.Job, e
 	if err != nil {
 		return types.Job{}, err
 	}
+	ws := types.WorkspaceFromContext(ctx)
 	var limits config.Jobs
-	if l, ok := types.WorkspaceFromContext(ctx).(workspaceJobLimits); ok {
+	if l, ok := ws.(workspaceJobLimits); ok {
 		limits = l.JobLimits()
 	}
+	// A view that wraps no repository answers All by panicking; that is reported as
+	// Unavailable like an empty one, so the checks that need projects say they did not run.
+	validated := func() (validated job.Workspace) {
+		defer func() {
+			if r := recover(); r != nil {
+				validated = job.Workspace{Unavailable: fmt.Sprintf("the workspace on the context could not list its projects: %v", r)}
+			}
+		}()
+		projects := ws.All()
+		if len(projects) == 0 {
+			return job.Workspace{Unavailable: "the workspace on the context lists no projects"}
+		}
+		return job.Workspace{Projects: projects, Ignored: job.VCSIgnored(ctx, ws.Root())}
+	}()
 	// No symbol reader: a magusfile target holds no loaded graph, so only the ambiguity
 	// check is skipped here, and the gate still refuses to certify an unresolved name.
-	return job.ForkMerge(ctx, store, strings.TrimSpace(id), merge, limits, nil)
+	return job.ForkMerge(ctx, store.InWorkspace(validated), strings.TrimSpace(id), merge, limits, nil)
 }
 
 // MagusRegisterJob backs magus\job.register: it records the base the workspace's

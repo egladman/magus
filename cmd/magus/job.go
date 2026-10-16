@@ -1201,6 +1201,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	store = store.InWorkspace(jobWorkspace(ctx, root))
 	// The reader loads the graph only when a gate names a symbol, or when the deletion
 	// candidates ask for it, and the two share one load.
 	graph := newJobGraph(root, true)
@@ -2319,6 +2320,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	store = store.InWorkspace(jobWorkspace(ctx, root))
 	checkpoint := func() string {
 		token, _ := checkoutBaseToken(ctx, root)
 		return token

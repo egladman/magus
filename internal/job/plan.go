@@ -43,26 +43,23 @@ func Declare(row types.Declaration, defaultTimeout time.Duration) func(*types.Jo
 // ForkMerge applies a field merge to one row, for `magus job fork` (whose merge is
 // [Declare]) and magus\job.put (from the client tool or a magusfile), and takes
 // default_timeout when a merge that creates the row named no timeout. What it is held to is
-// [refuseMerge]'s, the rules `magus job apply` shares. read may be nil where no graph is at
-// hand, which skips only the ambiguity check.
+// [ValidateMerge]'s, the rules `magus job apply` shares, with the merge's checkpoint and
+// symbol goals settled in the same pass: the error joins every problem left after the row's
+// waivers, and nothing is written then. read may be nil where no graph is at hand, which
+// skips only the ambiguity check.
 func ForkMerge(ctx context.Context, store *Store, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) (types.Job, error) {
 	rows, err := store.List()
 	if err != nil {
 		return types.Job{}, err
 	}
-	if merge, err = store.declaredMerge(ctx, rows, id, merge); err != nil {
+	v, merge := validateFork(ctx, store, rows, id, merge, limits, read)
+	if err := v.Err(); err != nil {
 		return types.Job{}, err
 	}
-	if merge, err = resolveMerge(ctx, store, rows, id, merge, read); err != nil {
-		return types.Job{}, err
-	}
-	proof, err := refuseMerge(ctx, store, rows, id, merge, limits, read)
-	if err != nil {
-		return types.Job{}, err
-	}
-	return writeMerge(ctx, store, id, merge, limits, proof)
+	return writeMerge(ctx, store, id, merge, limits, v.WriteProof)
 }
 
+// writeMerge stores a merge that validated, stamping when it did.
 func writeMerge(ctx context.Context, store *Store, id string, merge func(*types.Job), limits config.Jobs, proof types.JobWriteProof) (types.Job, error) {
 	return store.Update(ctx, id, func(u *types.Job) {
 		created := u.Created == 0
@@ -73,112 +70,8 @@ func writeMerge(ctx context.Context, store *Store, id string, merge func(*types.
 		if proof != "" {
 			u.WriteProof = proof
 		}
+		u.Validated = time.Now().Unix()
 	})
-}
-
-// refuseMerge holds a merge into job id, against the plan rows, to the rules a fork is held
-// to, and returns the write proof the row records. A merge that creates the row, or brings
-// an ended one back, meets every one. The row is scoped and graded, within the jobs limits,
-// with unambiguous symbol goals. Its write paths are no directory (MGS3018), no ungradable
-// claim (MGS3031), no project configuration held whole (MGS3036), and no shared checkout or
-// unordered shared file (MGS3032). Its check skips no test of its write paths' packages and
-// is none the guard denies its holder. A merge onto a row that has not ended meets
-// the same rules for what it ADDS: the goals and write paths it did not carry, so a path the
-// row already held never blocks an unrelated update. Its proof is recomputed when its write
-// paths change, and is empty otherwise, which keeps the one it holds.
-//
-// The guard grades the check against rows rather than sweep the store again.
-func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) (types.JobWriteProof, error) {
-	graded := WithSnapshot(ctx, Snapshot{Rows: rows})
-	prev, updates := mergeBase(rows, id, merge)
-	if updates {
-		merged := prev.Clone()
-		merge(&merged)
-		if err := RefuseUngraded(merged); err != nil {
-			return "", err
-		}
-		var goals []types.Goal
-		for _, gate := range merged.Goals {
-			if !slices.ContainsFunc(prev.Goals, func(g types.Goal) bool { return g.ID == gate.ID }) {
-				goals = append(goals, gate)
-			}
-		}
-		if err := RefuseAmbiguousSymbols(ctx, goals, read); err != nil {
-			return "", err
-		}
-		added := slices.DeleteFunc(slices.Clone(merged.WritePaths), func(p string) bool { return slices.Contains(prev.WritePaths, p) })
-		addedRow := types.Job{ID: id, WritePaths: added, Parent: merged.Parent, DependsOn: merged.DependsOn}
-		if err := RefuseAddedWritePaths(ctx, store, addedRow); err != nil {
-			return "", err
-		}
-		addedDenies := slices.DeleteFunc(slices.Clone(merged.DenyPaths), func(p string) bool { return slices.Contains(prev.DenyPaths, p) })
-		if err := RefuseUngradableClaims(ctx, store, types.Job{ID: id, DenyPaths: addedDenies}); err != nil {
-			return "", err
-		}
-		if err := RefuseUnorderedFileShare(ctx, store, rows, addedRow); err != nil {
-			return "", err
-		}
-		// Judged on what the update changes, so a check the row already held never blocks an
-		// unrelated update: a new check or goal is graded against every write path, an old
-		// one only against the paths this update adds.
-		checkChanged := !types.SameLeaseCheck(prev.Check, merged.Check)
-		newChecks := types.Job{ID: id, WritePaths: merged.WritePaths, Goals: goals}
-		if checkChanged {
-			newChecks.Check = merged.Check
-		}
-		if err := RefuseNarrowedTests(store, newChecks); err != nil {
-			return "", err
-		}
-		if len(added) > 0 {
-			oldChecks := types.Job{ID: id, WritePaths: added, Check: merged.Check, Goals: merged.Goals}
-			if err := RefuseNarrowedTests(store, oldChecks); err != nil {
-				return "", err
-			}
-		}
-		if err := RefuseDeniedCheck(graded, store, addedChecks(prev, merged, checkChanged)); err != nil {
-			return "", err
-		}
-		if slices.Equal(prev.WritePaths, merged.WritePaths) {
-			return "", nil
-		}
-		return store.WriteProof(rows, merged), nil
-	}
-	row := prev
-	merge(&row)
-	if err := RefuseUnscoped(row); err != nil {
-		return "", err
-	}
-	if err := RefuseUngraded(row); err != nil {
-		return "", err
-	}
-	if err := RefuseForkLimits(rows, id, row.Parent, limits); err != nil {
-		return "", err
-	}
-	if err := RefuseAmbiguousSymbols(ctx, row.Goals, read); err != nil {
-		return "", err
-	}
-	if err := RefuseDirectoryWritePaths(store, row); err != nil {
-		return "", err
-	}
-	if err := RefuseUngradableClaims(ctx, store, row); err != nil {
-		return "", err
-	}
-	if err := RefuseWholeFileConfigClaims(ctx, store, row); err != nil {
-		return "", err
-	}
-	if err := RefuseSharedCheckout(store, rows, row); err != nil {
-		return "", err
-	}
-	if err := RefuseUnorderedFileShare(ctx, store, rows, row); err != nil {
-		return "", err
-	}
-	if err := RefuseNarrowedTests(store, row); err != nil {
-		return "", err
-	}
-	if err := RefuseDeniedCheck(graded, store, row); err != nil {
-		return "", err
-	}
-	return store.WriteProof(rows, row), nil
 }
 
 // mergeBase is the row a merge into id lands on, and whether the merge updates that row
@@ -230,12 +123,16 @@ type Applied struct {
 // exceptions: an omitted checkpoint keeps the row's, or takes checkpoint() on a new row, and
 // the deadline moves only when a record names a timeout. A new id creates the job.
 //
-// Every record is refused or accepted before any is written: each is held to
-// [refuseMerge] and to the store's authorization against the plan as the records before it
-// leave it, so a stream refused at its third record writes nothing. A record carrying state
-// or enter is refused: state is status, and an entry is `magus job fork`'s. So is one naming
-// a job that already ended. dryRun returns what would be written and writes nothing, a
-// refusal's release request included.
+// Every record is validated before any is written, each against the plan as the records
+// before it leave it, and the error joins every record's problems, each message prefixed by
+// its record id, so a stream with problems in its first and third records writes nothing
+// and names both. Each record is held to [ValidateMerge], with its checkpoint settled in the
+// same pass. A record carrying state, enter or checkout is a JobRecordInvalid problem: state
+// is status, and an entry and a checkout are `magus job fork`'s. So is one naming a job that
+// already ended, and one dropping every write path a live job holds. Who may write a record
+// is judged first: the store's authorization refuses at once, as it did before the pass.
+// dryRun returns what would be written and writes nothing, a refusal's release request
+// included.
 func Apply(ctx context.Context, store *Store, records []types.Declaration, limits config.Jobs, read SymbolReader, checkpoint func() string, dryRun bool) ([]Applied, error) {
 	rows, err := store.List()
 	if err != nil {
@@ -248,34 +145,45 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 	plan := make([]Applied, 0, len(records))
 	merges := make([]func(*types.Job), 0, len(records))
 	proofs := make([]types.JobWriteProof, 0, len(records))
+	var problems types.JobProblems
 	for _, rec := range records {
-		switch {
-		case rec.State != "":
-			return nil, fmt.Errorf("job: the record for %s carries state %q, which is status: apply writes the spec and never moves a job, a holder moves its own with `%s` and `%s`",
-				rec.ID, rec.State, hint.JobExec.With(rec.ID), hint.JobExit.With(rec.ID))
-		case rec.Enter != "":
-			return nil, fmt.Errorf("job: the record for %s enters %s, which declares nothing to apply, `%s` records an entry", rec.ID, rec.Enter, hint.JobFork.With("--stdin"))
-		case rec.Checkout != "":
-			return nil, fmt.Errorf("job: the record for %s names checkout %s, which only a fork makes, `%s` fed this record makes it", rec.ID, rec.Checkout, hint.JobFork.With("--stdin"))
+		var ps types.JobProblems
+		invalid := func(field, message, fix string) {
+			ps = append(ps, types.JobProblem{Code: types.JobRecordInvalid, Field: field, Message: message, Fix: fix})
+		}
+		if rec.State != "" {
+			invalid("state", fmt.Sprintf("the record for %s carries state %q, which is status: apply writes the spec and never moves a job", rec.ID, rec.State),
+				fmt.Sprintf("drop state; a holder moves its own job with `%s` and `%s`", hint.JobExec.With(rec.ID), hint.JobExit.With(rec.ID)))
+		}
+		if rec.Checkout != "" {
+			invalid("checkout", fmt.Sprintf("the record for %s names checkout %s, which only a fork makes", rec.ID, rec.Checkout),
+				fmt.Sprintf("drop checkout, or feed this record to `%s`", hint.JobFork.With("--stdin")))
 		}
 		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == rec.ID })
 		var prev types.Job
 		if i >= 0 {
 			prev = rows[i]
-			if prev.State.Terminal() {
-				return nil, fmt.Errorf("job: %s already ended %s, and apply changes a live job, fork a new one", rec.ID, prev.State)
-			}
 		}
-		if rec.Checkpoint, err = store.DeclaredCheckpoint(ctx, rows, rec.ID, rec.Checkpoint); err != nil {
-			return nil, err
+		switch {
+		case rec.Enter != "":
+			invalid("enter", fmt.Sprintf("the record for %s enters %s, which declares nothing to apply", rec.ID, rec.Enter),
+				fmt.Sprintf("feed it to `%s`, which records an entry", hint.JobFork.With("--stdin")))
+		case i >= 0 && prev.State.Terminal():
+			invalid("id", fmt.Sprintf("%s already ended %s, and apply changes a live job", rec.ID, prev.State),
+				fmt.Sprintf("fork a new job with `%s`", hint.JobFork.With("--stdin")))
 		}
-		merge, err := resolveMerge(ctx, refusing, rows, rec.ID, specMerge(rec, i < 0, checkpoint), read)
-		if err != nil {
-			return nil, err
+		if rec.Enter != "" || i >= 0 && prev.State.Terminal() {
+			problems = append(problems, prefixed(rec.ID, ps)...)
+			continue
 		}
-		proof, err := refuseMerge(ctx, refusing, rows, rec.ID, merge, limits, read)
-		if err != nil {
-			return nil, err
+		var cps types.JobProblems
+		rec.Checkpoint, cps = store.DeclaredCheckpoint(ctx, rows, rec.ID, rec.Checkpoint)
+		ps = append(ps, cps...)
+		merge := specMerge(rec, i < 0, checkpoint)
+		if resolved, err := resolveMerge(ctx, refusing, rows, rec.ID, merge, read); err != nil {
+			ps = append(ps, resolveProblem(err))
+		} else {
+			merge = resolved
 		}
 		next := prev.Clone()
 		next.ID = rec.ID
@@ -286,21 +194,26 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 		// An empty write set is no boundary at all (the guard scopes nothing by it), so
 		// dropping the last path would free the job rather than stop it.
 		if i >= 0 && len(prev.WritePaths) > 0 && len(next.WritePaths) == 0 && !next.ReadOnly {
-			return nil, fmt.Errorf("job: that drops every write path %s holds, which leaves it bounded by nothing,"+
-				" end the job with `%s` instead", rec.ID, hint.JobExit.With(rec.ID))
+			invalid("write_paths", fmt.Sprintf("the record drops every write path %s holds, which leaves it bounded by nothing", rec.ID),
+				fmt.Sprintf("keep a write path, or end the job with `%s`", hint.JobExit.With(rec.ID)))
 		}
 		actor := store.Actor()
 		if err := authorizeRow(actor, rec.ID, asDeclaration, prev, next, i >= 0, rows); err != nil {
 			return nil, err
 		}
+		v := ValidateMerge(ctx, refusing, rows, rec.ID, merge, limits, read)
+		problems = append(problems, prefixed(rec.ID, append(ps, v.Problems...))...)
 		next.Releases = store.releases(ctx, prev, next, time.Now().Unix(), prev.Registered != 0 && actor.Lease != rec.ID)
 		plan = append(plan, Applied{Prev: prev, Next: next, Created: i < 0, Changed: specChanges(prev, next)})
-		merges, proofs = append(merges, merge), append(proofs, proof)
+		merges, proofs = append(merges, merge), append(proofs, v.WriteProof)
 		if i >= 0 {
 			rows[i] = next
 		} else {
 			rows = append(rows, next)
 		}
+	}
+	if err := problems.Err(); err != nil {
+		return nil, err
 	}
 	if dryRun {
 		return plan, nil
@@ -343,125 +256,12 @@ func specChanges(prev, next types.Job) []string {
 	})
 }
 
-// RefuseAddedWritePaths holds the write paths a write adds to a job to the rules a fork's
-// are held to: no directory (MGS3018), no claim a footprint cannot grade (MGS3031), and no
-// project configuration held whole (MGS3036). A rule that held only at creation would
-// depend on which call wrote the path. added is the job's row carrying only the write paths
-// the write adds, so a path the row already held never blocks an unrelated write.
-func RefuseAddedWritePaths(ctx context.Context, store *Store, added types.Job) error {
-	if len(added.WritePaths) == 0 {
-		return nil
+// prefixed is ps with each message led by the record id it was found on.
+func prefixed(id string, ps types.JobProblems) types.JobProblems {
+	for i := range ps {
+		ps[i].Message = id + ": " + ps[i].Message
 	}
-	if err := RefuseDirectoryWritePaths(store, added); err != nil {
-		return err
-	}
-	if err := RefuseUngradableClaims(ctx, store, added); err != nil {
-		return err
-	}
-	return RefuseWholeFileConfigClaims(ctx, store, added)
-}
-
-// RefuseUngraded refuses a writing job that declares neither a check nor a goal: `job wait`
-// could never pass it, so the row would end by `job exit` on the holder's word. A read-only
-// job writes nothing to grade and is exempt.
-func RefuseUngraded(row types.Job) error {
-	if row.ReadOnly || len(row.WritePaths) == 0 || row.Check != nil || strings.TrimSpace(row.Validation) != "" || len(row.Goals) > 0 {
-		return nil
-	}
-	return fmt.Errorf("job: %s writes %s and declares neither a check nor a goal, so `%s` has nothing to grade it by:"+
-		` add "check" (the target that proves it, as "<target> <project>") or "goals" to the record, such as`+
-		` {"id":"done","kind":"paths","expect":"changed","paths":["<glob>"]}, `+"`%s`"+` prints every field,`+
-		` and a job that writes nothing is "read_only"`,
-		row.ID, strings.Join(row.WritePaths, ", "), hint.JobWait.With(row.ID), hint.JobFork.With("--schema"))
-}
-
-// RefuseUnscoped refuses a forked job that is neither read-only nor handed a write path.
-// The guard scopes nothing by an empty write set, so its holder could write anywhere, and
-// `job wait` refuses a result that changed nothing on a row that is not read-only: a scout
-// forked this way can only end no_return.
-func RefuseUnscoped(row types.Job) error {
-	if row.ReadOnly || len(row.WritePaths) > 0 {
-		return nil
-	}
-	return fmt.Errorf("job: %s names no write paths and is not read-only, so nothing bounds what its holder writes:"+
-		" fork a job that only reads with --read-only and one that writes with --write-paths,"+
-		` and a read-only job passes only with a script check, {"check": {"script": "<probe>.buzz"}}, whose result cites`+
-		" the ref `%s` prints, or its holder ends it with `%s`",
-		row.ID, hint.Buzz.With("--record", "<probe>.buzz"), hint.JobExit.With(row.ID))
-}
-
-// RefuseForkLimits refuses a fork that would put the job deeper below its root, or leave
-// its root's tree holding more live jobs, than the workspace's jobs section allows. rows is
-// the plan before the fork; a zero limit is unlimited.
-//
-// Read before the store's lock is taken, so two concurrent forks can each pass a max_live
-// the pair of them exceeds. A limit here is a brake on a runaway fan-out, not a quota.
-func RefuseForkLimits(rows []types.Job, id, parent string, limits config.Jobs) error {
-	depth, root := 0, id
-	if parent != "" {
-		ancestors := types.JobAncestors(rows, parent)
-		depth = 1 + len(ancestors)
-		root = parent
-		if len(ancestors) > 0 {
-			root = ancestors[len(ancestors)-1].ID
-		}
-	}
-	if limits.MaxDepth > 0 && depth > limits.MaxDepth {
-		return fmt.Errorf("job: %s would sit %d level(s) below its root job %s, and jobs.max_depth in magus.yaml allows %d",
-			id, depth, root, limits.MaxDepth)
-	}
-	if limits.MaxLive <= 0 {
-		return nil
-	}
-	live := 1
-	for _, r := range rows {
-		if r.ID == id || !r.State.Live() {
-			continue
-		}
-		rowRoot := r.ID
-		if ancestors := types.JobAncestors(rows, r.ID); len(ancestors) > 0 {
-			rowRoot = ancestors[len(ancestors)-1].ID
-		}
-		if rowRoot == root {
-			live++
-		}
-	}
-	if live > limits.MaxLive {
-		return fmt.Errorf("job: forking %s would make %d live jobs under root job %s, and jobs.max_live in magus.yaml allows %d,"+
-			" end one with `%s` first", id, live, root, limits.MaxLive, hint.JobExit.With("<job>"))
-	}
-	return nil
-}
-
-// RefuseAmbiguousSymbols refuses a symbol goal whose bare name resolves to more than one
-// definition, naming each. A name the reader cannot answer for is not refused: a cold graph
-// must not block a declaration, and the goal itself still refuses to certify later.
-func RefuseAmbiguousSymbols(ctx context.Context, goals []types.Goal, read SymbolReader) error {
-	if read == nil {
-		return nil
-	}
-	var refused []string
-	for _, goal := range goals {
-		if goal.Resolve().Kind != types.GoalKindSymbol {
-			continue
-		}
-		for _, name := range goal.Symbols {
-			if name = strings.TrimSpace(name); name == "" {
-				continue
-			}
-			fact, ok := read(ctx, name, "")
-			if !ok || len(fact.SameNameDefinitions) < 2 {
-				continue
-			}
-			refused = append(refused, fmt.Sprintf("goal %q names %q, which the graph resolves to %d definitions (%s)",
-				goal.ID, name, len(fact.SameNameDefinitions), strings.Join(fact.SameNameDefinitions, ", ")))
-		}
-	}
-	if len(refused) == 0 {
-		return nil
-	}
-	return fmt.Errorf("job: %s, name one by the symbol id `%s` prints, or the goal grades whichever definition ranks first",
-		strings.Join(refused, ", "), hint.Refs.With("<name>"))
+	return ps
 }
 
 // ResolveSymbolGoals settles what row's symbol goals name before a door stores it, and
@@ -634,7 +434,7 @@ func resolveMerge(ctx context.Context, store *Store, rows []types.Job, id string
 // several mean the claim would guard more than the goal asked for, and either is refused
 // (MGS3031). A file no diff driver places gets no claim, and a store with no tree to ask,
 // or whose version control is disabled, places none; version control that cannot answer
-// is an error. A claim written by hand is held to [RefuseUngradableClaims] instead, which
+// is an error. A claim written by hand is held to [ungradableClaimProblems] instead, which
 // accepts a word naming no declaration, since that one may not be written yet.
 func PlaceDerivedClaims(ctx context.Context, store *Store, derived []string) ([]string, error) {
 	if store == nil || store.root == "" || len(derived) == 0 {

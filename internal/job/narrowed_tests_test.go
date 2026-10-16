@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime"
 	"strings"
@@ -54,9 +55,17 @@ func goTestCheck(args ...string) *types.LeaseCheck {
 	return &types.LeaseCheck{Target: "go-test", Project: ".", Args: args}
 }
 
-// refuseNarrowedIn is RefuseNarrowedTests with a store opened at root, which is all it reads.
+// refuseNarrowedIn is narrowedTestProblems with a store opened at root, which is all it
+// reads, each problem rendered as its message and fix on one line.
 func refuseNarrowedIn(root string, row types.Job) error {
-	return RefuseNarrowedTests(&Store{root: root}, row)
+	var errs []error
+	for _, p := range narrowedTestProblems(&Store{root: root}, row) {
+		if p.Code != types.JobCheckUnrunnable {
+			return fmt.Errorf("code %s, want %s", p.Code, types.JobCheckUnrunnable)
+		}
+		errs = append(errs, errors.New(p.Message+": "+p.Fix))
+	}
+	return errors.Join(errs...)
 }
 
 func TestRefuseNarrowedTestsListsWhatTheCheckLeavesOut(t *testing.T) {
@@ -168,7 +177,7 @@ func TestRefuseNarrowedTestsFindsPackagesFromWritePaths(t *testing.T) {
 		t.Parallel()
 
 		require.NoError(t, refuseNarrowedIn("", types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: narrow}))
-		require.NoError(t, RefuseNarrowedTests(nil, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: narrow}), "nor a nil store")
+		assert.Empty(t, narrowedTestProblems(nil, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: narrow}), "nor a nil store")
 	})
 }
 

@@ -506,6 +506,8 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 		name  string
 		fork  func(t *testing.T, s *Store, checkpoint string) (types.Job, error)
 		proof types.JobWriteProof
+		// validated says the door validates the whole record, which stamps the row.
+		validated bool
 	}{
 		{name: "job fork --stdin", fork: func(t *testing.T, s *Store, checkpoint string) (types.Job, error) {
 			row, err := DecodeDeclaration(strings.NewReader(fmt.Sprintf(
@@ -514,7 +516,7 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 			require.NoError(t, err)
 			return s.Update(t.Context(), row.ID, Declare(row, 0))
 		}},
-		{name: "magus\\job.put", proof: types.WriteProofAlone, fork: func(t *testing.T, s *Store, checkpoint string) (types.Job, error) {
+		{name: "magus\\job.put", proof: types.WriteProofAlone, validated: true, fork: func(t *testing.T, s *Store, checkpoint string) (types.Job, error) {
 			put, err := DecodePut(map[string]any{
 				"criteria": "goal", "checkpoint": checkpoint, "write_paths": []any{"a.go"}, "check": "go-test .",
 			})
@@ -531,6 +533,7 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 			head := repo.Head()
 			stored, err := tc.fork(t, tmpStore(t, repo.Root()), head)
 			require.NoError(t, err)
+			assert.Equal(t, tc.validated, stored.Validated != 0, "validated stamp")
 			assert.Equal(t, types.Job{
 				Schema:       types.Schema{Version: types.JobSchemaVersion},
 				ID:           "a",
@@ -545,6 +548,7 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 				Attempts:     1,
 				Created:      stored.Created,
 				Updated:      stored.Updated,
+				Validated:    stored.Validated,
 				RegisteredBy: stored.RegisteredBy,
 			}, stored)
 		})
