@@ -172,7 +172,9 @@ const (
 	RelationAnnotates RelationID = "annotates" // note->any known entity, from the notes store
 )
 
-const RelationCoChanges RelationID = "co_changes" // file<->file, changed in the same commits
+// RelationCoChanges links two files changed in the same commits, from git history. It is
+// symmetric and stored once, with the lesser path as the source.
+const RelationCoChanges RelationID = "co_changes"
 
 // KnowledgeEndpointShape is one permitted subject/object-kind pair for a relation.
 // These are validation shapes in the closed-world sense: unlike OWL domain/range
