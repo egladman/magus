@@ -1113,7 +1113,7 @@ func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
 	require.NoError(t, err)
 	worker := narrowLease()
 	worker.Parent = "harness"
-	_, err = job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).
+	_, err = job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).
 		Update(t.Context(), worker.ID, func(cur *types.Job) { *cur = worker })
 	require.NoError(t, err)
 	bindCheckout(t, cacheDir, worker.ID)
@@ -1444,7 +1444,7 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 	// hook's inherited lease-b was passed in as a flag and outranked both of these.
 	t.Run("the session's binding outranks the baggage claim", func(t *testing.T) {
 		t.Setenv(trail.EnvBaggage, "")
-		require.NoError(t, job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).
+		require.NoError(t, job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).
 			Bind(job.Caller{Session: "bound-session"}, "lease-a"))
 		t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-b")
 		got, err := run(owned, "--path", "--session", "bound-session", "-o", "json")
@@ -1498,7 +1498,7 @@ func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
 		},
 		"session": {
 			setup: func(t *testing.T, _ context.Context, cacheDir, root string) {
-				require.NoError(t, job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).
+				require.NoError(t, job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).
 					Bind(job.Caller{Session: "bound-session"}, "lease-a"))
 			},
 			args: []string{"--session", "bound-session"},
@@ -1601,7 +1601,7 @@ func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
 	testkit.Isolate(t)
 	root, cacheDir := t.TempDir(), t.TempDir()
 	row := types.Job{ID: "worker", WritePaths: []string{"a.go"}, Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1}
-	_, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 	require.NoError(t, err)
 	ctx := guard.WithLocation(t.Context(), cacheDir, root, "")
 	run := func(flags ...string) types.GuardJudgment {

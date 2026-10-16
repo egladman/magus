@@ -20,7 +20,6 @@ import (
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -34,23 +33,19 @@ const LeaseMarkerName = "lease"
 // markerKind is the user state directory's subdirectory the markers live under.
 const markerKind = "checkouts"
 
-// MarkerPath is where the checkout record for the checkout whose cache dir is cacheDir
-// lives, or "" when there is no cache dir or no user state dir.
+// MarkerPath is where the checkout record for the checkout whose cache dir is
+// loc.CacheDir lives, under loc.StateBase, or "" when either is empty.
 //
 // NOT in the cache dir. The sandbox grants a run write access to its workspace, and the
 // cache dir sits inside it by default, so a marker there is one a confined run could
 // rewrite to name a broader lease, or delete, and the next run in the checkout, sandbox
 // and guard alike, would act on what it wrote. The sandbox grants the user state dir to
 // nobody.
-func MarkerPath(cacheDir string) string {
-	if cacheDir == "" {
+func (loc Location) MarkerPath() string {
+	if loc.CacheDir == "" || loc.StateBase == "" {
 		return ""
 	}
-	base, err := xdg.StateDir()
-	if err != nil {
-		return ""
-	}
-	key, err := filepath.Abs(cacheDir)
+	key, err := filepath.Abs(loc.CacheDir)
 	if err != nil {
 		return ""
 	}
@@ -58,7 +53,7 @@ func MarkerPath(cacheDir string) string {
 		key = resolved
 	}
 	sum := sha256.Sum256([]byte(key))
-	return filepath.Join(base, "magus", markerKind, hex.EncodeToString(sum[:12]), LeaseMarkerName)
+	return filepath.Join(loc.StateBase, "magus", markerKind, hex.EncodeToString(sum[:12]), LeaseMarkerName)
 }
 
 // LeaseQuery is what a caller knows about itself when it asks which lease it acts under.
@@ -183,7 +178,7 @@ const agentRecordDir = "agents"
 // separators included, and a filename assembled from one is a filename the input picked.
 func (s *Store) record(c Caller) string {
 	if !c.Identified() {
-		return MarkerPath(s.cacheDir)
+		return s.place().MarkerPath()
 	}
 	if s.err != nil || s.path == "" {
 		return ""
@@ -362,8 +357,8 @@ func dropRecord(path string, b Binding) {
 // and no subagent: this checkout's record, else claim. claim is the lease the process says
 // it acts under: trail.LeaseFromEnv for a process reading its own environment, or the
 // lease an adopted run was forwarded with. See [LeaseQuery.Resolve].
-func ActingLease(cacheDir, claim string) (string, types.LeaseSource) {
-	return LeaseQuery{CheckoutJob: readRecord(MarkerPath(cacheDir)), Claim: claim}.Resolve()
+func ActingLease(loc Location, claim string) (string, types.LeaseSource) {
+	return LeaseQuery{CheckoutJob: readRecord(loc.MarkerPath()), Claim: claim}.Resolve()
 }
 
 // HeldIn returns the rows with write paths whose holder recorded its base in the checkout

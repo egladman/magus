@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/trail"
@@ -55,7 +56,7 @@ func TestApplySandboxNarrowsToTheLeaseOnTheContext(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv(trail.EnvBaggage, "")
 	m := openSandboxed(t, types.SandboxModeBestEffort)
-	store := job.NewStore(job.Location{CacheDir: m.CacheDir(), Root: m.ws.Root})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: m.CacheDir(), Root: m.ws.Root})
 	for _, id := range []string{"fleet/client", "fleet/daemon"} {
 		_, err := store.Update(t.Context(), id, func(cur *types.Job) {
 			*cur = types.Job{ID: id, Parent: "fleet/root", State: types.StateRunning, WritePaths: []string{"pkg/**"}}

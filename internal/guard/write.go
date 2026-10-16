@@ -338,7 +338,7 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		//
 		// Best-effort by construction: a failure here is swallowed, because this whole function
 		// fails open and a store that would not accept a note must not cost somebody a save.
-		_ = job.NewStore(job.Location{CacheDir: location.cacheDir, Root: location.workspace}).
+		_ = job.NewStore(location.jobs()).
 			RecordUnattributedWrite(ctx, owner.ID, rel)
 		// Held once per session per lease: the second write into the same lease's paths
 		// repeats a fact the writer already has, while a different lease is a new one.
@@ -650,7 +650,7 @@ func gradeEntry(ctx context.Context, deps Dependencies, at location, owner types
 			}.full()}, true
 		}
 	}
-	_ = job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).ConsumeEntry(ctx, owner.ID, rel)
+	_ = job.NewStore(at.jobs()).ConsumeEntry(ctx, owner.ID, rel)
 	return writeGrade{}, true
 }
 

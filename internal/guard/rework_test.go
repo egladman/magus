@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/testkit"
@@ -30,7 +31,7 @@ func newReworkFixture(t *testing.T) reworkFixture {
 		ctx:   WithLocation(t.Context(), cacheDir, root, root),
 		at:    location{cacheDir: cacheDir, workspace: root, dir: root},
 		facts: hint.NewGate(cacheDir, FactsKey("claude-code", "8f2c6a1e")),
-		store: job.NewStore(job.Location{CacheDir: cacheDir, Root: root}),
+		store: job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}),
 	}
 }
 

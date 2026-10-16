@@ -118,7 +118,9 @@ func gradeConfigNarrowing(ctx context.Context, at location, checkout string, me 
 	if len(touched) == 0 || isDryRun(ctx) {
 		return writeGrade{}
 	}
-	row, err := job.NarrowConfigHold(ctx, job.NewStore(job.Location{CacheDir: at.cacheDir, Root: checkout}), me.ID, rel, touched)
+	loc := at.jobs()
+	loc.Root = checkout
+	row, err := job.NarrowConfigHold(ctx, job.NewStore(loc), me.ID, rel, touched)
 	if err != nil {
 		return writeGrade{}
 	}

@@ -182,7 +182,7 @@ func TestGradeLeasedWriteIdleFleet(t *testing.T) {
 			require.NoError(t, err)
 			body = append(append(body, line...), '\n')
 		}
-		path, err := job.NewStore(job.Location{CacheDir: ctx.Value(locationKey{}).(location).cacheDir, Root: root}).Path()
+		path, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: ctx.Value(locationKey{}).(location).cacheDir, Root: root}).Path()
 		require.NoError(t, err)
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 		require.NoError(t, os.WriteFile(path, body, 0o644))
@@ -594,7 +594,7 @@ func TestGuardDeniesAuthoringANote(t *testing.T) {
 func fleetLedger(t *testing.T, ctx context.Context) *job.Store {
 	t.Helper()
 	loc := hookLocation(ctx, Dependencies{})
-	return job.NewStore(job.Location{CacheDir: loc.cacheDir, Root: loc.workspace})
+	return job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: loc.cacheDir, Root: loc.workspace})
 }
 
 func unattributedOf(t *testing.T, store *job.Store, id string) []types.JobUnattributedWrite {
@@ -1162,7 +1162,7 @@ func TestEnterRefuses(t *testing.T) {
 // storeAt is the job store the fixture's context pins.
 func storeAt(ctx context.Context) *job.Store {
 	at := hookLocation(ctx, Dependencies{})
-	return job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+	return job.NewStore(at.jobs())
 }
 
 // vcsOffSwitchWorkspace puts the test in a workspace workspace.FindRoot resolves, the way

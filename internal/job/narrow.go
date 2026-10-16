@@ -160,7 +160,7 @@ func liveHolders(rows []types.Job, id, file string) []types.Job {
 // not make (the sweep's, and a refusal's release request) skipped.
 func (s *Store) dry() *Store {
 	return &Store{
-		path: s.path, err: s.err, root: s.root, actor: s.actor, cacheDir: s.cacheDir,
+		path: s.path, err: s.err, root: s.root, actor: s.actor, cacheDir: s.cacheDir, stateBase: s.stateBase,
 		clock: s.clock, staleAfter: s.staleAfter, notices: s.notices, retain: s.retain, outputs: s.outputs,
 		landed: s.landed, grader: s.grader, dryRun: true,
 	}

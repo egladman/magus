@@ -2242,7 +2242,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 	cacheOpts = append(cacheOpts, observability.TargetRunOptions(ctx, m.tel, spellsOf)...)
 	if opts.report != nil {
-		cacheOpts = append(cacheOpts, report.RunOptions(opts.report, report.ServedIn(m.CacheDir(), m.ws.Root))...)
+		cacheOpts = append(cacheOpts, report.RunOptions(opts.report, report.ServedIn(m.jobPlace()))...)
 	}
 	cacheOpts = append(cacheOpts, diagnosticCaptureOption(ctx))
 	// runTarget opens the descendant audit around a step's body, which a hit never runs.

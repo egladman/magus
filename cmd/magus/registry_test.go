@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/rpcerr"
@@ -325,7 +326,7 @@ func TestEvictAllOnEmptyRegistry(t *testing.T) {
 // naming the log the run produced.
 func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 	dir := t.TempDir()
-	serverJobStore = job.NewStore(job.Location{CacheDir: dir, Root: dir})
+	serverJobStore = job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: dir, Root: dir})
 	t.Cleanup(func() { serverJobStore = nil })
 
 	_, err := serverJobStore.Update(t.Context(), "sync-graph", func(row *types.Job) {
@@ -366,7 +367,7 @@ func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 // has no row of its own to complete.
 func TestCompleteJobRowIgnoresAnAdoptedRun(t *testing.T) {
 	dir := t.TempDir()
-	serverJobStore = job.NewStore(job.Location{CacheDir: dir, Root: dir})
+	serverJobStore = job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: dir, Root: dir})
 	t.Cleanup(func() { serverJobStore = nil })
 
 	completeJobRow(t.Context(), []string{"run", "test", "."}, time.Second, nil)

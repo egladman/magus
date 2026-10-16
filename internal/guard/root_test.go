@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/agent/model"
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -516,7 +517,7 @@ func tierFixture(t *testing.T, set *types.ModelTierSet, rows ...types.Job) conte
 	matrix := func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error) {
 		return &types.JobModelTier{Name: "economy", Rank: 0, Skills: types.SkillVariantFull, Reason: "two files", Site: "hack/tiers.buzz:12"}, nil
 	}
-	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root, ModelTiers: set, ModelTierMatrix: matrix})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root, ModelTiers: set, ModelTierMatrix: matrix})
 	for _, row := range rows {
 		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 		require.NoError(t, err)

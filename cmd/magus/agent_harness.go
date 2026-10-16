@@ -10,12 +10,10 @@ import (
 	"os"
 	"slices"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
@@ -144,11 +142,11 @@ func installHarnessSkillPath(ctx context.Context, root, path string, form agent.
 // work (a forwarded call's lease, else BAGGAGE). A CLI process knows no host session or
 // subagent, so those sources never answer here.
 func checkoutLease(ctx context.Context, root string) (string, types.LeaseSource, error) {
-	dir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+	loc, err := jobPlace(root)
 	if err != nil {
 		return "", "", fmt.Errorf("resolve the checkout's lease: %w", err)
 	}
-	lease, from := job.RunLease(ctx, dir)
+	lease, from := job.RunLease(ctx, loc)
 	return lease, from, nil
 }
 

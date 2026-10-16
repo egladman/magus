@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
@@ -39,7 +40,7 @@ func TestCheckoutLeaseAnswersWhatTheCheckpointClaimedFromTheEnvironment(t *testi
 				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.claim)
 			}
 
-			wantLease, wantFrom := job.ActingLease(cacheDir, trail.SpawnFromEnv().Lease)
+			wantLease, wantFrom := job.ActingLease(job.Location{CacheDir: cacheDir, StateBase: fixture.StateBase(t)}, trail.SpawnFromEnv().Lease)
 			lease, from, err := checkoutLease(context.Background(), root)
 			require.NoError(t, err)
 			assert.Equal(t, wantLease, lease)

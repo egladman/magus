@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -193,7 +194,9 @@ func TestRecordOutputStampsTheActingLease(t *testing.T) {
 	assert.Equal(t, "wave/api", record().Lease)
 	assert.Equal(t, "wave/client", recordIn(adopted).Lease, "the client's lease outranks the daemon's environment")
 
-	require.NoError(t, job.NewStore(job.Location{CacheDir: cdir}).Bind(job.Caller{}, "wave/bound"))
+	stateBase, err := xdg.StateDir()
+	require.NoError(t, err)
+	require.NoError(t, job.NewStore(job.Location{StateBase: stateBase, CacheDir: cdir}).Bind(job.Caller{}, "wave/bound"))
 	assert.Equal(t, "wave/bound", record().Lease, "the checkout's binding outranks the claim")
 	assert.Equal(t, "wave/bound", recordIn(adopted).Lease, "the checkout's binding outranks the client's claim")
 }

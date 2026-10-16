@@ -405,7 +405,7 @@ func recordSpawnedAgent(ctx context.Context, at location, facts hint.Gate, who h
 			return
 		}
 		child := job.Caller{Host: who.Host, Session: who.Session, Agent: env.SpawnedAgent}
-		_ = job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Bind(child, row.ID)
+		_ = job.NewStore(at.jobs()).Bind(child, row.ID)
 	}
 	writeSpawnedAgent(facts, env.SpawnedAgent, rec)
 }
@@ -506,7 +506,7 @@ func boundJob(who hookAttribution, at location) job.Binding {
 	if who.caller().Identified() && at.workspace == "" {
 		return job.Binding{}
 	}
-	return job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Binding(who.caller())
+	return job.NewStore(at.jobs()).Binding(who.caller())
 }
 
 // resolveActingLease is the lease a call acts under. See [resolveLease].
@@ -630,7 +630,7 @@ func bindOnExec(ctx context.Context, at location, who hookAttribution, command s
 	if who.caller().Identified() && at.workspace == "" {
 		return
 	}
-	store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+	store := job.NewStore(at.jobs())
 	if store.Bound(who.caller()) != id {
 		_ = store.Bind(who.caller(), id)
 	}
@@ -666,7 +666,7 @@ func releaseOnEnd(at location, who hookAttribution, command string) {
 				continue
 			}
 			if store == nil {
-				store = job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+				store = job.NewStore(at.jobs())
 			}
 			store.Release(who.caller(), operands[0])
 		}
@@ -737,7 +737,7 @@ func registerAgentBase(ctx context.Context, deps Dependencies, at location, agen
 		if refusals.AlreadyFired(refused) {
 			return false
 		}
-		if _, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Exec(ctx, agentJob); err != nil {
+		if _, err := job.NewStore(at.jobs()).Exec(ctx, agentJob); err != nil {
 			// Only a holder conflict lasts until the row changes. A cancelled deadline, lock
 			// contention, I/O or a checkout with no revision yet may pass on the next call, so
 			// it is never remembered.

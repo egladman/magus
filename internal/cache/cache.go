@@ -36,6 +36,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -1020,7 +1021,9 @@ func (c *Cache) emitUnchangedFailureHint(ctx context.Context, hash string) strin
 // resolves it: the checkout's binding outranks the claim, which a worker can rewrite from
 // its own shell.
 func (c *Cache) actingLease(ctx context.Context) string {
-	lease, _ := job.RunLease(ctx, c.dir)
+	// No user state dir means no checkout record, so the claim answers, as the sandbox's does.
+	stateBase, _ := xdg.StateDir()
+	lease, _ := job.RunLease(ctx, job.Location{CacheDir: c.dir, StateBase: stateBase})
 	return lease
 }
 

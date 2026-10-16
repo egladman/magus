@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
@@ -344,7 +345,7 @@ func integratorFixture(t *testing.T, row types.Job, title string) (context.Conte
 	at, ok := ctx.Value(locationKey{}).(location)
 	require.True(t, ok)
 	row.CheckoutRoot = cmp.Or(row.CheckoutRoot, root)
-	_, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: root}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: root}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 	require.NoError(t, err)
 	caller := job.Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
 	facts := hint.NewGate(at.cacheDir, FactsKey(caller.Host, caller.Session))
@@ -723,8 +724,7 @@ func TestIdentityLessCallersShareTheCheckoutRecord(t *testing.T) {
 		"a subagent in the checkout": {},
 	}, got)
 
-	base := hookLocation(ctx, Dependencies{}).cacheDir
-	require.NoError(t, os.WriteFile(job.MarkerPath(base), []byte("not a lease id!\n"), 0o644))
+	require.NoError(t, os.WriteFile(hookLocation(ctx, Dependencies{}).jobs().MarkerPath(), []byte("not a lease id!\n"), 0o644))
 	v := Judge(ctx, Dependencies{}, Request{Input: "ls"})
 	assert.Equal(t, graded{}, graded{v.Lease, v.LeaseFrom}, "a record that does not read binds nobody")
 	assert.Equal(t, decisionPass, v.Decision)
@@ -1402,7 +1402,7 @@ func TestATombstonedBindingIsRefusedUntilItRebinds(t *testing.T) {
 	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
 	bindCaller(t, ctx, who, held.ID)
 	require.NoError(t, os.RemoveAll(gone))
-	_, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
+	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).List()
 	require.NoError(t, err)
 	b := boundJob(who, at)
 	require.Equal(t, []any{held.ID, true}, []any{b.Job, b.Gone}, "the sweep tombstoned the binding")
@@ -1513,7 +1513,7 @@ func TestEndingYourOwnJobReleasesTheBinding(t *testing.T) {
 			}
 			v := Judge(ctx, Dependencies{}, Request{Input: tc.call(t, by), Host: by.Host})
 			require.NotEqual(t, decisionDeny, v.Decision, "ending the job: %s", v.Reason)
-			store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+			store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace})
 			tc.ends(t, store, held.ID)
 
 			fork := judge("magus job fork next-job --parent other --read-only")
@@ -1537,7 +1537,7 @@ func TestABindingToARemovedRowIsATombstone(t *testing.T) {
 	at := hookLocation(ctx, Dependencies{})
 	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
 	bindCaller(t, ctx, who, held.ID)
-	store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace})
 	_, err := store.Delete(t.Context(), held.ID, true)
 	require.NoError(t, err)
 	_, err = store.List()
@@ -1726,9 +1726,9 @@ func childFleet(t *testing.T, readOnly bool) (context.Context, types.Job, *job.S
 	other := types.Job{ID: "harness/other", WritePaths: []string{"docs/**"}, State: types.StateRunning}
 	ctx, root := fleetFixture(t, me, scout, other)
 	location, _ := ctx.Value(locationKey{}).(location)
-	unbound := job.NewStore(job.Location{CacheDir: location.cacheDir, Root: root, Actor: &job.Actor{}})
+	unbound := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: location.cacheDir, Root: root, Actor: &job.Actor{}})
 	require.NoError(t, unbound.Bind(job.Caller{}, me.ID))
-	bound := job.NewStore(job.Location{CacheDir: location.cacheDir, Root: root, Actor: &job.Actor{Lease: me.ID}})
+	bound := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: location.cacheDir, Root: root, Actor: &job.Actor{Lease: me.ID}})
 	return ctx, me, bound
 }
 

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
@@ -130,7 +131,7 @@ func TestCommandRuleSeesTheCheckoutsTheCallerOwns(t *testing.T) {
 	other := types.Job{ID: "wave/other", Criteria: "the docs", WritePaths: []string{"docs/**"}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row, other)
 	at, _ := ctx.Value(locationKey{}).(location)
-	store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace})
 	owned, foreign := t.TempDir(), t.TempDir()
 	for id, root := range map[string]string{row.ID: owned, other.ID: foreign} {
 		_, err := store.RecordWorktree(ctx, id, types.JobWorktree{Root: root, Source: at.workspace})

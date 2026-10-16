@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
@@ -618,7 +619,9 @@ func TestJobStoreRetainsTheLeaseCapturedOnTheBuzzContext(t *testing.T) {
 func TestJobStorePrefersTheCheckoutsBindingOverTheCapturedClaim(t *testing.T) {
 	testkit.Isolate(t)
 	workspace := &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
-	require.NoError(t, job.NewStore(job.Location{CacheDir: workspace.cacheDir}).Bind(job.Caller{}, "fleet/bound"))
+	stateBase, err := xdg.StateDir()
+	require.NoError(t, err)
+	require.NoError(t, job.NewStore(job.Location{StateBase: stateBase, CacheDir: workspace.cacheDir}).Bind(job.Caller{}, "fleet/bound"))
 	ctx := types.WithJobLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
 
 	store, err := jobStoreFromContext(ctx, "job.put")

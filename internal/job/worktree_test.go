@@ -15,7 +15,7 @@ import (
 func worktreeStore(t *testing.T) (*Store, Location, *testkit.Repo) {
 	t.Helper()
 	repo := execRepo(t)
-	loc := Location{CacheDir: t.TempDir(), Root: repo.Root()}
+	loc := Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: repo.Root()}
 	return NewStore(loc), loc, repo
 }
 
@@ -102,7 +102,7 @@ func TestExecTakesAJobInItsOwnCheckoutAndNowhereElse(t *testing.T) {
 	require.ErrorIs(t, err, ErrHeldElsewhere)
 	assert.ErrorContains(t, err, row.Worktree.Root)
 
-	taken, err := NewStore(Location{CacheDir: loc.CacheDir, Root: row.Worktree.Root}).Exec(ctx, "w1")
+	taken, err := NewStore(Location{StateBase: loc.StateBase, CacheDir: loc.CacheDir, Root: row.Worktree.Root}).Exec(ctx, "w1")
 	require.NoError(t, err)
 	assert.Equal(t, row.Worktree.Root, taken.CheckoutRoot)
 	assert.Equal(t, types.StateRunning, taken.State)
@@ -140,7 +140,7 @@ func TestEndWorktreesKeepsTheCheckoutTheCallRunsInAndSaysSo(t *testing.T) {
 	ctx := t.Context()
 	s, loc, _ := worktreeStore(t)
 	row := forkInto(t, s, "w1", "")
-	inside := NewStore(Location{CacheDir: loc.CacheDir, Root: row.Worktree.Root})
+	inside := NewStore(Location{StateBase: loc.StateBase, CacheDir: loc.CacheDir, Root: row.Worktree.Root})
 	_, err := Exit(ctx, inside, "w1", nil, nil)
 	require.NoError(t, err)
 

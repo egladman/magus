@@ -31,5 +31,5 @@ func recordRework(ctx context.Context, at location, facts hint.Gate, addressed s
 	if !ok || (row.State != types.StateExited && !row.State.Terminal()) {
 		return
 	}
-	_ = job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).RecordRework(ctx, row.ID)
+	_ = job.NewStore(at.jobs()).RecordRework(ctx, row.ID)
 }

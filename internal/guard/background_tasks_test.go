@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
@@ -208,7 +209,7 @@ func TestSessionEndedIsASubagentStopOrASessionEnd(t *testing.T) {
 func TestEndStoppedSessionEndsTheJobOnlyWhenTheStopStands(t *testing.T) {
 	root := t.TempDir()
 	commitCheckout(t, root)
-	store := job.NewStore(job.Location{Root: root, CacheDir: t.TempDir(), Actor: &job.Actor{}})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, CacheDir: t.TempDir(), Actor: &job.Actor{}})
 	_, err := store.Update(t.Context(), "w", func(row *types.Job) { *row = types.Job{ID: "w", State: types.StateDeclared} })
 	require.NoError(t, err)
 	_, err = store.Exec(t.Context(), "w")

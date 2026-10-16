@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	// The interpreter a real magusfile load needs, which cmd/magus links in production.
+	"github.com/egladman/magus/internal/fixture"
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	_ "github.com/egladman/magus/internal/interp/engine/buzz"
 	"github.com/egladman/magus/internal/job"
@@ -528,7 +529,7 @@ func TestSpawnRuleCountsARowsOwnCheckoutAsIsolation(t *testing.T) {
 		types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared},
 		types.Job{ID: "other", ReadOnly: true, State: types.StateDeclared})
 	at, _ := ctx.Value(locationKey{}).(location)
-	store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace})
 	_, err := store.RecordWorktree(ctx, "scout", types.JobWorktree{Root: t.TempDir(), Source: at.workspace})
 	require.NoError(t, err)
 
@@ -563,7 +564,7 @@ func trailEvents(t *testing.T, base string, kind trail.Kind) []trail.Event {
 func bindCaller(t *testing.T, ctx context.Context, who hookAttribution, id string) {
 	t.Helper()
 	at := hookLocation(ctx, Dependencies{})
-	require.NoError(t, job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Bind(who.caller(), id))
+	require.NoError(t, job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).Bind(who.caller(), id))
 }
 
 // execHere records id as taken in the fixture's checkout, as `magus job exec` does. The
@@ -572,7 +573,7 @@ func execHere(t *testing.T, ctx context.Context, id string) {
 	t.Helper()
 	at := hookLocation(ctx, Dependencies{})
 	commitCheckout(t, at.workspace)
-	_, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Exec(ctx, id)
+	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).Exec(ctx, id)
 	require.NoError(t, err)
 }
 
@@ -873,7 +874,7 @@ func TestSpawnTitleAttributesTheChildToItsJob(t *testing.T) {
 			write := hookJSON(t, map[string]any{"session_id": "8f2c6a1e", "agent_id": "a1b2c3", "agent_type": "general-purpose", "cwd": cwd, "permission_mode": "default", "hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": edit})
 			v := Judge(ctx, deps, Request{Input: write, Host: "claude-code", Lease: tc.lease})
 
-			rows, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
+			rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).List()
 			require.NoError(t, err)
 			require.Len(t, rows, 1)
 			assert.Equal(t, want, outcome{
@@ -933,7 +934,7 @@ func TestAWorkerInItsOwnWorktreeIsGradedUnderItsJob(t *testing.T) {
 	assert.Equal(t, graded{"pass", "guard-facts", types.LeaseSourceAgent}, graded{inside.Decision, inside.Lease, inside.LeaseFrom})
 	assert.Equal(t, graded{"deny", "guard-facts", types.LeaseSourceAgent}, graded{outside.Decision, outside.Lease, outside.LeaseFrom})
 
-	rows, err := job.NewStore(job.Location{CacheDir: workerCache, Root: workerRoot}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: workerCache, Root: workerRoot}).List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	rev, _ := types.ParseCheckpointToken(rows[0].ReportedBase)
@@ -960,7 +961,7 @@ func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
 	require.True(t, registerAgentBase(t.Context(), deps, worker, row.ID))
 	assert.False(t, registerAgentBase(t.Context(), deps, worker, row.ID), "a job registers once")
 
-	rows, err := job.NewStore(job.Location{CacheDir: worker.cacheDir, Root: workerRoot}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: worker.cacheDir, Root: workerRoot}).List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	abs, err := filepath.Abs(workerRoot)
@@ -1016,7 +1017,7 @@ func TestRegisterAgentBaseFollowsADivergedCheckout(t *testing.T) {
 			for _, role := range []string{checkpoint, created, other} {
 				revs[role] = commitCheckout(t, root)
 			}
-			store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+			store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace})
 			_, err := store.Update(ctx, row.ID, func(u *types.Job) { u.Checkpoint = revs[checkpoint] })
 			require.NoError(t, err)
 			fixtureGit(t, root, "checkout", "-q", revs[tc.reported])
@@ -1111,7 +1112,7 @@ func refusalRemembered(t *testing.T, ctx context.Context, at location, id string
 // store's lock.
 func withLapsedLock(t *testing.T, ctx context.Context, at location, fn func(lapsed context.Context)) {
 	t.Helper()
-	path, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Path()
+	path, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).Path()
 	require.NoError(t, err)
 	lapsed, cancel := context.WithCancel(ctx)
 	cancel()
@@ -1176,7 +1177,7 @@ func TestASpawnAttributesOnlyAJobItsSpawnerCanHandOut(t *testing.T) {
 	spawn("worker/forger victim-job", "forged")
 	rec, ok := readSpawnedAgent(facts, "forged")
 	require.True(t, ok)
-	assert.Empty(t, job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).Bound(job.Caller{Host: "claude-code", Session: "worker-session", Agent: "forged"}),
+	assert.Empty(t, job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).Bound(job.Caller{Host: "claude-code", Session: "worker-session", Agent: "forged"}),
 		"a leased spawner cannot hand out a job outside its own tree")
 	assert.Equal(t, "victim-job", rec.UntrustedJob, "the claim is kept for a reader")
 	assert.Empty(t, graded("forged").Lease, "no record answers for the forged child, and it never reads its spawner's")
@@ -1282,7 +1283,7 @@ func TestASubagentsExecNeverBindsItsParent(t *testing.T) {
 	took := Judge(ctx, Dependencies{}, Request{Input: bashCall(t, session, "a1b2c3", "./magus job exec "+research.ID), Host: "claude-code"})
 	require.Equal(t, graded{}, gradedAs(took), "the child held nothing when it took the job")
 	commitCheckout(t, root)
-	_, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).Exec(ctx, research.ID)
+	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).Exec(ctx, research.ID)
 	require.NoError(t, err, "the CLI half of the exec")
 
 	child := Judge(ctx, Dependencies{}, Request{Input: bashCall(t, session, "a1b2c3", "ls"), Host: "claude-code"})
@@ -1297,7 +1298,7 @@ func TestASubagentsExecNeverBindsItsParent(t *testing.T) {
 		"git merge linux-platform-design":                                {},
 	}, got, "the parent sharing the child's session and checkout acts under nothing")
 
-	lease, from := job.ActingLease(cacheDir, "")
+	lease, from := job.ActingLease(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir}, "")
 	assert.Equal(t, graded{}, graded{Lease: lease, From: from}, "a process that is not a hook, the sandbox's run included, reads no binding either")
 }
 
@@ -1392,7 +1393,7 @@ func TestAttributedWorkersExecIsIdempotent(t *testing.T) {
 	Judge(ctx, Dependencies{}, Request{Input: finishedSpawn(t, "orchestrator/integrator guard-facts", "", "", "", "a1b2c3"), Host: "claude-code"})
 	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
 	at := hookLocation(ctx, Dependencies{})
-	store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace})
 	jobs, err := store.Path()
 	require.NoError(t, err)
 	records := func() []string {
@@ -1412,7 +1413,7 @@ func TestAttributedWorkersExecIsIdempotent(t *testing.T) {
 
 	assert.Equal(t, before, records(), "no second record")
 	assert.Equal(t, row.ID, store.Bound(who.caller()))
-	_, err = os.Stat(job.MarkerPath(at.cacheDir))
+	_, err = os.Stat(at.jobs().MarkerPath())
 	assert.True(t, os.IsNotExist(err), "no checkout record")
 	rows, err := store.List()
 	require.NoError(t, err)

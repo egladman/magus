@@ -327,7 +327,7 @@ func TestStampedLeaseOnlyDowngrades(t *testing.T) {
 			}
 			t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.claim)
 			t.Setenv(EnvStampedLease, tc.stamped)
-			assert.Equal(t, tc.want, ActingActor(loc.CacheDir))
+			assert.Equal(t, tc.want, ActingActor(loc))
 		})
 	}
 }
@@ -581,14 +581,14 @@ func TestRunLeaseResolvesTheStampedLeaseBeforeTheEnvironment(t *testing.T) {
 			}
 			cacheDir := t.TempDir()
 			if tc.bound != "" {
-				require.NoError(t, NewStore(Location{CacheDir: cacheDir}).Bind(Caller{}, tc.bound))
+				require.NoError(t, NewStore(placeAt(t, cacheDir)).Bind(Caller{}, tc.bound))
 			}
 
 			ctx := t.Context()
 			if !tc.unstamped {
 				ctx = types.WithJobLease(ctx, tc.forwarded)
 			}
-			lease, from := RunLease(ctx, cacheDir)
+			lease, from := RunLease(ctx, placeAt(t, cacheDir))
 			assert.Equal(t, tc.want, answer{lease, from})
 		})
 	}

@@ -5,9 +5,19 @@ import (
 
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/require"
 )
+
+// StateBase is the user state dir this process resolves, for a job.Location: under
+// testkit.Isolate, a temp dir.
+func StateBase(tb testing.TB) string {
+	tb.Helper()
+	base, err := xdg.StateDir()
+	require.NoError(tb, err)
+	return base
+}
 
 // SeedLeases isolates the environment, creates a workspace root and a cache dir, and seeds
 // the job store with leases. The ledger lives in the per-repository state directory and
@@ -18,7 +28,7 @@ func SeedLeases(tb testing.TB, leases ...types.Job) (root, cacheDir string) {
 	tb.Helper()
 	testkit.Isolate(tb)
 	root, cacheDir = tb.TempDir(), tb.TempDir()
-	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
+	store := job.NewStore(job.Location{CacheDir: cacheDir, StateBase: StateBase(tb), Root: root})
 	for _, lease := range leases {
 		_, err := store.Update(tb.Context(), lease.ID, func(cur *types.Job) { *cur = lease })
 		require.NoError(tb, err)

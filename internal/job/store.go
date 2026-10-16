@@ -34,7 +34,6 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -89,8 +88,9 @@ type Store struct {
 	// from cacheDir and the environment. The server builds ONE Store at startup and serves
 	// every MCP job caller from it, so an actor frozen at construction grades all of
 	// them as whoever started the process.
-	actor    *Actor
-	cacheDir string
+	actor     *Actor
+	cacheDir  string
+	stateBase string
 	// clock, staleAfter and notices are the sweep's seams (see [Store.List]); nil means
 	// time.Now, the workspace's jobs.stale_after, and stderr.
 	clock      func() time.Time
@@ -134,8 +134,9 @@ type Location struct {
 	// release is digested (see Update). A Store built with an empty root still records
 	// releases; it just cannot say what was in them.
 	Root string
-	// StateBase overrides the user state directory the ledger resolves under. Empty
-	// means xdg.StateDir, which is what every caller outside a test wants.
+	// StateBase is the user state directory the ledger and the checkout records live
+	// under: xdg.StateDir for every caller outside a test, resolved by the caller. Empty
+	// is an error every Store operation reports, and a checkout with no record.
 	StateBase string
 	// Actor is who the Store writes as. A pointer because the zero Actor is UNBOUND and
 	// is a real value: nil is the only way to say "resolve it at every write, from the
@@ -196,7 +197,7 @@ type Location struct {
 // A resolution failure is held rather than returned: every operation reports it, so a
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
-	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()),
+	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()),
 		modelTiers: loc.ModelTiers, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners, priceContext: loc.PriceContext}
 	s.path, s.err = jobsPath(loc)
 	return s
@@ -210,19 +211,20 @@ func (s *Store) Actor() Actor {
 	if s.actor != nil {
 		return *s.actor
 	}
-	return ActingActor(s.cacheDir)
+	return ActingActor(s.place())
+}
+
+// place is the part of s's Location that keys the checkout record.
+func (s *Store) place() Location {
+	return Location{CacheDir: s.cacheDir, StateBase: s.stateBase}
 }
 
 // jobsPath places the jobs file: <XDG state>/magus/jobs/<repo>/jobs.jsonl.
 func jobsPath(loc Location) (string, error) {
-	base := loc.StateBase
-	if base == "" {
-		var err error
-		if base, err = xdg.StateDir(); err != nil {
-			return "", fmt.Errorf("job: resolve state dir, set XDG_STATE_HOME to a writable absolute path: %w", err)
-		}
+	if loc.StateBase == "" {
+		return "", errors.New("job: no user state dir: the caller passes Location.StateBase")
 	}
-	dir, err := vcs.StateDir(base, "jobs", loc.Root)
+	dir, err := vcs.StateDir(loc.StateBase, "jobs", loc.Root)
 	if err != nil {
 		return "", fmt.Errorf("job: %w", err)
 	}

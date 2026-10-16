@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -759,7 +760,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	bound := boundJob(who, location)
 	binding := bindingUnlessEnded(ctx, location, bound)
 	if persists && binding.Job == "" && bound.Job != "" && !bound.Gone {
-		job.NewStore(job.Location{CacheDir: location.cacheDir, Root: location.workspace}).Release(who.caller(), bound.Job)
+		job.NewStore(location.jobs()).Release(who.caller(), bound.Job)
 	}
 	actingLease, leaseFrom := resolveLease(who, req.Lease, binding.Job)
 	deps.lease = actingLease
@@ -1980,6 +1981,14 @@ type location struct {
 	models func() []types.ModelPricing
 }
 
+// jobs places the job store and checkout record of the checkout at. A user state dir that
+// will not resolve is left empty: the store reports it, and the checkout reads as having
+// no record.
+func (at location) jobs() job.Location {
+	stateBase, _ := xdg.StateDir()
+	return job.Location{CacheDir: at.cacheDir, StateBase: stateBase, Root: at.workspace}
+}
+
 type locationKey struct{}
 
 // withJobStoreRows reads the job store once and pins it for the rules below, error
@@ -2031,7 +2040,9 @@ func rereadJobStoreRows(ctx context.Context, at location) context.Context {
 	defer cancel()
 	start := time.Now()
 	dryRun := isDryRun(ctx)
-	store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace, DryRun: dryRun})
+	loc := at.jobs()
+	loc.DryRun = dryRun
+	store := job.NewStore(loc)
 	rows, err := awaitDeadline(wait, store.List)
 	if err != nil && wait.Err() != nil {
 		log.record(timedPhase(phaseJobRows, time.Since(start), budget, true))
@@ -2078,7 +2089,7 @@ func leaseRows(ctx context.Context, at location) ([]types.Job, error) {
 	if pinned, ok := job.SnapshotFromContext(ctx); ok {
 		return pinned.Rows, pinned.Err
 	}
-	return job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
+	return job.NewStore(at.jobs()).List()
 }
 
 // copySessionState copies into a new temporary directory what the gates keyed on keys hold
@@ -2152,7 +2163,7 @@ func withRegisteredBase(ctx context.Context, deps Dependencies, at location, age
 	if here, err := filepath.Abs(at.workspace); err != nil || job.WrongCheckout(snap.Rows[i], here) != nil {
 		return ctx
 	}
-	base, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).CheckoutToken(ctx)
+	base, err := job.NewStore(at.jobs()).CheckoutToken(ctx)
 	if err != nil {
 		return ctx
 	}

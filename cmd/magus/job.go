@@ -35,6 +35,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -179,17 +180,31 @@ type jobOpen struct {
 	ModelTiers bool
 }
 
+// jobPlace places the job store and the checkout record of the workspace at root: its
+// cache dir and the user state dir.
+func jobPlace(root string) (job.Location, error) {
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return job.Location{}, err
+	}
+	stateBase, err := xdg.StateDir()
+	if err != nil {
+		return job.Location{}, fmt.Errorf("resolve the user state dir, set XDG_STATE_HOME to a writable absolute path: %w", err)
+	}
+	return job.Location{CacheDir: cacheDir, StateBase: stateBase, Root: root}, nil
+}
+
 // openJobs opens the job store of the workspace at root. With o.ModelTiers a workspace
 // that will not load is an error, since a tier declaration that failed to load must not
 // read as one that declared nothing; a root of "" is no workspace at all, and assigns
 // nothing.
 func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
-	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+	loc, err := jobPlace(root)
 	if err != nil {
 		return nil, err
 	}
-	loc := job.Location{CacheDir: cacheDir, Root: root, Outputs: outputsIn, DryRun: o.DryRun,
-		TrailBase: func(checkoutRoot string) (string, error) { return magus.ResolveCacheDir(checkoutRoot, cliOptions()...) }}
+	loc.Outputs, loc.DryRun = outputsIn, o.DryRun
+	loc.TrailBase = func(checkoutRoot string) (string, error) { return magus.ResolveCacheDir(checkoutRoot, cliOptions()...) }
 	if root != "" {
 		// Read once, and only when a job ends with a priceable trail, since it loads the
 		// workspace's harness spells.
@@ -1450,8 +1465,8 @@ func jobExecCommand(ctx context.Context, root string, pos []string, timeout time
 	spawn := trail.SpawnFromEnv()
 	lease := spawn.Lease
 	if root != "" {
-		if cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg)); err == nil {
-			lease, _ = job.ActingLease(cacheDir, spawn.Lease)
+		if loc, err := jobPlace(root); err == nil {
+			lease, _ = job.ActingLease(loc, spawn.Lease)
 		}
 	}
 

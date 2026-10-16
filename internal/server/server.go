@@ -52,6 +52,7 @@ import (
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1/graphv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1/insightv1alpha1connect"
@@ -208,7 +209,11 @@ func (s *Server) Serve(ctx context.Context) error {
 	// performs under a single acquisition then serializes against nothing. The client
 	// tool's magus\job runs in a forked worker and opens the store itself.
 	if opts.Jobs == nil && opts.Magus != nil {
-		opts.Jobs = job.NewStore(job.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
+		stateBase, err := xdg.StateDir()
+		if err != nil {
+			return fmt.Errorf("server: resolve the user state dir that holds the job store: %w", err)
+		}
+		opts.Jobs = job.NewStore(job.Location{CacheDir: opts.Magus.CacheDir(), StateBase: stateBase, Root: opts.Magus.Root()})
 	}
 
 	// Build the MCP handler (validates opts and wires session tracking). No

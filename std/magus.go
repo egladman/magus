@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/diagnostics"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -1805,7 +1806,11 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	}
 	// No Grader: the store grades with the one the composition root installed through
 	// job.SetCheckGrader.
-	loc := job.Location{CacheDir: cd.CacheDir(), Root: ws.Root()}
+	stateBase, err := xdg.StateDir()
+	if err != nil {
+		return nil, fmt.Errorf("%s: resolve the user state dir that holds the job store: %w", member, err)
+	}
+	loc := job.Location{CacheDir: cd.CacheDir(), StateBase: stateBase, Root: ws.Root()}
 	// Recovered by assertion like workspaceCacheDir; declared here, inside the one
 	// declaration this door owns.
 	type modelTiered interface {
@@ -1832,7 +1837,7 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	// could otherwise unset BAGGAGE and become an apparent orchestrator mid-run. It is
 	// the claim, so the checkout's record still outranks it.
 	if claim := types.JobLeaseFromContext(ctx); claim != "" {
-		lease, _ := job.ActingLease(loc.CacheDir, claim)
+		lease, _ := job.ActingLease(loc, claim)
 		loc.Actor = &job.Actor{Lease: lease}
 	}
 	return job.NewStore(loc), nil

@@ -1401,15 +1401,15 @@ func stagePaths(ctx context.Context, root string, driver types.VCSDriver, paths 
 // checkout. Two holders sharing a checkout share its dirty tree, and staging the other's
 // uncommitted sources would land them under this caller's commit.
 func heldForOtherLeases(ctx context.Context, root string, paths []string) (map[string]string, error) {
-	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+	loc, err := jobPlace(root)
 	if err != nil {
-		return nil, fmt.Errorf("vcs add: resolve the cache dir to read which leases share this checkout: %w", err)
+		return nil, fmt.Errorf("vcs add: place the job store to read which leases share this checkout: %w", err)
 	}
-	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(loc).List()
 	if err != nil {
 		return nil, fmt.Errorf("vcs add: read the job store to keep other leases' work out of this stage: %w", err)
 	}
-	lease, _ := job.ActingLease(cacheDir, types.JobLeaseFromContext(ctx))
+	lease, _ := job.ActingLease(loc, types.JobLeaseFromContext(ctx))
 	return otherLeasesPaths(rows, root, lease, paths), nil
 }
 

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/testkit/register"
@@ -275,7 +276,7 @@ func denyRemedyFixtures() []denyRemedyFixture {
 // seedRemedyJob files row in the job store the fixtures are judged against.
 func seedRemedyJob(t *testing.T, at location, row types.Job) {
 	t.Helper()
-	_, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 	require.NoError(t, err)
 }
 

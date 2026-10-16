@@ -46,13 +46,13 @@ type Actor struct {
 // than letting either win. A process that sets it on itself can lose rights, never gain one.
 const EnvStampedLease = "MAGUS_STAMPED_LEASE"
 
-// ActingActor is the party this process acts as for the checkout whose cache dir is
-// cacheDir: the lease [ActingLease] resolves from the checkout's record and this
-// process's BAGGAGE claim. A process with no lease is the unbound actor, unless
-// [EnvStampedLease] says a transport stamped that absence.
-func ActingActor(cacheDir string) Actor {
+// ActingActor is the party this process acts as for the checkout loc places: the lease
+// [ActingLease] resolves from the checkout's record and this process's BAGGAGE claim. A
+// process with no lease is the unbound actor, unless [EnvStampedLease] says a transport
+// stamped that absence.
+func ActingActor(loc Location) Actor {
 	claim := trail.LeaseFromEnv()
-	lease, _ := ActingLease(cacheDir, claim)
+	lease, _ := ActingLease(loc, claim)
 	if os.Getenv(EnvStampedLease) == "" {
 		return Actor{Lease: lease}
 	}
@@ -67,12 +67,12 @@ func ActingActor(cacheDir string) Actor {
 // stamped it: the CLI stamps its BAGGAGE, and the daemon stamps a client's lease, or the
 // client's lack of one, so a client run never reads the daemon's own environment. Only a
 // ctx no entry point stamped, such as an embedding Go program's, falls back to BAGGAGE.
-func RunLease(ctx context.Context, cacheDir string) (string, types.LeaseSource) {
+func RunLease(ctx context.Context, loc Location) (string, types.LeaseSource) {
 	claim, ok := types.LookupJobLease(ctx)
 	if !ok {
 		claim = trail.LeaseFromEnv()
 	}
-	return ActingLease(cacheDir, claim)
+	return ActingLease(loc, claim)
 }
 
 // Bound reports whether this actor is held to a worker's boundary: a worker acting under a
@@ -84,7 +84,7 @@ func (a Actor) Bound() bool { return a.Lease != "" || a.Unstamped }
 // takes its own mutex; the file lock still serializes it against s and every other writer.
 func (s *Store) As(a Actor) *Store {
 	return &Store{
-		path: s.path, err: s.err, root: s.root, actor: &a, cacheDir: s.cacheDir,
+		path: s.path, err: s.err, root: s.root, actor: &a, cacheDir: s.cacheDir, stateBase: s.stateBase,
 		clock: s.clock, staleAfter: s.staleAfter, notices: s.notices, outputs: s.outputs, landed: s.landed,
 		build: s.build,
 	}

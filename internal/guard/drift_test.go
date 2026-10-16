@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/testkit"
@@ -154,7 +155,7 @@ func TestLeaseCoversWrite(t *testing.T) {
 	testkit.Isolate(t)
 	base, root := t.TempDir(), t.TempDir()
 	location := location{cacheDir: base, workspace: root}
-	store := job.NewStore(job.Location{CacheDir: base, Root: root})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: base, Root: root})
 	row := types.Job{
 		ID:         "unit-a",
 		State:      types.StateRunning,

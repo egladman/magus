@@ -26,6 +26,7 @@ import (
 	// catalog. See internal/interp/bindings/spell.go's init.
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/interp"
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
@@ -397,7 +398,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			if tc.binary {
 				placeBinary(t, hookLocation(ctx, Dependencies{}).workspace)
 			}
-			store := job.NewStore(job.Location{CacheDir: cacheDir, Root: hookLocation(ctx, Dependencies{}).workspace})
+			store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: hookLocation(ctx, Dependencies{}).workspace})
 			for _, row := range tc.jobs {
 				if row.State == types.StateRunning && row.CheckoutRoot == "" {
 					row.CheckoutRoot = hookLocation(ctx, Dependencies{}).workspace
@@ -1113,7 +1114,7 @@ func BenchmarkWithJobStoreRows(b *testing.B) {
 	require.NoError(b, err)
 	cacheDir := b.TempDir()
 	at := location{cacheDir: cacheDir, workspace: root, dir: root}
-	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
+	store := job.NewStore(at.jobs())
 	states := []types.JobState{types.StatePass, types.StatePass, types.StateFail, types.StateNoReturn, types.StateDeclared}
 	for i := range 300 {
 		row := types.Job{
@@ -1135,7 +1136,7 @@ func TestJobStoreRowsAreReadFreshEachCall(t *testing.T) {
 	testkit.Isolate(t)
 	root, cacheDir := t.TempDir(), t.TempDir()
 	at := location{cacheDir: cacheDir, workspace: root, dir: root}
-	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
 	put := func(row types.Job) {
 		t.Helper()
 		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
@@ -1881,7 +1882,7 @@ func TestJobRowsReadIsBoundedByTheDeadline(t *testing.T) {
 	}
 	ctx, cacheDir := spawnFixture(t)
 	at := hookLocation(ctx, Dependencies{})
-	path, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: at.workspace}).Path()
+	path, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: at.workspace}).Path()
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, exec.CommandContext(ctx, mkfifo, path).Run())

@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -392,7 +393,11 @@ func validationScope(dir, lease string) (tree string, maxValidations int, err er
 	if root == "" {
 		return lease, cfg.Jobs.MaxValidations, nil
 	}
-	tree, err = job.NewStore(job.Location{Root: root}).TreeRoot(lease)
+	stateBase, err := xdg.StateDir()
+	if err != nil {
+		return "", 0, fmt.Errorf("resolve the user state dir that holds the job store: %w", err)
+	}
+	tree, err = job.NewStore(job.Location{Root: root, StateBase: stateBase}).TreeRoot(lease)
 	if err != nil {
 		return "", 0, err
 	}

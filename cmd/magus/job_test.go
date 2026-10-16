@@ -486,7 +486,7 @@ func seedJobStore(t *testing.T, root string, rows ...types.Job) (string, string)
 	t.Helper()
 	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
-	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
 	for _, row := range rows {
 		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 		require.NoError(t, err)
@@ -511,7 +511,7 @@ func TestJobForkRefusesAnUngradableDenyPath(t *testing.T) {
 	assert.Contains(t, err.Error(), `deny path "notes.txt" has no diff driver`)
 
 	require.NoError(t, fork("accepted", "run.go#A"))
-	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "a refused fork writes no row")
 	assert.Equal(t, []any{"accepted", []string{"run.go#A"}}, []any{rows[0].ID, rows[0].DenyPaths})
@@ -533,7 +533,7 @@ func TestJobForkRefusesARowScopedByNothing(t *testing.T) {
 
 	require.NoError(t, fork("reader", "--read-only", "--criteria", "find the callers"))
 	require.NoError(t, fork("writer", "--write-paths", "run.go", "--check", "test ."))
-	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List()
 	require.NoError(t, err)
 	got := make(map[string]bool, len(rows))
 	for _, r := range rows {
@@ -573,7 +573,7 @@ func TestJobForkResolvesItsCheckpoint(t *testing.T) {
 	assert.Contains(t, err.Error(), "`magus vcs checkpoint -o name`")
 
 	captureStdout(t, func() { require.NoError(t, fork("real", head[:9])) })
-	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "a refused fork writes no row")
 	assert.Equal(t, []string{"real", head}, []string{rows[0].ID, rows[0].Checkpoint})
@@ -731,7 +731,7 @@ func TestJobPrunePrintsEachRowAndTheCount(t *testing.T) {
 	out := captureStdout(t, func() { require.NoError(t, jobPrune(t.Context(), root, nil)) })
 	assert.Regexp(t, "^would end returned: exited .* ago and nobody collected its result with `magus job wait`\n"+
 		"would end 1 job\\(s\\); --dry-run ended nothing\n$", out)
-	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
 	rows, err := store.List()
 	require.NoError(t, err)
 	assert.Equal(t, types.StateExited, rows[0].State)
@@ -751,7 +751,7 @@ func TestJobApplyPrintsTheSpecDiffAndKeepsTheState(t *testing.T) {
 	row.State, row.WritePaths, row.Check = types.StateRunning, []string{"a.go", "b.go"}, &types.LeaseCheck{Target: "test", Project: "."}
 	row.Validation = row.Check.String()
 	root, cacheDir := execFixture(t, row)
-	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
 	record := filepath.Join(t.TempDir(), "w.json")
 	require.NoError(t, os.WriteFile(record, fmt.Appendf(nil,
 		`{"schema_version":%d,"id":"w","model":"standard","write_paths":["b.go","c.go"],"check":{"target":"test","project":"."}}`,
@@ -885,7 +885,7 @@ func TestDeletionCandidatesAskNothingOfARowThatWritesNothing(t *testing.T) {
 // host names no session takes a job there.
 func bindCheckout(t *testing.T, cacheDir, id string) {
 	t.Helper()
-	require.NoError(t, job.NewStore(job.Location{CacheDir: cacheDir}).Bind(job.Caller{}, id))
+	require.NoError(t, job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir}).Bind(job.Caller{}, id))
 }
 
 // TestJobExecWritesNoMarker pins the half of the 2026-09-26 fix that lives in the CLI: exec
@@ -903,12 +903,13 @@ func TestJobExecWritesNoMarker(t *testing.T) {
 	})
 	assert.Contains(t, out, "took "+row.ID)
 
-	_, err := os.Stat(job.MarkerPath(cacheDir))
+	loc := job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}
+	_, err := os.Stat(loc.MarkerPath())
 	assert.True(t, os.IsNotExist(err), "exec writes no checkout record")
-	lease, from := job.ActingLease(cacheDir, "")
+	lease, from := job.ActingLease(loc, "")
 	assert.Equal(t, []any{"", types.LeaseSource("")}, []any{lease, from}, "the checkout acts under nothing")
 
-	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
+	store := job.NewStore(loc)
 	rows, err := store.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -949,7 +950,7 @@ func TestJobExecRefusesATypedBase(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "-base")
 
-	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: repo.Root()}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: repo.Root()}).List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, []any{types.StateDeclared, ""}, []any{rows[0].State, rows[0].ReportedBase}, "a refused exec takes nothing")
@@ -1257,7 +1258,7 @@ func TestJobForkRefusesACheckThatSkipsATestOfItsPackage(t *testing.T) {
 	assert.Contains(t, err.Error(), "`Alpha|^(TestBeta)$`")
 
 	require.NoError(t, fork("go-test . -- -run Alpha|^(TestBeta)$"))
-	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "the refused fork wrote no row")
 }
@@ -1298,7 +1299,7 @@ func TestJobForkRefusesACheckTheGuardDeniesItsWorker(t *testing.T) {
 
 	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
-	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
 	rows, err := store.List()
 	require.NoError(t, err)
 	assert.Empty(t, rows, "grading dry-runs the guard and the refused fork wrote no row")
@@ -1450,7 +1451,7 @@ func TestJobForkIsNotRefusedByADenyThatHoldsForEveryCommand(t *testing.T) {
 	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."}))
 	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
-	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "the fork went through")
 }

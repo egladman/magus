@@ -163,13 +163,13 @@ func publishServerTrailBase() {
 		slog.Warn("no workspace root; background jobs and scheduled maintenance will not be recorded", attr.Error(err))
 		return
 	}
-	base, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+	loc, err := jobPlace(root)
 	if err != nil {
-		slog.Warn("cache dir unresolvable; background jobs and scheduled maintenance will not be recorded", attr.Error(err))
+		slog.Warn("cache or state dir unresolvable; background jobs and scheduled maintenance will not be recorded", attr.Error(err))
 		return
 	}
-	serverTrailBase = base
-	serverJobStore = job.NewStore(job.Location{CacheDir: base, Root: root})
+	serverTrailBase = loc.CacheDir
+	serverJobStore = job.NewStore(loc)
 }
 
 // startBridge opens the server's own workspace, keeps its graph and symbol indexes

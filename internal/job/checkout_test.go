@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,10 +41,25 @@ func TestRecordsSweptKeepsItsLastPass(t *testing.T) {
 // parallel tests here cannot pin it one test at a time.
 func TestMain(m *testing.M) { testkit.Main(m) }
 
+// envStateBase is the user state dir the test's environment names, resolved as a door
+// outside this package resolves it.
+func envStateBase(t *testing.T) string {
+	t.Helper()
+	base, err := xdg.StateDir()
+	require.NoError(t, err)
+	return base
+}
+
+// placeAt is the Location of the checkout whose cache dir is cacheDir, under envStateBase.
+func placeAt(t *testing.T, cacheDir string) Location {
+	t.Helper()
+	return Location{CacheDir: cacheDir, StateBase: envStateBase(t)}
+}
+
 // writeMarker writes content as cacheDir's checkout record.
 func writeMarker(t *testing.T, cacheDir, content string) {
 	t.Helper()
-	path := MarkerPath(cacheDir)
+	path := placeAt(t, cacheDir).MarkerPath()
 	require.NotEmpty(t, path)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
@@ -356,15 +372,15 @@ func TestMarkerLivesOutsideTheCacheDir(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), ".magus")
 	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
 
-	require.NoError(t, NewStore(Location{CacheDir: cacheDir}).Bind(Caller{}, "wave/worker"))
-	assert.True(t, strings.HasPrefix(MarkerPath(cacheDir), state+string(filepath.Separator)),
-		"the marker is under the state dir: %s", MarkerPath(cacheDir))
+	require.NoError(t, NewStore(Location{StateBase: envStateBase(t), CacheDir: cacheDir}).Bind(Caller{}, "wave/worker"))
+	assert.True(t, strings.HasPrefix(placeAt(t, cacheDir).MarkerPath(), state+string(filepath.Separator)),
+		"the marker is under the state dir: %s", placeAt(t, cacheDir).MarkerPath())
 	entries, err := os.ReadDir(cacheDir)
 	require.NoError(t, err)
 	assert.Empty(t, entries, "binding writes nothing into the cache dir")
 
 	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, LeaseMarkerName), []byte("wave/root\n"), 0o644))
-	lease, from := ActingLease(cacheDir, "")
+	lease, from := ActingLease(placeAt(t, cacheDir), "")
 	assert.Equal(t, "wave/worker", lease, "a marker-shaped file in the cache dir binds nothing")
 	assert.Equal(t, types.LeaseSourceMarker, from)
 }
@@ -377,8 +393,8 @@ func TestBindRecordIsOwnerOnly(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	cacheDir := filepath.Join(t.TempDir(), ".magus")
 
-	require.NoError(t, NewStore(Location{CacheDir: cacheDir}).Bind(Caller{}, "wave/worker"))
-	fi, err := os.Stat(MarkerPath(cacheDir))
+	require.NoError(t, NewStore(Location{StateBase: envStateBase(t), CacheDir: cacheDir}).Bind(Caller{}, "wave/worker"))
+	fi, err := os.Stat(placeAt(t, cacheDir).MarkerPath())
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
 }
@@ -390,8 +406,8 @@ func TestACallersRecordIsReadFromEveryWorktreeOfTheRepository(t *testing.T) {
 	main, worktree := t.TempDir(), t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(worktree, ".git"),
 		[]byte("gitdir: "+filepath.Join(main, ".git", "worktrees", "w")+"\n"), 0o644))
-	spawner := NewStore(Location{CacheDir: filepath.Join(main, ".magus"), Root: main})
-	worker := NewStore(Location{CacheDir: filepath.Join(worktree, ".magus"), Root: worktree})
+	spawner := NewStore(Location{StateBase: envStateBase(t), CacheDir: filepath.Join(main, ".magus"), Root: main})
+	worker := NewStore(Location{StateBase: envStateBase(t), CacheDir: filepath.Join(worktree, ".magus"), Root: worktree})
 	child := Caller{Host: "claude-code", Session: "s1", Agent: "a1b2c3"}
 
 	require.NoError(t, spawner.Bind(child, "wave/worker"))
@@ -410,7 +426,7 @@ func TestACallersRecordIsReadFromEveryWorktreeOfTheRepository(t *testing.T) {
 func TestNoRecordAnswersForAnotherKey(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
-	s := NewStore(Location{CacheDir: filepath.Join(root, ".magus"), Root: root})
+	s := NewStore(Location{StateBase: envStateBase(t), CacheDir: filepath.Join(root, ".magus"), Root: root})
 	bound := map[string]Caller{
 		"wave/child":    {Host: "claude-code", Session: "s1", Agent: "a1b2c3"},
 		"wave/parent":   {Host: "claude-code", Session: "s1"},
@@ -443,7 +459,7 @@ func TestNoRecordAnswersForAnotherKey(t *testing.T) {
 		"another host":               "",
 		"an agent with no session":   "",
 	}, got)
-	lease, from := ActingLease(filepath.Join(root, ".magus"), "")
+	lease, from := ActingLease(placeAt(t, filepath.Join(root, ".magus")), "")
 	assert.Equal(t, []any{"wave/checkout", types.LeaseSourceMarker}, []any{lease, from},
 		"a process that is not a hook reads the checkout's record")
 }
@@ -453,11 +469,11 @@ func TestNoRecordAnswersForAnotherKey(t *testing.T) {
 func TestARecordThatDoesNotReadIsNone(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	cacheDir := t.TempDir()
-	s := NewStore(Location{CacheDir: cacheDir})
+	s := NewStore(Location{StateBase: envStateBase(t), CacheDir: cacheDir})
 
 	writeMarker(t, cacheDir, "not a lease id!\n")
 	assert.Empty(t, s.Bound(Caller{}))
-	lease, from := ActingLease(cacheDir, "wave/claim")
+	lease, from := ActingLease(placeAt(t, cacheDir), "wave/claim")
 	assert.Equal(t, []any{"wave/claim", types.LeaseSourceEnv}, []any{lease, from})
 
 	require.NoError(t, s.Bind(Caller{}, "wave/worker"), "a binding replaces what did not read")

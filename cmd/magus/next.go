@@ -71,18 +71,22 @@ func newNextGate(root string) nextGate {
 	if err != nil {
 		return nextGate{role: hint.RoleUnbound}
 	}
-	role, writePaths := actingRole(dir, resolveRootOrEmpty(root))
+	role, writePaths := actingRole(resolveRootOrEmpty(root))
 	return nextGate{gate: hint.NewGate(dir, ""), role: role, writePaths: writePaths}
 }
 
 // actingRole grades the acting lease against this checkout's job store. A store that
 // cannot be read serves the worker's narrower set.
-func actingRole(cacheDir, root string) (hint.Role, []string) {
-	id, _ := job.ActingLease(cacheDir, trail.LeaseFromEnv())
+func actingRole(root string) (hint.Role, []string) {
+	loc, err := jobPlace(root)
+	if err != nil {
+		return hint.RoleWorker, nil
+	}
+	id, _ := job.ActingLease(loc, trail.LeaseFromEnv())
 	if id == "" {
 		return hint.RoleUnbound, nil
 	}
-	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(loc).List()
 	if err != nil {
 		return hint.RoleWorker, nil
 	}

@@ -1107,7 +1107,7 @@ func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, 
 		id:       actingLease,
 		standing: sync.OnceValue(func() leaseStanding { return actingLeaseStanding(ctx, deps, actingLease) }),
 		storeLease: func() string {
-			lease, _ := job.ActingLease(hookLocation(ctx, deps).cacheDir, "")
+			lease, _ := job.ActingLease(hookLocation(ctx, deps).jobs(), "")
 			return lease
 		},
 	}

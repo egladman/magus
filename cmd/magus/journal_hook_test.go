@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
@@ -182,8 +183,9 @@ func TestWithInvocationJournalRanksTheBindingOverTheClaim(t *testing.T) {
 	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Dir(job.MarkerPath(cacheDir)), 0o755))
-	require.NoError(t, os.WriteFile(job.MarkerPath(cacheDir), []byte("fleet/bound\n"), 0o644))
+	marker := job.Location{CacheDir: cacheDir, StateBase: fixture.StateBase(t)}.MarkerPath()
+	require.NoError(t, os.MkdirAll(filepath.Dir(marker), 0o755))
+	require.NoError(t, os.WriteFile(marker, []byte("fleet/bound\n"), 0o644))
 
 	handlers := withInvocationJournal(context.Background(), nil, root, "run", []string{"ci"})
 	require.Len(t, handlers, 1)

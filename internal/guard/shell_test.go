@@ -2661,7 +2661,7 @@ func TestRefsRenameEditIsGradedUnderTheClaimedLease(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	assert.Equal(t, graded{}, gradedAs(edit("internal/ledger/store.go")), "no lease held in this checkout")
 
-	store := job.NewStore(job.Location{CacheDir: hookLocation(ctx, Dependencies{}).cacheDir, Root: root})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: hookLocation(ctx, Dependencies{}).cacheDir, Root: root})
 	_, err := store.Update(t.Context(), "lease-c", func(cur *types.Job) {
 		*cur = types.Job{ID: "lease-c", WritePaths: []string{"web/**"}, State: types.StateRunning, CheckoutRoot: root}
 	})
