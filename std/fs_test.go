@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -446,6 +447,60 @@ func TestFsWriteFileRefusesASchemaDowngrade(t *testing.T) {
 
 	assert.Error(t, FsWriteFileAtomic(ctx, p, "rendered by an older build"),
 		"the atomic spelling shares the precondition")
+}
+
+// gitRepoWithIgnoredExport returns a git repo whose .gitignore covers gen/*.json, holding a
+// newer-stamped ignored export and a newer-stamped tracked document.
+func gitRepoWithIgnoredExport(t *testing.T) (ignored, tracked string) {
+	t.Helper()
+	dir := t.TempDir()
+	out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	newer := fmt.Sprintf("{\"schema_version\": %d}\n", types.KnowledgeSchemaVersion+1)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "gen"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("/gen/*.json\n"), 0o644))
+	ignored = filepath.Join(dir, "gen", "knowledge-graph.json")
+	require.NoError(t, os.WriteFile(ignored, []byte(newer), 0o644))
+	tracked = filepath.Join(dir, "MAGUS.md")
+	require.NoError(t, os.WriteFile(tracked, []byte(newer), 0o644))
+	out, err = exec.Command("git", "-C", dir, "add", ".gitignore", "MAGUS.md").CombinedOutput()
+	require.NoError(t, err, string(out))
+	return ignored, tracked
+}
+
+// An ignored export is never committed, so a checkout switched from a newer-schema branch
+// must be able to regenerate it instead of stranding graph-generate.
+func TestFsWriteFileOverwritesAnIgnoredNewerStamp(t *testing.T) {
+	ctx := context.Background()
+	ignored, _ := gitRepoWithIgnoredExport(t)
+
+	require.NoError(t, FsWriteFile(ctx, ignored, "regenerated"))
+	got, err := os.ReadFile(ignored)
+	require.NoError(t, err)
+	assert.Equal(t, "regenerated", string(got))
+
+	newer := fmt.Sprintf("{\"schema_version\": %d}\n", types.KnowledgeSchemaVersion+1)
+	require.NoError(t, os.WriteFile(ignored, []byte(newer), 0o644))
+	require.NoError(t, FsWriteFileAtomic(ctx, ignored, "regenerated atomically"),
+		"the atomic spelling shares the exemption")
+}
+
+func TestFsWriteFileStillRefusesATrackedNewerStamp(t *testing.T) {
+	_, tracked := gitRepoWithIgnoredExport(t)
+
+	err := FsWriteFile(context.Background(), tracked, "rendered by an older build")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "would downgrade committed output")
+}
+
+func TestFsWriteFileRefusesWhenTheVCSCannotAnswer(t *testing.T) {
+	ignored, _ := gitRepoWithIgnoredExport(t)
+	t.Setenv("MAGUS_VCS_NAME", "no-such-vcs")
+
+	err := FsWriteFile(context.Background(), ignored, "rendered by an older build")
+	require.Error(t, err, "a failed VCS query must keep the refusal")
+	assert.Contains(t, err.Error(), "would downgrade committed output")
 }
 
 func TestFsWriteFileAllowsEqualOrOlderStamps(t *testing.T) {
