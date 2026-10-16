@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"io"
 	"log/slog"
 	"strings"
 	"testing"
@@ -427,11 +428,14 @@ func TestNotifyOpensARequestThatAttentionLists(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	root := attentionTestRoot(t)
 
-	var out bytes.Buffer
-	require.NoError(t, notifyCmd(context.Background(), root,
-		strings.NewReader(`{"outcome":"permission","source":{"kind":"agent","sub":"claude","id":"sess-9"},"message":"needs approval to push"}`),
-		&out, []string{"-o", "name"}))
-	assert.Equal(t, "permission\n", out.String())
+	var err error
+	out := captureStdout(t, func() {
+		err = notifyCmd(context.Background(), root,
+			strings.NewReader(`{"outcome":"permission","source":{"kind":"agent","sub":"claude","id":"sess-9"},"message":"needs approval to push"}`),
+			io.Discard, []string{"-o", "name"})
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "permission\n", out)
 
 	global = globalFlags{}
 	listed := captureStdout(t, func() {

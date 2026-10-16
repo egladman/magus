@@ -115,8 +115,7 @@ func checkpointCmd(ctx context.Context, root string, in io.Reader, out io.Writer
 		fmt.Fprintln(out, checkpointRecordedLine(stored, recorded))
 		return nil
 	case outputName:
-		fmt.Fprintln(out, stored.Tree.Revision)
-		return nil
+		return emitNames([]string{stored.Tree.Revision})
 	}
 	// recorded travels with the record: a wrapper reading the structured form has no
 	// other way to tell a new checkpoint from one identical to the last.

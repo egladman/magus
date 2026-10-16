@@ -122,7 +122,8 @@ func TestNotifyCmd(t *testing.T) {
 	})
 
 	t.Run("empty stdin still produces a record", func(t *testing.T) {
-		out, err := run("", "-o", "name")
+		var err error
+		out := captureStdout(t, func() { _, err = run("", "-o", "name") })
 		require.NoError(t, err)
 		assert.Equal(t, "other\n", out)
 	})

@@ -79,8 +79,7 @@ func notifyCmd(ctx context.Context, root string, in io.Reader, out io.Writer, ar
 		fmt.Fprintf(out, "%s: %s\n", title, message)
 		return nil
 	case outputName:
-		fmt.Fprintln(out, ev.Outcome)
-		return nil
+		return emitNames([]string{string(ev.Outcome)})
 	}
 	return writeFormatted(out, opts, ev)
 }
