@@ -72,10 +72,10 @@ func catalogEdge(g *Graph, e types.KnowledgeEdge) bool {
 //
 // Two inputs are excluded because MAGUS.md is committed and drift-gated. Runtime edges,
 // so the table does not rank on which diagnostics THIS machine tripped. And git history
-// (the author kind and its `authored` edges), because that varies by COMMIT: a contributor
-// appearing under a second identity moved the author count and rewrote a committed file
-// that no source change had touched. Degree is what makes the second one subtle, since
-// authored edges also decide which nodes each row lists as anchors.
+// (the author kind, its `authored` edges and the `co_changes` edges), because that varies
+// by COMMIT: a contributor appearing under a second identity moved the author count and
+// rewrote a committed file that no source change had touched. Degree is what makes the
+// second one subtle, since those edges also decide which nodes each row lists as anchors.
 //
 // A third input varies the same way: the catalogs magus supplies itself. Their rows still
 // route, but the size is withheld (binarySuppliedKinds) and the edges inside the catalog
@@ -102,7 +102,7 @@ func (g *Graph) Routing() types.KnowledgeRouting {
 	deg := make(map[string]int, len(g.nodes))
 	edgeCount := 0
 	for _, e := range g.edges {
-		if e.Provenance == ProvenanceRuntime || e.Relation == types.RelationAuthored {
+		if e.Provenance == ProvenanceRuntime || e.Relation == types.RelationAuthored || e.Relation == types.RelationCoChanges {
 			continue
 		}
 		edgeCount++

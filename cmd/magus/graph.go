@@ -488,7 +488,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 //
 // Two kinds qualify, for the same reason and not the obvious one. Locally OBSERVED data
 // (run timings, output refs, coverage, loaded agent contact) varies by machine. Git HISTORY (author nodes,
-// per-file churn, the dir_commits roll-up, prose staleness) varies by COMMIT, and that is
+// co_changes edges, per-file churn, the dir_commits roll-up, prose staleness) varies by COMMIT, and that is
 // the sharper problem for a checked-in export: committing anything changes the churn, so
 // the artifact invalidates itself and the drift gate fires on the commit that just fixed
 // it. The @dirs shard calls its inputs deterministic, which is true per HEAD and is not the
@@ -525,7 +525,7 @@ func stripUnreproducible(g *types.KnowledgeGraphOutput) {
 
 	links := g.Links[:0]
 	for _, link := range g.Links {
-		if link.Provenance == knowledge.ProvenanceRuntime || link.Relation == types.RelationAuthored {
+		if link.Provenance == knowledge.ProvenanceRuntime || link.Relation == types.RelationAuthored || link.Relation == types.RelationCoChanges {
 			continue
 		}
 		links = append(links, link)
