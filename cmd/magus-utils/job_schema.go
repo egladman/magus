@@ -50,6 +50,7 @@ var jobRecords = []jobRecord{
 var jobSources = []string{
 	"internal/job/verify.go",
 	"types/job.go",
+	"types/job_problem.go",
 	"types/schema.go",
 }
 
@@ -70,6 +71,9 @@ var closedSets = map[string][]string{
 	"JobState":   leaseStateNames(),
 	"GoalKind":   goalKindNames(),
 	"GoalExpect": goalExpectNames(),
+	// The only DiagnosticCode a record declares is JobWaiver.Code, so the set is the codes a
+	// waiver may name: a waiver on any other code fails the schema as it fails the decoder.
+	"DiagnosticCode": waivableCodeNames(),
 }
 
 func runJobSchema(args []string) error {
@@ -347,6 +351,16 @@ func (d *goDecls) read(gd *ast.GenDecl, spec ast.Spec) {
 func firstParagraph(doc string) string {
 	head, _, _ := strings.Cut(strings.TrimSpace(doc), "\n\n")
 	return strings.Join(strings.Fields(head), " ")
+}
+
+func waivableCodeNames() []string {
+	var names []string
+	for _, c := range types.AllDiagnosticCodes() {
+		if types.Waivable(c) {
+			names = append(names, string(c))
+		}
+	}
+	return names
 }
 
 func leaseStateNames() []string {

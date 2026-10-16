@@ -29,6 +29,8 @@
     },
     "parent": {
       "type": "string",
+      "pattern": "^[./0-9:A-Z_a-z-]+$",
+      "maxLength": 128,
       "description": "Parent is the lease this one was spawned under, empty for a lease the root declared."
     },
     "criteria": {
@@ -65,6 +67,8 @@
       "items": {
         "type": "string"
       },
+      "pattern": "^[./0-9:A-Z_a-z-]+$",
+      "maxLength": 128,
       "description": "DependsOn names the lease ids that must land before this one."
     },
     "breaks": {
@@ -240,6 +244,27 @@
     "max_attempts": {
       "type": "integer",
       "description": "MaxAttempts caps how many times the job may be forked, its first fork included; zero is no cap. See [Job.MaxAttempts]."
+    },
+    "waivers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "subject", "reason"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["MGS3043", "MGS3044", "MGS3045"]
+          },
+          "subject": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Waivers accept waivable problems (see [Waivable]) on the record's own authority."
     },
     "enter": {
       "type": "string",

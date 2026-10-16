@@ -3,11 +3,14 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 // recordFixture is a record shaped like a ledger row: one field per rule the generator
@@ -147,6 +150,19 @@ func TestLeaseIDPatternMatchesTheValidator(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t, "^[./0-9:A-Z_a-z-]+$", leaseIDPattern())
+}
+
+func TestWaiverCodeEnumIsExactlyTheWaivableCodes(t *testing.T) {
+	t.Parallel()
+
+	enum := closedSets["DiagnosticCode"]
+	require.NotEmpty(t, enum)
+	for _, c := range types.AllDiagnosticCodes() {
+		assert.Equal(t, types.Waivable(c), slices.Contains(enum, string(c)), "code %s", c)
+	}
+	for _, name := range enum {
+		assert.True(t, types.Waivable(types.DiagnosticCode(name)), "enum names %s", name)
+	}
 }
 
 func TestRenderLedgerSchemaNamesWhatItCannotPublish(t *testing.T) {

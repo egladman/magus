@@ -281,6 +281,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "RetryVerdict", Type: reflect.TypeFor[types.RetryVerdict](), RuntimeObject: true},
 	{Name: "PriorAttempt", Type: reflect.TypeFor[types.PriorAttempt](), RuntimeObject: true},
 	{Name: "JobRejection", Type: reflect.TypeFor[types.JobRejection](), RuntimeObject: true},
+	{Name: "JobWaiver", Type: reflect.TypeFor[types.JobWaiver](), RuntimeObject: true},
 	{Name: "Job", Type: reflect.TypeFor[types.Job](), RuntimeObject: true},
 	// Declaration is Job's INPUT twin: a magusfile can construct one, but nothing hands one
 	// back out, so it carries no RuntimeObject encoder.

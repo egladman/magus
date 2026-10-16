@@ -1038,6 +1038,12 @@ export object JobEntry {
     consumed: int = 0,
 }
 
+export object JobWaiver {
+    code: str = "",
+    subject: str = "",
+    reason: str = "",
+}
+
 export object JobWorktree {
     root: str = "",
     source: str = "",
@@ -1141,6 +1147,8 @@ export object Job {
     unattributed: [JobUnattributedWrite] = [],
     entries: [JobEntry] = [],
     writeProof: str = "",
+    waivers: [JobWaiver] = [],
+    validated: int = 0,
     reportedBase: str = "",
     baseVerdict: str = "",
     registeredBy: Origin = Origin{},

@@ -3284,6 +3284,14 @@ func ObjectJobRejection(v types.JobRejection) vm.Value {
 	return out
 }
 
+func ObjectJobWaiver(v types.JobWaiver) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("code", vm.StrValue(string(v.Code)))
+	out.MapSet("subject", vm.StrValue(v.Subject))
+	out.MapSet("reason", vm.StrValue(v.Reason))
+	return out
+}
+
 func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("schemaVersion", vm.IntValue(int64(v.Schema.Version)))
@@ -3372,6 +3380,12 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	}
 	out.MapSet("entries", vm.ListValue(itemsEntries))
 	out.MapSet("writeProof", vm.StrValue(string(v.WriteProof)))
+	itemsWaivers := make([]vm.Value, len(v.Waivers))
+	for indexWaivers := range v.Waivers {
+		itemsWaivers[indexWaivers] = ObjectJobWaiver(v.Waivers[indexWaivers])
+	}
+	out.MapSet("waivers", vm.ListValue(itemsWaivers))
+	out.MapSet("validated", vm.IntValue(int64(v.Validated)))
 	out.MapSet("reportedBase", vm.StrValue(v.ReportedBase))
 	out.MapSet("baseVerdict", vm.StrValue(string(v.BaseVerdict)))
 	out.MapSet("registeredBy", ObjectOrigin(v.RegisteredBy))

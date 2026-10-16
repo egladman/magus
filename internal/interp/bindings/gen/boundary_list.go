@@ -152,6 +152,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "JobUnattributedWrite", Zero: types.JobUnattributedWrite{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectJobUnattributedWrite(v.(types.JobUnattributedWrite))
 	}},
+	{Name: "JobWaiver", Zero: types.JobWaiver{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobWaiver(v.(types.JobWaiver)) }},
 	{Name: "JobWorktree", Zero: types.JobWorktree{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobWorktree(v.(types.JobWorktree)) }},
 	{Name: "KnowledgeAnswer", Zero: types.KnowledgeAnswer{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeAnswer(v.(types.KnowledgeAnswer), enums)
