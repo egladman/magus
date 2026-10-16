@@ -1,7 +1,9 @@
 package agent
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -13,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/types"
 )
 
 // ToolCapability is what a host tool can do to a workspace, in magus's own words. The shape
@@ -44,12 +47,32 @@ const ToolRowsVersion = 1
 // toolRowsVersionFile names the file holding a directory's ToolRowsVersion.
 const toolRowsVersionFile = "version"
 
+// modelRowsFile holds the harness's model rows, one JSON object a line; tierFile holds the
+// workspace's model-tier declaration as one JSON line, and is empty for none. They leave
+// ToolRowsVersion alone: a reader that predates them ignores them, and ToolRows.Models
+// reports a directory written before them, so no build misreads the other's directory.
+const (
+	modelRowsFile = "models"
+	tierFile      = "tiers"
+)
+
 // HarnessTools is the table of a host's own tools a harness spell declares, by its
 // harness_tools op: Dir is the workspace-relative directory the rows are installed in, and
 // the directory the spell's hook wiring names to the guard with --tool-rows.
 type HarnessTools struct {
 	Dir  string        `json:"dir"`
 	Rows []HarnessTool `json:"rows"`
+	// Models is what install writes beside the rows so a hook prices and tiers a call
+	// without loading the workspace; nil writes neither file. No spell declares it.
+	Models *ModelFacts `json:"-"`
+}
+
+// ModelFacts is what the guard prices and tiers a call by: the model rows the harness
+// publishes through harness_models, and the workspace's model-tier declaration, nil when it
+// declares none or turned tiers off.
+type ModelFacts struct {
+	Rows  []types.ModelPricing
+	Tiers *types.ModelTierSet
 }
 
 // HarnessTool is one row: a tool by the host's own name, and what it can do.
@@ -106,6 +129,11 @@ func (t HarnessTools) Files() []HarnessAgentFile {
 		}
 		files = append(files, HarnessAgentFile{Path: path.Join(t.Dir, string(c)), Content: b.String()})
 	}
+	if t.Models != nil {
+		files = append(files,
+			HarnessAgentFile{Path: path.Join(t.Dir, modelRowsFile), Content: encodeModelRows(t.Models.Rows)},
+			HarnessAgentFile{Path: path.Join(t.Dir, tierFile), Content: encodeTiers(t.Models.Tiers)})
+	}
 	return append(files, HarnessAgentFile{Path: path.Join(t.Dir, toolRowsVersionFile), Content: strconv.Itoa(ToolRowsVersion) + "\n"})
 }
 
@@ -117,15 +145,28 @@ func (d HarnessDescriptor) toolFiles() []HarnessAgentFile {
 	return d.Tools.Files()
 }
 
-// InstallHarnessTools writes the tool rows directory harness id declares under root, and
-// returns the paths it changed. A harness that declares no tools writes nothing.
+// InstallHarnessTools writes the tool rows directory harness id declares under root, with
+// the harness's model rows and the model tiers of the workspace ctx carries, and returns the
+// paths it changed. A harness that declares no tools writes nothing. A ctx carrying no
+// workspace is an error: its tiers are unknown, and an empty tiers file would say none.
 func InstallHarnessTools(ctx context.Context, root, id string, dryRun bool) ([]string, error) {
 	d, _, err := LoadHarness(ctx, root, id)
 	if err != nil {
 		return nil, err
 	}
+	if d.Tools == nil {
+		return nil, nil
+	}
+	ws, ok := types.WorkspaceFromContext(ctx).(interface {
+		ModelTiers(ctx context.Context) *types.ModelTierSet
+	})
+	if !ok {
+		return nil, fmt.Errorf("agent: harness %s: no workspace is loaded, so its model tiers are unknown", id)
+	}
+	tools := *d.Tools
+	tools.Models = &ModelFacts{Rows: d.Models, Tiers: ws.ModelTiers(ctx)}
 	var changed []string
-	for _, f := range d.toolFiles() {
+	for _, f := range tools.Files() {
 		planned, err := planWholeFile(root, f.Path, f.Content)
 		if err != nil {
 			return changed, err
@@ -153,6 +194,7 @@ func InstallHarnessTools(ctx context.Context, root, id string, dryRun bool) ([]s
 type ToolRows struct {
 	// Dir is the directory as the wiring named it, "" when it named none.
 	Dir          string
+	abs          string
 	capabilities map[string]ToolCapability
 	Err          error
 }
@@ -181,6 +223,7 @@ func ReadToolRows(root, dir string) ToolRows {
 		rows.Err = fmt.Errorf("the tool rows at %s are version %s and this magus reads version %d, %s", dir, got, ToolRowsVersion, reinstall)
 		return rows
 	}
+	rows.abs = abs
 	rows.capabilities = map[string]ToolCapability{}
 	for _, c := range ToolCapabilities {
 		body, err := os.ReadFile(filepath.Join(abs, string(c)))
@@ -203,4 +246,205 @@ func ReadToolRows(root, dir string) ToolRows {
 // Capability is tool's capability, "" for a tool the rows do not list or when there are none.
 func (r ToolRows) Capability(tool string) ToolCapability {
 	return r.capabilities[tool]
+}
+
+// Models reads the model facts installed beside the rows. It reads on each call rather than
+// in ReadToolRows, so a call the inert fast path answers never pays for them. The error says
+// why there are none: the rows did not read, or a file is missing or malformed, each naming
+// the install that rewrites it.
+func (r ToolRows) Models() (ModelFacts, error) {
+	if r.Err != nil {
+		return ModelFacts{}, r.Err
+	}
+	if r.capabilities == nil {
+		return ModelFacts{}, errors.New("no tool rows were read")
+	}
+	reinstall := "rewrite it with `magus agent harness install`"
+	body, err := os.ReadFile(filepath.Join(r.abs, modelRowsFile))
+	if err != nil {
+		return ModelFacts{}, fmt.Errorf("no model rows at %s, %s: %w", r.Dir, reinstall, err)
+	}
+	rows, err := decodeModelRows(body)
+	if err != nil {
+		return ModelFacts{}, fmt.Errorf("the model rows at %s do not read, %s: %w", r.Dir, reinstall, err)
+	}
+	body, err = os.ReadFile(filepath.Join(r.abs, tierFile))
+	if err != nil {
+		return ModelFacts{}, fmt.Errorf("no model tiers at %s, %s: %w", r.Dir, reinstall, err)
+	}
+	tiers, err := decodeTiers(body)
+	if err != nil {
+		return ModelFacts{}, fmt.Errorf("the model tiers at %s do not read, %s: %w", r.Dir, reinstall, err)
+	}
+	return ModelFacts{Rows: rows, Tiers: tiers}, nil
+}
+
+type toolRowsKey struct{}
+
+// ContextWithToolRows attaches the tool rows a hook's wiring named, so what the hook loads
+// inside its judgment reads the model facts installed beside them.
+func ContextWithToolRows(ctx context.Context, rows ToolRows) context.Context {
+	return context.WithValue(ctx, toolRowsKey{}, rows)
+}
+
+// ToolRowsFromContext is the tool rows ContextWithToolRows attached, false when none were:
+// the caller is no hook, so no wiring named a directory.
+func ToolRowsFromContext(ctx context.Context) (ToolRows, bool) {
+	rows, ok := ctx.Value(toolRowsKey{}).(ToolRows)
+	return rows, ok
+}
+
+// modelRowLine is one model row as the models file keeps it, in harness_models' own keys;
+// types.ModelPricing carries no wire tags.
+type modelRowLine struct {
+	ID           string  `json:"id"`
+	Tier         string  `json:"tier,omitempty"`
+	Window       int64   `json:"window,omitempty"`
+	Input        float64 `json:"input,omitempty"`
+	CacheWrite5m float64 `json:"cache_write_5m,omitempty"`
+	CacheWrite1h float64 `json:"cache_write_1h,omitempty"`
+	CacheRead    float64 `json:"cache_read,omitempty"`
+	Output       float64 `json:"output,omitempty"`
+	PriceStep    int64   `json:"price_step,omitempty"`
+	StepFactor   float64 `json:"step_factor,omitempty"`
+}
+
+func encodeModelRows(rows []types.ModelPricing) string {
+	var b strings.Builder
+	for _, r := range rows {
+		line := modelRowLine{
+			ID: r.ID, Tier: r.Tier, Window: r.Window, Input: float64(r.Input), CacheWrite5m: float64(r.CacheWrite5m),
+			CacheWrite1h: float64(r.CacheWrite1h), CacheRead: float64(r.CacheRead), Output: float64(r.Output),
+		}
+		if r.LongContext != nil {
+			line.PriceStep, line.StepFactor = r.LongContext.Above, r.LongContext.Multiplier
+		}
+		writeJSONLine(&b, line)
+	}
+	return b.String()
+}
+
+func decodeModelRows(body []byte) ([]types.ModelPricing, error) {
+	var rows []types.ModelPricing
+	for i, raw := range jsonLines(body) {
+		var line modelRowLine
+		if err := json.Unmarshal(raw, &line); err != nil {
+			return nil, fmt.Errorf("line %d: %w", i+1, err)
+		}
+		row := types.ModelPricing{
+			ID: line.ID, Tier: line.Tier, Window: line.Window, Input: types.USDPerMTok(line.Input), CacheWrite5m: types.USDPerMTok(line.CacheWrite5m),
+			CacheWrite1h: types.USDPerMTok(line.CacheWrite1h), CacheRead: types.USDPerMTok(line.CacheRead), Output: types.USDPerMTok(line.Output),
+		}
+		if line.PriceStep > 0 {
+			row.LongContext = &types.PriceStep{Above: line.PriceStep, Multiplier: line.StepFactor}
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
+}
+
+// tierLine is a model-tier declaration as the tiers file keeps it: each list by rank,
+// cheapest first, and each host's model alias for every rank.
+type tierLine struct {
+	Enum    string               `json:"enum"`
+	Site    string               `json:"site"`
+	Cases   []string             `json:"cases"`
+	Default int                  `json:"default"`
+	Bounds  []tierBoundsLine     `json:"bounds"`
+	Skills  []types.SkillVariant `json:"skills"`
+	Hosts   map[string][]string  `json:"hosts,omitempty"`
+}
+
+type tierBoundsLine struct {
+	MaxLive    int   `json:"max_live,omitempty"`
+	MaxContext int64 `json:"max_context,omitempty"`
+}
+
+func encodeTiers(set *types.ModelTierSet) string {
+	if set == nil {
+		return ""
+	}
+	tiers := set.All()
+	line := tierLine{Enum: tierEnum(set), Site: set.Site(), Default: set.Default().Rank()}
+	for _, t := range tiers {
+		b := set.Bounds(t)
+		line.Cases = append(line.Cases, t.Name())
+		line.Bounds = append(line.Bounds, tierBoundsLine{MaxLive: b.MaxLive, MaxContext: b.MaxContext})
+		line.Skills = append(line.Skills, set.Skills(t))
+	}
+	for _, host := range set.Hosts() {
+		if line.Hosts == nil {
+			line.Hosts = map[string][]string{}
+		}
+		for _, t := range tiers {
+			// A host the set lists maps every rank, so Alias cannot fail here.
+			alias, _ := set.Alias(host, t)
+			line.Hosts[host.ID] = append(line.Hosts[host.ID], alias)
+		}
+	}
+	var b strings.Builder
+	writeJSONLine(&b, line)
+	return b.String()
+}
+
+// tierEnum is the name of the enum that declared set. The set reports it only inside the
+// error of a Parse no case answers, and the empty name is one: no case is empty.
+//
+// TODO: read it from a types.ModelTierSet accessor once one is exported.
+func tierEnum(set *types.ModelTierSet) string {
+	_, err := set.Parse("")
+	if err == nil {
+		return ""
+	}
+	tiers := set.All()
+	cases := make([]string, len(tiers))
+	for i, t := range tiers {
+		cases[i] = t.Name()
+	}
+	msg, _ := strings.CutPrefix(err.Error(), `"" is not a model tier: enum `)
+	return strings.TrimSuffix(msg, " at "+set.Site()+" declares "+strings.Join(cases, ", "))
+}
+
+func decodeTiers(body []byte) (*types.ModelTierSet, error) {
+	lines := jsonLines(body)
+	switch len(lines) {
+	case 0:
+		return nil, nil
+	case 1:
+	default:
+		return nil, fmt.Errorf("%d lines, and a declaration is one", len(lines))
+	}
+	var line tierLine
+	if err := json.Unmarshal(lines[0], &line); err != nil {
+		return nil, err
+	}
+	decl := types.ModelTierDeclaration{Enum: line.Enum, Site: line.Site, Cases: line.Cases, Default: line.Default, Skills: line.Skills}
+	for _, b := range line.Bounds {
+		decl.Bounds = append(decl.Bounds, types.ModelTierBounds{MaxLive: b.MaxLive, MaxContext: b.MaxContext})
+	}
+	if len(line.Hosts) > 0 {
+		decl.Hosts = make(map[types.HarnessKey][]string, len(line.Hosts))
+		for id, aliases := range line.Hosts {
+			decl.Hosts[types.HarnessKey{ID: id}] = aliases
+		}
+	}
+	return types.NewModelTierSet(decl)
+}
+
+// writeJSONLine appends v as one line. Each value written holds only strings, numbers and
+// lists and maps of them, which always marshal.
+func writeJSONLine(b *strings.Builder, v any) {
+	raw, _ := json.Marshal(v)
+	b.Write(raw)
+	b.WriteByte('\n')
+}
+
+func jsonLines(body []byte) [][]byte {
+	var lines [][]byte
+	for line := range bytes.Lines(body) {
+		if line = bytes.TrimSpace(line); len(line) > 0 {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }

@@ -2,11 +2,14 @@ package agent
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 func writeToolFiles(t *testing.T, root string, files []HarnessAgentFile) {
@@ -47,6 +50,95 @@ func TestReadToolRowsReadsBackWhatFilesWrote(t *testing.T) {
 	assert.Equal(t, ToolRuns, rows.Capability("Shell"))
 	assert.Equal(t, ToolNetwork, rows.Capability("Browse"))
 	assert.Empty(t, rows.Capability("Stranger"))
+}
+
+func testModelFacts(t testing.TB) *ModelFacts {
+	t.Helper()
+	tiers, err := types.NewModelTierSet(types.ModelTierDeclaration{
+		Enum: "Tier", Site: "magusfile.buzz:7", Cases: []string{"economy", "standard"}, Default: 1,
+		Bounds: []types.ModelTierBounds{{MaxLive: 4}, {MaxContext: 150_000}},
+		Skills: []types.SkillVariant{types.SkillVariantShort, types.SkillVariantFull},
+		Hosts:  map[types.HarnessKey][]string{{ID: "host"}: {"small", "large"}},
+	})
+	require.NoError(t, err)
+	return &ModelFacts{Tiers: tiers, Rows: []types.ModelPricing{
+		{ID: "small-1", Tier: "economy", Window: 200_000, Input: 1, Output: 5},
+		{ID: "large-1", Tier: "standard", Window: 1_000_000, Input: 3, CacheWrite5m: 3.75, CacheWrite1h: 6, CacheRead: 0.3, Output: 15,
+			LongContext: &types.PriceStep{Above: 200_000, Multiplier: 2}},
+	}}
+}
+
+func TestToolRowsModelsReadBackWhatFilesWrote(t *testing.T) {
+	root := t.TempDir()
+	want := testModelFacts(t)
+	writeToolFiles(t, root, HarnessTools{Dir: "tools", Rows: []HarnessTool{{Name: "Shell", Capability: ToolRuns}}, Models: want}.Files())
+
+	got, err := ReadToolRows(root, "tools").Models()
+	require.NoError(t, err)
+	assert.Equal(t, want.Rows, got.Rows)
+	require.NotNil(t, got.Tiers)
+	assert.Equal(t, encodeTiers(want.Tiers), encodeTiers(got.Tiers), "every field of the declaration survives")
+	_, err = got.Tiers.Parse("premium")
+	assert.EqualError(t, err, `"premium" is not a model tier: enum Tier at magusfile.buzz:7 declares economy, standard`)
+}
+
+// A workspace that declares no tiers writes an empty tiers file, which reads back as none
+// rather than as a missing file.
+func TestToolRowsModelsWithoutTiersReadAsNone(t *testing.T) {
+	root := t.TempDir()
+	writeToolFiles(t, root, HarnessTools{Dir: "tools", Models: &ModelFacts{}}.Files())
+
+	got, err := ReadToolRows(root, "tools").Models()
+	require.NoError(t, err)
+	assert.Equal(t, ModelFacts{}, got)
+}
+
+// Every way to have no model facts says why and names the install that rewrites them.
+func TestToolRowsModelsSayWhyThereAreNone(t *testing.T) {
+	root := t.TempDir()
+	writeToolFiles(t, root, HarnessTools{Dir: "bare", Rows: []HarnessTool{{Name: "Shell", Capability: ToolRuns}}}.Files())
+	broken := HarnessTools{Dir: "broken", Models: testModelFacts(t)}.Files()
+	for i, f := range broken {
+		if path.Base(f.Path) == tierFile {
+			broken[i].Content = "{\n{\n"
+		}
+	}
+	writeToolFiles(t, root, broken)
+
+	for name, tc := range map[string]struct{ dir, says string }{
+		"no rows":          {"missing", "no tool rows at missing"},
+		"written before":   {"bare", "no model rows at bare"},
+		"a malformed file": {"broken", "the model tiers at broken do not read"},
+	} {
+		_, err := ReadToolRows(root, tc.dir).Models()
+		require.Error(t, err, name)
+		assert.Contains(t, err.Error(), tc.says, name)
+		assert.Contains(t, err.Error(), "magus agent harness install", name)
+	}
+	_, err := ToolRows{}.Models()
+	assert.EqualError(t, err, "no tool rows were read")
+}
+
+// BenchmarkToolRowsModels is what a hook pays for the model facts once a judgment asks for
+// them: the two files install writes, read and decoded, in place of loading the workspace
+// to ask each harness spell for its rows and the magusfile for its tiers.
+func BenchmarkToolRowsModels(b *testing.B) {
+	root := b.TempDir()
+	for _, f := range (HarnessTools{Dir: "tools", Rows: []HarnessTool{{Name: "Shell", Capability: ToolRuns}}, Models: testModelFacts(b)}).Files() {
+		if err := os.MkdirAll(filepath.Join(root, filepath.Dir(f.Path)), 0o755); err != nil {
+			b.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, f.Path), []byte(f.Content), 0o644); err != nil {
+			b.Fatal(err)
+		}
+	}
+	rows := ReadToolRows(root, "tools")
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := rows.Models(); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
 
 // Every way to have no table names the install that writes one, and knows no tool.

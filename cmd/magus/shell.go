@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -18,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
@@ -338,6 +340,19 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 	deps.SymbolSites = index.symbolSites
 	deps.GraphIDs = index.graphIDs
 	deps.IndexedIDs = index.indexedIDs
+	// A hook reads the model facts install wrote beside its tool rows: loading the workspace
+	// for them cost most of a judgment, and under load more than the hook's deadline. A
+	// caller that is no hook names no tool rows and loads the workspace as before.
+	if tools, hook := agent.ToolRowsFromContext(ctx); hook {
+		facts, err := tools.Models()
+		if err == nil {
+			deps.ModelRows = func() []types.ModelPricing { return facts.Rows }
+			deps.ModelTiers = func() *types.ModelTierSet { return facts.Tiers }
+			return deps, rules
+		}
+		slog.WarnContext(ctx, "the guard loads the whole workspace for its model rows and tiers, which can miss the hook's deadline: "+err.Error(),
+			attr.Notice(""), attr.Component("magus shell"))
+	}
 	deps.ModelRows = guardModelRows(ctx, rootOverride)
 	deps.ModelTiers = guardModelTiers(ctx, rootOverride)
 	return deps, rules
