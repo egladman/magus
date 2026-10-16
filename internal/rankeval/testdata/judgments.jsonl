@@ -1,0 +1,9 @@
+{"id": "j1", "query": "ParseManifest", "verb": "refs", "date": "2026-09-01", "source": "fixture", "split": "dev", "shape": "identifier", "gold": {"file:pkg/manifest/parse.go": 3, "dir:pkg/manifest": 1}}
+{"id": "j2", "query": "pkg/manifest/parse.go", "verb": "explain", "date": "2026-09-02", "source": "fixture", "split": "dev", "shape": "path", "gold": {"file:pkg/manifest/parse.go": 2}}
+{"id": "j3", "query": "where the cache key is hashed", "verb": "query", "date": "2026-09-03", "source": "fixture", "split": "dev", "shape": "prose", "gold": {"file:pkg/cache/key.go": 2, "file:pkg/cache/key_test.go": 1}}
+{"id": "j4", "query": "kind=target project=web", "verb": "query", "date": "2026-09-04", "source": "fixture", "split": "dev", "shape": "field", "gold": {"dir:web": 1}}
+
+{"id": "j5", "query": "retry_backoff", "verb": "refs", "date": "2026-10-02", "source": "fixture", "split": "holdout", "shape": "identifier", "gold": {"file:pkg/net/retry.go": 3}}
+{"id": "j6", "query": "pkg/net", "verb": "explain", "date": "2026-10-03", "source": "fixture", "split": "holdout", "shape": "path", "gold": {"dir:pkg/net": 1}}
+{"id": "j7", "query": "how a lease is released", "verb": "query", "date": "2026-10-04", "source": "fixture", "split": "holdout", "shape": "prose", "gold": {"file:pkg/lease/release.go": 3, "file:pkg/lease/lease.go": 2, "dir:pkg/lease": 1}}
+{"id": "j8", "query": "id=~^file:pkg/cache", "verb": "query", "date": "2026-10-05", "source": "fixture", "split": "holdout", "shape": "field", "gold": {"file:pkg/cache/key.go": 1}}
