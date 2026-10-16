@@ -2129,28 +2129,8 @@ func sessionCopy(cacheDir string, keys ...string) (dir string, release func()) {
 	if err != nil {
 		return "", release
 	}
-	copyFile := func(src, dst string) error {
-		info, err := os.Stat(src)
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		body, err := os.ReadFile(src)
-		if err != nil {
-			return err
-		}
-		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(dst, body, 0o644); err != nil {
-			return err
-		}
-		return os.Chtimes(dst, info.ModTime(), info.ModTime())
-	}
 	copyAll := func() error {
-		if err := copyFile(hint.ServedNextPath(cacheDir), hint.ServedNextPath(dir)); err != nil {
+		if err := copyWithModTime(hint.ServedNextPath(cacheDir), hint.ServedNextPath(dir)); err != nil {
 			return err
 		}
 		for _, key := range keys {
@@ -2160,7 +2140,7 @@ func sessionCopy(cacheDir string, keys ...string) (dir string, release func()) {
 				if !strings.HasPrefix(e.Name(), filepath.Base(from)) {
 					continue
 				}
-				if err := copyFile(filepath.Join(filepath.Dir(from), e.Name()), filepath.Join(filepath.Dir(to), e.Name())); err != nil {
+				if err := copyWithModTime(filepath.Join(filepath.Dir(from), e.Name()), filepath.Join(filepath.Dir(to), e.Name())); err != nil {
 					return err
 				}
 			}
@@ -2172,6 +2152,29 @@ func sessionCopy(cacheDir string, keys ...string) (dir string, release func()) {
 		return "", release
 	}
 	return dir, func() { _ = os.RemoveAll(dir) }
+}
+
+// copyWithModTime copies src to dst, creating dst's directory, and gives dst src's
+// modification time. A missing src copies nothing.
+func copyWithModTime(src, dst string) error {
+	info, err := os.Stat(src)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	body, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(dst, body, 0o644); err != nil {
+		return err
+	}
+	return os.Chtimes(dst, info.ModTime(), info.ModTime())
 }
 
 // removeOrphanedCopies removes the session copies whose process has exited. A name that
