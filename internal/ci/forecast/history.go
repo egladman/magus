@@ -334,16 +334,6 @@ func (h *History) PredictDuration(project, target string, tags []string) time.Du
 	return time.Duration(p75) * time.Millisecond
 }
 
-// resolvePrediction returns (p75, hitCount, missCount, hitRate) for the best matching tier.
-//
-// Tier 3 is the tier the record path fills. Tiers 1-2 read Buckets, keyed by tags Tags()
-// derives from the changed-file list, known at plan time, not at record time. Filling
-// them means threading the affected set onto the outcome, a real change to what the
-// record path knows.
-//
-// HitCount/MissCount stay unfed for the same shape of reason: a cache hit executes no
-// target, so no outcome exists. hitRate stays 0 and no hit discount applies, which
-// over-predicts: the safe direction for a shard planner.
 // targetHistories returns every Stats a project recorded for target.
 //
 // The history keys a target as "<spell>/<target>", stamped with the spell that ran it,
@@ -370,6 +360,16 @@ func targetHistories(targets map[string]Stats, target string) []Stats {
 	return out
 }
 
+// resolvePrediction returns (p75, hitCount, missCount, hitRate) for the best matching tier.
+//
+// Tier 3 is the tier the record path fills. Tiers 1-2 read Buckets, keyed by tags Tags()
+// derives from the changed-file list, known at plan time, not at record time. Filling
+// them means threading the affected set onto the outcome, a real change to what the
+// record path knows.
+//
+// HitCount/MissCount stay unfed for the same shape of reason: a cache hit executes no
+// target, so no outcome exists. hitRate stays 0 and no hit discount applies, which
+// over-predicts: the safe direction for a shard planner.
 func (h *History) resolvePrediction(project, target string, tags []string) (p75 int64, hitCount, missCount int, hitRate float64) {
 	if targets, ok := h.Projects[project]; ok {
 		found := targetHistories(targets, target)
