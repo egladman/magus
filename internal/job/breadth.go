@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
@@ -24,20 +25,29 @@ type Workspace struct {
 	Unavailable string
 }
 
-// A job's edit is one change a reviewer reads, which lands in one project and touches tens
-// of files; a write path past either bound claims files nobody meant to edit, and blocks
-// every sibling that needs one of them. A sweep that truly needs more says so in a waiver.
-const (
-	maxClaimFiles    = 50
-	maxClaimProjects = 1
-)
-
-// broadClaimProblems reports each write path of row that claims more than the
-// workspace's breadth thresholds allow, as WritePathTooBroad.
+// broadClaimProblems reports each write path of row that claims more than the workspace's
+// jobs.max_claim_files or jobs.max_claim_projects allow, as WritePathTooBroad. A job's edit
+// is one change a reviewer reads; a write path past either bound claims files nobody meant
+// to edit, and blocks every sibling that needs one of them. A sweep that truly needs more
+// says so in a waiver. The bounds come from the workspace's own magus.yaml, and one that
+// cannot be read is a problem of the row rather than a default.
 func broadClaimProblems(ctx context.Context, root string, row types.Job, ws Workspace, read SymbolReader) types.JobProblems {
 	if row.ReadOnly {
 		return nil
 	}
+	cfg, err := config.LoadWorkspaceOnly(root)
+	if err == nil {
+		err = config.Validate(cfg)
+	}
+	if err != nil {
+		return types.JobProblems{{
+			Code:    types.WritePathTooBroad,
+			Field:   "write_paths",
+			Message: fmt.Sprintf("write path breadth was not judged: the claim bounds jobs.max_claim_files and jobs.max_claim_projects are unreadable: %v", err),
+			Fix:     "fix the jobs section of magus.yaml, then fork again",
+		}}
+	}
+	maxFiles, maxProjects := cfg.Jobs.MaxClaimFiles, cfg.Jobs.MaxClaimProjects
 	projectOf := projectLocator(root, ws)
 	var problems types.JobProblems
 	var fix func(string) string
@@ -58,11 +68,11 @@ func broadClaimProblems(ctx context.Context, root string, row types.Job, ws Work
 			}
 		}
 		var over []string
-		if len(projects) > maxClaimProjects {
-			over = append(over, fmt.Sprintf("more than %s", plural(maxClaimProjects, "project")))
+		if len(projects) > maxProjects {
+			over = append(over, fmt.Sprintf("more than %s", plural(maxProjects, "project")))
 		}
-		if len(files) > maxClaimFiles {
-			over = append(over, fmt.Sprintf("more than %s", plural(maxClaimFiles, "file")))
+		if len(files) > maxFiles {
+			over = append(over, fmt.Sprintf("more than %s", plural(maxFiles, "file")))
 		}
 		if strings.HasPrefix(path.Clean(file), "**") {
 			over = append(over, "a leading `**`, which reaches every directory of the workspace")

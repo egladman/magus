@@ -479,6 +479,20 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 			cfg.Jobs.MaxValidations = n
 		}
 	}
+	if v := getenv("MAGUS_JOBS_MAX_CLAIM_FILES"); v != "" {
+		if n, err := strconv.Atoi(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_JOBS_MAX_CLAIM_FILES: %w", err))
+		} else {
+			cfg.Jobs.MaxClaimFiles = n
+		}
+	}
+	if v := getenv("MAGUS_JOBS_MAX_CLAIM_PROJECTS"); v != "" {
+		if n, err := strconv.Atoi(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_JOBS_MAX_CLAIM_PROJECTS: %w", err))
+		} else {
+			cfg.Jobs.MaxClaimProjects = n
+		}
+	}
 	if v := getenv("MAGUS_CONCURRENCY"); v != "" {
 		if n, err := strconv.Atoi(v); err != nil {
 			errs = append(errs, fmt.Errorf("MAGUS_CONCURRENCY: %w", err))

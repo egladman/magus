@@ -202,7 +202,8 @@ type Diff struct {
 // Jobs bounds the job tree `magus job fork` declares. Every limit is unset by default, and
 // unset means no limit: a bound belongs to the workspace that chose it, never to magus.
 // StaleAfter and Retain are the exceptions, because they decide when magus ends a row
-// nobody took and when it drops one that is over.
+// nobody took and when it drops one that is over. So are MaxClaimFiles and MaxClaimProjects,
+// which are never zero: a claim has to be bounded by something.
 type Jobs struct {
 	// MaxDepth is how many levels below its root job a fork may land. 0 = unlimited.
 	MaxDepth int `json:"max_depth" yaml:"max_depth" validate:"gte=0"`
@@ -225,6 +226,14 @@ type Jobs struct {
 	// (the root, a person) is never counted. Default 1; 0 = unlimited. Workspace only, like
 	// StaleAfter.
 	MaxValidations int `json:"max_validations" yaml:"max_validations" validate:"gte=0" merge:"written"`
+	// MaxClaimFiles is how many files one glob write path may match before a job record
+	// refuses it as too broad (MGS3043). Default 50; zero or negative is an error. A sweep
+	// that needs more waives the path. Workspace only, like StaleAfter.
+	MaxClaimFiles int `json:"max_claim_files" yaml:"max_claim_files" validate:"gt=0" merge:"written"`
+	// MaxClaimProjects is how many projects one glob write path may reach before a job
+	// record refuses it as too broad (MGS3043). Default 1; zero or negative is an error.
+	// Workspace only, like StaleAfter.
+	MaxClaimProjects int `json:"max_claim_projects" yaml:"max_claim_projects" validate:"gt=0" merge:"written"`
 }
 
 // TuiEnabled reports whether `magus diff` may open the viewer.
@@ -1085,7 +1094,7 @@ func Defaults() Config {
 			},
 		},
 		ShutdownGrace: DefaultShutdownGrace,
-		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1},
+		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1},
 		Queue:         Queue{CarryApprovals: CarryApprovals(queuetypes.DefaultCarryPolicy())},
 		// Kept in step with secret.DefaultTimeouts, which applies when a Resolver is built
 		// without options (tests, and any caller outside the run path).

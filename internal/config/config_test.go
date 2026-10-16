@@ -24,6 +24,39 @@ func TestDefaults_VolatilityEnabled(t *testing.T) {
 	assert.True(t, cfg.Volatility.Enabled, "Defaults().Volatility.Enabled should be true")
 }
 
+func TestJobsClaimBounds(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		yaml         string
+		files, projs int
+		wantErr      string
+	}{
+		"absent takes the defaults":    {files: 50, projs: 1},
+		"written numbers are taken":    {yaml: "jobs:\n  max_claim_files: 80\n  max_claim_projects: 3\n", files: 80, projs: 3},
+		"one written leaves the other": {yaml: "jobs:\n  max_claim_files: 80\n", files: 80, projs: 1},
+		"a written zero is an error":   {yaml: "jobs:\n  max_claim_files: 0\n", wantErr: "max_claim_files"},
+		"a negative is an error":       {yaml: "jobs:\n  max_claim_projects: -1\n", wantErr: "max_claim_projects"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			if tc.yaml != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(root, Filename), []byte(tc.yaml), 0o644))
+			}
+			cfg, err := LoadWorkspaceOnly(root)
+			require.NoError(t, err)
+			if tc.wantErr != "" {
+				assert.ErrorContains(t, Validate(cfg), tc.wantErr)
+				return
+			}
+			require.NoError(t, Validate(cfg))
+			assert.Equal(t, tc.files, cfg.Jobs.MaxClaimFiles)
+			assert.Equal(t, tc.projs, cfg.Jobs.MaxClaimProjects)
+		})
+	}
+}
+
 // TestCacheIncludeDefaultsOff pins the OFF default deliberately, against the pull to
 // "fix" it toward the safe-looking direction. Keying the host platform is not what makes
 // a replay safe (Manifest.Platform refuses a cross-platform hit whatever these say), and

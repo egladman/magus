@@ -364,6 +364,12 @@ How long a job that is over (graded, ended, or exited with its result never coll
 \fBMAGUS_JOBS_MAX_VALIDATIONS\fR
 How many `magus run`s one job tree's leased workers may have going at once; a run past it waits for a seat and says whose run holds it. A run with no lease (the root, a person) is never counted. Default 1; 0 = unlimited. Workspace only, like StaleAfter (default: 1). Config file key: \fBjobs.max_validations\fR.
 .TP
+\fBMAGUS_JOBS_MAX_CLAIM_FILES\fR
+How many files one glob write path may match before a job record refuses it as too broad (MGS3043). Default 50; zero or negative is an error. A sweep that needs more waives the path. Workspace only, like StaleAfter (default: 50). Config file key: \fBjobs.max_claim_files\fR.
+.TP
+\fBMAGUS_JOBS_MAX_CLAIM_PROJECTS\fR
+How many projects one glob write path may reach before a job record refuses it as too broad (MGS3043). Default 1; zero or negative is an error. Workspace only, like StaleAfter (default: 1). Config file key: \fBjobs.max_claim_projects\fR.
+.TP
 \fBMAGUS_CONCURRENCY\fR
 Caps concurrent builds; top\-level and in\-process fan\-out share one limiter. Overrides concurrency_profile when set. Config file key: \fBconcurrency\fR.
 .TP

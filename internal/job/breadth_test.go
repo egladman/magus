@@ -8,6 +8,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -58,7 +59,7 @@ func TestBroadClaimRefusesAGlobAcrossProjects(t *testing.T) {
 
 func TestBroadClaimRefusesAGlobPastTheFileLimit(t *testing.T) {
 	var many []string
-	for i := range maxClaimFiles + 1 {
+	for i := range config.Defaults().Jobs.MaxClaimFiles + 1 {
 		many = append(many, fmt.Sprintf("pkg/gen/f%02d.txt", i))
 	}
 	root := breadthWorkspace(t, many...)
@@ -69,6 +70,36 @@ func TestBroadClaimRefusesAGlobPastTheFileLimit(t *testing.T) {
 	require.Len(t, got, 1)
 	assert.Equal(t, `write path "pkg/gen/*.txt" matches 51 files in 1 project: more than 50 files`, got[0].Message)
 	assert.Contains(t, got[0].Fix, "the criteria and goals name no file the graph resolves")
+}
+
+func TestBroadClaimReadsTheWorkspaceBounds(t *testing.T) {
+	ctx := context.Background()
+	across := types.Job{ID: "both", WritePaths: []string{"*/*.go"}}
+	ws := Workspace{Projects: []*types.Project{{Path: "."}, {Path: "web"}}}
+	inPkg := types.Job{ID: "pkg", WritePaths: []string{"pkg/*.go"}}
+
+	t.Run("max_claim_projects raised admits two projects", func(t *testing.T) {
+		root := breadthWorkspace(t)
+		require.NoError(t, os.WriteFile(filepath.Join(root, config.Filename), []byte("jobs:\n  max_claim_projects: 2\n"), 0o644))
+		assert.Empty(t, broadClaimProblems(ctx, root, across, ws, nil))
+	})
+
+	t.Run("max_claim_files lowered refuses a small glob", func(t *testing.T) {
+		root := breadthWorkspace(t)
+		require.NoError(t, os.WriteFile(filepath.Join(root, config.Filename), []byte("jobs:\n  max_claim_files: 2\n"), 0o644))
+		got := broadClaimProblems(ctx, root, inPkg, Workspace{}, nil)
+		require.Len(t, got, 1)
+		assert.Equal(t, `write path "pkg/*.go" matches 3 files in 1 project: more than 2 files`, got[0].Message)
+	})
+
+	t.Run("a written zero is refused, never read as no bound", func(t *testing.T) {
+		root := breadthWorkspace(t)
+		require.NoError(t, os.WriteFile(filepath.Join(root, config.Filename), []byte("jobs:\n  max_claim_files: 0\n"), 0o644))
+		got := broadClaimProblems(ctx, root, inPkg, Workspace{}, nil)
+		require.Len(t, got, 1)
+		assert.Equal(t, types.WritePathTooBroad, got[0].Code)
+		assert.Contains(t, got[0].Message, "max_claim_files")
+	})
 }
 
 func TestBroadClaimPassesAGlobInOneProject(t *testing.T) {
