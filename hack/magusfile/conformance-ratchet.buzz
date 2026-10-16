@@ -21,7 +21,18 @@ object Pruned {
 // run deletes from the record at path every known item a fresh conformance report calls
 // stale. It never adds an item, changes a threshold or edits a reason, and when an index is
 // not up to date or the answer is not found it leaves the record as it is and says why.
+// magus\conformance refreshes a stale index first, which format must not pay for, so run
+// asks `magus status` before it and prunes only when every index is already current.
 export fun run(path: str) > void !> any {
+    final status: {str: any} = json\parse(magus\cmd("status", args: ["--symbols", "-o", "json"], opts: {"quiet": true}).stdout);
+    if (!status.hasKey("symbol_indexes")) {
+        throw "conformance-ratchet: `magus status --symbols -o json` reported no symbol_indexes";
+    }
+    final behind = staleIndex(status["symbol_indexes"]);
+    if (behind != "") {
+        std\print("ratchet not pruned: {behind} is stale");
+        return;
+    }
     final got = prune(magus\conformance(), record: fs\readLines(path));
     if (got.refused != "") {
         std\print("conformance-ratchet: left {path} as it is: {got.refused}");
@@ -119,9 +130,7 @@ fun unvouched(report: {str: any}) > str {
     foreach (idx in indexes) {
         final freshness: str = idx["freshness"] ?? "";
         if (freshness != "up-to-date") {
-            final project: str = idx["project"]["path"] ?? ".";
-            final lang: str = idx["language"] ?? "";
-            return "the {lang} symbol index of {project} is {freshness}";
+            return "{indexLabel(idx)} is {freshness}";
         }
     }
     final answer: {str: any} = report["answer"] ?? {<str: any>};
@@ -131,6 +140,23 @@ fun unvouched(report: {str: any}) > str {
         return "magus\\conformance answered {verdict} ({reason})";
     }
     return "";
+}
+
+// staleIndex names the first of indexes that is not up to date, or is "" when all are.
+fun staleIndex(indexes: [any]) > str {
+    foreach (idx in indexes) {
+        final freshness: str = idx["freshness"] ?? "";
+        if (freshness != "up-to-date") {
+            return indexLabel(idx);
+        }
+    }
+    return "";
+}
+
+fun indexLabel(idx: any) > str {
+    final project: str = idx["project"]["path"] ?? ".";
+    final lang: str = idx["language"] ?? "";
+    return "the {lang} symbol index of {project}";
 }
 
 fun names(items: any) > [str] {
@@ -206,6 +232,13 @@ test "a stale index or an unknown answer changes nothing and says why" {
     final unknown = prune({"indexes": fresher, "answer": answer, "stale": stale}, record: RECORD);
     assert\equal(unknown.lines.join("\n"), want: RECORD.join("\n"), message: "unchanged");
     assert\equal(unknown.refused, want: "magus\\conformance answered unknown (no-index)", message: unknown.refused);
+}
+
+test "the first index that is not up to date is named; all current names none" {
+    final behind: [any] = [fresh(), {"project": {"path": "docs"}, "language": "buzz", "freshness": "out-of-date"}];
+    assert\equal(staleIndex(behind), want: "the buzz symbol index of docs", message: "the stale one");
+    final current: [any] = [fresh()];
+    assert\equal(staleIndex(current), want: "", message: "all current");
 }
 
 test "a row whose items are not last is refused rather than reformatted" {
