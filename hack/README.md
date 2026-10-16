@@ -110,6 +110,7 @@ Targets import these; each runs through its target rather than by hand.
 | `hack/magusfile/branch-stack.buzz` | the typed BranchStack record split-into-branches emits and merge-job-branches reads, with its strict reader, writer and layer ordering |
 | `hack/magusfile/changelog.buzz` | the changelog fragments' one grammar and renderer |
 | `hack/magusfile/commits.buzz` | the conventional-commit rule the pull request title check and the commit hook share |
+| `hack/magusfile/conformance-ratchet.buzz` | the prune `format` runs over `hack/policy/conformance.jsonl`: it deletes the known items that no longer violate, and only those |
 | `hack/magusfile/coverage.buzz` | the Go coverage profile filtered to hand-written code, and the static statement count the published figure divides by |
 | `hack/magusfile/drift.buzz` | drift measured by content, for every generated-file gate |
 | `hack/magusfile/harness.buzz` | which committed host config files lack what their wired harness spell renders, and the merge command for each |

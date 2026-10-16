@@ -127,7 +127,8 @@ func TestCheckConformanceRatchet(t *testing.T) {
 			}}},
 			status:   types.CheckAdvice,
 			evidence: types.EvidenceMeasured,
-			details:  []string{"hack/policy/conformance.jsonl:5: known file-lines entry no longer violates, delete: old.go, older.go"},
+			details: []string{"hack/policy/conformance.jsonl:5: known file-lines entry no longer violates; " +
+				"magus never edits the record, so delete by hand or with a workspace target: old.go, older.go"},
 		},
 		{
 			name: "rows with nothing to tighten and no stale entry are quiet",

@@ -92,7 +92,7 @@ export fun judge(report: {str: any}) > [Finding] !> any {
         }
         found.append(Finding{ path = RATCHET,
             message = "a {metric} known entry names {staleNames(k)}, which no longer violates",
-            fix = "Delete the entry: the known lists only shrink." });
+            fix = "Run `magus run format .`: it deletes what no longer violates." });
     }
     return found;
 }
@@ -203,6 +203,7 @@ test "a known entry that no longer violates fails at the ratchet" {
     assert\equal(got.len(), want: 1, message: "the stale entry");
     assert\equal(got[0].path, want: RATCHET, message: "points at the ratchet");
     assert\equal(got[0].message.indexOf("vcs/hg.go#hgVCS.Bisect") != null, want: true, message: got[0].message);
+    assert\equal(got[0].fix, want: "Run `magus run format .`: it deletes what no longer violates.", message: "format prunes");
 }
 
 test "a stale entry of an advice metric is printed, never failed" {

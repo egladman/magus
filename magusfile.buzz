@@ -10,6 +10,7 @@ import "./hack/policy/commits" as wording;
 import "./hack/policy/pull_requests" as descriptions;
 import "./hack/magusfile/changelog" as changelog;
 import "./hack/magusfile/advisories" as advisories;
+import "./hack/magusfile/conformance-ratchet" as ratchet;
 import "spells/git/hooks" as githooks;
 import "./hack/policy/guard" as agentpolicy;
 import "./hack/policy/builtins" as agentbuiltins;
@@ -2438,8 +2439,9 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
             + malformed.join("\n  ");
     }
 }
-// Regenerates, then formats Go, tidies `go.mod`, and formats Markdown.
-export fun format(ctx: magus\Context, args: [str]) > void {
+// Regenerates, then formats Go, tidies `go.mod`, formats Markdown, and deletes from the
+// conformance ratchet what no longer violates.
+export fun format(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(generate);
     // Not writesFiles: gofmt amends authored code, which must stay off the replay path.
     ctx.modifiesExistingFiles("**/*.go", "go.mod", "go.sum",
@@ -2456,6 +2458,9 @@ export fun format(ctx: magus\Context, args: [str]) > void {
         "internal/agent/agents-section.md");
     markdown["dprint"](ctx, {"args": ["./*.md", "./benchmarks/**/*.md", "./tapes/**/*.md",
         "./internal/agent/agents-section.md"]});
+    // After go-fmt, so the lens measures the formatted tree lint_rules then judges.
+    ctx.modifiesExistingFiles("hack/policy/conformance.jsonl");
+    ratchet\run("hack/policy/conformance.jsonl");
 }
 
 // Runs the CI gates through their declared dependencies.

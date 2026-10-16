@@ -84,8 +84,9 @@ Each lens is a field on the report:
   when nothing is committed and the configured bound applies. They differ on purpose.
   Nothing enforces a live percentile, because a threshold that follows the code loosens
   as the code grows. `violations` lists what sits past `value`, apart from the `known`
-  entries the record accepts; `stale` lists known entries that no longer violate, which
-  a person deletes.
+  entries the record accepts; `stale` lists known entries that no longer violate. magus
+  never deletes them: a person does, or a target the workspace writes. In the magus
+  repository, `magus run format .` deletes them.
 
   `propose` is the lens's only suggestion: the live percentile, offered when at least
   `min_sample` items back it and it sits `step` below `value`. It is never looser than

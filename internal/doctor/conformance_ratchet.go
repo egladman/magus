@@ -70,7 +70,7 @@ func (r *runner) checkConformanceRatchet(_ []*types.Project) types.Check {
 		details = append(details, conformanceProposal(row, percentile, conformance.Ratchet, ratchet))
 	}
 	for _, k := range out.Stale {
-		details = append(details, fmt.Sprintf("%s: known %s entry no longer violates, delete: %s",
+		details = append(details, fmt.Sprintf("%s: known %s entry no longer violates; magus never edits the record, so delete by hand or with a workspace target: %s",
 			conformanceRatchetAt(conformance.Ratchet, k.Line), k.Metric, strings.Join(k.Items, ", ")))
 	}
 	if readErr != nil && len(details) > 0 {
