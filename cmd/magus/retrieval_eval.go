@@ -105,14 +105,38 @@ func (r replayer) replay(ctx context.Context, j rankeval.Judgment) (rankeval.Run
 		return run, fmt.Errorf("magus %s %q: %w", j.Verb, j.Query, err)
 	}
 	run.Unknown = answer.Verdict == types.VerdictUnknown
-	run.Ranked = withDefiningFiles(hits, func(id string) string {
+	sourceOf := func(id string) string {
 		if s, ok := sources[id]; ok {
 			return s
 		}
 		return r.known[id]
-	}, r.known)
+	}
+	run.Files = rankeval.FileCut(hits, func(id string) string { return hitFile(id, sourceOf, r.known) }, rankeval.FileDepth)
+	if j.Set == rankeval.SetAgentAgreement {
+		run.Ranked = withDefiningFiles(hits, sourceOf, r.known)
+	}
 	run.Bytes = printed.Len()
 	return run, nil
+}
+
+// hitFile is the file: id a hit lives in: a file hit is itself, a directory is none,
+// and any other node is the file its Source points into, when the graph holds that
+// file. A target or doc section maps to the file that declares it.
+func hitFile(id string, sourceOf func(string) string, known map[string]string) string {
+	switch {
+	case strings.HasPrefix(id, types.KindFile+":"):
+		return id
+	case strings.HasPrefix(id, types.KindDir+":"):
+		return ""
+	}
+	file := sourceFile(sourceOf(id))
+	if file == "" {
+		return ""
+	}
+	if _, ok := known[types.KindFile+":"+file]; !ok {
+		return ""
+	}
+	return types.KindFile + ":" + file
 }
 
 // loadedGraph is the graph the CLI verb would load for input.
@@ -124,8 +148,9 @@ func (r replayer) loadedGraph(input string) *knowledge.Graph {
 }
 
 // withDefiningFiles follows each hit with the file:<path> its node's Source points into
-// and that file's dir:<dir>, keeping each id's first position: gold ids name files and
-// dirs, while a hit is often a symbol, target or doc section inside one.
+// and that file's dir:<dir>, keeping each id's first position: agent-agreement's gold
+// names files and dirs, while a hit is often a symbol, target or doc section inside
+// one. It feeds the node-level report only, never the file cut.
 func withDefiningFiles(hits []string, sourceOf func(string) string, known map[string]string) []string {
 	seen := make(map[string]bool, 3*len(hits))
 	out := make([]string, 0, 3*len(hits))
