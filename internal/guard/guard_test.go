@@ -2,7 +2,6 @@ package guard
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -918,28 +917,42 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 	}
 }
 
-// A dry run's copy goes when its context ends, since a judgment past the hook's deadline is
-// still running when the process exits; and it goes on release when the run returns first.
-func TestSessionCopyIsRemovedByReleaseOrItsContextEnding(t *testing.T) {
+// A dry run past the hook's deadline still reads its copy, so only release removes it.
+func TestSessionCopyHoldsItsGatesUntilRelease(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
-	gone := func(dir string) func() bool {
-		return func() bool {
-			_, err := os.Stat(dir)
-			return errors.Is(err, os.ErrNotExist)
-		}
+	cacheDir := t.TempDir()
+	const kind = hint.MarkerKind("told")
+	require.False(t, hint.NewGate(cacheDir, "s1").MarkFired(kind))
+
+	dir, release := sessionCopy(cacheDir, "s1")
+	require.DirExists(t, dir)
+	assert.True(t, hint.NewGate(dir, "s1").AlreadyFired(kind), "the copy carries the session's marker")
+	release()
+	assert.NoDirExists(t, dir)
+	assert.True(t, hint.NewGate(cacheDir, "s1").AlreadyFired(kind), "the session's own marker stays")
+}
+
+// A hook process exits without waiting for a dry run that ran out of time, and that run's
+// gates may write its copy until then; the next copy removes it, and keeps a live process's.
+func TestSessionCopyRemovesTheCopyOfAnExitedProcess(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	const exited = 1 << 30
+	orphan := filepath.Join(tmp, fmt.Sprintf("%s%d-1", dryRunCopyPrefix, exited))
+	require.False(t, hint.NewGate(orphan, "s1").MarkFired("told"), "a late write recreates the copy")
+	require.DirExists(t, orphan)
+	live := filepath.Join(tmp, fmt.Sprintf("%s%d-1", dryRunCopyPrefix, os.Getpid()))
+	unnamed := filepath.Join(tmp, dryRunCopyPrefix+"2837461923")
+	for _, dir := range []string{live, unnamed} {
+		require.NoError(t, os.Mkdir(dir, 0o755))
 	}
 
-	ctx, cancel := context.WithCancel(t.Context())
-	dir, release := sessionCopy(ctx, t.TempDir(), "s1")
-	require.DirExists(t, dir)
-	cancel()
-	assert.Eventually(t, gone(dir), 5*time.Second, 10*time.Millisecond, "the deadline removes it")
+	dir, release := sessionCopy(t.TempDir(), "s1")
+	assert.NoDirExists(t, orphan)
+	assert.DirExists(t, live)
+	assert.DirExists(t, unnamed, "a copy that names no process is never guessed at")
 	release()
-
-	dir, release = sessionCopy(t.Context(), t.TempDir(), "s1")
-	require.DirExists(t, dir)
-	release()
-	assert.True(t, gone(dir)(), "release removes it")
+	assert.NoDirExists(t, dir)
 }
 
 // Judging a spawn records it, so a dry run refuses one rather than record it.

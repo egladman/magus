@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/xdg"
@@ -750,7 +752,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	stateAt := location
 	if req.DryRun {
 		var release func()
-		stateAt.cacheDir, release = sessionCopy(ctx, location.cacheDir, who.callerKey(), who.factsKey(), who.skillsKey())
+		stateAt.cacheDir, release = sessionCopy(location.cacheDir, who.callerKey(), who.factsKey(), who.skillsKey())
 		defer release()
 	}
 	markers := hint.NewGate(stateAt.cacheDir, who.callerKey())
@@ -2104,20 +2106,26 @@ func leaseRows(ctx context.Context, at location) ([]types.Job, error) {
 	return job.NewStore(at.jobs()).List()
 }
 
+// dryRunCopyPrefix starts the name of a dry run's session copy in the temporary directory;
+// the pid of the process that made it follows.
+const dryRunCopyPrefix = "magus-guard-dry-run-"
+
 // sessionCopy copies into a new temporary directory what the gates keyed on keys hold under
 // cacheDir, and the served-next journal, keeping modification times, since an anonymous
 // marker expires on its age. "" when there is nothing to copy or the copy cannot be made: a
 // dry run then reads a session nothing was told yet, rather than write the real one.
 //
-// release removes the copy, which also happens once ctx is done. A dry run nested in a hook
-// judgment that runs out of time is still running when JudgeWithin answers unjudged and the
-// process exits, so its deferred release never runs.
-func sessionCopy(ctx context.Context, cacheDir string, keys ...string) (dir string, release func()) {
+// Call release once the judgment returns, never sooner: a judgment past the hook's deadline
+// still reads its gates, and a gate's write recreates a removed copy. A hook process exits
+// without waiting for a judgment that ran out of time, so the next copy removes every copy
+// whose process has exited.
+func sessionCopy(cacheDir string, keys ...string) (dir string, release func()) {
 	release = func() {}
 	if cacheDir == "" {
 		return "", release
 	}
-	dir, err := os.MkdirTemp("", "magus-guard-dry-run-")
+	removeOrphanedCopies()
+	dir, err := os.MkdirTemp("", dryRunCopyPrefix+strconv.Itoa(os.Getpid())+"-")
 	if err != nil {
 		return "", release
 	}
@@ -2163,11 +2171,18 @@ func sessionCopy(ctx context.Context, cacheDir string, keys ...string) (dir stri
 		_ = os.RemoveAll(dir)
 		return "", release
 	}
-	remove := func() { _ = os.RemoveAll(dir) }
-	stop := context.AfterFunc(ctx, remove)
-	return dir, func() {
-		stop()
-		remove()
+	return dir, func() { _ = os.RemoveAll(dir) }
+}
+
+// removeOrphanedCopies removes the session copies whose process has exited. A name that
+// carries no pid, as one made by an older magus, is kept: its process may still read it.
+func removeOrphanedCopies() {
+	copies, _ := filepath.Glob(filepath.Join(os.TempDir(), dryRunCopyPrefix+"*"))
+	for _, path := range copies {
+		owner, _, named := strings.Cut(strings.TrimPrefix(filepath.Base(path), dryRunCopyPrefix), "-")
+		if n, err := strconv.Atoi(owner); named && err == nil && !pid.Alive(n) {
+			_ = os.RemoveAll(path)
+		}
 	}
 }
 
