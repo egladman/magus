@@ -49,7 +49,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [process-poll](process-poll.md)                       | a process table inspected to wait on magus work the lock already reports                             |
 | [push-ungated](push-ungated.md)                       | a push at a commit with no green gate: the person is asked, a leased worker refused                  |
 | [shared-stash](shared-stash.md)                       | a bare stash push or pop, on a stack every worktree shares                                           |
-| [sleep-poll](sleep-poll.md)                           | a sleep before a status read, a call that only sleeps, or a worker waiting for the build budget      |
+| [sleep-poll](sleep-poll.md)                           | a sleep before a status read, a call that only sleeps, or a wait on or retry into a full budget      |
 | [spawn-above-parent-tier](spawn-above-parent-tier.md) | a subagent spawned on a model whose tier ranks above its spawner's                                   |
 | [spawn-duplicate](spawn-duplicate.md)                 | a spawn for a job that already has a worker                                                          |
 | [spawn-unvalidated](spawn-unvalidated.md)             | a spawn for a job whose record was never validated                                                   |
