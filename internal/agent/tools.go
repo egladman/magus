@@ -3,7 +3,6 @@ package agent
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -15,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -298,15 +298,15 @@ func ToolRowsFromContext(ctx context.Context) (ToolRows, bool) {
 // types.ModelPricing carries no wire tags.
 type modelRowLine struct {
 	ID           string  `json:"id"`
-	Tier         string  `json:"tier,omitempty"`
-	Window       int64   `json:"window,omitempty"`
-	Input        float64 `json:"input,omitempty"`
-	CacheWrite5m float64 `json:"cache_write_5m,omitempty"`
-	CacheWrite1h float64 `json:"cache_write_1h,omitempty"`
-	CacheRead    float64 `json:"cache_read,omitempty"`
-	Output       float64 `json:"output,omitempty"`
-	PriceStep    int64   `json:"price_step,omitempty"`
-	StepFactor   float64 `json:"step_factor,omitempty"`
+	Tier         string  `json:"tier,omitzero"`
+	Window       int64   `json:"window,omitzero"`
+	Input        float64 `json:"input,omitzero"`
+	CacheWrite5m float64 `json:"cache_write_5m,omitzero"`
+	CacheWrite1h float64 `json:"cache_write_1h,omitzero"`
+	CacheRead    float64 `json:"cache_read,omitzero"`
+	Output       float64 `json:"output,omitzero"`
+	PriceStep    int64   `json:"price_step,omitzero"`
+	StepFactor   float64 `json:"step_factor,omitzero"`
 }
 
 func encodeModelRows(rows []types.ModelPricing) string {
@@ -356,8 +356,8 @@ type tierLine struct {
 }
 
 type tierBoundsLine struct {
-	MaxLive    int   `json:"max_live,omitempty"`
-	MaxContext int64 `json:"max_context,omitempty"`
+	MaxLive    int   `json:"max_live,omitzero"`
+	MaxContext int64 `json:"max_context,omitzero"`
 }
 
 func encodeTiers(set *types.ModelTierSet) string {
