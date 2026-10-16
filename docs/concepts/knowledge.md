@@ -347,7 +347,10 @@ Edges are directed and carry provenance and a confidence tag: `extracted` (1.0,
 from a parseable source) or `inferred` (a rubric score, from a fuzzy match).
 
 Relations: `depends_on`, `contains`, `uses`, `calls`, `implements`, `imports`,
-`references`, `documents`, `rationale_for`, `owns`. `calls` spans two layers: buzz function to buzz
+`references`, `documents`, `rationale_for`, `owns`, `co_changes`. `co_changes` links
+two files that changed in the same commits, from git history (see
+[Git history](#git-history-vcs)); it is symmetric and stored once, with the
+lesser path as its source. `calls` spans two layers: buzz function to buzz
 function, and code symbol to code symbol from a SCIP index. `implements` runs from an
 implementing type or method to the interface or interface method it satisfies, both
 symbols, from the relationships the indexer records. `rationale_for` points at a
@@ -691,6 +694,13 @@ is a phantom nothing can retire.
 ## Git history (@vcs)
 
 Opt-in, off by default: enable it to fold each file's git history onto its file node.
+
+It also links files that change together. A pair gets a symmetric `co_changes` edge,
+carrying `support` (shared commits) and `confidence` (support over the commit count of
+the less-changed file), when both files have a node, they share at least two commits,
+and confidence is at least 0.3. A commit touching more than 30 files is skipped as
+mechanical. The edge answers "what else changes with this", so a ranked search that
+walks the graph can reach a file's usual companions.
 
 ```yaml
 # magus.yaml
