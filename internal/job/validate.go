@@ -21,17 +21,17 @@ import (
 // problems they waived, each check that could not run and why, and the write proof the row
 // records.
 //
-// A merge that creates the row, or brings an ended one back, meets every rule: the record's
-// own shape, a boundary and a grade (JobUngraded), the jobs limits (JobForkLimitExceeded),
-// unambiguous symbol goals (JobGoalInvalid), write paths that are no directory
-// (WritePathIsDirectory), no ungradable claim (WritePathClaimUngradable), no project
-// configuration held whole (WritePathConfigWholeFile), no file the workspace loads while
-// another job works in this checkout (CheckoutConfigHeld) and no unordered shared file
-// (WritePathFileShared), checks that skip no test of the write paths' packages, that the
-// guard lets the holder run and that name a project and target the workspace has
-// (JobCheckUnrunnable), no regenerated output outside the write paths
-// (OutputOutsideWritePaths), no ci target over them that nothing runs (GateNotRun), and no
-// write path broader than the workspace allows (WritePathTooBroad).
+// A merge that creates the row, or brings an ended one back, meets every rule. The record
+// holds its own shape, a boundary and a grade (JobUngraded), the jobs limits
+// (JobForkLimitExceeded) and unambiguous symbol goals (JobGoalInvalid). Its write paths
+// name no directory (WritePathIsDirectory), no ungradable claim (WritePathClaimUngradable),
+// no project configuration held whole (WritePathConfigWholeFile), no file the workspace
+// loads while another job works in this checkout (CheckoutConfigHeld), no unordered shared
+// file (WritePathFileShared) and nothing broader than the workspace allows
+// (WritePathTooBroad). Its checks skip no test of the write paths' packages, are ones the
+// guard lets the holder run, and name a project and target the workspace has
+// (JobCheckUnrunnable). No regenerated output sits outside the write paths
+// (OutputOutsideWritePaths), and no ci target over them goes unrun (GateNotRun).
 //
 // A merge onto a row that has not ended meets the same rules for what it ADDS: the goals,
 // checks, write paths and deny paths it did not carry, the outputs and gates those bring
@@ -57,7 +57,7 @@ func ValidateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 	// write paths with every check it runs for an update.
 	judged := merged
 	if updates {
-		ps = append(ps, newProblems(recordOf(prev).Problems(), recordOf(merged).Problems())...)
+		ps = append(ps, newProblems(rowDeclaration(prev).Problems(), rowDeclaration(merged).Problems())...)
 		ps = append(ps, ungradedProblems(merged)...)
 		var goals []types.Goal
 		for _, gate := range merged.Goals {
@@ -94,7 +94,7 @@ func ValidateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 			v.WriteProof = store.WriteProof(rows, merged)
 		}
 	} else {
-		ps = append(ps, recordOf(merged).Problems()...)
+		ps = append(ps, rowDeclaration(merged).Problems()...)
 		ps = append(ps, unscopedProblems(merged)...)
 		ps = append(ps, ungradedProblems(merged)...)
 		ps = append(ps, forkLimitProblems(rows, id, merged.Parent, limits)...)
@@ -329,9 +329,9 @@ func unrunGateProblems(gates []UnrunGate) types.JobProblems {
 	return ps
 }
 
-// recordOf is row as the record that would declare it, for the shape checks
+// rowDeclaration is row as the record that would declare it, for the shape checks
 // [types.Declaration.Problems] makes.
-func recordOf(row types.Job) types.Declaration {
+func rowDeclaration(row types.Job) types.Declaration {
 	rec := types.Declaration{
 		ID: row.ID, Parent: row.Parent, Criteria: row.Criteria, Checkpoint: row.Checkpoint,
 		WritePaths: row.WritePaths, DenyPaths: row.DenyPaths, ReadPaths: row.ReadPaths, DependsOn: row.DependsOn,
