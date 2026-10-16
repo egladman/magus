@@ -593,6 +593,52 @@ const ToolUnprobeable DiagnosticCode = "MGS3035"
 // holding it whole blocks all of them for one line; the refusal lists the claims to hold
 // instead.
 const WritePathConfigWholeFile DiagnosticCode = "MGS3036"
+
+// JobRecordInvalid is a job record field that fails its own shape: an id, parent or
+// depends_on that is not a lease id, an unknown state, a timeout that is not a positive
+// duration, a negative max_attempts, a relative checkout, a path outside the workspace, a
+// blank breaks entry, a field spelled both ways, enter mixed with a declaration, an
+// unknown member, or a waiver on a code that cannot be waived or with no reason.
+const JobRecordInvalid DiagnosticCode = "MGS3037"
+
+// JobGoalInvalid is a goal no evidence could ever grade: a malformed shape, a duplicate
+// id, a depends_on naming no goal, a dependency cycle, two signatures for one symbol, or
+// a symbol the index resolves to more than one declaration.
+const JobGoalInvalid DiagnosticCode = "MGS3038"
+
+// JobUngraded is a job nothing would grade: it writes and declares no check or goal, or
+// it declares no write paths and is not read-only.
+const JobUngraded DiagnosticCode = "MGS3039"
+
+// JobCheckUnrunnable is a check the worker cannot run to a passing record: its project or
+// target is unknown, the guard denies it, a person must run it, or it narrows away the
+// tests of the packages it writes.
+const JobCheckUnrunnable DiagnosticCode = "MGS3040"
+
+// JobCheckpointUnplaceable is a checkpoint this checkout cannot start the job from: it is
+// neither HEAD nor an ancestor of it, or its digest does not match the working state.
+const JobCheckpointUnplaceable DiagnosticCode = "MGS3041"
+
+// JobForkLimitExceeded is a fork past the workspace's jobs.max_depth or jobs.max_live.
+const JobForkLimitExceeded DiagnosticCode = "MGS3042"
+
+// WritePathTooBroad is a write path that claims more than the workspace's breadth
+// thresholds allow: more projects, more files, or a leading `**`. Waivable, because a
+// sweep is sometimes the job.
+const WritePathTooBroad DiagnosticCode = "MGS3043"
+
+// OutputOutsideWritePaths is a regenerated output, built from sources inside the write
+// paths, that the write paths do not cover. Waivable when the root regenerates it.
+const OutputOutsideWritePaths DiagnosticCode = "MGS3044"
+
+// GateNotRun is a ci target over the write paths that neither the check nor a goal runs.
+// Waivable when the root runs it.
+const GateNotRun DiagnosticCode = "MGS3045"
+
+// CheckoutConfigHeld is a job whose write paths cover a file the workspace loads (a
+// magusfile, magus.yaml or spell source), forked into a checkout another live job is
+// working in: a half-saved load file stops `magus run` for every job there.
+const CheckoutConfigHeld DiagnosticCode = "MGS3046"
 const RaceDetected DiagnosticCode = "MGS4001"
 const OutputOverlapDetected DiagnosticCode = "MGS4002"
 const NondeterministicOutput DiagnosticCode = "MGS4003"
@@ -917,6 +963,16 @@ var allDiagnosticCodes = []DiagnosticCode{
 	MCPClientFailed,
 	ToolUnprobeable,
 	WritePathConfigWholeFile,
+	JobRecordInvalid,
+	JobGoalInvalid,
+	JobUngraded,
+	JobCheckUnrunnable,
+	JobCheckpointUnplaceable,
+	JobForkLimitExceeded,
+	WritePathTooBroad,
+	OutputOutsideWritePaths,
+	GateNotRun,
+	CheckoutConfigHeld,
 	RaceDetected,
 	OutputOverlapDetected,
 	NondeterministicOutput,
@@ -992,6 +1048,15 @@ var retryTable = map[DiagnosticCode]RetryChange{
 	BuildSlotsDeadlocked:     RetryAfterConfig,
 	WritePathIsDirectory:     RetryAfterWidening,
 	PipeCycle:                RetryAfterConfig,
+	JobRecordInvalid:         RetryAfterConfig,
+	JobGoalInvalid:           RetryAfterConfig,
+	JobUngraded:              RetryAfterConfig,
+	JobCheckUnrunnable:       RetryAfterConfig,
+	JobCheckpointUnplaceable: RetryAfterConfig,
+	WritePathTooBroad:        RetryAfterConfig,
+	OutputOutsideWritePaths:  RetryAfterConfig,
+	GateNotRun:               RetryAfterConfig,
+	CheckoutConfigHeld:       RetryAfterConfig,
 	BearerRejected:           RetryAfterPerson,
 	NoAuthToken:              RetryAfterPerson,
 }
