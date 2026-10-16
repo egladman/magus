@@ -199,11 +199,11 @@ func judgeBriefOffCheck(deps Dependencies, brief briefInput) ShellVerdict {
 	if len(graded) == 0 {
 		return briefUngraded(whyNoBriefRow(ids, rows), runs)
 	}
-	if v := briefHumanOnly(ctx, deps, at.workspace, graded[0], runs); v.Deny != "" {
+	workspace := lazyWorkspace(ctx, deps, at.workspace)
+	if v := briefHumanOnly(ctx, deps, at.workspace, workspace, graded[0], runs); v.Deny != "" {
 		return v
 	}
 	var notes []string
-	workspace := lazyWorkspace(ctx, deps, at.workspace)
 	// A worker starts at its checkout's root, wherever the spawn was made from.
 	at.dir = at.workspace
 	for _, row := range graded {
@@ -222,12 +222,12 @@ func judgeBriefOffCheck(deps Dependencies, brief briefInput) ShellVerdict {
 
 // briefHumanOnly refuses a brief telling row's worker to run a line that reaches a
 // human_only target, which human-only would refuse the worker whatever its check.
-func briefHumanOnly(ctx context.Context, deps Dependencies, workspace string, row types.Job, runs []briefRun) ShellVerdict {
+func briefHumanOnly(ctx context.Context, deps Dependencies, root string, workspace func() (types.WorkspaceRepository, error), row types.Job, runs []briefRun) ShellVerdict {
 	for _, r := range runs {
 		if r.negated {
 			continue
 		}
-		pairs := humanOnlyReach(ctx, deps, workspace, []targetRun{r.run})
+		pairs := humanOnlyReach(ctx, deps, root, workspace, []targetRun{r.run})
 		if len(pairs) == 0 {
 			continue
 		}

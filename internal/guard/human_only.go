@@ -52,7 +52,7 @@ func gradeHumanOnly(ctx context.Context, deps Dependencies, actingLease, command
 		return "", ""
 	}
 	at := hookLocation(ctx, deps)
-	pairs := humanOnlyReach(ctx, deps, at.workspace, runs)
+	pairs := humanOnlyReach(ctx, deps, at.workspace, lazyWorkspace(ctx, deps, at.workspace), runs)
 	if len(pairs) == 0 {
 		return "", ""
 	}
@@ -117,13 +117,13 @@ const phaseHumanOnlyRecord = "human_only_record"
 
 // humanOnlyReach is every human_only target runs reach in the workspace at root, each
 // once. It answers from the knowledge store's record while that record is provably
-// current, and opens the workspace otherwise. A workspace that cannot be read reaches
-// none.
-func humanOnlyReach(ctx context.Context, deps Dependencies, root string, runs []targetRun) []humanOnlyPair {
+// current, and opens the workspace through workspace otherwise. A workspace that cannot
+// be read reaches none.
+func humanOnlyReach(ctx context.Context, deps Dependencies, root string, workspace func() (types.WorkspaceRepository, error), runs []targetRun) []humanOnlyPair {
 	ix, ok := deps.humanOnlyRecord(ctx, root)
 	if !ok {
-		ws, err := deps.inspect(ctx, root)
-		if err != nil || ws == nil {
+		ws, err := workspace()
+		if err != nil {
 			return nil
 		}
 		ix = types.IndexHumanOnly(ws)
