@@ -663,12 +663,22 @@ export object ConformanceKnown {
     metric: str = "",
     items: [str] = [],
     reason: str = "",
+    shapes: {str: str} = {},
+}
+
+export object ConformanceCarry {
+    metric: str = "",
+    @"from": str = "",
+    to: [str] = [],
 }
 
 export object Conformance {
     definition: str = "",
     rows: [ConformanceRow] = [],
     stale: [ConformanceKnown] = [],
+    carried: [ConformanceCarry] = [],
+    ambiguous: [ConformanceCarry] = [],
+    shapes: {str: str} = {},
     excluded: int = 0,
     answer: KnowledgeAnswer = KnowledgeAnswer{},
 }

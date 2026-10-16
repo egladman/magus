@@ -222,6 +222,14 @@ func (o ConformanceOptions) Validate() error {
 		if k.Reason == "" {
 			fail("%s: known %s: no reason", at, k.Metric)
 		}
+		for _, item := range slices.Sorted(maps.Keys(k.Shapes)) {
+			switch {
+			case !slices.Contains(k.Items, item):
+				fail("%s: known %s: a shape for %s, which the entry does not list", at, k.Metric, item)
+			case k.Shapes[item] == "":
+				fail("%s: known %s: an empty shape for %s", at, k.Metric, item)
+			}
+		}
 	}
 	return errors.Join(errs...)
 }
@@ -324,13 +332,16 @@ type ConformanceThreshold struct {
 }
 
 // ConformanceKnown is a worklist of items already past a metric's value and accepted for a
-// reason. A known item that no longer violates is stale and should be deleted. Line is its
-// 1-based line in the record.
+// reason. A known item that no longer violates is stale and should be deleted. Shapes maps
+// a listed item to its fingerprint when it was listed, a symbol's body shape or a file's
+// set of body digests, which a rename or a move leaves unchanged: it is how the item is
+// recognized under a new ID. Line is its 1-based line in the record.
 type ConformanceKnown struct {
-	Metric ConformanceMetric `json:"metric" yaml:"metric"`
-	Items  []string          `json:"items"  yaml:"items"`
-	Reason string            `json:"reason" yaml:"reason"`
-	Line   int               `json:"-"      yaml:"-"      buzz:"-"`
+	Metric ConformanceMetric `json:"metric"           yaml:"metric"`
+	Items  []string          `json:"items"            yaml:"items"`
+	Reason string            `json:"reason"           yaml:"reason"`
+	Shapes map[string]string `json:"shapes,omitempty" yaml:"shapes,omitempty"`
+	Line   int               `json:"-"                yaml:"-"                buzz:"-"`
 }
 
 const conformanceRowKinds = "schema, measured, threshold or known"
@@ -420,12 +431,12 @@ func (c *conformanceRow) UnmarshalJSON(data []byte) error {
 //	{"kind":"schema","schema":1}
 //	{"kind":"measured","rev":"<rev>","date":"<date>"}
 //	{"kind":"threshold","metric":"file-lines","population":"source","scope":"<dir>","value":938,"n":1130,"percentile":95,"why":"<why>"}
-//	{"kind":"known","metric":"clone-tokens","reason":"<why>","items":["<item>"]}
+//	{"kind":"known","metric":"clone-tokens","reason":"<why>","items":["<item>"],"shapes":{"<item>":"<shape>"}}
 //
-// scope and why are optional, and a record names its schema and its measurement at most
-// once. An unknown kind, member, metric or population, a repeated member, a wrongly typed
-// value, a repeated line, and a key committed twice are errors naming path:line, path
-// being where data was read from.
+// scope, why and shapes are optional, and a record names its schema and its measurement at
+// most once. An unknown kind, member, metric or population, a repeated member, a wrongly
+// typed value, a repeated line, and a key committed twice are errors naming path:line,
+// path being where data was read from.
 func ReadConformanceRatchet(path string, data []byte) (ConformanceRatchet, error) {
 	var r ConformanceRatchet
 	seen := conformanceSeen{thresholds: map[ConformanceKey]int{}}
@@ -494,10 +505,17 @@ func (r *ConformanceRatchet) add(row conformanceRow, line int, seen *conformance
 
 // ConformanceOutput is the conformance lens: one row per key, the known items no longer past
 // their value, and how many files Exclude hid, so a widened exclusion stays visible.
+// Carried are the known items followed through a rename or a move, each judged under its
+// new ID; Ambiguous are those not followed, because more than one candidate shares the
+// recorded shape or another known item claims the one that does. Shapes is the current fingerprint of each listed item that has one,
+// under its carried ID, for filling a record that lacks it.
 type ConformanceOutput struct {
 	Definition string             `json:"definition" yaml:"definition"`
 	Rows       []ConformanceRow   `json:"rows"       yaml:"rows"`
 	Stale      []ConformanceKnown `json:"stale"      yaml:"stale"`
+	Carried    []ConformanceCarry `json:"carried"    yaml:"carried"`
+	Ambiguous  []ConformanceCarry `json:"ambiguous"  yaml:"ambiguous"`
+	Shapes     map[string]string  `json:"shapes"     yaml:"shapes"`
 	Excluded   int                `json:"excluded"   yaml:"excluded"`
 	Answer     KnowledgeAnswer    `json:"answer"     yaml:"answer"`
 }
@@ -553,6 +571,16 @@ type AliasClash struct {
 	Both      int    `json:"both"      yaml:"both"`
 	Importers int    `json:"importers" yaml:"importers"`
 	Ours      bool   `json:"ours"      yaml:"ours"`
+}
+
+// ConformanceCarry is a known item that matches no sample of its metric, From, and the
+// unlisted items past its value whose shape equals the one recorded for it, To. A carried
+// item has exactly one; an ambiguous one has more, or shares its one with another known
+// item.
+type ConformanceCarry struct {
+	Metric ConformanceMetric `json:"metric" yaml:"metric"`
+	From   string            `json:"from"   yaml:"from"`
+	To     []string          `json:"to"     yaml:"to"`
 }
 
 // ConformanceItem is one file, symbol, package or clone group past its row's value and not

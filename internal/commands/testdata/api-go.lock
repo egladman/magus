@@ -1184,6 +1184,10 @@ github.com/egladman/magus/types.ConflictResolver.RemoveConflicts imethod func(ct
 github.com/egladman/magus/types.ConformanceAliasShare const ConformanceMetric = "alias-share"
 github.com/egladman/magus/types.ConformanceCallSequence const ConformanceMetric = "call-sequence"
 github.com/egladman/magus/types.ConformanceCallerSpread const ConformanceMetric = "caller-spread"
+github.com/egladman/magus/types.ConformanceCarry type struct
+github.com/egladman/magus/types.ConformanceCarry.From field string "json:\"from\"   yaml:\"from\""
+github.com/egladman/magus/types.ConformanceCarry.Metric field ConformanceMetric "json:\"metric\" yaml:\"metric\""
+github.com/egladman/magus/types.ConformanceCarry.To field []string "json:\"to\"     yaml:\"to\""
 github.com/egladman/magus/types.ConformanceCloneTokens const ConformanceMetric = "clone-tokens"
 github.com/egladman/magus/types.ConformanceDefinition const untyped string = "Conformance measures how big and how coupled the workspace's code is, one row per metric and population: file lines, function lines, methods per type, top-level declarations per file, workspace imports per package, token count of bodies that share a shape, and exported symbols nothing outside their package uses. Each row gives the live percentiles, the value a check enforces (the committed ratchet value, else the configured anchor) and where that value came from, and the files, symbols or clone groups past it that no known entry accepts. Propose is the live percentile when it has fallen at least the configured step below the enforced value on a large enough sample, and never otherwise: nothing here enforces a live percentile, since a threshold that follows the code loosens as the code grows. The lens proposes; a person commits the value to the ratchet record the row names, and nothing here edits it. Generated and excluded files belong to no population, and excluded counts the files the configured exclusions hid. An index that is missing or stale answers unknown, never a pass."
 github.com/egladman/magus/types.ConformanceDepFanout const ConformanceMetric = "dep-fanout"
@@ -1208,10 +1212,11 @@ github.com/egladman/magus/types.ConformanceKey.Metric field ConformanceMetric "j
 github.com/egladman/magus/types.ConformanceKey.Population field ConformancePopulation "json:\"population\"      yaml:\"population\""
 github.com/egladman/magus/types.ConformanceKey.Scope field string "json:\"scope,omitempty\" yaml:\"scope,omitempty\""
 github.com/egladman/magus/types.ConformanceKnown type struct
-github.com/egladman/magus/types.ConformanceKnown.Items field []string "json:\"items\"  yaml:\"items\""
-github.com/egladman/magus/types.ConformanceKnown.Line field int "json:\"-\"      yaml:\"-\"      buzz:\"-\""
-github.com/egladman/magus/types.ConformanceKnown.Metric field ConformanceMetric "json:\"metric\" yaml:\"metric\""
-github.com/egladman/magus/types.ConformanceKnown.Reason field string "json:\"reason\" yaml:\"reason\""
+github.com/egladman/magus/types.ConformanceKnown.Items field []string "json:\"items\"            yaml:\"items\""
+github.com/egladman/magus/types.ConformanceKnown.Line field int "json:\"-\"                yaml:\"-\"                buzz:\"-\""
+github.com/egladman/magus/types.ConformanceKnown.Metric field ConformanceMetric "json:\"metric\"           yaml:\"metric\""
+github.com/egladman/magus/types.ConformanceKnown.Reason field string "json:\"reason\"           yaml:\"reason\""
+github.com/egladman/magus/types.ConformanceKnown.Shapes field map[string]string "json:\"shapes,omitempty\" yaml:\"shapes,omitempty\""
 github.com/egladman/magus/types.ConformanceLimit type struct
 github.com/egladman/magus/types.ConformanceLimit.Anchor field int
 github.com/egladman/magus/types.ConformanceLimit.MinSubject field int
@@ -1234,10 +1239,13 @@ github.com/egladman/magus/types.ConformanceOptions.RatchetPath field string
 github.com/egladman/magus/types.ConformanceOptions.Step field float64
 github.com/egladman/magus/types.ConformanceOptions.Validate method func() error
 github.com/egladman/magus/types.ConformanceOutput type struct
+github.com/egladman/magus/types.ConformanceOutput.Ambiguous field []ConformanceCarry "json:\"ambiguous\"  yaml:\"ambiguous\""
 github.com/egladman/magus/types.ConformanceOutput.Answer field KnowledgeAnswer "json:\"answer\"     yaml:\"answer\""
+github.com/egladman/magus/types.ConformanceOutput.Carried field []ConformanceCarry "json:\"carried\"    yaml:\"carried\""
 github.com/egladman/magus/types.ConformanceOutput.Definition field string "json:\"definition\" yaml:\"definition\""
 github.com/egladman/magus/types.ConformanceOutput.Excluded field int "json:\"excluded\"   yaml:\"excluded\""
 github.com/egladman/magus/types.ConformanceOutput.Rows field []ConformanceRow "json:\"rows\"       yaml:\"rows\""
+github.com/egladman/magus/types.ConformanceOutput.Shapes field map[string]string "json:\"shapes\"     yaml:\"shapes\""
 github.com/egladman/magus/types.ConformanceOutput.Stale field []ConformanceKnown "json:\"stale\"      yaml:\"stale\""
 github.com/egladman/magus/types.ConformancePopMain const ConformancePopulation = "main"
 github.com/egladman/magus/types.ConformancePopSource const ConformancePopulation = "source"

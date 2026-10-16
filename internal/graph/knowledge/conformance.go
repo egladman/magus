@@ -2,6 +2,8 @@ package knowledge
 
 import (
 	"cmp"
+	"crypto/sha256"
+	"encoding/hex"
 	"maps"
 	"math"
 	"path"
@@ -21,7 +23,8 @@ import (
 // else the configured anchor. A live percentile is reported and may be proposed, never
 // enforced. A key with no configured value is measured only: no violations, no proposal.
 // The mode-knobs row holds only the functions the coupling rule finds over-shared, so its n
-// is how many there are, zero included.
+// is how many there are, zero included. A known item renamed or moved is judged under its
+// new ID when its recorded shape names it unambiguously (carryKnown).
 //
 // Rows come back sorted by metric, population and scope, and every list inside them in a
 // fixed order, so two runs over one graph agree byte for byte. A graph with no symbols
@@ -38,18 +41,15 @@ func (g *Graph) Conformance(o types.ConformanceOptions) types.ConformanceOutput 
 	samples[couplingKey(types.ConformanceModeKnobs)] = knobbed
 	maps.Copy(samples, aliasSamples(g, o))
 	groups := cloneGroups(g, o)
-	known := conformanceKnownItems(o.Ratchet.Known)
-	// past holds, per metric, every item some enforced row found past its value: a known
-	// item outside it is stale.
-	past := map[types.ConformanceMetric]map[string]bool{}
-	mark := func(m types.ConformanceMetric, id string) {
-		if past[m] == nil {
-			past[m] = map[string]bool{}
-		}
-		past[m][id] = true
-	}
+	past := pastValue(o, samples, groups)
+	shapes := newConformanceIndex(g, o).itemShapes()
+	carry := carryKnown(o.Ratchet.Known, sampledIDs(samples), past, shapes)
+	known := conformanceKnownItems(carry.known)
 
-	out := types.ConformanceOutput{Excluded: conformanceExcluded(g, o)}
+	out := types.ConformanceOutput{
+		Excluded: conformanceExcluded(g, o), Carried: carry.carried, Ambiguous: carry.ambiguous,
+		Shapes: listedShapes(carry.known, shapes),
+	}
 	for _, key := range slices.SortedFunc(maps.Keys(samples), compareConformanceKeys) {
 		items := samples[key]
 		row := types.ConformanceRow{Key: key, N: len(items)}
@@ -71,7 +71,7 @@ func (g *Graph) Conformance(o types.ConformanceOptions) types.ConformanceOutput 
 		}
 		if key == cloneKey {
 			for _, grp := range groups {
-				if knownCloneGroup(grp, o.Ratchet.Known) {
+				if knownCloneGroup(grp, carry.known) {
 					row.Known++
 					continue
 				}
@@ -82,7 +82,6 @@ func (g *Graph) Conformance(o types.ConformanceOptions) types.ConformanceOutput 
 				if it.Measure <= row.Value {
 					continue
 				}
-				mark(key.Metric, it.ID)
 				if known[key.Metric][it.ID] {
 					row.Known++
 					continue
@@ -98,7 +97,7 @@ func (g *Graph) Conformance(o types.ConformanceOptions) types.ConformanceOutput 
 		}
 		out.Rows = append(out.Rows, row)
 	}
-	out.Stale = staleKnown(o.Ratchet.Known, past, groups)
+	out.Stale = staleKnown(carry.known, past, groups)
 	out.Answer = types.ClassifyAnswer(len(out.Rows) > 0, "", nil)
 	return out
 }
@@ -628,10 +627,12 @@ func cloneItem(grp []types.ConformanceItem) types.ConformanceItem {
 }
 
 // staleKnown is each known entry narrowed to the items no longer past their value, in
-// record order. A clone entry is stale whole once no group shares two of its members.
+// record order, without shapes. A clone entry is stale whole once no group shares two of
+// its members.
 func staleKnown(known []types.ConformanceKnown, past map[types.ConformanceMetric]map[string]bool, groups [][]types.ConformanceItem) []types.ConformanceKnown {
 	var out []types.ConformanceKnown
 	for _, k := range known {
+		k.Shapes = nil
 		if k.Metric == types.ConformanceCloneTokens {
 			if !slices.ContainsFunc(groups, func(grp []types.ConformanceItem) bool { return sharedMembers(grp, k.Items) >= 2 }) {
 				out = append(out, k)
@@ -650,6 +651,194 @@ func staleKnown(known []types.ConformanceKnown, past map[types.ConformanceMetric
 		}
 	}
 	slices.SortStableFunc(out, func(a, b types.ConformanceKnown) int { return cmp.Compare(a.Line, b.Line) })
+	return out
+}
+
+// pastValue holds, per metric, every item a configured row finds past its value, and every
+// member of a clone group when the clone row is configured: a known item outside it is
+// stale.
+func pastValue(o types.ConformanceOptions, samples map[types.ConformanceKey][]types.ConformanceItem, groups [][]types.ConformanceItem) map[types.ConformanceMetric]map[string]bool {
+	past := map[types.ConformanceMetric]map[string]bool{}
+	mark := func(m types.ConformanceMetric, id string) {
+		if past[m] == nil {
+			past[m] = map[string]bool{}
+		}
+		past[m][id] = true
+	}
+	for key, items := range samples {
+		value, src := o.Effective(key)
+		if src == "" || key == cloneKey {
+			continue
+		}
+		for _, it := range items {
+			if it.Measure > value {
+				mark(key.Metric, it.ID)
+			}
+		}
+	}
+	if _, src := o.Effective(cloneKey); src != "" {
+		for _, grp := range groups {
+			for _, m := range grp {
+				mark(types.ConformanceCloneTokens, m.ID)
+			}
+		}
+	}
+	return past
+}
+
+// sampledIDs is every item ID measured, per metric, whatever its measure.
+func sampledIDs(samples map[types.ConformanceKey][]types.ConformanceItem) map[types.ConformanceMetric]map[string]bool {
+	out := map[types.ConformanceMetric]map[string]bool{}
+	for key, items := range samples {
+		if out[key.Metric] == nil {
+			out[key.Metric] = map[string]bool{}
+		}
+		for _, it := range items {
+			out[key.Metric][it.ID] = true
+		}
+	}
+	return out
+}
+
+// itemShapes is the fingerprint of every item a rename or a move can carry: a callable's
+// or type's body shape under its item ID, and a file's fileShape under its path. An item
+// ID two symbols share, such as a file's init functions, has none, and neither has a
+// package.
+func (x *conformanceIndex) itemShapes() map[string]string {
+	out := map[string]string{}
+	count := map[string]int{}
+	for _, s := range x.symbols() {
+		count[s.itemID]++
+		if shape := s.node.Attrs[AttrBodyShape]; shape != "" {
+			out[s.itemID] = shape
+		}
+	}
+	for id, n := range count {
+		if n > 1 {
+			delete(out, id)
+		}
+	}
+	for id, f := range x.g.nodes {
+		if f.Kind != types.KindFile || f.Attrs[attrLanguage] == "" {
+			continue
+		}
+		if _, ok := x.population(f.Source); !ok {
+			continue
+		}
+		var digests []string
+		for _, e := range x.g.out[id] {
+			if e.Relation != types.RelationDefines || len(x.local[e.Target]) == 0 {
+				continue
+			}
+			if d := x.g.nodes[e.Target].Attrs[AttrBodyDigest]; d != "" {
+				digests = append(digests, d)
+			}
+		}
+		if len(digests) > 0 {
+			out[f.Source] = fileShape(digests)
+		}
+	}
+	return out
+}
+
+// fileShape fingerprints the body digests of the symbols a file defines as a set: a file
+// moved whole keeps it, and one that gained, lost or changed a symbol does not. The
+// package clause is no symbol's body, so a move to another package keeps it too.
+func fileShape(digests []string) string {
+	slices.Sort(digests)
+	sum := sha256.Sum256([]byte(strings.Join(digests, "\n")))
+	return hex.EncodeToString(sum[:8])
+}
+
+// knownCarry is the known entries with each carried item re-keyed to its new ID, and the
+// pairs carryKnown found.
+type knownCarry struct {
+	known              []types.ConformanceKnown
+	carried, ambiguous []types.ConformanceCarry
+}
+
+// carryKnown follows known items through a rename or a move. A known item that matches no
+// sample of its metric and has a recorded shape is carried to the one item past its value
+// that no entry of the metric lists and whose current shape is equal. Two or more such
+// items, or one that a second known item also claims, carry nothing: the pair is
+// ambiguous, and the old ID stays stale beside a violation, as with no shape at all.
+// known itself is not modified.
+func carryKnown(known []types.ConformanceKnown, sampled, past map[types.ConformanceMetric]map[string]bool, shapes map[string]string) knownCarry {
+	listed := conformanceKnownItems(known)
+	type itemKey struct {
+		metric types.ConformanceMetric
+		id     string
+	}
+	var found []types.ConformanceCarry
+	seen := map[itemKey]bool{}
+	claims := map[itemKey]int{}
+	for _, k := range known {
+		for _, from := range k.Items {
+			shape := k.Shapes[from]
+			if shape == "" || sampled[k.Metric][from] || seen[itemKey{k.Metric, from}] {
+				continue
+			}
+			seen[itemKey{k.Metric, from}] = true
+			var to []string
+			for id := range past[k.Metric] {
+				if !listed[k.Metric][id] && shapes[id] == shape {
+					to = append(to, id)
+				}
+			}
+			if len(to) == 0 {
+				continue
+			}
+			slices.Sort(to)
+			for _, id := range to {
+				claims[itemKey{k.Metric, id}]++
+			}
+			found = append(found, types.ConformanceCarry{Metric: k.Metric, From: from, To: to})
+		}
+	}
+
+	out := knownCarry{known: known}
+	renamed := map[itemKey]string{}
+	for _, c := range found {
+		if len(c.To) == 1 && claims[itemKey{c.Metric, c.To[0]}] == 1 {
+			out.carried = append(out.carried, c)
+			renamed[itemKey{c.Metric, c.From}] = c.To[0]
+		} else {
+			out.ambiguous = append(out.ambiguous, c)
+		}
+	}
+	if len(renamed) == 0 {
+		return out
+	}
+	out.known = make([]types.ConformanceKnown, len(known))
+	for i, k := range known {
+		k.Items = slices.Clone(k.Items)
+		k.Shapes = maps.Clone(k.Shapes)
+		for j, item := range k.Items {
+			if to, ok := renamed[itemKey{k.Metric, item}]; ok {
+				k.Items[j] = to
+				k.Shapes[to] = k.Shapes[item]
+				delete(k.Shapes, item)
+			}
+		}
+		out.known[i] = k
+	}
+	return out
+}
+
+// listedShapes is the current shape of each item known lists, where it has one, or nil
+// when none has.
+func listedShapes(known []types.ConformanceKnown, shapes map[string]string) map[string]string {
+	var out map[string]string
+	for _, k := range known {
+		for _, item := range k.Items {
+			if s := shapes[item]; s != "" {
+				if out == nil {
+					out = map[string]string{}
+				}
+				out[item] = s
+			}
+		}
+	}
 	return out
 }
 

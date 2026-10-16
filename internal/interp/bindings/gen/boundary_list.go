@@ -39,6 +39,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Conformance", Zero: types.ConformanceOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectConformanceOutput(v.(types.ConformanceOutput), enums)
 	}},
+	{Name: "ConformanceCarry", Zero: types.ConformanceCarry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformanceCarry(v.(types.ConformanceCarry)) }},
 	{Name: "ConformanceItem", Zero: types.ConformanceItem{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformanceItem(v.(types.ConformanceItem)) }},
 	{Name: "ConformanceKey", Zero: types.ConformanceKey{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformanceKey(v.(types.ConformanceKey)) }},
 	{Name: "ConformanceKnown", Zero: types.ConformanceKnown{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformanceKnown(v.(types.ConformanceKnown)) }},

@@ -554,6 +554,23 @@ func ObjectConformanceKnown(v types.ConformanceKnown) vm.Value {
 	}
 	out.MapSet("items", vm.ListValue(itemsItems))
 	out.MapSet("reason", vm.StrValue(v.Reason))
+	mappedShapes := vm.NewMap()
+	for keyShapes, itemShapes := range v.Shapes {
+		mappedShapes.MapSet(keyShapes, vm.StrValue(itemShapes))
+	}
+	out.MapSet("shapes", mappedShapes)
+	return out
+}
+
+func ObjectConformanceCarry(v types.ConformanceCarry) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("metric", vm.StrValue(string(v.Metric)))
+	out.MapSet("from", vm.StrValue(v.From))
+	itemsTo := make([]vm.Value, len(v.To))
+	for indexTo := range v.To {
+		itemsTo[indexTo] = vm.StrValue(v.To[indexTo])
+	}
+	out.MapSet("to", vm.ListValue(itemsTo))
 	return out
 }
 
@@ -570,6 +587,21 @@ func ObjectConformanceOutput(v types.ConformanceOutput, enums ffi.EnumCases) vm.
 		itemsStale[indexStale] = ObjectConformanceKnown(v.Stale[indexStale])
 	}
 	out.MapSet("stale", vm.ListValue(itemsStale))
+	itemsCarried := make([]vm.Value, len(v.Carried))
+	for indexCarried := range v.Carried {
+		itemsCarried[indexCarried] = ObjectConformanceCarry(v.Carried[indexCarried])
+	}
+	out.MapSet("carried", vm.ListValue(itemsCarried))
+	itemsAmbiguous := make([]vm.Value, len(v.Ambiguous))
+	for indexAmbiguous := range v.Ambiguous {
+		itemsAmbiguous[indexAmbiguous] = ObjectConformanceCarry(v.Ambiguous[indexAmbiguous])
+	}
+	out.MapSet("ambiguous", vm.ListValue(itemsAmbiguous))
+	mappedShapes := vm.NewMap()
+	for keyShapes, itemShapes := range v.Shapes {
+		mappedShapes.MapSet(keyShapes, vm.StrValue(itemShapes))
+	}
+	out.MapSet("shapes", mappedShapes)
 	out.MapSet("excluded", vm.IntValue(int64(v.Excluded)))
 	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer, enums))
 	return out

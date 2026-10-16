@@ -142,6 +142,14 @@ func TestConformanceValidateRefuses(t *testing.T) {
 			func(o *ConformanceOptions) { o.Ratchet.Known[0].Reason = "" },
 			"hack/policy/conformance.jsonl:12: known clone-tokens: no reason",
 		},
+		"known with a shape for an item it does not list": {
+			func(o *ConformanceOptions) { o.Ratchet.Known[0].Shapes = map[string]string{"c.go#F": "s1"} },
+			"hack/policy/conformance.jsonl:12: known clone-tokens: a shape for c.go#F, which the entry does not list",
+		},
+		"known with an empty shape": {
+			func(o *ConformanceOptions) { o.Ratchet.Known[0].Shapes = map[string]string{"a.go#F": ""} },
+			"hack/policy/conformance.jsonl:12: known clone-tokens: an empty shape for a.go#F",
+		},
 		"limit with an unknown metric": {
 			func(o *ConformanceOptions) {
 				o.Limits[ConformanceKey{Metric: "bogus", Population: ConformancePopSource}] = ConformanceLimit{Anchor: 1}
@@ -229,6 +237,7 @@ func TestReadConformanceRatchet(t *testing.T) {
 		`{"kind":"threshold","metric":"file-lines","population":"source","value":938,"n":1130,"percentile":95,"why":"p95 at abc123"}`,
 		`{"kind":"threshold","metric":"dep-fanout","population":"source","scope":"cmd/magus","value":89,"n":1,"percentile":0}`,
 		`{"kind":"known","metric":"clone-tokens","reason":"driver twins","items":["vcs/hg.go#hgVCS.Bisect","vcs/sapling.go#saplingVCS.Bisect"]}`,
+		`{"kind":"known","metric":"func-lines","reason":"long on purpose","items":["a.go#F"],"shapes":{"a.go#F":"5f3a"}}`,
 	))
 	require.NoError(t, err)
 	assert.Equal(t, ConformanceRatchet{
@@ -244,6 +253,9 @@ func TestReadConformanceRatchet(t *testing.T) {
 		Known: []ConformanceKnown{{
 			Metric: ConformanceCloneTokens, Items: []string{"vcs/hg.go#hgVCS.Bisect", "vcs/sapling.go#saplingVCS.Bisect"},
 			Reason: "driver twins", Line: 6,
+		}, {
+			Metric: ConformanceFuncLines, Items: []string{"a.go#F"}, Reason: "long on purpose",
+			Shapes: map[string]string{"a.go#F": "5f3a"}, Line: 7,
 		}},
 	}, r)
 }

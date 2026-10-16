@@ -88,6 +88,16 @@ Each lens is a field on the report:
   never deletes them: a person does, or a target the workspace writes. In the magus
   repository, `magus run format .` deletes them.
 
+  A known item follows its code through a rename or a move. A known line may record each
+  item's shape in `shapes`: a function's or type's body shape, which ignores names, or for
+  a file the set of its symbols' body digests. When a listed item matches nothing the
+  lens measured, and exactly one item past `value` that no known line lists has an equal
+  shape, the lens judges that item as the listed one and reports the pair in `carried`.
+  Two or more such items, or one that a second listed item also claims, carry nothing:
+  `ambiguous` reports them, the old item is stale and the new one is a violation, as if
+  no shape were recorded. Packages are never carried. In the magus repository,
+  `magus run format .` records missing shapes and re-keys carried items.
+
   `propose` is the lens's only suggestion: the live percentile, offered when at least
   `min_sample` items back it and it sits `step` below `value`. It is never looser than
   `value`. The lens proposes and a person commits: you copy the proposed value, its
@@ -104,12 +114,12 @@ Each lens is a field on the report:
   {"kind":"schema","schema":1}
   {"kind":"measured","rev":"<rev>","date":"<date>"}
   {"kind":"threshold","metric":"<metric>","population":"<population>","scope":"<scope>","value":<value>,"n":<n>,"percentile":<percentile>,"why":"<why>"}
-  {"kind":"known","metric":"<metric>","reason":"<reason>","items":["<item>"]}
+  {"kind":"known","metric":"<metric>","reason":"<reason>","items":["<item>"],"shapes":{"<item>":"<shape>"}}
   ```
 
-  `schema` is required and names the format version, 1. `scope` and `why` are
+  `schema` is required and names the format version, 1. `scope`, `why` and `shapes` are
   optional, and `scope` is absent when the key has none. A `known` line lists the
-  items it accepts in `items`. An unknown kind, member, metric or population, a
+  items it accepts in `items`, and a shape only for an item it lists. An unknown kind, member, metric or population, a
   repeated member, a value of the wrong type, a missing required member, a repeated
   line or a key committed twice is an error naming the file and line. The
   tab-separated and single-document JSON formats before this one are refused the same

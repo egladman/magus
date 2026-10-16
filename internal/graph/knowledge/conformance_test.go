@@ -249,8 +249,8 @@ func TestConformanceKnownItemIgnoresItsMeasure(t *testing.T) {
 	assert.Empty(t, out.Stale)
 }
 
-// A renamed or moved item matches no sample: its old ID is stale, and its new ID, if still
-// past the value, is a violation.
+// A renamed or moved item with no recorded shape matches no sample: its old ID is stale,
+// and its new ID, if still past the value, is a violation.
 func TestConformanceKnownIDMatchingNoSampleIsStale(t *testing.T) {
 	key := types.ConformanceKey{Metric: types.ConformanceFileLines, Population: types.ConformancePopSource}
 	known := types.ConformanceKnown{Metric: types.ConformanceFileLines, Items: []string{"pkg/old.go"}, Reason: "split pending", Line: 3}
@@ -262,6 +262,129 @@ func TestConformanceKnownIDMatchingNoSampleIsStale(t *testing.T) {
 	assert.Equal(t, []types.ConformanceKnown{known}, out.Stale)
 	assert.Equal(t, []types.ConformanceItem{{ID: "pkg/f00.go", Source: "pkg/f00.go:1", Measure: 300}},
 		conformanceRowFor(t, out, types.ConformanceFileLines, types.ConformancePopSource, "").Violations)
+}
+
+// carryOptions enforce 10 func lines and 30 file lines on source, with one known entry of
+// metric m listing items.
+func carryOptions(m types.ConformanceMetric, items ...string) types.ConformanceOptions {
+	return types.ConformanceOptions{Ratchet: types.ConformanceRatchet{Schema: 1,
+		Thresholds: []types.ConformanceThreshold{
+			{ConformanceKey: types.ConformanceKey{Metric: types.ConformanceFuncLines, Population: types.ConformancePopSource}, Value: 10},
+			{ConformanceKey: types.ConformanceKey{Metric: types.ConformanceFileLines, Population: types.ConformancePopSource}, Value: 30},
+		},
+		Known: []types.ConformanceKnown{{Metric: m, Items: items, Reason: "split pending", Line: 3}},
+	}}
+}
+
+// recordShapes fills o's known entries with the shapes out reports, as format does.
+func recordShapes(o *types.ConformanceOptions, out types.ConformanceOutput) {
+	for i, k := range o.Ratchet.Known {
+		shapes := map[string]string{}
+		for _, item := range k.Items {
+			if s := out.Shapes[item]; s != "" {
+				shapes[item] = s
+			}
+		}
+		o.Ratchet.Known[i].Shapes = shapes
+	}
+}
+
+func TestConformanceCarriesARenamedKnownFunction(t *testing.T) {
+	long := func(name string) types.KnowledgeSymbol {
+		return conformanceSym("/pkg", name+"().", "pkg/a.go", 1, 20, 20, "SA", 100)
+	}
+	other := conformanceSym("/pkg", "Other().", "pkg/b.go", 1, 20, 20, "SB", 100)
+	o := carryOptions(types.ConformanceFuncLines, "pkg/a.go#Long", "pkg/b.go#Other")
+	before := assembleLens([]types.KnowledgeSymbol{long("Long"), other}).Conformance(o)
+	require.Equal(t, map[string]string{"pkg/a.go#Long": "SA", "pkg/b.go#Other": "SB"}, before.Shapes)
+	recordShapes(&o, before)
+
+	out := assembleLens([]types.KnowledgeSymbol{long("Renamed"), other}).Conformance(o)
+	row := conformanceRowFor(t, out, types.ConformanceFuncLines, types.ConformancePopSource, "")
+	assert.Equal(t, 2, row.Known, "Renamed is Long")
+	assert.Empty(t, row.Violations)
+	assert.Empty(t, out.Stale)
+	assert.Equal(t, []types.ConformanceCarry{{Metric: types.ConformanceFuncLines, From: "pkg/a.go#Long", To: []string{"pkg/a.go#Renamed"}}}, out.Carried)
+	assert.Empty(t, out.Ambiguous)
+	assert.Equal(t, map[string]string{"pkg/a.go#Renamed": "SA", "pkg/b.go#Other": "SB"}, out.Shapes, "under the carried ID")
+	assert.Equal(t, []string{"pkg/a.go#Long", "pkg/b.go#Other"}, o.Ratchet.Known[0].Items, "the record is read, never edited")
+}
+
+func TestConformanceCarriesAMovedKnownFile(t *testing.T) {
+	file := func(path string) []types.KnowledgeSymbol {
+		a := conformanceSym("/pkg", "A().", path, 1, 2, 300, "", 0)
+		b := conformanceSym("/pkg", "B().", path, 4, 5, 300, "", 0)
+		a.BodyDigest, b.BodyDigest = "d1", "d2"
+		return []types.KnowledgeSymbol{a, b}
+	}
+	small := conformanceSym("/pkg", "C().", "pkg/small.go", 1, 2, 10, "", 0)
+	small.BodyDigest = "d3"
+	o := carryOptions(types.ConformanceFileLines, "pkg/old.go")
+	before := assembleLens(append(file("pkg/old.go"), small)).Conformance(o)
+	recordShapes(&o, before)
+	require.NotEmpty(t, o.Ratchet.Known[0].Shapes["pkg/old.go"])
+
+	out := assembleLens(append(file("pkg/new.go"), small)).Conformance(o)
+	row := conformanceRowFor(t, out, types.ConformanceFileLines, types.ConformancePopSource, "")
+	assert.Equal(t, 1, row.Known)
+	assert.Empty(t, row.Violations)
+	assert.Empty(t, out.Stale)
+	assert.Equal(t, []types.ConformanceCarry{{Metric: types.ConformanceFileLines, From: "pkg/old.go", To: []string{"pkg/new.go"}}}, out.Carried)
+
+	// A file that changed a symbol on the way did not move whole.
+	moved := file("pkg/new.go")
+	moved[1].BodyDigest = "d2-edited"
+	out = assembleLens(append(moved, small)).Conformance(o)
+	assert.Empty(t, out.Carried)
+	assert.Len(t, out.Stale, 1)
+}
+
+func TestConformanceShapeTwinsCarryNothing(t *testing.T) {
+	renamed := conformanceSym("/pkg", "Renamed().", "pkg/a.go", 1, 20, 20, "SA", 100)
+	twin := conformanceSym("/pkg", "Twin().", "pkg/b.go", 1, 20, 20, "SA", 100)
+	o := carryOptions(types.ConformanceFuncLines, "pkg/a.go#Long")
+	o.Ratchet.Known[0].Shapes = map[string]string{"pkg/a.go#Long": "SA"}
+
+	out := assembleLens([]types.KnowledgeSymbol{renamed, twin}).Conformance(o)
+	assert.Empty(t, out.Carried)
+	assert.Equal(t, []types.ConformanceCarry{
+		{Metric: types.ConformanceFuncLines, From: "pkg/a.go#Long", To: []string{"pkg/a.go#Renamed", "pkg/b.go#Twin"}},
+	}, out.Ambiguous)
+	assert.Equal(t, []types.ConformanceKnown{
+		{Metric: types.ConformanceFuncLines, Items: []string{"pkg/a.go#Long"}, Reason: "split pending", Line: 3},
+	}, out.Stale)
+	assert.Len(t, conformanceRowFor(t, out, types.ConformanceFuncLines, types.ConformancePopSource, "").Violations, 2)
+
+	// One candidate that two known items claim is no evidence for either.
+	o = carryOptions(types.ConformanceFuncLines, "pkg/a.go#Long", "pkg/c.go#Gone")
+	o.Ratchet.Known[0].Shapes = map[string]string{"pkg/a.go#Long": "SA", "pkg/c.go#Gone": "SA"}
+	out = assembleLens([]types.KnowledgeSymbol{renamed}).Conformance(o)
+	assert.Empty(t, out.Carried)
+	assert.Equal(t, []types.ConformanceCarry{
+		{Metric: types.ConformanceFuncLines, From: "pkg/a.go#Long", To: []string{"pkg/a.go#Renamed"}},
+		{Metric: types.ConformanceFuncLines, From: "pkg/c.go#Gone", To: []string{"pkg/a.go#Renamed"}},
+	}, out.Ambiguous)
+}
+
+func TestConformanceRenamedCloneMemberKeepsItsGroupKnown(t *testing.T) {
+	o := lensFixtureOptions()
+	o.Ratchet.Known = []types.ConformanceKnown{{Metric: types.ConformanceCloneTokens, Items: []string{"internal/a/a.go#F", "internal/b/b.go#G"}, Reason: "one home pending", Line: 12}}
+	recordShapes(&o, lensFixture().Conformance(o))
+
+	syms := lensSymbols()
+	for i := range syms {
+		if syms[i].Key == conformanceNS("/internal/b")+"G()." {
+			syms[i].Key = conformanceNS("/internal/b") + "G2()."
+		}
+	}
+	out := assembleLens(syms).Conformance(o)
+	clones := conformanceRowFor(t, out, types.ConformanceCloneTokens, types.ConformancePopSource, "")
+	assert.Equal(t, 1, clones.Known)
+	assert.Empty(t, clones.Violations)
+	assert.Empty(t, out.Stale)
+	assert.Equal(t, []types.ConformanceCarry{
+		{Metric: types.ConformanceCloneTokens, From: "internal/b/b.go#G", To: []string{"internal/b/b.go#G2"}},
+	}, out.Carried, "F is listed, so G2 is the one unlisted member sharing the shape")
 }
 
 // A known export goes stale when a caller is added from another package, a change to a
