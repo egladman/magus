@@ -1130,7 +1130,7 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions, restated ...string
 		}
 		for _, row := range fresh {
 			if !slices.ContainsFunc(taken, func(r types.Job) bool { return r.ID == row.ID }) {
-				return fmt.Errorf("job: %s joined a tree this prune ends after it was read, so nothing was ended; prune again to see it", row.ID)
+				return fmt.Errorf("job: %s joined a tree this prune ends after it was read, so nothing was ended: prune again to see it", row.ID)
 			}
 		}
 		for _, e := range out {

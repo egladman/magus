@@ -351,8 +351,8 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 			deps.ModelTiers = func() *types.ModelTierSet { return facts.Tiers }
 			return deps, rules
 		}
-		slog.WarnContext(ctx, "the guard loads the whole workspace for its model rows and tiers, which can miss the hook's deadline: "+err.Error(),
-			attr.Notice(""), attr.Component("magus shell"))
+		slog.WarnContext(ctx, "the guard loads the whole workspace for its model rows and tiers, which can miss the hook's deadline",
+			attr.Error(err), attr.Notice(""), attr.Component("magus shell"))
 	}
 	deps.ModelRows = guardModelRows(ctx, rootOverride)
 	deps.ModelTiers = guardModelTiers(ctx, rootOverride)

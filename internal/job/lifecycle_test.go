@@ -1118,7 +1118,7 @@ func TestJobPruneEndsOnlyRowsNobodyIsWorking(t *testing.T) {
 	}{
 		{
 			name:    "the default names a job that would end only with its ancestor, and ends nothing",
-			refused: "prune would end 1 live job(s) only because an ancestor it ends does: done/c (declared, session holder, never taken). Restate each to end it too: `magus job prune done/c`",
+			refused: "prune would end 1 live job(s) only because an ancestor it ends does: done/c (declared, session holder, never taken): restate each to end it too: `magus job prune done/c`",
 		},
 		{name: "restating that job ends it with what is provably not worked", restated: []string{"done/c"}, want: defaults},
 		{

@@ -140,7 +140,7 @@ func refuseLiveDescendants(ctx context.Context, rows []types.Job, id string, res
 		descs[i] = describeDescendant(ctx, r)
 	}
 	if result {
-		return fmt.Errorf("job: %s's result is refused: %d job(s) below it are still working: %s. Collect each with `%s` or end it with `%s`, then file the result",
+		return fmt.Errorf("job: %s's result is refused: %d job(s) below it are still working: %s: collect each with `%s` or end it with `%s`, then file the result",
 			id, len(descs), joinDescendants(descs), hint.JobWait.With("<id>"), hint.JobExit.With("<id>"))
 	}
 	return unnamedError(id, descs)
@@ -152,7 +152,7 @@ func unnamedError(id string, descs []descendant) error {
 	for _, d := range descs {
 		ids = append(ids, d.row.ID)
 	}
-	return fmt.Errorf("job: ending %s would end %d live job(s) below it: %s. Name each to end it too: `%s`",
+	return fmt.Errorf("job: ending %s would end %d live job(s) below it: %s: name each to end it too: `%s`",
 		id, len(descs), joinDescendants(descs), hint.JobExit.With(ids...))
 }
 
@@ -272,7 +272,7 @@ func (s *Store) confirmEnd(ctx context.Context, ids []string, holding []descenda
 			return fmt.Errorf("job: ending %s needs a person's confirmation, and the request for one cannot be filed: %w", open.Where, err)
 		}
 	}
-	return fmt.Errorf("job: ending %s takes down work only a person may discard: %s. A person disposes attention request %s (`%s`), which an agent may not, then the same end proceeds",
+	return fmt.Errorf("job: ending %s takes down work only a person may discard: %s: a person disposes attention request %s (`%s`), which an agent may not, then the same end proceeds",
 		open.Where, joinDescendants(holding), id, hint.SessionDispose.With(id))
 }
 
@@ -312,7 +312,7 @@ func (s *Store) refuseTreeEndings(ctx context.Context, taken []types.Job, restat
 	}
 	for _, id := range restated {
 		if !slices.ContainsFunc(taken, func(r types.Job) bool { return r.ID == id }) {
-			return fmt.Errorf("job: prune does not end %s with an ancestor, so there is nothing to restate; `magus job prune --dry-run` lists what it ends", id)
+			return fmt.Errorf("job: prune does not end %s with an ancestor, so there is nothing to restate: `magus job prune --dry-run` lists what it ends", id)
 		}
 	}
 	if len(unstated) > 0 {
@@ -320,7 +320,7 @@ func (s *Store) refuseTreeEndings(ctx context.Context, taken []types.Job, restat
 		for i, d := range unstated {
 			ids[i] = d.row.ID
 		}
-		return fmt.Errorf("job: prune would end %d live job(s) only because an ancestor it ends does: %s. Restate each to end it too: `magus job prune %s`",
+		return fmt.Errorf("job: prune would end %d live job(s) only because an ancestor it ends does: %s: restate each to end it too: `magus job prune %s`",
 			len(unstated), joinDescendants(unstated), strings.Join(append(slices.Clone(restated), ids...), " "))
 	}
 	if len(holding) == 0 {

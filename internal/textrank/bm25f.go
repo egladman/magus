@@ -293,7 +293,7 @@ func ReadIndex(r io.Reader) (*Index, error) {
 		return nil, fmt.Errorf("textrank: not a textrank index (header %q)", magic[:])
 	}
 	if v := rd.uvarint(); rd.err == nil && v != indexFormat {
-		return nil, fmt.Errorf("textrank: index format version %d, this build reads version %d; rebuild the index", v, indexFormat)
+		return nil, fmt.Errorf("textrank: index format version %d, this build reads version %d: rebuild the index", v, indexFormat)
 	}
 
 	ix := &Index{post: map[string][]posting{}}
