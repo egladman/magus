@@ -109,7 +109,9 @@ step, and so do hunks that use each other, because neither can go first. Generat
 sits in a folded group of its own (`--generated` shows it), and a hunk magus cannot place
 goes in a final group named `unranked` that says why: no symbol index covers the file, the
 hunk defines and uses no changed symbol, or the working tree no longer matches the range
-you are reading.
+you are reading. Under each step, a `signature:` line gives every changed symbol's declaration
+as the indexer rendered it, with `was` and the old declaration after it when `--baseline`
+shows the signature changed.
 
 The last line is a completeness line, such as `14 hunks, 14 placed`. It names any hunk
 placed twice or not placed, and any changed file with no hunk to show (a binary file, a
