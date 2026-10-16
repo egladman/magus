@@ -30,7 +30,7 @@ type Attribution struct {
 // cooperating: nothing in the write itself says who made it, and the declaration does.
 //
 // THE ATTRIBUTION IS EXACT BECAUSE THE WRITE PATHS ARE DISJOINT, and that is a property the
-// fork already proves rather than one assumed here: [RefuseSharedCheckout] refuses a fork
+// fork already proves rather than one assumed here: [sharedCheckoutProblems] refuses a fork
 // whose write paths would collide, [Store.WriteProof] records what it could prove, and `magus
 // ls jobs` prints every pair that claims common ground. So the usual answer is one job or
 // none.

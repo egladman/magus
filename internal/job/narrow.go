@@ -21,7 +21,7 @@ const releaseSource = "magus/job-release"
 
 // projectConfig reports whether rel is a project's configuration this workspace loads: a
 // magusfile source or a magus.yaml among describe.WorkspaceLoadFiles, the set
-// RefuseSharedCheckout guards. The spell sources a magusfile imports are left out: they
+// sharedCheckoutProblems guards. The spell sources a magusfile imports are left out: they
 // are code a job owns, not a table every job edits.
 func projectConfig(root, rel string) bool {
 	if !configName(rel) {

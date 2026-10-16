@@ -286,7 +286,7 @@ func checkMatrixAnswer(set *types.ModelTierSet, id string, answer types.JobModel
 // than that tier's MaxLive bound allows. rows is the plan without the job being assigned;
 // a zero bound is unlimited, and a tier the set does not declare is an error.
 //
-// Read inside the store's write, so unlike [RefuseForkLimits] two concurrent forks cannot
+// Read inside the store's write, so unlike [forkLimitProblems] two concurrent forks cannot
 // both pass a bound the pair exceeds.
 func refuseModelTierLimits(rows []types.Job, assigned types.JobModelTier, set *types.ModelTierSet) error {
 	tier, err := set.Parse(assigned.Name)
