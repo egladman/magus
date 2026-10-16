@@ -447,6 +447,17 @@ func TestKnowledgeRelationShapesForMarkersAndPackages(t *testing.T) {
 	assert.False(t, KnowledgeRelationAllows(RelationDocuments, KindDocSection, KindSpell))
 }
 
+func TestKnowledgeRelationCoChanges(t *testing.T) {
+	def, ok := KnowledgeRelation(RelationCoChanges)
+	require.True(t, ok, "co_changes is declared")
+	assert.True(t, def.Symmetric)
+	assert.Equal(t, "changes with", def.Label(true))
+	assert.Equal(t, "changes with", def.Label(false))
+	assert.True(t, KnowledgeRelationAllows(RelationCoChanges, KindFile, KindFile))
+	assert.False(t, KnowledgeRelationAllows(RelationCoChanges, KindFile, KindDir))
+	assert.False(t, KnowledgeRelationAllows(RelationCoChanges, KindAuthor, KindFile))
+}
+
 func TestKnowledgeRelationImplements(t *testing.T) {
 	var def *KnowledgeRelationDefinition
 	for _, d := range KnowledgeRelationDefinitions() {

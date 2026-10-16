@@ -172,6 +172,8 @@ const (
 	RelationAnnotates RelationID = "annotates" // note->any known entity, from the notes store
 )
 
+const RelationCoChanges RelationID = "co_changes" // file<->file, changed in the same commits
+
 // KnowledgeEndpointShape is one permitted subject/object-kind pair for a relation.
 // These are validation shapes in the closed-world sense: unlike OWL domain/range
 // axioms, they do not infer a node's kind; they reject an edge whose already-known
@@ -286,6 +288,7 @@ var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
 	{ID: RelationProduces, Description: "declares a generated file or document output", ForwardLabel: "produces", ReverseLabel: "produced by", Shapes: endpointShapes(KindTarget, KindFile, KindDoc)},
 	{ID: RelationConsumes, Description: "declares a file or document input", ForwardLabel: "consumes", ReverseLabel: "consumed by", Shapes: endpointShapes(KindTarget, KindFile, KindDoc)},
 	{ID: RelationAuthored, Description: "attributes a file to a git contributor", ForwardLabel: "authored", ReverseLabel: "authored by", Shapes: endpointShapes(KindAuthor, KindFile)},
+	{ID: RelationCoChanges, Description: "changed in the same commits, from git history", ForwardLabel: "changes with", ReverseLabel: "changes with", Symmetric: true, Shapes: endpointShapes(KindFile, KindFile)},
 	{ID: RelationAnnotates, Description: "attaches a human-authored note to an existing entity", ForwardLabel: "is about", ReverseLabel: "NOTE", Shapes: endpointShapes(KindNote,
 		KindProject, KindTarget, KindSpell, KindOp, KindTool, KindCharm, KindModule,
 		KindMethod, KindDiagnostic, KindDoc, KindDocSection, KindFile, KindDir,
@@ -468,6 +471,18 @@ type KnowledgeVCS struct {
 	// is one of them (the most recent).
 	Authors []string `json:"authors"`
 	Commits int      `json:"commits"`
+}
+
+// KnowledgeCoChange is a pair of files changed in the same commits, an assembly input for
+// the `co_changes` edges. A < B. Support is the commits touching both; Confidence is
+// Support over the commit count of the less-changed file. It is not CoChange: that one
+// pairs projects, counts and carries no confidence, and the semantics differ, so the copy
+// stays.
+type KnowledgeCoChange struct {
+	A          string  `json:"a"`
+	B          string  `json:"b"`
+	Support    int     `json:"support"`
+	Confidence float64 `json:"confidence"`
 }
 
 // KnowledgeNote is one human-authored note from the declared notes store (an assembly
