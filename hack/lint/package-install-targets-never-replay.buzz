@@ -6,6 +6,8 @@
 //
 // A target installs when it calls an install op of its spell, which magus\describe.graph()
 // records statically; skip_cache is read from the evaluated projects.
+//
+// Tier 1, mechanical: the fix is skip_cache on the target.
 namespace installs;
 
 import "assert";

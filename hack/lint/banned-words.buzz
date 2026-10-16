@@ -11,6 +11,9 @@
 // in prose or inside an identifier.
 //
 // A word in backticks on its own (`lane`) is a mention, not a use, and passes.
+//
+// Tier 1, mechanical: the fix is a word, and SANCTIONED names a finding kept on purpose
+// with why.
 namespace bannedwords;
 
 import "assert";

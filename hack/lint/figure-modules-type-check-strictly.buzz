@@ -5,6 +5,8 @@
 //
 // The figure library itself may name magus record types but never call the host: a figure
 // hands it Dir, Layer and RefsResult records, so the library reads no workspace of its own.
+//
+// Tier 1, mechanical: the fix is what the checker names.
 namespace figurecheck;
 
 import "assert";

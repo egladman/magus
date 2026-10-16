@@ -4,6 +4,8 @@
 // The Buzz glue takes its per-entry knobs from the event it already reads and from its own
 // argv, which `magus buzz` forwards after `--`, so an environment knob in front of it says
 // nothing the glue reads. Only that segment is judged, whatever runs before a `;`.
+//
+// Tier 1, mechanical: the fix moves the knob into the glue's argv.
 namespace buzzglue;
 
 import "assert";

@@ -3,6 +3,8 @@
 // run, and the merge queue validates pull-request code in one; a hook that escapes can
 // read the runtime token and plant an entry every branch and tag run restores. See
 // docs/concepts/merge-queue.md, Trust model.
+//
+// Tier 1, mechanical: the fix drops the cache step.
 namespace trustedcache;
 
 import "assert";

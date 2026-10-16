@@ -1,6 +1,8 @@
 // magusfiles-hold-no-tests refuses a `test "..." {` block in any magusfile.buzz or docs
 // tour step (docs/guides/testing.md): a magusfile is glue, and tests belong to the
 // modules, spells and policy libraries it imports.
+//
+// Tier 1, mechanical: the fix moves the test into the module it covers.
 namespace magusfiles;
 
 import "assert";

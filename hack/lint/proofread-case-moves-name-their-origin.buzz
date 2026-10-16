@@ -1,3 +1,4 @@
+// Tier 1, mechanical: the fix is a `was=` marker on the section header.
 namespace casemoves;
 
 import "assert";

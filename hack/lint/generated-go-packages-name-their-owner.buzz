@@ -3,6 +3,8 @@
 // every importer would alias, a mockery double named `<package>test` after the standard
 // library's httptest, and no clause two generated packages share. The walk prunes gen/,
 // so the rule asks the graph for the directories rather than reading handed-in files.
+//
+// Tier 1, mechanical: the fix is a package clause.
 namespace generatedpackages;
 
 import "assert";

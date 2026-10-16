@@ -372,7 +372,10 @@ The test for any new resistance is whether it carries information. The
 `push-ungated` catalog entry names the failure it replaced: an advisory that
 fired on every push having read nothing was "a toll rather than a reminder".
 Friction that tells the fast caller and the careless caller the same sentence
-is a toll, and a toll is removed. This principle never slows
+is a toll, and a toll is removed. A finding charged to a change that did not cause
+it is a toll too, so whoever adds or tightens a rule pays its cost
+([Rolling out a stricter rule](https://github.com/egladman/magus/blob/main/CONTRIBUTING.md#rolling-out-a-stricter-rule)).
+This principle never slows
 [the loop that verifies](#optimize-the-loop-that-verifies-never-the-loop-that-generates):
 a cache hit stays instant, and the pause belongs to the act that leaves the
 machine.

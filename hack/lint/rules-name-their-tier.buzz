@@ -1,0 +1,93 @@
+// rules-name-their-tier refuses a hack/lint rule whose header comment names no rollout tier,
+// or names one by the wrong word. CONTRIBUTING.md, "Rolling out a stricter rule", defines
+// the three; a rule with parts in two tiers names both, one line each.
+//
+// Tier 1, mechanical: the fix is a header line.
+namespace ruletiers;
+
+import "assert";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+// TIERS names each tier by its number, as the header line spells it: `// Tier 1, mechanical`.
+export final TIERS = {"1": "mechanical", "2": "measured shape", "3": "judgment"};
+
+// NOT_RULES are the files in hack/lint that hold no rule: the runner and its helpers.
+final NOT_RULES = ["hack/lint/run.buzz", "hack/lint/support.buzz"];
+
+final PREFIX = "// Tier ";
+
+export fun reads() > [str] {
+    return ["hack/lint/*.buzz"];
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    foreach (f in files) {
+        if (!f.value.startsWith("hack/lint/") or !f.value.endsWith(".buzz") or NOT_RULES.indexOf(f.value) != null) {
+            continue;
+        }
+        foreach (finding in judge(f.value, src: support\read(f))) {
+            found.append(finding);
+        }
+    }
+    return found;
+}
+
+// judge is each finding for the rule at path whose source is src. The header is the comment
+// lines the file opens with.
+export fun judge(path: str, src: str) > [Finding] {
+    final found = mut [<Finding>];
+    var named = 0;
+    foreach (i, line in src.split("\n")) {
+        if (!line.startsWith("//")) {
+            break;
+        }
+        if (!line.startsWith(PREFIX)) {
+            continue;
+        }
+        final rest = line.sub(PREFIX.len(), len: line.len() - PREFIX.len());
+        final number = rest.sub(0, len: 1);
+        final word = TIERS[number];
+        if (word == null or !rest.sub(1, len: rest.len() - 1).startsWith(", " + word!)) {
+            found.append(Finding{ path = path, line = i + 1,
+                message = "the tier line does not read `// Tier N, <name>` with a name from TIERS: {line}",
+                fix = "Write `// Tier 1, mechanical`, `// Tier 2, measured shape` or `// Tier 3, judgment`, then the reason." });
+            continue;
+        }
+        named = named + 1;
+    }
+    if (named == 0 and found.len() == 0) {
+        found.append(Finding{ path = path, line = 1,
+            message = "the rule's header comment names no rollout tier",
+            fix = "Add `// Tier N, <name>: <why>` to the header; CONTRIBUTING.md, \"Rolling out a stricter rule\", says which tier." });
+    }
+    return found;
+}
+
+test "a header naming its tier passes, and a rule may name two" {
+    assert\equal(judge("a.buzz", src: "// a holds x.\n//\n// Tier 1, mechanical: a sort.\nnamespace a;\n").len(), want: 0, message: "one tier");
+    assert\equal(judge("b.buzz", src: "// Tier 2, measured shape: a baseline.\n// Tier 3, judgment: advice.\nnamespace b;\n").len(),
+        want: 0, message: "two tiers");
+}
+
+test "a header naming no tier fails at line 1" {
+    final got = judge("a.buzz", src: "// a holds x.\nnamespace a;\n// Tier 1, mechanical: below the header.\n");
+    assert\equal(got.len(), want: 1, message: "a tier line after the header does not count");
+    assert\equal(got[0].line, want: 1, message: "line");
+    assert\equal(judge("b.buzz", src: "namespace b;\n").len(), want: 1, message: "no header at all");
+}
+
+test "a tier line with the wrong name fails at its line" {
+    final got = judge("a.buzz", src: "// a holds x.\n// Tier 2, mechanical: wrong name.\nnamespace a;\n");
+    assert\equal(got.len(), want: 1, message: support\messages(got).join("; "));
+    assert\equal(got[0].line, want: 2, message: "line");
+    assert\equal(judge("b.buzz", src: "// Tier 4, cosmic.\nnamespace b;\n").len(), want: 1, message: "no tier 4");
+}
+
+test "check skips the runner and its helpers" {
+    final got = check(support\fixture({"hack/lint/run.buzz": "namespace run;\n", "hack/lint/support.buzz": "namespace support;\n",
+        "hack/lint/x.buzz": "namespace x;\n"}));
+    assert\equal(got.len(), want: 1, message: support\messages(got).join("; "));
+    assert\equal(got[0].path, want: "hack/lint/x.buzz", message: "only the rule");
+}

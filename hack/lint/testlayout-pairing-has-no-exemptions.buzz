@@ -5,6 +5,8 @@
 // leaving a module out of the run. This refuses each of those. A file-wide nolint is
 // out of the analyzer's reach, so this rule reads every test file, and lint-rules
 // replays from cache less often for it; that is the price of the check.
+//
+// Tier 1, mechanical: the fix deletes the exemption.
 namespace testpairing;
 
 import "assert";

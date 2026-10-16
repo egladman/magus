@@ -1,6 +1,8 @@
 // markdown-carries-no-mermaid refuses a mermaid fence in this repository's markdown. magus
 // draws its figures with magus/figure, and nothing here renders mermaid any more, so a
 // fence would show as a block of source.
+//
+// Tier 1, mechanical: the fix is a figure, a table or a list.
 namespace nomermaid;
 
 import "assert";

@@ -3,6 +3,8 @@
 // skills rather than `.claude/skills/**` keeps the hand-authored ones out, but goes
 // stale on its own, so adding a skill fails here rather than ships an installed file
 // magus calls hand-editable.
+//
+// Tier 1, mechanical: the fix is an outputs entry.
 namespace skills;
 
 import "assert";

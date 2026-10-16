@@ -41,6 +41,10 @@
 //
 // Generated Markdown is skipped: its generator owns the fix. It is what .gitattributes
 // marks linguist-generated, what .markdownlintignore lists, and every MAGUS.md.
+//
+// Tier 1, mechanical: a spaced hyphen, a heading's case and a finding the decisions table
+// denies fail everywhere, and the fix is a rewording.
+// Tier 3, judgment: a finding the table advises is the reader's to weigh, and never fails.
 namespace markdownproofread;
 
 import "assert";

@@ -12,6 +12,8 @@
 // on-<where> and runs the command that follows it there, and only there. The modules
 // magusfiles import (hack/magusfile) keep their nouns, and hack/ itself holds no script.
 // lint, policy and git-hooks run through their own entry points and are not read.
+//
+// Tier 1, mechanical: the fix is a rename, a move or a README row.
 namespace hackscriptverbs;
 
 import "assert";

@@ -399,6 +399,24 @@ Rules for a user's own workspace use the same homes with different owners.
 [Where guidance belongs](docs/guides/integrations/agents/skills.md#where-guidance-belongs)
 and the `magus-workspace-rules` skill cover that case.
 
+### Rolling out a stricter rule
+
+The person who adds a rule, or tightens one, pays its cost in the same change. After
+that, a change answers only for what it did.
+
+- A mechanical rule, one whose fix needs no knowledge of the code, is enforced
+  everywhere, and the sweep lands with it.
+- A measured rule, one whose fix is a refactor anyone can do, lands with a baseline
+  listing every item already past it. The baseline only shrinks. `magus run format .`
+  deletes the items that no longer violate, so nobody edits it to keep a passing change
+  passing.
+- A rule whose fix needs knowledge of the code, or a taste, advises and never fails.
+
+A rule's header comment names its tier, then the reason:
+`// Tier 1, mechanical`, `// Tier 2, measured shape` or `// Tier 3, judgment`. A rule
+with parts in two tiers names both. `rules-name-their-tier` in `hack/lint/` fails a rule
+that names none.
+
 ## Naming
 
 Names are the API most people meet first, so they get decided deliberately
