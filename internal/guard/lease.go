@@ -746,7 +746,8 @@ func (r targetRun) writesOutside(ws types.WorkspaceReader, writePaths []string) 
 // `*`: a declared `docs/gen/*` matches the output `docs/gen/*.svg` and covers it. It fails
 // for `**`, which a declared `docs/*` would match as one segment while the output reaches
 // every depth. A glob holding `**` is covered only by a declaration spelling the same
-// glob, or one claiming a whole directory its literal prefix lies in.
+// glob, one claiming a whole directory its literal prefix lies in, or a declared
+// `<dir>/**/<tail>` whose dir holds that prefix and whose tail ends the glob.
 func leaseCoversGlob(writePaths []string, glob string) bool {
 	if !strings.Contains(glob, "**") {
 		_, covered, _ := declarationCovering(writePaths, glob)
@@ -760,17 +761,24 @@ func leaseCoversGlob(writePaths []string, glob string) bool {
 		prefix = append(prefix, segment)
 	}
 	literal := strings.Join(prefix, "/")
+	under := func(dir string) bool { return literal == dir || strings.HasPrefix(literal, dir+"/") }
 	return slices.ContainsFunc(writePaths, func(raw string) bool {
 		file, _ := types.SplitClaim(raw)
 		declared := path.Clean(file)
 		if declared == glob || declared == "**" {
 			return true
 		}
-		dir := strings.TrimSuffix(declared, "/**")
-		if dir == "." || dir == "/" || types.IsGlobMeta(dir) || literal == "" {
+		if literal == "" {
 			return false
 		}
-		return literal == dir || strings.HasPrefix(literal, dir+"/")
+		if dir, tail, ok := strings.Cut(declared, "/**/"); ok && !types.IsGlobMeta(dir) && !strings.Contains(tail, "**") {
+			return under(dir) && strings.HasSuffix(glob, "/"+tail)
+		}
+		dir := strings.TrimSuffix(declared, "/**")
+		if dir == "." || dir == "/" || types.IsGlobMeta(dir) {
+			return false
+		}
+		return under(dir)
 	})
 }
 

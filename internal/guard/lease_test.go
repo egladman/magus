@@ -820,6 +820,12 @@ func TestLeaseCoversGlob(t *testing.T) {
 		{[]string{"docs"}, "docs/**/*.md", true},
 		{[]string{"**"}, "console/**/*.md", true},
 		{[]string{"docs/**"}, "**/*.md", false},
+		{[]string{"docs/**/*.md"}, "docs/guides/**/*.md", true},
+		{[]string{"docs/**/*.md"}, "docs/**/*.md", true},
+		{[]string{"docs/**/*.md"}, "docs/guides/**/*.svg", false},
+		{[]string{"docs/**/*.md"}, "console/**/*.md", false},
+		{[]string{"docs/**/*.md"}, "docs/guides/**", false},
+		{[]string{"docs/**/gen/*.go"}, "docs/api/**/gen/*.go", true},
 	} {
 		assert.Equal(t, tt.covered, leaseCoversGlob(tt.writePaths, tt.glob), "%v covering %s", tt.writePaths, tt.glob)
 	}
