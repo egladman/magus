@@ -1,16 +1,16 @@
 ---
-title: "worker-check-only: a bound worker running a target other than its check or a writer of its write paths, or writing past them"
-description: "A deny rule by default: it refuses a bound worker running a target other than its check or a writer of its write paths, or writing past them, and names what to run instead."
+title: "worker-check-only: a bound worker running other than its check or a writer of its write paths, or writing past them"
+description: "A deny rule by default: it refuses a bound worker running other than its check or a writer of its write paths, or writing past them, and names what to run instead."
 tags: [guard, rules, worker-check-only, deny]
 ---
 
 # worker-check-only
 
-A deny rule by default: it refuses a bound worker running a target other than its check or a writer of its write paths, or writing past them, and names what to run instead.
+A deny rule by default: it refuses a bound worker running other than its check or a writer of its write paths, or writing past them, and names what to run instead.
 
 ## What it catches
 
-A bound worker running a target other than its check or a writer of its write paths, or writing past them.
+A bound worker running other than its check or a writer of its write paths, or writing past them.
 
 ## Why
 

@@ -615,7 +615,7 @@ var ruleDocWholeTree = types.RuleDoc{
 
 var ruleDocWorkerCheckOnly = types.RuleDoc{
 	Name:    string(denyRuleWorkerCheckOnly),
-	Catches: "a bound worker running a target other than its check or a writer of its write paths, or writing past them",
+	Catches: "a bound worker running other than its check or a writer of its write paths, or writing past them",
 	Why: "A worker's row names one check, and the checkout's integrator runs every other target serially, in its own tree, after the units land. " +
 		"The integrator is a role, never a check: the subagent spawned `<parent>/integrate <job>` whose row was taken in the checkout the call runs in builds ./magus, regenerates and gates there, whatever its row's check names. A row whose check is the gate is refused it like any worker, since a job's check is never the gate. The root holds no spawn title, so it never integrates, and one build at a time per checkout is the project lock's: a second run of a project the checkout is already running is refused, naming the run holding it. " +
 		"Two workers running the same target at once from two worktrees double the load and prove nothing the integrator's one run does not: the cache replays a run that has landed and never two in flight, and two trees share no key. " +
