@@ -84,13 +84,30 @@ nodes, so an agent knows what exists before running anything.
 
 ## Query grammar
 
-`magus query` takes free-text terms (AND) plus field matchers. A matcher is
+`magus query` takes free-text terms plus field matchers. A matcher is
 `field<op>value`, where the operator is `=` (match), `!=` (exclude), or `=~` (regex).
-Terms are scored with the same leaf-anchored fuzzy match that powers `magus where`.
+Matchers filter; free text ranks.
+
+Free text is split into words, so `leafScore` also finds `leaf` and `score`, and each
+word is scored by BM25F over a node's name, signature, path and docs. A match needs
+any one word. One that holds fewer words than the query is a partial match, ranked by
+its score among the rest. `-o json` gives every match a `why`: the words it held
+(`matched` of `of`), each word's score per field, and its rank in each ranked list. The
+answer's `ranking` names the weight file's digest, so a result says which weights
+produced it.
+
+When you work in a changed tree, or under a lease, the files you changed and the
+lease's write paths also seed a personalized PageRank. That reranks the matches near
+them, and `ranking.reader` lists the paths it used.
+
+`explain`, `path` and `refs` name a node from the same ranking, and they take only a
+match that holds every word. A name nothing holds whole answers absent; it never
+resolves to a neighbor that shares one word.
 
 | Form               | Meaning                                            |
 | ------------------ | -------------------------------------------------- |
-| `build`            | free text: match node IDs, labels, and docs        |
+| `build`            | free text: ranked over names, paths and docs       |
+| `internal/trail`   | a term holding `/` must appear whole in the match  |
 | `kind=spell`       | only nodes of that kind                            |
 | `project=pkg/foo`  | the project node and its targets                   |
 | `relation=uses`    | seed from nodes touching a `uses` edge             |

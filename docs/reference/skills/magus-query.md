@@ -3,8 +3,8 @@ title: magus-query
 generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 15093
-skill_short_bytes: 8843
+skill_full_bytes: 15719
+skill_short_bytes: 9255
 ---
 
 # magus-query
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `140` |
 | `knowledge-schema-version` | `22` |
-| `skill-content` | `e758e63ba147` |
+| `skill-content` | `3929ff69d4a2` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -128,8 +128,9 @@ Completeness rests on current index even when everything verifies: newly appende
 
 ## Query grammar
 
-Free-text terms (AND) plus field matchers. Matcher: `field<op>value`; operators `=` (match), `!=` (exclude), `=~` (regex):
-- `build`: free text over IDs, labels, docs
+Free-text terms plus field matchers. Matchers filter; free text RANKS. Matcher: `field<op>value`; operators `=` (match), `!=` (exclude), `=~` (regex):
+- `build`: free text ranked by BM25F over names, signatures, paths, docs; any one word matches; fewer words than the query = PARTIAL match
+- `internal/trail`: term holding `/` must appear whole
 - `kind=spell`: only that node kind
 - `project=pkg/foo`: everything project owns
 - `relation=uses`: seed from nodes touching that edge
@@ -156,6 +157,7 @@ Reading one file whose path you know: fine. This replaces SCAN, not targeted rea
 ## Reading results
 
 - Machine reading -> `-o json`. Every verb returns stable, `schema_version`-stamped OBJECT with top-level wrapper. Key into plural (`.matches`, `.targets`); never bare array. `-o name`: bare IDs for piping. Do not scrape human text or trim with `head`.
+- Each match carries `why`: `matched`/`of` words held (partial matches labeled), `terms` per field, `lists` ranks, `seeds` (changed files, lease paths). `ranking.weights`: weight file digest. explain/path/refs take full matches only.
 - Node IDs stable, structured: `<kind>:<qualified-name>`, like `target:pkg/foo:build`, `spell:go`, `diagnostic:MGS2001`. Key on them.
 - Edges directed, carry `confidence`: `extracted` (read directly off source) or `inferred` (rubric score), plus `provenance` (origin).
 - Node `attrs` surface metadata.
@@ -359,10 +361,12 @@ while adding one magus never saw.
 
 ## Query grammar
 
-Free-text terms (AND) plus field matchers. A matcher is `field<op>value`; the
-operators are `=` (match), `!=` (exclude), `=~` (regex):
+Free-text terms plus field matchers. Matchers filter; free text RANKS. A matcher is
+`field<op>value`; the operators are `=` (match), `!=` (exclude), `=~` (regex):
 
-- `build`: free text over IDs, labels, and docs
+- `build`: free text, ranked by BM25F over names, signatures, paths and docs. A match
+  needs any one word; one holding fewer words than the query is a PARTIAL match
+- `internal/trail`: a term holding `/` must appear whole
 - `kind=spell`: only that node kind
 - `project=pkg/foo`: everything the project owns: the project node, its
   targets, and the files/functions/docs whose source lives under it (nested
@@ -411,6 +415,11 @@ same fragment a link into the rendered page carries.
   (`.matches`, `.targets`); it is never a bare array. `-o name` prints bare IDs for
   piping. Do not scrape the human text or trim it with `head`.
   Over MCP the tools already return structured content; nothing to shape.
+- Each match carries `why`: `matched` of `of` says how many of your words it holds,
+  so a partial match is labeled, not hidden; `terms` scores each word per field; `lists`
+  gives its rank in each fused list; `seeds` names the changed files or lease paths that
+  lifted it. `ranking.weights` is the weight file's digest. `explain`, `path` and `refs`
+  take only full matches, so a name nothing holds whole answers absent.
 - Node IDs are stable and structured: `<kind>:<qualified-name>`, e.g.
   `target:pkg/foo:build`, `spell:go`, `diagnostic:MGS2001`. Key on them; a rename
   is a delete plus an add.
