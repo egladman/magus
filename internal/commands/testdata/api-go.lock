@@ -2960,7 +2960,7 @@ github.com/egladman/magus/types.KnowledgeRoutingProject.TargetCount field int "j
 github.com/egladman/magus/types.KnowledgeSchemaVersion const untyped int = 21
 github.com/egladman/magus/types.KnowledgeStaleIndex type struct
 github.com/egladman/magus/types.KnowledgeStaleIndex.Changed field []string "json:\"changed,omitempty\"       yaml:\"changed,omitempty\""
-github.com/egladman/magus/types.KnowledgeStaleIndex.ChangedCount field int "json:\"changed_count,omitempty\" yaml:\"changed_count,omitempty\""
+github.com/egladman/magus/types.KnowledgeStaleIndex.ChangedCount field int "json:\"changed_count,omitzero\"  yaml:\"changed_count,omitempty\""
 github.com/egladman/magus/types.KnowledgeStaleIndex.CouldHold method func(language string) bool
 github.com/egladman/magus/types.KnowledgeStaleIndex.Describe method func() string
 github.com/egladman/magus/types.KnowledgeStaleIndex.Language field string "json:\"language,omitempty\" yaml:\"language,omitempty\""
@@ -4354,7 +4354,7 @@ github.com/egladman/magus/types.SymbolIndexNotCurrent const DiagnosticCode = "MG
 github.com/egladman/magus/types.SymbolIndexStale const SymbolIndexFreshness = "out-of-date"
 github.com/egladman/magus/types.SymbolIndexStatus type struct
 github.com/egladman/magus/types.SymbolIndexStatus.Changed field []string "json:\"changed,omitempty\""
-github.com/egladman/magus/types.SymbolIndexStatus.ChangedCount field int "json:\"changed_count,omitempty\""
+github.com/egladman/magus/types.SymbolIndexStatus.ChangedCount field int "json:\"changed_count,omitzero\""
 github.com/egladman/magus/types.SymbolIndexStatus.Detail field string "json:\"detail,omitempty\""
 github.com/egladman/magus/types.SymbolIndexStatus.Freshness field SymbolIndexFreshness "json:\"freshness\""
 github.com/egladman/magus/types.SymbolIndexStatus.Language field string "json:\"language,omitempty\""
