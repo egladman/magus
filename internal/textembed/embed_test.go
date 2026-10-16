@@ -122,12 +122,12 @@ func TestEmbedByHand(t *testing.T) {
 func TestEmbedNoVector(t *testing.T) {
 	tbl := handTable(t)
 	for name, fields := range map[string][]Field{
-		"no fields":      nil,
-		"no tokens":      {{Weight: 1}},
-		"no vocabulary":  {{Tokens: []string{"absent", "zzz"}, Weight: 1}},
-		"weight zero":    {{Tokens: []string{"a", "b"}, Weight: 0}},
-		"sum cancels":    {{Tokens: []string{"c", "d"}, Weight: 1}},
-		"fields cancel":  {{Tokens: []string{"c"}, Weight: 2}, {Tokens: []string{"d", "d"}, Weight: 1}},
+		"no fields":     nil,
+		"no tokens":     {{Weight: 1}},
+		"no vocabulary": {{Tokens: []string{"absent", "zzz"}, Weight: 1}},
+		"weight zero":   {{Tokens: []string{"a", "b"}, Weight: 0}},
+		"sum cancels":   {{Tokens: []string{"c", "d"}, Weight: 1}},
+		"fields cancel": {{Tokens: []string{"c"}, Weight: 2}, {Tokens: []string{"d", "d"}, Weight: 1}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			v, ok := tbl.Embed(fields)
