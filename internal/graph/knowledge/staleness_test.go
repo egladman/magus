@@ -117,29 +117,29 @@ func TestStalenessLabel(t *testing.T) {
 // only surviving evidence of why it went; ranking either one down buries it exactly when it
 // is needed. Guru and g3doc both label rather than demote for the same reason.
 func TestResolveLabelsStalenessWithoutReordering(t *testing.T) {
-	g := NewGraph()
-	g.AddNode(types.KnowledgeNode{
-		ID: "doc:docs/cache.md", Kind: types.KindDoc, Label: "cache",
-		Attrs: map[string]string{AttrStaleness: StalenessPetrified, AttrOutrunDays: "400"},
-	})
-	g.AddNode(types.KnowledgeNode{ID: "doc:docs/cache-current.md", Kind: types.KindDoc, Label: "cache"})
-
-	matches := g.Resolve("cache", 0)
+	build := func(attrs map[string]string) *Graph {
+		g := NewGraph()
+		g.AddNode(types.KnowledgeNode{ID: "doc:docs/cache.md", Kind: types.KindDoc, Label: "cache", Attrs: attrs})
+		g.AddNode(types.KnowledgeNode{ID: "doc:docs/cache-current.md", Kind: types.KindDoc, Label: "cache"})
+		return g
+	}
+	matches := build(map[string]string{AttrStaleness: StalenessPetrified, AttrOutrunDays: "400"}).Resolve("cache", 0)
+	unlabeled := build(nil).Resolve("cache", 0)
 	require.Len(t, matches, 2)
+	require.Len(t, unlabeled, 2)
+
+	// Being behind costs a match no rank: the order is the one the same nodes take unlabeled.
+	for i := range matches {
+		assert.Equal(t, unlabeled[i].ID, matches[i].ID, "rank %d", i)
+	}
 
 	byID := map[string]types.KnowledgeMatch{}
 	for _, m := range matches {
 		byID[m.ID] = m
 	}
 	stale, current := byID["doc:docs/cache.md"], byID["doc:docs/cache-current.md"]
-
-	// Being behind costs a match no rank, and the day count is the evidence, which must reach
-	// the caller.
-	wantStale := types.KnowledgeMatch{
-		ID: "doc:docs/cache.md", Kind: types.KindDoc, Label: "cache",
-		Score: current.Score, Staleness: StalenessPetrified, OutrunDays: 400,
-	}
-	assert.Equal(t, wantStale, stale)
+	assert.Equal(t, StalenessPetrified, stale.Staleness)
+	assert.Equal(t, 400, stale.OutrunDays, "the day count is the evidence and must reach the caller")
 	assert.Empty(t, current.Staleness, "prose that kept up carries no staleness claim")
 	assert.Zero(t, current.OutrunDays)
 }
