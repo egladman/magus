@@ -204,13 +204,21 @@ func judgeBriefOffCheck(deps Dependencies, brief briefInput) ShellVerdict {
 		return v
 	}
 	var notes []string
+	workspace := sync.OnceValue(func() types.WorkspaceReader {
+		ws, err := deps.inspect(ctx, at.workspace)
+		if err != nil || ws == nil {
+			return nil
+		}
+		return ws
+	})
 	for _, row := range graded {
 		produces := lazyProducers(sync.OnceValue(func() func(target, project string) bool {
 			return leaseProducers(ctx, deps, at.workspace, row.WritePaths)
 		}))
-		if off, found := briefOffCheck(runs, row, produces); found {
+		if off, rewrite, found := briefOffCheck(runs, row, produces, deps.DefaultCharms, workspace); found {
 			return ShellVerdict{
-				Deny: briefOffCheckDeny(row, off.line, off.run.target),
+				Deny: briefOffCheckDeny(row, off, rewrite),
+				Why:  rewrite.Why,
 				Rule: denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleWorkerCheckOnly)},
 			}
 		}
@@ -327,7 +335,13 @@ func briefPassVerdict(notes []string) ShellVerdict {
 }
 
 // briefOffCheckDeny words the refusal, quoting the line the brief would have the worker follow.
-func briefOffCheckDeny(row types.Job, line, target string) string {
+// A refused rewrite names the files it would write past the write paths in its Why.
+func briefOffCheckDeny(row types.Job, off briefRun, rewrite denial) string {
+	line, target := off.line, off.run.target
+	if rewrite.refused() {
+		return fmt.Sprintf("this brief tells job %s's worker to run `%s`, which rewrites files outside its write paths [%s]; fix the brief.\nThe line: %q",
+			row.ID, target, denyRuleWorkerCheckOnly, elideCommand(strings.TrimSpace(line)))
+	}
 	checks := rowChecks(row)
 	names := make([]string, len(checks))
 	for i, c := range checks {
@@ -367,17 +381,24 @@ func briefRow(ids []string, rows []types.Job) (types.Job, bool) {
 // Only a run the brief teaches is graded: a shell block's line or a code span. Running text
 // describes a run as often as it asks for one ("the guard refused magus run lint"), and no
 // parser can tell the two apart, so it is noted and never refused.
-func briefOffCheck(runs []briefRun, row types.Job, produces lazyProducers) (briefRun, bool) {
+//
+// A run row allows is still held to its write paths under the rw charm, named on the target
+// or carried by defaults, as denyRewriteOutsideLease holds the worker's own run; rewrite is
+// that refusal when it is the reason.
+func briefOffCheck(runs []briefRun, row types.Job, produces lazyProducers, defaults []string, workspace func() types.WorkspaceReader) (off briefRun, rewrite denial, found bool) {
 	checks := rowChecks(row)
 	for _, r := range runs {
 		if r.negated || r.prose || strings.ContainsAny(r.run.target, "<>$") {
 			continue
 		}
 		if !r.run.allowed(checks, produces) {
-			return r, true
+			return r, denial{}, true
+		}
+		if d := denyRewriteOutsideLease(r.run, row, defaults, workspace); d.refused() {
+			return r, d, true
 		}
 	}
-	return briefRun{}, false
+	return briefRun{}, denial{}, false
 }
 
 // briefRun is one run a brief presents, with the line presenting it.

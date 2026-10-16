@@ -1237,6 +1237,7 @@ func NewDependencies(ctx context.Context, w Wiring) (Dependencies, *WorkspaceRul
 		TrackedFiles:    trackedFilesAt,
 		CheckoutState:   checkoutStateAt,
 		VCS:             w.vcsOptions(),
+		DefaultCharms:   w.Config.DefaultCharms,
 		BinaryVersion:   w.BinaryVersion,
 		Binary:          w.Binary,
 		RuleLoad:        loaded,

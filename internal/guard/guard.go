@@ -158,6 +158,10 @@ type Dependencies struct {
 	// VCS is the workspace's version-control configuration. The worktree rule reads its
 	// base branch, and refuses when it disables version control.
 	VCS types.VCSOptions
+	// DefaultCharms are the workspace's default_charms, which `magus run` applies unless
+	// --no-default-charms is passed. The leased rw rule reads them, since rw added here
+	// writes as surely as rw typed on the target.
+	DefaultCharms []string
 	// Builtins is the effective setting of every compiled rule, resolved from what the
 	// workspace declared over builtin.Defaults. Nil means the defaults, with no
 	// parameters set.

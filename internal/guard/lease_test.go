@@ -741,6 +741,41 @@ func TestWorkerCheckOnlyHoldsARewriteToTheWritePaths(t *testing.T) {
 	assert.Contains(t, reason.Say, " run format / --no-default-charms`.")
 }
 
+// TestWorkerCheckOnlyJudgesTheDefaultCharms: default_charms [rw] make a plain `magus run`
+// write as surely as `:rw` on the target, so the run is held to the write paths unless it
+// passes --no-default-charms.
+func TestWorkerCheckOnlyJudgesTheDefaultCharms(t *testing.T) {
+	ws := typestest.NewMockWorkspaceRepository(t)
+	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{}, nil).Maybe()
+	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	ws.EXPECT().Get("docs").Return(&types.Project{Path: "docs"}).Maybe()
+	inspect := func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }
+	row := types.Job{
+		ID: "docs/jobs", Criteria: "document jobs", WritePaths: []string{"docs/guides/jobs.md"},
+		Check: &types.LeaseCheck{Target: "dprint", Project: "docs"}, State: types.StateRunning, Registered: 1,
+	}
+	for _, tt := range []struct {
+		name, command string
+		defaults      []string
+		refused       bool
+	}{
+		{"a plain run under default rw", "./magus run dprint docs", []string{"rw"}, true},
+		{"the defaults turned off", "./magus run dprint docs --no-default-charms", []string{"rw"}, false},
+		{"defaults without rw", "./magus run dprint docs", []string{"verbose"}, false},
+		{"no defaults", "./magus run dprint docs", nil, false},
+	} {
+		ctx, _ := fleetFixture(t, row)
+		reason := denyWorkerCheckOnly(ctx, Dependencies{Inspect: inspect, DefaultCharms: tt.defaults}, row.ID, tt.command)
+		if !tt.refused {
+			assert.Empty(t, reason, tt.name)
+			continue
+		}
+		require.NotEmpty(t, reason, tt.name)
+		assert.Contains(t, reason.Why, "`docs:dprint` declares no write", tt.name)
+		assert.Contains(t, reason.Say, " run dprint docs --no-default-charms`.", tt.name)
+	}
+}
+
 // TestLeaseCoversGlob pins how a glob a target writes is held to the write paths: a
 // declaration matching its text covers a single-segment wildcard, and only a whole tree
 // covers `**`.

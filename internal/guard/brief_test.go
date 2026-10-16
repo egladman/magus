@@ -130,12 +130,20 @@ func TestJudgeRefusesASpawnWhoseBriefTeachesADeniedCommand(t *testing.T) {
 // lint, and two ran it at once. A brief naming a live row is held to that row's check before
 // any worker exists. Only a run the brief teaches, in a code span or a shell block, is held
 // to it: on 2026-10-14 a brief that only described a refused run in running text was refused.
+// A run the row allows is still held to the write paths under the rw charm, as the worker's
+// own run would be.
 func TestBriefOffCheckIsRefused(t *testing.T) {
 	row := figuresLease()
 	produces := func() func(target, project string) bool {
 		return func(target, project string) bool {
 			return targetName(target) == "figures-generate" && project == "docs"
 		}
+	}
+	deps := figuresWorkspace(t)
+	workspace := func() types.WorkspaceReader {
+		ws, err := deps.Inspect(t.Context(), "")
+		require.NoError(t, err)
+		return ws
 	}
 	for _, tt := range []struct {
 		name, brief, target string // target is what the refusal names; "" for none
@@ -151,13 +159,13 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 		{"do not run, in prose", "Do not run lint docs: validations serialize.", ""},
 		{"the row's own check", "Run `./magus run diagrams_generate docs` once at the end.", ""},
 		{"the check with a charm, in prose", "Run ./magus run diagrams-generate:rw docs -- -v and report.", ""},
-		{"a target regenerating the write paths", "Regenerate with `./magus run figures-generate:rw docs`.", ""},
-		{"a word the workspace defines as no target", "Run the check target once, then magus run takes over.", ""},
+		{"a target regenerating past the write paths", "Regenerate with `./magus run figures-generate:rw docs`.", "figures-generate:rw"},
+		{"a target regenerating the write paths, read-only", "Check with `./magus run figures-generate docs`.", ""},		{"a word the workspace defines as no target", "Run the check target once, then magus run takes over.", ""},
 		{"a placeholder", "Run `./magus run <target> <project>` for the row's check.", ""},
 		{"a read", "Read `./magus describe job figures/flow` first.", ""},
 	} {
 		runs := briefRuns(tt.brief)
-		off, found := briefOffCheck(runs, row, produces)
+		off, rewrite, found := briefOffCheck(runs, row, produces, nil, workspace)
 		if tt.target == "" {
 			assert.False(t, found, "%s: refused over %q", tt.name, off.line)
 			if slices.ContainsFunc(runs, func(r briefRun) bool { return r.prose }) {
@@ -167,11 +175,23 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 		}
 		require.True(t, found, tt.name)
 		assert.Equal(t, tt.target, off.run.target, tt.name)
-		deny := briefOffCheckDeny(row, off.line, off.run.target)
+		deny := briefOffCheckDeny(row, off, rewrite)
 		assert.Contains(t, deny, strconv.Quote(strings.TrimSpace(off.line)), "%s: the refusal quotes the line", tt.name)
-		assert.Contains(t, deny, "`magus run diagrams_generate docs`", "%s: the refusal names the row's check", tt.name)
 		assert.Contains(t, deny, "["+string(denyRuleWorkerCheckOnly)+"]", tt.name)
+		if rewrite.refused() {
+			assert.Contains(t, deny, "rewrites files outside its write paths", tt.name)
+			assert.Contains(t, rewrite.Why, "`docs/gen/figures/*.svg`", "%s: the refusal names the glob", tt.name)
+			continue
+		}
+		assert.Contains(t, deny, "`magus run diagrams_generate docs`", "%s: the refusal names the row's check", tt.name)
 	}
+
+	plain := briefRuns("Check with `./magus run figures-generate docs`.")
+	_, rewrite, found := briefOffCheck(plain, row, produces, []string{"rw"}, workspace)
+	require.True(t, found, "default_charms [rw] rewrite a plain run")
+	assert.True(t, rewrite.refused())
+	_, _, found = briefOffCheck(briefRuns("Check with `./magus run figures-generate docs --no-default-charms`."), row, produces, []string{"rw"}, workspace)
+	assert.False(t, found, "--no-default-charms keeps the defaults off")
 }
 
 // agentEnvelope is a spawn in a session of its own, since a repeated deny is shortened.

@@ -454,7 +454,7 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 	})
 	for _, r := range runs {
 		if r.allowed(checks, produces) || r.composedByCheck(composes) {
-			if d := denyRewriteOutsideLease(r, me, workspace); d.refused() {
+			if d := denyRewriteOutsideLease(r, me, deps.DefaultCharms, workspace); d.refused() {
 				return d
 			}
 			continue
@@ -488,10 +488,11 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 // write past the row's write paths: a glob its target's declarations write that no write
 // path covers, or a target declaring no write at all. A leased `dprint:rw` rewrote
 // console/README.md this way, and the audit that saw it could only report the write after
-// it landed. A workspace that cannot be read leaves the run to the rest of the rule, as
+// it landed. defaults are the workspace's default_charms, which put rw on a plain run as
+// well. A workspace that cannot be read leaves the run to the rest of the rule, as
 // leaseProducers does.
-func denyRewriteOutsideLease(r targetRun, me types.Job, workspace func() types.WorkspaceReader) denial {
-	if r.verb != "run" || !r.rewrites() {
+func denyRewriteOutsideLease(r targetRun, me types.Job, defaults []string, workspace func() types.WorkspaceReader) denial {
+	if r.verb != "run" || !r.rewrites(defaults) {
 		return denial{}
 	}
 	ws := workspace()
@@ -561,6 +562,9 @@ type targetRun struct {
 	verb     string
 	target   string
 	projects []string
+	// noDefaultCharms is --no-default-charms, which keeps the workspace's default_charms
+	// off this run.
+	noDefaultCharms bool
 }
 
 // runReportFlags turn a run into a report about one: nothing executes, so nothing contends.
@@ -584,9 +588,12 @@ func parseTargetRun(c hint.Invocation) (targetRun, bool) {
 		case a == "--":
 			return r, r.target != ""
 		case len(a) > 1 && a[0] == '-':
-			name, _, joined := strings.Cut(strings.TrimLeft(a, "-"), "=")
+			name, value, joined := strings.Cut(strings.TrimLeft(a, "-"), "=")
 			if slices.Contains(runReportFlags, name) {
 				return targetRun{}, false
+			}
+			if name == "no-default-charms" {
+				r.noDefaultCharms = !joined || value != "false"
 			}
 			skip = !joined && verbFlagTakesValue(r.verb, name)
 		case r.verb == "":
@@ -656,12 +663,20 @@ func (r targetRun) composedByCheck(composes func() func(target, project string) 
 	return !slices.ContainsFunc(r.projectsOrRoot(), func(p string) bool { return !composed(r.target, p) })
 }
 
-// rewrites reports a run whose target names the rw charm. A workspace's default_charms
-// can activate rw as well, which the target alone does not show.
-func (r targetRun) rewrites() bool {
+// rewrites reports a run under the rw charm: named on its target, or carried by defaults,
+// the workspace's default_charms, on a `magus run` without --no-default-charms.
+func (r targetRun) rewrites(defaults []string) bool {
 	_, t := splitSpell(r.target)
 	parsed, err := types.ParseTarget(t)
-	return err == nil && slices.Contains(parsed.Charms, types.CharmReadWrite)
+	if err != nil {
+		return false
+	}
+	if slices.Contains(parsed.Charms, types.CharmReadWrite) {
+		return true
+	}
+	return r.verb == "run" && !r.noDefaultCharms && slices.ContainsFunc(defaults, func(c string) bool {
+		return types.NormalizeCharm(c) == types.CharmReadWrite
+	})
 }
 
 // readOnly is the run's command without the rw charm, and with no default charms that
