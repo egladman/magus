@@ -74,7 +74,7 @@ func (ix *Index) eligible(doc int, allow []uint64) bool {
 // Scoring q's int8 values against a doc's bits, rather than q's own sign bits by
 // Hamming distance, keeps the magnitudes the query carries.
 //
-//	measured (96k docs of 256 dims, the Zipf corpus of search_test.go, 100 queries):
+//	measured (96k docs of 256 dims, the Zipf doc set of search_test.go, 100 queries):
 //	top-10 overlap with exact search at rescore 512 rises 0.834 -> 0.981, and top-100
 //	at rescore 2048 0.741 -> 0.940.
 func (ix *Index) candidates(q []int8, allow []uint64, r int) []int32 {

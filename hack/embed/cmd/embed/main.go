@@ -27,7 +27,7 @@ const usage = `usage: embed <command> [flags]
 
 commands:
   fetch           download the pinned inputs named in inputs.jsonl and verify their sha256
-  texts           write the training texts and forced tokens from embed-mine's corpus manifest
+  texts           write the training texts and forced tokens from embed-mine's source manifest
   vocab           build the vocabulary and write its token texts for a teacher run
   teacher         embed a texts file with a teacher model into resumable, content-addressed shards
   teacher-parity  check the Go teacher against the reference vectors and report texts/s
@@ -71,8 +71,8 @@ func main() {
 // mix and the first shard's rate projects the run.
 const textsSalt = "embed-texts/v1:"
 
-// corpusRecord is one line of hack/embed/gen/corpus.jsonl, as far as texts reads it.
-type corpusRecord struct {
+// sourceRecord is one line of hack/embed/gen/sources.jsonl, as far as texts reads it.
+type sourceRecord struct {
 	Kind   string   `json:"kind"`
 	Path   string   `json:"path"`
 	Split  string   `json:"split"`
@@ -85,7 +85,7 @@ type corpusRecord struct {
 	Desc   string   `json:"desc"`
 }
 
-// runTexts turns the corpus manifest into the texts file vocab, teacher and train read.
+// runTexts turns the source manifest into the texts file vocab, teacher and train read.
 // Every train-split file is cut into line-bounded chunks, each figure outside eval fold
 // 0 becomes its title and description, and CoRNStack rows add a query and the head of
 // its document, one row per in-repo text at -cornstack 1. Files are read at the commit
@@ -93,17 +93,17 @@ type corpusRecord struct {
 // do not move when the tree does.
 func runTexts(args []string) error {
 	fs := flag.NewFlagSet("texts", flag.ExitOnError)
-	corpusPath := fs.String("corpus", "gen/corpus.jsonl", "embed-mine's corpus manifest")
+	sourcesPath := fs.String("sources", "gen/sources.jsonl", "embed-mine's source manifest")
 	root := fs.String("root", "../..", "the repository the manifest's paths are relative to")
-	rev := fs.String("rev", "", "the commit to read files at; default: the last commit that changed -corpus")
+	rev := fs.String("rev", "", "the commit to read files at; default: the last commit that changed -sources")
 	cache := fs.String("cache", cacheRoot(), "the cache root the manifest's input paths are relative to")
-	out := fs.String("out", "", "the directory to write texts.jsonl and forced.txt to; default <cache>/corpus")
+	out := fs.String("out", "", "the directory to write texts.jsonl and forced.txt to; default <cache>/training")
 	maxBytes := fs.Int("chunk-bytes", 512, "a text holds at most this many bytes, so the teacher's 256-token cap rarely cuts it")
 	ratio := fs.Float64("cornstack", 1, "CoRNStack rows per in-repo text; each row adds two texts")
 	skip := fs.String("skip", "", "comma-separated input names left out; an input with no reader must be named here")
 	_ = fs.Parse(args)
 	if *out == "" {
-		*out = filepath.Join(*cache, "corpus")
+		*out = filepath.Join(*cache, "training")
 	}
 	skipped := map[string]bool{}
 	for name := range strings.SplitSeq(*skip, ",") {
@@ -112,12 +112,12 @@ func runTexts(args []string) error {
 		}
 	}
 
-	records, err := readCorpus(*corpusPath)
+	records, err := readSources(*sourcesPath)
 	if err != nil {
 		return err
 	}
 	if *rev == "" {
-		if *rev, err = lastCommit(*root, *corpusPath); err != nil {
+		if *rev, err = lastCommit(*root, *sourcesPath); err != nil {
 			return err
 		}
 	}
@@ -135,15 +135,15 @@ func runTexts(args []string) error {
 	var texts []teacher.Text
 	forced := map[string]bool{}
 	var nFiles, nFigures int
-	var inputs []corpusRecord
+	var inputs []sourceRecord
 	for _, r := range records {
 		switch r.Kind {
 		case "file":
 			if r.Split != "train" {
 				continue
 			}
-			if digestOf(files[r.Path]) != r.SHA256 {
-				return fmt.Errorf("%s at %s does not hash to the manifest's %s: regenerate %s", r.Path, *rev, r.SHA256, *corpusPath)
+			if sha256Hex(files[r.Path]) != r.SHA256 {
+				return fmt.Errorf("%s at %s does not hash to the manifest's %s: regenerate %s", r.Path, *rev, r.SHA256, *sourcesPath)
 			}
 			nFiles++
 			for _, c := range chunks(string(files[r.Path]), *maxBytes) {
@@ -161,7 +161,7 @@ func runTexts(args []string) error {
 		case "input":
 			inputs = append(inputs, r)
 		default:
-			return fmt.Errorf("%s: record kind %q", *corpusPath, r.Kind)
+			return fmt.Errorf("%s: record kind %q", *sourcesPath, r.Kind)
 		}
 	}
 	repo := len(texts)
@@ -234,19 +234,19 @@ func runTexts(args []string) error {
 		return err
 	}
 	fmt.Printf("files at %s; %d texts: %d chunks of %d files, %d figures, %d CoRNStack documents and %d queries; texts %s; %d forced tokens\n",
-		*rev, len(texts), repo-nFigures, nFiles, nFigures, docs, queries, digestOf(buf.Bytes()), len(tokens))
+		*rev, len(texts), repo-nFigures, nFiles, nFigures, docs, queries, sha256Hex(buf.Bytes()), len(tokens))
 	return nil
 }
 
-func readCorpus(path string) ([]corpusRecord, error) {
-	var out []corpusRecord
+func readSources(path string) ([]sourceRecord, error) {
+	var out []sourceRecord
 	var readErr error
-	fail := func(_ corpusRecord, err error) bool {
+	fail := func(_ sourceRecord, err error) bool {
 		readErr = err
 		return false
 	}
 	for n, line := range jsonLines(path, fail) {
-		var r corpusRecord
+		var r sourceRecord
 		if err := json.Unmarshal(line, &r); err != nil {
 			return nil, fmt.Errorf("%s:%d: %w", path, n, err)
 		}
@@ -564,7 +564,7 @@ func summarize(manifest string) (runLine, error) {
 	line := runLine{
 		Kind: "teacher", Run: spec.Key(), Teacher: spec.Model, Revision: spec.Revision,
 		WeightsSHA256: spec.WeightsSHA256, TextsSHA256: spec.TextsSHA256,
-		MaxLen: spec.MaxLen, ShardSize: spec.ShardSize, Shards: len(shards), ManifestSHA256: digestOf(b),
+		MaxLen: spec.MaxLen, ShardSize: spec.ShardSize, Shards: len(shards), ManifestSHA256: sha256Hex(b),
 	}
 	for _, r := range shards {
 		line.Rows += r.Rows

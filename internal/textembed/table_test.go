@@ -19,7 +19,7 @@ func testProvenance() Provenance {
 	return Provenance{
 		Teacher:         "nomic-ai/CodeRankEmbed",
 		TeacherRevision: "rev1",
-		CorpusDigest:    "corpus1",
+		TextsDigest:     "texts1",
 		PairsDigest:     "pairs1",
 		Pipeline:        "f1980cc5c",
 		Run:             "run1",
@@ -122,7 +122,7 @@ func TestTableRoundTrip(t *testing.T) {
 // same digest on every architecture, and a layout change must bump tableFormat.
 func TestTableGolden(t *testing.T) {
 	data := encode(t, testSpec(probeVocab(), 64))
-	const want = "a60ea70302d30f760d68e1c8e5cb4a5f89165579a530c95c93ee024863b04606"
+	const want = "971904b4e5777c8b0ac79dfdd28731d25832325c53c67083b15aeb98f714d21c"
 	if got := read(t, data).Digest(); got != want {
 		t.Errorf("probe table digest = %s, want %s", got, want)
 	}
@@ -167,7 +167,7 @@ func TestTableEncodeRefuses(t *testing.T) {
 		{"no teacher", func(s *TableSpec) { s.Prov.Teacher = "" }, "provenance teacher is empty"},
 		{"no run", func(s *TableSpec) { s.Prov.Run = "" }, "provenance run is empty"},
 		{"no goarch", func(s *TableSpec) { s.Prov.GOARCH = "" }, "provenance goarch is empty"},
-		{"other format", func(s *TableSpec) { s.Prov.Format = 2 }, "provenance names format 2, but this build writes format 1"},
+		{"other format", func(s *TableSpec) { s.Prov.Format = 3 }, "provenance names format 3, but this build writes format 2"},
 		{"other tokenizer", func(s *TableSpec) { s.Prov.TokenizerDigest = "feed" }, "tokenizer digest feed, but textrank.Tokens"},
 	}
 	for _, tt := range tests {
@@ -259,7 +259,7 @@ func TestTableReadRefuses(t *testing.T) {
 		{"empty", nil, "no MSET magic"},
 		{"other magic", append([]byte("MTRX"), data[4:]...), "no MSET magic"},
 		{"magic only", data[:4], "truncated table"},
-		{"other format", append(append([]byte("MSET"), 2), data[5:]...), "format 2, but this build reads only format 1"},
+		{"other format", append(append([]byte("MSET"), 3), data[5:]...), "format 3, but this build reads only format 2"},
 		{"no trailer", data[:len(data)-sha256.Size], "sha256 trailer does not match"},
 		{"flipped row byte", func() []byte { d := slices.Clone(data); d[len(d)-40] ^= 1; return d }(), "sha256 trailer does not match"},
 		{"flipped trailer", func() []byte { d := slices.Clone(data); d[len(d)-1] ^= 1; return d }(), "sha256 trailer does not match"},

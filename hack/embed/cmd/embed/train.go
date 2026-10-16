@@ -70,7 +70,7 @@ func runVocab(args []string) error {
 	if err := os.WriteFile(*out, b, 0o644); err != nil {
 		return err
 	}
-	fmt.Printf("%d tokens over %d counted; token texts %s\n", v.Len(), v.Total, digestOf(b))
+	fmt.Printf("%d tokens over %d counted; token texts %s\n", v.Len(), v.Total, sha256Hex(b))
 	return nil
 }
 
@@ -123,7 +123,7 @@ func runTrain(args []string) error {
 	if err != nil {
 		return err
 	}
-	tokens, err := readTeacherRun(*tokenRun, digestOf(tt), v.Len())
+	tokens, err := readTeacherRun(*tokenRun, sha256Hex(tt), v.Len())
 	if err != nil {
 		return fmt.Errorf("token run: %w", err)
 	}
@@ -210,7 +210,7 @@ func runTrain(args []string) error {
 	var buf bytes.Buffer
 	err = distill.WriteTable(&buf, m, v, textembed.Provenance{
 		Teacher: tokens.spec.Model, TeacherRevision: tokens.spec.Revision,
-		CorpusDigest: textsDigest, PairsDigest: pairsDigest,
+		TextsDigest: textsDigest, PairsDigest: pairsDigest,
 		Pipeline: *pipeline, Run: *run, GOARCH: runtime.GOARCH, Seed: *seed,
 	})
 	if err != nil {
@@ -222,7 +222,7 @@ func runTrain(args []string) error {
 	if err := os.WriteFile(*out, buf.Bytes(), 0o644); err != nil {
 		return err
 	}
-	fmt.Printf("best epoch %d of %d, %d steps; table %s: %d bytes, sha256 %s\n", rep.BestEpoch, len(rep.Epochs), rep.Steps, *out, buf.Len(), digestOf(buf.Bytes()))
+	fmt.Printf("best epoch %d of %d, %d steps; table %s: %d bytes, sha256 %s\n", rep.BestEpoch, len(rep.Epochs), rep.Steps, *out, buf.Len(), sha256Hex(buf.Bytes()))
 	return nil
 }
 
@@ -270,7 +270,7 @@ func readLines(path string) ([]string, error) {
 	return out, sc.Err()
 }
 
-func digestOf(b []byte) string {
+func sha256Hex(b []byte) string {
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
 }

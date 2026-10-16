@@ -16,11 +16,11 @@ import (
 	"github.com/egladman/magus/internal/textrank"
 )
 
-// corpus is a synthetic retrieval set. Token frequencies follow Zipf(1) by rank, and
+// docSet is a synthetic retrieval set. Token frequencies follow Zipf(1) by rank, and
 // a token's w16 falls with its frequency, as SIF weighting makes it in a real table.
 // Each query mixes tokens of one target doc with Zipf draws. It uses only sha256 and
 // PCG's raw output, so it is the same on every machine and Go release.
-type corpus struct {
+type docSet struct {
 	table   *Table
 	docs    [][]Field
 	queries []Vector
@@ -29,9 +29,9 @@ type corpus struct {
 // noVectorEvery is how often a doc holds only an out-of-vocabulary token.
 const noVectorEvery = 97
 
-func newCorpus(vocab, docs, queries, dims int) corpus {
+func newDocSet(vocab, docs, queries, dims int) docSet {
 	rng := rand.New(rand.NewPCG(1, 2))
-	ranked := corpusWords(rng, vocab)
+	ranked := docSetWords(rng, vocab)
 	weight := make(map[string]uint16, vocab)
 	cum := make([]uint64, vocab)
 	var total uint64
@@ -65,7 +65,7 @@ func newCorpus(vocab, docs, queries, dims int) corpus {
 		panic(err)
 	}
 
-	c := corpus{table: tbl, docs: make([][]Field, docs)}
+	c := docSet{table: tbl, docs: make([][]Field, docs)}
 	for i := range c.docs {
 		if i%noVectorEvery == noVectorEvery-1 {
 			c.docs[i] = []Field{{Tokens: []string{"zzzzzzzzzzzz"}, Weight: 1}}
@@ -87,9 +87,9 @@ func newCorpus(vocab, docs, queries, dims int) corpus {
 	return c
 }
 
-// corpusWords is n distinct lowercase words that are fixed points of textrank.Tokens,
+// docSetWords is n distinct lowercase words that are fixed points of textrank.Tokens,
 // most frequent first.
-func corpusWords(rng *rand.Rand, n int) []string {
+func docSetWords(rng *rand.Rand, n int) []string {
 	seen := make(map[string]bool, n)
 	out := make([]string, 0, n)
 	for len(out) < n {
@@ -108,22 +108,22 @@ func corpusWords(rng *rand.Rand, n int) []string {
 	return out
 }
 
-// bigCorpus is the shape the design budgets for: about 96k docs over the 29k-token
+// bigDocSet is the shape the design budgets for: about 96k docs over the 29k-token
 // table, at 256 dims.
-var bigCorpus = sync.OnceValues(func() (corpus, *Index) {
-	c := newCorpus(29000, 96000, 100, 256)
+var bigDocSet = sync.OnceValues(func() (docSet, *Index) {
+	c := newDocSet(29000, 96000, 100, 256)
 	return c, NewIndex(c.table, c.docs)
 })
 
-func smallCorpus(t testing.TB) (corpus, *Index) {
+func smallDocSet(t testing.TB) (docSet, *Index) {
 	t.Helper()
-	c := newCorpus(500, 300, 20, 128)
+	c := newDocSet(500, 300, 20, 128)
 	return c, NewIndex(c.table, c.docs)
 }
 
 // referenceSearch is Search by sorting: every eligible doc by its sign-code score
 // descending, then doc, the first r of those by exact score, the first depth.
-func referenceSearch(c corpus, q Vector, allow []uint64, depth, r int) []Hit {
+func referenceSearch(c docSet, q Vector, allow []uint64, depth, r int) []Hit {
 	type cand struct{ doc, near int }
 	var cands []cand
 	vecs := make([]Vector, len(c.docs))
@@ -153,7 +153,7 @@ func referenceSearch(c corpus, q Vector, allow []uint64, depth, r int) []Hit {
 }
 
 func TestSearchMatchesReference(t *testing.T) {
-	c, ix := smallCorpus(t)
+	c, ix := smallDocSet(t)
 	for _, tt := range []struct{ depth, rescore int }{
 		{1, 1}, {10, 1}, {10, 7}, {10, 40}, {40, 10}, {25, 299}, {25, 300}, {25, 10000}, {300, 0},
 	} {
@@ -173,7 +173,7 @@ func TestSearchMatchesReference(t *testing.T) {
 }
 
 func TestSearchAllow(t *testing.T) {
-	c, ix := smallCorpus(t)
+	c, ix := smallDocSet(t)
 	rng := rand.New(rand.NewPCG(3, 4))
 	allow := make([]uint64, (ix.Len()+63)/64)
 	for doc := range ix.Len() {
@@ -200,7 +200,7 @@ func TestSearchAllow(t *testing.T) {
 }
 
 func TestSearchNeverReturnsADocWithNoVector(t *testing.T) {
-	c, ix := smallCorpus(t)
+	c, ix := smallDocSet(t)
 	for _, q := range c.queries {
 		for _, h := range ix.Search(q, SearchOptions{Depth: ix.Len(), Rescore: ix.Len()}) {
 			if h.Doc%noVectorEvery == noVectorEvery-1 {
@@ -211,7 +211,7 @@ func TestSearchNeverReturnsADocWithNoVector(t *testing.T) {
 }
 
 func TestSearchTieBreak(t *testing.T) {
-	c, _ := smallCorpus(t)
+	c, _ := smallDocSet(t)
 	doc := c.docs[0]
 	ix := NewIndex(c.table, [][]Field{c.docs[1], doc, c.docs[2], doc, doc})
 	q, _ := c.table.Embed(doc)
@@ -227,7 +227,7 @@ func TestSearchTieBreak(t *testing.T) {
 }
 
 func TestSearchEmptyIndex(t *testing.T) {
-	c, _ := smallCorpus(t)
+	c, _ := smallDocSet(t)
 	ix := NewIndex(c.table, nil)
 	if got := ix.Search(c.queries[0], SearchOptions{Depth: 3}); len(got) != 0 {
 		t.Errorf("Search over no docs = %v", got)
@@ -238,7 +238,7 @@ func TestSearchEmptyIndex(t *testing.T) {
 }
 
 func TestSearchPanics(t *testing.T) {
-	c, ix := smallCorpus(t)
+	c, ix := smallDocSet(t)
 	q := c.queries[0]
 	words := (ix.Len() + 63) / 64
 	tests := []struct {
@@ -281,7 +281,7 @@ func (f failingRows) ReadAt(p []byte, off int64) (int, error) {
 }
 
 func TestSearchPanicsOnAFailedRead(t *testing.T) {
-	c, ix := smallCorpus(t)
+	c, ix := smallDocSet(t)
 	data := writeIndex(t, ix)
 	back, err := ReadIndex(failingRows{data, int64(len(data) - ix.Len()*128)}, int64(len(data)), c.table)
 	if err != nil {
@@ -304,11 +304,11 @@ func hitsDigest(hits []Hit) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// TestSearchGolden pins hits over the big corpus. Search uses no float and a fixed
+// TestSearchGolden pins hits over the big doc set. Search uses no float and a fixed
 // order, so they hold byte for byte on amd64 and arm64; a mismatch on one
 // architecture only is a determinism bug, never a reason to update want.
 func TestSearchGolden(t *testing.T) {
-	c, ix := bigCorpus()
+	c, ix := bigDocSet()
 	tests := []struct {
 		name string
 		opts SearchOptions
@@ -347,10 +347,10 @@ func overlap(a, b []Hit) float64 {
 }
 
 // TestSearchRecall measures how much of exact search's top 100 and top 10 the
-// sign-code stage keeps over the big corpus, per rescore depth. The floors sit just
+// sign-code stage keeps over the big doc set, per rescore depth. The floors sit just
 // under the measured means, so a change that loses recall fails here.
 func TestSearchRecall(t *testing.T) {
-	c, ix := bigCorpus()
+	c, ix := bigDocSet()
 	exact := make([][]Hit, len(c.queries))
 	for i, q := range c.queries {
 		exact[i] = ix.Search(q, SearchOptions{Depth: 100, Rescore: ix.Len()})

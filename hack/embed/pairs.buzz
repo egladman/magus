@@ -2,11 +2,11 @@ import "std";
 import "fs";
 import "magus";
 import "encoding/json";
-import "corpus";
+import "sources";
 import "holdout";
 
 // Every ref is a span, path:a-b: lines a..b, 1-based and inclusive, of the blob
-// corpus.jsonl pins for path. A pair is holdout when either span sits in a holdout
+// sources.jsonl pins for path. A pair is holdout when either span sits in a holdout
 // file, or comes from an eval-fold figure.
 export object Pair {
     source: str,
@@ -16,7 +16,7 @@ export object Pair {
 }
 
 object Miner {
-    c: corpus\Corpus,
+    c: sources\Snapshot,
     pairs: mut [Pair],
     seen: mut {str: bool},
 
@@ -66,13 +66,13 @@ fun words(text: str) > int {
     return n;
 }
 
-fun defEnd(c: corpus\Corpus, s: magus\KnowledgeNode) > int !> any {
+fun defEnd(c: sources\Snapshot, s: magus\KnowledgeNode) > int !> any {
     final end = std\parseInt(s.attrs["def_end_line"] ?? "") ?? 0;
-    final line = corpus\spanLine(s.source);
+    final line = sources\spanLine(s.source);
     if (end >= line) {
         return end;
     }
-    return corpus\blockEnd(c, path: corpus\spanPath(s.source), line: line);
+    return sources\blockEnd(c, path: sources\spanPath(s.source), line: line);
 }
 
 final goDeclKinds = {"Function": true, "Method": true, "Struct": true, "Interface": true, "Type": true, "TypeAlias": true};
@@ -85,12 +85,12 @@ fun goDocDecl(m: Miner) > void !> any {
         if (s.attrs["language"] != "go" or goDeclKinds[s.attrs["symbol_kind"] ?? ""] == null) {
             continue;
         }
-        final path = corpus\spanPath(s.source);
+        final path = sources\spanPath(s.source);
         if (!m.c.has(path) or m.c.isGenerated(path) or path.endsWith("_test.go") or words(s.attrs["doc"] ?? "") < 3) {
             continue;
         }
-        final line = corpus\spanLine(s.source);
-        final top = corpus\commentAbove(m.c, path: path, line: line);
+        final line = sources\spanLine(s.source);
+        final top = sources\commentAbove(m.c, path: path, line: line);
         if (top == 0) {
             continue;
         }
@@ -111,26 +111,26 @@ fun buzzDocDecl(m: Miner) > void !> any {
             docs[s.source] = s.attrs["doc"] ?? "";
         }
     }
-    foreach (n in corpus\nodes("function")) {
+    foreach (n in sources\nodes("function")) {
         if (ends[n.source] == null) {
-            final path = corpus\spanPath(n.source);
+            final path = sources\spanPath(n.source);
             if (m.c.has(path)) {
-                ends[n.source] = corpus\blockEnd(m.c, path: path, line: corpus\spanLine(n.source));
+                ends[n.source] = sources\blockEnd(m.c, path: path, line: sources\spanLine(n.source));
             }
         }
         if ((docs[n.source] ?? "") == "") {
             docs[n.source] = n.doc;
         }
     }
-    final sources = ends.keys().cloneMutable();
-    sources.sort(fun (a: str, b: str) > bool => a < b);
-    foreach (src in sources) {
-        final path = corpus\spanPath(src);
+    final spans = ends.keys().cloneMutable();
+    spans.sort(fun (a: str, b: str) > bool => a < b);
+    foreach (src in spans) {
+        final path = sources\spanPath(src);
         if (!m.c.has(path) or m.c.isGenerated(path) or words(docs[src] ?? "") < 3) {
             continue;
         }
-        final line = corpus\spanLine(src);
-        final top = corpus\commentAbove(m.c, path: path, line: line);
+        final line = sources\spanLine(src);
+        final top = sources\commentAbove(m.c, path: path, line: line);
         if (top == 0) {
             continue;
         }
@@ -168,18 +168,18 @@ fun hostModules(m: Miner) > void !> any {
     final pages = documentedBy("module");
     final impls: mut {str: str} = mut {};
     foreach (s in m.c.symbols) {
-        final path = corpus\spanPath(s.source);
+        final path = sources\spanPath(s.source);
         if (path.startsWith("std/") and !path.endsWith("_test.go") and s.attrs["symbol_kind"] == "Function" and impls[s.label] == null) {
-            impls[s.label] = span(path, a: corpus\spanLine(s.source), b: defEnd(m.c, s: s));
+            impls[s.label] = span(path, a: sources\spanLine(s.source), b: defEnd(m.c, s: s));
         }
     }
-    foreach (meth in corpus\nodes("method")) {
-        final name = corpus\buzzName(meth.attrs["buzz"] ?? "");
+    foreach (meth in sources\nodes("method")) {
+        final name = sources\buzzName(meth.attrs["buzz"] ?? "");
         final module = meth.id.sub(7, len: (meth.id.indexOf(".") ?? 7) - 7);
         if (name == "") {
             continue;
         }
-        final section = corpus\sectionSpan(m.c, path: pages["module:{module}"] ?? "", label: name, level: 3);
+        final section = sources\sectionSpan(m.c, path: pages["module:{module}"] ?? "", label: name, level: 3);
         final impl = impls[capitalize(module) + capitalize(name)] ?? "";
         m.add("host-module", query: section, doc: impl, held: false);
     }
@@ -201,7 +201,7 @@ fun provenanceLines(provenance: str) > [int] {
 
 // enclosing is the span of the smallest function or method in path around line,
 // capped at maxLines; past the cap, or outside any, a window around line.
-fun enclosing(c: corpus\Corpus, path: str, line: int, maxLines: int) > str !> any {
+fun enclosing(c: sources\Snapshot, path: str, line: int, maxLines: int) > str !> any {
     var best = "";
     var bestLen = maxLines + 1;
     foreach (s in c.symbolsByFile[path] ?? []) {
@@ -209,7 +209,7 @@ fun enclosing(c: corpus\Corpus, path: str, line: int, maxLines: int) > str !> an
         if (kind != "Function" and kind != "Method") {
             continue;
         }
-        final a = corpus\spanLine(s.source);
+        final a = sources\spanLine(s.source);
         final b = std\parseInt(s.attrs["def_end_line"] ?? "") ?? 0;
         if (a <= line and line <= b and b - a < bestLen) {
             best = span(path, a: a, b: b);
@@ -222,14 +222,14 @@ fun enclosing(c: corpus\Corpus, path: str, line: int, maxLines: int) > str !> an
     return window(c, path: path, line: line, before: 3, after: 3);
 }
 
-fun window(c: corpus\Corpus, path: str, line: int, before: int, after: int) > str !> any {
+fun window(c: sources\Snapshot, path: str, line: int, before: int, after: int) > str !> any {
     final n = c.lines(path).len();
     final a = if (line - before < 1) 1 else line - before;
     final b = if (line + after > n) n else line + after;
     return span(path, a: a, b: b);
 }
 
-fun refsByTarget(c: corpus\Corpus) > {str: [magus\KnowledgeEdge]} {
+fun refsByTarget(c: sources\Snapshot) > {str: [magus\KnowledgeEdge]} {
     final by: mut {str: mut [magus\KnowledgeEdge]} = mut {};
     foreach (e in c.refLinks) {
         if (by[e.target] == null) {
@@ -249,7 +249,7 @@ fun refsByTarget(c: corpus\Corpus) > {str: [magus\KnowledgeEdge]} {
 fun bzzDiagnostics(m: Miner, refs: {str: [magus\KnowledgeEdge]}) > void !> any {
     final tests: mut [magus\KnowledgeNode] = mut [];
     foreach (s in m.c.symbols) {
-        final path = corpus\spanPath(s.source);
+        final path = sources\spanPath(s.source);
         if (path.startsWith("libs/gopherbuzz/") and path.endsWith("_test.go") and s.label.startsWith("Test") and s.attrs["symbol_kind"] == "Function") {
             tests.append(s);
         }
@@ -259,7 +259,7 @@ fun bzzDiagnostics(m: Miner, refs: {str: [magus\KnowledgeEdge]}) > void !> any {
             continue;
         }
         var code = "";
-        foreach (q in corpus\quoted(k.attrs["signature"] ?? "")) {
+        foreach (q in sources\quoted(k.attrs["signature"] ?? "")) {
             if (q.startsWith("BZZ")) {
                 code = q;
             }
@@ -268,15 +268,15 @@ fun bzzDiagnostics(m: Miner, refs: {str: [magus\KnowledgeEdge]}) > void !> any {
         if (code == "" or !m.c.has(page)) {
             continue;
         }
-        final hs = corpus\headings(m.c, path: page);
+        final hs = sources\headings(m.c, path: page);
         if (hs.len() == 0) {
             continue;
         }
-        final lead = span(page, a: hs[0].line, b: corpus\sectionEnd(m.c, path: page, hs: hs, h: hs[0], lead: true));
+        final lead = span(page, a: hs[0].line, b: sources\sectionEnd(m.c, path: page, hs: hs, h: hs[0], lead: true));
         foreach (t in tests) {
             if (t.label.indexOf(k.label) != null or (t.attrs["doc"] ?? "").indexOf(code) != null) {
-                final path = corpus\spanPath(t.source);
-                m.add("bzz-diagnostic", query: lead, doc: span(path, a: corpus\spanLine(t.source), b: defEnd(m.c, s: t)), held: false);
+                final path = sources\spanPath(t.source);
+                m.add("bzz-diagnostic", query: lead, doc: span(path, a: sources\spanLine(t.source), b: defEnd(m.c, s: t)), held: false);
             }
         }
         foreach (e in refs[k.id] ?? []) {
@@ -307,7 +307,7 @@ fun builtins(m: Miner) > void !> any {
         if (dispatch[s.label] == null or s.attrs["symbol_kind"] != "Function") {
             continue;
         }
-        final a = corpus\spanLine(s.source);
+        final a = sources\spanLine(s.source);
         final b = defEnd(m.c, s: s);
         for (var n = a; n <= b; n = n + 1) {
             final head = m.c.line(path, n: n);
@@ -326,8 +326,8 @@ fun builtins(m: Miner) > void !> any {
 }
 
 // Fixtures that exist to pin upstream-only constructs (match, explicit generics) stay
-// in the corpus but never pair: a table taught them would rank syntax gopherbuzz rejects.
-fun upstreamOnly(c: corpus\Corpus, path: str) > bool !> any {
+// in the sources but never pair: a table taught them would rank syntax gopherbuzz rejects.
+fun upstreamOnly(c: sources\Snapshot, path: str) > bool !> any {
     if (fs\basename(path).indexOf("match") != null) {
         return true;
     }
@@ -341,11 +341,11 @@ fun upstreamOnly(c: corpus\Corpus, path: str) > bool !> any {
 
 fun gopherbuzzTests(m: Miner) > void !> any {
     foreach (s in m.c.symbols) {
-        final path = corpus\spanPath(s.source);
+        final path = sources\spanPath(s.source);
         if (!path.startsWith("libs/gopherbuzz/") or !path.endsWith("_test.go") or !s.label.startsWith("Test") or s.attrs["symbol_kind"] != "Function") {
             continue;
         }
-        final line = corpus\spanLine(s.source);
+        final line = sources\spanLine(s.source);
         final end = defEnd(m.c, s: s);
         if (end - 1 > line) {
             m.add("gopherbuzz-test", query: span(path, a: line, b: line), doc: span(path, a: line + 1, b: end - 1), held: false);
@@ -388,21 +388,21 @@ fun spellOps(m: Miner) > void !> any {
     final pages = documentedBy("spell");
     final defs: mut {str: str} = mut {};
     foreach (s in m.c.symbols) {
-        final path = corpus\spanPath(s.source);
+        final path = sources\spanPath(s.source);
         if (s.attrs["language"] == "buzz" and s.attrs["symbol_kind"] == "Function" and path.startsWith("spells/") and !path.startsWith("spells/examples/")) {
             final key = "{fs\dirname(path)}/{s.label}";
             if (defs[key] == null) {
-                defs[key] = span(path, a: corpus\spanLine(s.source), b: defEnd(m.c, s: s));
+                defs[key] = span(path, a: sources\spanLine(s.source), b: defEnd(m.c, s: s));
             }
         }
     }
-    foreach (op in corpus\nodes("op")) {
+    foreach (op in sources\nodes("op")) {
         final parts = op.id.split(":");
         if (parts.len() < 3) {
             continue;
         }
         final spell = parts[1];
-        final section = corpus\sectionSpan(m.c, path: pages["spell:{spell}"] ?? "", label: op.label, level: 0);
+        final section = sources\sectionSpan(m.c, path: pages["spell:{spell}"] ?? "", label: op.label, level: 0);
         foreach (k, v in defs) {
             if (k.endsWith("/{camel(op.label)}") and (k.indexOf("/{spell}/") != null or k.startsWith("spells/{spell}"))) {
                 m.add("spell-op", query: section, doc: v, held: false);
@@ -422,11 +422,11 @@ fun buzzScipRefs(m: Miner, refs: {str: [magus\KnowledgeEdge]}) > void !> any {
         if (s.attrs["language"] != "buzz" or buzzDeclKinds[s.attrs["symbol_kind"] ?? ""] == null) {
             continue;
         }
-        final path = corpus\spanPath(s.source);
+        final path = sources\spanPath(s.source);
         if (!m.c.has(path) or m.c.isGenerated(path)) {
             continue;
         }
-        final a = corpus\spanLine(s.source);
+        final a = sources\spanLine(s.source);
         final b = defEnd(m.c, s: s);
         final firsts: mut [str] = mut [];
         final rest: mut [str] = mut [];
@@ -463,14 +463,14 @@ fun buzzScipRefs(m: Miner, refs: {str: [magus\KnowledgeEdge]}) > void !> any {
 fun figureApi(m: Miner) > void !> any {
     final path = "libs/figure/figure.buzz";
     final page = "docs/reference/buzz/figure.md";
-    foreach (n in corpus\nodes("function")) {
+    foreach (n in sources\nodes("function")) {
         if (!n.id.startsWith("function:{path}:") or n.attrs["exported"] != "true" or !m.c.has(path)) {
             continue;
         }
-        final line = corpus\spanLine(n.source);
-        final top = corpus\commentAbove(m.c, path: path, line: line);
-        final decl = span(path, a: if (top == 0) line else top, b: corpus\blockEnd(m.c, path: path, line: line));
-        m.add("figure-api", query: corpus\sectionSpan(m.c, path: page, label: n.label, level: 3), doc: decl, held: false);
+        final line = sources\spanLine(n.source);
+        final top = sources\commentAbove(m.c, path: path, line: line);
+        final decl = span(path, a: if (top == 0) line else top, b: sources\blockEnd(m.c, path: path, line: line));
+        m.add("figure-api", query: sources\sectionSpan(m.c, path: page, label: n.label, level: 3), doc: decl, held: false);
     }
 }
 
@@ -496,15 +496,15 @@ fun attrValues(svg: str, attr: str) > [str] {
         found.append(unescape(parts[i].sub(0, len: parts[i].indexOf("\"") ?? 0)));
         i = i + 1;
     }
-    return corpus\uniqueSorted(found);
+    return sources\uniqueSorted(found);
 }
 
 // figures reads each drawn figure's claim off its light SVG: the title, the desc, the
 // dirs its boxes anchor (kept only when the graph holds that dir) and the docs
 // sections a <!--diagram:ID--> marker embeds it in.
-export fun figures(c: corpus\Corpus) > [{str: any}] !> any {
+export fun figures(c: sources\Snapshot) > [{str: any}] !> any {
     final dirs: mut {str: bool} = mut {};
-    foreach (d in corpus\nodes("dir")) {
+    foreach (d in sources\nodes("dir")) {
         dirs[d.id.sub(4, len: d.id.len() - 4)] = true;
     }
     final markers: mut {str: mut [str]} = mut {};
@@ -512,13 +512,13 @@ export fun figures(c: corpus\Corpus) > [{str: any}] !> any {
         if (f.language != "markdown" or !f.path.startsWith("docs/")) {
             continue;
         }
-        final hs = corpus\headings(c, path: f.path);
+        final hs = sources\headings(c, path: f.path);
         foreach (i, l in c.lines(f.path)) {
             final id = between(l, open: "<!--diagram:", close: "-->");
             if (id == "") {
                 continue;
             }
-            var owner: corpus\Heading? = null;
+            var owner: sources\Heading? = null;
             foreach (h in hs) {
                 if (h.line <= i + 1) {
                     owner = h;
@@ -528,7 +528,7 @@ export fun figures(c: corpus\Corpus) > [{str: any}] !> any {
                 if (markers[id] == null) {
                     markers[id] = mut [];
                 }
-                markers[id]!.append(span(f.path, a: h.line, b: corpus\sectionEnd(c, path: f.path, hs: hs, h: h, lead: true)));
+                markers[id]!.append(span(f.path, a: h.line, b: sources\sectionEnd(c, path: f.path, hs: hs, h: h, lead: true)));
             }
         }
     }
@@ -559,7 +559,7 @@ export fun figures(c: corpus\Corpus) > [{str: any}] !> any {
         final script = "docs/site/diagrams/{id}.buzz";
         foreach (s in c.symbolsByFile[script] ?? []) {
             if (builder == "" and s.attrs["symbol_kind"] == "Function" and (s.attrs["signature"] ?? "").indexOf("> figure\\Figure") != null) {
-                builder = span(script, a: corpus\spanLine(s.source), b: defEnd(c, s: s));
+                builder = span(script, a: sources\spanLine(s.source), b: defEnd(c, s: s));
             }
         }
         found.append({
@@ -570,7 +570,7 @@ export fun figures(c: corpus\Corpus) > [{str: any}] !> any {
             "desc": unescape(between(svg, open: "<desc id=\"{id}-desc\">", close: "</desc>")),
             "nodes": anchors,
             "externals": externals,
-            "sections": corpus\uniqueSorted(markers[id] ?? []),
+            "sections": sources\uniqueSorted(markers[id] ?? []),
             "fold": holdout\figureFold(id),
         });
     }
@@ -585,13 +585,13 @@ fun figurePairs(m: Miner, figs: [{str: any}]) > void !> any {
         if (s.attrs["language"] != "go" or s.attrs["symbol_kind"] != "Package") {
             continue;
         }
-        final path = corpus\spanPath(s.source);
+        final path = sources\spanPath(s.source);
         final dir = fs\dirname(path);
         if (packageDocs[dir] != null or !m.c.has(path) or path.endsWith("_test.go")) {
             continue;
         }
-        final line = corpus\spanLine(s.source);
-        final top = corpus\commentAbove(m.c, path: path, line: line);
+        final line = sources\spanLine(s.source);
+        final top = sources\commentAbove(m.c, path: path, line: line);
         if (top > 0) {
             packageDocs[dir] = span(path, a: top, b: line - 1);
         }
@@ -616,7 +616,7 @@ fun figurePairs(m: Miner, figs: [{str: any}]) > void !> any {
 
 // write mines every pair source into target, sorted by source, query and doc, and
 // returns the count per source and split.
-export fun write(c: corpus\Corpus, figs: [{str: any}], target: str) > {str: int} !> any {
+export fun write(c: sources\Snapshot, figs: [{str: any}], target: str) > {str: int} !> any {
     final m = mut Miner{c = c, pairs = mut [], seen = mut {}};
     final refs = refsByTarget(c);
     goDocDecl(m);
@@ -642,7 +642,7 @@ export fun write(c: corpus\Corpus, figs: [{str: any}], target: str) > {str: int}
     final lines: mut [str] = mut [];
     final counts: mut {str: int} = mut {};
     foreach (p in sorted) {
-        final split = corpus\splitOf(p.holdout);
+        final split = sources\splitOf(p.holdout);
         lines.append(json\stringify({"source": p.source, "query_ref": p.query, "doc_ref": p.doc, "split": split}));
         final key = "{p.source}/{split}";
         counts[key] = (counts[key] ?? 0) + 1;

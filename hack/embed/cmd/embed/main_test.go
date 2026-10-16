@@ -62,7 +62,7 @@ func TestReadBatch(t *testing.T) {
 
 func TestRecord(t *testing.T) {
 	cache := t.TempDir()
-	texts := filepath.Join(cache, "corpus", "texts.jsonl")
+	texts := filepath.Join(cache, "training", "texts.jsonl")
 	require.NoError(t, os.MkdirAll(filepath.Dir(texts), 0o755))
 	require.NoError(t, os.WriteFile(texts, []byte(`{"id":"a","text":"x"}`+"\n"+`{"id":"b","text":"y"}`+"\n"+`{"id":"c","text":"z"}`+"\n"), 0o644))
 	digest, err := teacher.FileSHA256(texts)
@@ -85,7 +85,7 @@ func TestRecord(t *testing.T) {
 	require.Len(t, lines, 1)
 	require.Equal(t, runLine{
 		Kind: "teacher", Run: spec.Key(), Teacher: "M", Revision: "r1", TextsSHA256: digest,
-		TextsFile: "corpus/texts.jsonl", MaxLen: 256, ShardSize: 2, Shards: 1, Texts: 3, Rows: 2,
+		TextsFile: "training/texts.jsonl", MaxLen: 256, ShardSize: 2, Shards: 1, Texts: 3, Rows: 2,
 		Tokens: 10, Seconds: 1.5, Manifest: "teacher/M/" + spec.Key() + "/manifest.jsonl",
 		ManifestSHA256: lines[0].ManifestSHA256,
 	}, lines[0])

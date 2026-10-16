@@ -16,7 +16,7 @@ import (
 
 func testProvenance() textembed.Provenance {
 	return textembed.Provenance{
-		Teacher: "toy", TeacherRevision: "r1", CorpusDigest: "c", PairsDigest: "p",
+		Teacher: "toy", TeacherRevision: "r1", TextsDigest: "c", PairsDigest: "p",
 		Pipeline: "test", Run: "run-1", GOARCH: "test", Seed: 7,
 	}
 }

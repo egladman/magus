@@ -7,7 +7,7 @@ import (
 )
 
 // fileIndex writes ix to a file and reads it back, so Search reads rows with pread.
-func fileIndex(b *testing.B, c corpus, ix *Index) *Index {
+func fileIndex(b *testing.B, c docSet, ix *Index) *Index {
 	b.Helper()
 	path := filepath.Join(b.TempDir(), "vectors.idx")
 	if err := os.WriteFile(path, writeIndex(b, ix), 0o600); err != nil {
@@ -29,10 +29,10 @@ func fileIndex(b *testing.B, c corpus, ix *Index) *Index {
 	return back
 }
 
-// BenchmarkSearch runs the big corpus's queries in turn: about 96k docs of 256 dims,
+// BenchmarkSearch runs the big doc set's queries in turn: about 96k docs of 256 dims,
 // rows in memory and in a file in the page cache.
 func BenchmarkSearch(b *testing.B) {
-	c, mem := bigCorpus()
+	c, mem := bigDocSet()
 	file := fileIndex(b, c, mem)
 	for _, src := range []struct {
 		name string
@@ -67,7 +67,7 @@ func BenchmarkSearch(b *testing.B) {
 }
 
 func BenchmarkReadIndex(b *testing.B) {
-	c, mem := bigCorpus()
+	c, mem := bigDocSet()
 	path := filepath.Join(b.TempDir(), "vectors.idx")
 	if err := os.WriteFile(path, writeIndex(b, mem), 0o600); err != nil {
 		b.Fatal(err)

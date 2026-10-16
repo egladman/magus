@@ -19,7 +19,7 @@ import (
 
 // tableFormat is the version EncodeTable stamps and ReadTable requires. Bump it on any
 // change to the layout or the header.
-const tableFormat = 1
+const tableFormat = 2
 
 var tableMagic = [4]byte{'M', 'S', 'E', 'T'}
 
@@ -73,7 +73,7 @@ type Table struct {
 type Provenance struct {
 	Format                         int
 	Teacher, TeacherRevision       string
-	CorpusDigest, PairsDigest      string
+	TextsDigest, PairsDigest       string
 	TokenizerDigest, Pipeline, Run string
 	GOARCH                         string
 	Seed                           uint64
@@ -94,7 +94,7 @@ type tableHeader struct {
 	Tokens          int    `json:"tokens"`
 	Teacher         string `json:"teacher"`
 	TeacherRevision string `json:"teacher_revision"`
-	CorpusDigest    string `json:"corpus_digest"`
+	TextsDigest     string `json:"texts_digest"`
 	PairsDigest     string `json:"pairs_digest"`
 	TokenizerDigest string `json:"tokenizer_digest"`
 	Pipeline        string `json:"pipeline"`
@@ -108,7 +108,7 @@ func (h tableHeader) provenance() Provenance {
 		Format:          tableFormat,
 		Teacher:         h.Teacher,
 		TeacherRevision: h.TeacherRevision,
-		CorpusDigest:    h.CorpusDigest,
+		TextsDigest:     h.TextsDigest,
 		PairsDigest:     h.PairsDigest,
 		TokenizerDigest: h.TokenizerDigest,
 		Pipeline:        h.Pipeline,
@@ -122,7 +122,7 @@ func (p Provenance) check() error {
 	for _, f := range []struct{ name, value string }{
 		{"teacher", p.Teacher},
 		{"teacher_revision", p.TeacherRevision},
-		{"corpus_digest", p.CorpusDigest},
+		{"texts_digest", p.TextsDigest},
 		{"pairs_digest", p.PairsDigest},
 		{"tokenizer_digest", p.TokenizerDigest},
 		{"pipeline", p.Pipeline},
@@ -211,7 +211,7 @@ func (spec TableSpec) header() ([]byte, error) {
 		Tokens:          n,
 		Teacher:         prov.Teacher,
 		TeacherRevision: prov.TeacherRevision,
-		CorpusDigest:    prov.CorpusDigest,
+		TextsDigest:     prov.TextsDigest,
 		PairsDigest:     prov.PairsDigest,
 		TokenizerDigest: prov.TokenizerDigest,
 		Pipeline:        prov.Pipeline,

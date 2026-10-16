@@ -36,7 +36,7 @@ func readIndexBytes(t testing.TB, data []byte, tbl *Table) *Index {
 }
 
 func TestIndexRoundTrip(t *testing.T) {
-	c, ix := smallCorpus(t)
+	c, ix := smallDocSet(t)
 	data := writeIndex(t, ix)
 	back := readIndexBytes(t, data, c.table)
 	if back.Len() != ix.Len() || back.Len() != len(c.docs) {
@@ -56,7 +56,7 @@ func TestIndexRoundTrip(t *testing.T) {
 }
 
 func TestIndexNoVector(t *testing.T) {
-	c, _ := smallCorpus(t)
+	c, _ := smallDocSet(t)
 	ix := NewIndex(c.table, [][]Field{c.docs[0], {{Tokens: []string{"zzzzzzzzzzzz"}, Weight: 1}}, nil})
 	if ix.invNorm[1] != 0 || ix.invNorm[2] != 0 || ix.invNorm[0] == 0 {
 		t.Errorf("InvNorms = %v, want only doc 0's set", ix.invNorm)
@@ -66,13 +66,13 @@ func TestIndexNoVector(t *testing.T) {
 	}
 }
 
-// TestIndexGolden pins the bytes WriteTo writes for the small corpus. Embed and
+// TestIndexGolden pins the bytes WriteTo writes for the small doc set. Embed and
 // WriteTo use no float and little-endian integers, so they hold on amd64 and arm64.
 func TestIndexGolden(t *testing.T) {
-	_, ix := smallCorpus(t)
+	_, ix := smallDocSet(t)
 	data := writeIndex(t, ix)
 	sum := sha256.Sum256(data)
-	if got, want := hex.EncodeToString(sum[:]), "4aafb4d99649986c2f69584ad93461e75c01a0cb6df000f9ae9d9754a369b1dc"; got != want {
+	if got, want := hex.EncodeToString(sum[:]), "62a94011377d578fb3b84dcd317b8ea500750c885071702b6d389e99802b22a6"; got != want {
 		t.Errorf("index digest = %q, want %q", got, want)
 	}
 }
@@ -101,7 +101,7 @@ func resignIndex(format uint64, hdr, head, rows []byte) []byte {
 }
 
 func TestIndexReadRefuses(t *testing.T) {
-	c, ix := smallCorpus(t)
+	c, ix := smallDocSet(t)
 	data := writeIndex(t, ix)
 	hdr, head, rows := indexLayout(data, ix.Len(), 128)
 	var h indexHeader
@@ -123,7 +123,7 @@ func TestIndexReadRefuses(t *testing.T) {
 	noVector := clone(head)
 	// Doc 96 holds only an out-of-vocabulary token; its code starts after every InvNorm.
 	noVector[4*ix.Len()+8*2*(noVectorEvery-1)] = 1
-	other := newCorpus(499, 1, 1, 128).table
+	other := newDocSet(499, 1, 1, 128).table
 	if other.Digest() == c.table.Digest() {
 		t.Fatal("the other table is the same table")
 	}
@@ -171,7 +171,7 @@ func withHeaderJSON(t *testing.T, hdr, head, rows []byte) []byte {
 }
 
 func TestIndexReadRefusesEveryTruncation(t *testing.T) {
-	c, _ := smallCorpus(t)
+	c, _ := smallDocSet(t)
 	data := writeIndex(t, NewIndex(c.table, c.docs[:3]))
 	for n := range len(data) {
 		if _, err := ReadIndex(bytes.NewReader(data[:n]), int64(n), c.table); err == nil {
@@ -185,7 +185,7 @@ type errReader struct{}
 func (errReader) ReadAt([]byte, int64) (int, error) { return 0, errWrite }
 
 func TestIndexReadErrors(t *testing.T) {
-	c, ix := smallCorpus(t)
+	c, ix := smallDocSet(t)
 	data := writeIndex(t, ix)
 	// A size larger than the reader holds is a file truncated after its size was read.
 	if _, err := ReadIndex(bytes.NewReader(data[:100]), int64(len(data)), c.table); err == nil || !strings.Contains(err.Error(), "truncated index") {
@@ -200,7 +200,7 @@ func TestIndexReadErrors(t *testing.T) {
 }
 
 func TestIndexWriteError(t *testing.T) {
-	_, ix := smallCorpus(t)
+	_, ix := smallDocSet(t)
 	if _, err := ix.WriteTo(failingWriter{}); !errors.Is(err, errWrite) {
 		t.Errorf("WriteTo error = %v, want the writer's", err)
 	}

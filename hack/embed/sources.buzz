@@ -6,7 +6,7 @@ import "crypto";
 import "encoding/json";
 import "holdout";
 
-export object CorpusFile {
+export object SourceFile {
     path: str,
     slice: str,
     language: str,
@@ -16,12 +16,12 @@ export object CorpusFile {
     holdout: bool,
 }
 
-// Corpus is the tracked tree at one commit plus the graph slices every miner reads.
+// Snapshot is the tracked tree at one commit plus the graph slices every miner reads.
 // lines caches file reads; spans index into them 1-based.
-export object Corpus {
+export object Snapshot {
     root: str,
-    files: [CorpusFile],
-    byPath: {str: CorpusFile},
+    files: [SourceFile],
+    byPath: {str: SourceFile},
     symbols: [magus\KnowledgeNode],
     symbolsByFile: {str: [magus\KnowledgeNode]},
     refLinks: [magus\KnowledgeEdge],
@@ -91,7 +91,7 @@ fun inDotDir(path: str) > bool {
 
 fun trackedPaths() > [str] !> any {
     if (vcs\name() != "git") {
-        throw "corpus: lists the tree with git ls-files; this checkout is {vcs\name()}";
+        throw "sources: lists the tree with git ls-files; this checkout is {vcs\name()}";
     }
     final listing = vcs\cmd(["-c", "core.quotepath=off", "ls-files", "--full-name", "--", ":/"], opts: {"quiet": true}).stdout;
     final keep: mut [str] = mut [];
@@ -126,7 +126,7 @@ export fun nodes(kind: str) > [magus\KnowledgeNode] !> any {
 
 // load reads the tracked tree and the symbol index. It refuses a partial index: a
 // project the index could not read would silently drop its pairs.
-export fun load() > Corpus !> any {
+export fun load() > Snapshot !> any {
     final root = vcs\root();
     final paths = trackedPaths();
     final described = magus\describe.file(paths);
@@ -134,8 +134,8 @@ export fun load() > Corpus !> any {
     foreach (d in described.files) {
         generated[d.path] = d.role == "output";
     }
-    final files: mut [CorpusFile] = mut [];
-    final byPath: mut {str: CorpusFile} = mut {};
+    final files: mut [SourceFile] = mut [];
+    final byPath: mut {str: SourceFile} = mut {};
     foreach (p in paths) {
         final abs = fs\join(root, name: p);
         final size = fs\size(abs);
@@ -143,7 +143,7 @@ export fun load() > Corpus !> any {
             continue;
         }
         final language = languages[fs\ext(p)] ?? "";
-        final f = CorpusFile{
+        final f = SourceFile{
             path = p,
             slice = sliceOf(p, language: language),
             language = language,
@@ -158,7 +158,7 @@ export fun load() > Corpus !> any {
 
     final digest = magus\symbolIndexDigest();
     if (!digest.indexed or digest.gaps.len() > 0) {
-        throw "corpus: the symbol index is missing or partial ({digest.gaps.len()} gaps); run `magus graph build`";
+        throw "sources: the symbol index is missing or partial ({digest.gaps.len()} gaps); run `magus graph build`";
     }
     final q = everyNode("symbol");
     final symbols: mut [magus\KnowledgeNode] = mut [];
@@ -186,7 +186,7 @@ export fun load() > Corpus !> any {
     foreach (k, v in byFile) {
         frozen[k] = v;
     }
-    return Corpus{
+    return Snapshot{
         root = root,
         files = files,
         byPath = byPath,
@@ -239,7 +239,7 @@ fun indentOf(line: str) > int {
 // blockEnd is the line closing the brace block a declaration opens at line: the
 // first later line at the declaration's indent that starts with "}". A declaration
 // that opens no block ends where it starts.
-export fun blockEnd(c: Corpus, path: str, line: int) > int !> any {
+export fun blockEnd(c: Snapshot, path: str, line: int) > int !> any {
     final ls = c.lines(path);
     final head = ls[line - 1];
     final trimmed = head.trim();
@@ -260,7 +260,7 @@ export fun blockEnd(c: Corpus, path: str, line: int) > int !> any {
 
 // commentAbove is the first line of the // block that ends right above line, or 0
 // when the line above is not a comment.
-export fun commentAbove(c: Corpus, path: str, line: int) > int !> any {
+export fun commentAbove(c: Snapshot, path: str, line: int) > int !> any {
     var n = line - 1;
     while (n >= 1 and c.line(path, n: n).trim().startsWith("//")) {
         n = n - 1;
@@ -276,7 +276,7 @@ export object Heading {
 
 // headings lists a Markdown file's ATX headings outside fenced code, in order, with
 // trailing #s and backticks dropped from the text the graph labels them by.
-export fun headings(c: Corpus, path: str) > [Heading] !> any {
+export fun headings(c: Snapshot, path: str) > [Heading] !> any {
     final found: mut [Heading] = mut [];
     var fenced = false;
     foreach (i, l in c.lines(path)) {
@@ -306,7 +306,7 @@ export fun headings(c: Corpus, path: str) > [Heading] !> any {
 
 // sectionEnd is the last non-blank line of the section heading h opens: up to the next
 // heading at h's level or above, or to the next heading at all when lead is set.
-export fun sectionEnd(c: Corpus, path: str, hs: [Heading], h: Heading, lead: bool) > int !> any {
+export fun sectionEnd(c: Snapshot, path: str, hs: [Heading], h: Heading, lead: bool) > int !> any {
     var end = c.lines(path).len();
     foreach (o in hs) {
         if (o.line > h.line and (lead or o.level <= h.level)) {
@@ -321,7 +321,7 @@ export fun sectionEnd(c: Corpus, path: str, hs: [Heading], h: Heading, lead: boo
 }
 
 // sectionSpan is the "path:a-b" span of the heading labelled label at level, or "".
-export fun sectionSpan(c: Corpus, path: str, label: str, level: int) > str !> any {
+export fun sectionSpan(c: Snapshot, path: str, label: str, level: int) > str !> any {
     if (!c.has(path)) {
         return "";
     }
@@ -334,9 +334,9 @@ export fun sectionSpan(c: Corpus, path: str, label: str, level: int) > str !> an
     return "";
 }
 
-// The forced vocabulary: sets every table must carry whatever their corpus counts.
+// The forced vocabulary: sets every table must carry whatever the source files' counts say.
 // Each names the declaration it was read from.
-fun literalSet(c: Corpus, name: str, file: str) > {str: any} !> any {
+fun literalSet(c: Snapshot, name: str, file: str) > {str: any} !> any {
     foreach (s in c.symbolsByFile[file] ?? []) {
         if (s.label == name and s.attrs["symbol_kind"] == "Variable") {
             final start = spanLine(s.source);
@@ -354,7 +354,7 @@ fun literalSet(c: Corpus, name: str, file: str) > {str: any} !> any {
             return {"ref": "{file}:{start}-{end}", "symbol": s.id, "tokens": uniqueSorted(tokens)};
         }
     }
-    throw "corpus: {file} declares no variable {name}; the forced set lost its source of truth";
+    throw "sources: {file} declares no variable {name}; the forced set lost its source of truth";
 }
 
 fun withField(key: str, value: str, record: {str: any}) > {str: any} {
@@ -397,7 +397,7 @@ export fun buzzName(signature: str) > str {
     return signature.sub(slash + 1, len: paren - slash - 1);
 }
 
-fun forcedSets(c: Corpus) > [{str: any}] !> any {
+fun forcedSets(c: Snapshot) > [{str: any}] !> any {
     final sets: mut [{str: any}] = mut [];
     final keywords = literalSet(c, name: "keywords", file: "libs/gopherbuzz/token/token.go");
     sets.append(withField("set", value: "buzz-keywords", record: keywords));
@@ -503,10 +503,10 @@ fun inputs() > [{str: any}] {
     return found;
 }
 
-// write emits gen/corpus.jsonl: the pinned downloads, the forced vocabulary sets, the
-// figures and every corpus file, each line tagged by kind and sorted within it. A
+// write emits gen/sources.jsonl: the pinned downloads, the forced vocabulary sets, the
+// figures and every source file, each line tagged by kind and sorted within it. A
 // file's sha256 pins the blob every pairs.jsonl span indexes into.
-export fun write(c: Corpus, figures: [{str: any}], target: str) > {str: int} !> any {
+export fun write(c: Snapshot, figures: [{str: any}], target: str) > {str: int} !> any {
     final lines: mut [str] = mut [];
     foreach (pin in inputs()) {
         lines.append(json\stringify(tagged("input", record: pin)));
