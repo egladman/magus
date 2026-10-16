@@ -1,9 +1,11 @@
 # Consuming magus as a Go library
 
-This skill's reader has never run `magus` and does not know its subcommands. They
+{{if .Full}}This skill's reader has never run `magus` and does not know its subcommands. They
 found `github.com/egladman/magus` on pkg.go.dev or in an import line. They want to
 call it from their own Go program. Ground every answer in the actual exported API,
-never in what the CLI does, which this reader cannot see:
+never in what the CLI does, which this reader cannot see:{{else}}The reader has never run `magus`; they found `github.com/egladman/magus` on
+pkg.go.dev and want to call it from Go. Ground every answer in the exported API,
+never the CLI:{{end}}
 
 - `magus.go`, `register.go`, `run.go`, `judge.go`, `knowledge.go`, `describe.go`
 - `types/repository.go`, `types/describe.go`
@@ -20,9 +22,9 @@ tagged versions the requires name. An older root tag may still require them at `
 and fail as `unknown revision libs/gopherbuzz/v0.0.0`{{end}}.
 
 Say `go get` succeeds only for a version you ran it against, and say how: a scratch
-module, `go get github.com/egladman/magus@<version>`, then `go build ./...`. A worked
+module, `go get github.com/egladman/magus@<version>`, then `go build ./...`{{if .Full}}. A worked
 example that compiles for you inside the module but fails for them is worse than
-admitting you did not check{{if .Full}}. `go install .../cmd/magus@<version>` refuses the
+admitting you did not check. `go install .../cmd/magus@<version>` refuses the
 root module at any version, since its `go.mod` carries replace directives{{end}}.
 
 ## Entry points
@@ -32,14 +34,14 @@ root module at any version, since its `go.mod` carries replace directives{{end}}
 | `magus.Open(ctx, root, opts...)` | `*magus.Magus` | builds one | the caller will `Run` targets or read cached results |
 | `magus.Inspect(ctx, root, opts...)` | `types.WorkspaceRepository` | none | pure introspection: list/describe/classify, never execute |
 
-Both discover the root's projects and evaluate magusfiles the same way. `Open` calls
-the same `load()` as `Inspect`, then also opens the on-disk cache.{{if .Full}} The only
+{{if .Full}}Both discover the root's projects and evaluate magusfiles the same way. `Open` calls
+the same `load()` as `Inspect`, then also opens the on-disk cache. The only
 difference is whether a cache is built, not what is discovered. `Inspect` returning the narrow
 `types.WorkspaceRepository` interface rather than the concrete `*Magus` is
 itself a hint: an introspection-only caller should code against the
 interface, and a caller who later needs `Run` should switch to `Open` and get
-the concrete type, not type-assert their way there.{{else}} A caller who later needs
-`Run` switches to `Open`; it never type-asserts its way there.{{end}}
+the concrete type, not type-assert their way there.{{else}}A caller who later needs
+`Run` switches to `Open`, never type-asserts.{{end}}
 
 Both require `magus.WithSpawnRule(magus.TierCeiling)` (it has no default), and
 a workspace with a magusfile needs `import _ "github.com/egladman/magus/buzzengine"`.
@@ -55,8 +57,8 @@ does; an empty `dir` is an error, not the working directory.
 | `std.MagusPutJob`, `MagusQuery`, `MagusRefs`, `MagusTrailRead`, ... | the Buzz host modules' Go doors, with typed options (`types.JobPut`, `types.KnowledgeQueryOptions`, ...); `std` is in the Go API lock |
 
 The lease a call acts under rides `ctx` (`types.WithJobLease`). The SDK never retries,
-re-grades or routes around a refusal. It has no agent loop: it answers what a loop asks
-and never decides what runs next.
+re-grades or routes around a refusal.{{if .Full}} It has no agent loop: it answers what a loop asks
+and never decides what runs next.{{end}}
 
 ## The interface hierarchy: depend on the narrowest role
 
@@ -107,7 +109,7 @@ DIFFERENT representations:
   workspace-rooted globs, joined against the project path with magusfile globs
   folded in.
 
-Reading one where the other was meant silently mismatches every glob it feeds. The
+{{if .Full}}Reading one where the other was meant silently mismatches every glob it feeds. {{end}}The
 field comment on `ProjectEntry.Sources` in `types/describe.go` is the one place this
 is documented. Read it before writing code that consumes both.
 
@@ -116,9 +118,9 @@ is documented. Read it before writing code that consumes both.
 Every `Inspector` method takes `ctx` first and returns `error` last, the read-only
 `List*` calls included. A cancelled walk returns an error, never a truncated slice.
 
-- `describeCancelled` in `describe.go` names the walk and how far it got
+{{if .Full}}- `describeCancelled` in `describe.go` names the walk and how far it got
   (`"describe projects: cancelled after 2 of 8: context canceled"`).
-- It wraps `ctx.Err()`, so `errors.Is(err, context.Canceled)` and
+{{end}}- The error wraps `ctx.Err()`, so `errors.Is(err, context.Canceled)` and
   `errors.Is(err, context.DeadlineExceeded)` both hold.{{if .Full}}
 - VERIFIED: cancelling before `ListProjects` on a one-project workspace produces
   exactly that message, and `errors.Is` returns true.{{end}}
@@ -165,9 +167,9 @@ before you add a type{{if .Full}}; guess at the pattern instead and you misname 
   (`ProjectsOutput`, `TargetGraphOutput`).
 - `Report` means rebuilt at the render edge from a plain slice the method returned
   (`FileReport`, `CharmReport`).
-- `ListProjects`/`EvaluateProjects` are the deliberate exceptions. They still return
-  their `*Output` type directly, because they carry a real `Workspace` field a
-  `{definition, count, items}` envelope cannot derive.
+- `ListProjects`/`EvaluateProjects` are the deliberate exceptions: they return their
+  `*Output` type directly{{if .Full}}, because they carry a real `Workspace` field a
+  `{definition, count, items}` envelope cannot derive{{end}}.
 
 **Evaluating a magusfile needs the Buzz engine linked.** A program that loads
 magusfiles blank-imports `github.com/egladman/magus/buzzengine`, as `cmd/magus` does.

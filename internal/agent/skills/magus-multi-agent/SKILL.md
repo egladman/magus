@@ -26,9 +26,9 @@ You do not need to be asked to split work{{if .Full}}. "Split this across agents
 several disjoint write sets you can name is another{{else}}: several disjoint write sets
 you can name are reason enough{{end}}.
 
-Fan-out is not inherently expensive{{if .Full}}. What costs is unbounded fan-out:
+{{if .Full}}Fan-out is not inherently expensive. What costs is unbounded fan-out:
 workers that hand work on without a shrinking scope, jobs with no acceptance criteria
-so nobody can say when to stop, and a principal model assigned to mechanical edits. Each of those is a choice made below, not a property of fanning out{{end}}. Say what a round
+so nobody can say when to stop, and a principal model assigned to mechanical edits. Each of those is a choice made below, not a property of fanning out. {{end}}Say what a round
 costs when the user is deciding, and prefer the smallest fan-out that covers the work.
 
 Fan out only after the collision check below REPORTS the jobs disjoint; looking
@@ -120,10 +120,10 @@ A job's `breaks` list names the flags, JSON keys, exported symbols or stored for
 you approved it breaking. A worker that finds a break outside it stops and reports.
 Each unreferenced symbol `{{cmd "job fork"}}` lists in the write paths
 (`deletion_candidates`) or `{{cmd "job wait"}}` reports is finished or deleted. Confirm
-first: the graph cannot see reflection, interface dispatch or outside consumers.
+first{{if .Full}}: the graph cannot see reflection, interface dispatch or outside consumers{{end}}.
 
-Check each declared name with `{{cmd "refs"}}` before forking. A bare name that resolves
-to more than one definition is graded against one of them, silently.
+Check each declared name with `{{cmd "refs"}}` before forking.{{if .Full}} A bare name that resolves
+to more than one definition is graded against one of them, silently.{{end}}
 
 This applies with zero workers. A solo change across several call sites is a one-job
 tree. Skipping the declaration because nothing is forked is the same failure{{if .Full}} without
@@ -218,8 +218,8 @@ re-forked one tier up, not retried at the same one.{{if .Full}} "Only ever spawn
 weaker" was tried and withdrawn, because same-strength offload is legitimate, so this
 is a starting point and not a ceiling.{{end}}
 
-Tiers are the workspace's: a magusfile enum (`magus\job.modelTiers`, shipped as economy,
-standard, principal) maps each to every harness's model alias. `--model` takes a tier or a
+Tiers are the workspace's.{{if .Full}} A magusfile enum (`magus\job.modelTiers`, shipped as economy,
+standard, principal) maps each to every harness's model alias.{{end}} `--model` takes a tier or a
 model.{{if .Full}} The row records tier, rank, source (row, matrix, default) and why, and the guard
 compares a spawn's tier by rank.{{end}} magus never picks a model live: re-fork to change a tier.
 
@@ -269,12 +269,12 @@ magus affected <target> --plan
 ```
 
 For a proposed change whose paths are known but not yet edited, plan those paths
-instead of the current diff:
-
+instead of the current diff (`--stdin --plan`, one repo-relative path per line).
+{{if .Full}}
 ```sh
 printf '%s\n' <repo-relative-path>... | magus affected <target> --stdin --plan
 ```
-
+{{end}}
 Read the JSON fields `count`, `max_parallel`, `source`, and `matrix`.{{if .Full}} A shard is a
 history-balanced execution group, not an edit assignment or proof of write isolation.{{end}}
 Use a shard only as the first partition. If paths are unknown, query the task's symbols,
@@ -315,7 +315,7 @@ ONE WORKTREE PER WORKER wherever a write path touches workspace configuration: a
 project's magusfile, its `magus.yaml`, or a spell source a magusfile imports.
 
 magus READS those files to load the workspace. A half-saved one stops the workspace
-loading for everybody in that checkout at once{{if .Full}}. The rest lose `{{cmd "run"}}`, `{{cmd "ls"}}` and their own tests over an edit they
+loading for everybody in that checkout{{if .Full}} at once. The rest lose `{{cmd "run"}}`, `{{cmd "ls"}}` and their own tests over an edit they
 cannot see. Measured 2026-09-17: three workers
 shared a checkout, one saved the root magusfile mid-edit, and all three were
 stopped for the duration by a file only one of them had ever opened{{end}}.
@@ -377,9 +377,9 @@ job's own criteria, boundary and check, plus what the workspace knows and nobody
 down{{if .Full}}: the projects the write paths reach, the declared
 output globs that land inside them, the paths a sibling job is holding, the build
 inputs and workspace configuration that have one owner, and the projects that
-change alongside the leased ones without declaring a dependency{{end}}. Two renders of one
-row are byte-identical, which hand-typed prompts are not{{if .Full}}: seven of
-them disagreed about a dedup key and every one ended with the gate{{end}}.
+change alongside the leased ones without declaring a dependency{{end}}. {{if .Full}}Two renders of one
+row are byte-identical, which hand-typed prompts are not: seven of
+them disagreed about a dedup key and every one ended with the gate.{{end}}
 
 The guard grades every command a brief presents in a shell fence or a code span. One
 it would deny refuses the spawn{{if .Full}}, since the worker runs a brief's
@@ -404,9 +404,10 @@ End every brief with the step that files the result, as the worker's LAST act be
 it reports back. A brief that leaves it out gets a prose report and a row that never
 moves{{if .Full}}: the store keeps the write paths held, `{{cmd "job wait"}}`
 has nothing to verify, and nobody notices until a sibling is refused over a path
-the finished worker no longer needs{{end}}. The step, with the shape `{{cmd "job exit"}} --schema`
-prints:
-
+the finished worker no longer needs{{end}}. The step: `{{cmd "job exit"}} <job> --stdin` with a record of `schema_version` 2, `job`,
+`changed_paths`, `validation` (`command` and `output_ref`), `descendants` and
+`unresolved_risks`; `{{cmd "job exit"}} --schema` prints the shape.
+{{if .Full}}
 ```sh
 magus job exit <job> --stdin <<'EOF'
 {"schema_version": 2, "job": "<job>",
@@ -416,7 +417,7 @@ magus job exit <job> --stdin <<'EOF'
  "unresolved_risks": ["what is left, or what the worker could not verify"]}
 EOF
 ```
-
+{{end}}
 {{if .Full}}A typed result makes verification mechanical. {{end}}Keep unresolved risks mandatory{{if .Full}}, so a
 mis-scoped worker can say so instead of widening silently{{end}}.
 
@@ -475,18 +476,18 @@ The root never builds. The integrator is a role, never a check: spawned `<parent
    a result that will not decode exits 2. A holder does not verify its own job, or a
    sibling's.
 
-   Then reopen the evidence yourself (`{{cmd "query output"}} <ref>`). Wait proves the ref
+   Then reopen the evidence yourself (`{{cmd "query output"}} <ref>`).{{if .Full}} Wait proves the ref
    names a passing run of this job's own check, never that the work meets the job's
-   GOAL. A worker's prose about its criteria is not that evidence.
+   GOAL.{{end}} A worker's prose about its criteria is not that evidence.
 3. Resolve cross-job API changes centrally; never assign the same seam twice.
 4. Regenerate declared outputs once, after source work converges and before the full
    test run, or a drift test fails for nothing.
 5. Re-run `{{cmd "affected"}} <target> --plan` over the actual diff. If its shape
    invalidates the original partition, stop parallel integration and reconcile.
 6. Read the integrated changeset with `{{cmd "diff"}} --impact` before landing it.
-   It shows reach, other recent editors, a rebuild estimate from recorded run times,
-   advisors and anchored notes. It is context, never a verdict: nothing gates on it. An
-   empty section means nobody could measure it, not that nothing was found.
+   {{if .Full}}It shows reach, other recent editors, a rebuild estimate from recorded run times,
+   advisors and anchored notes. {{end}}It is context, never a verdict: nothing gates on it.{{if .Full}} An
+   empty section means nobody could measure it, not that nothing was found.{{end}}
 7. Validate once per wave, not once per fix:
    - After a failed full run, read it (`{{cmd "query output"}} <ref>`). Rerun only the
      failing tests, with the runner's filter after `--`, until green; `{{skill "run"}}`
