@@ -739,8 +739,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_HISTORY_PATH",
 		Flag:     fieldtype.FlagNames{Long: "history-path"},
 		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_HISTORY_PATH: HistoryPath is the path to the runtime-history JSON used by volatility detection, CI forecaster, graph timing, and bi...",
-		Doc:      "The path to the runtime-history JSON used by volatility detection, CI forecaster, graph timing, and bisect. Defaults to $XDG_STATE_HOME/magus/history/v1.json",
+		Usage:    "MAGUS_HISTORY_PATH: HistoryPath is the path to the runtime-history JSON Lines store used by volatility detection, CI forecaster, graph ti...",
+		Doc:      "The path to the runtime-history JSON Lines store used by volatility detection, CI forecaster, graph timing, and bisect. Defaults to $XDG_STATE_HOME/magus/history/history.jsonl",
 	},
 	{
 		GoPath:   "DryRun",

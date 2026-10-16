@@ -81,7 +81,7 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.IntVar(&cfg.MaxFailures, "max-failures", cfg.MaxFailures, "MAGUS_MAX_FAILURES: MaxFailures bounds how many projects may fail before a run stops starting more.")
 	fs.DurationVar(&cfg.TargetTimeout, "target-timeout", cfg.TargetTimeout, "MAGUS_TARGET_TIMEOUT: TargetTimeout bounds how long any single target may run before magus cancels it.")
 	fs.DurationVar(&cfg.StallTimeout, "stall-timeout", cfg.StallTimeout, "MAGUS_STALL_TIMEOUT: StallTimeout aborts an invocation that is making no progress at all: no target has started, finished, or written a li...")
-	fs.StringVar(&cfg.HistoryPath, "history-path", cfg.HistoryPath, "MAGUS_HISTORY_PATH: HistoryPath is the path to the runtime-history JSON used by volatility detection, CI forecaster, graph timing, and bi...")
+	fs.StringVar(&cfg.HistoryPath, "history-path", cfg.HistoryPath, "MAGUS_HISTORY_PATH: HistoryPath is the path to the runtime-history JSON Lines store used by volatility detection, CI forecaster, graph ti...")
 	fs.BoolVar(&cfg.DryRun, "dry-run", cfg.DryRun, "MAGUS_DRY_RUN: DryRun prints what would run without executing.")
 	fs.BoolVar(&cfg.DryRun, "u", cfg.DryRun, "Short for --dry-run")
 	fs.TextVar(&cfg.Sandbox.Mode, "sandbox", cfg.Sandbox.Mode, "MAGUS_SANDBOX: Mode is off (the default), best-effort (landlock confines each child where the host has it, magus's own binding check...")

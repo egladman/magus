@@ -400,7 +400,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Aborts an invocation that is making no progress at all: no target has started, finished, or written a line of output for this long while every selected project's lock is still held. Zero, the default, uses the built-in 15-minute window; a negative value turns the watchdog off. Config file key: **stall_timeout**.
 
 **MAGUS_HISTORY_PATH**
-: The path to the runtime-history JSON used by volatility detection, CI forecaster, graph timing, and bisect. Defaults to $XDG_STATE_HOME/magus/history/v1.json. Config file key: **history_path**.
+: The path to the runtime-history JSON Lines store used by volatility detection, CI forecaster, graph timing, and bisect. Defaults to $XDG_STATE_HOME/magus/history/history.jsonl. Config file key: **history_path**.
 
 **MAGUS_DRY_RUN**
 : Prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1. Config file key: **dry_run**.
