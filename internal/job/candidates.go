@@ -82,9 +82,9 @@ func deletionLines(candidates []types.UnreferencedEntry) []string {
 		"finish each or delete it; reflection, interface dispatch and consumers outside this workspace are invisible to this list, so confirm before deleting")
 }
 
-// ReferencedOutsideLimit is how many files a text rendering lists before it counts the
+// referencedOutsideLimit is how many files a text rendering lists before it counts the
 // rest.
-const ReferencedOutsideLimit = 12
+const referencedOutsideLimit = 12
 
 const referencedHeading = "referenced outside the write paths: files that use what the write paths define"
 
@@ -185,7 +185,7 @@ func referencedLines(files []ReferencedFile) []string {
 	if len(files) == 0 {
 		return nil
 	}
-	shown := files[:min(len(files), ReferencedOutsideLimit)]
+	shown := files[:min(len(files), referencedOutsideLimit)]
 	lines := make([]string, 0, len(shown)+2)
 	for _, f := range shown {
 		kind := "uses"

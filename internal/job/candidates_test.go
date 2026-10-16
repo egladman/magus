@@ -98,7 +98,7 @@ func TestRenderReferencedOutsideCapsAndSaysWhatToAdd(t *testing.T) {
 	assert.Empty(t, empty.String(), "nothing is written for none")
 
 	files := []ReferencedFile{{File: "a_test.go", Count: 2, Uses: []string{"a.go"}}}
-	for i := range ReferencedOutsideLimit + 1 {
+	for i := range referencedOutsideLimit + 1 {
 		files = append(files, ReferencedFile{File: fmt.Sprintf("f%02d.go", i), Count: 1, Uses: []string{"a.go#Run"}})
 	}
 	var out strings.Builder
