@@ -1075,8 +1075,10 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		row           types.Declaration
 		declared      forkFlags
 		schema, stdin bool
+		flags         *flag.FlagSet
 	)
 	pos, err := cmdParse("job fork", args, func(fs *flag.FlagSet) {
+		flags = fs
 		fs.BoolVar(&schema, "schema", false, "Print the JSON schema a job must satisfy, and exit")
 		fs.BoolVar(&stdin, "stdin", false, "Read one job as JSON on stdin instead of taking it from flags")
 		fs.StringVar(&declared.criteria, "criteria", "", "What this job is for and what done means, as prose; the machine-checkable half is --check, and the goals a --stdin record declares")
@@ -1127,7 +1129,8 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "revision when it names none. A ./magus this checkout runs is copied into it. The")
 			fmt.Fprintln(os.Stderr, "job is taken there and nowhere else, and once it ends magus removes the checkout")
 			fmt.Fprintln(os.Stderr, "if it is clean and every commit in it is on a branch, bookmark, remote or its")
-			fmt.Fprintln(os.Stderr, "base; otherwise it keeps it and records why.")
+			fmt.Fprintln(os.Stderr, "base; otherwise it keeps it and records why. It is the one job flag --stdin")
+			fmt.Fprintln(os.Stderr, "takes, for a record that names no checkout; the record holds the rest.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "There is no --state: this declares a NEW job, and one nobody has taken is")
 			fmt.Fprintln(os.Stderr, string(types.StateDeclared)+". A holder moves its own job with `"+hint.JobExec.String()+"` and `"+hint.JobExit.String()+"`.")
@@ -1147,22 +1150,39 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return nil
 	}
 
+	if declared.checkout != "" {
+		if declared.checkout, err = filepath.Abs(declared.checkout); err != nil {
+			return exit.Usagef("magus job fork: --checkout: %s", err)
+		}
+	}
 	switch {
 	case stdin:
 		if len(pos) > 0 {
 			return exit.Usagef("magus job fork: --stdin reads the id from the record, so %q is one id too many", pos[0])
 		}
+		var dropped []string
+		flags.Visit(func(f *flag.Flag) {
+			if slices.Contains([]string{"criteria", "timeout", "parent", "checkpoint", "write-paths", "deny-paths", "read-paths", "depends-on", "check", "model", "read-only"}, f.Name) {
+				dropped = append(dropped, "--"+f.Name)
+			}
+		})
+		if len(dropped) > 0 {
+			return exit.Usagef("magus job fork: --stdin takes the job from the record, so %s would be ignored: put it in the record (`%s` prints its fields)",
+				strings.Join(dropped, ", "), hint.JobFork.With("--schema"))
+		}
 		if row, err = job.DecodeDeclaration(os.Stdin); err != nil {
 			return exit.Usagef("magus job fork: %s (`%s` prints the schema it must satisfy)", err, hint.JobFork.With("--schema"))
+		}
+		// --checkout says where the job runs, so it rides beside a record that names none.
+		switch {
+		case row.Checkout == "":
+			row.Checkout = declared.checkout
+		case declared.checkout != "" && filepath.Clean(row.Checkout) != declared.checkout:
+			return exit.Usagef("magus job fork: --checkout %s and the record's checkout %s name two checkouts: give one", declared.checkout, row.Checkout)
 		}
 	case len(pos) != 1:
 		return exit.Usagef("magus job fork: requires exactly one job id, or --stdin with a job on it")
 	default:
-		if declared.checkout != "" {
-			if declared.checkout, err = filepath.Abs(declared.checkout); err != nil {
-				return exit.Usagef("magus job fork: --checkout: %s", err)
-			}
-		}
 		row = declared.row(pos[0])
 		if err := row.Validate(); err != nil {
 			return exit.Usagef("magus job fork: %s", err)

@@ -256,7 +256,7 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 		case rec.Enter != "":
 			return nil, fmt.Errorf("job: the record for %s enters %s, which declares nothing to apply, `%s` records an entry", rec.ID, rec.Enter, hint.JobFork.With("--stdin"))
 		case rec.Checkout != "":
-			return nil, fmt.Errorf("job: the record for %s names checkout %s, which only a fork makes, `%s` makes it", rec.ID, rec.Checkout, hint.JobFork.With(rec.ID, "--checkout", rec.Checkout))
+			return nil, fmt.Errorf("job: the record for %s names checkout %s, which only a fork makes, `%s` fed this record makes it", rec.ID, rec.Checkout, hint.JobFork.With("--stdin"))
 		}
 		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == rec.ID })
 		var prev types.Job

@@ -579,6 +579,48 @@ func TestJobForkResolvesItsCheckpoint(t *testing.T) {
 	assert.Equal(t, []string{"real", head}, []string{rows[0].ID, rows[0].Checkpoint})
 }
 
+// A --stdin record and --checkout combine: the fork makes the checkout the flag names and
+// judges the record against it, so a live job in the forking checkout refuses nothing.
+// The same record without the flag is still refused, and a record naming another checkout
+// is refused rather than one of the two being dropped.
+func TestJobForkFromStdinMakesTheCheckoutTheFlagNames(t *testing.T) {
+	resetWorkspaceMemo(t)
+	repo, cacheDir := execRepoFixture(t, types.Job{
+		ID: "live", State: types.StateRunning, WritePaths: []string{"a.go"},
+		Check: &types.LeaseCheck{Target: "test", Project: "."},
+	})
+	root := repo.Root()
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
+	_, err := store.Update(t.Context(), "live", func(cur *types.Job) { cur.CheckoutRoot = root })
+	require.NoError(t, err)
+	record := func(id, checkout string) string {
+		return fmt.Sprintf(`{"schema_version": %d, "id": %q, "checkout": %q, "write_paths": ["magus.yaml"],`+
+			` "check": {"target": "test", "project": "."}}`, types.JobSchemaVersion, id, checkout)
+	}
+	fork := func(stdin string, args ...string) error {
+		writeStdin(t, stdin)
+		return jobFork(t.Context(), root, append([]string{"--stdin"}, args...))
+	}
+
+	err = fork(record("shared", ""))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "live is live in this checkout")
+
+	own := filepath.Join(t.TempDir(), "own")
+	err = fork(record("elsewhere", filepath.Join(t.TempDir(), "other")), "--checkout", own)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), own)
+
+	captureStdout(t, func() { require.NoError(t, fork(record("own", ""), "--checkout", own)) })
+	rows, err := store.List()
+	require.NoError(t, err)
+	i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == "own" })
+	require.GreaterOrEqual(t, i, 0, "the fork wrote its row")
+	require.NotNil(t, rows[i].Worktree)
+	assert.Equal(t, own, rows[i].Worktree.Root)
+	assert.DirExists(t, own)
+}
+
 // limitHostSpell is a harness whose host waits ten minutes at most on a foreground call.
 const limitHostSpell = `import "magus/spell";
 
