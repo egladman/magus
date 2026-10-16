@@ -302,3 +302,17 @@ func TestAReplayedStepCarriesNoClaim(t *testing.T) {
 	assert.Zero(t, replayed[0].CPUMs)
 	assert.Zero(t, replayed[0].MaxRSSBytes)
 }
+
+// A refusal says how the slots were sized as well as the memory, so a reader knows
+// whether to look at a slots policy, the run history, or the memory claim.
+func TestMachineDeclarationNamesHowSlotsWereSized(t *testing.T) {
+	measured := types.SlotSizing{Source: types.SlotsMeasured, Samples: 4}
+	assert.Equal(t, "it takes 3 slots (measured over 4 runs)",
+		describeMachineDeclaration(types.MachineClaim{Target: "scip", Slots: 3, Sizing: types.MemorySizing{Slots: measured}}))
+	assert.Equal(t, "it claims 2.0 GiB (declared) and takes 1 slot (unmeasured)",
+		describeMachineDeclaration(types.MachineClaim{Target: "test", MemoryMB: 2048, Slots: 1,
+			Sizing: types.MemorySizing{Slots: types.SlotSizing{Source: types.SlotsUnmeasured}}}))
+	assert.Equal(t, "it runs test, which claims 6.0 GiB (measured over 5 runs), and takes 6 slots (for its memory)",
+		describeMachineDeclaration(types.MachineClaim{Target: "ci", DeclaredBy: "test", MemoryMB: 6144, Slots: 6,
+			Sizing: types.MemorySizing{Samples: 5, Slots: types.SlotSizing{Source: types.SlotsForMemory}}}))
+}

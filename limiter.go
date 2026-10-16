@@ -102,8 +102,8 @@ func (m *Magus) hostUsableBytes() int64 {
 }
 
 // sizeClaim sets on step what it claims from both halves of admission: its memory, the
-// target that figure came from and how it was sized, and its slots. It returns the
-// memory's sizing.
+// target that figure came from, its slots, and how each was sized. It returns that
+// sizing.
 //
 // A declaration always wins. Memory folds the target's ctx.needs chain (see
 // types.SizedChainMemory, supplied the workspace's cross-project lookup), each
@@ -125,12 +125,19 @@ func (m *Magus) sizeClaim(step *cache.Step, p *types.Project, target string, siz
 		sizeDeclared = size.memory
 	}
 	c := types.SizedChainMemory(p, target, m.Get, sizeDeclared)
-	slots := p.TargetPolicies[target].Slots
-	if size != nil && slots == 0 {
-		slots = size.slots(p, target, m.limiter().Capacity())
+	slots, slotSizing := p.TargetPolicies[target].Slots, types.SlotSizing{Source: types.SlotsDeclared}
+	if slots == 0 {
+		slotSizing = types.SlotSizing{Source: types.SlotsUnmeasured}
+		if size != nil {
+			slots, slotSizing = size.slots(p, target, m.limiter().Capacity())
+		}
 	}
+	step.Slots = slotsForPolicy(slots, c.MB, m.limiter().Capacity(), m.hostUsableBytes())
+	if step.Slots > max(slots, 1) {
+		slotSizing = types.SlotSizing{Source: types.SlotsForMemory}
+	}
+	c.Sizing.Slots = slotSizing
 	step.MemoryMB, step.MemoryDeclaredBy, step.MemorySizing = c.MB, c.DeclaredBy, c.Sizing
-	step.Slots = slotsForPolicy(slots, step.MemoryMB, m.limiter().Capacity(), m.hostUsableBytes())
 	return c.Sizing
 }
 
@@ -171,7 +178,7 @@ func (s *claimSizer) memory(proj *types.Project, target string, declaredMB int) 
 }
 
 // slots sizes the slot claim of a target that declares none. See sizeSlotClaim.
-func (s *claimSizer) slots(proj *types.Project, target string, capacity int) int {
+func (s *claimSizer) slots(proj *types.Project, target string, capacity int) (int, types.SlotSizing) {
 	same, all := s.runs.Width(proj.Path, target, s.shape)
 	return sizeSlotClaim(same, all, capacity)
 }
@@ -209,15 +216,16 @@ func sizeMemoryClaim(declaredMB int, sameShape, anyShape forecast.Measurement) (
 // when the budget is limited, or 0, which takes one slot, when too few runs measured
 // it. A run whose claim capped its width doubles the claim, so a Go-heavy target that
 // runs only as wide as its slots (spawn.SeatJobserver) still measures its way wider.
-func sizeSlotClaim(sameShape, anyShape forecast.Measurement, capacity int) int {
-	width, _, ok := trustedMeasurement(sameShape, anyShape)
+func sizeSlotClaim(sameShape, anyShape forecast.Measurement, capacity int) (int, types.SlotSizing) {
+	width, measured, ok := trustedMeasurement(sameShape, anyShape)
 	if !ok {
-		return 0
+		return 0, types.SlotSizing{Source: types.SlotsUnmeasured}
 	}
+	sizing := types.SlotSizing{Source: types.SlotsMeasured, Samples: measured.Samples, AnyShape: measured.AnyShape}
 	if capacity > 0 {
-		return min(int(width.Value), capacity)
+		return min(int(width.Value), capacity), sizing
 	}
-	return int(width.Value)
+	return int(width.Value), sizing
 }
 
 // slotsForPolicy resolves a target's declared policy to the number of concurrency

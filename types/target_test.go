@@ -265,6 +265,16 @@ func TestMemorySizingString(t *testing.T) {
 	assert.Equal(t, "measured over 9 runs of any shape", MemorySizing{Samples: 9, AnyShape: true}.String())
 }
 
+func TestSlotSizingString(t *testing.T) {
+	t.Parallel()
+	assert.Empty(t, SlotSizing{}.String(), "nothing recorded says nothing")
+	assert.Equal(t, "declared", SlotSizing{Source: SlotsDeclared}.String())
+	assert.Equal(t, "unmeasured", SlotSizing{Source: SlotsUnmeasured}.String())
+	assert.Equal(t, "for its memory", SlotSizing{Source: SlotsForMemory}.String())
+	assert.Equal(t, "measured over 4 runs", SlotSizing{Source: SlotsMeasured, Samples: 4}.String())
+	assert.Equal(t, "measured over 7 runs of any shape", SlotSizing{Source: SlotsMeasured, Samples: 7, AnyShape: true}.String())
+}
+
 // TestChainBuilderReadsLikeTheBody: Needs(a, b).Needs(c) is `ctx.needs(a, b); ctx.needs(c)`,
 // with a cross-project step spelled the way ChainStep.Ref prints one.
 func TestChainBuilderReadsLikeTheBody(t *testing.T) {

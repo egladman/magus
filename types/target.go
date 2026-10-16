@@ -507,6 +507,50 @@ type MemorySizing struct {
 	// AnyShape is set when runs with this invocation's charms and forwarded args were
 	// too few, so the figure was sized from every run of the target.
 	AnyShape bool `json:"any_shape,omitzero" yaml:"any_shape,omitempty"`
+	// Slots is where the same claim's slot count came from. It rides here because this
+	// is the one provenance record a claim carries from sizing to a refusal.
+	Slots SlotSizing `json:"slots,omitzero" yaml:"slots,omitempty"`
+}
+
+// SlotSource is where a claim's slot count came from.
+type SlotSource string
+
+const (
+	// SlotsUnmeasured is one slot: the target declares none and too few runs measured it.
+	SlotsUnmeasured SlotSource = "unmeasured"
+	// SlotsDeclared is the target's own slots policy.
+	SlotsDeclared SlotSource = "declared"
+	// SlotsMeasured is the width the target's runs measured.
+	SlotsMeasured SlotSource = "measured"
+	// SlotsForMemory is what the memory claim is worth on this host, which is more than
+	// the declared or measured slots.
+	SlotsForMemory SlotSource = "memory"
+)
+
+// SlotSizing says where a claim's slot count came from. The zero value records nothing,
+// as on a claim from a magus that did not report it.
+type SlotSizing struct {
+	Source SlotSource `json:"source,omitempty" yaml:"source,omitempty"`
+	// Samples and AnyShape say what a measured count was sized from, as on MemorySizing.
+	Samples  int  `json:"samples,omitzero" yaml:"samples,omitempty"`
+	AnyShape bool `json:"any_shape,omitzero" yaml:"any_shape,omitempty"`
+}
+
+// Measured reports whether the count came from recorded runs.
+func (s SlotSizing) Measured() bool { return s.Source == SlotsMeasured }
+
+// String renders the provenance for a person, or "" when none was recorded.
+func (s SlotSizing) String() string {
+	switch {
+	case s.Source == SlotsForMemory:
+		return "for its memory"
+	case !s.Measured():
+		return string(s.Source)
+	case s.AnyShape:
+		return fmt.Sprintf("measured over %d runs of any shape", s.Samples)
+	default:
+		return fmt.Sprintf("measured over %d runs", s.Samples)
+	}
 }
 
 // Measured reports whether the figure came from recorded peaks rather than a declaration.

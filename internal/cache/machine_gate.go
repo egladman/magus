@@ -473,13 +473,16 @@ func machineBlindError(c types.MachineClaim, v types.MachineVerdict) error {
 		describeMachineRemaining(v), describeMachineHolders(v.Holders))}
 }
 
-// describeMachineDeclaration says where the figure came from. A composed target is
-// held over a number a target in its chain wrote, and a reader sent to its own policy
-// would find nothing to change there.
+// describeMachineDeclaration says where the memory and slots came from. A composed
+// target is held over a number a target in its chain wrote, and a reader sent to its
+// own policy would find nothing to change there.
 func describeMachineDeclaration(c types.MachineClaim) string {
 	slots := fmt.Sprintf("%d slot", max(c.Slots, 1))
 	if max(c.Slots, 1) != 1 {
 		slots += "s"
+	}
+	if how := c.Sizing.Slots.String(); how != "" {
+		slots += " (" + how + ")"
 	}
 	if c.MemoryMB <= 0 {
 		return "it takes " + slots

@@ -294,12 +294,15 @@ func TestSizeClaimFoldsSizedFigures(t *testing.T) {
 		map[string]types.Target{"test": {MemoryMB: 10240}, "lint": {MemoryMB: 1024}},
 		map[string][]types.ChainStep{"ci": types.Needs("lint", "test")})
 
+	// A host with memory to spare per slot, so the memory claim adds no slots of its own.
+	m := &Magus{}
+	m.limOnce.Do(func() { m.lim = cache.NewLimiter(8) })
+	m.hostMemOnce.Do(func() { m.hostMemBytes = 1 << 40 })
 	var step cache.Step
-	sizing := (&Magus{}).sizeClaim(&step, p, "ci", newClaimSizer(&x, shape))
-	// test is sized to 1.25 x 4000; lint has no runs, so its declaration stands. Slots follow the
-	// host's capacity, which the test does not control.
-	want := types.MemorySizing{Samples: 3}
-	assert.Equal(t, cache.Step{MemoryMB: 5000 + 1024, MemoryDeclaredBy: "test", MemorySizing: want, Slots: step.Slots}, step)
+	sizing := m.sizeClaim(&step, p, "ci", newClaimSizer(&x, shape))
+	// test is sized to 1.25 x 4000; lint has no runs, so its declaration stands.
+	want := types.MemorySizing{Samples: 3, Slots: types.SlotSizing{Source: types.SlotsUnmeasured}}
+	assert.Equal(t, cache.Step{MemoryMB: 5000 + 1024, MemoryDeclaredBy: "test", MemorySizing: want, Slots: 1}, step)
 	assert.Equal(t, want, sizing)
 
 	assert.Nil(t, newClaimSizer(nil, shape), "no history, no sizer: declarations fold as written")
@@ -330,14 +333,27 @@ func TestSizeClaimMeasuresAnUndeclaredTarget(t *testing.T) {
 		return step
 	}
 
-	measured := types.MemorySizing{Samples: minMeasuredRuns}
-	assert.Equal(t, cache.Step{MemoryMB: 2000, MemoryDeclaredBy: "scip", MemorySizing: measured, Slots: 3}, claim(types.Target{}, minMeasuredRuns),
-		"ceil(1.25 x 1600) MiB and three slots")
-	assert.Equal(t, cache.Step{}, claim(types.Target{}, minMeasuredRuns-1), "too few runs claim no memory and one slot")
-	assert.Equal(t, cache.Step{MemoryMB: 2000, MemoryDeclaredBy: "scip", MemorySizing: measured, Slots: 1}, claim(types.Target{Slots: 1}, minMeasuredRuns),
-		"declared slots beat the measured width")
-	assert.Equal(t, cache.Step{MemoryMB: 1024, MemoryDeclaredBy: "scip", Slots: 3}, claim(types.Target{MemoryMB: 1024}, minMeasuredRuns),
-		"declared memory caps the measured peak")
+	measuredSlots := types.SlotSizing{Source: types.SlotsMeasured, Samples: minMeasuredRuns}
+	assert.Equal(t, cache.Step{MemoryMB: 2000, MemoryDeclaredBy: "scip", MemorySizing: types.MemorySizing{Samples: minMeasuredRuns, Slots: measuredSlots}, Slots: 3},
+		claim(types.Target{}, minMeasuredRuns), "ceil(1.25 x 1600) MiB and three slots")
+	assert.Equal(t, cache.Step{MemorySizing: types.MemorySizing{Slots: types.SlotSizing{Source: types.SlotsUnmeasured}}},
+		claim(types.Target{}, minMeasuredRuns-1), "too few runs claim no memory and one slot")
+	assert.Equal(t, cache.Step{MemoryMB: 2000, MemoryDeclaredBy: "scip", MemorySizing: types.MemorySizing{Samples: minMeasuredRuns, Slots: types.SlotSizing{Source: types.SlotsDeclared}}, Slots: 1},
+		claim(types.Target{Slots: 1}, minMeasuredRuns), "declared slots beat the measured width")
+	assert.Equal(t, cache.Step{MemoryMB: 1024, MemoryDeclaredBy: "scip", MemorySizing: types.MemorySizing{Slots: measuredSlots}, Slots: 3},
+		claim(types.Target{MemoryMB: 1024}, minMeasuredRuns), "declared memory caps the measured peak")
+}
+
+// A memory claim worth more slots than the target's own count says so, since a reader
+// sent to its slots or its runs would find nothing that explains the figure.
+func TestSizeClaimNamesSlotsTakenForMemory(t *testing.T) {
+	m := &Magus{}
+	m.limOnce.Do(func() { m.lim = cache.NewLimiter(8) })
+	m.hostMemOnce.Do(func() { m.hostMemBytes = 8 << 30 }) // 1 GiB a slot
+	var step cache.Step
+	sizing := m.sizeClaim(&step, chainProject(".", map[string]types.Target{"test": {MemoryMB: 3072, Slots: 2}}, nil), "test", nil)
+	assert.Equal(t, 3, step.Slots)
+	assert.Equal(t, types.SlotSizing{Source: types.SlotsForMemory}, sizing.Slots)
 }
 
 // A Go target runs only as wide as its claim, so a claim its runs saturate doubles, up
@@ -377,7 +393,8 @@ func TestSizeSlotClaim(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, sizeSlotClaim(tc.same, tc.all, tc.capacity))
+			got, _ := sizeSlotClaim(tc.same, tc.all, tc.capacity)
+			assert.Equal(t, tc.want, got)
 		})
 	}
 }

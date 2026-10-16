@@ -2018,10 +2018,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	keyedStep := func(p *types.Project, target string) (cache.Step, error) {
 		step := m.buildStep(p, target)
 		if sizeClaims != nil {
-			if sizing := m.sizeClaim(&step, p, target, sizeClaims); sizing.Measured() {
-				slog.With(attr.Component("magus")).DebugContext(ctx, "memory claim sized from measured peaks",
+			if sizing := m.sizeClaim(&step, p, target, sizeClaims); sizing.Measured() || sizing.Slots.Measured() {
+				slog.With(attr.Component("magus")).DebugContext(ctx, "claim sized from measured runs",
 					slog.String("project", p.Path), slog.String("target", target),
-					slog.Int("memory_mb", step.MemoryMB), slog.String("sizing", sizing.String()))
+					slog.Int("memory_mb", step.MemoryMB), slog.String("sizing", sizing.String()),
+					slog.Int("slots", step.Slots), slog.String("slot_sizing", sizing.Slots.String()))
 			}
 		}
 		var toolVersions []string
