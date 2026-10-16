@@ -157,8 +157,8 @@ type Target struct {
 	// and holds that many slots, so there is ONE admission path rather than two
 	// budgets that can disagree.
 	//
-	// Undeclared (0) and an unmeasurable host both mean "take one slot", which is
-	// exactly the behavior that existed before this field.
+	// Undeclared (0) claims what the target's runs measured once enough of them have,
+	// and no memory before that. An unmeasurable host converts no memory to slots.
 	//
 	// A COMPOSED target inherits the largest declaration in its chain; see
 	// ChainMemoryMB. A run claims less than this when it has measured less: see
@@ -525,8 +525,8 @@ func (s MemorySizing) String() string {
 	}
 }
 
-// MemorySizer turns one target's own memory declaration, always positive, into the
-// figure it claims. It must not return more than declaredMB.
+// MemorySizer turns one target's own memory declaration, 0 when it declares none, into
+// the figure it claims. It must not return more than a positive declaredMB.
 type MemorySizer func(proj *Project, target string, declaredMB int) (mb int, sizing MemorySizing)
 
 // ChainMemory is a folded memory claim: the figure, the target whose declaration it
@@ -537,10 +537,10 @@ type ChainMemory struct {
 	Sizing     MemorySizing
 }
 
-// SizedChainMemory is ChainMemoryMB with every declaration in the chain passed through
-// size before it folds, so a composed step claims the sized figures of its members
-// rather than their declarations. A nil size folds the declarations as written. A
-// target declaring nothing is never sized: it claims slots, not memory.
+// SizedChainMemory is ChainMemoryMB with every member of the chain passed through size
+// before it folds, so a composed step claims the sized figures of its members rather
+// than their declarations, and a member declaring nothing claims what its runs
+// measured. A nil size folds the declarations as written.
 //
 // Sizing names the largest single contributor's provenance, as DeclaredBy names it.
 func SizedChainMemory(p *Project, target string, lookup func(path string) *Project, size MemorySizer) ChainMemory {
@@ -557,12 +557,13 @@ func SizedChainMemory(p *Project, target string, lookup func(path string) *Proje
 		}
 		seen[key] = true
 
-		var peak ChainMemory
-		if declared := proj.TargetPolicies[name].MemoryMB; declared > 0 {
-			peak = ChainMemory{MB: declared, DeclaredBy: name}
-			if size != nil {
-				peak.MB, peak.Sizing = size(proj, name, declared)
-			}
+		declared := proj.TargetPolicies[name].MemoryMB
+		peak := ChainMemory{MB: declared, DeclaredBy: name}
+		if size != nil {
+			peak.MB, peak.Sizing = size(proj, name, declared)
+		}
+		if peak.MB <= 0 {
+			peak = ChainMemory{}
 		}
 		// One sum per call; a call's members run together, and the calls run in turn.
 		var call, top ChainMemory

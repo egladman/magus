@@ -222,7 +222,7 @@ func TestSizedChainMemoryFoldsSizedFigures(t *testing.T) {
 	got := SizedChainMemory(p, "ci", nil, size)
 	assert.Equal(t, ChainMemory{MB: 4000, DeclaredBy: "bench"}, got,
 		"lint+test sized to 3000 now loses to bench, which it beat as declared")
-	assert.ElementsMatch(t, []string{"lint", "test", "bench"}, sized, "ci declares nothing, so it is never sized")
+	assert.ElementsMatch(t, []string{"ci", "lint", "test", "bench"}, sized, "ci declares nothing and is sized too")
 
 	p.TargetPolicies["bench"] = Target{MemoryMB: 1500}
 	assert.Equal(t, ChainMemory{MB: 3000, DeclaredBy: "test", Sizing: MemorySizing{Samples: 7}},
@@ -231,6 +231,31 @@ func TestSizedChainMemoryFoldsSizedFigures(t *testing.T) {
 	mb, by := ChainMemoryMB(p, "ci", nil)
 	assert.Equal(t, 11000, mb, "ChainMemoryMB folds the declarations as written")
 	assert.Equal(t, "test", by)
+}
+
+// TestSizedChainMemorySizesAnUndeclaredMember: a member declaring nothing is sized from
+// 0, so a composed step claims its measured peak beside its peers' declarations, and an
+// unmeasured one still contributes nothing.
+func TestSizedChainMemorySizesAnUndeclaredMember(t *testing.T) {
+	t.Parallel()
+	p := &Project{
+		Path:           ".",
+		TargetChains:   map[string][]ChainStep{"ci": Needs("lint", "scip")},
+		TargetPolicies: map[string]Target{"lint": {MemoryMB: 1000}},
+	}
+	measured := map[string]int{"scip": 2000}
+	size := func(proj *Project, target string, declaredMB int) (int, MemorySizing) {
+		if mb, ok := measured[target]; ok {
+			return mb, MemorySizing{Samples: 3}
+		}
+		return declaredMB, MemorySizing{}
+	}
+
+	assert.Equal(t, ChainMemory{MB: 3000, DeclaredBy: "scip", Sizing: MemorySizing{Samples: 3}},
+		SizedChainMemory(p, "ci", nil, size), "scip's measured peak sums with lint's declaration")
+
+	delete(measured, "scip")
+	assert.Equal(t, ChainMemory{MB: 1000, DeclaredBy: "lint"}, SizedChainMemory(p, "ci", nil, size))
 }
 
 func TestMemorySizingString(t *testing.T) {

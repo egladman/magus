@@ -107,8 +107,8 @@ func (m *Magus) hostUsableBytes() int64 {
 //
 // A declaration always wins. Memory folds the target's ctx.needs chain (see
 // types.SizedChainMemory, supplied the workspace's cross-project lookup), each
-// declaration narrowed by what its runs measured; only a chain that declares nothing
-// claims the scheduled target's own measured peak. Slots are the target's declaration,
+// declaration narrowed by what its runs measured and each member declaring nothing
+// sized from its measured peak. Slots are the target's declaration,
 // else its measured width, else one, raised to what the memory is worth on this host
 // (see slotsForPolicy).
 //
@@ -126,15 +126,8 @@ func (m *Magus) sizeClaim(step *cache.Step, p *types.Project, target string, siz
 	}
 	c := types.SizedChainMemory(p, target, m.Get, sizeDeclared)
 	slots := p.TargetPolicies[target].Slots
-	if size != nil {
-		if c.MB == 0 {
-			if mb, sizing := size.memory(p, target, 0); mb > 0 {
-				c = types.ChainMemory{MB: mb, DeclaredBy: target, Sizing: sizing}
-			}
-		}
-		if slots == 0 {
-			slots = size.slots(p, target, m.limiter().Capacity())
-		}
+	if size != nil && slots == 0 {
+		slots = size.slots(p, target, m.limiter().Capacity())
 	}
 	step.MemoryMB, step.MemoryDeclaredBy, step.MemorySizing = c.MB, c.DeclaredBy, c.Sizing
 	step.Slots = slotsForPolicy(slots, step.MemoryMB, m.limiter().Capacity(), m.hostUsableBytes())
