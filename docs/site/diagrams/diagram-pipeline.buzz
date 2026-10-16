@@ -52,36 +52,15 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
         .except([magus\dir("libs/testkit")], why: "fixtures for magus's Go tests")
         .except([magus\dir("libs/scipbuzz")],
             why: "the Buzz symbol indexer; it feeds the knowledge graph, not a figure")
+        .except([magus\dir("libs/cmdline")],
+            why: "the command tree magus's generators read; no figure passes through it")
+        .except([magus\dir("libs/proofread")],
+            why: "the prose judge; a figure's text is not judged by it")
+        .except([magus\dir("libs/xdg")],
+            why: "the user config, state and cache directories; no figure passes through them")
         .except([magus\dir("std/gen/stdtest")], why: "generated test mocks")
-        .except([
-            magus\dir("std/encoding"),
-            magus\dir("std/encoding/base64"),
-            magus\dir("std/encoding/csv"),
-            magus\dir("std/encoding/hex"),
-            magus\dir("std/encoding/ini"),
-            magus\dir("std/encoding/json"),
-            magus\dir("std/encoding/toml"),
-            magus\dir("std/encoding/url"),
-            magus\dir("std/encoding/xml"),
-            magus\dir("std/encoding/yaml"),
-        ],
+        .except(goPackages("std/encoding/**"),
             why: "the encoding host modules; a figure source reads the graph through the magus module alone")
-        .except([
-            magus\dir("internal/handler/activity"),
-            magus\dir("internal/handler/attention"),
-            magus\dir("internal/handler/diff"),
-            magus\dir("internal/handler/graph"),
-            magus\dir("internal/handler/insight"),
-            magus\dir("internal/handler/job"),
-            magus\dir("internal/handler/mcp"),
-            magus\dir("internal/handler/metrics"),
-            magus\dir("internal/handler/notes"),
-            magus\dir("internal/handler/plan"),
-            magus\dir("internal/handler/status"),
-            magus\dir("internal/handler/token"),
-            magus\dir("internal/handler/tool"),
-            magus\dir("internal/handler/trailrpc"),
-            magus\dir("internal/handler/viewer"),
-        ],
+        .except(figure\without(magus\layer("handler").dirs, drop: [server]),
             why: "the console's other services; none embeds magus/figure");
 }

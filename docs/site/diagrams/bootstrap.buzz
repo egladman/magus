@@ -70,15 +70,6 @@ export fun bootstrapFigure() > figure\Figure !> any {
             why: "each built-in rule's grade; the raw-tool advisory this figure draws is graded there like every other rule")
         .except([magus\dir("cmd/magus-utils")],
             why: "the type generator spells-generate runs through go generate; the Spell bytecode actor stands for that step")
-        .except([
-            magus\dir("internal/interp"),
-            magus\dir("internal/interp/bindings/ffi"),
-            magus\dir("internal/interp/bindings/gen"),
-            magus\dir("internal/interp/bindings/gen/decode"),
-            magus\dir("internal/interp/engine"),
-            magus\dir("internal/interp/engine/buzz"),
-            magus\dir("internal/interp/mcpclient"),
-            magus\dir("internal/interp/transform"),
-        ],
+        .except(figure\without(goPackages("internal/interp/**"), drop: [stamp]),
             why: "the rest of the magusfile interpreter; go-build's -X flag names bindings.buildStamp alone");
 }

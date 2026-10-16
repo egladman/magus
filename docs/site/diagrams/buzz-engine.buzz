@@ -64,17 +64,6 @@ export fun buzzEngineFigure() > figure\Figure !> any {
         .except([magus\dir("internal/interp/mcpclient"), magus\dir("internal/interp/transform")],
             why: "the MCP client and transform workers run Buzz apart from the two hosts compared here")
         .except([magus\dir("std/gen/stdtest")], why: "generated test mocks")
-        .except([
-            magus\dir("std/encoding"),
-            magus\dir("std/encoding/base64"),
-            magus\dir("std/encoding/csv"),
-            magus\dir("std/encoding/hex"),
-            magus\dir("std/encoding/ini"),
-            magus\dir("std/encoding/json"),
-            magus\dir("std/encoding/toml"),
-            magus\dir("std/encoding/url"),
-            magus\dir("std/encoding/xml"),
-            magus\dir("std/encoding/yaml"),
-        ],
+        .except(goPackages("std/encoding/**"),
             why: "the encoding host modules, wired through the trampolines like every module in the Host modules box");
 }
