@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1340,6 +1341,47 @@ func TestGradeLeasedWriteInTheCheckoutTheLeasesForkMade(t *testing.T) {
 			other := gradeLeasedWrite(ctx, Dependencies{}, "w", filepath.Join(third, "std", "module.go"))
 			assert.Equal(t, "deny", other.Decision)
 			assert.Contains(t, other.Reason, "another checkout")
+		})
+	}
+}
+
+// The host's own Write and Edit calls, from a session rooted in another checkout, reach the
+// same grading through Judge: each is graded against the lease's paths in the checkout its
+// fork made, and neither is waved through as a write outside every checkout.
+func TestJudgeGradesWriteAndEditInTheCheckoutTheLeasesForkMade(t *testing.T) {
+	ctx, session := fleetFixture(t)
+	own := t.TempDir()
+	for _, dir := range []string{session, own} {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "std"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
+	}
+	module := filepath.Join(own, "std", "module.go")
+	require.NoError(t, os.WriteFile(module, []byte("package std\n\nfunc A() {}\n"), 0o644))
+	row := types.Job{ID: "w", WritePaths: []string{"std/*.go"}, State: types.StateRunning,
+		Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1,
+		CheckoutRoot: session, Worktree: &types.JobWorktree{Root: own, Source: session}}
+	ctx = job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{row}})
+	judge := func(tool string, input map[string]any) types.GuardJudgment {
+		return Judge(ctx, Dependencies{}, Request{Host: "claude-code", Lease: "w", Input: hookJSON(t, map[string]any{
+			"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": tool, "cwd": session,
+			"tool_input": input,
+		})})
+	}
+
+	for tool, payload := range map[string]map[string]any{
+		"Write": {"content": "package std\n\nfunc B() {}\n"},
+		"Edit":  {"old_string": "func A() {}", "new_string": "func A() { _ = 1 }"},
+	} {
+		t.Run(tool, func(t *testing.T) {
+			at := func(path string) map[string]any {
+				input := map[string]any{"file_path": path}
+				maps.Copy(input, payload)
+				return input
+			}
+			inside := judge(tool, at(module))
+			assert.NotEqual(t, decisionDeny, inside.Decision, inside.Reason)
+			outside := judge(tool, at(filepath.Join(own, "cmd", "main.go")))
+			assert.Equal(t, decisionDeny, outside.Decision, "a path outside the lease's paths, in the checkout its fork made")
 		})
 	}
 }
