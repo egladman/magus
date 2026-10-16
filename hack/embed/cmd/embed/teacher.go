@@ -36,9 +36,9 @@ var docPrefix = map[string]string{
 	"nomic-embed-text-v1.5": "search_document: ",
 }
 
-// Input is one line of inputs.jsonl: a pinned file, where it comes from and where it lives
-// under the cache root.
-type Input struct {
+// inputRecord is one line of inputs.jsonl: a pinned file, where it comes from and where it
+// lives under the cache root.
+type inputRecord struct {
 	Name     string `json:"name"`
 	Source   string `json:"source"`
 	Revision string `json:"revision"`
@@ -48,16 +48,16 @@ type Input struct {
 	Path     string `json:"path"`
 }
 
-func readInputs(path string) ([]Input, error) {
+func readInputs(path string) ([]inputRecord, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	var out []Input
+	var out []inputRecord
 	sc := bufio.NewScanner(f)
 	for n := 1; sc.Scan(); n++ {
-		var in Input
+		var in inputRecord
 		if err := json.Unmarshal(sc.Bytes(), &in); err != nil {
 			return nil, fmt.Errorf("%s:%d: %w", path, n, err)
 		}
@@ -69,17 +69,17 @@ func readInputs(path string) ([]Input, error) {
 	return out, sc.Err()
 }
 
-func findInput(inputs []Input, name string) (Input, error) {
+func findInput(inputs []inputRecord, name string) (inputRecord, error) {
 	for _, in := range inputs {
 		if in.Name == name {
 			return in, nil
 		}
 	}
-	return Input{}, fmt.Errorf("inputs.jsonl pins no %s", name)
+	return inputRecord{}, fmt.Errorf("inputs.jsonl pins no %s", name)
 }
 
 // verify fails unless the input's file under cache matches its pinned digest.
-func verify(cache string, in Input) (string, error) {
+func verify(cache string, in inputRecord) (string, error) {
 	path := filepath.Join(cache, in.Path)
 	sum, err := teacher.FileSHA256(path)
 	if err != nil {
@@ -171,7 +171,7 @@ func (c *common) load() (*loaded, error) {
 	return &loaded{enc: enc, tok: tok, spec: spec}, nil
 }
 
-func (c *common) newBackend(inputs []Input) (compute.Backend, error) {
+func (c *common) newBackend(inputs []inputRecord) (compute.Backend, error) {
 	switch c.backend {
 	case "go":
 		return gobackend.New("")
@@ -194,7 +194,7 @@ func (c *common) newBackend(inputs []Input) (compute.Backend, error) {
 
 // pluginPath returns the extracted PJRT CPU plugin, extracting the verified release
 // archive on first use.
-func pluginPath(cache string, in Input) (string, error) {
+func pluginPath(cache string, in inputRecord) (string, error) {
 	dir := filepath.Join(cache, "xla", in.Revision)
 	glob := filepath.Join(dir, "pjrt_c_api_cpu_*_plugin.so")
 	if matches, _ := filepath.Glob(glob); len(matches) == 1 {
@@ -287,7 +287,7 @@ func runFetch(args []string) error {
 	return nil
 }
 
-func download(cache string, in Input) error {
+func download(cache string, in inputRecord) error {
 	dst := filepath.Join(cache, in.Path)
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err

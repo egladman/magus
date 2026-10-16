@@ -179,7 +179,7 @@ func runTexts(args []string) error {
 			fmt.Printf("input %s: not read, the earlier inputs filled -cornstack\n", in.Name)
 			continue
 		}
-		path, err := verify(*cache, Input{Name: in.Name, Path: in.Path, SHA256: in.SHA256})
+		path, err := verify(*cache, inputRecord{Name: in.Name, Path: in.Path, SHA256: in.SHA256})
 		if err != nil {
 			return err
 		}
