@@ -17,10 +17,11 @@ final HELP = "cost: a binary copy, a graph build and a lease, in seconds; this s
     + "lease, then refuses unless the row names this worktree as its checkout and the base it recorded matches the row's\n"
     + "checkpoint. Writes ./magus, the graph, harness skills and the job row.\n\n"
     + "The orchestrator builds one ./magus per base commit, in the root, and every worker checkout receives a copy. A copy is\n"
-    + "placed only when it is provably the binary this worktree would build: no Go build input (a file under a package\n"
-    + "./cmd/magus compiles, or a go.mod, go.sum or go.work) differs between the commit the binary was built at and this\n"
-    + "worktree, and none went into it uncommitted. Docs, console and other non-Go changes do not count, so a base commit\n"
-    + "later than the binary's usually qualifies. Otherwise the script refuses and names what to build in the root.\n"
+    + "placed only when it is provably the binary this worktree would build: no Go build input (a file in a package\n"
+    + "`go list -deps ./cmd/magus` names, or the root go.mod, go.sum or go.work) differs between the commit the binary was\n"
+    + "built at and this worktree, and none went into it uncommitted. Docs, console, a package nothing links and a separate\n"
+    + "module such as hack/embed do not count, so a base commit later than the binary's usually qualifies. Otherwise the\n"
+    + "script refuses and names what to build in the root.\n"
     + "--check prints that verdict and writes nothing.";
 final MODULE = "module github.com/egladman/magus";
 
@@ -59,15 +60,18 @@ export fun parseBuild(versionJSON: str) > BuildFacts !> any {
     return BuildFacts{ commit = j["commit"] ?? "", dirty = version.endsWith("-dirty") };
 }
 
-// The files that decide the module graph a Go build resolves, wherever they sit.
+// The files that decide the module graph a Go build resolves, at the root.
 final MODULE_FILES = ["go.mod", "go.sum", "go.work", "go.work.sum"];
 
-// packageScopes are where a file other than Go source can reach the binary, root-relative:
-// "dir/" for everything under a package directory below root, a bare path for one file the
-// root package embeds. listed is `go list -deps` output, one package per line as its
-// absolute directory then each go:embed file after a "|". A standard-library or module-cache
-// directory is not under root and drops out. The root package contributes only its embedded
-// files, since a "dir/" for root would take in MAGUS.md and every doc.
+// ROOT_SCOPE marks the root package among the scopes. It is not a prefix: a "dir/" for root
+// would take in MAGUS.md and every doc.
+final ROOT_SCOPE = "./";
+
+// packageScopes are where a file can reach the binary, root-relative: "dir/" for a package
+// directory below root, ROOT_SCOPE for the root package, a bare path for one file the root
+// package embeds. listed is `go list -deps` output, one package per line as its absolute
+// directory then each go:embed file after a "|". A standard-library or module-cache
+// directory is not under root and drops out.
 export fun packageScopes(listed: str, root: str) > [str] {
     final scopes = mut [<str>];
     final base = path\clean(root);
@@ -78,6 +82,7 @@ export fun packageScopes(listed: str, root: str) > [str] {
         final fields = line.trim().split("|");
         final dir = path\clean(fields[0]);
         if (dir == base) {
+            scopes.append(ROOT_SCOPE);
             foreach (embedded in fields.sub(1)) {
                 scopes.append(embedded);
             }
@@ -89,9 +94,10 @@ export fun packageScopes(listed: str, root: str) > [str] {
 }
 
 // buildInputs are the changed root-relative paths that can change the compiled binary: a
-// non-test Go file anywhere, a module file, or a file inside a scope, which is where go:embed
-// reads from. The Go file rule keeps a package deleted since the listing counted. A test file
-// is not linked in, and docs, console and changelog fragments sit outside every scope.
+// non-test Go file in a linked package, a module file at the root, or a file inside a package
+// directory, which is where go:embed reads from. A package nothing links, a separate module
+// beside it, a test file, docs, console and changelog fragments are not inputs. A linked
+// package deleted since the listing is not missed: whatever imported it changed too.
 export fun buildInputs(changed: [str], scopes: [str]) > [str] {
     final inputs = mut [<str>];
     foreach (p in changed) {
@@ -104,17 +110,18 @@ export fun buildInputs(changed: [str], scopes: [str]) > [str] {
 
 fun isBuildInput(p: str, scopes: [str]) > bool {
     final name = fs\basename(p);
-    if (MODULE_FILES.indexOf(name) != null) {
+    final dir = fs\dirname(p);
+    if (MODULE_FILES.indexOf(name) != null and dir == ".") {
         return true;
-    }
-    if (name.endsWith("_test.go")) {
-        return false;
     }
     if (name.endsWith(".go")) {
-        return true;
+        if (name.endsWith("_test.go")) {
+            return false;
+        }
+        return scopes.indexOf(if (dir == ".") ROOT_SCOPE else dir + "/") != null;
     }
     foreach (s in scopes) {
-        if (s == p or (s.endsWith("/") and p.startsWith(s))) {
+        if (s == p or (s != ROOT_SCOPE and s.endsWith("/") and p.startsWith(s))) {
             return true;
         }
     }
@@ -464,12 +471,12 @@ test "a binary is this worktree's build while no Go build input differs, at any 
 test "package scopes are the package directories below the root and the files the root embeds" {
     final listed = "/work/magus|assets/a.txt\n/work/magus/internal/guard\n/work/magus/libs/figure|figure.buzz\n"
         + "/home/me/go/pkg/mod/dario.cat/mergo@v1.0.2\n/work/magus-other/x\n\n";
-    assert\equal(packageScopes(listed, root: "/work/magus"), want: ["assets/a.txt", "internal/guard/", "libs/figure/"],
+    assert\equal(packageScopes(listed, root: "/work/magus"), want: ["./", "assets/a.txt", "internal/guard/", "libs/figure/"],
         message: "module-cache and sibling directories drop out; the root contributes only what it embeds");
 }
 
-test "a build input is a Go file, a module file, or a file in a package scope" {
-    final scopes = ["assets/a.txt", "internal/guard/", "libs/figure/"];
+test "a build input is a Go file in a linked package, a root module file, or a file in a package scope" {
+    final scopes = ["./", "assets/a.txt", "internal/guard/", "internal/guard/builtin/", "libs/figure/"];
     assert\equal(buildInputs([
         "run.go", "run_test.go", "go.mod", "libs/figure/go.sum", "internal/guard/brief.go", "internal/guard/brief_test.go",
         "internal/guard/builtin/builtin.go", "spells/go/go.buzz", "internal/guard/rules/embedded.txt", "libs/figure/figure.buzz",
@@ -479,6 +486,11 @@ test "a build input is a Go file, a module file, or a file in a package scope" {
         "run.go", "go.mod", "libs/figure/go.sum", "internal/guard/brief.go", "internal/guard/builtin/builtin.go",
         "internal/guard/rules/embedded.txt", "libs/figure/figure.buzz", "assets/a.txt",
     ], message: "docs, console, hack, tests and root-level files outside the embeds are not inputs");
+    assert\equal(buildInputs([
+        "internal/textembed/embed.go", "internal/guard/unlinked/x.go", "hack/embed/go.mod", "hack/embed/go.sum",
+        "hack/embed/teacher/nomicbert.go", "internal/textembed/go.mod", "internal/guard/new.go",
+    ], scopes: scopes), want: ["internal/guard/new.go"],
+        message: "a Go file in a package nothing links, and a separate module's files, are not inputs; a file in a linked package is");
     assert\equal(buildInputs(["docs/x.md", "run_test.go"], scopes: scopes), want: [<str>], message: "a docs-and-tests commit changes no input");
     assert\equal(placed("/r/magus", commit: "166d3dabd", rootRev: "166d3dabd7d7", scopes: 3),
         want: "/r/magus was built at 166d3dabd, which this worktree is at; no Go build input under 3 package scopes differs", message: "same commit");
