@@ -298,17 +298,19 @@ Key properties:
   machine; `aggressive` reserves none of that, taking every usable megabyte down to a
   fixed 512 MiB floor for the kernel and its page cache. A CI job that asks for
   `aggressive` claims memory the same way it claims cores.
-- **Declared, not observed.** It arbitrates what targets say they need
-  ([`memory_mb`](targets.md)), so the same command on the same machine reaches the
-  same verdict whatever else is running. Observed pressure warns separately and
-  never blocks.
+- **Declared or measured, never observed live.** It arbitrates what targets say they
+  need ([`memory_mb`](targets.md)) and what their recorded runs measured, so the same
+  command with the same history reaches the same verdict whatever else is running.
+  Observed pressure warns separately and never blocks.
 - **It does not queue behind another invocation.** A step kept out by another magus
   invocation is refused immediately, exiting **75**
   ([MGS3009](../reference/codes/sandbox/MGS3009.md)), the same transient-failure code
   a contended lock uses above, and for the same reason. The refusal names who holds
   the budget (pid, project, target, and directory), so a caller can go see why and
   retry once it frees. A step kept out only by its own process or its own run waits
-  for them, on the same terms as the lock.
+  for them, on the same terms as the lock. `magus status --wait` is the wait a caller
+  asks for: it reserves the seat it sized for the run it pipes into, so that run is not
+  refused, while a bare run still refuses at once.
 - **What a missing broker means is a setting.** `broker: best-effort` (the default)
   leaves a run whose broker does not start, or dies mid-run, unarbitrated and
   finishing, having said once that it is. `broker: required` refuses the step instead
