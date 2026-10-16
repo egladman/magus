@@ -349,15 +349,18 @@ func (g *Graph) compileQuery(q parsedQuery) *compiledQuery {
 
 // lexicalIndex returns the lexical index over every node of the graph, without section
 // bodies, building it on first use. Retrieve ranks from it when no stored index is bound.
-// The words of a node's id join its path field, so `spell:go` and `target build` find
-// the node an id names, as the substring match over ids did.
+// A node with no Source is found by the path its id names, and every node by its kind,
+// so `spell:go` finds the node that id names.
 func (ix *searchIndex) lexicalIndex() *textrank.Index {
 	ix.lexOnce.Do(func() {
 		docs := make([]textrank.Document, len(ix.entries))
 		for i := range ix.entries {
-			n := &ix.entries[i].node
-			docs[i] = lexicalDocument(*n, "")
-			docs[i].Fields[textrank.FieldPath] = append(docs[i].Fields[textrank.FieldPath], textrank.Tokens(n.ID)...)
+			n := ix.entries[i].node
+			if n.Source == "" {
+				_, n.Source, _ = strings.Cut(n.ID, ":")
+			}
+			docs[i] = lexicalDocument(n, "")
+			docs[i].Fields[textrank.FieldPath] = append(docs[i].Fields[textrank.FieldPath], textrank.Tokens(n.Kind)...)
 		}
 		ix.lex = textrank.NewIndex(docs)
 	})

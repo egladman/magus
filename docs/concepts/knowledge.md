@@ -91,7 +91,8 @@ Matchers filter; free text ranks.
 Free text is split into words, so `leafScore` also finds `leaf` and `score`, and each
 word is scored by BM25F over a node's name, signature, path and docs. A match needs
 any one word. One that holds fewer words than the query is a partial match, ranked by
-its score among the rest. `-o json` gives every match a `why`: the words it held
+its score among the rest. A node whose name is the query as typed ranks ahead of one
+whose docs only repeat its words. `-o json` gives every match a `why`: the words it held
 (`matched` of `of`), each word's score per field, and its rank in each ranked list. The
 answer's `ranking` names the weight file's digest, so a result says which weights
 produced it.

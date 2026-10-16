@@ -16,6 +16,7 @@ import (
 // Names of the ranked lists Retrieve fuses, as KnowledgeListRank and fusion.lists name them.
 const (
 	listLexical = "lexical"
+	listExact   = "exact"
 	listGraph   = "graph"
 )
 
@@ -83,7 +84,7 @@ func (g *Graph) Retrieve(input string, opts RetrieveOptions) ([]types.KnowledgeM
 			ranking.Note = fmt.Sprintf("no stored lexical index: ranked over one built in memory from %d graph nodes, without section bodies", lex.Len())
 		}
 		var err error
-		matches, err = g.rankText(ix, cq, tokens, need, lex, opts, &ranking)
+		matches, err = g.rankText(ix, cq, tokens, need, exactPhrase(cq.terms), lex, opts, &ranking)
 		if err != nil {
 			return nil, ranking, err
 		}
@@ -179,9 +180,9 @@ type candidate struct {
 }
 
 // rankText scores tokens over lex, keeps the hits the filters admit, and fuses their
-// lexical order with a personalized PageRank over the same matches. Why counts a match's
-// tokens against need.
-func (g *Graph) rankText(ix *searchIndex, cq *compiledQuery, tokens, need []string, lex *textrank.Index, opts RetrieveOptions, ranking *types.KnowledgeRanking) ([]types.KnowledgeMatch, error) {
+// lexical order with the ones named phrase exactly and a personalized PageRank over the
+// same matches. Why counts a match's tokens against need.
+func (g *Graph) rankText(ix *searchIndex, cq *compiledQuery, tokens, need []string, phrase string, lex *textrank.Index, opts RetrieveOptions, ranking *types.KnowledgeRanking) ([]types.KnowledgeMatch, error) {
 	var cands []candidate
 	for _, h := range lex.Score(tokens, opts.Weights.BM25F) {
 		pos, ok := ix.byID[h.ID]
@@ -214,7 +215,8 @@ func (g *Graph) rankText(ix *searchIndex, cq *compiledQuery, tokens, need []stri
 	}
 	matches := make([]types.KnowledgeMatch, 0, len(cands))
 	lexWeight := listWeight(opts.Weights, listLexical)
-	if graph == nil {
+	exact := exactList(ix, cands, phrase, opts.Weights)
+	if graph == nil && exact == nil {
 		// One list fuses to its own order; the score is its reciprocal rank term.
 		for i := range cands {
 			c := &cands[i]
@@ -231,7 +233,12 @@ func (g *Graph) rankText(ix *searchIndex, cq *compiledQuery, tokens, need []stri
 		lexical[i] = cands[i].hit.ID
 		byID[cands[i].hit.ID] = &cands[i]
 	}
-	lists := []textrank.RankedList{{Name: listLexical, Weight: lexWeight, IDs: lexical}, *graph}
+	lists := []textrank.RankedList{{Name: listLexical, Weight: lexWeight, IDs: lexical}}
+	for _, l := range []*textrank.RankedList{exact, graph} {
+		if l != nil {
+			lists = append(lists, *l)
+		}
+	}
 	fused, err := textrank.Fuse(lists, opts.Weights.Fusion.K)
 	if err != nil {
 		return nil, err
@@ -248,6 +255,40 @@ func (g *Graph) rankText(ix *searchIndex, cq *compiledQuery, tokens, need []stri
 		matches = append(matches, newMatch(&ix.entries[c.pos].node, f.Score, w))
 	}
 	return matches, nil
+}
+
+// exactList is the cands, in lexical order, whose label, last id segment or whole id is
+// phrase, the query's plain terms as typed: the node a reader names outright. BM25F alone
+// lets a node whose doc repeats a word outrank the one called by it, so `explain build`
+// would name an op that mentions build over the target named build. nil when none is.
+func exactList(ix *searchIndex, cands []candidate, phrase string, w textrank.Weights) *textrank.RankedList {
+	if phrase == "" {
+		return nil
+	}
+	var ids []string
+	for _, c := range cands {
+		e := &ix.entries[c.pos]
+		if e.lcLabel == phrase || e.lcID == phrase || e.lcID[strings.LastIndexAny(e.lcID, "/:")+1:] == phrase {
+			ids = append(ids, c.hit.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	return &textrank.RankedList{Name: listExact, Weight: listWeight(w, listExact), IDs: ids}
+}
+
+// exactPhrase is the query's plain free-text terms, lowercased and joined by a space, ""
+// when a wildcard or path term is among them: neither names one node outright.
+func exactPhrase(terms []compiledTerm) string {
+	parts := make([]string, 0, len(terms))
+	for _, t := range terms {
+		if t.glob != nil || t.path {
+			return ""
+		}
+		parts = append(parts, t.lc)
+	}
+	return strings.Join(parts, " ")
 }
 
 // graphList ranks cands by a personalized PageRank seeded by every reader path that names

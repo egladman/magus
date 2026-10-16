@@ -146,15 +146,30 @@ func TestRetrieveWhyNamesEveryList(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, ranking.Skipped)
 	z := ms[slices.Index(retrieveIDs(ms), "symbol:z")]
-	assert.Equal(t, []types.KnowledgeListRank{{List: listLexical, Rank: 6}, {List: listGraph, Rank: 1}}, z.Why.Lists)
+	assert.Equal(t, []types.KnowledgeListRank{{List: listLexical, Rank: 6}, {List: listExact, Rank: 6}, {List: listGraph, Rank: 1}}, z.Why.Lists)
 	assert.Contains(t, z.Why.Seeds, fileID("pkg/x.go"))
 	assert.Equal(t, []types.KnowledgeTermScore{{Term: "parse", Field: textrank.FieldName, Score: z.Why.Terms[0].Score}}, z.Why.Terms)
 	assert.InDelta(t, 1.0, z.Why.Prior, 0)
 
 	ms, ranking, err = g.Retrieve("parse", shipped())
 	require.NoError(t, err)
-	assert.Equal(t, []types.KnowledgeListRank{{List: listLexical, Rank: 1}}, ms[0].Why.Lists)
+	assert.Equal(t, []types.KnowledgeListRank{{List: listLexical, Rank: 1}, {List: listExact, Rank: 1}}, ms[0].Why.Lists)
 	assert.Equal(t, []string{listGraph + ": no reader path names a node"}, ranking.Skipped)
+
+	ms, _, err = g.Retrieve("parse x.go", shipped())
+	require.NoError(t, err)
+	assert.Equal(t, []types.KnowledgeListRank{{List: listLexical, Rank: 1}}, ms[0].Why.Lists, "no node is named that")
+}
+
+// A node whose doc repeats a word must not outrank the node named by it.
+func TestRetrieveRanksTheNodeNamedOverOneThatMentionsIt(t *testing.T) {
+	g := NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: "target:.:build", Kind: types.KindTarget, Label: "build", Source: "."})
+	g.AddNode(types.KnowledgeNode{ID: "op:ts:tsc-build", Kind: types.KindOp, Label: "tsc-build",
+		Doc: "tsc-build runs the incremental build mode, so a build reuses the last build's output"})
+	ms, _, err := g.Retrieve("build", shipped())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"target:.:build", "op:ts:tsc-build"}, retrieveIDs(ms))
 }
 
 func TestRetrieveRefusesUnusableWeights(t *testing.T) {
