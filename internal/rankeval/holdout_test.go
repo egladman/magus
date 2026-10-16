@@ -23,7 +23,7 @@ func TestHoldoutLedgerRefusesASecondRead(t *testing.T) {
 	second := first
 	second.Candidate, second.At = "k2-seed2", at.Add(time.Hour)
 	prior, err = RecordHoldoutRead(ledger, second)
-	require.ErrorIs(t, err, ErrHoldoutRead)
+	require.ErrorIs(t, err, errHoldoutRead)
 	assert.ErrorContains(t, err, "judged-holdout d1 was read for k2-seed1 at 2026-10-16T12:00:00Z")
 	assert.Equal(t, []HoldoutRead{first}, prior)
 
@@ -37,7 +37,7 @@ func TestHoldoutLedgerRefusesASecondRead(t *testing.T) {
 	assert.Equal(t, []HoldoutRead{first, second}, prior)
 
 	after, err := RecordHoldoutRead(ledger, first)
-	require.ErrorIs(t, err, ErrHoldoutRead, "a report-only read does not reopen the set")
+	require.ErrorIs(t, err, errHoldoutRead, "a report-only read does not reopen the set")
 	assert.Equal(t, []HoldoutRead{first, second, other}, after)
 
 	data, err := os.ReadFile(ledger)

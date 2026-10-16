@@ -69,14 +69,14 @@ func TestPairedRandomizationMatchesExactEnumeration(t *testing.T) {
 	require.Equal(t, 152.0/4096, exact, "Python Fraction enumeration: 152 of 4096 patterns")
 
 	for _, seed := range []uint64{1, 2, 3} {
-		mean, p := PairedRandomization(twelveA, twelveB, 200_000, seed)
+		mean, p := pairedRandomization(twelveA, twelveB, 200_000, seed)
 		assert.Equal(t, 5.0/32, mean)
 		assert.InDelta(t, exact, p, 0.005, "seed %d", seed)
 	}
 }
 
 func TestPairedRandomizationSleep(t *testing.T) {
-	mean, p := PairedRandomization(sleepDrug1, sleepDrug2, 200_000, 7)
+	mean, p := pairedRandomization(sleepDrug1, sleepDrug2, 200_000, 7)
 	assert.InDelta(t, -1.58, mean, 1e-12)
 	// Only the all-negative and all-positive patterns reach |sum| = 15.8, each
 	// twice over the zero difference: 4 of 1024.
@@ -84,20 +84,20 @@ func TestPairedRandomizationSleep(t *testing.T) {
 }
 
 func TestPairedRandomizationDeterministic(t *testing.T) {
-	_, p1 := PairedRandomization(twelveA, twelveB, 10_000, 42)
-	_, p2 := PairedRandomization(twelveA, twelveB, 10_000, 42)
-	_, p3 := PairedRandomization(twelveA, twelveB, 10_000, 43)
+	_, p1 := pairedRandomization(twelveA, twelveB, 10_000, 42)
+	_, p2 := pairedRandomization(twelveA, twelveB, 10_000, 42)
+	_, p3 := pairedRandomization(twelveA, twelveB, 10_000, 43)
 	assert.Equal(t, p1, p2)
 	assert.NotEqual(t, p1, p3)
 
 	same := []float64{0.3, 0.6, 0.9}
-	mean, p := PairedRandomization(same, same, 1_000, 1)
+	mean, p := pairedRandomization(same, same, 1_000, 1)
 	assert.Zero(t, mean)
 	assert.Equal(t, 1.0, p, "every flip of all-zero differences ties the observed 0")
 
 	// A shift so large no flip but the identity and its negation reaches it still
 	// gets p >= 1/(samples+1), never 0.
-	_, p = PairedRandomization([]float64{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}, make([]float64, 20), 1_000, 1)
+	_, p = pairedRandomization([]float64{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}, make([]float64, 20), 1_000, 1)
 	assert.Equal(t, 1.0/1001, p)
 }
 
@@ -118,7 +118,7 @@ func TestPairedRandomizationClustered(t *testing.T) {
 	exact := exactSignFlipP(flat)
 	require.Equal(t, 6.0/128, exact, "Python Fraction enumeration over 7 clusters: 6 of 128")
 
-	mean, p := ClusteredRandomization(twelveA, twelveB, clusters, 200_000, 1)
+	mean, p := clusteredRandomization(twelveA, twelveB, clusters, 200_000, 1)
 	assert.Equal(t, 5.0/32, mean, "the mean stays over pairs")
 	assert.InDelta(t, exact, p, 0.005)
 
@@ -126,41 +126,41 @@ func TestPairedRandomizationClustered(t *testing.T) {
 	for i := range singletons {
 		singletons[i] = string(rune('a' + i))
 	}
-	_, pc := ClusteredRandomization(twelveA, twelveB, singletons, 50_000, 9)
-	_, pp := PairedRandomization(twelveA, twelveB, 50_000, 9)
+	_, pc := clusteredRandomization(twelveA, twelveB, singletons, 50_000, 9)
+	_, pp := pairedRandomization(twelveA, twelveB, 50_000, 9)
 	assert.Equal(t, pp, pc, "one pair per cluster is the paired test")
 }
 
 func TestPairedRandomizationPanics(t *testing.T) {
-	assert.Panics(t, func() { PairedRandomization([]float64{1}, []float64{1, 2}, 10, 1) })
-	assert.Panics(t, func() { PairedRandomization(nil, nil, 10, 1) })
-	assert.Panics(t, func() { PairedRandomization([]float64{math.NaN()}, []float64{1}, 10, 1) })
-	assert.Panics(t, func() { PairedRandomization([]float64{1}, []float64{math.Inf(1)}, 10, 1) })
-	assert.Panics(t, func() { PairedRandomization([]float64{1}, []float64{0}, 0, 1) })
-	assert.Panics(t, func() { ClusteredRandomization([]float64{1, 2}, []float64{0, 0}, []string{"a"}, 10, 1) })
+	assert.Panics(t, func() { pairedRandomization([]float64{1}, []float64{1, 2}, 10, 1) })
+	assert.Panics(t, func() { pairedRandomization(nil, nil, 10, 1) })
+	assert.Panics(t, func() { pairedRandomization([]float64{math.NaN()}, []float64{1}, 10, 1) })
+	assert.Panics(t, func() { pairedRandomization([]float64{1}, []float64{math.Inf(1)}, 10, 1) })
+	assert.Panics(t, func() { pairedRandomization([]float64{1}, []float64{0}, 0, 1) })
+	assert.Panics(t, func() { clusteredRandomization([]float64{1, 2}, []float64{0, 0}, []string{"a"}, 10, 1) })
 }
 
 func TestPairedTIntervalSleep(t *testing.T) {
 	// R prints mean difference -1.58 and 95 percent CI -2.4598858 -0.7001142; the
 	// literals are the quadrature t(0.975, 9) = 2.262157162798248 applied to
 	// sd = sqrt(1702/1125).
-	mean, lo, hi := PairedTInterval(sleepDrug1, sleepDrug2, 0.95)
+	mean, lo, hi := pairedTInterval(sleepDrug1, sleepDrug2, 0.95)
 	assert.InDelta(t, -1.58, mean, 1e-12)
 	assert.InDelta(t, -2.4598857632769993, lo, 1e-9)
 	assert.InDelta(t, -0.7001142367230009, hi, 1e-9)
 
 	// t(0.95, 9) = 1.8331129326562747 by quadrature; se = sqrt(1702/1125/10).
 	se := math.Sqrt(1702.0 / 1125 / 10)
-	_, lo90, hi90 := PairedTInterval(sleepDrug1, sleepDrug2, 0.90)
+	_, lo90, hi90 := pairedTInterval(sleepDrug1, sleepDrug2, 0.90)
 	assert.InDelta(t, -1.58-1.8331129326562747*se, lo90, 1e-9)
 	assert.InDelta(t, -1.58+1.8331129326562747*se, hi90, 1e-9)
 
 	// Cohen's d_z = -1.58 / sqrt(1702/1125).
-	assert.InDelta(t, -1.2845575625910546, EffectSize(sleepDrug1, sleepDrug2), 1e-12)
+	assert.InDelta(t, -1.2845575625910546, effectSize(sleepDrug1, sleepDrug2), 1e-12)
 
-	assert.Panics(t, func() { PairedTInterval([]float64{1}, []float64{0}, 0.95) })
-	assert.Panics(t, func() { PairedTInterval(sleepDrug1, sleepDrug2, 1) })
-	assert.Panics(t, func() { EffectSize([]float64{1}, []float64{0}) })
+	assert.Panics(t, func() { pairedTInterval([]float64{1}, []float64{0}, 0.95) })
+	assert.Panics(t, func() { pairedTInterval(sleepDrug1, sleepDrug2, 1) })
+	assert.Panics(t, func() { effectSize([]float64{1}, []float64{0}) })
 }
 
 func TestPairedTIntervalStudentT(t *testing.T) {
@@ -184,23 +184,23 @@ func TestPairedTIntervalStudentT(t *testing.T) {
 func TestNonInferior(t *testing.T) {
 	// Drug 2 against drug 1: mean difference +1.58. The one-sided p-values are
 	// quadrature t tail areas at (1.58 + margin) / se with 9 df.
-	lower, p := NonInferior(sleepDrug2, sleepDrug1, 0.5)
+	lower, p := nonInferior(sleepDrug2, sleepDrug1, 0.5)
 	assert.InDelta(t, 0.7001142367230009, lower, 1e-9)
 	assert.InDelta(t, 0.00023190270447970285, p, 1e-9)
-	_, p = NonInferior(sleepDrug2, sleepDrug1, 0)
+	_, p = nonInferior(sleepDrug2, sleepDrug1, 0)
 	assert.InDelta(t, 0.001416445098695096, p, 1e-9, "half R's two-sided 0.002833")
 
 	// The interval rule and the test agree at every margin: lower > -margin
 	// exactly when p < 0.025.
 	for _, margin := range []float64{0, 0.5, 2, 2.45, 2.47, 3} {
-		lower, p := NonInferior(sleepDrug1, sleepDrug2, margin)
+		lower, p := nonInferior(sleepDrug1, sleepDrug2, margin)
 		assert.Equal(t, lower > -margin, p < 0.025, "margin %v", margin)
 	}
-	_, p = NonInferior(sleepDrug1, sleepDrug2, 2.4598857632769993)
+	_, p = nonInferior(sleepDrug1, sleepDrug2, 2.4598857632769993)
 	assert.InDelta(t, 0.025, p, 1e-9, "the margin at the interval's lower end")
 
-	assert.Panics(t, func() { NonInferior(sleepDrug1, sleepDrug2, -0.1) })
-	assert.Panics(t, func() { NonInferior(sleepDrug1, sleepDrug2, math.NaN()) })
+	assert.Panics(t, func() { nonInferior(sleepDrug1, sleepDrug2, -0.1) })
+	assert.Panics(t, func() { nonInferior(sleepDrug1, sleepDrug2, math.NaN()) })
 }
 
 // holmRejects is Holm's procedure as published: sort ascending, reject while
@@ -232,11 +232,11 @@ func holmRejects(ps []float64, alpha float64) []bool {
 func TestHolm(t *testing.T) {
 	// Sorted 0.005 0.01 0.03 0.04 times 4 3 2 1: 0.02 0.03 0.06 0.04, then the
 	// running max lifts 0.04 to 0.06.
-	assert.InDeltaSlice(t, []float64{0.03, 0.06, 0.06, 0.02}, Holm([]float64{0.01, 0.04, 0.03, 0.005}), 1e-15)
-	assert.Equal(t, []float64{1, 1}, Holm([]float64{0.5, 0.6}))
-	assert.Equal(t, []float64{0.2}, Holm([]float64{0.2}))
-	assert.InDeltaSlice(t, []float64{0.06, 0.06, 0.5}, Holm([]float64{0.02, 0.02, 0.5}), 1e-15, "tied p-values")
-	assert.Empty(t, Holm(nil))
+	assert.InDeltaSlice(t, []float64{0.03, 0.06, 0.06, 0.02}, holm([]float64{0.01, 0.04, 0.03, 0.005}), 1e-15)
+	assert.Equal(t, []float64{1, 1}, holm([]float64{0.5, 0.6}))
+	assert.Equal(t, []float64{0.2}, holm([]float64{0.2}))
+	assert.InDeltaSlice(t, []float64{0.06, 0.06, 0.5}, holm([]float64{0.02, 0.02, 0.5}), 1e-15, "tied p-values")
+	assert.Empty(t, holm(nil))
 
 	rng := rand.New(rand.NewPCG(5, 0))
 	for range 500 {
@@ -244,7 +244,7 @@ func TestHolm(t *testing.T) {
 		for i := range ps {
 			ps[i] = rng.Float64() * rng.Float64() * rng.Float64()
 		}
-		adjusted := Holm(ps)
+		adjusted := holm(ps)
 		for _, alpha := range []float64{0.01, 0.05, 0.1} {
 			want := holmRejects(ps, alpha)
 			for i := range ps {
@@ -253,8 +253,8 @@ func TestHolm(t *testing.T) {
 		}
 	}
 
-	assert.Panics(t, func() { Holm([]float64{1.2}) })
-	assert.Panics(t, func() { Holm([]float64{math.NaN()}) })
+	assert.Panics(t, func() { holm([]float64{1.2}) })
+	assert.Panics(t, func() { holm([]float64{math.NaN()}) })
 }
 
 func TestTopicSetSize(t *testing.T) {
@@ -275,14 +275,14 @@ func TestTopicSetSize(t *testing.T) {
 		{"alpha .01 power .9", 1, 0.2, 0.01, 0.9, 376},
 	}
 	for _, c := range cases {
-		assert.Equal(t, c.want, TopicSetSize(c.sd, c.delta, c.alpha, c.power), c.name)
+		assert.Equal(t, c.want, topicSetSize(c.sd, c.delta, c.alpha, c.power), c.name)
 	}
-	assert.Equal(t, 2, TopicSetSize(0.01, 1, 0.05, 0.8), "a huge effect still needs 2 topics")
+	assert.Equal(t, 2, topicSetSize(0.01, 1, 0.05, 0.8), "a huge effect still needs 2 topics")
 
-	assert.Panics(t, func() { TopicSetSize(0, 0.05, 0.05, 0.8) })
-	assert.Panics(t, func() { TopicSetSize(0.2, math.Inf(1), 0.05, 0.8) })
-	assert.Panics(t, func() { TopicSetSize(0.2, 0.05, 0, 0.8) })
-	assert.Panics(t, func() { TopicSetSize(0.2, 0.05, 0.05, 1) })
+	assert.Panics(t, func() { topicSetSize(0, 0.05, 0.05, 0.8) })
+	assert.Panics(t, func() { topicSetSize(0.2, math.Inf(1), 0.05, 0.8) })
+	assert.Panics(t, func() { topicSetSize(0.2, 0.05, 0, 0.8) })
+	assert.Panics(t, func() { topicSetSize(0.2, 0.05, 0.05, 1) })
 }
 
 func TestKappa(t *testing.T) {
@@ -294,23 +294,23 @@ func TestKappa(t *testing.T) {
 			b = append(b, cell.y)
 		}
 	}
-	assert.InDelta(t, 0.4, CohenKappa(a, b), 1e-15)
-	assert.InDelta(t, 0.4, WeightedKappa(a, b), 1e-15, "two grades: linear weights are the unweighted ones")
+	assert.InDelta(t, 0.4, cohenKappa(a, b), 1e-15)
+	assert.InDelta(t, 0.4, weightedKappa(a, b), 1e-15, "two grades: linear weights are the unweighted ones")
 
 	// Grades 0-2, Fraction arithmetic: kappa 3/10, linear-weighted 6/13.
 	ga := []int{2, 2, 1, 0, 1, 2, 0, 0, 1, 2, 1, 0, 2, 1, 0}
 	gb := []int{2, 1, 1, 0, 2, 2, 0, 1, 1, 1, 0, 0, 2, 2, 1}
-	assert.InDelta(t, 0.3, CohenKappa(ga, gb), 1e-15)
-	assert.InDelta(t, 6.0/13, WeightedKappa(ga, gb), 1e-15)
+	assert.InDelta(t, 0.3, cohenKappa(ga, gb), 1e-15)
+	assert.InDelta(t, 6.0/13, weightedKappa(ga, gb), 1e-15)
 
 	// Weights are scale-free: grades 0 and 2 alone weigh as one step.
-	assert.InDelta(t, 8.0/13, WeightedKappa([]int{0, 2, 2, 0, 2}, []int{0, 2, 0, 0, 2}), 1e-15)
-	assert.InDelta(t, 8.0/13, CohenKappa([]int{0, 2, 2, 0, 2}, []int{0, 2, 0, 0, 2}), 1e-15)
+	assert.InDelta(t, 8.0/13, weightedKappa([]int{0, 2, 2, 0, 2}, []int{0, 2, 0, 0, 2}), 1e-15)
+	assert.InDelta(t, 8.0/13, cohenKappa([]int{0, 2, 2, 0, 2}, []int{0, 2, 0, 0, 2}), 1e-15)
 
-	assert.Equal(t, 1.0, CohenKappa(ga, ga))
-	assert.Equal(t, 1.0, WeightedKappa(ga, ga))
-	assert.True(t, math.IsNaN(CohenKappa([]int{1, 1}, []int{1, 1})), "p_e = 1 leaves kappa undefined")
+	assert.Equal(t, 1.0, cohenKappa(ga, ga))
+	assert.Equal(t, 1.0, weightedKappa(ga, ga))
+	assert.True(t, math.IsNaN(cohenKappa([]int{1, 1}, []int{1, 1})), "p_e = 1 leaves kappa undefined")
 
-	assert.Panics(t, func() { CohenKappa([]int{1}, []int{1, 2}) })
-	assert.Panics(t, func() { WeightedKappa(nil, nil) })
+	assert.Panics(t, func() { cohenKappa([]int{1}, []int{1, 2}) })
+	assert.Panics(t, func() { weightedKappa(nil, nil) })
 }

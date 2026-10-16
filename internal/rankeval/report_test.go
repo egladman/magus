@@ -31,10 +31,10 @@ func TestFileCutMixedIDs(t *testing.T) {
 		"symbol:a.go#A", "dir:.", "file:a.go", "symbol:b.go#B", "dir:pkg",
 		"symbol:a.go#C", "file:c.go", "target:pkg:build", "symbol:b.go#D", "file:d.go",
 	}
-	assert.Equal(t, []string{"file:a.go", "file:b.go", "file:c.go", "file:d.go"}, FileCut(ranked, fileOfFixture, Cutoff),
+	assert.Equal(t, []string{"file:a.go", "file:b.go", "file:c.go", "file:d.go"}, FileCut(ranked, fileOfFixture, cutoff),
 		"each hit becomes its file at its first position; dirs and targets take none")
 	assert.Equal(t, []string{"file:a.go", "file:b.go"}, FileCut(ranked, fileOfFixture, 2))
-	assert.Empty(t, FileCut(nil, fileOfFixture, Cutoff))
+	assert.Empty(t, FileCut(nil, fileOfFixture, cutoff))
 }
 
 func TestFileCutStopsAtTenFiles(t *testing.T) {
@@ -42,8 +42,8 @@ func TestFileCutStopsAtTenFiles(t *testing.T) {
 	for i := range 30 {
 		ranked = append(ranked, "symbol:f"+strconv.Itoa(i)+".go#S", "dir:d"+strconv.Itoa(i), "file:f"+strconv.Itoa(i)+".go")
 	}
-	files := FileCut(ranked, fileOfFixture, Cutoff)
-	require.Len(t, files, Cutoff)
+	files := FileCut(ranked, fileOfFixture, cutoff)
+	require.Len(t, files, cutoff)
 	assert.Equal(t, "file:f9.go", files[9], "ten files, not ten nodes: 28 nodes reach the tenth")
 
 	run := Run{Judgment: Judgment{ID: "q", Set: SetJudgedDev, Gold: map[string]int{"file:f10.go": 2}}, Files: FileCut(ranked, fileOfFixture, FileDepth)}

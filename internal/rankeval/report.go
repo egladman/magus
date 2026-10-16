@@ -11,13 +11,13 @@ import (
 	"time"
 )
 
-// Cutoff is the number of files every @10 metric scores. Its unit is a file, never a
+// cutoff is the number of files every @10 metric scores. Its unit is a file, never a
 // node: a ranker that returns files would otherwise reach deeper than one that
 // returns the symbols inside them.
-const Cutoff = 10
+const cutoff = 10
 
 // FileDepth is how many files a Run keeps: the condensed list drops unjudged files
-// and still needs Cutoff left.
+// and still needs 10 left.
 const FileDepth = 100
 
 // Run is one judgment replayed. Files is the ranking at file granularity, as FileCut
@@ -55,9 +55,9 @@ func FileCut(ranked []string, fileOf func(id string) string, k int) []string {
 	return out
 }
 
-// Metrics summarizes the runs of one slice at file granularity, cut at Cutoff files.
+// Metrics summarizes the runs of one slice at file granularity, cut at 10 files.
 // Rates and means are over Queries, the runs with at least one relevant file; a run
-// with none counts in Unscorable only. Judged10 is the share of the top Cutoff files
+// with none counts in Unscorable only. Judged10 is the share of the top 10 files
 // that carry a judgment, over the runs that returned a file. CondensedNDCG10 scores
 // the list with unjudged files removed (Sakai, SIGIR 2007).
 type Metrics struct {
@@ -146,8 +146,8 @@ func Summarize(set EvalSet, runs []Run) SetReport {
 		rep.Scores = append(rep.Scores, QueryScore{
 			ID:              r.Judgment.ID,
 			Cluster:         r.Judgment.Session,
-			NDCG10:          NDCGAt(r.Files, relevant, Cutoff),
-			CondensedNDCG10: NDCGAt(condensed(r.Files, judged), relevant, Cutoff),
+			NDCG10:          NDCGAt(r.Files, relevant, cutoff),
+			CondensedNDCG10: NDCGAt(condensed(r.Files, judged), relevant, cutoff),
 		})
 	}
 	slices.SortFunc(rep.Scores, func(a, b QueryScore) int { return cmp.Compare(a.ID, b.ID) })
@@ -191,10 +191,10 @@ func summarize(runs []Run) Metrics {
 			continue
 		}
 		m.Queries++
-		top := r.Files[:min(Cutoff, len(r.Files))]
-		m.NDCG10 += NDCGAt(r.Files, relevant, Cutoff)
-		m.CondensedNDCG10 += NDCGAt(condensed(r.Files, judged), relevant, Cutoff)
-		m.Recall10 += RecallAt(top, relevant, Cutoff)
+		top := r.Files[:min(cutoff, len(r.Files))]
+		m.NDCG10 += NDCGAt(r.Files, relevant, cutoff)
+		m.CondensedNDCG10 += NDCGAt(condensed(r.Files, judged), relevant, cutoff)
+		m.Recall10 += RecallAt(top, relevant, cutoff)
 		m.RR10 += ReciprocalRank(top, relevant)
 		if len(top) == 0 {
 			m.ZeroResult++
@@ -245,8 +245,8 @@ func summarizeNodes(runs []Run) *NodeMetrics {
 			continue
 		}
 		m.Queries++
-		m.Recall10 += RecallAt(r.Ranked, gold, Cutoff)
-		m.NDCG10 += NDCGAt(r.Ranked, gold, Cutoff)
+		m.Recall10 += RecallAt(r.Ranked, gold, cutoff)
+		m.NDCG10 += NDCGAt(r.Ranked, gold, cutoff)
 		m.MRR += ReciprocalRank(r.Ranked, gold)
 	}
 	if m.Queries > 0 {
@@ -355,7 +355,7 @@ func Compare(base, now Report) []Comparison {
 			tested = append(tested, i)
 		}
 	}
-	for j, p := range Holm(ps) {
+	for j, p := range holm(ps) {
 		out[tested[j]].PHolm = p
 	}
 	return out
@@ -393,12 +393,12 @@ func compareScores(set EvalSet, metric string, base, now []QueryScore, value fun
 		return c
 	}
 	if clustered {
-		c.Delta, c.P = ClusteredRandomization(a, b, clusters, randomizationSamples, randomizationSeed)
+		c.Delta, c.P = clusteredRandomization(a, b, clusters, randomizationSamples, randomizationSeed)
 	} else {
-		c.Delta, c.P = PairedRandomization(a, b, randomizationSamples, randomizationSeed)
+		c.Delta, c.P = pairedRandomization(a, b, randomizationSamples, randomizationSeed)
 	}
-	_, c.Lo, c.Hi = PairedTInterval(ia, ib, 0.95)
-	c.Effect = EffectSize(ia, ib)
+	_, c.Lo, c.Hi = pairedTInterval(ia, ib, 0.95)
+	c.Effect = effectSize(ia, ib)
 	return c
 }
 

@@ -8,7 +8,7 @@ import (
 	"slices"
 )
 
-// PairedRandomization is the two-sided paired randomization (sign-flip) test of
+// pairedRandomization is the two-sided paired randomization (sign-flip) test of
 // a against b, one pair per query (Smucker, Allan and Carterette, CIKM 2007;
 // Urbano, Lima and Hanjalic, SIGIR 2019). meanDelta is mean(a-b). Of samples
 // random sign flips of the differences, the hits are those whose |sum| reaches
@@ -16,17 +16,17 @@ import (
 // SAGMB 2010). A PCG stream seeded with seed draws the flips, so a seed fixes p.
 // It panics when a and b differ in length, are empty or hold a NaN or an
 // infinity, or when samples < 1.
-func PairedRandomization(a, b []float64, samples int, seed uint64) (meanDelta, p float64) {
+func pairedRandomization(a, b []float64, samples int, seed uint64) (meanDelta, p float64) {
 	d := differences(a, b, 1)
 	return signFlip(d, len(d), samples, seed)
 }
 
-// ClusteredRandomization is PairedRandomization with one sign per cluster:
+// clusteredRandomization is pairedRandomization with one sign per cluster:
 // every pair sharing a cluster id, such as the queries of one session, flips
 // together, so correlated rows do not count as independent evidence. meanDelta
-// is still the mean over pairs. It panics as PairedRandomization does, and when
+// is still the mean over pairs. It panics as pairedRandomization does, and when
 // clusters is not as long as a.
-func ClusteredRandomization(a, b []float64, clusters []string, samples int, seed uint64) (meanDelta, p float64) {
+func clusteredRandomization(a, b []float64, clusters []string, samples int, seed uint64) (meanDelta, p float64) {
 	d := differences(a, b, 1)
 	if len(clusters) != len(d) {
 		panic(fmt.Sprintf("%d cluster ids for %d pairs", len(clusters), len(d)))
@@ -83,12 +83,12 @@ func signFlip(sums []float64, pairs, samples int, seed uint64) (meanDelta, p flo
 	return observed / float64(pairs), float64(hits+1) / float64(samples+1)
 }
 
-// PairedTInterval is the Student t confidence interval for mean(a-b) at the
+// pairedTInterval is the Student t confidence interval for mean(a-b) at the
 // given confidence, such as 0.95: mean +- t(1-(1-confidence)/2, n-1) * sd/sqrt(n),
 // with sd the sample standard deviation of the differences (Student 1908). It
-// panics on fewer than 2 pairs, on input PairedRandomization rejects, and on a
+// panics on fewer than 2 pairs, on input pairedRandomization rejects, and on a
 // confidence outside (0, 1).
-func PairedTInterval(a, b []float64, confidence float64) (mean, lo, hi float64) {
+func pairedTInterval(a, b []float64, confidence float64) (mean, lo, hi float64) {
 	if math.IsNaN(confidence) || confidence <= 0 || confidence >= 1 {
 		panic(fmt.Sprintf("confidence %v is outside (0, 1)", confidence))
 	}
@@ -98,22 +98,22 @@ func PairedTInterval(a, b []float64, confidence float64) (mean, lo, hi float64) 
 	return mean, mean - half, mean + half
 }
 
-// EffectSize is the standardized mean difference of paired scores, mean(a-b) /
+// effectSize is the standardized mean difference of paired scores, mean(a-b) /
 // sd(a-b), Cohen's d_z (Cohen 1988), with sd the sample standard deviation. It is
 // +-Inf when every difference is the same nonzero value and NaN when all are 0.
-// It panics as PairedTInterval does.
-func EffectSize(a, b []float64) float64 {
+// It panics as pairedTInterval does.
+func effectSize(a, b []float64) float64 {
 	mean, sd := meanSD(differences(a, b, 2))
 	return mean / sd
 }
 
-// NonInferior tests H0: mean(a-b) <= -margin against H1: mean(a-b) > -margin
+// nonInferior tests H0: mean(a-b) <= -margin against H1: mean(a-b) > -margin
 // with a one-sided paired t-test. lower is the lower end of the 95%
-// PairedTInterval and p the test's p-value; lower > -margin exactly when p <
+// pairedTInterval and p the test's p-value; lower > -margin exactly when p <
 // 0.025, the convention that the lower bound of the two-sided 95% interval
 // clears the margin (ICH E9, 1998). Pass the p of several guards through Holm.
-// It panics as PairedTInterval does, and on a negative or non-finite margin.
-func NonInferior(a, b []float64, margin float64) (lower, p float64) {
+// It panics as pairedTInterval does, and on a negative or non-finite margin.
+func nonInferior(a, b []float64, margin float64) (lower, p float64) {
 	if math.IsNaN(margin) || margin < 0 || math.IsInf(margin, 1) {
 		panic(fmt.Sprintf("non-inferiority margin %v is not a finite value >= 0", margin))
 	}
@@ -124,13 +124,13 @@ func NonInferior(a, b []float64, margin float64) (lower, p float64) {
 	return mean - studentTQuantile(0.025, df)*se, studentTUpper((mean+margin)/se, df)
 }
 
-// Holm returns Holm's step-down adjusted p-values (Holm, Scand. J. Statistics
+// holm returns Holm's step-down adjusted p-values (Holm, Scand. J. Statistics
 // 1979), in the order of ps: sorted ascending, the i-th smallest (0-based) of m
 // becomes min(1, (m-i) * p), raised to the largest adjusted value before it.
 // Rejecting every hypothesis whose adjusted p is <= alpha controls the
 // family-wise error rate at alpha (Carterette, TOIS 2012, for IR). It panics on
 // a p outside [0, 1].
-func Holm(ps []float64) []float64 {
+func holm(ps []float64) []float64 {
 	for _, p := range ps {
 		if math.IsNaN(p) || p < 0 || p > 1 {
 			panic(fmt.Sprintf("p-value %v is outside [0, 1]", p))
@@ -150,7 +150,7 @@ func Holm(ps []float64) []float64 {
 	return adjusted
 }
 
-// TopicSetSize is the number of topics a paired t-test at two-sided level alpha
+// topicSetSize is the number of topics a paired t-test at two-sided level alpha
 // needs to detect a true mean difference delta with the given power, when the
 // differences have standard deviation sd (Sakai, "Topic set size design",
 // Information Retrieval Journal 2016, after Nagata 2003). It is the smallest
@@ -159,7 +159,7 @@ func Holm(ps []float64) []float64 {
 // ((z_{alpha/2} + z_{1-power}) / (delta/sd))^2 + z_{alpha/2}^2/2, z_P the upper
 // P point of the standard normal. It panics unless
 // sd and delta are finite and > 0 and alpha and power lie in (0, 1).
-func TopicSetSize(sd, delta, alpha, power float64) int {
+func topicSetSize(sd, delta, alpha, power float64) int {
 	for _, v := range []float64{sd, delta} {
 		if math.IsNaN(v) || v <= 0 || math.IsInf(v, 1) {
 			panic(fmt.Sprintf("topic set size needs a finite sd and delta > 0, got %v and %v", sd, delta))
@@ -196,11 +196,11 @@ func pairedTPower(n int, effect, alpha float64) float64 {
 	return 1 - normalCDF((t*shrink-lambda)/scale) + normalCDF((-t*shrink-lambda)/scale)
 }
 
-// CohenKappa is Cohen's kappa between two raters' labels of the same items
+// cohenKappa is Cohen's kappa between two raters' labels of the same items
 // (Cohen 1960): `(p_o - p_e) / (1 - p_e)`, with p_e from each rater's marginals.
 // It is NaN when p_e is 1, as when both raters give every item one label. It
 // panics when a and b differ in length or are empty.
-func CohenKappa(a, b []int) float64 {
+func cohenKappa(a, b []int) float64 {
 	return kappa(a, b, func(x, y int) int64 {
 		if x == y {
 			return 0
@@ -209,12 +209,12 @@ func CohenKappa(a, b []int) float64 {
 	})
 }
 
-// WeightedKappa is Cohen's weighted kappa with linear weights (Cohen 1968) for
+// weightedKappa is Cohen's weighted kappa with linear weights (Cohen 1968) for
 // ordinal grades: `1 - sum(w*observed) / sum(w*expected)`, with disagreement
 // weight |x-y| on the grade values. It equals scikit-learn's
 // cohen_kappa_score(weights="linear") when the observed grades are consecutive
-// integers. Its NaN and panic cases are CohenKappa's.
-func WeightedKappa(a, b []int) float64 {
+// integers. Its NaN and panic cases are cohenKappa's.
+func weightedKappa(a, b []int) float64 {
 	return kappa(a, b, func(x, y int) int64 {
 		if x > y {
 			return int64(x - y)

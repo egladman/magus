@@ -59,13 +59,13 @@ func (r HoldoutRead) validate() error {
 	return nil
 }
 
-// ErrHoldoutRead is returned by RecordHoldoutRead when the topic set was read before.
-var ErrHoldoutRead = errors.New("holdout already read")
+// errHoldoutRead is returned by RecordHoldoutRead when the topic set was read before.
+var errHoldoutRead = errors.New("holdout already read")
 
 // RecordHoldoutRead appends read to the JSON Lines ledger at path, creating it, and
 // returns the reads before it. A holdout is read once (Dwork et al., "The reusable
 // holdout", Science 2015): when the ledger already holds a read of read.Digest, a
-// read that is not ReportOnly is refused with ErrHoldoutRead naming the first, and
+// read that is not ReportOnly is refused with an error naming the first, and
 // nothing is appended. A ReportOnly read is always appended. It is not safe for two
 // processes recording at once.
 func RecordHoldoutRead(path string, read HoldoutRead) ([]HoldoutRead, error) {
@@ -89,7 +89,7 @@ func RecordHoldoutRead(path string, read HoldoutRead) ([]HoldoutRead, error) {
 	for _, p := range prior {
 		if p.Digest == read.Digest && !read.ReportOnly {
 			return prior, fmt.Errorf("%w: %s %s was read for %s at %s; a further read only reports, with MAGUS_EVAL_REPORT_ONLY=1",
-				ErrHoldoutRead, p.Set, p.Digest, p.Candidate, p.At.Format(time.RFC3339))
+				errHoldoutRead, p.Set, p.Digest, p.Candidate, p.At.Format(time.RFC3339))
 		}
 	}
 	out, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
