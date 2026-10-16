@@ -503,7 +503,7 @@ func gatherKnowledgeInputs(ctx context.Context, src knowledgeSources, refresh bo
 		// churn and unmeasured prose. Reading it back off @vcs is no substitute either: that
 		// shard is filtered to paths with a file node, so it is a view of the scan and not a
 		// record of it.
-		in.VCS = loadKnowledgeVCSCached(ctx, src.cfg, src.root, src.cacheDir, refresh, src.log)
+		in.VCS, in.CoChanges = loadKnowledgeVCSCached(ctx, src.cfg, src.root, src.cacheDir, refresh, src.log)
 	}
 	if needs(knowledge.ClassDomain) {
 		cfg := src.cfg
@@ -1891,34 +1891,36 @@ func spellIndexer(name string) *spells.SymbolIndexer {
 // budget, so the effective in-subdir window is smaller than the bound.
 const vcsDefaultMaxCommits = 1000
 
-// loadKnowledgeVCS gathers per-file history for the @vcs shard when opt-in
-// (knowledge.vcs.enabled), routed through the VCS abstraction so it is not git-specific:
-// any resolved backend that implements ChurnReporter works, and one that does not is
-// skipped. Best-effort: a disabled/absent VCS or a scan error yields no metadata (the
-// shard is absent), never an error. Callers want loadKnowledgeVCSCached; this is the
-// uncached walk it wraps.
-func loadKnowledgeVCS(ctx context.Context, cfg config.Config, root string, log *slog.Logger) []types.KnowledgeVCS {
+// loadKnowledgeVCS gathers per-file history and file co-change pairs for the @vcs shard
+// when opt-in (knowledge.vcs.enabled), routed through the VCS abstraction so it is not
+// git-specific: any resolved backend that implements ChurnReporter works, and one that
+// does not is skipped. Best-effort: a disabled/absent VCS or a scan error yields no
+// metadata (the shard is absent), never an error. Callers want loadKnowledgeVCSCached;
+// this is the uncached walk it wraps.
+func loadKnowledgeVCS(ctx context.Context, cfg config.Config, root string, log *slog.Logger) ([]types.KnowledgeVCS, []types.KnowledgeCoChange) {
 	if !cfg.Knowledge.VCS.Enabled {
-		return nil
+		return nil, nil
 	}
 	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
 	if err != nil || res.Source == types.VCSSourceDisabled || res.VCS == nil {
 		log.DebugContext(ctx, "vcs enabled but no version control resolved, skipping")
-		return nil
+		return nil, nil
 	}
 	changes, err := res.VCS.ChangesByCommit(ctx, root, vcsMaxCommits(cfg), "")
 	if err != nil {
 		log.WarnContext(ctx, "vcs history scan failed, skipping", attr.Error(err))
-		return nil
+		return nil, nil
 	}
-	return aggregateFileHistory(changes, vcsPathPrefix(root, res.VCS.Claims()))
+	prefix := vcsPathPrefix(root, res.VCS.Claims())
+	return aggregateFileHistory(changes, prefix), aggregateFileCoupling(changes, prefix)
 }
 
 // vcsHistoryFile holds one cached scan. The fingerprint travels inside the file rather than
 // in its name, so a stale scan is overwritten instead of accumulating a file per dead HEAD.
 type vcsHistoryFile struct {
-	Fingerprint string               `json:"fingerprint"`
-	Entries     []types.KnowledgeVCS `json:"entries"`
+	Fingerprint string                    `json:"fingerprint"`
+	Entries     []types.KnowledgeVCS      `json:"entries"`
+	Couplings   []types.KnowledgeCoChange `json:"couplings"`
 }
 
 // vcsHistoryFormat versions the cached SHAPE. Bump it whenever a KnowledgeVCS json tag is
@@ -1926,18 +1928,19 @@ type vcsHistoryFile struct {
 // would match on an unchanged HEAD and decode the renamed fields as zero values.
 //
 //	v2: LastUnix (epoch int64) became LastModified (time.Time).
-const vcsHistoryFormat = 2
+//	v3: the file holds co-change couplings beside the entries.
+const vcsHistoryFormat = 3
 
-// loadKnowledgeVCSCached returns the per-file history, walking it only when the cached scan
-// does not match the current input.
+// loadKnowledgeVCSCached returns the per-file history and co-change pairs, walking only when
+// the cached scan does not match the current input.
 //
 // A hit and a miss must be indistinguishable downstream (every consumer gets the same full
-// slice either way), which is the property that makes caching this safe at all.
+// slices either way), which is the property that makes caching this safe at all.
 //
 // refresh forces the walk and still rewrites the cache, so distrusting it costs one walk
 // rather than every walk. Best-effort throughout: an unreadable file or a failed write just
 // means walking, and nothing here can fail a build.
-func loadKnowledgeVCSCached(ctx context.Context, cfg config.Config, root, cacheDir string, refresh bool, log *slog.Logger) []types.KnowledgeVCS {
+func loadKnowledgeVCSCached(ctx context.Context, cfg config.Config, root, cacheDir string, refresh bool, log *slog.Logger) ([]types.KnowledgeVCS, []types.KnowledgeCoChange) {
 	fp := vcsInputFingerprint(ctx, cfg, root)
 	path := filepath.Join(knowledge.StoreDir(cacheDir), "inputs", "vcs.json")
 	if fp != "" && !refresh {
@@ -1945,24 +1948,24 @@ func loadKnowledgeVCSCached(ctx context.Context, cfg config.Config, root, cacheD
 			var f vcsHistoryFile
 			if err := json.Unmarshal(b, &f); err == nil && f.Fingerprint == fp {
 				log.DebugContext(ctx, "reusing cached vcs history", slog.Int("files", len(f.Entries)))
-				return f.Entries
+				return f.Entries, f.Couplings
 			}
 		}
 	}
-	entries := loadKnowledgeVCS(ctx, cfg, root, log)
+	entries, couplings := loadKnowledgeVCS(ctx, cfg, root, log)
 	// An empty scan is not worth a file, and writing one would cache "no history" against a
 	// real HEAD, so a transient git failure would persist as an answer.
 	if fp == "" || len(entries) == 0 || cacheImmutable(cfg) {
-		return entries
+		return entries, couplings
 	}
-	b, err := json.Marshal(vcsHistoryFile{Fingerprint: fp, Entries: entries})
+	b, err := json.Marshal(vcsHistoryFile{Fingerprint: fp, Entries: entries, Couplings: couplings})
 	if err == nil {
 		err = file.WriteFileAtomic(path, b, 0o644)
 	}
 	if err != nil {
 		log.DebugContext(ctx, "caching vcs history failed", attr.Error(err))
 	}
-	return entries
+	return entries, couplings
 }
 
 // vcsInputFingerprint identifies the history the scan reads: where it starts, how far back
@@ -2076,6 +2079,69 @@ func aggregateFileHistory(changes []types.CommitChange, prefix string) []types.K
 		entries = append(entries, types.KnowledgeVCS{Path: p, LastCommit: a.lastCommit, LastModified: a.lastModified, LastAuthor: a.lastAuthor, Authors: slices.Sorted(maps.Keys(a.authors)), Commits: a.commits})
 	}
 	return entries
+}
+
+// A commit touching more than coChangeMaxFiles files is mechanical (a rename sweep, a
+// regeneration, a format pass) and says nothing about which files belong together (Robbes
+// et al.). A pair needs coChangeMinSupport shared commits, because one co-occurrence is
+// coincidence, and coChangeMinConfidence of the rarer file's commits, so a hot file does
+// not couple to everything it ever shared a commit with.
+const (
+	coChangeMaxFiles      = 30
+	coChangeMinSupport    = 2
+	coChangeMinConfidence = 0.3
+)
+
+// aggregateFileCoupling reduces per-commit changes to the file pairs that change together.
+// Paths are made workspace-relative as aggregateFileHistory does. Confidence is Support
+// over the smaller of the two files' commit counts, counted over the commits kept after
+// the bulk filter. The result is independent of commit order, with A < B, sorted by A then
+// B.
+func aggregateFileCoupling(changes []types.CommitChange, prefix string) []types.KnowledgeCoChange {
+	commits := map[string]int{}
+	type pair struct{ a, b string }
+	support := map[pair]int{}
+	for _, c := range changes {
+		if len(c.Files) > coChangeMaxFiles {
+			continue
+		}
+		seen := map[string]bool{}
+		for _, ch := range c.Files {
+			f := filepath.ToSlash(strings.TrimSpace(ch.Path))
+			if prefix != "" {
+				rel, ok := strings.CutPrefix(f, prefix)
+				if !ok {
+					continue
+				}
+				f = rel
+			}
+			if f != "" {
+				seen[f] = true
+			}
+		}
+		files := slices.Sorted(maps.Keys(seen))
+		for i, a := range files {
+			commits[a]++
+			for _, b := range files[i+1:] {
+				support[pair{a, b}]++
+			}
+		}
+	}
+	var out []types.KnowledgeCoChange
+	for p, n := range support {
+		confidence := float64(n) / float64(min(commits[p.a], commits[p.b]))
+		if n < coChangeMinSupport || confidence < coChangeMinConfidence {
+			continue
+		}
+		out = append(out, types.KnowledgeCoChange{A: p.a, B: p.b, Support: n, Confidence: confidence})
+	}
+	slices.SortFunc(out, func(x, y types.KnowledgeCoChange) int {
+		if c := cmp.Compare(x.A, y.A); c != 0 {
+			return c
+		}
+		return cmp.Compare(x.B, y.B)
+	})
+	return out
 }
 
 // ShortRevision abbreviates a full VCS revision id for display, leaving a
