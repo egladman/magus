@@ -37,13 +37,13 @@ Anchor is one typed attachment from a note to a graph entity, with the result of
 
 Source: [notes.proto](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto).
 
-| Field     | Type                          | # | Description                                                                                                                                                                                                                |
-| --------- | ----------------------------- | - | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`    | [AnchorKind](#anchorkind)     | 1 |                                                                                                                                                                                                                            |
-| `target`  | string                        | 2 |                                                                                                                                                                                                                            |
-| `status`  | [AnchorStatus](#anchorstatus) | 3 |                                                                                                                                                                                                                            |
-| `node_id` | string                        | 4 | node\_id is the graph node this anchor names, so a client can link into the Graph Explorer. Empty when the anchor does not resolve.                                                                                        |
-| `detail`  | string                        | 5 | detail explains a DANGLING, DRIFTED or BODY\_CHANGED status in one sentence, and what to do about it. Empty for the other statuses. UNTRUSTED only in the sense that it is prose; it is magus-authored, unlike body below. |
+| Field     | Type                          | # | Description                                                                                                                                                                                                   |
+| --------- | ----------------------------- | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`    | [AnchorKind](#anchorkind)     | 1 |                                                                                                                                                                                                               |
+| `target`  | string                        | 2 |                                                                                                                                                                                                               |
+| `status`  | [AnchorStatus](#anchorstatus) | 3 |                                                                                                                                                                                                               |
+| `node_id` | string                        | 4 | node\_id is the graph node this anchor names, so a client can link into the Graph Explorer. Empty when the anchor does not resolve.                                                                           |
+| `detail`  | string                        | 5 | detail explains a DANGLING, DRIFTED or UNVERIFIED status in one sentence, and what to do about it. Empty for RESOLVES. UNTRUSTED only in the sense that it is prose; it is magus-authored, unlike body below. |
 
 Used by: [GetNote (response)](notes.md#getnote), [ListNotes (response)](notes.md#listnotes).
 
@@ -158,18 +158,21 @@ Used by: [GetNote (response)](notes.md#getnote), [ListNotes (response)](notes.md
 
 AnchorStatus is what checking one anchor against the workspace found.
 
-DRIFTED is the case an existence check cannot catch and a reader cannot see: the anchored code still exists and quietly stopped meaning what the note says. BODY\_CHANGED is that same check graded one step finer - the content moved, the DECLARATION did not - and it is a far weaker signal: measured across 1,496 repositories, an edit that leaves the signature alone is 39-105x less likely to come with a prose update than one that changes it, which is why an undifferentiated content hash reports drift that mostly is not there. Surface it, never gate on it. UNVERIFIED is a real, distinct answer and must never be rendered as "fine" - it means no fingerprint was recorded (the note predates fingerprinting, or was never re-read) or none could be computed here, and reporting drift from missing data is the false positive that trains a reader to ignore every flag.
+It is `magus notes verify`'s grade, mapped rather than re-derived, so the two cannot disagree.
+
+DRIFTED is the case an existence check cannot catch and a reader cannot see: the anchored code still exists and quietly stopped meaning what the note says. A symbol drifts when its signature changes; a body edit or a move leaves it RESOLVES, since those almost never invalidate prose about what the symbol is. A file drifts when its content changes. UNVERIFIED is a real, distinct answer and must never be rendered as "fine" - it means the graph would not load, a symbol note recorded no signature, or none could be read here, and reporting drift from missing data is the false positive that trains a reader to ignore every flag.
 
 Source: [notes.proto](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto).
 
-| Value                        | # | Description |
-| ---------------------------- | - | ----------- |
-| `ANCHOR_STATUS_UNSPECIFIED`  | 0 |             |
-| `ANCHOR_STATUS_RESOLVES`     | 1 |             |
-| `ANCHOR_STATUS_DANGLING`     | 2 |             |
-| `ANCHOR_STATUS_DRIFTED`      | 3 |             |
-| `ANCHOR_STATUS_UNVERIFIED`   | 4 |             |
-| `ANCHOR_STATUS_BODY_CHANGED` | 5 |             |
+| Value                       | # | Description |
+| --------------------------- | - | ----------- |
+| `ANCHOR_STATUS_UNSPECIFIED` | 0 |             |
+| `ANCHOR_STATUS_RESOLVES`    | 1 |             |
+| `ANCHOR_STATUS_DANGLING`    | 2 |             |
+| `ANCHOR_STATUS_DRIFTED`     | 3 |             |
+| `ANCHOR_STATUS_UNVERIFIED`  | 4 |             |
+
+_Reserved: 5; `ANCHOR_STATUS_BODY_CHANGED`._
 
 Used by: [GetNote (response)](notes.md#getnote), [ListNotes (response)](notes.md#listnotes).
 
