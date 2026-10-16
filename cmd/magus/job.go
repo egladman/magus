@@ -195,9 +195,10 @@ func jobPlace(root string) (job.Location, error) {
 }
 
 // openJobs opens the job store of the workspace at root. With o.ModelTiers a workspace
-// that will not load is an error, since a tier declaration that failed to load must not
-// read as one that declared nothing; a root of "" is no workspace at all, and assigns
-// nothing.
+// that will not load still opens the store, so the fork or apply that fixes the break can
+// be declared: it assigns no tier and checks no tier limit, and says so on stderr with
+// the load error, since a tier declaration that failed to load must not read as one that
+// declared nothing. A root of "" is no workspace at all, and assigns nothing.
 func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 	loc, err := jobPlace(root)
 	if err != nil {
@@ -217,7 +218,9 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 	if o.ModelTiers && root != "" {
 		m, err := loadMagus(ctx, root)
 		if err != nil {
-			return nil, err
+			slog.WarnContext(ctx, "the workspace did not load, so no model tier was assigned and no tier limit was checked; a row written now carries no tier until its model changes",
+				attr.Notice("unchecked"), attr.Error(err))
+			return job.NewStore(loc), nil
 		}
 		loc.ModelTiers, loc.ModelTierMatrix = m.ModelTiers(ctx), m.ModelTierMatrix()
 		loc.Owners = func(ctx context.Context, files []string) ([]string, error) {
@@ -940,18 +943,23 @@ type describeJobOutput struct {
 // Computed here rather than taken from the caller, which is what makes the divergence
 // verdict a fact. It is the same value `magus vcs checkpoint -o name` prints, from the
 // same function, so the token a person cites and the token exec records cannot differ.
+//
+// It reads magus.yaml's vcs keys and never the magusfiles, so a workspace whose load is
+// broken still has a base: the fork that fixes the break needs one.
 func checkoutBaseToken(ctx context.Context, root string) (string, error) {
-	// loadMagus, not inspectWorkspace: the fork's notes open the workspace next, and an
-	// inspection first would be a second load, which an open one later reuses.
-	ws, err := loadMagus(ctx, root)
+	if root == "" {
+		return "", errors.New("no workspace was found, so this checkout has no base to record")
+	}
+	root, err := workspace.FindRoot(root)
 	if err != nil {
 		return "", err
 	}
-	res, err := vcs.Resolve(ctx, ws.Root(), "", ws.VCSOptions())
+	opts := types.VCSOptions{Enabled: globalCfg.VCS.Enabled, Name: globalCfg.VCS.Name, BaseRef: globalCfg.VCS.BaseRef}
+	res, err := vcs.Resolve(ctx, root, "", opts)
 	if err != nil {
 		return "", err
 	}
-	cp, err := vcs.Checkpoint(ctx, ws.Root(), res, false)
+	cp, err := vcs.Checkpoint(ctx, root, res, false)
 	if err != nil {
 		return "", err
 	}

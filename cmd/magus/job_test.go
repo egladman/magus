@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -542,17 +544,26 @@ func TestJobForkRefusesARowScopedByNothing(t *testing.T) {
 	assert.Equal(t, map[string]bool{"reader": true, "writer": false}, got, "a refused fork writes no row")
 }
 
-// Only a store opened for model tiers loads the workspace, so a magusfile mid-edit fails
-// that open alone.
-func TestOpenJobsLoadsTheWorkspaceOnlyForModelTiers(t *testing.T) {
+// A magusfile mid-edit still opens the store for model tiers, so the fork that fixes it can
+// be declared, and the open names the tier it left unassigned: a tier declaration that
+// failed to load must not read as one that declared nothing.
+func TestOpenJobsOpensTheStoreWhenTheWorkspaceWillNotLoad(t *testing.T) {
 	resetWorkspaceMemo(t)
 	root, _ := execFixture(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\nmagus\\project({\n"), 0o644))
 
+	var logged bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
 	_, err := openJobs(t.Context(), root, jobOpen{DryRun: true})
 	require.NoError(t, err)
+	assert.Empty(t, logged.String(), "a store opened without model tiers never loads the workspace")
 	_, err = openJobs(t.Context(), root, jobOpen{ModelTiers: true})
-	require.Error(t, err, "a tier declaration that failed to load is not one that declared nothing")
+	require.NoError(t, err)
+	assert.Contains(t, logged.String(), "no model tier was assigned")
+	assert.Contains(t, logged.String(), "magusfile.buzz")
 }
 
 // A fork resolves the checkpoint it is handed: a full-length revision the repository

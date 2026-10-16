@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 )
@@ -22,8 +24,9 @@ type rowNotes struct {
 }
 
 // jobNotes is rowNotes for each writing row, keyed by job id, over one workspace load. A
-// workspace that will not load yields nothing: the listing states a fact, and it must
-// never be the reason a fork or an apply fails.
+// workspace that will not load yields nothing and says on stderr which notes it could not
+// compute: the listing states a fact, and it must never be the reason a fork or an apply
+// fails, nor read as a clean bill when it was never computed.
 func jobNotes(ctx context.Context, root string, rows []types.Job) map[string]rowNotes {
 	var m *magus.Magus
 	var foregroundMax func() (time.Duration, bool)
@@ -35,6 +38,8 @@ func jobNotes(ctx context.Context, root string, rows []types.Job) map[string]row
 		if m == nil {
 			loaded, err := loadMagus(ctx, root)
 			if err != nil {
+				slog.WarnContext(ctx, "the workspace did not load, so the outputs regenerated outside the write paths, the ci targets no goal runs and a check too long for the foreground were not listed",
+					attr.Notice("unchecked"), attr.Error(err))
 				return nil
 			}
 			m = loaded
