@@ -878,29 +878,13 @@ var storeMechanicsSkipDirs = skipDirs("gen", "testdata")
 // TestStoreMechanicsLiveInInternalFile holds the file-persistence mechanics to one
 // implementation. A temp file renamed into place and an flock-guarded read-modify-write
 // each had several copies that differed in fsync, file mode, temp cleanup and whether the
-// wait honored ctx; internal/file (WriteFileAtomic, ReplaceFile, WithLock, Doc) is the one
+// wait honored ctx; internal/file (WriteFileAtomic, ReplaceFile, WithLock, JSONL) is the one
 // copy. The scan is per function and textual, so a copy split across two functions slips
 // past it; what it catches is the shape every copy so far has had.
 func TestStoreMechanicsLiveInInternalFile(t *testing.T) {
 	t.Parallel()
 
-	var files []string
-	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		slashed := filepath.ToSlash(path)
-		if d.IsDir() {
-			if storeMechanicsSkipDirs[d.Name()] || slashed == "libs" || slashed == "internal/file" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
-			files = append(files, path)
-		}
-		return nil
-	})
+	files, err := storeGoFiles(".")
 	require.NoError(t, err)
 
 	found := make([][]string, len(files))
@@ -925,24 +909,14 @@ func TestStoreMechanicsLiveInInternalFile(t *testing.T) {
 	}
 	require.NoError(t, g.Wait())
 
-	seen := map[string]bool{}
-	var violations []string
-	for _, sites := range found {
-		for _, site := range sites {
-			seen[site] = true
-			if _, ok := storeMechanicsAllowed[site]; !ok {
-				violations = append(violations, site)
-			}
+	var sites []allowlistSite
+	for _, fileSites := range found {
+		for _, site := range fileSites {
+			sites = append(sites, allowlistSite{key: site, label: site})
 		}
 	}
-	var stale []string
-	for site := range storeMechanicsAllowed {
-		if !seen[site] {
-			stale = append(stale, site)
-		}
-	}
-	sort.Strings(violations)
-	sort.Strings(stale)
+	slices.SortFunc(sites, func(a, b allowlistSite) int { return strings.Compare(a.label, b.label) })
+	violations, stale := allowlistVerdict(sites, storeMechanicsAllowed)
 
 	assert.Empty(t, violations,
 		"these functions write a file by temp and rename, or take an flock, themselves.\n"+
@@ -1012,21 +986,11 @@ func TestStoresAreJSONLines(t *testing.T) {
 	sites, err := appendSites(".")
 	require.NoError(t, err)
 
-	seen := map[string]bool{}
-	var violations []string
+	found := make([]allowlistSite, 0, len(sites))
 	for _, s := range sites {
-		seen[s.key()] = true
-		if _, ok := appendAllowed[s.key()]; !ok {
-			violations = append(violations, s.String())
-		}
+		found = append(found, allowlistSite{key: s.key(), label: s.String()})
 	}
-	var stale []string
-	for key := range appendAllowed {
-		if !seen[key] {
-			stale = append(stale, key)
-		}
-	}
-	sort.Strings(stale)
+	violations, stale := allowlistVerdict(found, appendAllowed)
 
 	assert.Empty(t, violations,
 		"these functions open a file with O_APPEND themselves. Append through internal/file:\n"+
@@ -1095,7 +1059,55 @@ func (s appendSite) String() string { return fmt.Sprintf("%s:%d in %s", s.path, 
 // appendSites returns every O_APPEND in a non-test Go file under root, sorted, outside
 // internal/file and the trees TestStoreMechanicsLiveInInternalFile skips too.
 func appendSites(root string) ([]appendSite, error) {
+	files, err := storeGoFiles(root)
+	if err != nil {
+		return nil, err
+	}
 	var sites []appendSite
+	for _, path := range files {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		if !strings.Contains(string(src), "O_APPEND") {
+			continue
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return nil, err
+		}
+		fset := token.NewFileSet()
+		f, err := parser.ParseFile(fset, path, src, parser.SkipObjectResolution)
+		if err != nil {
+			return nil, err
+		}
+		for _, decl := range f.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			name := fn.Name.Name
+			if fn.Recv != nil && len(fn.Recv.List) == 1 {
+				name = strings.TrimPrefix(gotypes.ExprString(fn.Recv.List[0].Type), "*") + "." + name
+			}
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				if sel, ok := n.(*ast.SelectorExpr); ok && sel.Sel.Name == "O_APPEND" {
+					sites = append(sites, appendSite{path: filepath.ToSlash(rel), line: fset.Position(sel.Pos()).Line, fn: name})
+				}
+				return true
+			})
+		}
+	}
+	slices.SortFunc(sites, func(a, b appendSite) int {
+		return cmp.Or(strings.Compare(a.path, b.path), a.line-b.line)
+	})
+	return sites, nil
+}
+
+// storeGoFiles lists the non-test Go files under root that the store rules govern: it
+// skips storeMechanicsSkipDirs, libs/ and internal/file.
+func storeGoFiles(root string) ([]string, error) {
+	var files []string
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -1111,41 +1123,33 @@ func appendSites(root string) ([]appendSite, error) {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		src, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if !strings.Contains(string(src), "O_APPEND") {
-			return nil
-		}
-		fset := token.NewFileSet()
-		f, err := parser.ParseFile(fset, path, src, parser.SkipObjectResolution)
-		if err != nil {
-			return err
-		}
-		for _, decl := range f.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Body == nil {
-				continue
-			}
-			name := fn.Name.Name
-			if fn.Recv != nil && len(fn.Recv.List) == 1 {
-				name = strings.TrimPrefix(gotypes.ExprString(fn.Recv.List[0].Type), "*") + "." + name
-			}
-			ast.Inspect(fn.Body, func(n ast.Node) bool {
-				if sel, ok := n.(*ast.SelectorExpr); ok && sel.Sel.Name == "O_APPEND" {
-					sites = append(sites, appendSite{path: slashed, line: fset.Position(sel.Pos()).Line, fn: name})
-				}
-				return true
-			})
+		if strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
+			files = append(files, path)
 		}
 		return nil
 	})
-	slices.SortFunc(sites, func(a, b appendSite) int {
-		return cmp.Or(strings.Compare(a.path, b.path), a.line-b.line)
-	})
-	return sites, err
+	return files, err
+}
+
+// allowlistSite is one finding of a store rule: key is what the allowlist names, label what
+// a violation prints.
+type allowlistSite struct{ key, label string }
+
+// allowlistVerdict grades found against allowed: violations are the labels of sites whose
+// key is not allowed, stale the sorted allowed keys no site matched.
+func allowlistVerdict(found []allowlistSite, allowed map[string]string) (violations, stale []string) {
+	seen := map[string]bool{}
+	for _, s := range found {
+		seen[s.key] = true
+		if _, ok := allowed[s.key]; !ok {
+			violations = append(violations, s.label)
+		}
+	}
+	for key := range allowed {
+		if !seen[key] {
+			stale = append(stale, key)
+		}
+	}
+	sort.Strings(stale)
+	return violations, stale
 }
