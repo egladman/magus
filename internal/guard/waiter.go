@@ -1,18 +1,27 @@
 package guard
 
 import (
+	"bufio"
+	"bytes"
 	"cmp"
 	"context"
+	"fmt"
+	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"mvdan.cc/sh/v3/syntax"
+
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -96,6 +105,157 @@ func waitsOnBudget(args []string) bool {
 		name, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "=")
 		return strings.HasPrefix(a, "-") && (name == "wait" || name == "watch" || name == "W")
 	})
+}
+
+// refusedRetryWindow is how long after an MGS3009 refusal a rerun of the same command is a
+// retry loop rather than a fresh attempt: in two days of session records, 106 of 140
+// consecutive refusals came back inside it.
+const refusedRetryWindow = 60 * time.Second
+
+// refusalCode is how a refusal's code reads inside a run log line, matched before the line
+// is decoded so a log full of output costs a byte search per line.
+var refusalCode = []byte(`"` + types.MachineBudgetExhausted + `"`)
+
+// refusedRun is a magus command this checkout's run log recorded refused with MGS3009.
+type refusedRun struct {
+	argv []string
+	at   time.Time
+}
+
+// denyRefusedRetry refuses a magus run that repeats, argv for argv, one this checkout's run
+// log recorded refused with MGS3009 inside refusedRetryWindow. Nothing freed a seat on the
+// caller's behalf in between, so the rerun is the poll again with the caller's turn as its
+// loop. A line that waits for the budget first (`magus status --wait | magus run ...`)
+// passes, as does any line that runs no target. The run log is read only for a line that
+// runs one, and only logs written inside the window are opened.
+func denyRefusedRetry(ctx context.Context, deps Dependencies, actingLease, command string) denial {
+	argvs := unwaitedRuns(command)
+	if len(argvs) == 0 {
+		return denial{}
+	}
+	now := time.Now()
+	r, ok := recentRefusal(workspaceRunsDir(hookLocation(ctx, deps).cacheDir), argvs, now)
+	if !ok {
+		return denial{}
+	}
+	run := strings.Join(append([]string{hint.BinaryName()}, quoteArgs(r.argv)...), " ")
+	ago := now.Sub(r.at).Round(time.Second)
+	if actingLease != "" {
+		if me, leased := actingLiveLease(ctx, deps, actingLease); leased && workerRole(me, deps.caller) != "" {
+			return denial{
+				Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago; %s", run, types.MachineBudgetExhausted, ago, denySlotWait),
+				Why: denyRefusedRetryWhy + " " + denySlotWaitWhy,
+			}
+		}
+	}
+	return denial{
+		Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago; wait for a seat in the same call: `%s | %s`.",
+			run, types.MachineBudgetExhausted, ago, hint.Status.With("--wait"), run),
+		Why: denyRefusedRetryWhy + " `status --wait` sizes the piped run's claim and exits once the budget can seat it, so the run starts as soon as a seat frees instead of on the caller's next turn.",
+	}
+}
+
+var denyRefusedRetryWhy = "A refusal frees no seat, and the same command run again inside a minute meets the same full budget: one checkout was once refused 63 times in 12 minutes, each retry a turn spent on a look."
+
+// unwaitedRuns is the argv of each magus run or affected on a line that does not wait for
+// the build budget first, nil for a line that waits or runs neither.
+func unwaitedRuns(command string) [][]string {
+	cmds, ok := ParseCommands(command)
+	if !ok {
+		return nil
+	}
+	var argvs [][]string
+	for _, c := range cmds {
+		if !isMagusInvocation(c) {
+			continue
+		}
+		words := magusSubcommandWords(c.Args)
+		if len(words) == 0 {
+			continue
+		}
+		switch words[0] {
+		case "status":
+			if waitsOnBudget(c.Args) {
+				return nil
+			}
+		case "run", "affected":
+			argvs = append(argvs, c.Args)
+		}
+	}
+	return argvs
+}
+
+// recentRefusal is the newest MGS3009 refusal in runsDir of any of argvs inside
+// refusedRetryWindow of now. A log last written before the window cannot hold one, so it
+// is skipped unopened.
+func recentRefusal(runsDir string, argvs [][]string, now time.Time) (refusedRun, bool) {
+	if runsDir == "" {
+		return refusedRun{}, false
+	}
+	entries, err := os.ReadDir(runsDir)
+	if err != nil {
+		return refusedRun{}, false
+	}
+	cutoff := now.Add(-refusedRetryWindow)
+	var newest refusedRun
+	found := false
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || info.ModTime().Before(cutoff) {
+			continue
+		}
+		r, ok := readRefusal(filepath.Join(runsDir, e.Name()), argvs)
+		if ok && !r.at.Before(cutoff) && (!found || r.at.After(newest.at)) {
+			newest, found = r, true
+		}
+	}
+	return newest, found
+}
+
+// readRefusal reads one run log: its started event must carry one of argvs, and a result
+// line must carry MGS3009. The rest of a log for another command is never read.
+func readRefusal(path string, argvs [][]string) (refusedRun, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return refusedRun{}, false
+	}
+	defer f.Close()
+	rd := bufio.NewReader(f)
+	var argv []string
+	for {
+		line, err := rd.ReadBytes('\n')
+		var ev journal.Event
+		switch {
+		case len(line) == 0:
+		case argv == nil:
+			if json.Unmarshal(line, &ev) != nil || ev.Kind != journal.KindStarted || ev.Command == nil ||
+				!slices.ContainsFunc(argvs, func(a []string) bool { return slices.Equal(a, ev.Command.Arguments) }) {
+				return refusedRun{}, false
+			}
+			argv = ev.Command.Arguments
+		case bytes.Contains(line, refusalCode) && json.Unmarshal(line, &ev) == nil &&
+			ev.Kind == journal.KindResult && ev.DiagnosticCode == string(types.MachineBudgetExhausted):
+			return refusedRun{argv: argv, at: time.UnixMilli(ev.Ts)}, true
+		}
+		if err != nil {
+			return refusedRun{}, false
+		}
+	}
+}
+
+// quoteArgs quotes each argument for a shell, so a printed command runs as it was recorded.
+func quoteArgs(args []string) []string {
+	quoted := make([]string, len(args))
+	for i, a := range args {
+		if q, err := syntax.Quote(a, syntax.LangBash); err == nil {
+			a = q
+		}
+		quoted[i] = a
+	}
+	return quoted
 }
 
 // budgetReadTimeout bounds the broker read a spawn makes, so a wedged broker costs a

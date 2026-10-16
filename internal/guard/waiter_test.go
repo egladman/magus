@@ -1,12 +1,18 @@
 package guard
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -275,4 +281,96 @@ func TestSpawnWaiterAndNestedWaiter(t *testing.T) {
 		"a worker's helper speaking of watching is advised against")
 	assert.Equal(t, "pass", spawn("a1b2c3", "add the watch flag").Decision, "once a session")
 	assert.Equal(t, "pass", spawn("", "add the watch flag").Decision, "the root is not nested")
+}
+
+// writeRefusalLog writes a run log for args started at at, its target refused with MGS3009
+// when refused and passed otherwise, last written at at.
+func writeRefusalLog(t *testing.T, runsDir, inv string, at time.Time, refused bool, args ...string) {
+	t.Helper()
+	result := journal.Event{Ts: at.UnixMilli(), Inv: inv, Project: ".", Target: "go-test:rw", Kind: journal.KindResult, Status: journal.StatusPass}
+	if refused {
+		result.Status, result.DiagnosticCode = journal.StatusFail, string(types.MachineBudgetExhausted)
+	}
+	var body []byte
+	for _, ev := range []journal.Event{
+		{Ts: at.UnixMilli(), Inv: inv, Kind: journal.KindStarted, Command: &journal.Command{Arguments: args}},
+		{Ts: at.UnixMilli(), Inv: inv, Kind: journal.KindOutput, Text: strings.Repeat("x", 128<<10)},
+		result,
+		{Ts: at.UnixMilli(), Inv: inv, Kind: journal.KindFinished, Status: result.Status},
+	} {
+		line, err := json.Marshal(ev)
+		require.NoError(t, err)
+		body = append(append(body, line...), '\n')
+	}
+	path := filepath.Join(runsDir, inv+".jsonl")
+	require.NoError(t, os.WriteFile(path, body, 0o644))
+	require.NoError(t, os.Chtimes(path, at, at))
+}
+
+// TestDenyRefusedRetry: a run this checkout saw refused with MGS3009 inside the minute is
+// refused again with the wait piped into it; an older refusal, another command, a run that
+// passed and the piped wait itself pass.
+func TestDenyRefusedRetry(t *testing.T) {
+	t.Parallel()
+	const retry = "./magus run go-test . -s -- -run 'TestHookCmd|TestJudge'"
+	refusedArgv := []string{"run", "go-test", ".", "-s", "--", "-run", "TestHookCmd|TestJudge"}
+	at := func(t *testing.T, refusedAgo time.Duration, refused bool) context.Context {
+		cacheDir := t.TempDir()
+		runsDir := filepath.Join(cacheDir, "runs")
+		require.NoError(t, os.MkdirAll(runsDir, 0o755))
+		writeRefusalLog(t, runsDir, "invrefused", time.Now().Add(-refusedAgo), refused, refusedArgv...)
+		writeRefusalLog(t, runsDir, "invother", time.Now().Add(-5*time.Second), false, "run", "lint", ".")
+		return context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir})
+	}
+
+	t.Run("a repeat inside the minute", func(t *testing.T) {
+		t.Parallel()
+		d := denyRefusedRetry(at(t, 10*time.Second, true), Dependencies{}, "", retry)
+		require.True(t, d.refused())
+		assert.Contains(t, d.Say, "refused with MGS3009 10s ago")
+		assert.Contains(t, d.Say, "status --wait | ", "the next line pipes the wait into the run")
+		assert.Contains(t, d.Say, " run go-test . -s -- -run 'TestHookCmd|TestJudge'`", "quoted so the pipe in the pattern stays an argument")
+	})
+	t.Run("a repeat after the minute", func(t *testing.T) {
+		t.Parallel()
+		assert.False(t, denyRefusedRetry(at(t, 90*time.Second, true), Dependencies{}, "", retry).refused())
+	})
+	t.Run("a different command", func(t *testing.T) {
+		t.Parallel()
+		ctx := at(t, 10*time.Second, true)
+		for _, line := range []string{"./magus run lint .", "./magus run go-test . -- -run 'TestHookCmd|TestJudge'", "./magus status", "git status"} {
+			assert.False(t, denyRefusedRetry(ctx, Dependencies{}, "", line).refused(), line)
+		}
+	})
+	t.Run("the same command after a run that passed", func(t *testing.T) {
+		t.Parallel()
+		assert.False(t, denyRefusedRetry(at(t, 10*time.Second, false), Dependencies{}, "", retry).refused())
+	})
+	t.Run("the piped wait", func(t *testing.T) {
+		t.Parallel()
+		ctx := at(t, 10*time.Second, true)
+		assert.False(t, denyRefusedRetry(ctx, Dependencies{}, "", "./magus status --wait | "+retry).refused())
+		assert.False(t, denyRefusedRetry(ctx, Dependencies{}, "", "./magus status -W | "+retry).refused())
+	})
+	t.Run("no run log", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir()})
+		assert.False(t, denyRefusedRetry(ctx, Dependencies{}, "", retry).refused())
+	})
+}
+
+// TestJudgeRefusesARetryAfterARefusal: the rule fires through Judge, which runs only the
+// role-scoped rules roleScopedCommandRules lists.
+func TestJudgeRefusesARetryAfterARefusal(t *testing.T) {
+	testkit.Isolate(t)
+	cacheDir := t.TempDir()
+	runsDir := filepath.Join(cacheDir, "runs")
+	require.NoError(t, os.MkdirAll(runsDir, 0o755))
+	writeRefusalLog(t, runsDir, "invrefused", time.Now().Add(-10*time.Second), true, "run", "lint", ".")
+	ctx := WithLocation(t.Context(), cacheDir, "/ws", "/ws")
+
+	v := Judge(ctx, Dependencies{}, Request{Input: "./magus run lint ."})
+	assert.Equal(t, decisionDeny, v.Decision, v.Reason)
+	assert.Equal(t, string(denyRuleSleepPoll), v.Rule, v.Reason)
+	assert.Contains(t, v.Reason, "refused with MGS3009")
 }
