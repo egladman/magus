@@ -169,9 +169,10 @@ func (s *Store) dry() *Store {
 // requestRelease files one attention request (outcome waiting) asking holder to release
 // what it does not edit of file, which a refused fork wanted as the claims in wanted. unused
 // are the holder's write paths its footprint has not touched, nil when it could not be read
-// (see [UnusedWritePaths]); the message lists them. The request is keyed on holder and file
-// alone (see [sessions.RequestID]), so every refusal over the pair lands on one row until the
-// holder or the root disposes of it; the claims ride along as its files. A dry-run store
+// (see [UnusedWritePaths]); the message lists them. The request is keyed on holder, file and
+// that message (see [sessions.RequestID]), so every refusal over the pair lands on one row
+// until the holder's footprint grows or someone disposes of it; the claims ride along as its
+// files, and a reader holding the holder's id finds its requests by that key. A dry-run store
 // files nothing, and neither does one that will not take the request: the refusal is the
 // answer either way.
 func (s *Store) requestRelease(ctx context.Context, holder, file string, wanted, unused []string) {

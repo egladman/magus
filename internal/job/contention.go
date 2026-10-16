@@ -64,13 +64,13 @@ func describeUnused(holder string, unused []string) string {
 	return fmt.Sprintf("%s has changed nothing under %s", holder, strings.Join(unused, ", "))
 }
 
-// narrowAdvice is the sentence a contention refusal's fix adds when holder has write paths
-// it has not used: the root narrows the holder's row to its footprint. It is "" when there
-// is nothing to drop or nobody could read what there is.
+// narrowAdvice is the clause a contention refusal's fix ends with when holder has write
+// paths it has not used: the root narrows the holder's row to its footprint. It is "" when
+// there is nothing to drop or nobody could read what there is.
 func narrowAdvice(holder string, unused []string) string {
 	if len(unused) == 0 {
 		return ""
 	}
-	return fmt.Sprintf(" Or the root narrows %s to what it has changed with `%s`, dropping %s",
+	return fmt.Sprintf("; or the root narrows %s to what it has changed with `%s`, dropping %s",
 		holder, hint.JobApply.With("-f", "<record>"), strings.Join(unused, ", "))
 }
