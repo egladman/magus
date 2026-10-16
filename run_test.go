@@ -2067,6 +2067,43 @@ func TestRun_RetryIsAudibleOffCI(t *testing.T) {
 	assert.Contains(t, got, "reason=bootstrap")
 }
 
+// A run beside a history store an older magus left behind says so as an error, naming the
+// file and how to move it aside, and says what the run does without its history. Silent,
+// every claim fell back to its declaration and no outcome was recorded.
+func TestRun_UnreadableHistoryIsSaid(t *testing.T) {
+	spellName := register.Spell(t, "zzz-unreadable-history-spell",
+		spells.WithTargets("build"),
+		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) { return nil, nil }),
+	)
+
+	var logged syncBuffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
+	stateDir := t.TempDir()
+	old := filepath.Join(stateDir, "v1.json")
+	require.NoError(t, os.WriteFile(old, []byte("{}"), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	cfg := config.Defaults()
+	cfg.HistoryPath = filepath.Join(stateDir, "history.jsonl")
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: "build"}}))
+
+	got := logged.String()
+	assert.Equal(t, 1, strings.Count(got, "run history is unreadable"), "said once, however many readers wait on it")
+	assert.Contains(t, got, "sizes claims from declarations and records no history")
+	assert.Contains(t, got, "mv "+old+" "+old+".old")
+}
+
 // TestRun_NonRetryableFailureRecordsNotRetried pins the record a target opted into
 // retry_on_volatile leaves when its failure is typed non-retryable.
 func TestRun_NonRetryableFailureRecordsNotRetried(t *testing.T) {

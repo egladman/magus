@@ -2619,6 +2619,12 @@ func checkOutputOverlap(ctx context.Context, steps []cache.Step, out *Sink) {
 // it, or nil when volatility is disabled. The file is shared by every workspace on the
 // host and runs to megabytes, so decoding it costs as much as the lock, probe and VCS
 // work it overlaps.
+//
+// A history that cannot be read is said once, as an error, by the first wait: the run
+// goes on, but it sizes every claim from declarations alone and records nothing, and a
+// store an older magus left beside it would otherwise stay unread with no word of why.
+// It does not fail the run, because an older magus on the same host recreates that file
+// as fast as it is moved aside.
 func (m *Magus) loadHistory(ctx context.Context) func() (*forecast.History, error) {
 	if !m.cfg.Volatility.Enabled {
 		return nil
@@ -2630,10 +2636,15 @@ func (m *Magus) loadHistory(ctx context.Context) func() (*forecast.History, erro
 		defer close(done)
 		err = h.Load(ctx, m.cfg.HistoryPath)
 	}()
-	return func() (*forecast.History, error) {
+	return sync.OnceValues(func() (*forecast.History, error) {
 		<-done
+		if err != nil {
+			slog.With(attr.Component("magus")).ErrorContext(ctx,
+				"run history is unreadable, so this run sizes claims from declarations and records no history",
+				attr.Error(err))
+		}
 		return &h, err
-	}
+	})
 }
 
 // measuredRuns waits for the history and snapshots its measured runs. nil, when history
@@ -2651,7 +2662,7 @@ func (m *Magus) measuredRuns(history func() (*forecast.History, error)) *forecas
 }
 
 // buildVolatilityRuntime returns a volatility.Runtime for the current run, or nil when
-// history cannot be loaded.
+// history cannot be loaded, which the history's wait has already said.
 func (m *Magus) buildVolatilityRuntime(ctx context.Context, retry bool, history func() (*forecast.History, error)) *volatility.Runtime {
 	h, err := history()
 	if err != nil {
