@@ -78,10 +78,7 @@ export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
 }
 
 export fun harness_entries(target: Target, cb: fun(any)) > [any] {
-    return [{
-        "path": ["hooks", "before"],
-        "entries": [{"match": "run", "commands": [{"type": "command", "command": "sh stand-in.sh"}]}],
-    }];
+    return [];
 }
 
 export fun harness_tools(target: Target, cb: fun(any)) > {str: any} {
