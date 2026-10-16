@@ -22,7 +22,7 @@ func Completion(shell string, commands []cmdline.Command) (string, error) {
 	case "powershell":
 		return powerShellList(commands), nil
 	}
-	return "", fmt.Errorf("completion: no renderer for shell %q; want bash, zsh, fish or powershell", shell)
+	return "", fmt.Errorf("completion: no renderer for shell %q, want bash, zsh, fish or powershell", shell)
 }
 
 func bashList(commands []cmdline.Command) string {

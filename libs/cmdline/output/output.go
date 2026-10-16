@@ -99,7 +99,7 @@ func (wr Writer) Write(w io.Writer, o Options, v any) error {
 		}
 		return wr.writeTemplate(w, v, o.Template)
 	}
-	return fmt.Errorf("output: Write does not render %q; the command renders it", o.Format)
+	return fmt.Errorf("output: Write does not render %q, the command renders it", o.Format)
 }
 
 func (wr Writer) writeJSON(w io.Writer, v any) error {
