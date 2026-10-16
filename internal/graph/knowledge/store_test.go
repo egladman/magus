@@ -1319,3 +1319,56 @@ func TestStoreEvaluationReadsDistinguishNoneFromUnknown(t *testing.T) {
 	assert.True(t, known, "an evaluation that read nothing is known to have read nothing")
 	assert.Equal(t, readlog.Reads{}, reads)
 }
+
+func TestStoreWritesALexicalSidecarPerDomainAndSymbolShard(t *testing.T) {
+	s := NewStore(t.TempDir(), false, 0, nil, nil)
+	docs, sym := lexicalDocsShard("Install frobnicator first."), lexicalSymbolShard("returns the ranking")
+	session := Shard{Name: "@session", Nodes: []types.KnowledgeNode{{ID: "session:x"}}}
+	syncLexical(t, s, nil, docs, sym, session)
+
+	assert.FileExists(t, s.lexicalSidecarPath(s.shardPath(docs.Name)))
+	assert.FileExists(t, s.lexicalSidecarPath(s.shardPath(sym.Name)))
+	assert.NoFileExists(t, s.lexicalSidecarPath(s.shardPath(session.Name)), "an overlay is not indexed, so it has no sidecar")
+
+	got, err := s.readLexicalSidecar(docs.Name, fingerprintShardContent(docs))
+	require.NoError(t, err)
+	assert.Equal(t, docs.Text, got.Text)
+	assert.Len(t, got.Nodes, 2)
+	_, err = s.readLexicalSidecar(docs.Name, "another fingerprint")
+	assert.Error(t, err, "a sidecar is bound to its shard's fingerprint")
+
+	b, err := os.ReadFile(s.lexicalSidecarPath(s.shardPath(sym.Name)))
+	require.NoError(t, err)
+	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
+	require.Len(t, lines, 2, "a header line, then one line per node")
+	var rec lexicalRecord
+	require.NoError(t, json.Unmarshal([]byte(lines[1]), &rec))
+	assert.Equal(t, "returns the ranking", rec.SymbolDoc)
+}
+
+func TestStoreRemovesTheLexicalSidecarWithItsShard(t *testing.T) {
+	s := NewStore(t.TempDir(), false, 0, nil, nil)
+	docs, sym := lexicalDocsShard("Install frobnicator first."), lexicalSymbolShard("x")
+	syncLexical(t, s, nil, docs, sym)
+	sidecar := s.lexicalSidecarPath(s.shardPath(sym.Name))
+	require.FileExists(t, sidecar)
+
+	ix := syncLexical(t, s, nil, docs)
+	assert.NoFileExists(t, sidecar, "a pruned shard takes its sidecar with it")
+	require.NotNil(t, ix)
+	assert.Equal(t, 2, ix.Len(), "the rebuilt index no longer holds the pruned shard's nodes")
+}
+
+func TestStorePruneToSizeRemovesLexicalSidecars(t *testing.T) {
+	cacheDir := t.TempDir()
+	s := NewStore(cacheDir, false, 0, nil, nil)
+	docs := lexicalDocsShard("Install frobnicator first.")
+	syncLexical(t, s, nil, docs)
+	sidecar := s.lexicalSidecarPath(s.shardPath(docs.Name))
+	require.FileExists(t, sidecar)
+
+	capped := NewStore(cacheDir, false, 1, nil, nil)
+	capped.pruneToSize()
+	assert.NoFileExists(t, capped.shardPath(docs.Name))
+	assert.NoFileExists(t, sidecar, "an evicted shard takes its sidecar with it")
+}

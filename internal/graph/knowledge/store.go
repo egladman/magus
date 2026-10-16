@@ -369,10 +369,51 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 		return nil
 	}
 
+	// The lexical index is rebuilt whenever a domain or symbol shard moved, its text moved
+	// (Text is not fingerprinted, so an edited section body changes no shard), or the
+	// stored index is bound to other shards. It is removed before any shard is written, so
+	// a crash part way leaves no index rather than a stale one under a matching key.
+	lexical := plan.covers(ClassDomain) || plan.covers(ClassSymbols)
+	var staleText []Shard
+	lexicalMoved := false
+	if lexical {
+		writing := map[string]bool{}
+		for _, w := range toWrite {
+			writing[w.shard.Name] = true
+			lexicalMoved = lexicalMoved || lexicalClass(w.shard.Name)
+		}
+		for _, sh := range shards {
+			if lexicalClass(sh.Name) && !writing[sh.Name] && !s.lexicalSidecarCurrent(sh.Name, fps[sh.Name], textDigest(sh.Text)) {
+				staleText = append(staleText, sh)
+			}
+		}
+		for _, name := range pruned {
+			lexicalMoved = lexicalMoved || lexicalClass(name)
+		}
+		lexicalMoved = lexicalMoved || len(staleText) > 0
+		if lexicalMoved {
+			if err := s.removeLexicalIndex(); err != nil {
+				return err
+			}
+		}
+	}
+
 	if err := s.writeShards(ctx, toWrite); err != nil {
 		return err
 	}
+	for _, sh := range staleText {
+		nodes, _ := sh.canonicalContent()
+		if err := s.writeLexicalSidecar(sh.Name, fps[sh.Name], nodes, sh.Text); err != nil {
+			return err
+		}
+	}
 	s.recordPathIDs(ctx, shards, fps, newMan)
+	if lexical && (lexicalMoved || s.lexicalIndexKey() != lexicalShardsKey(&newMan)) {
+		// Best-effort like the routing index: without it a query states that it fell back.
+		if err := s.syncLexicalIndex(ctx, shards, &newMan); err != nil {
+			s.log.DebugContext(ctx, "lexical index not written", attr.Error(err))
+		}
+	}
 
 	// Refresh the derived symbol xref routing index (best-effort: a failure just means
 	// `magus refs` falls back to loading all symbol shards, never a wrong result; the index
@@ -867,6 +908,9 @@ func (s *Store) pruneToSize() {
 		if err := os.Remove(f.path); err != nil {
 			continue
 		}
+		// The sidecar goes with its shard: the next sync of its class rewrites both, and
+		// until then a lexical rebuild refuses rather than index the shard without it.
+		_ = os.Remove(s.lexicalSidecarPath(f.path))
 		total -= f.size
 	}
 }
@@ -995,6 +1039,11 @@ func (s *Store) writeShard(ctx context.Context, sh Shard, fp string) error {
 	}
 	if err := file.WriteFileAtomic(s.shardPath(sh.Name), b, 0o644); err != nil {
 		return err
+	}
+	if lexicalClass(sh.Name) {
+		if err := s.writeLexicalSidecar(sh.Name, fp, nodes, sh.Text); err != nil {
+			return err
+		}
 	}
 	s.pushShard(ctx, sh.Name, fp, b)
 	return nil
@@ -1127,9 +1176,10 @@ func (s *Store) readShardKeeping(name string, keep bool) (shardFile, error) {
 }
 
 func (s *Store) removeShard(name string) error {
-	err := os.Remove(s.shardPath(name))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+	for _, p := range []string{s.shardPath(name), s.lexicalSidecarPath(s.shardPath(name))} {
+		if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 	}
 	return nil
 }
