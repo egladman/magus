@@ -52,10 +52,15 @@ func DecodePut(params map[string]any) (types.JobPut, error) {
 	list("read_paths", &put.ReadPaths)
 	list("depends_on", &put.DependsOn)
 	list("breaks", &put.Breaks)
-	if goals, ok, e := decodeGoals(params, "goals"); e != nil {
+	if goals, ok, e := decodeObjects[types.Goal](params, "goals", "goals"); e != nil {
 		err = errors.Join(err, e)
 	} else if ok {
 		put.Goals = &goals
+	}
+	if waivers, ok, e := decodeObjects[types.JobWaiver](params, "waivers", "waivers"); e != nil {
+		err = errors.Join(err, e)
+	} else if ok {
+		put.Waivers = &waivers
 	}
 
 	// check and validation are two spellings of one field, so a put naming each of them is
@@ -168,6 +173,14 @@ func PutMerge(p types.JobPut) (func(*types.Job), error) {
 			set = append(set, func(u *types.Job) { u.Goals = goals })
 		}
 	}
+	if p.Waivers != nil {
+		waivers := slices.Clone(*p.Waivers)
+		if e := (types.Declaration{ID: "merge", Waivers: waivers}).Validate(); e != nil {
+			err = errors.Join(err, e)
+		} else {
+			set = append(set, func(u *types.Job) { u.Waivers = waivers })
+		}
+	}
 	if p.Check != nil {
 		if p.Check.Target == "" && p.Check.Script == "" {
 			set = append(set, func(u *types.Job) { u.Check, u.Validation = nil, "" })
@@ -243,7 +256,8 @@ func declaredKeys(p types.JobPut) []string {
 		{"model", p.Model != nil}, {"timeout", p.Timeout != nil}, {"state", p.State != nil},
 		{"check", p.Check != nil}, {"write_paths", p.WritePaths != nil}, {"deny_paths", p.DenyPaths != nil},
 		{"read_paths", p.ReadPaths != nil}, {"depends_on", p.DependsOn != nil}, {"breaks", p.Breaks != nil},
-		{"goals", p.Goals != nil}, {"read_only", p.ReadOnly != nil}, {"max_attempts", p.MaxAttempts != nil},
+		{"goals", p.Goals != nil}, {"waivers", p.Waivers != nil}, {"read_only", p.ReadOnly != nil},
+		{"max_attempts", p.MaxAttempts != nil},
 	} {
 		if f.set {
 			keys = append(keys, f.key)
@@ -256,8 +270,8 @@ func declaredKeys(p types.JobPut) []string {
 // because they are how a door names the call rather than fields of the row.
 var mergeFields = []string{
 	"parent", "criteria", "checkpoint", "write_paths", "deny_paths", "read_paths",
-	"depends_on", "breaks", "model", "check", "validation", "goals", "state", "read_only", "timeout",
-	"max_attempts", "enter",
+	"depends_on", "breaks", "model", "check", "validation", "goals", "waivers", "state", "read_only",
+	"timeout", "max_attempts", "enter",
 }
 
 // unknownParams rejects a key outside that set. A dropped key reads to its sender exactly
@@ -361,10 +375,10 @@ func mergeList(params map[string]any, key string) ([]string, bool, error) {
 	return nil, false, badType
 }
 
-// decodeGoals accepts the natural JSON/Buzz object array, or that array as a JSON string
-// for a client the MCP descriptor holds to scalars. [PutMerge] validates the goals through
-// the same typed declaration boundary stdin uses.
-func decodeGoals(params map[string]any, key string) ([]types.Goal, bool, error) {
+// decodeObjects accepts the natural JSON/Buzz object array, or that array as a JSON string
+// for a client the MCP descriptor holds to scalars; what names the elements in the error.
+// [PutMerge] validates them through the same typed declaration boundary stdin uses.
+func decodeObjects[T any](params map[string]any, key, what string) ([]T, bool, error) {
 	v, present := params[key]
 	if !present {
 		return nil, false, nil
@@ -374,11 +388,11 @@ func decodeGoals(params map[string]any, key string) ([]types.Goal, bool, error) 
 		body, err = []byte(s), nil
 	}
 	if err != nil {
-		return nil, false, fmt.Errorf("job: %s must be an array of goals: %w", key, err)
+		return nil, false, fmt.Errorf("job: %s must be an array of %s: %w", key, what, err)
 	}
-	var gates []types.Goal
-	if err := json.Unmarshal(body, &gates); err != nil {
-		return nil, false, fmt.Errorf("job: %s must be an array of goals: %w", key, err)
+	var objects []T
+	if err := json.Unmarshal(body, &objects); err != nil {
+		return nil, false, fmt.Errorf("job: %s must be an array of %s: %w", key, what, err)
 	}
-	return gates, true, nil
+	return objects, true, nil
 }

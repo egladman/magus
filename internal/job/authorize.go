@@ -366,6 +366,7 @@ func changedFields(prev, next types.Job) []string {
 	add("model", prev.Model != next.Model)
 	add("validation", prev.Validation != next.Validation)
 	add("goals", !goalsEqual(prev.Goals, next.Goals))
+	add("waivers", !slices.Equal(prev.Waivers, next.Waivers))
 	add("state", prev.State != next.State)
 	add("read_only", prev.ReadOnly != next.ReadOnly)
 	add("max_attempts", prev.MaxAttempts != next.MaxAttempts)
