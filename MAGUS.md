@@ -141,7 +141,6 @@ magus graph export -o json  # the whole graph
 | `agent-bench-run`        | Runs a benchmark manifest (default pilot.manifest) with CLAUDE_BENCH_TOKEN read through the secret provider, so the launching shell never holds it.                                                                            |
 | `agent-eval`             | Runs cmd/magus's agent eval, which skips in the ordinary test target because it spends tokens.                                                                                                                                 |
 | `retrieval-eval`         | Replays testdata/retrieval/judgments.jsonl through query, refs and explain and prints recall, MRR and nDCG; report-only, so no score fails it.                                                                                 |
-| `compress-cgo-test`      | Runs internal/compress's tests under the cgo tags, which the ordinary test target cannot reach.                                                                                                                                |
 | `hoste-2-e-test`         | Drives the installed Claude Code, Codex, Cursor and OpenCode headless against a wired workspace; see docs/guides/integrations/agents.md.                                                                                       |
 | `deploy-generate`        | deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root and the console under /console/.                                                                                               |
 | `toolchain-report`       | Reports installed toolchains; excluded from CI because it probes remote tags.                                                                                                                                                  |
@@ -158,6 +157,7 @@ magus graph export -o json  # the whole graph
 | `lint-rules`             | Holds the repository's non-Go files to conventions no off-the-shelf linter checks; each rule is hack/lint/<rule>.buzz, and hack/lint/run.buzz reports drift between their reads and this footprint.                            |
 | `harness-drift`          | Fails when a committed host config file lacks what its wired harness spell renders, naming each file and the command that merges it.                                                                                           |
 | `swegrade-build`         | Builds swegrade, the grader the SWE-bench runner pipes every eval log through, at the path swebench/lib.sh reads it from.                                                                                                      |
+| `compress-cgo-test`      | Runs internal/compress's tests under the cgo tags, which the ordinary test target cannot reach.                                                                                                                                |
 
 ## Project: libs/figure
 
