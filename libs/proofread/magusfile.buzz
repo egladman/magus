@@ -66,7 +66,6 @@ export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx, {
 // Links proofread, so the pull request guard and the writing checks never wait on the compiler.
 // The guard denies a pull request until this has run, and again once the sources move on.
 export fun proofread_build(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(format);
     // readsFiles replaces the project baseline. proofread.buzz computes the digest, so a
     // change to it must relink: a replayed digest from the old code would deny every call.
     ctx.readsFiles("**/*.go", "internal/wordclass/gen/model.gz", "internal/calibrate/cases/*.txtar", "go.mod", "go.sum",
@@ -89,7 +88,6 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 // Fails on a vulnerable symbol this module calls.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
     final inheritedFatal = advisories\inheritedFatal(args);
-    ctx.needs(format);
     advisories\govulncheck(ctx, go: go, inheritedFatal: inheritedFatal);
 }
 
