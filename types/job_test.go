@@ -886,3 +886,153 @@ func TestFootprintsCrossJSON(t *testing.T) {
 	assert.JSONEq(t, `{"job_a":"a","job_b":"b","paths_a":["x"],"paths_b":["x"],`+
 		`"footprint":{"verdict":"shared","shared":["x/a.go#func X() {"]}}`, string(overlap))
 }
+
+func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
+	t.Parallel()
+	d := Declaration{
+		ID:          "bad id",
+		Parent:      "bad parent",
+		DependsOn:   []string{"ok", "bad dep"},
+		State:       "nope",
+		Timeout:     "soon",
+		MaxAttempts: -1,
+		Checkout:    "rel/dir",
+		WritePaths:  []string{"a.go", "../b.go"},
+		Breaks:      []string{" "},
+		Check:       &LeaseCheck{Target: "test", Project: "."},
+		Validation:  "magus run test .",
+		Waivers: []JobWaiver{
+			{Code: JobRecordInvalid, Subject: "x", Reason: "r"},
+			{Code: GateNotRun},
+		},
+		Goals: []Goal{
+			{ID: "a", Kind: GoalKindPaths},
+			{ID: "a", Kind: GoalKindPaths, Paths: []string{"x"}, DependsOn: []string{"missing"}},
+		},
+	}
+
+	ps := d.Problems()
+
+	fields := make([]string, len(ps))
+	for i, p := range ps {
+		fields[i] = string(p.Code) + " " + p.Field
+		assert.NotEmptyf(t, p.Message, "%s has a message", fields[i])
+		assert.NotEmptyf(t, p.Fix, "%s has a fix", fields[i])
+	}
+	assert.Equal(t, []string{
+		"MGS3037 id",
+		"MGS3037 parent",
+		"MGS3037 depends_on[1]",
+		"MGS3037 state",
+		"MGS3037 timeout",
+		"MGS3037 max_attempts",
+		"MGS3037 checkout",
+		"MGS3037 write_paths[1]",
+		"MGS3037 validation",
+		"MGS3037 breaks[0]",
+		"MGS3037 waivers[0].code",
+		"MGS3037 waivers[1].subject",
+		"MGS3037 waivers[1].reason",
+		"MGS3038 goals[0].paths",
+		"MGS3038 goals[1].id",
+		"MGS3038 goals[1].depends_on[0]",
+	}, fields)
+	err := d.Validate()
+	require.ErrorIs(t, err, JobRecordInvalid)
+	require.ErrorIs(t, err, JobGoalInvalid)
+}
+
+func TestDeclarationProblemsOfAValidRecordIsEmpty(t *testing.T) {
+	t.Parallel()
+	d := Declaration{
+		ID:         "wave/a",
+		WritePaths: []string{"types/job.go"},
+		Check:      &LeaseCheck{Target: "go-test", Project: "."},
+		Waivers:    []JobWaiver{{Code: GateNotRun, Subject: "lint .", Reason: "the root runs it"}},
+		Goals:      []Goal{{ID: "names", Kind: GoalKindSymbol, Symbols: []string{"X"}, DependsOn: []string{PrimaryGoalID}}},
+	}
+
+	assert.Empty(t, d.Problems())
+	require.NoError(t, d.Validate())
+}
+
+func TestDeclarationProblemsReportsEachGoalCycleOnce(t *testing.T) {
+	t.Parallel()
+	d := Declaration{ID: "a", Goals: []Goal{
+		{ID: "x", Kind: GoalKindPaths, Paths: []string{"p"}, DependsOn: []string{"y"}},
+		{ID: "y", Kind: GoalKindPaths, Paths: []string{"p"}, DependsOn: []string{"x"}},
+		{ID: "z", Kind: GoalKindPaths, Paths: []string{"p"}, DependsOn: []string{"z"}},
+	}}
+
+	ps := d.Problems()
+
+	require.Len(t, ps, 2)
+	assert.Equal(t, "goals[0].depends_on", ps[1].Field)
+	assert.Contains(t, ps[1].Message, `cycle at "x"`)
+	assert.Equal(t, "goals[2].depends_on[0]", ps[0].Field)
+	assert.Contains(t, ps[0].Message, "cannot depend on itself")
+}
+
+func TestDeclarationApplyCopiesWaivers(t *testing.T) {
+	t.Parallel()
+	waivers := []JobWaiver{{Code: GateNotRun, Subject: "lint .", Reason: "the root runs it"}}
+	var row Job
+
+	Declaration{ID: "a", Waivers: waivers}.Apply(&row)
+	waivers[0].Reason = "changed"
+
+	assert.Equal(t, "the root runs it", row.Waivers[0].Reason)
+}
+
+func TestGoalProblemsNameTheFieldUnderTheGoal(t *testing.T) {
+	t.Parallel()
+	g := Goal{ID: "g", Kind: GoalKindSymbol, Expect: ExpectSignature, Symbols: []string{"A", "B"}, Paths: []string{"x"}}
+
+	ps := g.problems("goals[3]")
+
+	require.Len(t, ps, 2)
+	assert.Equal(t, "goals[3].paths", ps[0].Field)
+	assert.Equal(t, "goals[3].symbols", ps[1].Field)
+	for _, p := range ps {
+		assert.Equal(t, JobGoalInvalid, p.Code)
+	}
+	require.ErrorIs(t, g.Validate(), JobGoalInvalid)
+}
+
+func TestPathWithin(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		inner, outer string
+		want         bool
+	}{
+		{"internal/job/a.go", "internal/job/a.go", true},
+		{"internal/job/a.go", "internal/job", true},
+		{"internal/job/a.go", "internal/jo", false},
+		{"internal/job/a.go", "internal/job/*.go", true},
+		{"internal/job/a.go", "internal/**", true},
+		{"internal/job/a.txt", "internal/job/*.go", false},
+		{"internal/job/a.go#Run", "internal/job/a.go", true},
+		{"internal/job/a.go#Run", "internal/job/*.go", true},
+		{"internal/job/a.go#Run", "internal/job/a.go#Run", true},
+		{"internal/job/a.go#Run", "internal/job/a.go#Stop", false},
+		{"internal/job/a.go", "internal/job/a.go#Run", false},
+		{"internal/job/*.go", "internal/job/a.go#Run", false},
+		{"internal/job/*.go", "internal/job", true},
+		{"internal/job/*.go", "internal/job/a.go", false},
+		{"internal/job/*.go", "internal/**", true},
+		{"internal/job/*.go", "internal/**/*.go", true},
+		{"internal/*/x/*.go", "internal/**/*.go", true},
+		{"internal/job/a.go", "internal/**/*.go", true},
+		{"internal/*.go", "internal/**/*.go", true},
+		{"internal/job/**", "internal/**/*.go", false},
+		{"internal/job/*.txt", "internal/**/*.go", false},
+		{"internal/**", "internal/job/**", false},
+		{"**/*.go", "internal/**", false},
+		{"**/*.go", "**", true},
+		{"internal/job/*.go", "internal/job/*.go", true},
+		{"", "internal/job", false},
+		{"internal/job/a.go", "", false},
+	} {
+		assert.Equalf(t, tc.want, PathWithin(tc.inner, tc.outer), "PathWithin(%q, %q)", tc.inner, tc.outer)
+	}
+}

@@ -15,7 +15,6 @@ import (
 )
 
 // errInvalidJob opens every error a job record's validation returns.
-var errInvalidJob = errors.New("invalid job")
 
 // JobState is where one lease stands. The three terminal values are
 // the point of the set: a row that never reaches one is a row nobody closed.
@@ -88,7 +87,7 @@ func (h JobHolder) OrSession() JobHolder {
 type LeaseCheck struct {
 	// Target is the magus target the check runs, without the `magus run` in front of it.
 	// Empty when Script names the check instead.
-	Target string `json:"target"             yaml:"target"`
+	Target string `json:"target"             yaml:"target" schema:"target"`
 	// Script is a Buzz script the check runs with `magus buzz --record` in place of a
 	// target, for a fact no target checks: a passing recorded run of it is the evidence. A
 	// check names a target or a script, never both.
@@ -811,6 +810,11 @@ type Job struct {
 	// output-only like Releases: it is a fact about the plan at one instant, and a caller
 	// that could assert it could assert the proof it stands for. See [JobWriteProof].
 	WriteProof JobWriteProof `json:"write_proof,omitempty" yaml:"write_proof,omitempty"`
+	// Waivers are the waivable problems the declaration accepted, copied from it.
+	Waivers []JobWaiver `json:"waivers,omitempty" yaml:"waivers,omitempty"`
+	// Validated is when the store last validated the whole record, in unix seconds; zero
+	// on a row never validated. Store-stamped like Created: a declaration cannot set it.
+	Validated int64 `json:"validated,omitempty" yaml:"validated,omitempty"`
 	// ReportedBase is the checkpoint token the lease's WORKER reported it actually landed
 	// on, in the same `magus vcs checkpoint -o name` form Checkpoint holds. Checkpoint is
 	// what the orchestrator handed out; this is what the worker found. Two fields rather
@@ -1004,7 +1008,7 @@ type Declaration struct {
 	// and the only required field besides the version.
 	ID string `json:"id" schema:"leaseid"`
 	// Parent is the lease this one was spawned under, empty for a lease the root declared.
-	Parent string `json:"parent,omitempty"`
+	Parent string `json:"parent,omitempty" schema:"leaseid"`
 	// Criteria is what this lease is for and what done means, as one block of prose. The
 	// machine-checkable half is Goals.
 	Criteria string `json:"criteria,omitempty"`
@@ -1013,14 +1017,14 @@ type Declaration struct {
 	Checkpoint string `json:"checkpoint,omitempty"`
 	// WritePaths is what this lease may write, empty on a read-only row by design. An entry
 	// `<file>#<declaration>` claims one declaration of the file (see SplitClaim).
-	WritePaths []string `json:"write_paths,omitempty"`
+	WritePaths []string `json:"write_paths,omitempty" schema:"writepath"`
 	// DenyPaths are the paths inside those this lease may not write.
-	DenyPaths []string `json:"deny_paths,omitempty"`
+	DenyPaths []string `json:"deny_paths,omitempty" schema:"writepath"`
 	// ReadPaths is what it may READ, widened to those projects' dependencies by the
 	// guard. Empty means write_paths stands in.
-	ReadPaths []string `json:"read_paths,omitempty"`
+	ReadPaths []string `json:"read_paths,omitempty" schema:"writepath"`
 	// DependsOn names the lease ids that must land before this one.
-	DependsOn []string `json:"depends_on,omitempty"`
+	DependsOn []string `json:"depends_on,omitempty" schema:"leaseid"`
 	// Breaks are the flags, JSON keys, exported symbols or stored formats the root approved
 	// this job breaking; empty means it breaks nothing on its own authority. See [Job.Breaks].
 	Breaks []string `json:"breaks,omitempty"`
@@ -1031,7 +1035,7 @@ type Declaration struct {
 	// checkout of the repository for this job at its checkpoint, or at the forking
 	// checkout's revision when it names none.
 	// The job owns it: see [JobWorktree]. Empty works wherever the job is taken.
-	Checkout string `json:"checkout,omitempty"`
+	Checkout string `json:"checkout,omitempty" schema:"abspath"`
 	// LegacyWritePaths is the pre-rename spelling of write_paths, accepted on input and
 	// never emitted.
 	//
@@ -1068,10 +1072,12 @@ type Declaration struct {
 	// Timeout bounds the lease, as a Go duration. The store stamps Job.Deadline from it when
 	// it writes the row, so a declaration carries a length and never an instant. Empty is no
 	// bound; there is no default here (a workspace may set jobs.default_timeout).
-	Timeout string `json:"timeout,omitempty"`
+	Timeout string `json:"timeout,omitempty" schema:"duration"`
 	// MaxAttempts caps how many times the job may be forked, its first fork included; zero
 	// is no cap. See [Job.MaxAttempts].
 	MaxAttempts int `json:"max_attempts,omitempty"`
+	// Waivers accept waivable problems (see [Waivable]) on the record's own authority.
+	Waivers []JobWaiver `json:"waivers,omitempty"`
 	// Enter turns the record into an entry rather than a declaration: it acknowledges one
 	// write into this path, inside the write paths of the live job ID names, by somebody
 	// other than its holder. A record carrying it declares nothing else.
@@ -1089,7 +1095,7 @@ func (r *Declaration) FoldLegacyNames() error {
 		switch {
 		case len(from) == 0:
 		case len(*into) > 0:
-			err = errors.Join(err, fmt.Errorf("%w: a row declares %s or its renamed spelling, not both", errInvalidJob, name))
+			err = errors.Join(err, DiagnosticErrorf(JobRecordInvalid, "a row declares %s or its renamed spelling, not both", name))
 		default:
 			*into = from
 		}
@@ -1101,7 +1107,7 @@ func (r *Declaration) FoldLegacyNames() error {
 		switch {
 		case from == "":
 		case *into != "":
-			err = errors.Join(err, fmt.Errorf("%w: a row declares %s or its renamed spelling, not both", errInvalidJob, name))
+			err = errors.Join(err, DiagnosticErrorf(JobRecordInvalid, "a row declares %s or its renamed spelling, not both", name))
 		default:
 			*into = from
 		}
@@ -1128,30 +1134,51 @@ func pathOutsideWorkspace(p string) string {
 	return ""
 }
 
-// Validate reports what is wrong with a declared row, or nil.
-func (r Declaration) Validate() error {
+// Validate reports what is wrong with a declared row, or nil: every problem
+// [Declaration.Problems] finds, joined.
+func (r Declaration) Validate() error { return r.Problems().Err() }
+
+// Problems is every problem the record shows on its own, without a workspace: each field's
+// shape, the check, the waivers and the goals. It never stops at the first.
+func (r Declaration) Problems() JobProblems {
+	var ps JobProblems
+	invalid := func(field, message, fix string) {
+		ps = append(ps, JobProblem{Code: JobRecordInvalid, Field: field, Message: message, Fix: fix})
+	}
 	if !ValidJobID(strings.TrimSpace(r.ID)) {
-		return fmt.Errorf("%w: %q is not a lease id (letters, digits and -_./: only, at most %d characters)", errInvalidJob, r.ID, MaxJobIDLen)
+		invalid("id", fmt.Sprintf("%q is not a lease id", r.ID),
+			fmt.Sprintf("use letters, digits and -_./: only, at most %d characters", MaxJobIDLen))
 	}
 	if r.Enter != "" {
 		rest := r
 		rest.Schema, rest.ID, rest.Enter = Schema{}, "", ""
 		if !reflect.ValueOf(rest).IsZero() {
-			return fmt.Errorf("%w: a record carrying enter enters a job and declares nothing, so it carries only schema_version, id and enter", errInvalidJob)
+			invalid("enter", "a record carrying enter enters a job and declares nothing, so it carries only schema_version, id and enter",
+				"drop every other field, or drop enter")
 		}
-		return nil
+		return ps
+	}
+	if p := strings.TrimSpace(r.Parent); p != "" && !ValidJobID(p) {
+		invalid("parent", fmt.Sprintf("parent %q is not a lease id", r.Parent), "name the id of the job this one was forked under")
+	}
+	for i, dep := range r.DependsOn {
+		if d := strings.TrimSpace(dep); d != "" && !ValidJobID(d) {
+			invalid(fmt.Sprintf("depends_on[%d]", i), fmt.Sprintf("depends_on[%d] %q is not a lease id", i, dep),
+				"name the id of a job that must land first")
+		}
 	}
 	if r.State != "" && !ValidJobState(r.State) {
-		return fmt.Errorf("%w: state must be one of %s", errInvalidJob, JobStateVocabulary())
+		invalid("state", fmt.Sprintf("state %q is not a job state", r.State), "use one of "+JobStateVocabulary())
 	}
 	if _, err := ParseJobTimeout(r.Timeout); err != nil {
-		return err
+		invalid("timeout", fmt.Sprintf("timeout %q is not a positive duration", r.Timeout), "name one such as 30m or 2h, or leave it out")
 	}
 	if r.MaxAttempts < 0 {
-		return fmt.Errorf("%w: max_attempts is %d, and it is a count of forks or 0 for no cap", errInvalidJob, r.MaxAttempts)
+		invalid("max_attempts", fmt.Sprintf("max_attempts is %d, and it is a count of forks", r.MaxAttempts), "use a positive count, or 0 for no cap")
 	}
 	if r.Checkout != "" && !filepath.IsAbs(r.Checkout) {
-		return fmt.Errorf("%w: checkout %q is relative, and a fork names the checkout it makes by an absolute path", errInvalidJob, r.Checkout)
+		invalid("checkout", fmt.Sprintf("checkout %q is relative, and a fork names the checkout it makes by an absolute path", r.Checkout),
+			"name an absolute directory outside the workspace")
 	}
 	for _, field := range []struct {
 		name  string
@@ -1159,150 +1186,193 @@ func (r Declaration) Validate() error {
 	}{{"write_paths", r.WritePaths}, {"deny_paths", r.DenyPaths}, {"read_paths", r.ReadPaths}} {
 		for i, p := range field.paths {
 			if why := pathOutsideWorkspace(p); why != "" {
-				return fmt.Errorf("%w: %s[%d] %q %s, so it matches no workspace path and bounds nothing: name it relative to the workspace root",
-					errInvalidJob, field.name, i, p, why)
+				at := fmt.Sprintf("%s[%d]", field.name, i)
+				invalid(at, fmt.Sprintf("%s %q %s, so it matches no workspace path and bounds nothing", at, p, why),
+					"name it relative to the workspace root")
 			}
 		}
 	}
-	check, declared, err := r.check()
-	if err != nil {
-		return err
-	}
+	_, declared, checkProblems := r.check()
+	ps = append(ps, checkProblems...)
 	for i, b := range r.Breaks {
 		if strings.TrimSpace(b) == "" {
-			return fmt.Errorf("%w: breaks[%d] is blank, and an entry names the flag, key, symbol or format the job may break", errInvalidJob, i)
+			at := fmt.Sprintf("breaks[%d]", i)
+			invalid(at, at+" is blank", "name the flag, key, symbol or format the job may break, or drop the entry")
 		}
 	}
-	seen := map[string]bool{}
-	if declared {
-		_ = check
-		seen[PrimaryGoalID] = true
-	}
-	for i, gate := range r.Goals {
-		if err := gate.Validate(); err != nil {
-			return fmt.Errorf("%w: goals[%d]: %w", errInvalidJob, i, err)
+	for i, w := range r.Waivers {
+		at := fmt.Sprintf("waivers[%d]", i)
+		if !Waivable(w.Code) {
+			invalid(at+".code", fmt.Sprintf("%s waives %q, which is not a waivable code", at, w.Code),
+				fmt.Sprintf("waive only %s, %s or %s, and fix the record for anything else", WritePathTooBroad, OutputOutsideWritePaths, GateNotRun))
 		}
-		if seen[gate.ID] {
-			return fmt.Errorf("%w: goals carries duplicate id %q", errInvalidJob, gate.ID)
+		if strings.TrimSpace(w.Subject) == "" {
+			invalid(at+".subject", at+" names no subject", "name the write path, `target project` or output path the problem names")
 		}
-		seen[gate.ID] = true
+		if strings.TrimSpace(w.Reason) == "" {
+			invalid(at+".reason", at+" gives no reason", "say why the problem is accepted, such as \"the root regenerates it\"")
+		}
 	}
-	if err := oneSignaturePerSymbol(r.Goals); err != nil {
-		return err
+	return append(ps, goalsProblems(r.Goals, declared)...)
+}
+
+// goalsProblems is every problem of a record's goals: each goal's own shape, then what
+// only the set shows. primary says the record declares a check, the goal named
+// PrimaryGoalID a depends_on may name.
+func goalsProblems(goals []Goal, primary bool) JobProblems {
+	var ps JobProblems
+	bad := func(field, message, fix string) {
+		ps = append(ps, JobProblem{Code: JobGoalInvalid, Field: field, Message: message, Fix: fix})
 	}
-	for _, gate := range r.Goals {
-		for _, dep := range gate.DependsOn {
-			if !seen[dep] {
-				return fmt.Errorf("%w: goal %q depends_on unknown goal %q", errInvalidJob, gate.ID, dep)
+	index := make(map[string]int, len(goals))
+	if primary {
+		index[PrimaryGoalID] = -1
+	}
+	for i, gate := range goals {
+		at := fmt.Sprintf("goals[%d]", i)
+		ps = append(ps, gate.problems(at)...)
+		if _, dup := index[gate.ID]; dup {
+			bad(at+".id", fmt.Sprintf("goals carries duplicate id %q", gate.ID), "give each goal its own id")
+			continue
+		}
+		index[gate.ID] = i
+	}
+	ps = append(ps, oneSignaturePerSymbol(goals)...)
+	for i, gate := range goals {
+		for j, dep := range gate.DependsOn {
+			at := fmt.Sprintf("goals[%d].depends_on[%d]", i, j)
+			switch _, known := index[dep]; {
+			case dep == gate.ID:
+				bad(at, fmt.Sprintf("goal %q cannot depend on itself", gate.ID), "drop the entry")
+			case !known:
+				bad(at, fmt.Sprintf("goal %q depends_on unknown goal %q", gate.ID, dep), "name a goal this record declares")
 			}
-			if dep == gate.ID {
-				return fmt.Errorf("%w: goal %q cannot depend on itself", errInvalidJob, gate.ID)
-			}
 		}
 	}
-	visiting := make(map[string]bool, len(r.Goals))
-	visited := make(map[string]bool, len(r.Goals))
-	byID := make(map[string]Goal, len(r.Goals))
-	for _, gate := range r.Goals {
-		byID[gate.ID] = gate
-	}
-	var visit func(string) error
-	visit = func(id string) error {
-		if id == PrimaryGoalID {
-			return nil
-		}
-		if visiting[id] {
-			return fmt.Errorf("%w: goal dependencies contain a cycle at %q", errInvalidJob, id)
-		}
-		if visited[id] {
-			return nil
+	visiting := make(map[string]bool, len(goals))
+	visited := make(map[string]bool, len(goals))
+	var visit func(string)
+	visit = func(id string) {
+		i, known := index[id]
+		switch {
+		case !known || i < 0 || visited[id]:
+			return
+		case visiting[id]:
+			visited[id] = true
+			bad(fmt.Sprintf("goals[%d].depends_on", i), fmt.Sprintf("goal dependencies contain a cycle at %q", id),
+				"drop one depends_on entry on the cycle")
+			return
 		}
 		visiting[id] = true
-		for _, dep := range byID[id].DependsOn {
-			if err := visit(dep); err != nil {
-				return err
+		for _, dep := range goals[i].DependsOn {
+			if dep != id {
+				visit(dep)
 			}
 		}
 		visiting[id] = false
 		visited[id] = true
-		return nil
 	}
-	for _, gate := range r.Goals {
-		if err := visit(gate.ID); err != nil {
-			return err
-		}
+	for _, gate := range goals {
+		visit(gate.ID)
 	}
-	return nil
+	return ps
 }
 
 // oneSignaturePerSymbol refuses two signature goals on one symbol: the graph answers one
 // declaration per name, so two shapes for it make a goal nobody could meet.
-func oneSignaturePerSymbol(goals []Goal) error {
+func oneSignaturePerSymbol(goals []Goal) JobProblems {
+	var ps JobProblems
 	held := map[string]string{}
-	for _, gate := range goals {
+	for i, gate := range goals {
 		if gate.Resolve().Expect != ExpectSignature {
 			continue
 		}
-		for _, name := range trimmedNonEmpty(gate.Symbols) {
+		for j, name := range gate.Symbols {
+			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
 			if other, ok := held[name]; ok {
-				return fmt.Errorf("%w: goals %q and %q both expect a signature of %q, and a symbol has one", errInvalidJob, other, gate.ID, name)
+				ps = append(ps, JobProblem{
+					Code:    JobGoalInvalid,
+					Field:   fmt.Sprintf("goals[%d].symbols[%d]", i, j),
+					Message: fmt.Sprintf("goals %q and %q both expect a signature of %q, and a symbol has one", other, gate.ID, name),
+					Fix:     "keep one signature goal per symbol",
+				})
+				continue
 			}
 			held[name] = gate.ID
 		}
 	}
-	return nil
+	return ps
 }
 
 // Validate reports whether a goal can be matched to an output record without
-// interpreting a shell command.
-func (g Goal) Validate() error {
+// interpreting a shell command: every problem it shows on its own, joined.
+func (g Goal) Validate() error { return g.problems("").Err() }
+
+// problems is every problem g shows on its own, each Field under field (`goals[1]`).
+func (g Goal) problems(field string) JobProblems {
+	var ps JobProblems
+	bad := func(sub, message, fix string) {
+		at := sub
+		if field != "" {
+			at = field + "." + sub
+		}
+		ps = append(ps, JobProblem{Code: JobGoalInvalid, Field: at, Message: message, Fix: fix})
+	}
 	if !ValidJobID(strings.TrimSpace(g.ID)) {
-		return fmt.Errorf("id %q is not a goal id", g.ID)
+		bad("id", fmt.Sprintf("id %q is not a goal id", g.ID), "use letters, digits and -_./: only")
 	}
 	// Validates what the row WILL BE, not what arrived: a declaration off the wire has not
 	// been through Resolve yet, and refusing it for naming no kind would refuse the
 	// shorthand the defaults exist to allow. Resolving here is not read-time defaulting;
 	// the stored row is resolved by cloneGoals on the way in.
 	g = g.Resolve()
-	accepted, known := goalAccepts[g.Kind]
-	if !known {
-		return fmt.Errorf("goal %q names kind %q, and the kinds are %s", g.ID, g.Kind, quoteJoin(GoalKinds(), ", "))
-	}
-	if !slices.Contains(accepted, g.Expect) {
-		return fmt.Errorf("goal %q is a %s goal expecting %q, and a %s goal expects %s",
-			g.ID, g.Kind, g.Expect, g.Kind, quoteJoin(accepted, " or "))
+	switch accepted, known := goalAccepts[g.Kind]; {
+	case !known:
+		bad("kind", fmt.Sprintf("goal %q names kind %q", g.ID, g.Kind), "use one of "+quoteJoin(GoalKinds(), ", "))
+	case !slices.Contains(accepted, g.Expect):
+		bad("expect", fmt.Sprintf("goal %q is a %s goal expecting %q", g.ID, g.Kind, g.Expect),
+			fmt.Sprintf("a %s goal expects %s", g.Kind, quoteJoin(accepted, " or ")))
 	}
 	// Exactly one subject, named by the kind. A goal carrying two is one whose author
 	// changed their mind, and grading the one the kind happens to read would silently
 	// ignore the other.
 	if g.Kind != GoalKindCheck && (g.Check.Target != "" || g.Check.Script != "") {
-		return fmt.Errorf("goal %q is a %s goal and also carries a check, a goal examines one subject", g.ID, g.Kind)
+		bad("check", fmt.Sprintf("goal %q is a %s goal and also carries a check", g.ID, g.Kind), "a goal examines one subject: drop the check")
 	}
 	if g.Kind != GoalKindPaths && len(trimmedNonEmpty(g.Paths)) > 0 {
-		return fmt.Errorf("goal %q is a %s goal and also carries paths, a goal examines one subject", g.ID, g.Kind)
+		bad("paths", fmt.Sprintf("goal %q is a %s goal and also carries paths", g.ID, g.Kind), "a goal examines one subject: drop the paths")
 	}
 	if g.Kind != GoalKindSymbol && len(trimmedNonEmpty(g.Symbols)) > 0 {
-		return fmt.Errorf("goal %q is a %s goal and also carries symbols, a goal examines one subject", g.ID, g.Kind)
+		bad("symbols", fmt.Sprintf("goal %q is a %s goal and also carries symbols", g.ID, g.Kind), "a goal examines one subject: drop the symbols")
 	}
-	if len(trimmedNonEmpty(g.Subject())) == 0 {
-		return fmt.Errorf("goal %q is a %s goal and names nothing to examine, so nothing could ever satisfy it", g.ID, g.Kind)
+	// An unknown kind has no subject field, and its own problem above says so.
+	subject := map[GoalKind]string{GoalKindCheck: "check", GoalKindPaths: "paths", GoalKindSymbol: "symbols"}[g.Kind]
+	if subject != "" && len(trimmedNonEmpty(g.Subject())) == 0 {
+		bad(subject, fmt.Sprintf("goal %q is a %s goal and names nothing to examine, so nothing could ever satisfy it", g.ID, g.Kind),
+			"name what the goal examines")
 	}
 	switch {
 	case g.Expect != ExpectSignature && strings.TrimSpace(g.Signature) != "":
-		return fmt.Errorf("goal %q expects %q and carries a signature, which only a %q goal reads", g.ID, g.Expect, ExpectSignature)
+		bad("signature", fmt.Sprintf("goal %q expects %q and carries a signature, which only a %q goal reads", g.ID, g.Expect, ExpectSignature),
+			"drop the signature")
 	case g.Expect == ExpectSignature && len(trimmedNonEmpty(g.Symbols)) != 1:
-		return fmt.Errorf("goal %q expects the signature of %d symbols, and a signature is one declaration: name one symbol per goal",
-			g.ID, len(trimmedNonEmpty(g.Symbols)))
+		bad("symbols", fmt.Sprintf("goal %q expects the signature of %d symbols, and a signature is one declaration", g.ID, len(trimmedNonEmpty(g.Symbols))),
+			"name one symbol per goal")
 	}
-	if g.Kind == GoalKindCheck {
-		if err := g.Check.validScript(); err != nil || g.Check.Script != "" {
-			return err
-		}
+	if g.Kind != GoalKindCheck {
+		return ps
+	}
+	if err := g.Check.validScript(); err != nil {
+		bad("check.script", err.Error(), "name a target or a script, and give a script no project or charms")
+	} else if g.Check.Script == "" {
 		if _, err := ParseLeaseCheck(g.Check.Target + " " + g.Check.Project); err != nil {
-			return err
+			bad("check.target", err.Error(), "name one target and the project it runs in")
 		}
 	}
-	return nil
+	return ps
 }
 
 // validScript refuses a check naming both a script and a target, or a script with a
@@ -1331,7 +1401,7 @@ func ParseJobTimeout(s string) (time.Duration, error) {
 	}
 	d, err := time.ParseDuration(s)
 	if err != nil || d <= 0 {
-		return 0, fmt.Errorf("%w: timeout %q is not a positive duration such as 30m or 2h", errInvalidJob, s)
+		return 0, DiagnosticErrorf(JobRecordInvalid, "timeout %q is not a positive duration such as 30m or 2h", s)
 	}
 	return d, nil
 }
@@ -1403,20 +1473,26 @@ func quoteJoin[T ~string](items []T, sep string) string {
 // check is the row's declared check, from either spelling, and whether it declares one at
 // all. A line that does not parse is refused HERE, at the door, rather than at grading
 // time, where the row is already stored and the worker has already run something.
-func (r Declaration) check() (LeaseCheck, bool, error) {
+func (r Declaration) check() (LeaseCheck, bool, JobProblems) {
+	invalid := func(field string, err error, fix string) JobProblems {
+		return JobProblems{{Code: JobRecordInvalid, Field: field, Message: err.Error(), Fix: fix}}
+	}
 	line := strings.TrimSpace(r.Validation)
 	switch {
 	case r.Check != nil && line != "":
-		return LeaseCheck{}, false, fmt.Errorf("%w: a row carries `check` or a rendered `validation` line, not both", errInvalidJob)
+		return LeaseCheck{}, false, JobProblems{{
+			Code: JobRecordInvalid, Field: "validation",
+			Message: "a row carries `check` or a rendered `validation` line, not both", Fix: "send `check` alone",
+		}}
 	case r.Check != nil && r.Check.Script != "":
 		if err := r.Check.validScript(); err != nil {
-			return LeaseCheck{}, false, fmt.Errorf("%w: %w", errInvalidJob, err)
+			return LeaseCheck{}, false, invalid("check.script", err, "name a target or a script, and give a script no project or charms")
 		}
 		return LeaseCheck{Script: r.Check.Script, Args: r.Check.Args}, true, nil
 	case r.Check != nil:
 		parsed, err := ParseLeaseCheck(r.Check.Target + " " + r.Check.Project)
 		if err != nil {
-			return LeaseCheck{}, false, fmt.Errorf("%w: %w", errInvalidJob, err)
+			return LeaseCheck{}, false, invalid("check.target", err, "name one target and the project it runs in")
 		}
 		parsed.Args = r.Check.Args
 		parsed.NoDefaultCharms = r.Check.NoDefaultCharms
@@ -1424,7 +1500,7 @@ func (r Declaration) check() (LeaseCheck, bool, error) {
 	case line != "":
 		parsed, err := ParseLeaseRunLine(line)
 		if err != nil {
-			return LeaseCheck{}, false, fmt.Errorf("%w: %w", errInvalidJob, err)
+			return LeaseCheck{}, false, invalid("validation", err, "send `check` with the target and project instead")
 		}
 		return parsed, true, nil
 	}
@@ -1455,8 +1531,8 @@ func (r Declaration) Apply(u *Job) {
 	u.DependsOn = trimmedNonEmpty(r.DependsOn)
 	u.Breaks = trimmedNonEmpty(r.Breaks)
 	u.Model = strings.TrimSpace(r.Model)
-	// Validate refused an unparsable check before the row reached a store, so the error
-	// here cannot fire; the rendered line is written from the record so the two agree.
+	// Validate refused an unparsable check before the row reached a store, so the problems
+	// here cannot arise; the rendered line is written from the record so the two agree.
 	check, declared, _ := r.check()
 	u.Check, u.Validation = nil, ""
 	if declared {
@@ -1466,6 +1542,7 @@ func (r Declaration) Apply(u *Job) {
 	u.State = r.State
 	u.ReadOnly = r.ReadOnly
 	u.MaxAttempts = r.MaxAttempts
+	u.Waivers = slices.Clone(r.Waivers)
 }
 
 // ApplySpec writes this declaration's spec onto a row, for `magus job apply`: as Apply, but
@@ -2101,6 +2178,74 @@ func LiteralPrefix(p string) string {
 	return p
 }
 
+// PathWithin reports whether the declared path inner names no file outer does not, so a
+// holder replacing outer with inner only narrows. A literal is within a glob that matches
+// it, a literal names itself and everything beneath it, `F#d` is within `F` and within a
+// glob matching F, and a glob is within a literal directory holding its literal prefix or
+// within `<prefix>/**` and `<prefix>/**/<last>` when its prefix is under that one.
+//
+// It errs toward false: two globs of any other shape are never within one another, since
+// proving one glob's matches a subset of another's is a solver, and a refused narrowing
+// costs the holder one widening where a wrong yes hands it a file nobody granted.
+func PathWithin(inner, outer string) bool {
+	innerFile, innerDecl := SplitClaim(inner)
+	outerFile, outerDecl := SplitClaim(outer)
+	if innerFile == "" || outerFile == "" {
+		return false
+	}
+	innerFile, outerFile = path.Clean(innerFile), path.Clean(outerFile)
+	innerGlob := IsGlobMeta(innerFile)
+	switch {
+	case outerDecl != "":
+		return innerDecl == outerDecl && innerFile == outerFile && !innerGlob
+	case innerFile == outerFile, outerFile == ".":
+		return true
+	case !IsGlobMeta(outerFile):
+		return underDir(LiteralPrefix(innerFile), outerFile)
+	case !innerGlob:
+		ok, err := doublestar.Match(outerFile, innerFile)
+		return err == nil && ok
+	}
+	prefix, last, ok := starStarShape(outerFile)
+	if !ok || !underDir(LiteralPrefix(path.Dir(innerFile)), prefix) {
+		return false
+	}
+	base := path.Base(innerFile)
+	if last == "" || base == last {
+		return true
+	}
+	if IsGlobMeta(base) {
+		return false
+	}
+	matched, err := doublestar.Match(last, base)
+	return err == nil && matched
+}
+
+// underDir reports whether p is dir or beneath it; every path is under the root, "".
+func underDir(p, dir string) bool {
+	return dir == "" || p == dir || strings.HasPrefix(p, dir+"/")
+}
+
+// starStarShape splits a glob of the form `<prefix>/**` or `<prefix>/**/<last>`, with a
+// literal prefix and a last segment holding no `**`, and reports false for any other shape.
+func starStarShape(glob string) (prefix, last string, ok bool) {
+	if unsplittableGlob(glob) {
+		return "", "", false
+	}
+	prefix = LiteralPrefix(glob)
+	rest := strings.TrimPrefix(strings.TrimPrefix(glob, prefix), "/")
+	segs := strings.Split(rest, "/")
+	switch {
+	case segs[0] != "**":
+		return "", "", false
+	case len(segs) == 1:
+		return prefix, "", true
+	case len(segs) == 2 && !strings.Contains(segs[1], "**"):
+		return prefix, segs[1], true
+	}
+	return "", "", false
+}
+
 // Clone returns a deep copy: the slice fields are the only shared state, so copying
 // them is what makes a value handed out of a store safe to keep. slices.Clone
 // preserves nil, so a row that stored null does not come back as [].
@@ -2116,6 +2261,7 @@ func (u Job) Clone() Job {
 	c.Releases = slices.Clone(u.Releases)
 	c.Unattributed = slices.Clone(u.Unattributed)
 	c.Entries = slices.Clone(u.Entries)
+	c.Waivers = slices.Clone(u.Waivers)
 	if u.ModelTier != nil {
 		tier := *u.ModelTier
 		c.ModelTier = &tier
