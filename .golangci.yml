@@ -114,6 +114,7 @@ linters:
     - stutter
     - filenames
     - nameoutput
+    - namewords
     - testisolation
     - providerio
     - fieldwise
@@ -483,6 +484,16 @@ linters:
           hint: >-
             the destination is --tee's; a single value is emitNames(out, []string{v}), a slice of
             records is emitItemNames(out, records, func(r T) string { return r.Field })
+
+      namewords:
+        type: module
+        description: reports function and method names ending in a preposition or using a short form
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          # A function is named for what it returns or does: graphOf builds a graph,
+          # so it is buildGraph, and configFor answers a question, so name the question.
+          suffixes: [To, For, Of]
+          short-forms: [Src, Dst, Cfg, Msg, Idx, Tmp, Ptr]
 
       testisolation:
         type: module

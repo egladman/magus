@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/libs/conventions/hostagnostic"
 	"github.com/egladman/magus/libs/conventions/hostvocab"
 	"github.com/egladman/magus/libs/conventions/nameoutput"
+	"github.com/egladman/magus/libs/conventions/namewords"
 	"github.com/egladman/magus/libs/conventions/providerio"
 	"github.com/egladman/magus/libs/conventions/ruletext"
 	"github.com/egladman/magus/libs/conventions/stderrprint"
@@ -40,6 +41,7 @@ func init() { //nolint:gochecknoinits // golangci-lint's plugin-module-register 
 	register.Plugin("hostagnostic", plugin("hostagnostic", hostagnostic.New))
 	register.Plugin("hostvocab", plugin("hostvocab", hostvocab.New))
 	register.Plugin("nameoutput", plugin("nameoutput", nameoutput.New))
+	register.Plugin("namewords", plugin("namewords", namewords.New))
 	register.Plugin("providerio", plugin("providerio", providerio.New))
 	register.Plugin("ruletext", plugin("ruletext", ruletext.New))
 	register.Plugin("stderrprint", plugin("stderrprint", stderrprint.New))
