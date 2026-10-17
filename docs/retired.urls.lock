@@ -400,3 +400,6 @@ reference/codes/sandbox/MGS3020/
 reference/codes/sandbox/MGS3021/
 tags/exit-2/
 tags/preflight/
+
+# The stdin-closed guard rule was deleted with the stdin rewrite.
+reference/rules/stdin-closed/
