@@ -21,8 +21,8 @@ func osModule() vm.Value {
 	m.MapSet("sleep", fn("os.sleep", osSleep))
 	m.MapSet("time", fn("os.time", osTime))
 	m.MapSet("env", fn("os.env", osEnv))
-	m.MapSet("tmpDir", fn("os.tmpDir", osTmpDir))
-	m.MapSet("tmpFilename", fn("os.tmpFilename", osTmpFilename))
+	m.MapSet("tmpDir", fn("os.tmpDir", osTempDir))
+	m.MapSet("tmpFilename", fn("os.tmpFilename", osTempFilename))
 	m.MapSet("exit", fn("os.exit", osExit))
 	m.MapSet("execute", fn("os.execute", osExecute))
 
@@ -80,11 +80,11 @@ func osEnv(_ context.Context, args []vm.Value) (vm.Value, error) {
 	return vm.StrValue(v), nil
 }
 
-func osTmpDir(_ context.Context, _ []vm.Value) (vm.Value, error) {
+func osTempDir(_ context.Context, _ []vm.Value) (vm.Value, error) {
 	return vm.StrValue(os.TempDir()), nil
 }
 
-func osTmpFilename(_ context.Context, args []vm.Value) (vm.Value, error) {
+func osTempFilename(_ context.Context, args []vm.Value) (vm.Value, error) {
 	prefix := "buzz"
 	if len(args) >= 1 && args[0].IsStr() {
 		prefix = args[0].AsString()

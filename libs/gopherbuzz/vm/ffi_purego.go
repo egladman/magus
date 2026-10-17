@@ -196,11 +196,11 @@ func (puregoFFI) OpenLibrary(libname string, sigs []CFuncSig) (Value, error) {
 	return heapValue(tagMap, m), nil
 }
 
-// foreignPtr converts a C address to unsafe.Pointer for a read. The address
+// foreignPointer converts a C address to unsafe.Pointer for a read. The address
 // came from dlsym (or a pointer loaded through one), so it never points into
 // the Go heap — the aliasing rules vet's unsafeptr check guards against don't
 // apply. The &addr round-trip is the conventional conversion vet accepts.
-func foreignPtr(addr uintptr) unsafe.Pointer {
+func foreignPointer(addr uintptr) unsafe.Pointer {
 	//nolint:gosec // G103: audited — addr is a dlsym-resolved C address, never a Go pointer.
 	return *(*unsafe.Pointer)(unsafe.Pointer(&addr))
 }
@@ -216,19 +216,19 @@ func loadExternVar(sig CFuncSig, sym uintptr) (Value, error) {
 		// A pointer (the symbol's own address) → ud, full 64-bit.
 		return UDValue(sym), nil
 	case CVoidPtr:
-		return UDValue(*(*uintptr)(foreignPtr(sym))), nil
+		return UDValue(*(*uintptr)(foreignPointer(sym))), nil
 	case CCharPtr:
-		p := *(*uintptr)(foreignPtr(sym))
+		p := *(*uintptr)(foreignPointer(sym))
 		if p == 0 {
 			return StrValue(""), nil
 		}
 		return StrValue(goCString(p)), nil
 	case CBool:
-		return BoolValue(*(*byte)(foreignPtr(sym)) != 0), nil
+		return BoolValue(*(*byte)(foreignPointer(sym)) != 0), nil
 	case CFloat:
-		return FloatValue(float64(*(*float32)(foreignPtr(sym)))), nil
+		return FloatValue(float64(*(*float32)(foreignPointer(sym)))), nil
 	case CDouble:
-		return FloatValue(*(*float64)(foreignPtr(sym))), nil
+		return FloatValue(*(*float64)(foreignPointer(sym))), nil
 	case CInt, CUint:
 		size, _, ok := CTypeLayout(sig.VarTypeName)
 		if !ok {
@@ -237,21 +237,21 @@ func loadExternVar(sig CFuncSig, sym uintptr) (Value, error) {
 		switch size {
 		case 1:
 			if sig.Ret == CInt {
-				return IntValue(int64(*(*int8)(foreignPtr(sym)))), nil
+				return IntValue(int64(*(*int8)(foreignPointer(sym)))), nil
 			}
-			return IntValue(int64(*(*uint8)(foreignPtr(sym)))), nil
+			return IntValue(int64(*(*uint8)(foreignPointer(sym)))), nil
 		case 2:
 			if sig.Ret == CInt {
-				return IntValue(int64(*(*int16)(foreignPtr(sym)))), nil
+				return IntValue(int64(*(*int16)(foreignPointer(sym)))), nil
 			}
-			return IntValue(int64(*(*uint16)(foreignPtr(sym)))), nil
+			return IntValue(int64(*(*uint16)(foreignPointer(sym)))), nil
 		case 4:
 			if sig.Ret == CInt {
-				return IntValue(int64(*(*int32)(foreignPtr(sym)))), nil
+				return IntValue(int64(*(*int32)(foreignPointer(sym)))), nil
 			}
-			return IntValue(int64(*(*uint32)(foreignPtr(sym)))), nil
+			return IntValue(int64(*(*uint32)(foreignPointer(sym)))), nil
 		case 8:
-			return IntValue(*(*int64)(foreignPtr(sym))), nil
+			return IntValue(*(*int64)(foreignPointer(sym))), nil
 		}
 		return Null, fmt.Errorf("unsupported scalar width %d for type %q", size, sig.VarTypeName)
 	}
@@ -263,7 +263,7 @@ func loadExternVar(sig CFuncSig, sym uintptr) (Value, error) {
 func goCString(addr uintptr) string {
 	var b []byte
 	for i := uintptr(0); ; i++ {
-		c := *(*byte)(foreignPtr(addr + i))
+		c := *(*byte)(foreignPointer(addr + i))
 		if c == 0 {
 			return string(b)
 		}
