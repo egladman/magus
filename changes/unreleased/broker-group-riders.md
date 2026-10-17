@@ -13,3 +13,7 @@
   that reused the id. The broker now checks that the group's leader runs and started
   before the hold; when the leader has exited it cannot tell, so it leaves the group
   running and files why in the attention queue.
+- **A failing sibling step no longer cancels the hold on a step's process group.** A
+  hold cancelled mid-request could leave one the broker recorded and the run never
+  released. A release the broker does not answer now warns that it may still hold the
+  group.
