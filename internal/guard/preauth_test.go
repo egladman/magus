@@ -12,12 +12,14 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/fixture"
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -157,12 +159,12 @@ var nextIDRe = regexp.MustCompile(`breadcrumb\("([a-z-]+)"`)
 // Several calls per function, because capNext trims to three: one fixture per function
 // would leave the fourth template of a family unrendered and unguarded, which is exactly
 // the hole the id sweep below closes.
-func servedNextTemplates(t *testing.T) map[string]types.NextStep {
+func servedNextTemplates(t *testing.T) map[string]string {
 	t.Helper()
-	rendered := map[string]types.NextStep{}
+	rendered := map[string]string{}
 	add := func(next []types.NextStep) {
 		for _, n := range next {
-			rendered[n.ID] = n
+			rendered[n.ID] = n.Run
 		}
 	}
 	add(hint.NextForQuery(types.KnowledgeQueryOutput{Matches: []types.KnowledgeMatch{
@@ -321,6 +323,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 	ctx, root := fleetFixture(t, worker, reviewer)
 	templates := servedNextTemplates(t)
 	readScript, writeScript := scriptNexts(t, root)
+	loaded := loadingWorkspace(t)
 
 	grade := func(t *testing.T, id, run, role, lease string) {
 		t.Helper()
@@ -339,7 +342,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 				return denial{}
 			},
 		} {
-			if reason := rule(ctx, Dependencies{}, lease, run).full(); reason != "" {
+			if reason := rule(ctx, loaded, lease, run).full(); reason != "" {
 				t.Errorf("the %q breadcrumb serves %q, which the guard denies for a %s.\n"+
 					"`next` has to be computed for the acting role, not filtered after the fact:\n%s",
 					id, run, role, reason)
@@ -355,15 +358,10 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 		{"worker with narrow write paths", worker.ID},
 		{"reviewer", reviewer.ID},
 	} {
-		kind, writePaths := hint.LeaseRole([]types.Job{worker, reviewer}, role.lease)
-		for id, n := range templates {
-			// Graded as served: a narrow worker is never served `generate:rw .`, which the
-			// guard refuses it once the workspace cannot vouch for what the run writes.
-			if len(hint.ServableTo(kind, writePaths, []types.NextStep{n})) == 0 {
-				continue
-			}
-			t.Run(role.name+"/"+id, func(t *testing.T) { grade(t, id, n.Run, role.name, role.lease) })
+		for id, run := range templates {
+			t.Run(role.name+"/"+id, func(t *testing.T) { grade(t, id, run, role.name, role.lease) })
 		}
+		kind, writePaths := hint.LeaseRole([]types.Job{worker, reviewer}, role.lease)
 		t.Run(role.name+"/scripts", func(t *testing.T) {
 			served := hint.ServableTo(kind, writePaths, []types.NextStep{readScript, writeScript})
 			require.Contains(t, served, readScript, "a read script is served to every role")
@@ -400,6 +398,25 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 	}
 }
 
+// loadingWorkspace is a root whose generate target writes cmd/magus/gen, inside the
+// narrow worker's write paths. It loads, so a write template is judged on the
+// workspace's declarations rather than refused as a run nothing could check.
+func loadingWorkspace(t *testing.T) Dependencies {
+	t.Helper()
+	const output = "cmd/magus/gen/*.go"
+	root := &types.Project{Path: ".", TargetOutputs: map[string][]types.OutputRef{"generate": {{Glob: output}}}}
+	ws := typestest.NewMockWorkspaceRepository(t)
+	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return([]types.FileEntry{{
+		Path: "cmd/magus/gen/flags.go", Project: ".", Role: "output",
+		Claims: []types.FileClaim{{Project: ".", Target: "generate", Role: "output", Glob: output}},
+	}}, nil).Maybe()
+	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{}, nil).Maybe()
+	ws.EXPECT().Get(".").Return(root).Maybe()
+	ws.EXPECT().All().Return([]*types.Project{root}).Maybe()
+	ws.EXPECT().Where(mock.Anything).Return(root, true).Maybe()
+	return Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
+}
+
 // scriptNexts serves one read and one write script out of an index written under root,
 // through the same lookup the serving sites use.
 func scriptNexts(t *testing.T, root string) (read, write types.NextStep) {
@@ -434,8 +451,7 @@ func scriptNexts(t *testing.T, root string) (read, write types.NextStep) {
 // mode measured across the templates on 2026-09-11: 30 of 30 templates cleared the guard and
 // the ones carrying `<path>` broke on the reader's own redirect.
 func TestServedNextTemplatesAreRunnable(t *testing.T) {
-	for id, n := range servedNextTemplates(t) {
-		run := n.Run
+	for id, run := range servedNextTemplates(t) {
 		assert.NotContains(t, run, "<", "the %q breadcrumb still carries a placeholder: %q", id, run)
 		cmds, ok := ParseCommands(run)
 		require.True(t, ok, "the %q breadcrumb does not parse as a shell command: %q", id, run)
