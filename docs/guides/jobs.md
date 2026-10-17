@@ -86,6 +86,8 @@ She declares a job per half, from her main checkout:
 $ magus job fork refactor/pricing --criteria 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .'
 forked refactor/pricing, declared, with 1 write path(s). Its holder reads the terms with `magus describe job refactor/pricing` and takes it with `magus job exec refactor/pricing`
 model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+referenced outside the write paths: files that use what the write paths define
+  unknown, no symbol index answered; `magus graph build` builds one
 ```
 
 ```sh
@@ -142,6 +144,9 @@ totals are computed in cents
 
 write paths
   pricing/total.sh
+
+referenced outside the write paths: files that use what the write paths define
+  unknown, no symbol index answered; `magus graph build` builds one
 
 projects
   .
@@ -281,6 +286,8 @@ Ben's change needs `format.sh` too, and he declares it anyway:
 $ magus job fork currency --criteria 'prices carry a currency code' --write-paths pricing/format.sh,checkout/tax.sh --check 'test .'
 forked currency, declared, with 2 write path(s). Its holder reads the terms with `magus describe job currency` and takes it with `magus job exec currency`
 model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+referenced outside the write paths: files that use what the write paths define
+  unknown, no symbol index answered; `magus graph build` builds one
 ```
 
 The store accepted the claim and recorded the overlap. For a file with a diff driver,
@@ -374,6 +381,9 @@ prices carry a currency code
 write paths
   pricing/format.sh
   checkout/tax.sh
+
+referenced outside the write paths: files that use what the write paths define
+  unknown, no symbol index answered; `magus graph build` builds one
 
 projects
   .
