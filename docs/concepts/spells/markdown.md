@@ -1,13 +1,13 @@
 ---
 title: markdown spell
 generated_from: spells/markdown/spell.buzz
-description: "Markdown docs spell: markdownlint and prettier for linting and formatting prose."
+description: "Markdown docs spell: markdownlint and dprint for linting and formatting prose."
 tags: [markdown, spell, docs, prettier, lint, tools]
 ---
 
 # markdown
 
-The `markdown` spell lints and formats Markdown. `markdownlint` enforces style, and `prettier` checks formatting; the `rw` charm turns the check into an in-place rewrite.
+The `markdown` spell lints and formats Markdown. `markdownlint` enforces style, and `dprint` checks formatting; the `rw` charm turns the check into an in-place rewrite.
 
 **Runtime name:** `markdown` (source `spells/markdown/`)
 
@@ -29,7 +29,7 @@ Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patc
 
 ## dprint
 
-**Command:** `dprint check`
+**Command:** `dprint check --config-discovery=ignore-descendants`
 
 ### rw
 
@@ -66,44 +66,6 @@ magus\project({ "spells": [markdown] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     markdown["markdownlint"](ctx);
-}
-```
-
-## prettier
-
-**Command:** `prettier --check --no-error-on-unmatched-pattern **/*.md **/*.mdx`
-
-### rw
-
-Replaces `--check` with `--write`.
-
-<details class="charm-patch">
-<summary>JSON Patch</summary>
-
-```json
-[
-  {
-    "op": "replace",
-    "path": "/0",
-    "value": "--write"
-  }
-]
-```
-
-</details>
-
-### Example
-
-<!-- magus-run-recorder -->
-```buzz
-// prettier checks Markdown formatting; the rw charm (magus run format:rw) rewrites in place.
-import "magus";
-import "magus/spell/markdown";
-
-magus\project({ "spells": [markdown] });
-
-export fun format(ctx: magus\Context, args: [str]) > void {
-    markdown["prettier"](ctx);
 }
 ```
 
