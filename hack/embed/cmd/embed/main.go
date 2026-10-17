@@ -22,6 +22,7 @@ import (
 
 	"github.com/egladman/magus/hack/embed/distill"
 	"github.com/egladman/magus/hack/embed/teacher"
+	"github.com/egladman/magus/internal/textrank"
 	"github.com/egladman/magus/libs/xdg"
 )
 
@@ -184,9 +185,19 @@ func runTexts(args []string) error {
 	if err := writeDropped(filepath.Join(*out, "dropped.jsonl"), d.dropped); err != nil {
 		return err
 	}
+	var holdout [][]byte
+	for _, r := range records {
+		if r.Kind == "file" && r.Split == "holdout" {
+			holdout = append(holdout, files[r.Path])
+		}
+	}
+	forced, err := countForced(mix.forced, mix.texts, holdout)
+	if err != nil {
+		return err
+	}
 	line := textsLine{
 		Kind: "texts", Rev: *rev, TextsSHA256: digest, TextsFile: relativize(*cache, filepath.Join(*out, "texts.jsonl")),
-		Texts: len(mix.texts), Excluded: mix.excluded, Decontam: d.report,
+		Texts: len(mix.texts), Excluded: mix.excluded, Decontam: d.report, Forced: forced,
 	}
 	if err := appendLine(*runsPath, line); err != nil {
 		return err
@@ -195,6 +206,8 @@ func runTexts(args []string) error {
 		*rev, len(mix.texts), repo-mix.figures, mix.files, mix.figures, mix.docs, mix.queries, digest, len(mix.forced))
 	fmt.Printf("train files left out of the texts: %v; dropped as eval repeats: %v, by kind/reason/set %v; %d of %d eval grams are boilerplate\n",
 		mix.excluded, d.report.Dropped, d.report.DroppedBy, d.report.CommonGrams, d.report.Grams)
+	fmt.Printf("forced tokens: %d, %d in the training texts, %d only in holdout files, %d in neither\n",
+		forced.Tokens, forced.InTrainingTexts, forced.HoldoutOnly, forced.Unseen)
 	return nil
 }
 
@@ -207,6 +220,54 @@ type textsLine struct {
 	Texts       int            `json:"texts"`
 	Excluded    map[string]int `json:"excluded"`
 	Decontam    decontamReport `json:"decontam"`
+	Forced      forcedReport   `json:"forced"`
+}
+
+// forcedReport places every forced token. The whole product vocabulary is forced, holdout
+// files' names included, so HoldoutOnly counts the forced tokens an eval query can match
+// only because they were forced: no training text holds them, a holdout file does.
+type forcedReport struct {
+	Tokens          int `json:"tokens"`
+	InTrainingTexts int `json:"in_training_texts"`
+	HoldoutOnly     int `json:"holdout_only"`
+	Unseen          int `json:"unseen"`
+}
+
+// countForced tokenizes the training texts and the holdout files as the runtime does and
+// places each token distill.ForcedTokens makes of forced.
+func countForced(forced map[string]bool, texts []teacher.Text, holdout [][]byte) (forcedReport, error) {
+	tokens, err := distill.ForcedTokens(slices.Sorted(maps.Keys(forced)))
+	if err != nil {
+		return forcedReport{}, err
+	}
+	trained, held := map[string]bool{}, map[string]bool{}
+	for _, t := range texts {
+		markTokens(trained, tokens, t.Text)
+	}
+	for _, b := range holdout {
+		markTokens(held, tokens, string(b))
+	}
+	r := forcedReport{Tokens: len(tokens)}
+	for tok := range tokens {
+		switch {
+		case trained[tok]:
+			r.InTrainingTexts++
+		case held[tok]:
+			r.HoldoutOnly++
+		default:
+			r.Unseen++
+		}
+	}
+	return r, nil
+}
+
+// markTokens sets found[tok] for every token of body that wanted holds.
+func markTokens(found, wanted map[string]bool, body string) {
+	for _, tok := range textrank.Tokens(body) {
+		if wanted[tok] {
+			found[tok] = true
+		}
+	}
 }
 
 func commaSet(s string) map[string]bool {

@@ -393,7 +393,9 @@ export fun sectionSpan(c: Snapshot, path: str, label: str, level: int) > str !> 
 }
 
 // The forced vocabulary: sets every table must carry whatever the source files' counts say.
-// Each names the declaration it was read from.
+// Each names the declaration it was read from. The sets read holdout files too, since the
+// shipped table must know the whole product's names; `embed texts` records how many forced
+// tokens only holdout files hold.
 fun literalSet(c: Snapshot, name: str, file: str) > {str: any} !> any {
     foreach (s in c.symbolsByFile[file] ?? []) {
         if (s.label == name and s.attrs["symbol_kind"] == "Variable") {

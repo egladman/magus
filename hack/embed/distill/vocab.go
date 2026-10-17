@@ -56,7 +56,7 @@ func BuildVocab(c TextSource, opts VocabOptions) (*Vocab, error) {
 		}
 	}
 
-	forced, err := forcedTokens(opts.Forced)
+	forced, err := ForcedTokens(opts.Forced)
 	if err != nil {
 		return nil, err
 	}
@@ -90,9 +90,10 @@ func BuildVocab(c TextSource, opts VocabOptions) (*Vocab, error) {
 	return NewVocab(kept, n, total)
 }
 
-// forcedTokens is the set of tokens textrank.Tokens makes of forced, each of which it
-// must keep whole.
-func forcedTokens(forced []string) (map[string]bool, error) {
+// ForcedTokens is the set of tokens textrank.Tokens makes of forced, each of which it
+// must keep whole. A forced entry that yields no token, or a token textrank.Tokens would
+// not keep whole, is an error.
+func ForcedTokens(forced []string) (map[string]bool, error) {
 	out := map[string]bool{}
 	for _, f := range forced {
 		toks := textrank.Tokens(f)

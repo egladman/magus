@@ -111,6 +111,20 @@ func TestTextsLeaveOutGeneratedFilesAndChangelogs(t *testing.T) {
 	require.Equal(t, map[string]int{"generated": 1, "changelog-fragment": 1, "changelog": 1}, m.excluded)
 }
 
+func TestForcedReportCountsHoldoutOnlyWords(t *testing.T) {
+	forced := map[string]bool{"fs\\readFile": true, "MGS2001": true, "hasCharm": true}
+	texts := []teacher.Text{{ID: "a.go:1-2", Text: "data, err := fs.ReadFile(path)"}}
+	holdout := [][]byte{[]byte("// MGS2001 names a target the magusfile never declares\n")}
+	got, err := countForced(forced, texts, holdout)
+	require.NoError(t, err)
+	// fs, readfile, read and file are in a training text; mgs2001 is only in a holdout
+	// file; hascharm, has and charm are nowhere.
+	require.Equal(t, forcedReport{Tokens: 8, InTrainingTexts: 4, HoldoutOnly: 1, Unseen: 3}, got)
+
+	_, err = countForced(map[string]bool{"--": true}, texts, holdout)
+	require.ErrorContains(t, err, "yields no token")
+}
+
 func TestRecord(t *testing.T) {
 	cache := t.TempDir()
 	texts := filepath.Join(cache, "training", "texts.jsonl")
