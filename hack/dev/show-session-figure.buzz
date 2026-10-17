@@ -17,8 +17,7 @@ final HELP = "cost: reads every checkout's activity trail that changed inside th
     + "--all draws every job created in the window, not only the ones the session's trail names and their parents and dependencies.";
 
 final STATES = [
-    ["passed", "pass"],
-    ["exited, awaiting integration", "exited"],
+    ["passed or exited", "pass", "exited"],
     ["running or declared", "running", "declared"],
     ["no return or failed", "no_return", "fail"],
 ];
@@ -176,7 +175,6 @@ export fun drawJobTree(tr: JobTree) > figure\Figure !> any {
     foreach (e in tr.depends) {
         f.flowAcross(actors[e[0]]!, dst: actors[e[1]]!, label: "after", stroke: figure\Stroke.optional);
     }
-    f.zone("orchestrator", actors: [root]);
     foreach (z in STATES) {
         final members = mut [<figure\Actor>];
         foreach (n in tr.nodes) {
@@ -304,7 +302,7 @@ test "-o svg prints the golden SVG and nothing else" {
 test "without -o it prints a one-line summary and the console link" {
     final lines = rendered(fixture(), format: "text", theme: figure\Theme.light, console: "https://example.test/console/").split("\n");
     assert\equal(lines.len(), want: 2, message: "two lines");
-    assert\equal(lines[0], want: "read-only: 4 jobs (2 passed, 1 exited, awaiting integration, 1 no return or failed), 4 spawn and 1 dependency edges, session s-fixture", message: "summary");
+    assert\equal(lines[0], want: "read-only: 4 jobs (3 passed or exited, 1 no return or failed), 4 spawn and 1 dependency edges, session s-fixture", message: "summary");
     assert\equal(lines[1].startsWith("explore: https://example.test/console/graph/#figure="), want: true, message: lines[1]);
 }
 
