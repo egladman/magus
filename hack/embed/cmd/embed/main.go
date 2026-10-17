@@ -13,6 +13,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -77,25 +78,41 @@ const textsSalt = "embed-texts/v1:"
 
 // sourceRecord is one line of hack/embed/gen/sources.jsonl, as far as texts reads it.
 type sourceRecord struct {
-	Kind   string   `json:"kind"`
-	Path   string   `json:"path"`
-	Group  string   `json:"group"`
-	Split  string   `json:"split"`
-	SHA256 string   `json:"sha256"`
-	Name   string   `json:"name"`
-	Tokens []string `json:"tokens"`
-	ID     string   `json:"id"`
-	Fold   int      `json:"fold"`
-	Title  string   `json:"title"`
-	Desc   string   `json:"desc"`
+	Kind      string   `json:"kind"`
+	Path      string   `json:"path"`
+	Group     string   `json:"group"`
+	Split     string   `json:"split"`
+	Generated bool     `json:"generated"`
+	SHA256    string   `json:"sha256"`
+	Name      string   `json:"name"`
+	Tokens    []string `json:"tokens"`
+	ID        string   `json:"id"`
+	Fold      int      `json:"fold"`
+	Title     string   `json:"title"`
+	Desc      string   `json:"desc"`
+}
+
+// excludedReason names why a train file's text stays out of the training texts, or is
+// "" for a file it may enter. A generated output restates its source, which may be held
+// out, and changelog entries restate commit subjects, which are eval queries.
+func excludedReason(r sourceRecord) string {
+	switch {
+	case r.Generated:
+		return "generated"
+	case strings.HasPrefix(r.Path, "changes/unreleased/") && strings.HasSuffix(r.Path, ".md"):
+		return "changelog-fragment"
+	case path.Base(r.Path) == "CHANGELOG.md":
+		return "changelog"
+	}
+	return ""
 }
 
 // runTexts turns the source manifest into the texts file vocab, teacher and train read.
-// Every train-split file is cut into line-bounded chunks, each figure outside eval fold
-// 0 becomes its title and description, and CoRNStack rows add a query and the head of
-// its document, one row per in-repo text at -cornstack 1. Files are read at the commit
-// that last wrote the manifest, and each must hash to its pinned digest, so the texts
-// do not move when the tree does.
+// Every train-split file excludedReason lets in is cut into line-bounded chunks, each
+// figure outside eval fold 0 becomes its title and description, and CoRNStack rows add
+// a query and the head of its document, one row per in-repo text at -cornstack 1. Files
+// are read at the commit that last wrote the manifest, and each must hash to its pinned
+// digest, so the texts do not move when the tree does.
 func runTexts(args []string) error {
 	fs := flag.NewFlagSet("texts", flag.ExitOnError)
 	sourcesPath := fs.String("sources", "gen/sources.jsonl", "embed-mine's source manifest")
@@ -131,7 +148,7 @@ func runTexts(args []string) error {
 	}
 	var paths []string
 	for _, r := range records {
-		if r.Kind == "file" && r.Split == "train" {
+		if r.Kind == "file" && r.Split == "train" && excludedReason(r) == "" {
 			paths = append(paths, r.Path)
 		}
 	}
@@ -140,7 +157,7 @@ func runTexts(args []string) error {
 		return err
 	}
 
-	mix := textMix{forced: map[string]bool{}}
+	mix := textMix{forced: map[string]bool{}, excluded: map[string]int{}}
 	if err := mix.addRepo(records, files, *rev, *sourcesPath, *maxBytes); err != nil {
 		return err
 	}
@@ -156,28 +173,34 @@ func runTexts(args []string) error {
 	}
 	fmt.Printf("files at %s; %d texts: %d chunks of %d files, %d figures, %d CoRNStack documents and %d queries; texts %s; %d forced tokens\n",
 		*rev, len(mix.texts), repo-mix.figures, mix.files, mix.figures, mix.docs, mix.queries, digest, len(mix.forced))
+	fmt.Printf("train files left out of the texts: %v\n", mix.excluded)
 	return nil
 }
 
 // textMix is the training texts as texts assembles them, the forced tokens, and the
-// counts it reports.
+// counts it reports. excluded counts the train files left out, by excludedReason.
 type textMix struct {
 	texts          []teacher.Text
 	forced         map[string]bool
 	inputs         []sourceRecord
+	excluded       map[string]int
 	files, figures int
 	docs, queries  int
 }
 
-// addRepo adds the in-repo texts the manifest records: each train-split file, which
-// must hash to its pinned digest at rev, cut into chunks of at most maxBytes, and each
-// figure outside eval fold 0. It collects the forced tokens and the input records for
-// addCornstack.
+// addRepo adds the in-repo texts the manifest records: each train-split file that
+// excludedReason lets in, which must hash to its pinned digest at rev, cut into chunks
+// of at most maxBytes, and each figure outside eval fold 0. It collects the forced
+// tokens and the input records for addCornstack.
 func (m *textMix) addRepo(records []sourceRecord, files map[string][]byte, rev, sourcesPath string, maxBytes int) error {
 	for _, r := range records {
 		switch r.Kind {
 		case "file":
 			if r.Split != "train" {
+				continue
+			}
+			if reason := excludedReason(r); reason != "" {
+				m.excluded[reason]++
 				continue
 			}
 			if sha256Hex(files[r.Path]) != r.SHA256 {

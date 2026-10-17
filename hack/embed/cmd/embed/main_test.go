@@ -93,6 +93,22 @@ func TestHoldoutGroupsNeverSpanSplits(t *testing.T) {
 	}
 }
 
+func TestTextsLeaveOutGeneratedFilesAndChangelogs(t *testing.T) {
+	kept := []byte("package textrank\n")
+	records := []sourceRecord{
+		{Kind: "file", Path: "internal/textrank/tokens.go", Split: "train", SHA256: sha256Hex(kept)},
+		{Kind: "file", Path: "docs/reference/buzz/crypto.md", Split: "train", Generated: true},
+		{Kind: "file", Path: "changes/unreleased/split-holdout.md", Split: "train"},
+		{Kind: "file", Path: "CHANGELOG.md", Split: "train"},
+		{Kind: "file", Path: "std/crypto.go", Split: "holdout"},
+	}
+	files := map[string][]byte{"internal/textrank/tokens.go": kept}
+	m := textMix{forced: map[string]bool{}, excluded: map[string]int{}}
+	require.NoError(t, m.addRepo(records, files, "HEAD", "sources.jsonl", 512))
+	require.Equal(t, []teacher.Text{{ID: "internal/textrank/tokens.go:1-1", Text: "package textrank\n"}}, m.texts)
+	require.Equal(t, map[string]int{"generated": 1, "changelog-fragment": 1, "changelog": 1}, m.excluded)
+}
+
 func TestRecord(t *testing.T) {
 	cache := t.TempDir()
 	texts := filepath.Join(cache, "training", "texts.jsonl")
