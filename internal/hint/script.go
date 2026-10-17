@@ -154,7 +154,7 @@ var placeholderRe = regexp.MustCompile(`\{([a-z]+)\}`)
 
 // MatchScripts returns the breadcrumbs for every script the index under cacheDir lists
 // for situation, in index order and uncapped: the serving site merges them with its
-// own and ServableTo caps what survives.
+// own and FilterServable caps what survives.
 //
 // It errors only on a situation ValidateSituation rejects. A missing, unreadable or
 // foreign-format index serves nothing, as does an entry whose file is gone, whose

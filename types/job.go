@@ -273,7 +273,7 @@ func (u Job) EffectiveGoals() []Goal {
 
 // String renders the check as the command a person types and a row stores. Running it
 // satisfies the check: the charms it executes under, default_charms included, are the
-// charms the check is resolved to (internal/job.bindsTo).
+// charms the check is resolved to (internal/job.ranCheck).
 func (c LeaseCheck) String() string {
 	if c.Script != "" {
 		line := "magus buzz --record " + c.Script
