@@ -154,7 +154,6 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 		{"may also run", "You may also run `./magus run lint docs` beside the check.", "lint"},
 		{"a shell block", "Validate:\n```bash\n./magus run diagrams_generate docs\n./magus run lint docs\n```", "lint"},
 		{"the gate", "Finish with `./magus affected ci`.", "ci"},
-
 		{"may also run, in prose", "You may also run ./magus run lint docs, lint-files . and observe.", ""},
 		{"run the X target", "Then run the lint target and report.", ""},
 		{"a run described in prose", "The guard refused magus run go-build . for the last worker; report it.", ""},
