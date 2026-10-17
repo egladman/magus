@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -27,6 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rankeval"
 	"github.com/egladman/magus/internal/textrank"
 	"github.com/egladman/magus/libs/xdg"
@@ -177,15 +177,14 @@ func exportExternalSubset(dir string, s externalSubset) (string, error) {
 		name  string
 		texts []externalText
 	}{{"queries.jsonl", s.queries}, {"corpus.jsonl", s.docs}} {
-		// encoding/json, not internal/json: its bytes must not depend on GOEXPERIMENT,
-		// since the export digest names the runs directory.
 		var b bytes.Buffer
-		enc := json.NewEncoder(&b)
-		enc.SetEscapeHTML(false)
 		for _, t := range f.texts {
-			if err := enc.Encode(t); err != nil {
-				return "", err
+			line, err := json.Marshal(t)
+			if err != nil {
+				return "", fmt.Errorf("%s %s: %w", f.name, t.ID, err)
 			}
+			b.Write(line)
+			b.WriteByte('\n')
 		}
 		sum.Write(b.Bytes())
 		path := filepath.Join(dir, f.name)
