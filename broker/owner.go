@@ -333,7 +333,7 @@ func inspectProcess(pid int) (started time.Time, group int, err error) {
 // inspectLinuxProcess reads /proc/<pid>/stat: the group is its fifth field and the
 // start, in clock ticks after boot, its twenty-second.
 func inspectLinuxProcess(pid int) (time.Time, int, error) {
-	stat, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
+	stat, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
 	if errors.Is(err, fs.ErrNotExist) {
 		return time.Time{}, 0, errLeaderGone
 	}
