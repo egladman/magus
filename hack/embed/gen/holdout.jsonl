@@ -69,6 +69,7 @@
 {"bucket":1,"path":"changes/unreleased/ended-checkout-cleaned.md"}
 {"bucket":0,"path":"changes/unreleased/exec-kills-orphaned-processes.md"}
 {"bucket":1,"path":"changes/unreleased/exited-job-releases-its-paths.md"}
+{"bucket":0,"path":"changes/unreleased/external-eval-harness.md"}
 {"bucket":0,"path":"changes/unreleased/failed-remote-cache-exchange-names-step.md"}
 {"bucket":0,"path":"changes/unreleased/failing-remote-tier-degrades-run-to.md"}
 {"bucket":0,"path":"changes/unreleased/flags-required.md"}
@@ -827,6 +828,7 @@
 {"bucket":1,"path":"internal/rankeval/qrels.go"}
 {"bucket":0,"path":"internal/rankeval/replay.go"}
 {"bucket":1,"path":"internal/rankeval/significance.go"}
+{"bucket":0,"path":"internal/rankeval/trec_test.go"}
 {"bucket":0,"path":"internal/readlog/read_log.go"}
 {"bucket":0,"path":"internal/render/graph_ir.go"}
 {"bucket":1,"path":"internal/render/knowledge_graph_test.go"}
