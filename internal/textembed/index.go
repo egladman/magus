@@ -13,20 +13,18 @@ import (
 
 // indexFormat is the version WriteTo stamps and ReadIndex requires. Bump it on any
 // change to the layout or the header.
-const indexFormat = 1
+const indexFormat = 2
 
 var indexMagic = [4]byte{'M', 'S', 'E', 'I'}
 
-// Index holds one Vector per document, by document ordinal: the inverse norms and sign
-// codes in memory, and the int8 rows behind an io.ReaderAt that Search reads only for
-// the documents it rescores. It is safe for concurrent use when its rows' ReaderAt is,
-// as an *os.File is.
+// Index holds one Vector per document, by document ordinal: the inverse norms in
+// memory, and the int8 rows behind an io.ReaderAt that every Search reads whole. It is
+// safe for concurrent use when its rows' ReaderAt is, as an *os.File is.
 type Index struct {
-	dims, words, n int
-	table          string
-	invNorm        []uint32 // per doc; 0 for a doc with no Vector
-	codes          []uint64 // n·words, doc-major
-	rows           io.ReaderAt
+	dims, n int
+	table   string
+	invNorm []uint32 // per doc; 0 for a doc with no Vector
+	rows    io.ReaderAt
 }
 
 type indexHeader struct {
@@ -41,11 +39,9 @@ type indexHeader struct {
 func NewIndex(t *Table, docs [][]Field) *Index {
 	ix := &Index{
 		dims:    t.dims,
-		words:   t.dims / 64,
 		n:       len(docs),
 		table:   t.Digest(),
 		invNorm: make([]uint32, len(docs)),
-		codes:   make([]uint64, len(docs)*(t.dims/64)),
 	}
 	rows := make([]byte, len(docs)*t.dims)
 	for i, fields := range docs {
@@ -54,7 +50,6 @@ func NewIndex(t *Table, docs [][]Field) *Index {
 			continue
 		}
 		ix.invNorm[i] = v.InvNorm
-		copy(ix.codes[i*ix.words:], v.Code)
 		for j, x := range v.Q {
 			rows[i*ix.dims+j] = byte(x)
 		}
@@ -68,9 +63,9 @@ func (ix *Index) Len() int { return ix.n }
 
 // WriteTo writes the index as one MSEI file: the magic, a uvarint format, a
 // uvarint-length JSON header {table_digest, docs, dims}, InvNorm[N] as little-endian
-// uint32s, Code[N][dims/64] as little-endian uint64s, a sha256 of everything so far,
-// then the rows, N·dims int8s. The rows sit outside the digest so ReadIndex need not
-// read them. The bytes depend only on the table and the documents.
+// uint32s, a sha256 of everything so far, then the rows, N·dims int8s. The rows sit
+// outside the digest so ReadIndex need not read them. The bytes depend only on the
+// table and the documents.
 func (ix *Index) WriteTo(w io.Writer) (int64, error) {
 	head, err := ix.head()
 	if err != nil {
@@ -106,19 +101,16 @@ func (ix *Index) head() ([]byte, error) {
 	for _, x := range ix.invNorm {
 		buf = binary.LittleEndian.AppendUint32(buf, x)
 	}
-	for _, c := range ix.codes {
-		buf = binary.LittleEndian.AppendUint64(buf, c)
-	}
 	return buf, nil
 }
 
 // ReadIndex decodes an index WriteTo wrote, from size bytes of r, strictly. The magic,
 // the format and the header must check out. So must a table digest equal to t.Digest(),
-// dims equal to t.Dims(), a size exactly what the header implies, the sha256 over
-// everything before the rows, and no doc with InvNorm 0 but a sign code. ReadIndex
-// returns an error naming the first that does not. It reads the inverse norms and codes into
-// memory and keeps r for the rows, which it does not read or verify; the caller must
-// keep r open and unchanged while the Index is in use.
+// dims equal to t.Dims(), a size exactly what the header implies, and the sha256 over
+// everything before the rows. ReadIndex returns an error naming the first that does
+// not. It reads the inverse norms into memory and keeps r for the rows, which it does
+// not read or verify; the caller must keep r open and unchanged while the Index is in
+// use.
 func ReadIndex(r io.ReaderAt, size int64, t *Table) (*Index, error) {
 	ix, err := readIndex(r, size, t)
 	if err != nil {
@@ -134,8 +126,8 @@ func readIndex(r io.ReaderAt, size int64, t *Table) (*Index, error) {
 	if err != nil {
 		return nil, err
 	}
-	ix := &Index{dims: t.dims, words: t.dims / 64, n: h.Docs, table: h.TableDigest}
-	perDoc := int64(4 + 8*ix.words + ix.dims)
+	ix := &Index{dims: t.dims, n: h.Docs, table: h.TableDigest}
+	perDoc := int64(4 + ix.dims)
 	room := size - headLen - sha256.Size
 	if room < 0 || int64(ix.n) > room/perDoc {
 		return nil, fmt.Errorf("header names %d docs, but %d bytes hold at most %d", ix.n, size, max(room, 0)/perDoc)
@@ -143,7 +135,7 @@ func readIndex(r io.ReaderAt, size int64, t *Table) (*Index, error) {
 	if want := headLen + sha256.Size + int64(ix.n)*perDoc; size != want {
 		return nil, fmt.Errorf("%d bytes, but %d docs of %d dims take %d", size, ix.n, ix.dims, want)
 	}
-	rowsAt, err := ix.readCodes(r, headLen)
+	rowsAt, err := ix.readInverseNorms(r, headLen)
 	if err != nil {
 		return nil, err
 	}
@@ -198,10 +190,10 @@ func readIndexHeader(r io.ReaderAt, size int64, t *Table) (h indexHeader, headLe
 	return h, start + int64(hlen), nil
 }
 
-// readCodes reads everything before the rows, checks its sha256, and decodes the
-// inverse norms and sign codes that start at headLen. It returns where the rows start.
-func (ix *Index) readCodes(r io.ReaderAt, headLen int64) (int64, error) {
-	head := make([]byte, headLen+int64(ix.n)*int64(4+8*ix.words)+sha256.Size)
+// readInverseNorms reads everything before the rows, checks its sha256, and decodes
+// the inverse norms that start at headLen. It returns where the rows start.
+func (ix *Index) readInverseNorms(r io.ReaderAt, headLen int64) (int64, error) {
+	head := make([]byte, headLen+4*int64(ix.n)+sha256.Size)
 	if err := readAt(r, head, 0); err != nil {
 		return 0, err
 	}
@@ -213,21 +205,6 @@ func (ix *Index) readCodes(r io.ReaderAt, headLen int64) (int64, error) {
 	ix.invNorm = make([]uint32, ix.n)
 	for i := range ix.invNorm {
 		ix.invNorm[i] = binary.LittleEndian.Uint32(b[4*i:])
-	}
-	b = b[4*ix.n:]
-	ix.codes = make([]uint64, ix.n*ix.words)
-	for i := range ix.codes {
-		ix.codes[i] = binary.LittleEndian.Uint64(b[8*i:])
-	}
-	for i, x := range ix.invNorm {
-		if x != 0 {
-			continue
-		}
-		for _, c := range ix.code(i) {
-			if c != 0 {
-				return 0, fmt.Errorf("doc %d has no vector (InvNorm 0) but a sign code", i)
-			}
-		}
 	}
 	return int64(len(head)), nil
 }
@@ -244,8 +221,4 @@ func readAt(r io.ReaderAt, p []byte, off int64) error {
 	default:
 		return err
 	}
-}
-
-func (ix *Index) code(doc int) []uint64 {
-	return ix.codes[doc*ix.words : (doc+1)*ix.words : (doc+1)*ix.words]
 }

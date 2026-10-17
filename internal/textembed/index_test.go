@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -46,10 +47,10 @@ func TestIndexRoundTrip(t *testing.T) {
 		t.Fatal("a read index writes different bytes")
 	}
 	for i, q := range c.queries {
-		for _, r := range []int{0, 10, ix.Len()} {
-			opts := SearchOptions{Depth: 15, Rescore: r}
+		for _, depth := range []int{15, ix.Len()} {
+			opts := SearchOptions{Depth: depth}
 			if got, want := back.Search(q, opts), ix.Search(q, opts); !slices.Equal(got, want) {
-				t.Fatalf("query %d, rescore %d: read index finds %v, built %v", i, r, got, want)
+				t.Fatalf("query %d, depth %d: read index finds %v, built %v", i, depth, got, want)
 			}
 		}
 	}
@@ -61,9 +62,6 @@ func TestIndexNoVector(t *testing.T) {
 	if ix.invNorm[1] != 0 || ix.invNorm[2] != 0 || ix.invNorm[0] == 0 {
 		t.Errorf("InvNorms = %v, want only doc 0's set", ix.invNorm)
 	}
-	if !slices.Equal(ix.code(1), make([]uint64, 2)) {
-		t.Errorf("doc 1's code = %v, want zero", ix.code(1))
-	}
 }
 
 // TestIndexGolden pins the bytes WriteTo writes for the small doc set. Embed and
@@ -72,13 +70,12 @@ func TestIndexGolden(t *testing.T) {
 	_, ix := smallDocSet(t)
 	data := writeIndex(t, ix)
 	sum := sha256.Sum256(data)
-	if got, want := hex.EncodeToString(sum[:]), "62a94011377d578fb3b84dcd317b8ea500750c885071702b6d389e99802b22a6"; got != want {
+	if got, want := hex.EncodeToString(sum[:]), "78bb15b2d80e750271bdb37704807d718d342b08a5dd255904086ee0891b3519"; got != want {
 		t.Errorf("index digest = %q, want %q", got, want)
 	}
 }
 
-// indexLayout splits a valid encoding into its header, the inverse norms and codes,
-// and the rows.
+// indexLayout splits a valid encoding into its header, the inverse norms, and the rows.
 func indexLayout(data []byte, docs, dims int) (hdr, head, rows []byte) {
 	_, k := binary.Uvarint(data[4:])
 	hlen, k2 := binary.Uvarint(data[4+k:])
@@ -120,9 +117,6 @@ func TestIndexReadRefuses(t *testing.T) {
 	clone := func(b []byte) []byte { return append([]byte{}, b...) }
 	flipped := clone(data)
 	flipped[len(data)-len(rows)-sha256.Size-1] ^= 1
-	noVector := clone(head)
-	// Doc 96 holds only an out-of-vocabulary token; its code starts after every InvNorm.
-	noVector[4*ix.Len()+8*2*(noVectorEvery-1)] = 1
 	other := newDocSet(499, 1, 1, 128).table
 	if other.Digest() == c.table.Digest() {
 		t.Fatal("the other table is the same table")
@@ -136,8 +130,8 @@ func TestIndexReadRefuses(t *testing.T) {
 	}{
 		{"empty", nil, c.table, "no MSEI magic"},
 		{"magic", append([]byte("MSET"), data[4:]...), c.table, "no MSEI magic"},
-		{"format", resignIndex(2, hdr, head, rows), c.table, "format 2"},
-		{"header length", append(indexMagic[:], 1, 0xff, 0xff, 0x7f), c.table, "header length is malformed"},
+		{"format", resignIndex(indexFormat+1, hdr, head, rows), c.table, fmt.Sprintf("format %d", indexFormat+1)},
+		{"header length", append(indexMagic[:], indexFormat, 0xff, 0xff, 0x7f), c.table, "header length is malformed"},
 		{"header json", resignIndex(indexFormat, []byte("{"), head, rows), c.table, "header"},
 		{"header field", withHeaderJSON(t, hdr, head, rows), c.table, "header"},
 		{"table digest", withHeader(func(h *indexHeader) { h.TableDigest = other.Digest() }), c.table, "rebuild it"},
@@ -149,7 +143,6 @@ func TestIndexReadRefuses(t *testing.T) {
 		{"one doc fewer", withHeader(func(h *indexHeader) { h.Docs-- }), c.table, "docs of 128 dims take"},
 		{"one byte over", append(clone(data), 0), c.table, "docs of 128 dims take"},
 		{"digest", flipped, c.table, "sha256 does not match"},
-		{"code without a vector", resignIndex(indexFormat, hdr, noVector, rows), c.table, "doc 96 has no vector"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

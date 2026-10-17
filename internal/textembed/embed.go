@@ -21,12 +21,10 @@ type Field struct {
 }
 
 // Vector is a text's embedding. Q is its direction, scaled so the largest component is
-// ±127. InvNorm is ⌊2^31/‖Q‖⌋. Code holds Q's sign bits: bit j%64 of Code[j/64] is set
-// when Q[j] > 0.
+// ±127. InvNorm is ⌊2^31/‖Q‖⌋.
 type Vector struct {
 	Q       []int8
 	InvNorm uint32
-	Code    []uint64
 }
 
 // Contribution is one query token's share of a document's score, in score units.
@@ -54,7 +52,7 @@ func (t *Table) Embed(fields []Field) (Vector, bool) {
 		return Vector{}, false
 	}
 	q := quantize(v, m)
-	return Vector{Q: q, InvNorm: invNorm(q), Code: signCode(q)}, true
+	return Vector{Q: q, InvNorm: invNorm(q)}, true
 }
 
 // Contributions splits d's score against q, int64(Σ q.Q[j]·d.Q[j])·d.InvNorm, across
@@ -197,16 +195,6 @@ func isqrt(x uint64) uint64 {
 		}
 		r = next
 	}
-}
-
-func signCode(q []int8) []uint64 {
-	code := make([]uint64, len(q)/64)
-	for j, x := range q {
-		if x > 0 {
-			code[j/64] |= 1 << (j % 64)
-		}
-	}
-	return code
 }
 
 // share is round-half-away(a·b·k/div) in 128-bit arithmetic, saturating at ±MaxInt64.

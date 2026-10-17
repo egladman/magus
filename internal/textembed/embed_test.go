@@ -48,17 +48,14 @@ func probeTable(t testing.TB) *Table {
 // checkVector asserts what every Vector Embed returns must hold.
 func checkVector(t *testing.T, v Vector, dims int) {
 	t.Helper()
-	if len(v.Q) != dims || len(v.Code) != dims/64 {
-		t.Fatalf("len(Q), len(Code) = %d, %d; want %d, %d", len(v.Q), len(v.Code), dims, dims/64)
+	if len(v.Q) != dims {
+		t.Fatalf("len(Q) = %d, want %d", len(v.Q), dims)
 	}
 	var peak int
 	var s uint64
-	for j, x := range v.Q {
+	for _, x := range v.Q {
 		peak = max(peak, int(x), -int(x))
 		s += uint64(int(x) * int(x))
-		if got := v.Code[j/64]>>(j%64)&1 == 1; got != (x > 0) {
-			t.Fatalf("Code bit %d = %v for Q %d", j, got, x)
-		}
 	}
 	if peak != 127 {
 		t.Errorf("largest |Q| = %d, want 127", peak)
@@ -75,27 +72,23 @@ func TestEmbedByHand(t *testing.T) {
 		name   string
 		fields []Field
 		q      map[int]int8
-		code   uint64
 	}{
 		{
 			// v = (254, -1, 1): 127·254/254 = 127 and ±127/254 = ±0.5 round away from zero.
 			name:   "halves round away from zero",
 			fields: []Field{{Tokens: []string{"a", "b", "absent"}, Weight: 1}},
 			q:      map[int]int8{0: 127, 1: -1, 2: 1},
-			code:   0b101,
 		},
 		{
 			// a counts 3+1, so v = (1016, -1, 1), and 127/1016 = 0.125 rounds to 0.
 			name:   "weights multiply counts",
 			fields: []Field{{Tokens: []string{"a"}, Weight: 3}, {Tokens: []string{"a", "b"}, Weight: 1}},
 			q:      map[int]int8{0: 127},
-			code:   0b1,
 		},
 		{
 			name:   "cancelled tokens leave the rest",
 			fields: []Field{{Tokens: []string{"c", "b", "d"}, Weight: 1}},
 			q:      map[int]int8{1: -127, 2: 127},
-			code:   0b100,
 		},
 	}
 	for _, tt := range tests {
@@ -111,9 +104,6 @@ func TestEmbedByHand(t *testing.T) {
 			}
 			if !slices.Equal(v.Q, want) {
 				t.Errorf("Q = %v, want %v", v.Q, want)
-			}
-			if v.Code[0] != tt.code {
-				t.Errorf("Code = %b, want %b", v.Code[0], tt.code)
 			}
 		})
 	}
@@ -194,9 +184,6 @@ func vectorDigest(v Vector) string {
 		h.Write([]byte{byte(x)})
 	}
 	h.Write(binary.LittleEndian.AppendUint32(nil, v.InvNorm))
-	for _, c := range v.Code {
-		h.Write(binary.LittleEndian.AppendUint64(nil, c))
-	}
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -211,14 +198,14 @@ func TestEmbedGolden(t *testing.T) {
 		invNorm uint32
 		digest  string
 	}{
-		{"prose", []Field{{Tokens: textrank.Tokens("How does the Buzz engine load a spell"), Weight: 1}}, 2674941, "c8ef80fcffb6433d547e7b481b0ed6605457e111d4332e3145388bfc0230e38e"},
-		{"identifiers", []Field{{Tokens: textrank.Tokens("HTTPServer TLSConfig fs\\readFile"), Weight: 1}}, 3579542, "16a5c810d8ed0086f19a924701a9c235790b1fefbba56605b0dbac8253114bb6"},
+		{"prose", []Field{{Tokens: textrank.Tokens("How does the Buzz engine load a spell"), Weight: 1}}, 2674941, "880a42223fea62ab0f9d3532d11a6ffce7f6cf7dc009c1d8202e9766237175b8"},
+		{"identifiers", []Field{{Tokens: textrank.Tokens("HTTPServer TLSConfig fs\\readFile"), Weight: 1}}, 3579542, "3c1da3f471642a3a60e154a22d35e88d58cd643ceeacccc04addfd17037f8df8"},
 		{"weighted fields", []Field{
 			{Tokens: textrank.Tokens("WriteTo"), Weight: 2},
 			{Tokens: textrank.Tokens("func (ix *Index) WriteTo(w io.Writer) (int64, error)"), Weight: 1},
 			{Tokens: textrank.Tokens("internal/textrank/bm25f.go"), Weight: 1},
-		}, 2603591, "b696116f02bdd96ff905bb7491d4e0fcc02397661f814758f5b73c998f2f7402"},
-		{"whole probe", []Field{{Tokens: textrank.Tokens(probe), Weight: 1}}, 3622872, "c956a417b6a462470da89c9cef6b47c1684fa31a59b59e63f50a32b90044789b"},
+		}, 2603591, "37dbbebf67837d0803a737858c0277da0443dc6337d8205e1afb32eba5d312d6"},
+		{"whole probe", []Field{{Tokens: textrank.Tokens(probe), Weight: 1}}, 3622872, "f18190939b26b1a400791d5fb8451e2e1162a453e68ed01d937acc563a44f5d4"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

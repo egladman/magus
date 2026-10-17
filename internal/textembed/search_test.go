@@ -2,7 +2,6 @@ package textembed
 
 import (
 	"bytes"
-	"cmp"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -124,32 +123,16 @@ func smallDocSet(t testing.TB) (docSet, *Index) {
 	return c, NewIndex(c.table, c.docs)
 }
 
-// referenceSearch is Search by sorting: every eligible doc by its sign-code score
-// descending, then doc, the first r of those by exact score, the first depth.
-func referenceSearch(c docSet, q Vector, allow []uint64, depth, r int) []Hit {
-	type cand struct{ doc, near int }
-	var cands []cand
-	vecs := make([]Vector, len(c.docs))
+// referenceSearch is Search by sorting: every eligible doc embedded afresh, by exact
+// score descending, then doc, the first depth.
+func referenceSearch(c docSet, q Vector, allow []uint64, depth int) []Hit {
+	var hits []Hit
 	for doc, fields := range c.docs {
 		v, ok := c.table.Embed(fields)
 		if !ok || (allow != nil && allow[doc/64]>>(doc%64)&1 == 0) {
 			continue
 		}
-		vecs[doc] = v
-		var near int
-		for j, x := range q.Q {
-			if v.Code[j/64]>>(j%64)&1 == 1 {
-				near += int(x)
-			}
-		}
-		cands = append(cands, cand{doc, near})
-	}
-	slices.SortFunc(cands, func(a, b cand) int {
-		return cmp.Or(cmp.Compare(b.near, a.near), cmp.Compare(a.doc, b.doc))
-	})
-	hits := make([]Hit, 0, len(cands))
-	for _, cd := range cands[:min(r, len(cands))] {
-		hits = append(hits, Hit{Doc: cd.doc, Score: score(q, vecs[cd.doc])})
+		hits = append(hits, Hit{Doc: doc, Score: score(q, v)})
 	}
 	slices.SortFunc(hits, compareHits)
 	return hits[:min(depth, len(hits))]
@@ -157,17 +140,11 @@ func referenceSearch(c docSet, q Vector, allow []uint64, depth, r int) []Hit {
 
 func TestSearchMatchesReference(t *testing.T) {
 	c, ix := smallDocSet(t)
-	for _, tt := range []struct{ depth, rescore int }{
-		{1, 1}, {10, 1}, {10, 7}, {10, 40}, {40, 10}, {25, 299}, {25, 300}, {25, 10000}, {300, 0},
-	} {
-		t.Run(fmt.Sprintf("depth%d/rescore%d", tt.depth, tt.rescore), func(t *testing.T) {
-			r := tt.rescore
-			if r == 0 {
-				r = max(512, 4*tt.depth)
-			}
+	for _, depth := range []int{1, 10, 40, 299, 300, 10000} {
+		t.Run(fmt.Sprintf("depth%d", depth), func(t *testing.T) {
 			for i, q := range c.queries {
-				got := ix.Search(q, SearchOptions{Depth: tt.depth, Rescore: tt.rescore})
-				if want := referenceSearch(c, q, nil, tt.depth, r); !slices.Equal(got, want) {
+				got := ix.Search(q, SearchOptions{Depth: depth})
+				if want := referenceSearch(c, q, nil, depth); !slices.Equal(got, want) {
 					t.Fatalf("query %d: Search = %v\nwant %v", i, got, want)
 				}
 			}
@@ -185,16 +162,14 @@ func TestSearchAllow(t *testing.T) {
 		}
 	}
 	for i, q := range c.queries {
-		for _, r := range []int{5, 50, 1000} {
-			got := ix.Search(q, SearchOptions{Depth: 20, Rescore: r, Allow: allow})
-			for _, h := range got {
-				if allow[h.Doc/64]>>(h.Doc%64)&1 == 0 {
-					t.Fatalf("query %d: hit %d is not allowed", i, h.Doc)
-				}
+		got := ix.Search(q, SearchOptions{Depth: 20, Allow: allow})
+		for _, h := range got {
+			if allow[h.Doc/64]>>(h.Doc%64)&1 == 0 {
+				t.Fatalf("query %d: hit %d is not allowed", i, h.Doc)
 			}
-			if want := referenceSearch(c, q, allow, 20, r); !slices.Equal(got, want) {
-				t.Fatalf("query %d, rescore %d: Search = %v\nwant %v", i, r, got, want)
-			}
+		}
+		if want := referenceSearch(c, q, allow, 20); !slices.Equal(got, want) {
+			t.Fatalf("query %d: Search = %v\nwant %v", i, got, want)
 		}
 	}
 	if got := ix.Search(c.queries[0], SearchOptions{Depth: 5, Allow: make([]uint64, len(allow))}); len(got) != 0 {
@@ -205,7 +180,7 @@ func TestSearchAllow(t *testing.T) {
 func TestSearchNeverReturnsADocWithNoVector(t *testing.T) {
 	c, ix := smallDocSet(t)
 	for _, q := range c.queries {
-		for _, h := range ix.Search(q, SearchOptions{Depth: ix.Len(), Rescore: ix.Len()}) {
+		for _, h := range ix.Search(q, SearchOptions{Depth: ix.Len()}) {
 			if h.Doc%noVectorEvery == noVectorEvery-1 {
 				t.Fatalf("hit %d has no vector", h.Doc)
 			}
@@ -222,10 +197,8 @@ func TestSearchTieBreak(t *testing.T) {
 	if got, want := ix.Search(q, SearchOptions{Depth: 3}), []Hit{{1, s}, {3, s}, {4, s}}; !slices.Equal(got, want) {
 		t.Errorf("Search = %v, want %v", got, want)
 	}
-	// The three copies top the sign-code stage together, so a rescore of two keeps the
-	// first two.
-	if got, want := ix.Search(q, SearchOptions{Depth: 3, Rescore: 2}), []Hit{{1, s}, {3, s}}; !slices.Equal(got, want) {
-		t.Errorf("Search with rescore 2 = %v, want %v", got, want)
+	if got, want := ix.Search(q, SearchOptions{Depth: 2}), []Hit{{1, s}, {3, s}}; !slices.Equal(got, want) {
+		t.Errorf("Search at depth 2 = %v, want %v", got, want)
 	}
 }
 
@@ -251,12 +224,11 @@ func TestSearchPanics(t *testing.T) {
 		want string
 	}{
 		{"zero depth", q, SearchOptions{}, "depth 0"},
-		{"negative rescore", q, SearchOptions{Depth: 1, Rescore: -1}, "rescore -1"},
 		{"short allow", q, SearchOptions{Depth: 1, Allow: make([]uint64, words-1)}, "allow has"},
 		{"long allow", q, SearchOptions{Depth: 1, Allow: make([]uint64, words+1)}, "allow has"},
 		{"allow past the last doc", q, SearchOptions{Depth: 1, Allow: append(make([]uint64, words-1), 1<<63)}, "past doc"},
 		{"no vector", Vector{}, SearchOptions{Depth: 1}, "dims"},
-		{"other dims", Vector{Q: make([]int8, 64), Code: make([]uint64, 1)}, SearchOptions{Depth: 1}, "dims"},
+		{"other dims", Vector{Q: make([]int8, 64)}, SearchOptions{Depth: 1}, "dims"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -317,9 +289,8 @@ func TestSearchGolden(t *testing.T) {
 		opts SearchOptions
 		want string
 	}{
-		{"default", SearchOptions{Depth: 10}, "8a123d00ba49e3b3473fa154ab9856d17262a1284f2e8e88e0982c022ab8dd5c"},
-		{"rescore 256", SearchOptions{Depth: 100, Rescore: 256}, "8a17e8c485ce59609ab305b275fdae553ea32a66d5e5146605cb0af812cd2345"},
-		{"exact", SearchOptions{Depth: 10, Rescore: ix.Len()}, "cde51efc7be9c8d373b82c081396512d2d405bd9ec01b89417ae2c0857c2ddf0"},
+		{"depth 10", SearchOptions{Depth: 10}, "cde51efc7be9c8d373b82c081396512d2d405bd9ec01b89417ae2c0857c2ddf0"},
+		{"depth 100", SearchOptions{Depth: 100}, "63b8a48b3de1d2d1c3dfbb4133cf52b5665e9190207bf1a7439cf876cdc448dd"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -334,59 +305,8 @@ func TestSearchGolden(t *testing.T) {
 	}
 }
 
-// overlap is |a ∩ b| / len(a).
-func overlap(a, b []Hit) float64 {
-	in := make(map[int]bool, len(b))
-	for _, h := range b {
-		in[h.Doc] = true
-	}
-	var n int
-	for _, h := range a {
-		if in[h.Doc] {
-			n++
-		}
-	}
-	return float64(n) / float64(len(a))
-}
-
-// TestSearchRecall measures how much of exact search's top 100 and top 10 the
-// sign-code stage keeps over the big doc set, per rescore depth. The floors sit just
-// under the measured means, so a change that loses recall fails here.
-func TestSearchRecall(t *testing.T) {
-	c, ix := bigDocSet()
-	exact := make([][]Hit, len(c.queries))
-	for i, q := range c.queries {
-		exact[i] = ix.Search(q, SearchOptions{Depth: 100, Rescore: ix.Len()})
-	}
-	for _, tt := range []struct {
-		rescore       int
-		top100, top10 float64
-	}{
-		{256, 0.640, 0.962},
-		{512, 0.767, 0.980},
-		{1024, 0.867, 0.991},
-		{2048, 0.939, 0.998},
-	} {
-		var top100, top10, worst100 float64
-		worst100 = 1
-		for i, q := range c.queries {
-			got := ix.Search(q, SearchOptions{Depth: 100, Rescore: tt.rescore})
-			o := overlap(exact[i], got)
-			top100 += o
-			worst100 = min(worst100, o)
-			top10 += overlap(exact[i][:10], got[:10])
-		}
-		top100 /= float64(len(c.queries))
-		top10 /= float64(len(c.queries))
-		t.Logf("rescore %4d: top-100 overlap %.4f (worst query %.2f), top-10 %.4f", tt.rescore, top100, worst100, top10)
-		if top100 < tt.top100 || top10 < tt.top10 {
-			t.Errorf("rescore %d: top-100 %.4f, top-10 %.4f; want at least %.4f, %.4f", tt.rescore, top100, top10, tt.top100, tt.top10)
-		}
-	}
-}
-
-// TestSearchShardedMatchesSingle checks that an exact search split across shards
-// returns the hits of one shard byte for byte, over 10k random queries, every shard
+// TestSearchShardedMatchesSingle checks that a search split across shards returns the
+// hits of one shard byte for byte, over 10k random queries, every shard
 // count from 1 to 16, and duplicated docs so ties fall across shard boundaries.
 func TestSearchShardedMatchesSingle(t *testing.T) {
 	c := newDocSet(500, 1500, 0, 64)
@@ -409,8 +329,8 @@ func TestSearchShardedMatchesSingle(t *testing.T) {
 		if i%2 == 1 {
 			a = allow
 		}
-		want := ix.exact(q, a, depth, 1)
-		if got := ix.exact(q, a, depth, 2+i%15); !slices.Equal(got, want) {
+		want := ix.search(q, a, depth, 1)
+		if got := ix.search(q, a, depth, 2+i%15); !slices.Equal(got, want) {
 			t.Fatalf("query %d, depth %d, %d shards: hits = %v\nwant %v", i, depth, 2+i%15, got, want)
 		}
 	}
@@ -478,14 +398,11 @@ func BenchmarkSearchWarm(b *testing.B) {
 		ix   *Index
 	}{{"mem", mem}, {"file", file}} {
 		ix := src.ix
-		b.Run(src.name+"/sign-code", func(b *testing.B) {
+		b.Run(src.name+"/single", func(b *testing.B) {
+			loopLatency(b, c.queries, func(q Vector) { ix.search(q.Q, nil, 100, 1) })
+		})
+		b.Run(src.name+"/sharded", func(b *testing.B) {
 			loopLatency(b, c.queries, func(q Vector) { ix.Search(q, SearchOptions{Depth: 100}) })
-		})
-		b.Run(src.name+"/exact-single", func(b *testing.B) {
-			loopLatency(b, c.queries, func(q Vector) { ix.exact(q.Q, nil, 100, 1) })
-		})
-		b.Run(src.name+"/exact-sharded", func(b *testing.B) {
-			loopLatency(b, c.queries, func(q Vector) { ix.exact(q.Q, nil, 100, ix.shards()) })
 		})
 	}
 }
@@ -495,21 +412,11 @@ func BenchmarkSearchWarm(b *testing.B) {
 func BenchmarkSearchCold(b *testing.B) {
 	c, mem := benchDocSet()
 	path := indexFile(b, mem)
-	for _, tt := range []struct {
-		name string
-		opts SearchOptions
-	}{
-		{"sign-code", SearchOptions{Depth: 100}},
-		{"exact-sharded", SearchOptions{Depth: 100, Rescore: mem.Len()}},
-	} {
-		b.Run(tt.name, func(b *testing.B) {
-			loopLatency(b, c.queries, func(q Vector) {
-				ix, f := openIndex(b, path, c.table)
-				ix.Search(q, tt.opts)
-				f.Close()
-			})
-		})
-	}
+	loopLatency(b, c.queries, func(q Vector) {
+		ix, f := openIndex(b, path, c.table)
+		ix.Search(q, SearchOptions{Depth: 100})
+		f.Close()
+	})
 }
 
 func BenchmarkReadIndex(b *testing.B) {
