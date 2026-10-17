@@ -164,8 +164,7 @@ export fun drawJobTree(tr: JobTree) > figure\Figure !> any {
             title: "Session {shortSession(tr.session)}: {tr.nodes.len()} jobs",
             eyebrow: "session",
             desc: "Every job the session's agents worked under, with the jobs they hang from. A solid edge is a spawn, a dashed one a declared dependency.",
-            direction: figure\Direction.across,
-            generated: true)
+            direction: figure\Direction.across)
         .unscoped("a session's jobs are units of work, not directories")
         .actor(root);
     foreach (n in tr.nodes) {
