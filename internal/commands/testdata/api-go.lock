@@ -3267,6 +3267,7 @@ github.com/egladman/magus/types.MemorySizing type struct
 github.com/egladman/magus/types.MemorySizing.AnyShape field bool "json:\"any_shape,omitzero\" yaml:\"any_shape,omitempty\""
 github.com/egladman/magus/types.MemorySizing.Measured method func() bool
 github.com/egladman/magus/types.MemorySizing.Samples field int "json:\"samples,omitzero\" yaml:\"samples,omitempty\""
+github.com/egladman/magus/types.MemorySizing.Slots field SlotSizing "json:\"slots,omitzero\" yaml:\"slots,omitempty\""
 github.com/egladman/magus/types.MemorySizing.String method func() string
 github.com/egladman/magus/types.MergeBothAdded const MergeKind = 2
 github.com/egladman/magus/types.MergeByClaim const MergeKind = 3
@@ -4101,6 +4102,17 @@ github.com/egladman/magus/types.SkillVariant.Valid method func() bool
 github.com/egladman/magus/types.SkillVariant.Values method func() []string
 github.com/egladman/magus/types.SkillVariantFull const SkillVariant = "full"
 github.com/egladman/magus/types.SkillVariantShort const SkillVariant = "short"
+github.com/egladman/magus/types.SlotSizing type struct
+github.com/egladman/magus/types.SlotSizing.AnyShape field bool "json:\"any_shape,omitzero\" yaml:\"any_shape,omitempty\""
+github.com/egladman/magus/types.SlotSizing.Measured method func() bool
+github.com/egladman/magus/types.SlotSizing.Samples field int "json:\"samples,omitzero\" yaml:\"samples,omitempty\""
+github.com/egladman/magus/types.SlotSizing.Source field SlotSource "json:\"source,omitempty\" yaml:\"source,omitempty\""
+github.com/egladman/magus/types.SlotSizing.String method func() string
+github.com/egladman/magus/types.SlotSource type string
+github.com/egladman/magus/types.SlotsDeclared const SlotSource = "declared"
+github.com/egladman/magus/types.SlotsForMemory const SlotSource = "memory"
+github.com/egladman/magus/types.SlotsMeasured const SlotSource = "measured"
+github.com/egladman/magus/types.SlotsUnmeasured const SlotSource = "unmeasured"
 github.com/egladman/magus/types.SocketPeerNotOwner const DiagnosticCode = "MGS9022"
 github.com/egladman/magus/types.SourceDiagnostic type struct
 github.com/egladman/magus/types.SourceDiagnostic.Code field DiagnosticCode "json:\"code,omitempty\" yaml:\"code,omitempty\""
