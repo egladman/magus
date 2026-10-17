@@ -27,7 +27,7 @@ import (
 func TestEveryRuleIsCatalogued(t *testing.T) {
 	t.Parallel()
 
-	src := ruleSourceOf(t)
+	src := parseRuleSource(t)
 	require.NotEmpty(t, src.denies, "parsed no denyRuleName constants; this gate stopped looking")
 
 	catalogued := map[string]types.RuleDoc{}
@@ -56,7 +56,7 @@ func TestEveryRuleIsCatalogued(t *testing.T) {
 func TestEveryRuleSiteNamesACataloguedRule(t *testing.T) {
 	t.Parallel()
 
-	src := ruleSourceOf(t)
+	src := parseRuleSource(t)
 	require.NotEmpty(t, src.sites, "found no site setting a rule; this gate stopped looking")
 	catalogued := map[string]types.RuleDoc{}
 	for _, r := range Rules() {
@@ -119,7 +119,7 @@ func TestCatalogMatchesBuiltinDefaults(t *testing.T) {
 func TestRuleDocsAreNamedAfterTheirRule(t *testing.T) {
 	t.Parallel()
 
-	src := ruleSourceOf(t)
+	src := parseRuleSource(t)
 	f, err := parser.ParseFile(token.NewFileSet(), "catalog.go", nil, 0)
 	require.NoError(t, err)
 
@@ -174,7 +174,7 @@ func pascalCase(id string) string {
 func TestEnrolledAdvisoriesAreMarkerKinds(t *testing.T) {
 	t.Parallel()
 
-	src := ruleSourceOf(t)
+	src := parseRuleSource(t)
 	enrolled := enrolledAdvisories()
 	require.NotEmpty(t, enrolled)
 	for _, name := range enrolled {
@@ -292,8 +292,8 @@ func isMarkerKind(expr ast.Expr) bool {
 	return ok && pkg.Name == "hint" && sel.Sel.Name == "MarkerKind"
 }
 
-// ruleSourceOf parses every non-test file of the package.
-func ruleSourceOf(t *testing.T) ruleSource {
+// parseRuleSource parses every non-test file of the package.
+func parseRuleSource(t *testing.T) ruleSource {
 	t.Helper()
 	files, err := filepath.Glob("*.go")
 	require.NoError(t, err)
@@ -388,7 +388,7 @@ func ruleSourceOf(t *testing.T) ruleSource {
 						continue
 					}
 					if key, ok := kv.Key.(*ast.Ident); ok && fields[typName][key.Name] {
-						src.sites = append(src.sites, siteOf(fset, kv.Value))
+						src.sites = append(src.sites, classifySite(fset, kv.Value))
 					}
 				}
 			case *ast.AssignStmt:
@@ -397,12 +397,12 @@ func ruleSourceOf(t *testing.T) ruleSource {
 				}
 				for i, lhs := range n.Lhs {
 					if sel, ok := lhs.(*ast.SelectorExpr); ok && assigned[sel.Sel.Name] {
-						src.sites = append(src.sites, siteOf(fset, n.Rhs[i]))
+						src.sites = append(src.sites, classifySite(fset, n.Rhs[i]))
 					}
 				}
 			case *ast.CallExpr:
 				if len(n.Args) == 1 && isDenyRuleName(n.Fun) {
-					src.sites = append(src.sites, siteOf(fset, n))
+					src.sites = append(src.sites, classifySite(fset, n))
 					return true
 				}
 				name := ""
@@ -414,7 +414,7 @@ func ruleSourceOf(t *testing.T) ruleSource {
 				}
 				for _, i := range params[name] {
 					if i < len(n.Args) {
-						src.sites = append(src.sites, siteOf(fset, n.Args[i]))
+						src.sites = append(src.sites, classifySite(fset, n.Args[i]))
 					}
 				}
 			}
@@ -459,9 +459,9 @@ func (src ruleSource) addConst(t *testing.T, spec *ast.ValueSpec) {
 	}
 }
 
-// siteOf classifies the value a rule is set to, seen through a conversion to string,
+// classifySite classifies the value a rule is set to, seen through a conversion to string,
 // denyRuleName or hint.MarkerKind.
-func siteOf(fset *token.FileSet, value ast.Expr) ruleSite {
+func classifySite(fset *token.FileSet, value ast.Expr) ruleSite {
 	s := ruleSite{at: fset.Position(value.Pos()).String()}
 	if call, ok := value.(*ast.CallExpr); ok && len(call.Args) == 1 {
 		if id, ok := call.Fun.(*ast.Ident); ok && id.Name == "string" || isDenyRuleName(call.Fun) || isMarkerKind(call.Fun) {

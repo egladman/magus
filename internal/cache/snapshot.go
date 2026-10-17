@@ -288,7 +288,7 @@ func (c *Cache) replayFrom(ctx context.Context, m *Manifest, root, store string)
 		// escapes root, or whose parent chain traverses a symlink, checked before
 		// the Remove and MkdirAll below, either of which would otherwise follow a
 		// symlink an earlier record planted (record "link"->"../" then "link/evil").
-		if err := ensureReplayDstSafe(root, dst, rec.Path); err != nil {
+		if err := ensureReplayDestinationSafe(root, dst, rec.Path); err != nil {
 			return nil, err
 		}
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
@@ -382,11 +382,11 @@ func stagingName(dst string) (string, error) {
 	return name, nil
 }
 
-// ensureReplayDstSafe refuses a replay destination that escapes root or whose
+// ensureReplayDestinationSafe refuses a replay destination that escapes root or whose
 // parent chain traverses a symlink. Both would let a write or delete land
 // outside the workspace when the manifest is hostile. A parent component that
 // does not yet exist stops the walk: MkdirAll creates the rest as real dirs.
-func ensureReplayDstSafe(root, dst, recPath string) error {
+func ensureReplayDestinationSafe(root, dst, recPath string) error {
 	rel, err := filepath.Rel(root, dst)
 	if err != nil {
 		return fmt.Errorf("replay: output path %q: %w", recPath, err)

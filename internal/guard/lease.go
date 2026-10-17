@@ -966,7 +966,7 @@ func rowChecks(row types.Job) []types.LeaseCheck {
 
 // sameTarget reports whether a run names a check's target. The charm is ignored, since
 // `lint:rw` is the same work written back; a spell filter is compared only when both name
-// one, as internal/job.bindsTo does.
+// one, as internal/job.ranCheck does.
 func sameTarget(check, ran string) bool {
 	cs, ct := splitSpell(check)
 	rs, rt := splitSpell(ran)
@@ -2932,11 +2932,11 @@ func reachOutside(checkout string, me types.Job, rel string) string {
 		case errDeny != nil || errMine != nil:
 			return filepath.SkipAll
 		case denied:
-		case mine && d.IsDir() && !leadsTo(me.DenyPaths, r):
+		case mine && d.IsDir() && !holdsDeclaredPath(me.DenyPaths, r):
 			return filepath.SkipDir
 		case mine:
 			return nil
-		case d.IsDir() && leadsTo(me.WritePaths, r):
+		case d.IsDir() && holdsDeclaredPath(me.WritePaths, r):
 			return nil
 		}
 		outside = r
@@ -2945,9 +2945,9 @@ func reachOutside(checkout string, me types.Job, rel string) string {
 	return outside
 }
 
-// leadsTo reports whether the directory dir holds a path one of decls could name: it is an
+// holdsDeclaredPath reports whether the directory dir holds a path one of decls could name: it is an
 // ancestor of a declaration's literal part, or a declaration starts with a pattern.
-func leadsTo(decls []string, dir string) bool {
+func holdsDeclaredPath(decls []string, dir string) bool {
 	for _, raw := range decls {
 		file, _ := types.SplitClaim(raw)
 		var literal []string

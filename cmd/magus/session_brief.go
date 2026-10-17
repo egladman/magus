@@ -245,7 +245,7 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 	}
 	brief.Leases, brief.OtherLeases = briefLeases(ctx, root)
 	brief.Failures = lastRunFailures(root)
-	brief.GuardWiring = relativeTo(root, doctor.HookConfigs(ctx, root, workspaceHarnessNames(ws)...))
+	brief.GuardWiring = relativePaths(root, doctor.HookConfigs(ctx, root, workspaceHarnessNames(ws)...))
 	brief.Rules = ruleLocations(ctx, root, workspaceHarnessNames(ws)...)
 	brief.PromptCache = promptCacheForCheckout(root, time.Now())
 	if base, err := rootmagus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg)); err == nil {
@@ -460,9 +460,9 @@ func ruleLocations(ctx context.Context, root string, wired ...string) []string {
 	return out
 }
 
-// relativeTo renders absolute paths inside root as workspace-relative ones, which is
+// relativePaths renders absolute paths inside root as workspace-relative ones, which is
 // the spelling every other magus command prints and takes back.
-func relativeTo(root string, paths []string) []string {
+func relativePaths(root string, paths []string) []string {
 	out := make([]string, 0, len(paths))
 	for _, p := range paths {
 		if rel, err := filepath.Rel(root, p); err == nil && !strings.HasPrefix(rel, "..") {

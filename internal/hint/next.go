@@ -194,7 +194,7 @@ const PipeSep = "|"
 
 // NextForDenyRemedyPipeline is NextForDenyRemedy for a remedy that is a shell pipeline
 // of several complete argvs. Run joins the quoted stages with ` | `; Argv joins them with
-// PipeSep, which ServableTo splits to grade every stage on its own.
+// PipeSep, which FilterServable splits to grade every stage on its own.
 func NextForDenyRemedyPipeline(rule string, stages [][]string, why string) types.NextStep {
 	runs := make([]string, len(stages))
 	var argv []string
@@ -264,14 +264,14 @@ func LeaseRole(rows []types.Job, id string) (Role, []string) {
 	return RoleWorker, nil
 }
 
-// ServableTo drops the breadcrumbs role may not be served: every write for a
+// FilterServable drops the breadcrumbs role may not be served: every write for a
 // reviewer, and for a worker every write that does not land inside writePaths. Unbound
 // keeps the lot. A script declared read is not a write (see declaredRead).
 //
 // Dropped, never rewritten. A template narrowed to fit a role would be a command
 // nobody wrote, and the cap is applied afterwards so a filtered list still fills up
 // to nextCap from what survives.
-func ServableTo(role Role, writePaths []string, next []types.NextStep) []types.NextStep {
+func FilterServable(role Role, writePaths []string, next []types.NextStep) []types.NextStep {
 	if role == "" || role == RoleUnbound {
 		return capNext(next)
 	}

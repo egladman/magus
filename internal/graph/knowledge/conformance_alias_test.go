@@ -23,9 +23,9 @@ func aliasPkg(pkg, name string, files []string, importers map[string]string) typ
 	return s
 }
 
-// importersOf is n files internal/use/<prefix>NN.go, the first of them aliasing as the
+// importerFiles is n files internal/use/<prefix>NN.go, the first of them aliasing as the
 // spellings say in order.
-func importersOf(prefix string, n int, spellings ...string) map[string]string {
+func importerFiles(prefix string, n int, spellings ...string) map[string]string {
 	out := map[string]string{}
 	for i := range n {
 		alias := ""
@@ -39,27 +39,27 @@ func importersOf(prefix string, n int, spellings ...string) map[string]string {
 
 // aliasFixture is a workspace whose packages show each case alias-design.md names.
 func aliasFixture() []types.KnowledgeSymbol {
-	queue := importersOf("q", 13, "qtypes", "qtypes", "qtypes", "queuetypes", "queuetypes")
-	root := importersOf("t", 12)
+	queue := importerFiles("q", 13, "qtypes", "qtypes", "qtypes", "queuetypes", "queuetypes")
+	root := importerFiles("t", 12)
 	for i := range 8 {
 		root[fmt.Sprintf("internal/use/q%02d.go", i)] = ""
 	}
-	mcp := importersOf("m", 4, "mcplib", "mcplib", "mcplib", "mcplib")
+	mcp := importerFiles("m", 4, "mcplib", "mcplib", "mcplib", "mcplib")
 	mcp["internal/mcp/server.go"] = "mcplib"
 	return []types.KnowledgeSymbol{
 		// 8 of internal/queue/types' 13 importers also import types (20): 62%, blamed on the lesser.
 		aliasPkg("/internal/queue/types", "types", []string{"internal/queue/types/types.go"}, queue),
 		aliasPkg("/types", "types", []string{"types/types.go"}, root),
 		// Every importer, one spelling.
-		aliasPkg("/internal/spell/remote", "remote", []string{"internal/spell/remote/remote.go"}, importersOf("r", 6, "remotespell", "remotespell", "remotespell", "remotespell", "remotespell", "remotespell")),
+		aliasPkg("/internal/spell/remote", "remote", []string{"internal/spell/remote/remote.go"}, importerFiles("r", 6, "remotespell", "remotespell", "remotespell", "remotespell", "remotespell", "remotespell")),
 		// Aliased to its own name: never needed.
-		aliasPkg("/internal/json", "json", []string{"internal/json/json.go"}, importersOf("j", 6, "json", "json", "json", "json", "json", "json")),
+		aliasPkg("/internal/json", "json", []string{"internal/json/json.go"}, importerFiles("j", 6, "json", "json", "json", "json", "json", "json")),
 		// One importer sits inside a package of the same name.
 		aliasPkg("/lib/mcp", "mcp", []string{"lib/mcp/mcp.go"}, mcp),
 		aliasPkg("/internal/mcp", "mcp", []string{"internal/mcp/server.go"}, nil),
 		// Below MinSubject, and generated.
-		aliasPkg("/internal/ci", "ci", []string{"internal/ci/ci.go"}, importersOf("c", 3, "internalci", "internalci", "internalci")),
-		aliasPkg("/internal/a/gen", "gen", []string{"internal/a/gen/gen.go"}, importersOf("g", 6, "agen", "agen", "agen", "agen", "agen", "agen")),
+		aliasPkg("/internal/ci", "ci", []string{"internal/ci/ci.go"}, importerFiles("c", 3, "internalci", "internalci", "internalci")),
+		aliasPkg("/internal/a/gen", "gen", []string{"internal/a/gen/gen.go"}, importerFiles("g", 6, "agen", "agen", "agen", "agen", "agen", "agen")),
 	}
 }
 

@@ -737,7 +737,7 @@ func TestWatchWorkspaceRootStopJoins(t *testing.T) {
 // person sees.
 func captureLockOut() (*bytes.Buffer, lockerOption) {
 	var b bytes.Buffer
-	return &b, writingTo(&b)
+	return &b, withOutput(&b)
 }
 
 // quickSupersede shortens the two timings a supersede is paced by, so a test that only

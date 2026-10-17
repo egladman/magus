@@ -429,7 +429,7 @@ func ServedIn(loc job.Location) NextServer {
 				role, writePaths = hint.LeaseRole(rows, id)
 			}
 		}
-		served := hint.ServableTo(role, writePaths, next)
+		served := hint.FilterServable(role, writePaths, next)
 		hint.AppendServedNext(cacheDir, served)
 		return served
 	}

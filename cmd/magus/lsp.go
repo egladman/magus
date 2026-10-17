@@ -193,10 +193,10 @@ func (s *lspServer) capabilities() any {
 	}
 }
 
-// srcAndOffset resolves a position request to the document text and the byte
+// resolvePosition resolves a position request to the document text and the byte
 // offset the langservice functions take. ok is false when the document is not
 // open, so the caller returns an empty result.
-func (s *lspServer) srcAndOffset(raw json.RawMessage) (src string, offset int, ok bool) {
+func (s *lspServer) resolvePosition(raw json.RawMessage) (src string, offset int, ok bool) {
 	var p positionParams
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return "", 0, false
@@ -209,7 +209,7 @@ func (s *lspServer) srcAndOffset(raw json.RawMessage) (src string, offset int, o
 }
 
 func (s *lspServer) completion(raw json.RawMessage) any {
-	src, offset, ok := s.srcAndOffset(raw)
+	src, offset, ok := s.resolvePosition(raw)
 	if !ok {
 		return map[string]any{"isIncomplete": false, "items": []any{}}
 	}
@@ -243,7 +243,7 @@ func (s *lspServer) completion(raw json.RawMessage) any {
 }
 
 func (s *lspServer) hover(raw json.RawMessage) any {
-	src, offset, ok := s.srcAndOffset(raw)
+	src, offset, ok := s.resolvePosition(raw)
 	if !ok {
 		return nil
 	}
@@ -261,7 +261,7 @@ func (s *lspServer) hover(raw json.RawMessage) any {
 }
 
 func (s *lspServer) signatureHelp(raw json.RawMessage) any {
-	src, offset, ok := s.srcAndOffset(raw)
+	src, offset, ok := s.resolvePosition(raw)
 	if !ok {
 		return nil
 	}

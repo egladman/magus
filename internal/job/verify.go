@@ -556,7 +556,7 @@ func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAtt
 		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q acted under lease %q, not this job's lease %q, so it is another job's evidence",
 			status.OutputRef, attempt.Lease, row.ID))
 	}
-	if !bindsTo(gate.Check, attempt, seen.DefaultCharms) {
+	if !ranCheck(gate.Check, attempt, seen.DefaultCharms) {
 		status.Violations = append(status.Violations, fmt.Sprintf("output ref %q records `%s` and this goal's check runs `%s`, so the evidence is from a different run",
 			status.OutputRef, attempt, resolveCheck(gate.Check, seen.DefaultCharms)))
 	}
@@ -567,7 +567,7 @@ func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAtt
 	return status
 }
 
-// bindsTo reports whether a recorded run is a run of this check.
+// ranCheck reports whether a recorded run is a run of this check.
 //
 // The spell filter is compared only when BOTH sides name one. A row that names
 // `go::go-test` and an attempt the store recorded under a bare target are the same run
@@ -586,7 +586,7 @@ func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAtt
 // `-- -run TestOne` does not stand in for the whole check. Nil args are not compared: the
 // run forwarded none, or its record predates the field, and either way it narrowed nothing
 // it can show.
-func bindsTo(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
+func ranCheck(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
 	if a.ExtraArgs != nil && !slices.Equal(a.ExtraArgs, c.Args) {
 		return false
 	}

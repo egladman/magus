@@ -486,18 +486,18 @@ func (r *jobGraph) load(ctx context.Context) *knowledge.Graph {
 // loadScoped is load for a row writing paths.
 func (r *jobGraph) loadScoped(paths []string) func(context.Context) *knowledge.Graph {
 	return func(ctx context.Context) *knowledge.Graph {
-		r.scopeTo(paths)
+		r.setScope(paths)
 		return r.load(ctx)
 	}
 }
 
 // loadDomain is loadScoped for the domain graph, under the same rule.
 func (r *jobGraph) loadDomain(ctx context.Context, paths []string) *knowledge.Graph {
-	r.scopeTo(paths)
+	r.setScope(paths)
 	return r.domainGraph.get(ctx, r.mustNotRead, r.domain)
 }
 
-func (r *jobGraph) scopeTo(paths []string) {
+func (r *jobGraph) setScope(paths []string) {
 	r.scopeOnce.Do(func() { r.scope = paths })
 }
 
@@ -511,7 +511,7 @@ func (r *jobGraph) mustNotRead(ctx context.Context) bool {
 // against the write paths the first scoped read named; with none named, every stale index.
 func (r *jobGraph) staleIndexes(ctx context.Context) []types.KnowledgeStaleIndex {
 	r.staleOnce.Do(func() {
-		r.scopeTo(nil)
+		r.setScope(nil)
 		for _, s := range r.stale(ctx) {
 			if staleIndexHits(s, r.scope) {
 				r.staleIdx = append(r.staleIdx, s)

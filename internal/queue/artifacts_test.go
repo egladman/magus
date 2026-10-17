@@ -69,7 +69,7 @@ func (r *run) artifact(name string, files map[string][]byte) types.Artifact {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	p := fmt.Sprintf("/artifacts/%d.zip", len(r.zips))
-	r.zips[p] = zipOf(r.t, files)
+	r.zips[p] = buildZip(r.t, files)
 	return types.Artifact{Name: name, URL: r.srv.URL + p}
 }
 
@@ -84,7 +84,7 @@ func (r *run) follower() *ArtifactFollower {
 		Follow: true, Interval: 1, Client: r.srv.Client()}
 }
 
-func zipOf(t *testing.T, files map[string][]byte) []byte {
+func buildZip(t *testing.T, files map[string][]byte) []byte {
 	t.Helper()
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
@@ -319,7 +319,7 @@ func TestArtifactFollowerKeepsTheListingsHeadersFromAnotherHostAndOffHTTPS(t *te
 	var seen []string
 	storage := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		seen = append(seen, req.Header.Get("Authorization")+"|"+req.Header.Get("Private-Token"))
-		_, _ = w.Write(zipOf(t, verdictFiles(t, "1")))
+		_, _ = w.Write(buildZip(t, verdictFiles(t, "1")))
 	}))
 	t.Cleanup(storage.Close)
 	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {

@@ -36,8 +36,8 @@ func oid(parts ...string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// candidateOf is the candidate [doubles.builds] makes of head onto onto.
-func candidateOf(onto, head string) string { return oid("candidate", onto, head) }
+// candidateID is the candidate [doubles.builds] makes of head onto onto.
+func candidateID(onto, head string) string { return oid("candidate", onto, head) }
 
 // change builds a change on main affecting units.
 func change(id string, units ...string) types.Change {
@@ -159,7 +159,7 @@ func (d doubles) noCheckouts() {
 }
 
 // building is how the version control answers the calls building a candidate makes, for
-// any change onto any commit: the candidate of head onto onto is candidateOf(onto, head),
+// any change onto any commit: the candidate of head onto onto is candidateID(onto, head),
 // and it touches touched.
 type building struct {
 	touched   []string
@@ -212,7 +212,7 @@ func (d doubles) builds(b building) *checkouts {
 		RunAndReturn(func(_ context.Context, dir string, _ magustypes.CheckoutCommit) (string, error) {
 			co.mu.Lock()
 			defer co.mu.Unlock()
-			return candidateOf(co.onto[dir], co.head[dir]), nil
+			return candidateID(co.onto[dir], co.head[dir]), nil
 		}).Maybe()
 	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, mock.Anything, mock.Anything).Return(b.touched, nil).Maybe()
 	d.vcs.EXPECT().RemoveCheckout(mock.Anything, clone.Root, mock.Anything).
@@ -246,7 +246,7 @@ func (tr *trail) entries() []string {
 }
 
 // marks records every mark the provider is asked to show, failing the entries fail
-// names. Set before [applierFor], it answers every mark ahead of that catch-all.
+// names. Set before [newApplier], it answers every mark ahead of that catch-all.
 func (d doubles) marks(fail map[string]error) *trail {
 	tr := &trail{}
 	d.provider.EXPECT().Mark(mock.Anything, mock.Anything, mock.Anything).

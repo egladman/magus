@@ -99,7 +99,7 @@ func actingRole(root string) (hint.Role, []string) {
 // journal's readers ask what a reader was given, and an entry that reached a harness
 // as a field was given over exactly as one printed on a terminal was.
 func (n nextGate) served(next []types.NextStep) []types.NextStep {
-	served := hint.ServableTo(n.role, n.writePaths, next)
+	served := hint.FilterServable(n.role, n.writePaths, next)
 	hint.AppendServedNext(n.gate.CacheDir(), served)
 	return served
 }

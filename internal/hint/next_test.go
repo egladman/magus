@@ -223,7 +223,7 @@ func TestRoleForGradesTheActingRow(t *testing.T) {
 
 // Every template, graded per role. A reviewer is handed no write at all; a worker
 // keeps the regeneration of its own project and loses everybody else's.
-func TestServableToDropsWritesOutsideTheWritePaths(t *testing.T) {
+func TestFilterServableDropsWritesOutsideTheWritePaths(t *testing.T) {
 	all := []types.NextStep{
 		breadcrumb("query-explain", Explain, "why", "spell:go"),
 		breadcrumb("file-impact", Affected, "why", "--impact"),
@@ -243,7 +243,7 @@ func TestServableToDropsWritesOutsideTheWritePaths(t *testing.T) {
 		{"reviewer owning the path anyway", RoleReviewer, []string{"docs/**"}, []string{"query-explain", "file-impact"}},
 	} {
 		var ids []string
-		for _, n := range ServableTo(tc.role, tc.paths, all) {
+		for _, n := range FilterServable(tc.role, tc.paths, all) {
 			ids = append(ids, n.ID)
 		}
 		assert.Equal(t, tc.want, ids, tc.name)
@@ -279,20 +279,20 @@ func TestNextForDenyRemedyPipelineGradesEveryStage(t *testing.T) {
 	}, n)
 	assert.Equal(t, stages, pipelineStages(n.Argv))
 
-	assert.Equal(t, []types.NextStep{n}, ServableTo(RoleWorker, []string{"docs/**", "internal/hint/**"}, []types.NextStep{n}))
-	assert.Nil(t, ServableTo(RoleWorker, []string{"docs/**"}, []types.NextStep{n}), "the second stage writes outside")
-	assert.Nil(t, ServableTo(RoleReviewer, []string{"docs/**", "internal/hint/**"}, []types.NextStep{n}))
-	assert.Equal(t, []types.NextStep{n}, ServableTo(RoleUnbound, nil, []types.NextStep{n}))
+	assert.Equal(t, []types.NextStep{n}, FilterServable(RoleWorker, []string{"docs/**", "internal/hint/**"}, []types.NextStep{n}))
+	assert.Nil(t, FilterServable(RoleWorker, []string{"docs/**"}, []types.NextStep{n}), "the second stage writes outside")
+	assert.Nil(t, FilterServable(RoleReviewer, []string{"docs/**", "internal/hint/**"}, []types.NextStep{n}))
+	assert.Equal(t, []types.NextStep{n}, FilterServable(RoleUnbound, nil, []types.NextStep{n}))
 }
 
-// TestServableToGradesVcsAddByItsPaths extends the worker's write-path rule to the one
+// TestFilterServableGradesVcsAddByItsPaths extends the worker's write-path rule to the one
 // write whose operands are paths: staging inside the write paths is the worker's own.
-func TestServableToGradesVcsAddByItsPaths(t *testing.T) {
+func TestFilterServableGradesVcsAddByItsPaths(t *testing.T) {
 	inside := NextForDenyRemedy("stage-all", VCSAdd.Argv("internal/hint/next.go"), "why")
 	whole := NextForDenyRemedy("stage-all", VCSAdd.Argv(), "why")
-	assert.Equal(t, []types.NextStep{inside}, ServableTo(RoleWorker, []string{"internal/hint/**"}, []types.NextStep{inside, whole}))
-	assert.Nil(t, ServableTo(RoleWorker, []string{"docs/**"}, []types.NextStep{inside}))
-	assert.Nil(t, ServableTo(RoleReviewer, []string{"internal/hint/**"}, []types.NextStep{inside}))
+	assert.Equal(t, []types.NextStep{inside}, FilterServable(RoleWorker, []string{"internal/hint/**"}, []types.NextStep{inside, whole}))
+	assert.Nil(t, FilterServable(RoleWorker, []string{"docs/**"}, []types.NextStep{inside}))
+	assert.Nil(t, FilterServable(RoleReviewer, []string{"internal/hint/**"}, []types.NextStep{inside}))
 }
 
 // A bare `magus run` writes wherever the workspace declares default charms, so the

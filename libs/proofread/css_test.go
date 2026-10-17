@@ -196,19 +196,19 @@ func TestCommentBudgetByPlace(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := rulesOf(judgeCSS(tc.src), RuleCommentBudget); len(got) != 0 {
+			if got := filterByRule(judgeCSS(tc.src), RuleCommentBudget); len(got) != 0 {
 				t.Errorf("%d lines drew %v, want none", tc.over, got)
 			}
 
 			more := strings.Replace(tc.src, "Line of a comment that says why.", "Line of a comment that says why.\n   One more.", 1)
-			if got := rulesOf(judgeCSS(more), RuleCommentBudget); len(got) != 1 {
+			if got := filterByRule(judgeCSS(more), RuleCommentBudget); len(got) != 1 {
 				t.Errorf("%d lines plus one drew %v, want one comment-budget finding", tc.over, got)
 			}
 		})
 	}
 }
 
-func rulesOf(found []Finding, rule Rule) []Finding {
+func filterByRule(found []Finding, rule Rule) []Finding {
 	var out []Finding
 
 	for _, f := range found {
@@ -240,20 +240,20 @@ func TestBlockBudgetGrowsWithTheBlock(t *testing.T) {
 	}
 
 	// 7 statements earn 6 + 7/5 = 7 lines.
-	if got := rulesOf(judgeCSS(block(0, 7)), RuleBlockBudget); len(got) != 0 {
+	if got := filterByRule(judgeCSS(block(0, 7)), RuleBlockBudget); len(got) != 0 {
 		t.Errorf("7 comment lines on a 7-statement block drew %v", got)
 	}
 
-	if got := rulesOf(judgeCSS(block(0, 8)), RuleBlockBudget); len(got) != 1 {
+	if got := filterByRule(judgeCSS(block(0, 8)), RuleBlockBudget); len(got) != 1 {
 		t.Errorf("8 comment lines on an 8-statement block drew %v, want one", got)
 	}
 
 	// 10 comments and 20 plain declarations are 30 statements: 6 + 30/5 = 12.
-	if got := rulesOf(judgeCSS(block(20, 10)), RuleBlockBudget); len(got) != 0 {
+	if got := filterByRule(judgeCSS(block(20, 10)), RuleBlockBudget); len(got) != 0 {
 		t.Errorf("10 comment lines on a 30-statement block drew %v", got)
 	}
 
-	if got := rulesOf(judgeCSS(block(0, 10)), RuleBlockBudget); len(got) != 1 {
+	if got := filterByRule(judgeCSS(block(0, 10)), RuleBlockBudget); len(got) != 1 {
 		t.Errorf("10 comment lines on a 10-statement block drew %v, want one", got)
 	}
 }

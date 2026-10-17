@@ -598,7 +598,7 @@ func fleetLedger(t *testing.T, ctx context.Context) *job.Store {
 	return job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: loc.cacheDir, Root: loc.workspace})
 }
 
-func unattributedOf(t *testing.T, store *job.Store, id string) []types.JobUnattributedWrite {
+func unattributedWrites(t *testing.T, store *job.Store, id string) []types.JobUnattributedWrite {
 	t.Helper()
 	rows, err := store.List()
 	require.NoError(t, err)
@@ -625,7 +625,7 @@ func TestGradeLeasedWriteRecordsWhatItAdvisedAbout(t *testing.T) {
 	require.Equal(t, "advise", got.Decision)
 
 	store := fleetLedger(t, ctx)
-	recorded := unattributedOf(t, store, "lease-a")
+	recorded := unattributedWrites(t, store, "lease-a")
 	require.Len(t, recorded, 1, "the owner is told what moved under it")
 	assert.Equal(t, "internal/ledger/store.go", recorded[0].Path)
 	assert.NotEmpty(t, recorded[0].Digest)
@@ -643,7 +643,7 @@ func TestGradeLeasedWriteRecordsWhatItAdvisedAbout(t *testing.T) {
 
 		gradeLeasedWrite(ctx, Dependencies{}, "lease-a", mine)
 
-		assert.Empty(t, unattributedOf(t, fleetLedger(t, ctx), "lease-a"))
+		assert.Empty(t, unattributedWrites(t, fleetLedger(t, ctx), "lease-a"))
 	})
 
 	t.Run("unclaimed ground records nothing", func(t *testing.T) {
@@ -654,8 +654,8 @@ func TestGradeLeasedWriteRecordsWhatItAdvisedAbout(t *testing.T) {
 		gradeLeasedWrite(ctx, Dependencies{}, "", loose)
 
 		store := fleetLedger(t, ctx)
-		assert.Empty(t, unattributedOf(t, store, "lease-a"))
-		assert.Empty(t, unattributedOf(t, store, "lease-b"))
+		assert.Empty(t, unattributedWrites(t, store, "lease-a"))
+		assert.Empty(t, unattributedWrites(t, store, "lease-b"))
 	})
 }
 

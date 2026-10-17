@@ -724,11 +724,11 @@ func cdInto(args []*syntax.Word, at shellDir) shellDir {
 		at.known = false
 		return at
 	}
-	return moveTo(at, target)
+	return changeDir(at, target)
 }
 
-// moveTo is at after changing into target. An absolute target is known wherever at was.
-func moveTo(at shellDir, target string) shellDir {
+// changeDir is at after changing into target. An absolute target is known wherever at was.
+func changeDir(at shellDir, target string) shellDir {
 	if filepath.IsAbs(target) {
 		return shellDir{dir: filepath.Clean(target), moved: true, known: true}
 	}
@@ -791,7 +791,7 @@ func gitCallAt(args []*syntax.Word, at shellDir) (shellDir, gitCommand, bool) {
 		if strings.HasPrefix(dir, "~") {
 			return at, g, false
 		}
-		at = moveTo(at, dir)
+		at = changeDir(at, dir)
 	}
 	return at, g, at.known
 }
@@ -826,7 +826,7 @@ func pushFrom(program string, args []*syntax.Word, at shellDir) (pushSite, bool)
 		if !ok || value == "" || strings.HasPrefix(value, "~") {
 			return pushSite{}, false
 		}
-		at = moveTo(at, value)
+		at = changeDir(at, value)
 	}
 	if !at.known {
 		return pushSite{}, false

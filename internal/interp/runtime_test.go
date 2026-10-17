@@ -156,7 +156,7 @@ func TestMagusfileImportIgnoresCwd(t *testing.T) {
 
 			src, err := Find(project.Root())
 			require.NoError(t, err)
-			load, err := execBuzzSrc(context.Background(), src, true)
+			load, err := execBuzzSource(context.Background(), src, true)
 			if tc.wantErr != "" {
 				require.ErrorContains(t, err, tc.wantErr)
 				return
@@ -191,7 +191,7 @@ func TestModuleImportStaysInsideWorkspaceRoot(t *testing.T) {
 		})
 		src, err := Find(root)
 		require.NoError(t, err)
-		load, err := execBuzzSrc(ctx, src, true)
+		load, err := execBuzzSource(ctx, src, true)
 		if err == nil {
 			t.Cleanup(func() { _ = load.Session.Close() })
 		}
@@ -304,7 +304,7 @@ func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 	}}}
 	src, err := Find(root)
 	require.NoError(t, err)
-	load, err := execBuzzSrc(t.Context(), src, false)
+	load, err := execBuzzSource(t.Context(), src, false)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = load.Session.Close() })
 
@@ -351,7 +351,7 @@ func guardLoad(t *testing.T, ctx context.Context, root string) []string {
 	t.Helper()
 	src, err := Find(root)
 	require.NoError(t, err)
-	load, err := execBuzzSrc(WithGuardRules(ctx), src, true)
+	load, err := execBuzzSource(WithGuardRules(ctx), src, true)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = load.Session.Close() })
 	return slices.Sorted(maps.Keys(load.Session.Exports()))

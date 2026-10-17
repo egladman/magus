@@ -1307,8 +1307,8 @@ type fixtureOccurrence struct {
 	def    bool
 }
 
-// writeIndexOf writes a SCIP index of docs (by project-relative path) to path.
-func writeIndexOf(t *testing.T, root, path, language string, docs map[string][]fixtureOccurrence) {
+// writeSCIPIndex writes a SCIP index of docs (by project-relative path) to path.
+func writeSCIPIndex(t *testing.T, root, path, language string, docs map[string][]fixtureOccurrence) {
 	t.Helper()
 	idx := &scip.Index{}
 	for _, rel := range slices.Sorted(maps.Keys(docs)) {
@@ -1374,10 +1374,10 @@ func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 		run       = "scip-buzz buzz . . `hack/ci/run.buzz`/run()."
 		goMain    = "scip-go gomod example.com/m v1 `example.com/m`/Main()."
 	)
-	writeIndexOf(t, root, symbols.IndexPath(cacheDir, root, spellpkg.DefaultSymbolIndexOp), "go", map[string][]fixtureOccurrence{
+	writeSCIPIndex(t, root, symbols.IndexPath(cacheDir, root, spellpkg.DefaultSymbolIndexOp), "go", map[string][]fixtureOccurrence{
 		"main.go": {{goMain, 2, true}},
 	})
-	writeIndexOf(t, root, symbols.IndexPath(cacheDir, root, "scip-buzz"), "buzz", map[string][]fixtureOccurrence{
+	writeSCIPIndex(t, root, symbols.IndexPath(cacheDir, root, "scip-buzz"), "buzz", map[string][]fixtureOccurrence{
 		"hack/ci/pull-requests.buzz": {{parsePull, 0, true}},
 		"hack/ci/run.buzz":           {{run, 2, true}, {parsePull, 3, false}},
 	})
@@ -1450,7 +1450,7 @@ func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 		edit.BuzzNameCaptures("raw", captured, noImporters, readFile))
 }
 
-func commitOf(id string, paths ...string) types.CommitChange {
+func newCommit(id string, paths ...string) types.CommitChange {
 	c := types.CommitChange{ID: id}
 	for _, p := range paths {
 		c.Files = append(c.Files, types.FileChange{Path: p})
@@ -1458,11 +1458,11 @@ func commitOf(id string, paths ...string) types.CommitChange {
 	return c
 }
 
-// commitsOf repeats the same file set as n commits with distinct ids.
-func commitsOf(tag string, n int, paths ...string) []types.CommitChange {
+// repeatCommits repeats the same file set as n commits with distinct ids.
+func repeatCommits(tag string, n int, paths ...string) []types.CommitChange {
 	out := make([]types.CommitChange, n)
 	for i := range out {
-		out[i] = commitOf(fmt.Sprintf("%s%d", tag, i), paths...)
+		out[i] = newCommit(fmt.Sprintf("%s%d", tag, i), paths...)
 	}
 	return out
 }
@@ -1470,17 +1470,17 @@ func commitsOf(tag string, n int, paths ...string) []types.CommitChange {
 func TestAggregateFileCouplingThresholds(t *testing.T) {
 	var changes []types.CommitChange
 	// a and b share two commits: the minimum support, and full confidence.
-	changes = append(changes, commitsOf("ab", 2, "a.go", "b.go")...)
+	changes = append(changes, repeatCommits("ab", 2, "a.go", "b.go")...)
 	// c and d share one commit: coincidence.
-	changes = append(changes, commitOf("cd", "c.go", "d.go"))
+	changes = append(changes, newCommit("cd", "c.go", "d.go"))
 	// e and f each change 10 times and share 2 of them: confidence 0.2, below the floor.
-	changes = append(changes, commitsOf("ef", 2, "e.go", "f.go")...)
-	changes = append(changes, commitsOf("e", 8, "e.go")...)
-	changes = append(changes, commitsOf("f", 8, "f.go")...)
+	changes = append(changes, repeatCommits("ef", 2, "e.go", "f.go")...)
+	changes = append(changes, repeatCommits("e", 8, "e.go")...)
+	changes = append(changes, repeatCommits("f", 8, "f.go")...)
 	// g and h each change 10 times and share 3 of them: confidence 0.3, exactly the floor.
-	changes = append(changes, commitsOf("gh", 3, "g.go", "h.go")...)
-	changes = append(changes, commitsOf("g", 7, "g.go")...)
-	changes = append(changes, commitsOf("h", 7, "h.go")...)
+	changes = append(changes, repeatCommits("gh", 3, "g.go", "h.go")...)
+	changes = append(changes, repeatCommits("g", 7, "g.go")...)
+	changes = append(changes, repeatCommits("h", 7, "h.go")...)
 
 	assert.Equal(t, []types.KnowledgeCoChange{
 		{A: "a.go", B: "b.go", Support: 2, Confidence: 1},
@@ -1490,8 +1490,8 @@ func TestAggregateFileCouplingThresholds(t *testing.T) {
 
 func TestAggregateFileCouplingConfidenceUsesTheRarerFile(t *testing.T) {
 	var changes []types.CommitChange
-	changes = append(changes, commitsOf("ab", 2, "hot.go", "rare.go")...)
-	changes = append(changes, commitsOf("hot", 18, "hot.go")...)
+	changes = append(changes, repeatCommits("ab", 2, "hot.go", "rare.go")...)
+	changes = append(changes, repeatCommits("hot", 18, "hot.go")...)
 
 	assert.Equal(t, []types.KnowledgeCoChange{
 		{A: "hot.go", B: "rare.go", Support: 2, Confidence: 1},
@@ -1506,10 +1506,10 @@ func TestAggregateFileCouplingSkipsBulkCommits(t *testing.T) {
 	atLimit := bulk[:coChangeMaxFiles]
 
 	// Two bulk commits would give every pair in them support 2.
-	changes := []types.CommitChange{commitOf("b1", bulk...), commitOf("b2", bulk...)}
+	changes := []types.CommitChange{newCommit("b1", bulk...), newCommit("b2", bulk...)}
 	assert.Empty(t, aggregateFileCoupling(changes, ""), "a commit over the limit is mechanical")
 
-	changes = []types.CommitChange{commitOf("l1", atLimit...), commitOf("l2", atLimit...)}
+	changes = []types.CommitChange{newCommit("l1", atLimit...), newCommit("l2", atLimit...)}
 	assert.NotEmpty(t, aggregateFileCoupling(changes, ""), "a commit at the limit still counts")
 }
 
@@ -1519,8 +1519,8 @@ func TestAggregateFileCouplingBulkCommitsDoNotDiluteConfidence(t *testing.T) {
 		bulk = append(bulk, fmt.Sprintf("gen/f%02d.go", i))
 	}
 	bulk = append(bulk, "a.go")
-	changes := commitsOf("ab", 2, "a.go", "b.go")
-	changes = append(changes, commitsOf("bulk", 20, bulk...)...)
+	changes := repeatCommits("ab", 2, "a.go", "b.go")
+	changes = append(changes, repeatCommits("bulk", 20, bulk...)...)
 
 	assert.Equal(t, []types.KnowledgeCoChange{
 		{A: "a.go", B: "b.go", Support: 2, Confidence: 1},
@@ -1528,7 +1528,7 @@ func TestAggregateFileCouplingBulkCommitsDoNotDiluteConfidence(t *testing.T) {
 }
 
 func TestAggregateFileCouplingStripsPrefix(t *testing.T) {
-	changes := commitsOf("c", 2, "sub/proj/a.go", "sub/proj/b.go", "other/c.go")
+	changes := repeatCommits("c", 2, "sub/proj/a.go", "sub/proj/b.go", "other/c.go")
 
 	assert.Equal(t, []types.KnowledgeCoChange{
 		{A: "a.go", B: "b.go", Support: 2, Confidence: 1},
@@ -1537,10 +1537,10 @@ func TestAggregateFileCouplingStripsPrefix(t *testing.T) {
 
 func TestAggregateFileCouplingIgnoresOrderAndDuplicates(t *testing.T) {
 	changes := []types.CommitChange{
-		commitOf("1", "b.go", "a.go", "b.go"),
-		commitOf("2", "c.go", "a.go"),
-		commitOf("3", "a.go", "c.go", "b.go"),
-		commitOf("4", "b.go", "c.go"),
+		newCommit("1", "b.go", "a.go", "b.go"),
+		newCommit("2", "c.go", "a.go"),
+		newCommit("3", "a.go", "c.go", "b.go"),
+		newCommit("4", "b.go", "c.go"),
 	}
 	want := aggregateFileCoupling(changes, "")
 	require.Equal(t, []types.KnowledgeCoChange{

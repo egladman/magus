@@ -341,12 +341,12 @@ func TestPaintLeavesTheCursorWhereTheCallerLeftIt(t *testing.T) {
 	l := z.Acquire(4)
 
 	fmt.Fprint(s, "a partial line, mid-write")
-	row, col := cursorRowOf(s), cursorColOf(s)
+	row, col := cursorRowOf(s), cursorCol(s)
 
 	_, err := l.Set([]Line{{Text: "repaint one"}, {Text: "repaint two"}})
 	require.NoError(t, err)
 	assert.Equal(t, row, cursorRowOf(s), "a repaint must not move the caller's cursor")
-	assert.Equal(t, col, cursorColOf(s))
+	assert.Equal(t, col, cursorCol(s))
 
 	// And the caller's own line is intact and can be continued.
 	fmt.Fprint(s, " ...continued")
@@ -390,8 +390,8 @@ func TestPaintReleaseHandsBackAWholeScreen(t *testing.T) {
 	require.Equal(t, "pool 1/4 running", bandRow(s, 19-borderRowsPerEdge))
 
 	require.NoError(t, z.Close())
-	assert.Equal(t, 1, scrollTopOf(s), "margins reset, or the user's shell stays pinned")
-	assert.Equal(t, 24, scrollBotOf(s))
+	assert.Equal(t, 1, scrollTop(s), "margins reset, or the user's shell stays pinned")
+	assert.Equal(t, 24, scrollBottom(s))
 	assert.Equal(t, "", bandRow(s, 19-borderRowsPerEdge), "the leased rows are cleared, not left as litter")
 	assert.Contains(t, s.String(), "transcript line", "and the transcript survives teardown")
 }
@@ -417,8 +417,8 @@ func TestPaintTwoConsumersShareOneTerminal(t *testing.T) {
 	// One margin set, covering both bands. Seven leased rows, not nine: the
 	// failure band's six plus the ONE row the single notification actually
 	// needs, and the zone's border above them.
-	assert.Equal(t, 1, scrollTopOf(s))
-	assert.Equal(t, 17-borderRows, scrollBotOf(s))
+	assert.Equal(t, 1, scrollTop(s))
+	assert.Equal(t, 17-borderRows, scrollBottom(s))
 	// The border marks where the scrolling stops.
 	assert.Equal(t, boxTL+strings.Repeat(boxH, 77)+boxTR, s.Row(18-borderRows), "the top rule spans the region, corners included")
 	// Both consumers are visible at once, in acquisition order.
@@ -431,6 +431,6 @@ func TestPaintTwoConsumersShareOneTerminal(t *testing.T) {
 // Small readers over the emulator, so the assertions below stay about what a
 // reader would see rather than about accessor spelling.
 func cursorRowOf(s *screen.Screen) int { r, _ := s.Cursor(); return r }
-func cursorColOf(s *screen.Screen) int { _, c := s.Cursor(); return c }
-func scrollTopOf(s *screen.Screen) int { t, _ := s.ScrollRegion(); return t }
-func scrollBotOf(s *screen.Screen) int { _, b := s.ScrollRegion(); return b }
+func cursorCol(s *screen.Screen) int { _, c := s.Cursor(); return c }
+func scrollTop(s *screen.Screen) int { t, _ := s.ScrollRegion(); return t }
+func scrollBottom(s *screen.Screen) int { _, b := s.ScrollRegion(); return b }

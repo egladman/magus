@@ -56,7 +56,7 @@ func (r *refResolver) resolve(input string) []string {
 	return ids
 }
 
-func (r *refResolver) projectOf(n types.KnowledgeNode, id string) (string, bool) {
+func (r *refResolver) owningProject(n types.KnowledgeNode, id string) (string, bool) {
 	if p, ok := nodeProjectPath(id); ok {
 		return p, true
 	}
@@ -136,18 +136,18 @@ func (r *refResolver) admits(n types.KnowledgeNode, id string, q parsedQuery) bo
 		return false
 	}
 	if vals, ok := q.fields["project"]; ok {
-		proj, owned := r.projectOf(n, id)
+		proj, owned := r.owningProject(n, id)
 		if !owned || !matchesProject(proj, vals) {
 			return false
 		}
 	}
 	if vals := q.negFields["project"]; len(vals) > 0 {
-		if proj, owned := r.projectOf(n, id); owned && matchesProject(proj, vals) {
+		if proj, owned := r.owningProject(n, id); owned && matchesProject(proj, vals) {
 			return false
 		}
 	}
 	if res := q.reFields["project"]; len(res) > 0 {
-		if proj, owned := r.projectOf(n, id); !owned || !matchesAnyRe(proj, res) {
+		if proj, owned := r.owningProject(n, id); !owned || !matchesAnyRe(proj, res) {
 			return false
 		}
 	}
@@ -435,7 +435,7 @@ func TestResolveProjectOwnerMatchesPrefixScan(t *testing.T) {
 		}
 		ref := newRefResolver(g)
 		for _, src := range srcs {
-			wantP, wantOK := ref.projectOf(types.KnowledgeNode{ID: "file:" + src, Source: src}, "file:"+src)
+			wantP, wantOK := ref.owningProject(types.KnowledgeNode{ID: "file:" + src, Source: src}, "file:"+src)
 			gotP, gotOK := owningProject(src, projects)
 			assert.Equalf(t, wantOK, gotOK, "owned: projects %q, src %q", set, src)
 			assert.Equalf(t, wantP, gotP, "owner: projects %q, src %q", set, src)

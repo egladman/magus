@@ -36,8 +36,6 @@ func mainCall(sec int, size int64, mdl string) trail.SessionCall {
 	return trail.SessionCall{At: at(sec), AgentFacts: types.AgentFacts{Thread: types.AgentThreadMain, ContextTokens: size, ContextModel: mdl}}
 }
 
-func resultOf(n int) *int { return &n }
-
 func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 	tr := &trail.SessionTrail{Commands: 6, Spawns: []trail.SessionSpawn{
 		{Child: "Explore", At: at(5), DeclaredModel: "claude-sonnet-5-5"},
@@ -47,7 +45,7 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 	for sec := 1; sec <= 30; sec++ {
 		c := mainCall(sec, 300_000, "claude-opus-5-5")
 		c.Billing = types.AgentBillingMetered
-		c.ResultChars = resultOf(1000)
+		c.ResultChars = new(1000)
 		c.Shadow = map[types.GuardProfile]types.GuardDecision{
 			types.GuardProfileStrict: types.GuardDeny,
 			types.GuardProfileLight:  types.GuardAllow,
@@ -123,7 +121,7 @@ func TestSummarizeCostReadsTheFactsAHookRecorded(t *testing.T) {
 			Session: "s1", Tool: "shell.command", Command: "grep -r x .", Decision: "pass",
 			AgentFacts: types.AgentFacts{
 				Thread: types.AgentThreadMain, ThreadFrom: types.ThreadReported, ContextTokens: 250_000, ContextModel: "claude-opus-5-5",
-				Billing: types.AgentBillingMetered, DelegableClass: types.DelegableSearch, ResultChars: resultOf(4000),
+				Billing: types.AgentBillingMetered, DelegableClass: types.DelegableSearch, ResultChars: new(4000),
 				Shadow: map[types.GuardProfile]types.GuardDecision{types.GuardProfileStrict: types.GuardDeny},
 			},
 		})
@@ -165,7 +163,7 @@ func TestDelegableTellsAnUnobservedResultFromAnEmptyOne(t *testing.T) {
 	assert.Nil(t, sumDelegable([]trail.SessionCall{mainCall(1, 1, "m")}))
 
 	empty := mainCall(1, 1, "m")
-	empty.ResultChars = resultOf(0)
+	empty.ResultChars = new(0)
 	got := sumDelegable([]trail.SessionCall{empty})
 	require.NotNil(t, got)
 	assert.Zero(t, got.Total)
@@ -255,7 +253,7 @@ func TestRenderCostPrintsMeasuredAndUnmeasuredSections(t *testing.T) {
 	}}
 	c1 := mainCall(1, 612_000, "claude-opus-5-5")
 	c1.Billing = types.AgentBillingMetered
-	c1.ResultChars = resultOf(1500)
+	c1.ResultChars = new(1500)
 	c1.DelegableClass = types.DelegableSearch
 	tr.Calls = []trail.SessionCall{c1}
 	got := summarizeCost(tr, fixtureModels())

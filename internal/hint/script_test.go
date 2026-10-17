@@ -175,7 +175,7 @@ func TestScriptsForRejectsUnknownSituations(t *testing.T) {
 
 // A read script survives for every role; a write script reaches only the unbound
 // reader, since `buzz` names no project a worker's write paths could cover.
-func TestServableToHonorsReadsForScriptsOnly(t *testing.T) {
+func TestFilterServableHonorsReadsForScriptsOnly(t *testing.T) {
 	read := breadcrumb("script-show-guard-health", Buzz, "why", "hack/dev/show-guard-health.buzz")
 	read.Reads = true
 	write := breadcrumb("script-prune-worktrees", Buzz, "why", "hack/dev/prune-worktrees.buzz")
@@ -185,8 +185,8 @@ func TestServableToHonorsReadsForScriptsOnly(t *testing.T) {
 	piped.Reads = true
 	all := []types.NextStep{read, write, notAScript, piped}
 
-	assert.Equal(t, []types.NextStep{read, write, notAScript}, ServableTo(RoleUnbound, nil, all))
-	assert.Equal(t, []types.NextStep{read}, ServableTo(RoleReviewer, nil, all))
-	assert.Equal(t, []types.NextStep{read}, ServableTo(RoleWorker, []string{"hack/**"}, all))
+	assert.Equal(t, []types.NextStep{read, write, notAScript}, FilterServable(RoleUnbound, nil, all))
+	assert.Equal(t, []types.NextStep{read}, FilterServable(RoleReviewer, nil, all))
+	assert.Equal(t, []types.NextStep{read}, FilterServable(RoleWorker, []string{"hack/**"}, all))
 	assert.True(t, mutatesTree(write.Argv), "buzz stays off readCommands")
 }

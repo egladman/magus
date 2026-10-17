@@ -35,10 +35,10 @@ func (r *reviewing) DismissReview(_ context.Context, _ types.Change, rv types.Re
 	return nil
 }
 
-// reviewsOf sets up the doubles for classifying the approvals on c, listed alone on main,
+// setupReviews sets up the doubles for classifying the approvals on c, listed alone on main,
 // whose head forked from carryNewBase: the listing, the base, the head and its fork
 // point, then cc for the approved carryOld.
-func reviewsOf(t *testing.T, c types.Change, cc carryCase, reads ...types.Reviews) (doubles, *reviewing) {
+func setupReviews(t *testing.T, c types.Change, cc carryCase, reads ...types.Reviews) (doubles, *reviewing) {
 	d := listedAlone(t, c)
 	d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, c.Head).Return(nil)
 	d.plain(c.Head)
@@ -68,7 +68,7 @@ var codeEdit = carryCase{edits: map[string]carryEdit{"a.go": {[]byte("package a\
 func TestReviewsCarriesWhatThePolicyAllowsAndDismissesNothing(t *testing.T) {
 	c := change("1", "a")
 	cc := carryCase{edits: map[string]carryEdit{"changes/unreleased/a.md": {nil, []byte("# a\n")}}}
-	d, prov := reviewsOf(t, c, cc, types.Reviews{Head: c.Head, Approving: []types.Review{approvedBy("ann", "12", carryOld), approvedBy("bob", "13", c.Head)}})
+	d, prov := setupReviews(t, c, cc, types.Reviews{Head: c.Head, Approving: []types.Review{approvedBy("ann", "12", carryOld), approvedBy("bob", "13", c.Head)}})
 
 	got, err := Reviews(t.Context(), d.vcs, d.facts, clone, prov, ReviewsQuery{Base: "main", Change: "1", Dismiss: true}, types.DefaultCarryPolicy())
 	require.NoError(t, err)
@@ -92,7 +92,7 @@ func TestReviewsCarriesWhatThePolicyAllowsAndDismissesNothing(t *testing.T) {
 // message naming the files that kept it from carrying.
 func TestReviewsDismissesWhatDoesNotCarryNamingTheFiles(t *testing.T) {
 	c := change("1", "a")
-	d, prov := reviewsOf(t, c, codeEdit, types.Reviews{Head: c.Head, Approving: []types.Review{approvedBy("ann", "12", carryOld), approvedBy("cy", "14", carryOld)}})
+	d, prov := setupReviews(t, c, codeEdit, types.Reviews{Head: c.Head, Approving: []types.Review{approvedBy("ann", "12", carryOld), approvedBy("cy", "14", carryOld)}})
 
 	got, err := Reviews(t.Context(), d.vcs, d.facts, clone, prov, ReviewsQuery{Base: "main", Change: "1", Head: c.Head, Dismiss: true}, types.DefaultCarryPolicy())
 	require.NoError(t, err)
@@ -117,7 +117,7 @@ func TestReviewsDismissesWhatDoesNotCarryNamingTheFiles(t *testing.T) {
 func TestReviewsLeavesAnApprovalAlreadyDismissed(t *testing.T) {
 	c := change("1", "a")
 	first := types.Reviews{Head: c.Head, Approving: []types.Review{approvedBy("ann", "12", carryOld), approvedBy("cy", "14", carryOld)}}
-	d, prov := reviewsOf(t, c, codeEdit, first, types.Reviews{Head: c.Head, Approving: []types.Review{approvedBy("cy", "14", carryOld)}})
+	d, prov := setupReviews(t, c, codeEdit, first, types.Reviews{Head: c.Head, Approving: []types.Review{approvedBy("cy", "14", carryOld)}})
 
 	got, err := Reviews(t.Context(), d.vcs, d.facts, clone, prov, ReviewsQuery{Base: "main", Change: "1", Dismiss: true}, types.DefaultCarryPolicy())
 	require.NoError(t, err)
@@ -133,7 +133,7 @@ func TestReviewsLeavesAnApprovalAlreadyDismissed(t *testing.T) {
 func TestReviewsDismissesNothingWhenTheHeadMoved(t *testing.T) {
 	c := change("1", "a")
 	approving := []types.Review{approvedBy("ann", "12", carryOld)}
-	d, prov := reviewsOf(t, c, codeEdit, types.Reviews{Head: c.Head, Approving: approving}, types.Reviews{Head: head("2"), Approving: approving})
+	d, prov := setupReviews(t, c, codeEdit, types.Reviews{Head: c.Head, Approving: approving}, types.Reviews{Head: head("2"), Approving: approving})
 
 	got, err := Reviews(t.Context(), d.vcs, d.facts, clone, prov, ReviewsQuery{Base: "main", Change: "1", Dismiss: true}, types.DefaultCarryPolicy())
 	require.NoError(t, err)
@@ -149,7 +149,7 @@ func TestReviewsDismissesNothingWhenTheHeadMoved(t *testing.T) {
 func TestReviewsWithoutDismissOrOnAnotherHeadOnlyReads(t *testing.T) {
 	c := change("1", "a")
 	approving := []types.Review{approvedBy("ann", "12", carryOld)}
-	d, prov := reviewsOf(t, c, codeEdit, types.Reviews{Head: c.Head, Approving: approving})
+	d, prov := setupReviews(t, c, codeEdit, types.Reviews{Head: c.Head, Approving: approving})
 
 	got, err := Reviews(t.Context(), d.vcs, d.facts, clone, prov, ReviewsQuery{Base: "main", Change: "1"}, types.DefaultCarryPolicy())
 	require.NoError(t, err)

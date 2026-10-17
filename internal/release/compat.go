@@ -72,7 +72,7 @@ func CheckCompat(ctx context.Context, repoRoot, baseTag string) (CompatReport, e
 	}
 	defer os.RemoveAll(scratch)
 	tree := filepath.Join(scratch, "tree")
-	if err := exportTo(ctx, repoRoot, baseTag, tree); err != nil {
+	if err := exportRevision(ctx, repoRoot, baseTag, tree); err != nil {
 		return CompatReport{}, err
 	}
 
@@ -208,9 +208,9 @@ func classify(err error) (codes []diagnostics.Code, uncoded []string) {
 	return nil, []string{err.Error()}
 }
 
-// exportTo writes rev of the repository at repoRoot into dir through the backend that
+// exportRevision writes rev of the repository at repoRoot into dir through the backend that
 // claims it.
-func exportTo(ctx context.Context, repoRoot, rev, dir string) error {
+func exportRevision(ctx context.Context, repoRoot, rev, dir string) error {
 	res, err := vcs.Resolve(ctx, repoRoot, "", types.VCSOptions{})
 	if err != nil {
 		return fmt.Errorf("release: %w", err)

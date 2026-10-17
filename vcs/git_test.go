@@ -2239,7 +2239,7 @@ func TestGitCheckoutState(t *testing.T) {
 	assert.Equal(t, types.CheckoutState{RemoteBranches: []string{"origin/main"}}, got)
 }
 
-func refsOf(t *testing.T, dir string) string {
+func listRefs(t *testing.T, dir string) string {
 	t.Helper()
 	return gitTestOutput(t, dir, "for-each-ref", "--format=%(refname) %(objectname)")
 }
@@ -2309,7 +2309,7 @@ func TestGitCallsIgnoreAHostileGitDir(t *testing.T) {
 	origin, _ := gitDivergedOrigin(t, 40)
 	clone := gitCloneShallow(t, origin, 1)
 	elsewhere := testkit.NewRepo(t, map[string]string{"x.txt": "x\n"}).Root()
-	before := refsOf(t, elsewhere)
+	before := listRefs(t, elsewhere)
 
 	t.Run("hostile environment", func(t *testing.T) {
 		t.Setenv("GIT_DIR", filepath.Join(elsewhere, ".git"))
@@ -2327,7 +2327,7 @@ func TestGitCallsIgnoreAHostileGitDir(t *testing.T) {
 	assert.Equal(t, gitTestOutput(t, clone, "rev-parse", "origin/main"), gitTestOutput(t, clone, "rev-parse", "MERGE_HEAD"),
 		"the merge did not start in the clone")
 	assert.NoFileExists(t, filepath.Join(elsewhere, ".git", "MERGE_HEAD"))
-	assert.Equal(t, before, refsOf(t, elsewhere), "a magus git call wrote into the repository GIT_DIR named")
+	assert.Equal(t, before, listRefs(t, elsewhere), "a magus git call wrote into the repository GIT_DIR named")
 	assert.NotEmpty(t, gitTestOutput(t, clone, "for-each-ref", "refs/remotes/origin/main"), "the fetch landed somewhere other than the clone")
 }
 
@@ -2732,13 +2732,13 @@ func (f remoteFixture) advance(t *testing.T, branch, name string) string {
 // the user's view of the remote under a command that only asked for a commit.
 func TestFetchRefLeavesTagsAndTrackingRefsAlone(t *testing.T) {
 	f := newRemoteFixture(t)
-	before := refsOf(t, f.clone)
+	before := listRefs(t, f.clone)
 	tip := f.advance(t, "main", "next.txt")
 
 	got, err := gitVCS{}.FetchRef(t.Context(), f.clone, "origin", "refs/heads/main")
 	require.NoError(t, err)
 	assert.Equal(t, tip, got)
-	assert.Equal(t, before, refsOf(t, f.clone), "fetching a branch moved, added or left a ref")
+	assert.Equal(t, before, listRefs(t, f.clone), "fetching a branch moved, added or left a ref")
 	gitRun(t, f.clone, "cat-file", "-e", tip+"^{commit}")
 }
 
@@ -2776,7 +2776,7 @@ func TestFetchRefConcurrentCallsDoNotShareARef(t *testing.T) {
 	for r := range results {
 		assert.Equal(t, tips[r.remote], r.id, "a fetch from %s answered with another fetch's tip", r.remote)
 	}
-	assert.NotContains(t, refsOf(t, f.clone), "refs/magus/", "a fetch left its scratch ref behind")
+	assert.NotContains(t, listRefs(t, f.clone), "refs/magus/", "a fetch left its scratch ref behind")
 }
 
 func TestFetchRefAndFetchCommit(t *testing.T) {
@@ -2798,7 +2798,7 @@ func TestFetchRefAndFetchCommit(t *testing.T) {
 // B10: a value shaped like a refspec, an option or a URL never reaches fetch or push.
 func TestRemoteArgumentsRefuseRefspecsOptionsAndURLs(t *testing.T) {
 	f := newRemoteFixture(t)
-	before := refsOf(t, f.clone)
+	before := listRefs(t, f.clone)
 	id := gitTestOutput(t, f.clone, "rev-parse", "HEAD")
 	g := gitVCS{}
 	ctx := t.Context()
@@ -2817,7 +2817,7 @@ func TestRemoteArgumentsRefuseRefspecsOptionsAndURLs(t *testing.T) {
 	require.Error(t, err)
 	_, err = g.MergeTrees(ctx, f.clone, types.TreeMerge{Ours: "HEAD", Theirs: "-x"})
 	require.Error(t, err)
-	assert.Equal(t, before, refsOf(t, f.clone))
+	assert.Equal(t, before, listRefs(t, f.clone))
 }
 
 // A name git would read as a path must not become one: with a repository at ./evil and no
@@ -3045,7 +3045,7 @@ func TestCommitTreeIsDeterministicAndCreatesNoRef(t *testing.T) {
 	ctx := t.Context()
 	tree, err := g.TreeID(ctx, dir, revs["clean"])
 	require.NoError(t, err)
-	before := refsOf(t, dir)
+	before := listRefs(t, dir)
 	c := types.TreeCommit{
 		CommitMeta: types.CommitMeta{
 			Message: "update", Author: types.Person{Name: "author", Email: "a@x"}, Committer: queueIdentity,
@@ -3058,7 +3058,7 @@ func TestCommitTreeIsDeterministicAndCreatesNoRef(t *testing.T) {
 	second, err := g.CommitTree(ctx, dir, c)
 	require.NoError(t, err)
 	assert.Equal(t, first, second, "the same inputs yield the same commit id")
-	assert.Equal(t, before, refsOf(t, dir))
+	assert.Equal(t, before, listRefs(t, dir))
 	assert.Equal(t, revs["ours"]+" "+revs["clean"], gitTestOutput(t, dir, "log", "-1", "--format=%P", first))
 	assert.Equal(t, "author queue", gitTestOutput(t, dir, "log", "-1", "--format=%an %cn", first))
 
@@ -3707,15 +3707,15 @@ func TestBundleCarriesCommitsWithoutRefs(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "stage.bundle")
 
 	require.NoError(t, g.Bundle(ctx, f.clone, file, types.BundleRange{Base: base, Head: carried}))
-	assert.NotContains(t, refsOf(t, f.clone), "refs/magus/")
+	assert.NotContains(t, listRefs(t, f.clone), "refs/magus/")
 
 	other := t.TempDir()
 	gitRun(t, other, "clone", "-q", "file://"+f.remote, ".")
 	gitConfigureFixture(t, other)
-	before := refsOf(t, other)
+	before := listRefs(t, other)
 	require.NoError(t, g.Unbundle(ctx, other, file))
 	gitRun(t, other, "cat-file", "-e", carried+"^{commit}")
-	assert.Equal(t, before, refsOf(t, other), "unbundling created a ref")
+	assert.Equal(t, before, listRefs(t, other), "unbundling created a ref")
 
 	whole := filepath.Join(t.TempDir(), "whole.bundle")
 	require.NoError(t, g.Bundle(ctx, f.clone, whole, types.BundleRange{Head: carried}), "an empty Base bundles the whole history")
@@ -3738,7 +3738,7 @@ func TestFetchSweepsOnlyStaleScratchRefs(t *testing.T) {
 
 	_, err := gitVCS{}.FetchRef(t.Context(), f.clone, "origin", "refs/heads/main")
 	require.NoError(t, err)
-	refs := refsOf(t, f.clone)
+	refs := listRefs(t, f.clone)
 	assert.NotContains(t, refs, stale)
 	assert.Contains(t, refs, fresh)
 }

@@ -22,7 +22,7 @@ import (
 	magustypes "github.com/egladman/magus/types"
 )
 
-func planOf(groups ...[]types.Change) types.Plan {
+func newPlan(groups ...[]types.Change) types.Plan {
 	return types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, CommitDate: when, Depth: 3, Partitions: groups}
 }
 
@@ -63,7 +63,7 @@ func (g *gated) count(id string) int {
 	return n
 }
 
-func (g *gated) unitsOf(run string) []string {
+func (g *gated) gatedUnits(run string) []string {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.units[run]
@@ -87,7 +87,7 @@ func (d doubles) gates(result func(id string) types.GateResult) *gated {
 
 func allGreen(string) types.GateResult { return types.GateResult{Green: true} }
 
-func redFor(ids ...string) func(string) types.GateResult {
+func failingGates(ids ...string) func(string) types.GateResult {
 	return func(id string) types.GateResult {
 		if slices.Contains(ids, id) {
 			return types.GateResult{Summary: "the gate exited 1"}
@@ -140,12 +140,12 @@ func TestSpeculativeCandidatesStackOntoEachOther(t *testing.T) {
 	one, two, three := change("1", "a"), change("2", "a"), change("3", "a")
 	d.builds(building{touched: []string{"a/x.go"}})
 	g := d.gates(allGreen)
-	v, dir := validating(t, d, planOf([]types.Change{one, two, three}))
-	require.NoError(t, v.Run(t.Context(), planOf([]types.Change{one, two, three})))
+	v, dir := validating(t, d, newPlan([]types.Change{one, two, three}))
+	require.NoError(t, v.Run(t.Context(), newPlan([]types.Change{one, two, three})))
 
-	c1 := candidateOf(base, one.Head)
-	c2 := candidateOf(c1, two.Head)
-	c3 := candidateOf(c2, three.Head)
+	c1 := candidateID(base, one.Head)
+	c2 := candidateID(c1, two.Head)
+	c3 := candidateID(c2, three.Head)
 	got := recorded(t, dir)
 	for id, want := range map[string]types.Verdict{
 		"1": {Change: one, After: "", Onto: base, CandidateCommit: c1, Depth: 1},
@@ -158,7 +158,7 @@ func TestSpeculativeCandidatesStackOntoEachOther(t *testing.T) {
 		assert.Equal(t, want, v, id)
 	}
 	assert.ElementsMatch(t, []string{"1@" + c1, "2@" + c2, "3@" + c3}, g.runs, "a green candidate costs no gate of its base")
-	assert.Equal(t, []string{"a"}, g.unitsOf("3@"+c3), "a gate runs its change's affected set")
+	assert.Equal(t, []string{"a"}, g.gatedUnits("3@"+c3), "a gate runs its change's affected set")
 }
 
 // Every head is in the store before the first hook runs: git fetches no object the store
@@ -183,7 +183,7 @@ func TestEveryHeadIsFetchedBeforeAnyHookRuns(t *testing.T) {
 			events.add("gate " + cand.Change)
 			return types.GateResult{Green: true}, nil
 		})
-	plan := planOf(changes)
+	plan := newPlan(changes)
 	v, _ := validating(t, d, plan)
 	v.Regenerate = func(_ context.Context, r types.Regeneration) error {
 		events.add("regenerate " + r.Change.ID)
@@ -211,16 +211,16 @@ func TestAVerdictNamesWhatAutoResolutionSettled(t *testing.T) {
 			d.vcs.EXPECT().MarkResolved(mock.Anything, mock.Anything, []string{"CHANGELOG.md"}).Return(nil)
 			result := allGreen
 			if red {
-				result = redFor("1")
+				result = failingGates("1")
 			}
 			g := d.gates(result)
-			plan := planOf([]types.Change{one})
+			plan := newPlan([]types.Change{one})
 			v, dir := validating(t, d, plan)
 			var events bytes.Buffer
 			v.Events = NewEvents(&events)
 			require.NoError(t, v.Run(t.Context(), plan))
 
-			cand := candidateOf(base, one.Head)
+			cand := candidateID(base, one.Head)
 			assert.Equal(t, 1, g.count("1"), "a resolution never skips the gate")
 			assert.Contains(t, events.String(), `"kind":"resolved","change":"1","reason":`+jsonString(t, chNote)+`,"commit":"`+cand+`"`)
 			got := recorded(t, dir)["1"]
@@ -243,20 +243,20 @@ func TestARedCandidateIsKickedAndWhatWasBuiltOnItIsRebuilt(t *testing.T) {
 	d := newDoubles(t)
 	one, two, three := change("1", "a"), change("2", "a"), change("3", "a")
 	d.builds(building{touched: []string{"a/x.go"}})
-	g := d.gates(redFor("2"))
-	plan := planOf([]types.Change{one, two, three})
+	g := d.gates(failingGates("2"))
+	plan := newPlan([]types.Change{one, two, three})
 	v, dir := validating(t, d, plan)
 	v.Reproduce = types.Reproduction{Gate: `magus run ci`}
 	require.NoError(t, v.Run(t.Context(), plan))
-	c1 := candidateOf(base, one.Head)
+	c1 := candidateID(base, one.Head)
 	assert.Equal(t, 1, g.count("base"))
-	assert.Equal(t, []string{"a"}, g.unitsOf("base@"+c1), "the base is gated on the red change's units, onto what it was built onto")
+	assert.Equal(t, []string{"a"}, g.gatedUnits("base@"+c1), "the base is gated on the red change's units, onto what it was built onto")
 
 	got := recorded(t, dir)
 	assert.Equal(t, types.DecisionMerge, got["1"].Decision)
 	// What failed on which commits, and no hook line.
 	assert.Equal(t, recordedAs(types.Verdict{
-		Change: two, After: "1", Onto: c1, CandidateCommit: candidateOf(c1, two.Head), Method: two.Method, Depth: 2,
+		Change: two, After: "1", Onto: c1, CandidateCommit: candidateID(c1, two.Head), Method: two.Method, Depth: 2,
 		Decision: types.DecisionKick, Code: types.CodeKickRed, Reason: "the gate exited 1",
 		Report: "The merge queue built this change at `" + short(two.Head) + "` onto the candidate of #1 (`" + short(c1) + "`), and the gate exited 1.\n",
 		Gate:   `magus run ci`,
@@ -267,7 +267,7 @@ func TestARedCandidateIsKickedAndWhatWasBuiltOnItIsRebuilt(t *testing.T) {
 	}
 	// Rebuilt onto what validated.
 	assert.Equal(t, recordedAs(types.Verdict{
-		Change: three, After: "1", Onto: c1, CandidateCommit: candidateOf(c1, three.Head), Method: three.Method, Depth: got["3"].Depth,
+		Change: three, After: "1", Onto: c1, CandidateCommit: candidateID(c1, three.Head), Method: three.Method, Depth: got["3"].Depth,
 		Decision: types.DecisionMerge, Gate: `magus run ci`,
 	}, got["3"]), got["3"])
 }
@@ -281,8 +281,8 @@ func TestAChangeStackedOnARedOneWaitsWithoutBlame(t *testing.T) {
 	d.builds(building{touched: []string{"a/x.go"}})
 	// The candidate beneath carries the stack base, so the natural merge base serves.
 	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, one.Head, mock.Anything).Return(true, nil).Maybe()
-	d.gates(redFor("1"))
-	plan := planOf([]types.Change{one, two})
+	d.gates(failingGates("1"))
+	plan := newPlan([]types.Change{one, two})
 	v, dir := validating(t, d, plan)
 	require.NoError(t, v.Run(t.Context(), plan))
 
@@ -302,8 +302,8 @@ func TestARedBaseKicksNobodyBackAndIsGatedOnce(t *testing.T) {
 	three := stacked("3", one, "a")
 	d.builds(building{touched: []string{"a/x.go"}})
 	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, one.Head, mock.Anything).Return(true, nil).Maybe()
-	g := d.gates(redFor("1", "2", "base"))
-	plan := planOf([]types.Change{one, two, three})
+	g := d.gates(failingGates("1", "2", "base"))
+	plan := newPlan([]types.Change{one, two, three})
 	v, dir := validating(t, d, plan)
 	require.NoError(t, v.Run(t.Context(), plan))
 
@@ -317,7 +317,7 @@ func TestARedBaseKicksNobodyBackAndIsGatedOnce(t *testing.T) {
 	}
 	assert.Equal(t, types.CodeWaitBelow, got["3"].Code, "stacked on a change that waits, not one kicked back")
 	assert.Equal(t, 1, g.count("base"), "one gate of the base answers every change it reddens")
-	assert.Equal(t, []string{"a"}, g.unitsOf("base@"+base))
+	assert.Equal(t, []string{"a"}, g.gatedUnits("base@"+base))
 }
 
 // A set that is no proof, unknown or unbounded, reaches every hook as the build tool
@@ -331,12 +331,12 @@ func TestAChangeWhoseSetIsNoProofIsGatedOnEveryUnit(t *testing.T) {
 	none.Affected = []string{}
 	d.builds(building{touched: []string{"a/x.go"}})
 	g := d.gates(allGreen)
-	plan := planOf([]types.Change{unknown}, []types.Change{unbounded}, []types.Change{none})
+	plan := newPlan([]types.Change{unknown}, []types.Change{unbounded}, []types.Change{none})
 	v, dir := validating(t, d, plan)
 	require.NoError(t, v.Run(t.Context(), plan))
 
-	assert.Equal(t, []string{"/"}, g.unitsOf("1@"+candidateOf(base, unknown.Head)))
-	assert.Equal(t, []string{"/"}, g.unitsOf("2@"+candidateOf(base, unbounded.Head)))
+	assert.Equal(t, []string{"/"}, g.gatedUnits("1@"+candidateID(base, unknown.Head)))
+	assert.Equal(t, []string{"/"}, g.gatedUnits("2@"+candidateID(base, unbounded.Head)))
 	assert.Zero(t, g.count("3"), "no unit, nothing to gate")
 	got := recorded(t, dir)
 	for _, id := range []string{"1", "2", "3"} {
@@ -351,11 +351,11 @@ func TestAChangeConflictingWithOneAheadWaitsAndTheRestStackPastIt(t *testing.T) 
 	one, two, three := change("1", "a"), change("2", "a"), change("3", "a")
 	d.builds(building{touched: []string{"a/x.go"}, conflicts: map[string][]magustypes.Conflict{two.Head: {{Path: "a/x.go", Kind: magustypes.ConflictKindContent}}}})
 	d.facts.EXPECT().Classify(mock.Anything, []string{"a/x.go"}).Return(map[string]types.Writes{}, nil)
-	c1 := candidateOf(base, one.Head)
+	c1 := candidateID(base, one.Head)
 	d.sides(c1, two.Head, "a/x.go", "package a\n", "package a1\n", "package a2\n")
 	d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, two.Head, c1, []string{"a/x.go"}).Return(nil, nil)
 	d.gates(allGreen)
-	plan := planOf([]types.Change{one, two, three})
+	plan := newPlan([]types.Change{one, two, three})
 	v, dir := validating(t, d, plan)
 	require.NoError(t, v.Run(t.Context(), plan))
 
@@ -368,7 +368,7 @@ func TestAChangeConflictingWithOneAheadWaitsAndTheRestStackPastIt(t *testing.T) 
 	}, got["2"]), got["2"])
 	// Stacked past the change that waits.
 	assert.Equal(t, recordedAs(types.Verdict{
-		Change: three, After: "1", Onto: c1, CandidateCommit: candidateOf(c1, three.Head), Method: three.Method, Depth: got["3"].Depth,
+		Change: three, After: "1", Onto: c1, CandidateCommit: candidateID(c1, three.Head), Method: three.Method, Depth: got["3"].Depth,
 		Decision: types.DecisionMerge,
 	}, got["3"]), got["3"])
 }
@@ -381,8 +381,8 @@ func TestARefusedCandidateIsKickedBackAndTheRestValidate(t *testing.T) {
 	d.builds(building{touched: []string{"gen/x.go"}})
 	d.facts.EXPECT().Classify(mock.Anything, []string{"gen/x.go"}).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
 	d.vcs.EXPECT().DirtyFiles(mock.Anything, mock.Anything, []string(nil)).Return(nil, nil).Maybe()
-	g := d.gates(redFor("base"))
-	plan := planOf([]types.Change{one}, []types.Change{two})
+	g := d.gates(failingGates("base"))
+	plan := newPlan([]types.Change{one}, []types.Change{two})
 	v, dir := validating(t, d, plan)
 	v.Regenerate = func(_ context.Context, r types.Regeneration) error {
 		assert.Equal(t, r.Change.Affected, r.Units, "validation regenerates by the change's own units")
@@ -413,7 +413,7 @@ func TestEveryCandidateGetsABoxOfItsOwn(t *testing.T) {
 	d.facts.EXPECT().Classify(mock.Anything, []string{"gen/x.go"}).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
 	d.vcs.EXPECT().DirtyFiles(mock.Anything, mock.Anything, []string(nil)).Return(nil, nil)
 	d.gates(allGreen)
-	plan := planOf([]types.Change{one, two})
+	plan := newPlan([]types.Change{one, two})
 	v, _ := validating(t, d, plan)
 	var mu sync.Mutex
 	boxes := map[string]string{}
@@ -452,7 +452,7 @@ func TestValidationRegeneratesStaleOutputsAndGatesTheResult(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			d := newDoubles(t)
 			c := change("1", "gen")
-			merged := candidateOf(base, c.Head)
+			merged := candidateID(base, c.Head)
 			want := merged
 			if len(tc.written) > 0 {
 				want = regenerated
@@ -468,7 +468,7 @@ func TestValidationRegeneratesStaleOutputsAndGatesTheResult(t *testing.T) {
 			d.facts.EXPECT().Classify(mock.Anything, touched).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
 			d.vcs.EXPECT().DirtyFiles(mock.Anything, mock.Anything, []string(nil)).Return(tc.written, nil)
 			g := d.gates(allGreen)
-			plan := planOf([]types.Change{c})
+			plan := newPlan([]types.Change{c})
 			v, dir := validating(t, d, plan)
 			var got types.Regeneration
 			v.Regenerate = func(_ context.Context, r types.Regeneration) error {
@@ -507,7 +507,7 @@ func TestAMachineFailureStopsItsPartitionAlone(t *testing.T) {
 	one, two := change("1", "a"), change("2", "b")
 	d.builds(building{touched: []string{"a/x.go"}, fail: map[string]error{one.Head: errors.New("disk full")}})
 	d.gates(allGreen)
-	plan := planOf([]types.Change{one}, []types.Change{two})
+	plan := newPlan([]types.Change{one}, []types.Change{two})
 	v, dir := validating(t, d, plan)
 	err := v.Run(t.Context(), plan)
 	require.ErrorContains(t, err, "build the candidate of #1 onto "+base[:12]+": disk full")
@@ -526,22 +526,22 @@ func TestOnlyBuildsTheChainButGatesTheOneChange(t *testing.T) {
 	}{
 		"green": {gate: allGreen, want: types.DecisionMerge},
 		// Red on top of changes this run did not gate cannot be pinned on the top change.
-		"red": {gate: redFor("2"), want: types.DecisionWait, wantCode: types.CodeWaitBehind},
+		"red": {gate: failingGates("2"), want: types.DecisionWait, wantCode: types.CodeWaitBehind},
 	} {
 		t.Run(name, func(t *testing.T) {
 			d := newDoubles(t)
 			one, two := change("1", "a"), change("2", "a")
 			d.builds(building{touched: []string{"a/x.go"}})
 			g := d.gates(tc.gate)
-			plan := planOf([]types.Change{one, two})
+			plan := newPlan([]types.Change{one, two})
 			v, dir := validating(t, d, plan)
 			v.Only = "2"
 			require.NoError(t, v.Run(t.Context(), plan))
 			got := recorded(t, dir)
 			require.Len(t, got, 1)
-			c1 := candidateOf(base, one.Head)
+			c1 := candidateID(base, one.Head)
 			wantVerdict := types.Verdict{
-				Change: two, After: "1", Onto: c1, CandidateCommit: candidateOf(c1, two.Head), Method: two.Method, Depth: 2,
+				Change: two, After: "1", Onto: c1, CandidateCommit: candidateID(c1, two.Head), Method: two.Method, Depth: 2,
 				Decision: tc.want, Code: tc.wantCode,
 			}
 			if tc.wantCode == types.CodeWaitBehind {
@@ -556,7 +556,7 @@ func TestOnlyBuildsTheChainButGatesTheOneChange(t *testing.T) {
 
 func TestOnlyAChangeThePlanDidNotAdmitIsAnError(t *testing.T) {
 	d := newDoubles(t)
-	plan := planOf([]types.Change{change("1", "a")})
+	plan := newPlan([]types.Change{change("1", "a")})
 	v, _ := validating(t, d, plan)
 	v.Only = "9"
 	require.EqualError(t, v.Run(t.Context(), plan), "9 is not an admitted change of the plan")
@@ -579,7 +579,7 @@ func TestParallelCapsCandidatesAcrossPartitions(t *testing.T) {
 		running.Add(-1)
 		return types.GateResult{Green: true}
 	})
-	plan := planOf(groups...)
+	plan := newPlan(groups...)
 	v, dir := validating(t, d, plan)
 	v.Parallel = 2
 	require.NoError(t, v.Run(t.Context(), plan))

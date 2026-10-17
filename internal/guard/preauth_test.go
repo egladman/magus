@@ -363,7 +363,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 		}
 		kind, writePaths := hint.LeaseRole([]types.Job{worker, reviewer}, role.lease)
 		t.Run(role.name+"/scripts", func(t *testing.T) {
-			served := hint.ServableTo(kind, writePaths, []types.NextStep{readScript, writeScript})
+			served := hint.FilterServable(kind, writePaths, []types.NextStep{readScript, writeScript})
 			require.Contains(t, served, readScript, "a read script is served to every role")
 			if kind == hint.RoleReviewer {
 				assert.NotContains(t, served, writeScript, "a write script is never served to a reviewer")

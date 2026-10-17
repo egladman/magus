@@ -153,9 +153,9 @@ func shellPipe(t *testing.T) (r, w *os.File) {
 	return r, w
 }
 
-// upstreamOf starts a helper stage whose stdout is w, and closes this process's copy of
+// startUpstream starts a helper stage whose stdout is w, and closes this process's copy of
 // w so the stage is the pipe's only writer.
-func upstreamOf(t *testing.T, cmd *exec.Cmd, w *os.File) {
+func startUpstream(t *testing.T, cmd *exec.Cmd, w *os.File) {
 	t.Helper()
 	cmd.Stdout = w
 	startStage(t, cmd)
@@ -297,20 +297,20 @@ func TestRecordUpstream(t *testing.T) {
 
 	r, w := shellPipe(t)
 	up := pipeStage(t, t.TempDir(), map[string]string{"HOLD_MS": "3000"}, "records")
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	pid, ok := RecordUpstream(ctx, r, writes)
 	if !ok || pid != up.Process.Pid {
 		t.Errorf("RecordUpstream = %d, %v; want the record stage %d", pid, ok, up.Process.Pid)
 	}
 
 	r2, w2 := shellPipe(t)
-	upstreamOf(t, pipeStage(t, t.TempDir(), map[string]string{"HOLD_MS": "3000"}), w2)
+	startUpstream(t, pipeStage(t, t.TempDir(), map[string]string{"HOLD_MS": "3000"}), w2)
 	if _, ok := RecordUpstream(ctx, r2, writes); ok {
 		t.Errorf("proved a stage whose argv writes no records")
 	}
 
 	r3, w3 := shellPipe(t)
-	upstreamOf(t, exec.Command("sleep", "3"), w3)
+	startUpstream(t, exec.Command("sleep", "3"), w3)
 	if _, ok := RecordUpstream(ctx, r3, func([]string) bool { return true }); ok {
 		t.Errorf("proved sleep as a record stage")
 	}
@@ -342,7 +342,7 @@ func TestPipeSettleDrainsSoAnUpstreamStillWritingFinishes(t *testing.T) {
 	cacheDir := t.TempDir()
 	r, w := shellPipe(t)
 	up := pipeStage(t, cacheDir, map[string]string{"WRITE_BYTES": strconv.Itoa(4 << 20), "EXIT": "0"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	s := provedStdio(r)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -364,7 +364,7 @@ func TestPipeForkPendingExecIsNoStage(t *testing.T) {
 	// Registered first, so it runs after the stage is killed, if the test stops early.
 	t.Cleanup(func() { _ = os.WriteFile(forkRelease, nil, 0o644) })
 	up := pipeStage(t, cacheDir, map[string]string{"FORK_UNTIL": forkRelease, "READY": ready, "EXIT": "0"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	waitForFile(t, ready, 5*time.Second)
 
 	s := provedStdio(r)
@@ -420,7 +420,7 @@ func TestPipeSettleCountsAVanishedUpstreamAsUnknown(t *testing.T) {
 	cacheDir := t.TempDir()
 	r, w := shellPipe(t)
 	up := pipeStage(t, cacheDir, map[string]string{"HOLD_MS": "60000", "EXIT": "0"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	s := provedStdio(r)
 
 	time.AfterFunc(200*time.Millisecond, func() { _ = up.Process.Kill() })
@@ -439,7 +439,7 @@ func TestPipeSettleHonorsContextCancel(t *testing.T) {
 	cacheDir := t.TempDir()
 	r, w := shellPipe(t)
 	up := pipeStage(t, cacheDir, map[string]string{"HOLD_MS": "60000", "EXIT": "0"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	s := provedStdio(r)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
@@ -469,7 +469,7 @@ func TestPipeAwaitUpstreamRefusesARedUpstream(t *testing.T) {
 	cacheDir := t.TempDir()
 	r, w := shellPipe(t)
 	up := pipeStage(t, cacheDir, map[string]string{"PRE_MS": "300", "EXIT": "4"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	s := provedStdio(r)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -485,7 +485,7 @@ func TestPipeAwaitUpstreamGreenLeavesNothingToSettle(t *testing.T) {
 	cacheDir := t.TempDir()
 	r, w := shellPipe(t)
 	up := pipeStage(t, cacheDir, map[string]string{"PRE_MS": "300", "EXIT": "0"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	s := provedStdio(r)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

@@ -53,7 +53,7 @@ func levelSetting(level types.GuardProfile) func(string) builtin.Setting {
 	return func(rule string) builtin.Setting { return settings[rule] }
 }
 
-func rulesOf(findings []costFinding) map[denyRuleName]bool {
+func denyByRule(findings []costFinding) map[denyRuleName]bool {
 	out := map[denyRuleName]bool{}
 	for _, f := range findings {
 		out[f.rule] = f.deny
@@ -67,28 +67,28 @@ func TestMainFindingsByLevel(t *testing.T) {
 	quiet := mainCall{from: types.ThreadReported, window: 1_000_000, line: "git status --short"}
 
 	st := costState{Tokens: 520_000, Streak: 7, Repeats: map[string]int{lineDigest("git diff"): 2}, Results: map[string]int{"Bash": 45_000}}
-	assert.Equal(t, map[denyRuleName]bool{}, rulesOf(mainFindings(levelSetting(types.GuardProfileOff), st, diff)))
+	assert.Equal(t, map[denyRuleName]bool{}, denyByRule(mainFindings(levelSetting(types.GuardProfileOff), st, diff)))
 	assert.Equal(t, map[denyRuleName]bool{
 		denyRuleRootContextBudget: false,
 		denyRuleRootResultCap:     false,
-	}, rulesOf(mainFindings(levelSetting(types.GuardProfileLight), st, diff)))
-	assert.Equal(t, map[denyRuleName]bool{
-		denyRuleRootContextBudget: false,
-		denyRuleRootHeavyCommand:  false,
-		denyRuleRootRepeat:        false,
-		denyRuleRootResultCap:     false,
-	}, rulesOf(mainFindings(levelSetting(types.GuardProfileStandard), st, diff)))
+	}, denyByRule(mainFindings(levelSetting(types.GuardProfileLight), st, diff)))
 	assert.Equal(t, map[denyRuleName]bool{
 		denyRuleRootContextBudget: false,
 		denyRuleRootHeavyCommand:  false,
 		denyRuleRootRepeat:        false,
 		denyRuleRootResultCap:     false,
-	}, rulesOf(mainFindings(levelSetting(types.GuardProfileStrict), st, diff)), "a strict session with no record of orchestrating is only advised")
+	}, denyByRule(mainFindings(levelSetting(types.GuardProfileStandard), st, diff)))
+	assert.Equal(t, map[denyRuleName]bool{
+		denyRuleRootContextBudget: false,
+		denyRuleRootHeavyCommand:  false,
+		denyRuleRootRepeat:        false,
+		denyRuleRootResultCap:     false,
+	}, denyByRule(mainFindings(levelSetting(types.GuardProfileStrict), st, diff)), "a strict session with no record of orchestrating is only advised")
 
 	assert.Equal(t, map[denyRuleName]bool{
 		denyRuleRootContextBudget: false,
 		denyRuleRootResultCap:     false,
-	}, rulesOf(mainFindings(levelSetting(types.GuardProfileStrict), st, quiet)), "a call no subagent would make is never counted or refused")
+	}, denyByRule(mainFindings(levelSetting(types.GuardProfileStrict), st, quiet)), "a call no subagent would make is never counted or refused")
 
 	small := costState{Tokens: 90_000, Streak: 3, Results: map[string]int{"Bash": 5_000}}
 	assert.Empty(t, mainFindings(levelSetting(types.GuardProfileStrict), small, diff))
@@ -104,7 +104,7 @@ func TestFreeCallsEscapeTheBudgetRules(t *testing.T) {
 	}
 	for _, level := range []types.GuardProfile{types.GuardProfileLight, types.GuardProfileStandard, types.GuardProfileStrict} {
 		for _, line := range costFreeLines {
-			rules := rulesOf(mainFindings(levelSetting(level), st, call(line)))
+			rules := denyByRule(mainFindings(levelSetting(level), st, call(line)))
 			assert.NotContains(t, rules, denyRuleRootContextBudget, "%s at %s", line, level)
 			assert.NotContains(t, rules, denyRuleRootHeavyCommand, "%s at %s", line, level)
 		}
@@ -113,12 +113,12 @@ func TestFreeCallsEscapeTheBudgetRules(t *testing.T) {
 		if delegableClass(line) == "" {
 			continue
 		}
-		rules := rulesOf(mainFindings(levelSetting(types.GuardProfileStrict), st, call(line)))
+		rules := denyByRule(mainFindings(levelSetting(types.GuardProfileStrict), st, call(line)))
 		assert.Contains(t, rules, denyRuleRootContextBudget, line)
 		assert.Contains(t, rules, denyRuleRootHeavyCommand, line)
 	}
 	for _, line := range []string{"./magus describe job a1 -o json", "git status"} {
-		rules := rulesOf(mainFindings(levelSetting(types.GuardProfileStandard), st, call(line)))
+		rules := denyByRule(mainFindings(levelSetting(types.GuardProfileStandard), st, call(line)))
 		assert.Contains(t, rules, denyRuleRootContextBudget, "a call that is not free is still advised: %s", line)
 	}
 }
@@ -248,24 +248,24 @@ func TestOrchestratorGroundworkByRole(t *testing.T) {
 	}
 	for _, line := range orchestrationLines(notes) {
 		findings := mainFindings(strict, st, call(line, types.OrchestrationProven))
-		assert.NotContains(t, rulesOf(findings), denyRuleOrchestratorGroundwork, line)
+		assert.NotContains(t, denyByRule(findings), denyRuleOrchestratorGroundwork, line)
 		assert.False(t, refuses(findings), line)
 	}
 	for _, g := range groundworkLines {
-		rules := rulesOf(mainFindings(strict, st, call(g.line, types.OrchestrationProven)))
+		rules := denyByRule(mainFindings(strict, st, call(g.line, types.OrchestrationProven)))
 		assert.True(t, rules[denyRuleOrchestratorGroundwork], g.line)
 		assert.NotContains(t, rules, denyRuleRootHeavyCommand, "an orchestrator is past the nudge: %s", g.line)
 		assert.NotContains(t, rules, denyRuleRootRepeat, g.line)
 
-		rules = rulesOf(mainFindings(levelSetting(types.GuardProfileOff), costState{}, call(g.line, types.OrchestrationProven)))
+		rules = denyByRule(mainFindings(levelSetting(types.GuardProfileOff), costState{}, call(g.line, types.OrchestrationProven)))
 		assert.True(t, rules[denyRuleOrchestratorGroundwork], "at any size and level, off included: %s", g.line)
 
 		findings := mainFindings(strict, st, call(g.line, types.OrchestrationInferred))
-		assert.Contains(t, rulesOf(findings), denyRuleOrchestratorGroundwork, g.line)
+		assert.Contains(t, denyByRule(findings), denyRuleOrchestratorGroundwork, g.line)
 		assert.False(t, refuses(findings), "an inferred record is only advised: %s", g.line)
 
 		findings = mainFindings(strict, st, call(g.line, ""))
-		assert.NotContains(t, rulesOf(findings), denyRuleOrchestratorGroundwork, g.line)
+		assert.NotContains(t, denyByRule(findings), denyRuleOrchestratorGroundwork, g.line)
 		assert.False(t, refuses(findings), "a strict session with no record is only advised: %s", g.line)
 	}
 

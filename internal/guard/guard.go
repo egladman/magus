@@ -1480,7 +1480,7 @@ func servableRemedy(ctx context.Context, deps Dependencies, at location, callDir
 	d := effectiveDialect(deps.ShellDialect)
 	candidates := next
 	if len(next) != 1 || !placesBinary(next[0], actingLease) {
-		candidates = hint.ServableTo(role, writePaths, next)
+		candidates = hint.FilterServable(role, writePaths, next)
 	}
 	var kept []types.NextStep
 	for _, n := range candidates {

@@ -97,7 +97,7 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	if len(types.InvocationAncestorsFromContext(ctx)) == 0 {
 		ctx = types.WithInvocationAncestors(ctx, spawn.AncestorsFromEnv())
 	}
-	lopts := []lockerOption{withReportWriter(rw), writingTo(m.noticeWriter()), withCommandLine(m.commandLine)}
+	lopts := []lockerOption{withReportWriter(rw), withOutput(m.noticeWriter()), withCommandLine(m.commandLine)}
 	if gate {
 		lopts = append(lopts, asGate())
 	}
@@ -308,8 +308,8 @@ func withReportWriter(w *report.Writer) lockerOption {
 	return func(l *projectLocker) { l.rw = w }
 }
 
-// writingTo sends the lock's decision lines to w.
-func writingTo(w io.Writer) lockerOption { return func(l *projectLocker) { l.out = w } }
+// withOutput sends the lock's decision lines to w.
+func withOutput(w io.Writer) lockerOption { return func(l *projectLocker) { l.out = w } }
 
 // withCommandLine is the command line the locker's records name as this process's.
 func withCommandLine(args []string) lockerOption {

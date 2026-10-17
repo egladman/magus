@@ -1315,8 +1315,8 @@ final __r = resume f;`
 	})
 }
 
-// warningsOf type-checks src and returns only the non-fatal diagnostics.
-func warningsOf(t *testing.T, src string) []typeError {
+// typeWarnings type-checks src and returns only the non-fatal diagnostics.
+func typeWarnings(t *testing.T, src string) []typeError {
 	t.Helper()
 	prog, err := ParseEmbedded(src)
 	require.NoError(t, err)
@@ -1338,7 +1338,7 @@ func TestStringAccumulationWarnsInEveryLoopForm(t *testing.T) {
 		{"deep in the concat spine", `var s = ""; foreach (p in ["a"]) { s = "<" + s + p + ">"; }`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := warningsOf(t, tc.src)
+			got := typeWarnings(t, tc.src)
 			require.Len(t, got, 1)
 			assert.Equal(t, diagnostics.Code("BZZ3002"), got[0].Code)
 			assert.Equal(t, SeverityWarning, got[0].Severity, "BZZ3002 must never fail a compile")
@@ -1359,7 +1359,7 @@ func TestStringAccumulationStaysQuiet(t *testing.T) {
 		{"list append, the fix itself", `final parts: mut [str] = mut [<str>]; foreach (p in ["a"]) { parts.append(p); }`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Empty(t, warningsOf(t, tc.src))
+			assert.Empty(t, typeWarnings(t, tc.src))
 		})
 	}
 }
@@ -1368,7 +1368,7 @@ func TestStringAccumulationStaysQuiet(t *testing.T) {
 // walks function bodies ahead of the real check purely to learn types. It discards errors;
 // it must discard warnings too, or every accumulation inside a function is reported twice.
 func TestStringAccumulationReportedOnce(t *testing.T) {
-	got := warningsOf(t, `fun build(xs: [str]) > str { var s = ""; foreach (x in xs) { s = s + x; } return s; }`)
+	got := typeWarnings(t, `fun build(xs: [str]) > str { var s = ""; foreach (x in xs) { s = s + x; } return s; }`)
 	require.Len(t, got, 1, "the speculative pass must not double-report")
 }
 

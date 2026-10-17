@@ -403,12 +403,12 @@ func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 	} {
 		c, err := types.ParseLeaseRunLine(line)
 		require.NoError(t, err, line)
-		assert.True(t, bindsTo(c, att, nil), line)
+		assert.True(t, ranCheck(c, att, nil), line)
 	}
 
 	c, err := types.ParseLeaseRunLine("magus run test cmd/magus")
 	require.NoError(t, err)
-	assert.False(t, bindsTo(c, att, nil), "another project is another run")
+	assert.False(t, ranCheck(c, att, nil), "another project is another run")
 }
 
 // A script check binds to the run `magus buzz --record` stored for that script, and to no
@@ -417,10 +417,10 @@ func TestScriptCheckBindsToItsRecordedRun(t *testing.T) {
 	t.Parallel()
 
 	c := types.LeaseCheck{Script: "probes/key.buzz"}
-	assert.True(t, bindsTo(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz probes/key.buzz"}, []string{"rw"}))
-	assert.True(t, bindsTo(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz ./probes/key.buzz"}, nil), "one path spelled two ways")
-	assert.False(t, bindsTo(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz probes/other.buzz"}, nil), "another script")
-	assert.False(t, bindsTo(c, types.JobAttempt{Found: true, Project: ".", Target: "test"}, nil), "a target run")
+	assert.True(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz probes/key.buzz"}, []string{"rw"}))
+	assert.True(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz ./probes/key.buzz"}, nil), "one path spelled two ways")
+	assert.False(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz probes/other.buzz"}, nil), "another script")
+	assert.False(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "test"}, nil), "a target run")
 }
 
 // A CHARM is part of a run's identity, not a spelling of it. The store records what was
@@ -435,13 +435,13 @@ func TestCheckBindsOnCharm(t *testing.T) {
 
 	charmless, err := types.ParseLeaseRunLine("magus run generate .")
 	require.NoError(t, err)
-	assert.False(t, bindsTo(charmless, written, nil), "a written run is not evidence of a gated one")
-	assert.True(t, bindsTo(charmless, gated, nil))
+	assert.False(t, ranCheck(charmless, written, nil), "a written run is not evidence of a gated one")
+	assert.True(t, ranCheck(charmless, gated, nil))
 
 	rw, err := types.ParseLeaseRunLine("magus run generate:rw .")
 	require.NoError(t, err)
-	assert.True(t, bindsTo(rw, written, nil))
-	assert.False(t, bindsTo(rw, gated, nil), "a gated run is not evidence of a written one")
+	assert.True(t, ranCheck(rw, written, nil))
+	assert.False(t, ranCheck(rw, gated, nil), "a gated run is not evidence of a written one")
 }
 
 // A check is resolved the way `magus run` resolves it, so in a workspace whose
@@ -476,7 +476,7 @@ func TestCheckBindsUnderDefaultCharms(t *testing.T) {
 			c, err := types.ParseLeaseRunLine(tc.check)
 			require.NoError(t, err)
 			tc.att.Found = true
-			assert.Equal(t, tc.want, bindsTo(c, tc.att, defaults))
+			assert.Equal(t, tc.want, ranCheck(c, tc.att, defaults))
 		})
 	}
 }
@@ -492,12 +492,12 @@ func TestCheckOptsOutOfDefaultCharms(t *testing.T) {
 	written := types.JobAttempt{Found: true, Project: ".", Target: "generate:rw"}
 
 	optOut := types.LeaseCheck{Target: "generate", Project: ".", NoDefaultCharms: true}
-	assert.True(t, bindsTo(optOut, gated, defaults), "the --no-default-charms run")
-	assert.False(t, bindsTo(optOut, written, defaults), "a written run is not evidence of a gated one")
+	assert.True(t, ranCheck(optOut, gated, defaults), "the --no-default-charms run")
+	assert.False(t, ranCheck(optOut, written, defaults), "a written run is not evidence of a gated one")
 
 	plain := types.LeaseCheck{Target: "generate", Project: "."}
-	assert.True(t, bindsTo(plain, written, defaults), "a plain check still binds the default-charm run")
-	assert.False(t, bindsTo(plain, gated, defaults))
+	assert.True(t, ranCheck(plain, written, defaults), "a plain check still binds the default-charm run")
+	assert.False(t, ranCheck(plain, gated, defaults))
 
 	assert.Equal(t, "magus run generate . --no-default-charms", optOut.String())
 	assert.True(t, strings.HasSuffix(gateCommand(optOut), " run generate . --no-default-charms"), gateCommand(optOut))

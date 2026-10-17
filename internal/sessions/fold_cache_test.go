@@ -19,8 +19,8 @@ func agentRecord(invocation string, seq uint64, path string) Record {
 	}
 }
 
-// agentEventsOf is the oracle: ReadAll, narrowed the way ReadAgentEvents narrows.
-func agentEventsOf(t *testing.T, dir string) Fold {
+// oracleAgentEvents is the oracle: ReadAll, narrowed the way ReadAgentEvents narrows.
+func oracleAgentEvents(t *testing.T, dir string) Fold {
 	t.Helper()
 	fold := mustRead(t, dir)
 	var records []Record
@@ -46,7 +46,7 @@ func TestReadAgentEventsMatchesReadAll(t *testing.T) {
 	for range 2 { // the miss that writes the cache, then the hit that reads it
 		got, err := ReadAgentEvents(dir)
 		require.NoError(t, err)
-		assert.Equal(t, agentEventsOf(t, dir), got)
+		assert.Equal(t, oracleAgentEvents(t, dir), got)
 	}
 }
 
@@ -98,7 +98,7 @@ func TestReadAgentEventsRefoldsFromATornCache(t *testing.T) {
 
 	got, err := ReadAgentEvents(dir)
 	require.NoError(t, err)
-	assert.Equal(t, agentEventsOf(t, dir), got)
+	assert.Equal(t, oracleAgentEvents(t, dir), got)
 
 	repaired, err := os.ReadFile(cache)
 	require.NoError(t, err)
@@ -117,7 +117,7 @@ func TestReadAgentEventsForgetsAPrunedFile(t *testing.T) {
 
 	got, err := ReadAgentEvents(dir)
 	require.NoError(t, err)
-	assert.Equal(t, agentEventsOf(t, dir), got)
+	assert.Equal(t, oracleAgentEvents(t, dir), got)
 	assert.NotContains(t, readFoldCache(foldCachePath(dir, KindAgentEvent), KindAgentEvent).Files, "a"+fileExt)
 }
 
@@ -190,5 +190,5 @@ func TestReadAgentEventsUnderConcurrentReadersAndWriters(t *testing.T) {
 	got, err := ReadAgentEvents(dir)
 	require.NoError(t, err)
 	assert.Len(t, got.Records, writers*appends)
-	assert.Equal(t, agentEventsOf(t, dir), got)
+	assert.Equal(t, oracleAgentEvents(t, dir), got)
 }

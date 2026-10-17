@@ -17,7 +17,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func snapshotOf(b *MachineBudget) func(context.Context) (types.MachineSnapshot, error) {
+func snapshotReader(b *MachineBudget) func(context.Context) (types.MachineSnapshot, error) {
 	return func(context.Context) (types.MachineSnapshot, error) { return b.Snapshot(), nil }
 }
 
@@ -33,7 +33,7 @@ func TestMachineGateAwaitReturnsAtOnceWhenTheBudgetSeatsIt(t *testing.T) {
 	b.Assert(types.MachineClaim{Project: "docs", Target: "ci", MemoryMB: 4000, PID: 100})
 
 	var said []string
-	err := AwaitMachine(t.Context(), snapshotOf(b), []types.MachineClaim{{Project: ".", Target: "test", MemoryMB: 6000}},
+	err := AwaitMachine(t.Context(), snapshotReader(b), []types.MachineClaim{{Project: ".", Target: "test", MemoryMB: 6000}},
 		func(msg string) { said = append(said, msg) })
 	require.NoError(t, err)
 	assert.Empty(t, said, "a claim the budget seats now waits for nothing and says nothing")
@@ -47,7 +47,7 @@ func TestMachineGateAwaitReturnsWhenTheHolderReleases(t *testing.T) {
 	var said []string
 	done := make(chan error, 1)
 	go func() {
-		done <- AwaitMachine(t.Context(), snapshotOf(b), []types.MachineClaim{{Project: ".", Target: "test", MemoryMB: 6000}},
+		done <- AwaitMachine(t.Context(), snapshotReader(b), []types.MachineClaim{{Project: ".", Target: "test", MemoryMB: 6000}},
 			func(msg string) { said = append(said, msg) })
 	}()
 	select {
@@ -72,12 +72,12 @@ func TestMachineGateAwaitReturnsWhenTheHolderReleases(t *testing.T) {
 func TestMachineGateAwaitWeighsEachClaimOnItsOwn(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
 	claims := []types.MachineClaim{{Project: "a", Target: "test", MemoryMB: 6000}, {Project: "b", Target: "test", MemoryMB: 6000}}
-	require.NoError(t, AwaitMachine(t.Context(), snapshotOf(b), claims, nil))
+	require.NoError(t, AwaitMachine(t.Context(), snapshotReader(b), claims, nil))
 }
 
 func TestMachineGateAwaitRefusesWhatCanNeverFit(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
-	err := AwaitMachine(t.Context(), snapshotOf(b), []types.MachineClaim{{Project: ".", Target: "test", MemoryMB: 64_000}}, nil)
+	err := AwaitMachine(t.Context(), snapshotReader(b), []types.MachineClaim{{Project: ".", Target: "test", MemoryMB: 64_000}}, nil)
 	require.Error(t, err)
 	var stated interface{ ExitCode() int }
 	require.ErrorAs(t, err, &stated)
@@ -99,11 +99,11 @@ func TestMachineGateAwaitStopsWithItsContext(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
-	err := AwaitMachine(ctx, snapshotOf(b), []types.MachineClaim{{Slots: 1}}, nil)
+	err := AwaitMachine(ctx, snapshotReader(b), []types.MachineClaim{{Slots: 1}}, nil)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
-func reserveOf(b *MachineBudget) func(context.Context, types.MachineClaim, int) (types.MachineVerdict, error) {
+func reserver(b *MachineBudget) func(context.Context, types.MachineClaim, int) (types.MachineVerdict, error) {
 	return func(_ context.Context, c types.MachineClaim, reader int) (types.MachineVerdict, error) {
 		return b.Reserve(c, reader), nil
 	}
@@ -119,7 +119,7 @@ func TestMachineGateReserveHoldsTheSeatItWaitedFor(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- ReserveMachine(t.Context(), reserveOf(b), []types.MachineClaim{{Project: ".", Target: "go-test", Slots: 4}}, 500, nil)
+		done <- ReserveMachine(t.Context(), reserver(b), []types.MachineClaim{{Project: ".", Target: "go-test", Slots: 4}}, 500, nil)
 	}()
 	select {
 	case err := <-done:
@@ -149,7 +149,7 @@ func TestMachineGateReserveSeatsTheWidestClaim(t *testing.T) {
 func TestMachineGateReserveRefusesWhatCanNeverFit(t *testing.T) {
 	b, _ := testBudget(t, 0, 4)
 	liveReaders(b, 500)
-	err := ReserveMachine(t.Context(), reserveOf(b), []types.MachineClaim{{Target: "test", Slots: 8}}, 500, nil)
+	err := ReserveMachine(t.Context(), reserver(b), []types.MachineClaim{{Target: "test", Slots: 8}}, 500, nil)
 	var stated interface{ ExitCode() int }
 	require.ErrorAs(t, err, &stated)
 	assert.Equal(t, ExitCodeMachineDeclaration, stated.ExitCode())

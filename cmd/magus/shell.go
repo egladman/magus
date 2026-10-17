@@ -173,7 +173,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		if err := writeGuardVerdict(out, opts, verdict); err != nil {
 			return err
 		}
-		return enforceVerdictTo(errOut, opts, verdict)
+		return verdictExit(errOut, opts, verdict)
 	}
 
 	input, readErr := shellInput(in, fset.Args())
@@ -198,7 +198,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		if err := writeGuardVerdict(out, opts, verdict); err != nil {
 			return err
 		}
-		return enforceVerdictTo(errOut, opts, verdict)
+		return verdictExit(errOut, opts, verdict)
 	}
 	// A hook's stdout is the host's pipe; a terminal on it means someone typed this.
 	window := terminalWindow()
@@ -257,12 +257,12 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	// reading that leaves them meaning anything at all. A script asking "would this be
 	// refused" wants the status and nothing on its stdout.
 	if global.quiet || global.silent {
-		return enforceVerdictTo(io.Discard, opts, verdict)
+		return verdictExit(io.Discard, opts, verdict)
 	}
 	if err := writeGuardVerdict(out, opts, verdict); err != nil {
 		return err
 	}
-	return enforceVerdictTo(errOut, opts, verdict)
+	return verdictExit(errOut, opts, verdict)
 }
 
 // terminalWindow names the terminal window this process writes to, or "" when stdout is
@@ -665,10 +665,10 @@ const guardDenyExitCode = 2
 // one discards stderr outright, so an unconditional copy printed a kilobyte-plus
 // reason twice to an audience with a context budget.
 func enforceVerdict(opts output.Options, verdict types.GuardJudgment) error {
-	return enforceVerdictTo(os.Stderr, opts, verdict)
+	return verdictExit(os.Stderr, opts, verdict)
 }
 
-func enforceVerdictTo(errOut io.Writer, opts output.Options, verdict types.GuardJudgment) error {
+func verdictExit(errOut io.Writer, opts output.Options, verdict types.GuardJudgment) error {
 	if verdict.Decision != "deny" && verdict.Decision != "ask" {
 		return nil
 	}

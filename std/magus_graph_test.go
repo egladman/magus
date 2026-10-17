@@ -464,7 +464,7 @@ func conformanceAtAnchor() *types.ConformanceOptions {
 	return &o
 }
 
-func conformanceReportOf(t *testing.T, got map[string]any) conformanceReport {
+func decodeConformanceReport(t *testing.T, got map[string]any) conformanceReport {
 	t.Helper()
 	b, err := json.Marshal(got)
 	require.NoError(t, err)
@@ -490,7 +490,7 @@ func TestConformanceReportsRowsBesideIndexFreshness(t *testing.T) {
 
 	got, err := MagusConformance(types.WithWorkspace(t.Context(), ws))
 	require.NoError(t, err)
-	report := conformanceReportOf(t, got)
+	report := decodeConformanceReport(t, got)
 	wantReport := report
 	wantReport.Definition = types.ConformanceDefinition
 	wantReport.Indexes = []types.SymbolIndexStatus{stale} // the index verdict rides beside the rows
@@ -513,7 +513,7 @@ func TestConformanceWithoutSymbolsIsUnknownNotAPass(t *testing.T) {
 	ws := &precedentGraphs{builtGraphWorkspace: &builtGraphWorkspace{g: knowledge.NewGraph(), cacheDir: t.TempDir()}}
 	got, err := MagusConformance(types.WithWorkspace(t.Context(), ws))
 	require.NoError(t, err)
-	answer := conformanceReportOf(t, got).Answer
+	answer := decodeConformanceReport(t, got).Answer
 	wantAnswer := answer
 	wantAnswer.Verdict, wantAnswer.Reason = types.VerdictUnknown, types.ReasonSymbolIndexMissing
 	assert.Equal(t, wantAnswer, answer)

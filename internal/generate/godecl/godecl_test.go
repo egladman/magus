@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// parseSrc writes src to a temp .go file and parses it, so each test states the
+// parseSource writes src to a temp .go file and parses it, so each test states the
 // declaration it is about inline instead of sharing a fixture nobody can read
 // without scrolling.
-func parseSrc(t *testing.T, src string) *ast.File {
+func parseSource(t *testing.T, src string) *ast.File {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "in.go")
 	require.NoError(t, os.WriteFile(path, []byte(src), 0o600))
@@ -36,7 +36,7 @@ func TestTag(t *testing.T) {
 // scanner it replaces read one named function, so a flag bound in a sibling was
 // reported as nonexistent.
 func TestFlagNamesReadsEveryFunction(t *testing.T) {
-	f := parseSrc(t, `package p
+	f := parseSource(t, `package p
 
 func first() {
 	fs.Bool("dry-run", false, "")
@@ -67,7 +67,7 @@ func notAFlagSet() {
 // where the destination comes first and the name is the first STRING argument. A
 // reader taking Args[0] blindly would record the variable's name, or nothing.
 func TestFlagNamesSkipsANonStringFirstArgument(t *testing.T) {
-	f := parseSrc(t, `package p
+	f := parseSource(t, `package p
 
 import "flag"
 
@@ -94,7 +94,7 @@ func bind(fs *flag.FlagSet) {
 // on record rather than a surprise, since the alternative (type resolution) is what
 // made the three hand-rolled scanners this package replaced so unreliable.
 func TestFlagNamesFalsePositiveOnAShadowedReceiver(t *testing.T) {
-	f := parseSrc(t, `package p
+	f := parseSource(t, `package p
 
 func notAFlagSet() {
 	fs := somethingElse{}
@@ -136,7 +136,7 @@ fs.Bool("verbose",false,"")
 	require.NoError(t, err)
 	require.NotEqual(t, ugly, string(pretty), "the fixture must actually be reformatted, or this proves nothing")
 
-	before, after := parseSrc(t, ugly), parseSrc(t, string(pretty))
+	before, after := parseSource(t, ugly), parseSource(t, string(pretty))
 
 	assert.Equal(t, FlagNames(before), FlagNames(after),
 		"reformatting does not move a flag binding")
@@ -146,7 +146,7 @@ fs.Bool("verbose",false,"")
 // fs that is not a flag binder (fs.Parse, fs.PrintDefaults) must not be read as a
 // flag, or every FlagSet would report a phantom flag named after its own arguments.
 func TestFlagNamesIgnoresNonBinderCalls(t *testing.T) {
-	f := parseSrc(t, `package p
+	f := parseSource(t, `package p
 
 import "flag"
 
