@@ -417,9 +417,6 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "fmt"}}},
 			}}},
 			"markdownlint": {Command: spells.Command{Bin: "markdownlint", Args: []string{"**/*.md", "**/*.mdx"}}},
-			"prettier": {Command: spells.Command{Bin: "prettier", Args: []string{"--check", "--no-error-on-unmatched-pattern", "**/*.md", "**/*.mdx"}, Charms: map[string]spells.Charm{
-				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},
-			}}},
 			// "fix", not "rw": this op takes no paths, so under the workspace default
 			// charm every caller rewrote its whole tree. See the spell source.
 			"typos": {Command: spells.Command{Bin: "typos", Args: []string{"--format", "brief"}, Charms: map[string]spells.Charm{

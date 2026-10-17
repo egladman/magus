@@ -11,15 +11,6 @@ export fun mgs_listRequiredGlobs() > [Path] {
 fun markdownlint(target: Target) > Command {
     return Command{bin = "markdownlint", args = ["**/*.md", "**/*.mdx"]};
 }
-fun prettier(target: Target) > Command {
-    // --no-error-on-unmatched-pattern: the argv globs include **/*.mdx, but a
-    // project may have only .md files; without it prettier exits non-zero on the
-    // empty .mdx glob. The `rw` charm swaps --check for --write by anchor.
-    final args = ["--check", "--no-error-on-unmatched-pattern", "**/*.md", "**/*.mdx"];
-    return Command{bin = "prettier", args = args, charms = {
-        "rw": set(args, "--check", "--write"),
-    }};
-}
 fun dprint(target: Target) > Command {
     // The formatter half, next to markdownlint's linter half. Scope comes from
     // dprint.json (includes/excludes), not argv, so there are no globs here and no
@@ -47,7 +38,7 @@ fun typos(target: Target) > Command {
 }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {
-    return {"markdownlint": markdownlint, "prettier": prettier, "dprint": dprint, "typos": typos};
+    return {"markdownlint": markdownlint, "dprint": dprint, "typos": typos};
 }
 
 // dprint downloads its formatter plugins into its cache.

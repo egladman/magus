@@ -82,8 +82,8 @@ var spellMeta = map[string]spellInfo{
 	},
 	"markdown": {
 		dir: "markdown", language: "Markdown",
-		description: "Markdown docs spell: markdownlint and prettier for linting and formatting prose.",
-		intro:       "The `markdown` spell lints and formats Markdown. `markdownlint` enforces style, and `prettier` checks formatting; the `rw` charm turns the check into an in-place rewrite.",
+		description: "Markdown docs spell: markdownlint and dprint for linting and formatting prose.",
+		intro:       "The `markdown` spell lints and formats Markdown. `markdownlint` enforces style, and `dprint` checks formatting; the `rw` charm turns the check into an in-place rewrite.",
 		tags:        []string{"markdown", "docs", "prettier", "lint"},
 	},
 	"podman": {
