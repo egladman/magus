@@ -188,7 +188,9 @@ func (g *machineGate) releaser(id string) func() {
 // process's connection to it closes, as it does when the process dies.
 type GroupHolder interface {
 	HoldGroup(ctx context.Context, claim string, pgid int, command string) (string, error)
-	ReleaseHold(ctx context.Context, id string)
+	// ReleaseHold returns an error when the broker did not answer and may still hold the
+	// group.
+	ReleaseHold(ctx context.Context, id string) error
 }
 
 // withStepGroups returns ctx under which every process group spawn.Exec starts rides
@@ -208,17 +210,27 @@ func withStepGroups(ctx context.Context, admit MachineAdmitter, claim string) co
 // dies and its connection to the broker closes. Call release once the group's leader has
 // exited, before it is reaped: a stop after the reap could reach another group that took
 // the id.
+//
+// The hold runs on a context no sibling's failure cancels: a cancel mid-request could
+// leave a hold the broker recorded that this process never learns the id of, and so
+// never releases. It is bounded the way a release is, so a sick broker cannot stall the
+// step that started the group.
 func holdStepGroup(ctx context.Context, holder GroupHolder, claim string, pgid int, command string) (release func()) {
-	id, err := holder.HoldGroup(ctx, claim, pgid, command)
+	hctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), machineReleaseTimeout)
+	id, err := holder.HoldGroup(hctx, claim, pgid, command)
+	cancel()
 	if err != nil {
 		slog.WarnContext(ctx, fmt.Sprintf("process group %d (%s) runs unheld: if this run dies, nothing stops it", pgid, command),
 			attr.Error(err))
 		return func() {}
 	}
 	return func() {
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), machineReleaseTimeout)
+		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), machineReleaseTimeout)
 		defer cancel()
-		holder.ReleaseHold(ctx, id)
+		if err := holder.ReleaseHold(rctx, id); err != nil {
+			slog.WarnContext(ctx, fmt.Sprintf("the broker may still hold process group %d (%s), which ended", pgid, command),
+				attr.Error(err))
+		}
 	}
 }
 

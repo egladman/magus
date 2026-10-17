@@ -318,7 +318,7 @@ func TestAReleasedStepGroupIsLeftAlone(t *testing.T) {
 	require.NoError(t, err)
 	id, err := c.HoldGroup(t.Context(), v.ID, pgid, "sleep 30")
 	require.NoError(t, err)
-	c.ReleaseHold(t.Context(), id)
+	require.NoError(t, c.ReleaseHold(t.Context(), id))
 	c.Release(t.Context(), v.ID)
 	require.NoError(t, c.Close())
 

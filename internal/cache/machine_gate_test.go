@@ -178,10 +178,45 @@ func (a *groupAdmitter) HoldGroup(_ context.Context, claim string, pgid int, com
 	return "hold-" + claim, nil
 }
 
-func (a *groupAdmitter) ReleaseHold(_ context.Context, id string) {
+func (a *groupAdmitter) ReleaseHold(_ context.Context, id string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.events = append(a.events, "release "+id)
+	return nil
+}
+
+// unansweredHolder is a broker that records each hold on whatever context it was handed
+// and answers no release.
+type unansweredHolder struct {
+	holdErr     error
+	holdHasTime bool
+}
+
+func (h *unansweredHolder) HoldGroup(ctx context.Context, claim string, _ int, _ string) (string, error) {
+	h.holdErr = ctx.Err()
+	_, h.holdHasTime = ctx.Deadline()
+	return "hold-" + claim, nil
+}
+
+func (*unansweredHolder) ReleaseHold(context.Context, string) error {
+	return errors.New("connection reset")
+}
+
+// A failing sibling cancels the run's context, and a hold made on it then could be one
+// the broker records and this process never releases; the hold runs uncancelled but
+// bounded. A release the broker does not answer says the group may still be held.
+func TestHoldStepGroupOutlivesACancelledRunAndWarnsOnAnUnansweredRelease(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	holder := &unansweredHolder{}
+
+	out := captureLog(t, func() {
+		holdStepGroup(ctx, holder, "claim-1", 4242, "sleep 30")()
+	})
+	assert.NoError(t, holder.holdErr, "the hold ran on a context the cancel did not reach")
+	assert.True(t, holder.holdHasTime, "the hold is bounded")
+	assert.Contains(t, out, "the broker may still hold process group 4242 (sleep 30), which ended")
+	assert.Contains(t, out, "connection reset")
 }
 
 // A process group a step starts rides the step's own claim, and is let go before it.

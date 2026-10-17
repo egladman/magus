@@ -1606,7 +1606,9 @@ func holdWithBroker(ctx context.Context, h broker.Hold) func() {
 	return func() {
 		rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		client.ReleaseHold(rctx, id)
+		if err := client.ReleaseHold(rctx, id); err != nil {
+			slog.WarnContext(ctx, "the broker may still hold this command's process group, which ended", attr.Error(err))
+		}
 	}
 }
 

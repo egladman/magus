@@ -573,9 +573,10 @@ func (c *Client) HoldGroup(ctx context.Context, claim string, pgid int, command 
 }
 
 // ReleaseHold says the held command ended on its own. A broker that is gone already
-// released it with the connection. A release the broker does not answer is logged: the
-// broker still holds the group then, and signals it only while it is the group it held.
-func (c *Client) ReleaseHold(ctx context.Context, id string) {
+// released it with the connection, so that returns nil. An error is a release the broker
+// did not answer: it still holds the group then, and signals it only while it is the
+// group it held.
+func (c *Client) ReleaseHold(ctx context.Context, id string) error {
 	remote := id
 	c.mu.Lock()
 	if r, ok := c.riders[id]; ok {
@@ -585,11 +586,12 @@ func (c *Client) ReleaseHold(ctx context.Context, id string) {
 	c.mu.Unlock()
 	cn := c.live()
 	if cn == nil || remote == "" {
-		return
+		return nil
 	}
 	if err := cn.roundTrip(ctx, c.next(), typeHoldRelease, holdReleaseRequest{ID: remote}, typeHoldReply, nil, nil); err != nil {
-		slog.WarnContext(ctx, "the broker may still hold a process group that ended", slog.String("hold", id), attr.Error(err))
+		return fmt.Errorf("broker: release hold %s: %w", id, err)
 	}
+	return nil
 }
 
 // Work is what runs against the broker, by owner, and what it stopped lately.

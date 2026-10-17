@@ -118,7 +118,7 @@ func TestAReleasedHoldIsLeftAlone(t *testing.T) {
 	id, err := c.Hold(t.Context(), Hold{PGID: cmd.Process.Pid, Command: "sleep 600", Deadline: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
 	require.Len(t, holders(t, addr), 1, "its slots count against the budget")
-	c.ReleaseHold(t.Context(), id)
+	require.NoError(t, c.ReleaseHold(t.Context(), id))
 	require.NoError(t, c.Close())
 
 	assert.Eventually(t, func() bool { return len(holders(t, addr)) == 0 }, 2*time.Second, 10*time.Millisecond)
