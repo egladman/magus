@@ -2,7 +2,7 @@
 title: markdown spell
 generated_from: spells/markdown/spell.buzz
 description: "Markdown docs spell: markdownlint and dprint for linting and formatting prose."
-tags: [markdown, spell, docs, prettier, lint, tools]
+tags: [markdown, spell, docs, lint, tools]
 ---
 
 # markdown
