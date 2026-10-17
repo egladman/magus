@@ -74,28 +74,33 @@ func sampleRuns() []Run {
 func TestSummarizeOverall(t *testing.T) {
 	rep := Summarize(SetJudgedDev, sampleRuns())
 	third := 1.0 / 3
-	// r2 ranks b third behind an unjudged u; condensed, u goes and b is second.
-	assert.Equal(t, Metrics{
-		Queries:         3,
-		Unscorable:      1,
-		DroppedGold:     3,
-		NDCG10:          (1 + 1/math.Log2(4)) / 3,
-		CondensedNDCG10: (1 + 1/math.Log2(3)) / 3,
-		Judged10:        (1 + 2*third) / 2,
-		Recall10:        2 * third,
-		RR10:            (1 + third) / 3,
-		ZeroResult:      third,
-		Unknown:         third,
-		LatencyP50:      20 * time.Millisecond,
-		LatencyP95:      30 * time.Millisecond,
-		MeanBytes:       100,
-	}, rep.Overall)
-	assert.Nil(t, rep.Nodes, "only agent-agreement has a node-level report")
-	assert.Equal(t, []QueryScore{
-		{ID: "r1", NDCG10: 1, CondensedNDCG10: 1},
-		{ID: "r2", NDCG10: 1 / math.Log2(4), CondensedNDCG10: 1 / math.Log2(3)},
-		{ID: "r3"},
-	}, rep.Scores, "r4 has nothing relevant and no score")
+	// TestSummarizeSlices covers the per-shape slices.
+	rep.Shapes = nil
+	// r2 ranks b third behind an unjudged u; condensed, u goes and b is second. r4 has
+	// nothing relevant and no score, and only agent-agreement has a node-level report.
+	assert.Equal(t, SetReport{
+		Set: SetJudgedDev,
+		Overall: Metrics{
+			Queries:         3,
+			Unscorable:      1,
+			DroppedGold:     3,
+			NDCG10:          (1 + 1/math.Log2(4)) / 3,
+			CondensedNDCG10: (1 + 1/math.Log2(3)) / 3,
+			Judged10:        (1 + 2*third) / 2,
+			Recall10:        2 * third,
+			RR10:            (1 + third) / 3,
+			ZeroResult:      third,
+			Unknown:         third,
+			LatencyP50:      20 * time.Millisecond,
+			LatencyP95:      30 * time.Millisecond,
+			MeanBytes:       100,
+		},
+		Scores: []QueryScore{
+			{ID: "r1", NDCG10: 1, CondensedNDCG10: 1},
+			{ID: "r2", NDCG10: 1 / math.Log2(4), CondensedNDCG10: 1 / math.Log2(3)},
+			{ID: "r3"},
+		},
+	}, rep)
 }
 
 func TestSummarizeSlices(t *testing.T) {
@@ -175,9 +180,11 @@ func TestSummarizeCompare(t *testing.T) {
 	require.Len(t, cs, 4, "two metrics for each set both reports scored")
 
 	dev := cs[0]
-	assert.Equal(t, SetJudgedDev, dev.Set)
-	assert.Equal(t, "ndcg@10", dev.Metric)
-	assert.Equal(t, 8, dev.Pairs)
+	// The floats are bounded below; the whole value pins every other field.
+	assert.Equal(t, Comparison{
+		Set: SetJudgedDev, Metric: "ndcg@10", Pairs: 8,
+		Base: dev.Base, Now: dev.Now, Delta: dev.Delta, Lo: dev.Lo, Hi: dev.Hi, Effect: dev.Effect, P: dev.P, PHolm: dev.PHolm,
+	}, dev)
 	assert.InDelta(t, 0.275, dev.Delta, 1e-12)
 	assert.InDelta(t, dev.Now-dev.Base, dev.Delta, 1e-12)
 	// Every difference is positive: of the 2^8 sign patterns only the observed one and
@@ -198,8 +205,10 @@ func TestSummarizeCompareClustersBySession(t *testing.T) {
 	base := Report{Sets: []SetReport{{Set: SetAgentAgreement, Scores: scores(session, 0, 0, 0, 0, 0, 0)}}}
 	now := Report{Sets: []SetReport{{Set: SetAgentAgreement, Scores: scores(session, 1, 1, 1, 1, 1, 0.4)}}}
 	c := Compare(base, now)[0]
-	assert.Equal(t, 6, c.Pairs)
-	assert.Equal(t, 2, c.Sessions)
+	assert.Equal(t, Comparison{
+		Set: SetAgentAgreement, Metric: "ndcg@10", Pairs: 6, Sessions: 2,
+		Base: c.Base, Now: c.Now, Delta: c.Delta, Lo: c.Lo, Hi: c.Hi, Effect: c.Effect, P: c.P, PHolm: c.PHolm,
+	}, c)
 	// Two sessions give four equally likely sign patterns, two of which reach |sum|.
 	assert.InDelta(t, 0.5, c.P, 0.01)
 	assert.InDelta(t, 0.9, c.Delta, 1e-12)
