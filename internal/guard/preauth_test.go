@@ -404,7 +404,10 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 func loadingWorkspace(t *testing.T) Dependencies {
 	t.Helper()
 	const output = "cmd/magus/gen/*.go"
-	root := &types.Project{Path: ".", TargetOutputs: map[string][]types.OutputRef{"generate": {{Glob: output}}}}
+	root := &types.Project{
+		Path: ".", MagusfileTargets: []string{"generate"},
+		TargetOutputs: map[string][]types.OutputRef{"generate": {{Glob: output}}},
+	}
 	ws := typestest.NewMockWorkspaceRepository(t)
 	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return([]types.FileEntry{{
 		Path: "cmd/magus/gen/flags.go", Project: ".", Role: "output",
