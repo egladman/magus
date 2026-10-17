@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/textrank"
 )
@@ -384,64 +385,131 @@ func TestSearchRecall(t *testing.T) {
 	}
 }
 
-// fileIndex writes ix to a file and reads it back, so Search reads rows with pread.
-func fileIndex(b *testing.B, c docSet, ix *Index) *Index {
+// TestSearchShardedMatchesSingle checks that an exact search split across shards
+// returns the hits of one shard byte for byte, over 10k random queries, every shard
+// count from 1 to 16, and duplicated docs so ties fall across shard boundaries.
+func TestSearchShardedMatchesSingle(t *testing.T) {
+	c := newDocSet(500, 1500, 0, 64)
+	docs := slices.Concat(c.docs, c.docs[:500])
+	ix := NewIndex(c.table, docs)
+	rng := rand.New(rand.NewPCG(5, 6))
+	allow := make([]uint64, (ix.Len()+63)/64)
+	for doc := range ix.Len() {
+		if rng.Uint64()%4 != 0 {
+			allow[doc/64] |= 1 << (doc % 64)
+		}
+	}
+	q := make([]int8, 64)
+	for i := range 10000 {
+		for j := range q {
+			q[j] = int8(rng.Uint64()%255) - 127
+		}
+		depth := 1 + int(rng.Uint64()%120)
+		var a []uint64
+		if i%2 == 1 {
+			a = allow
+		}
+		want := ix.exact(q, a, depth, 1)
+		if got := ix.exact(q, a, depth, 2+i%15); !slices.Equal(got, want) {
+			t.Fatalf("query %d, depth %d, %d shards: hits = %v\nwant %v", i, depth, 2+i%15, got, want)
+		}
+	}
+}
+
+// benchDocSet is the size design gate 4 names: 100k docs of 256 dims, with 1000
+// queries so a p95 reads a tail of 50.
+var benchDocSet = sync.OnceValues(func() (docSet, *Index) {
+	c := newDocSet(29000, 100000, 1000, 256)
+	return c, NewIndex(c.table, c.docs)
+})
+
+// indexFile writes ix to a file and returns its path.
+func indexFile(b *testing.B, ix *Index) string {
 	b.Helper()
 	path := filepath.Join(b.TempDir(), "vectors.idx")
 	if err := os.WriteFile(path, writeIndex(b, ix), 0o600); err != nil {
 		b.Fatal(err)
 	}
+	return path
+}
+
+// openIndex reads the index at path, so Search reads rows with pread, and the caller
+// closes the returned file.
+func openIndex(b *testing.B, path string, t *Table) (*Index, *os.File) {
 	f, err := os.Open(path)
 	if err != nil {
 		b.Fatal(err)
 	}
-	b.Cleanup(func() { f.Close() })
 	info, err := f.Stat()
 	if err != nil {
 		b.Fatal(err)
 	}
-	back, err := ReadIndex(f, info.Size(), c.table)
+	ix, err := ReadIndex(f, info.Size(), t)
 	if err != nil {
 		b.Fatal(err)
 	}
-	return back
+	return ix, f
 }
 
-// BenchmarkSearch runs the big doc set's queries in turn: about 96k docs of 256 dims,
-// rows in memory and in a file in the page cache.
-func BenchmarkSearch(b *testing.B) {
-	c, mem := bigDocSet()
-	file := fileIndex(b, c, mem)
+// loopLatency runs one call per iteration, the queries in turn, and reports the
+// 95th percentile of the calls' wall times as p95-ns.
+func loopLatency(b *testing.B, queries []Vector, call func(Vector)) {
+	b.ReportAllocs()
+	var took []time.Duration
+	i := 0
+	for b.Loop() {
+		start := time.Now()
+		call(queries[i%len(queries)])
+		took = append(took, time.Since(start))
+		i++
+	}
+	slices.Sort(took)
+	b.ReportMetric(float64(took[len(took)*95/100].Nanoseconds()), "p95-ns")
+}
+
+// BenchmarkSearchWarm is the warm daemon's embed stage: an index already read, rows in
+// memory or in a file in the page cache, at the 100 hits embed.depth asks for.
+func BenchmarkSearchWarm(b *testing.B) {
+	c, mem := benchDocSet()
+	file, f := openIndex(b, indexFile(b, mem), c.table)
+	b.Cleanup(func() { f.Close() })
 	for _, src := range []struct {
 		name string
 		ix   *Index
 	}{{"mem", mem}, {"file", file}} {
-		for _, tt := range []struct {
-			name string
-			opts SearchOptions
-		}{
-			{"depth10", SearchOptions{Depth: 10}},
-			{"depth100/rescore2048", SearchOptions{Depth: 100, Rescore: 2048}},
-			{"exact", SearchOptions{Depth: 10, Rescore: mem.Len()}},
-		} {
-			b.Run(src.name+"/"+tt.name, func(b *testing.B) {
-				b.ReportAllocs()
-				i := 0
-				for b.Loop() {
-					src.ix.Search(c.queries[i%len(c.queries)], tt.opts)
-					i++
-				}
-			})
-		}
+		ix := src.ix
+		b.Run(src.name+"/sign-code", func(b *testing.B) {
+			loopLatency(b, c.queries, func(q Vector) { ix.Search(q, SearchOptions{Depth: 100}) })
+		})
+		b.Run(src.name+"/exact-single", func(b *testing.B) {
+			loopLatency(b, c.queries, func(q Vector) { ix.exact(q.Q, nil, 100, 1) })
+		})
+		b.Run(src.name+"/exact-sharded", func(b *testing.B) {
+			loopLatency(b, c.queries, func(q Vector) { ix.exact(q.Q, nil, 100, ix.shards()) })
+		})
 	}
-	b.Run("scan", func(b *testing.B) {
-		b.ReportAllocs()
-		i := 0
-		for b.Loop() {
-			mem.candidates(c.queries[i%len(c.queries)].Q, nil, 512)
-			i++
-		}
-	})
+}
+
+// BenchmarkSearchCold is what a fresh `magus query` process adds for the index: open
+// it, ReadIndex, and one Search, with the file in the page cache.
+func BenchmarkSearchCold(b *testing.B) {
+	c, mem := benchDocSet()
+	path := indexFile(b, mem)
+	for _, tt := range []struct {
+		name string
+		opts SearchOptions
+	}{
+		{"sign-code", SearchOptions{Depth: 100}},
+		{"exact-sharded", SearchOptions{Depth: 100, Rescore: mem.Len()}},
+	} {
+		b.Run(tt.name, func(b *testing.B) {
+			loopLatency(b, c.queries, func(q Vector) {
+				ix, f := openIndex(b, path, c.table)
+				ix.Search(q, tt.opts)
+				f.Close()
+			})
+		})
+	}
 }
 
 func BenchmarkReadIndex(b *testing.B) {

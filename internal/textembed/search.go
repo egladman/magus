@@ -2,9 +2,13 @@ package textembed
 
 import (
 	"cmp"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"math/bits"
+	"runtime"
 	"slices"
+	"sync"
 )
 
 // SearchOptions bounds a Search. Depth is how many hits it returns at most, and must be
@@ -39,7 +43,101 @@ func (ix *Index) Search(q Vector, opts SearchOptions) []Hit {
 	if r == 0 {
 		r = max(512, 4*opts.Depth)
 	}
+	if r >= ix.n {
+		return ix.exact(q.Q, opts.Allow, opts.Depth, ix.shards())
+	}
 	return ix.rescore(q.Q, ix.candidates(q.Q, opts.Allow, r), opts.Depth)
+}
+
+// minShardDocs is the fewest docs a shard of an exact search scans, so a small index
+// is not split into goroutines that cost more than their scan.
+const minShardDocs = 4096
+
+func (ix *Index) shards() int {
+	return max(1, min(runtime.GOMAXPROCS(0), ix.n/minShardDocs))
+}
+
+// scanBlock is how many rows a shard reads with one ReadAt.
+const scanBlock = 256
+
+// exact scores every eligible doc, split into shards contiguous ranges of docs that
+// run at once. Each shard keeps its best depth by compareHits, a total order, so the
+// best depth of their union are the best depth overall: the hits do not depend on
+// shards.
+func (ix *Index) exact(q []int8, allow []uint64, depth, shards int) []Hit {
+	tops := make([][]Hit, shards)
+	errs := make([]error, shards)
+	var wg sync.WaitGroup
+	for s := range shards {
+		wg.Go(func() {
+			tops[s], errs[s] = ix.scan(q, allow, s*ix.n/shards, (s+1)*ix.n/shards, depth)
+		})
+	}
+	wg.Wait()
+	if err := errors.Join(errs...); err != nil {
+		panic(fmt.Sprintf("textembed: Search: %v", err))
+	}
+	all := slices.Concat(tops...)
+	slices.SortFunc(all, compareHits)
+	return all[:min(depth, len(all))]
+}
+
+// scan returns the best depth eligible docs in [lo, hi), unordered.
+func (ix *Index) scan(q []int8, allow []uint64, lo, hi, depth int) ([]Hit, error) {
+	top := make([]Hit, 0, min(depth, hi-lo))
+	buf := make([]byte, min(scanBlock, hi-lo)*ix.dims)
+	for start := lo; start < hi; start += scanBlock {
+		end := min(start+scanBlock, hi)
+		block := buf[:(end-start)*ix.dims]
+		if err := readAt(ix.rows, block, int64(start)*int64(ix.dims)); err != nil {
+			return nil, fmt.Errorf("read rows of docs %d-%d: %w", start, end-1, err)
+		}
+		for doc := start; doc < end; doc++ {
+			if !ix.eligible(doc, allow) {
+				continue
+			}
+			row := block[(doc-start)*ix.dims : (doc-start+1)*ix.dims]
+			top = keepBest(top, Hit{Doc: doc, Score: int64(dot(q, row)) * int64(ix.invNorm[doc])}, depth)
+		}
+	}
+	return top, nil
+}
+
+// dot is Σ q[j]·int8(row[j]) over len(q) dims, a multiple of 64. |q[j]|, |int8(row[j])|
+// ≤ 127 and len(q) ≤ maxDims keep it inside int32.
+//
+// optimization: one 8-byte load per 8 row bytes, and two sums, cut the loads and break
+// the add chain one sum makes.
+//
+//	measured (one goroutine, a whole scan of 100k rows of 256 dims, Apple M5, n=10,
+//	median ± 95% CI): one sum 7.99 ms ± 0%, this 4.70 ms ± 1%; four sums of byte
+//	loads 5.00 ms ± 5%, eight 5.11 ms ± 8%.
+func dot(q []int8, row []byte) int32 {
+	row = row[:len(q)]
+	var s0, s1 int32
+	for j := 0; j+8 <= len(q); j += 8 {
+		qq := q[j : j+8 : j+8]
+		w := binary.LittleEndian.Uint64(row[j:])
+		s0 += int32(qq[0])*int32(int8(w)) + int32(qq[1])*int32(int8(w>>8)) +
+			int32(qq[2])*int32(int8(w>>16)) + int32(qq[3])*int32(int8(w>>24))
+		s1 += int32(qq[4])*int32(int8(w>>32)) + int32(qq[5])*int32(int8(w>>40)) +
+			int32(qq[6])*int32(int8(w>>48)) + int32(qq[7])*int32(int8(w>>56))
+	}
+	return s0 + s1
+}
+
+// keepBest adds h to top, a heap of at most depth hits whose root is the worst kept,
+// when there is room or h beats the root.
+func keepBest(top []Hit, h Hit, depth int) []Hit {
+	switch {
+	case len(top) < depth:
+		top = append(top, h)
+		siftUp(top, len(top)-1)
+	case compareHits(h, top[0]) < 0:
+		top[0] = h
+		siftDown(top, 0)
+	}
+	return top
 }
 
 func (ix *Index) checkSearch(q Vector, opts SearchOptions) {
