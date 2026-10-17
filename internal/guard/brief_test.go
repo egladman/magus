@@ -143,6 +143,7 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 	judgeWith := func(row types.Job, defaults []string) rowJudge {
 		d := deps
 		d.DefaultCharms = defaults
+		d.Spells = spellCatalog
 		judge := newRowJudge(t.Context(), d, row, location{}, lazyWorkspace(t.Context(), d, ""))
 		judge.produces = produces
 		return judge

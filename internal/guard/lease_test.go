@@ -474,7 +474,7 @@ func figuresWorkspace(t *testing.T) Dependencies {
 		},
 	}, nil).Maybe()
 	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{}, nil).Maybe()
-	docs := &types.Project{Path: "docs", TargetOutputs: map[string][]types.OutputRef{
+	docs := &types.Project{Path: "docs", MagusfileTargets: []string{"diagrams-generate", "figures-generate", "flow-generate"}, TargetOutputs: map[string][]types.OutputRef{
 		"diagrams-generate": {{Glob: "gen/figures/flow.svg"}},
 		"figures-generate":  {{Glob: "gen/figures/*.svg"}},
 		"flow-generate":     {{Glob: "figures/flow.md"}},
@@ -516,8 +516,8 @@ func composingWorkspace(t *testing.T) Dependencies {
 		Claims: []types.FileClaim{{Project: ".", Target: "go-build", Role: "output", Glob: "magus"}},
 	}}, nil).Maybe()
 	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
-	ws.EXPECT().Get(".").Return(&types.Project{Path: "."}).Maybe()
-	ws.EXPECT().Get("libs/conventions").Return(&types.Project{Path: "libs/conventions"}).Maybe()
+	ws.EXPECT().Get(".").Return(&types.Project{Path: ".", MagusfileTargets: []string{"test", "format", "lint", "go-build"}}).Maybe()
+	ws.EXPECT().Get("libs/conventions").Return(&types.Project{Path: "libs/conventions", MagusfileTargets: []string{"proofread-build"}}).Maybe()
 	return Dependencies{
 		Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil },
 		Spells:  spellCatalog,
@@ -528,8 +528,8 @@ func composingWorkspace(t *testing.T) Dependencies {
 // run of any target the check composes, through ctx.needs or a spell op, narrowed however
 // its forwarded arguments narrow it, and a dependency install. A worker refused these ran
 // `go test` raw instead. A target the check does not compose is still refused. Under
-// default_charms [rw] each slice passes as well, since none declares a write: refusing a
-// target that declares none refused every worker's `go::go-vet`.
+// default_charms [rw] each slice passes as well, since none declares a write and no op among
+// them declares rw: refusing them refused every worker's `go::go-vet`. go-fmt declares rw.
 func TestWorkerCheckOnlyLetsASliceOfTheCheckRun(t *testing.T) {
 	row := testCheckLease()
 	ctx, _ := fleetFixture(t, row)
@@ -557,7 +557,6 @@ func TestWorkerCheckOnlyLetsASliceOfTheCheckRun(t *testing.T) {
 		{"the spell-qualified op", "./magus run go::go-test . -- -run 'Lease|Gate'", false},
 		{"another op it runs", "./magus run go::go-vet .", false},
 		{"a target it needs", "./magus run format .", false},
-		{"an op that target runs", "./magus run go-fmt .", false},
 		{"a target it needs in another project", "./magus run proofread-build libs/conventions", false},
 		{"the install target", "./magus run install .", false},
 		{"the install target on every project", "./magus run install /", false},
@@ -578,6 +577,9 @@ func TestWorkerCheckOnlyLetsASliceOfTheCheckRun(t *testing.T) {
 		require.NotEmpty(t, reason, tt.name)
 		assert.Contains(t, reason.Say, "run test .`.", tt.name)
 	}
+
+	assert.Empty(t, denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run go-fmt ."), "an op a target it needs runs")
+	assert.True(t, denyWorkerCheckOnly(ctx, rw, row.ID, "./magus run go-fmt .").refused(), "go-fmt honors rw, so default rw rewrites through it")
 }
 
 // A worker never builds ./magus: the orchestrator builds one per base and places it. The
@@ -711,9 +713,6 @@ func TestWorkerCheckOnlyHoldsARewriteToTheWritePaths(t *testing.T) {
 	}{
 		{"the check rewriting past one page", "./magus run format:rw .", []string{"docs/guides/jobs.md"}, "`docs/**/*.md`"},
 		{"a step its chain reaches", "./magus run markdown-format:rw .", []string{"docs/guides/jobs.md"}, "`docs/**/*.md`"},
-		{"a formatter declaring its rewrites", "./magus run dprint:rw .", []string{"docs/**"}, "`console/**/*.md`"},
-		{"a spell-qualified formatter", "./magus run dprint::dprint:rw .", []string{"docs/**"}, "`console/**/*.md`"},
-		{"a formatter its paths cover", "./magus run dprint:rw .", []string{"console/**", "docs/**"}, ""},
 		{"a build step run alone", "./magus run markdown-build:rw .", []string{"docs/**"}, "`gen/mdtool`"},
 		{"a pattern one segment deep", "./magus run format:rw .", []string{"docs/*"}, "`docs/**/*.md`"},
 		{"a pattern under the tree", "./magus run format:rw .", []string{"docs/guides/**"}, "`docs/**/*.md`"},
@@ -754,6 +753,69 @@ func TestWorkerCheckOnlyHoldsARewriteToTheWritePaths(t *testing.T) {
 	assert.Contains(t, reason.Say, " run format /`.")
 }
 
+// TestWorkerCheckOnlyRefusesAnOpRewrite: a leased `markdown::dprint:rw .`, an op the
+// format check composes, once passed because an op declares no writes, and its rewrites
+// surfaced only as MGS3001. A spell op run on its own under the
+// rw charm, named or carried by default_charms, is refused, naming the magusfile target
+// that calls it, whose declarations are judged as before. A read-only run passes, and an
+// op nothing calls is sent to the run without the charm. A brief teaching it is refused
+// the same way.
+func TestWorkerCheckOnlyRefusesAnOpRewrite(t *testing.T) {
+	ws := formatChainWorkspace(t)
+	inspect := func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }
+	row := types.Job{
+		ID: "docs/jobs", Criteria: "document jobs", WritePaths: []string{"docs/**"},
+		Check: &types.LeaseCheck{Target: "format", Project: "."}, State: types.StateRunning, Registered: 1,
+	}
+	for _, tt := range []struct {
+		name, command string
+		defaults      []string
+		next          string // the run the refusal names; "" for a pass
+	}{
+		{"the op under its charm", "./magus run dprint:rw .", nil, "format:rw ."},
+		{"the spell-qualified op", "./magus run markdown::dprint:rw .", nil, "format:rw ."},
+		{"the op with its own arguments", "./magus run dprint:rw . -- --verbose", nil, "format:rw ."},
+		{"the op under default rw", "./magus run dprint .", []string{"rw"}, "format ."},
+		{"the op read-only", "./magus run dprint .", nil, ""},
+		{"the op with the defaults off", "./magus run dprint . --no-default-charms", []string{"rw"}, ""},
+		{"the target calling it", "./magus run format:rw .", nil, ""},
+		{"the target calling it under default rw", "./magus run format .", []string{"rw"}, ""},
+	} {
+		ctx, _ := fleetFixture(t, row)
+		reason := denyWorkerCheckOnly(ctx, Dependencies{Inspect: inspect, DefaultCharms: tt.defaults}, row.ID, tt.command)
+		if tt.next == "" {
+			assert.Empty(t, reason, tt.name)
+			continue
+		}
+		require.True(t, reason.refused(), tt.name)
+		assert.Contains(t, reason.Say, "runs a spell op under the rw charm", tt.name)
+		assert.True(t, strings.HasSuffix(reason.Say, " run "+tt.next+"`."), "%s: %s", tt.name, reason.Say)
+		assert.Contains(t, reason.Why, "`format` calls it", tt.name)
+		assert.Contains(t, reason.Why, "MGS3001", tt.name)
+	}
+
+	narrow := row
+	narrow.WritePaths = []string{"docs/guides/jobs.md"}
+	ctx, _ := fleetFixture(t, narrow)
+	reason := denyWorkerCheckOnly(ctx, Dependencies{Inspect: inspect}, narrow.ID, "./magus run format:rw .")
+	assert.Contains(t, reason.Say, "rewrites files outside lease docs/jobs's write paths", "the target calling the op is judged by its declarations")
+
+	uncalled := row
+	uncalled.Check = &types.LeaseCheck{Target: "markdown-lint", Project: "."}
+	ctx, root := fleetFixture(t, uncalled)
+	deps := Dependencies{Inspect: inspect}
+	reason = denyWorkerCheckOnly(ctx, deps, uncalled.ID, "./magus run markdown-lint:rw .")
+	require.True(t, reason.refused(), "an op the check names is held the same way")
+	assert.True(t, strings.HasSuffix(reason.Say, " run markdown-lint .`."), reason.Say)
+	assert.Contains(t, reason.Why, "No magusfile target calls it")
+
+	judge := newRowJudge(ctx, deps, row, location{workspace: root, dir: root}, lazyWorkspace(ctx, deps, root))
+	off, v, found := briefOffCheck(briefRuns("Format with `./magus run dprint:rw .`."), judge)
+	require.True(t, found, "the brief is refused as its worker's run is")
+	assert.Contains(t, briefOffCheckDeny(row, off, v), "a spell op under the rw charm")
+	assert.Contains(t, briefOffCheckWhy(row, v, nil), "Teach `magus run format:rw .` instead.")
+}
+
 // formatChainWorkspace is a root project whose format check needs markdown-format and
 // markdown-build, then libs/md's format, and calls the dprint op.
 func formatChainWorkspace(t *testing.T) *typestest.MockWorkspaceRepository {
@@ -768,15 +830,16 @@ func formatChainWorkspace(t *testing.T) *typestest.MockWorkspaceRepository {
 	}}, nil).Maybe()
 	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 	root := &types.Project{
-		Path: ".",
+		Path:             ".",
+		MagusfileTargets: []string{"format", "markdown-format", "markdown-build"},
 		TargetChains: map[string][]types.ChainStep{
 			"format": append(types.Needs("markdown-format", "markdown-build"), types.ChainStep{Project: "libs/md", Target: "format"}),
 		},
 		TargetOutputs: map[string][]types.OutputRef{"markdown-build": {{Glob: "gen/mdtool"}}},
-		TargetUpdates: map[string][]types.UpdateRef{"markdown-format": {{Glob: "docs/**/*.md"}}, "dprint": {{Glob: "console/**/*.md"}}},
+		TargetUpdates: map[string][]types.UpdateRef{"markdown-format": {{Glob: "docs/**/*.md"}}},
 	}
 	ws.EXPECT().Get(".").Return(root).Maybe()
-	ws.EXPECT().Get("libs/md").Return(&types.Project{Path: "libs/md", TargetUpdates: map[string][]types.UpdateRef{"format": {{Glob: "**/*.go"}}}}).Maybe()
+	ws.EXPECT().Get("libs/md").Return(&types.Project{Path: "libs/md", MagusfileTargets: []string{"format"}, TargetUpdates: map[string][]types.UpdateRef{"format": {{Glob: "**/*.go"}}}}).Maybe()
 	ws.EXPECT().All().Return([]*types.Project{root}).Maybe()
 	return ws
 }
@@ -789,8 +852,9 @@ func TestWorkerCheckOnlyJudgesTheDefaultCharms(t *testing.T) {
 	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{}, nil).Maybe()
 	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 	ws.EXPECT().Get("docs").Return(&types.Project{
-		Path:          "docs",
-		TargetUpdates: map[string][]types.UpdateRef{"dprint": {{Glob: "**/*.md"}}},
+		Path:             "docs",
+		MagusfileTargets: []string{"dprint"},
+		TargetUpdates:    map[string][]types.UpdateRef{"dprint": {{Glob: "**/*.md"}}},
 	}).Maybe()
 	inspect := func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }
 	row := types.Job{
@@ -872,16 +936,20 @@ func TestWorkerCheckOnlyJudgesTheCwdProject(t *testing.T) {
 		{Path: "docs", Nodes: []types.TargetGraphNode{{Name: "format", Spells: []types.TargetSpellUse{{Spell: "dprint", Ops: []string{"dprint"}}}}}},
 	}}, nil).Maybe()
 	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
-	docs := &types.Project{Path: "docs", TargetUpdates: map[string][]types.UpdateRef{"dprint": {{Glob: "**/*.md"}}}}
+	docs := &types.Project{Path: "docs", MagusfileTargets: []string{"format"}, TargetUpdates: map[string][]types.UpdateRef{"format": {{Glob: "**/*.md"}}}}
 	ws.EXPECT().Where(at.dir).Return(docs, true).Maybe()
 	ws.EXPECT().Get("docs").Return(docs).Maybe()
 	deps := Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
 
 	assert.Empty(t, denyWorkerCheckOnly(ctx, deps, row.ID, "../magus run format"), "the check, run from its project")
-	reason := denyWorkerCheckOnly(ctx, deps, row.ID, "../magus run dprint:rw")
+	reason := denyWorkerCheckOnly(ctx, deps, row.ID, "../magus run format:rw")
 	require.True(t, reason.refused())
 	assert.Contains(t, reason.Say, "rewrites files outside lease docs/jobs's write paths")
 	assert.Contains(t, reason.Why, "`docs/**/*.md`")
+
+	op := denyWorkerCheckOnly(ctx, deps, row.ID, "../magus run dprint:rw")
+	require.True(t, op.refused())
+	assert.Contains(t, op.Say, " run format:rw`.", "docs' format calls the op")
 }
 
 // TestReadOnlyKeepsWhatTheRunAsked: the run offered in place of a rewrite drops only the rw

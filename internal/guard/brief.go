@@ -334,6 +334,9 @@ func briefOffCheckDeny(row types.Job, off briefRun, v runVerdict) string {
 	case v.unchecked != nil:
 		return fmt.Sprintf("this brief tells job %s's worker to run `%s`, which could not be judged against its write paths: the workspace did not load [%s].\nThe line: %q",
 			row.ID, target, denyRuleWorkerCheckOnly, elideCommand(strings.TrimSpace(line)))
+	case v.op:
+		return fmt.Sprintf("this brief tells job %s's worker to run `%s`, a spell op under the rw charm whose writes nothing declares [%s]; fix the brief.\nThe line: %q",
+			row.ID, target, denyRuleWorkerCheckOnly, elideCommand(strings.TrimSpace(line)))
 	case len(v.outside) > 0:
 		return fmt.Sprintf("this brief tells job %s's worker to run `%s`, which rewrites files outside its write paths [%s]; fix the brief.\nThe line: %q",
 			row.ID, target, denyRuleWorkerCheckOnly, elideCommand(strings.TrimSpace(line)))
@@ -385,7 +388,7 @@ func briefOffCheck(runs []briefRun, judge rowJudge) (off briefRun, v runVerdict,
 		if r.negated || r.prose || strings.ContainsAny(r.run.target, "<>$") {
 			continue
 		}
-		if v := judge.verdict(r.run); v.unchecked != nil || !v.permitted || len(v.outside) > 0 {
+		if v := judge.verdict(r.run); v.unchecked != nil || !v.permitted || v.op || len(v.outside) > 0 {
 			return r, v, true
 		}
 	}
@@ -398,6 +401,8 @@ func briefOffCheckWhy(row types.Job, v runVerdict, defaults []string) string {
 	switch {
 	case v.unchecked != nil:
 		return fmt.Sprintf("%v.\nWithout the workspace's declarations nothing says which project the run selects or what it writes, and the worker would be refused it for the same reason.", v.unchecked)
+	case v.op:
+		return fmt.Sprintf("A spell op run on its own declares nothing it writes, so job %s's write paths cannot hold it.\nTeach `%s` instead.", row.ID, v.opNext(defaults))
 	case len(v.outside) > 0:
 		return fmt.Sprintf("Under the rw charm `%s` writes `%s`, which job %s's write paths (%s) do not cover.\n"+
 			"Narrow the brief's command to `%s`, which reports the same drift without writing it, or widen the row's write paths to cover those globs.",

@@ -406,6 +406,8 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		switch {
 		case v.unchecked != nil:
 			return uncheckedDenial(v, me, checks, deps.DefaultCharms)
+		case v.op:
+			return opRewriteDenial(v, me, deps.DefaultCharms)
 		case len(v.outside) > 0:
 			return rewriteDenial(v, me, deps.DefaultCharms)
 		case v.permitted:
@@ -456,21 +458,36 @@ type rowJudge struct {
 	// root is the workspace, and dir the directory the runs are made in.
 	root, dir string
 	workspace func() (types.WorkspaceRepository, error)
+	graph     func() (types.TargetGraphOutput, error)
 	produces  lazyProducers
 	composes  lazyProducers
 }
 
 func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at location, workspace func() (types.WorkspaceRepository, error)) rowJudge {
 	checks := rowChecks(row)
+	graph := lazyTargetGraph(ctx, workspace)
 	return rowJudge{
-		deps: deps, row: row, checks: checks, root: at.workspace, dir: at.dir, workspace: workspace,
+		deps: deps, row: row, checks: checks, root: at.workspace, dir: at.dir, workspace: workspace, graph: graph,
 		produces: sync.OnceValue(func() func(target, project string) bool {
 			return leaseProducers(ctx, workspace, row.WritePaths)
 		}),
 		composes: sync.OnceValue(func() func(target, project string) bool {
-			return checksCompose(ctx, workspace, checks)
+			return checksCompose(graph, checks)
 		}),
 	}
+}
+
+// lazyTargetGraph reads the workspace's static target graph on its first call and keeps
+// it, or the error reading it: the graph parses every magusfile, so a judgment reads it
+// once.
+func lazyTargetGraph(ctx context.Context, workspace func() (types.WorkspaceRepository, error)) func() (types.TargetGraphOutput, error) {
+	return sync.OnceValues(func() (types.TargetGraphOutput, error) {
+		ws, err := workspace()
+		if err != nil {
+			return types.TargetGraphOutput{}, err
+		}
+		return ws.TargetGraph(ctx)
+	})
 }
 
 // runVerdict is how a row's rule judges one run its worker would make.
@@ -482,6 +499,11 @@ type runVerdict struct {
 	permitted bool
 	// outside are the globs a permitted run writes past the write paths under the rw charm.
 	outside []string
+	// op is a permitted run of a spell op on its own under an rw charm the op honors: no
+	// declaration says what it writes. composers are the magusfile targets calling it in
+	// the projects the run selects.
+	op        bool
+	composers []string
 	// unchecked is why the run could not be judged: the workspace it is read against did
 	// not load.
 	unchecked error
@@ -489,7 +511,8 @@ type runVerdict struct {
 
 // verdict judges r. A permitted run under the rw charm, named on its target or carried by
 // default_charms, is held to the write paths; a target whose chain declares no write
-// passes, since nothing says what it touches.
+// passes, since nothing says what it touches. A spell op run on its own under an rw charm
+// it honors is refused: an op declares no writes, so it would always pass.
 func (j rowJudge) verdict(r targetRun) runVerdict {
 	r, err := r.fromDir(j.root, j.dir, j.workspace)
 	v := runVerdict{run: r}
@@ -504,6 +527,10 @@ func (j rowJudge) verdict(r targetRun) runVerdict {
 		ws, err := j.workspace()
 		if err != nil {
 			v.unchecked = fmt.Errorf("reading what %s writes: %w", r.target, err)
+			break
+		}
+		if r.runsOp(ws) && opHonorsRewrite(j.deps.spells(), r.target) {
+			v.op, v.composers = true, r.composers(j.graph)
 			break
 		}
 		v.outside = r.writesOutside(ws, j.row.WritePaths)
@@ -523,6 +550,43 @@ func rewriteDenial(v runVerdict, me types.Job, defaults []string) denial {
 			"`%s` reports the same drift without writing it. The checkout's integrator, "+integratorIs+", rewrites the rest after it integrates the units; name the files in your result's unresolved risks if the unit needs them.",
 			r.target, strings.Join(v.outside, "`, `"), me.ID, strings.Join(me.WritePaths, ", "), next),
 	}
+}
+
+// opRewriteDenial words the refusal of a spell op run on its own under the rw charm. It
+// names a magusfile target composing the op, whose declarations the rule judges, or the
+// run without the charm when none does.
+func opRewriteDenial(v runVerdict, me types.Job, defaults []string) denial {
+	r, next := v.run, v.opNext(defaults)
+	why := fmt.Sprintf("A rewrite is held to lease %s's write paths by what its target declares writing, and a spell op run on its own declares nothing: what `%s` rewrites is known only once MGS3001 reports it, after the write.\n", me.ID, r.target)
+	if len(v.composers) > 0 {
+		why += fmt.Sprintf("`%s` calls it in the projects the run selects, and that run is judged by its declarations.", strings.Join(v.composers, "`, `"))
+	} else {
+		why += "No magusfile target calls it in the projects the run selects. `" + next + "` reports the same drift without writing it; the checkout's integrator, " + integratorIs + ", rewrites the rest after it integrates the units."
+	}
+	return denial{
+		Say: fmt.Sprintf("magus workspace: `%s` runs a spell op under the rw charm, and no declaration says what it writes; run `%s`.", r.target, next),
+		Why: why,
+	}
+}
+
+// opNext is the run a refused op run is sent to: its first composer, with the run's
+// charms and projects, or the run without the rw charm when nothing composes it. The
+// forwarded arguments are the op's own, so a composer's run drops them.
+func (v runVerdict) opNext(defaults []string) string {
+	r := v.run
+	if len(v.composers) == 0 {
+		return r.readOnly(defaults)
+	}
+	_, t, _ := r.parse()
+	name := v.composers[0]
+	if len(t.Charms) > 0 {
+		name += ":" + strings.Join(t.Charms, ",")
+	}
+	args := append([]string{name}, r.projects...)
+	if r.noDefaultCharms {
+		args = append(args, "--no-default-charms")
+	}
+	return hint.Run.With(args...)
 }
 
 // uncheckedDenial words the refusal of a run the rule could not judge. It refuses rather
@@ -565,7 +629,7 @@ func denyWorkerRawTool(ctx context.Context, deps Dependencies, actingLease, comm
 	op := match.spell + "::" + match.operation
 	why := "A bound worker runs its work through targets, where the cache, the sandbox and the rules that hold it to its row all apply."
 	project := cmp.Or(checks[0].Project, ".")
-	if checksCompose(ctx, lazyWorkspace(ctx, deps, hookLocation(ctx, deps).workspace), checks)(op, project) {
+	if checksCompose(lazyTargetGraph(ctx, lazyWorkspace(ctx, deps, hookLocation(ctx, deps).workspace)), checks)(op, project) {
 		why += " The check composes " + op + ", so a narrower run of it passes too: `" + hint.Run.With(op, project) + "`, with the tool's own flags after `--`."
 	} else {
 		why += " If the unit needs " + op + ", name it in your result's unresolved risks."
@@ -710,6 +774,71 @@ func (r targetRun) composedByCheck(composes lazyProducers) bool {
 	}
 	composed := composes()
 	return !slices.ContainsFunc(r.selection(), func(p string) bool { return !composed(r.target, p) })
+}
+
+// runsOp reports a run of a spell op rather than a magusfile target: one naming a spell
+// other than the magusfile's, or a target the magusfile of a project it selects does not
+// export. Over every project it is an op when no project exports it.
+func (r targetRun) runsOp(ws types.WorkspaceReader) bool {
+	if spell, _ := splitSpell(r.target); spell != "" && spell != types.MagusfileSpellName {
+		return true
+	}
+	name := targetName(r.target)
+	exports := func(p *types.Project) bool { return p != nil && slices.Contains(p.MagusfileTargets, name) }
+	if slices.Contains(r.selection(), "/") {
+		return !slices.ContainsFunc(ws.All(), exports)
+	}
+	return slices.ContainsFunc(r.selection(), func(p string) bool { return !exports(ws.Get(path.Clean(p))) })
+}
+
+// opHonorsRewrite reports whether the rw charm changes target's op: a catalog op declaring
+// it, or an op the catalog does not hold, since nothing then says the charm is ignored. An
+// op declaring no rw runs its argv unpatched, so default_charms [rw] write nothing through
+// it.
+func opHonorsRewrite(catalog []*spells.Spell, target string) bool {
+	spell, _ := splitSpell(target)
+	name := targetName(target)
+	found := false
+	for _, s := range catalog {
+		if spell != "" && s.Name() != spell {
+			continue
+		}
+		if _, ok := s.Op(name); !ok {
+			continue
+		}
+		if slices.Contains(s.Charms(name), types.CharmReadWrite) {
+			return true
+		}
+		found = true
+	}
+	return !found
+}
+
+// composers are the magusfile targets, in the projects the run selects, whose body calls
+// the op the run names. A graph that cannot be read names none.
+func (r targetRun) composers(graph func() (types.TargetGraphOutput, error)) []string {
+	g, err := graph()
+	if err != nil {
+		return nil
+	}
+	op := targetName(r.target)
+	selected := r.selection()
+	var names []string
+	for _, p := range g.Projects {
+		dir := path.Clean(cmp.Or(p.Path, "."))
+		if !slices.Contains(selected, "/") && !slices.ContainsFunc(selected, func(s string) bool { return path.Clean(s) == dir }) {
+			continue
+		}
+		for _, n := range p.Nodes {
+			calls := slices.ContainsFunc(n.Spells, func(u types.TargetSpellUse) bool {
+				return slices.ContainsFunc(u.Ops, func(o string) bool { return targetName(o) == op })
+			})
+			if name := targetName(n.Name); calls && !slices.Contains(names, name) {
+				names = append(names, name)
+			}
+		}
+	}
+	return names
 }
 
 // parse splits the run's target into its spell filter and the target with its charms.
@@ -867,15 +996,10 @@ func (r targetRun) installs(deps Dependencies) bool {
 // reaches through ctx.needs, in its own project or another, and every spell op those
 // targets call, read from the workspace's static target graph. A workspace that cannot
 // be read composes nothing, which leaves each run to the check alone.
-func checksCompose(ctx context.Context, workspace func() (types.WorkspaceRepository, error), checks []types.LeaseCheck) func(target, project string) bool {
-	none := func(string, string) bool { return false }
-	ws, err := workspace()
+func checksCompose(targetGraph func() (types.TargetGraphOutput, error), checks []types.LeaseCheck) func(target, project string) bool {
+	graph, err := targetGraph()
 	if err != nil {
-		return none
-	}
-	graph, err := ws.TargetGraph(ctx)
-	if err != nil {
-		return none
+		return func(string, string) bool { return false }
 	}
 	type key struct{ target, project string }
 	nodes := map[key]types.TargetGraphNode{}
