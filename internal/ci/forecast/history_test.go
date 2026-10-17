@@ -176,7 +176,7 @@ func TestHistorySchemaLock(t *testing.T) {
 		var top entry
 		require.NoError(t, json.Unmarshal([]byte(line), &top), "unmarshal a line to a map")
 		for k := range top {
-			assert.Truef(t, allowed[k], "unexpected history line key %q — add to allowed map with a safety justification, or remove the field", k)
+			assert.Truef(t, allowed[k], "unexpected history line key %q: add to allowed map with a safety justification, or remove the field", k)
 		}
 		if w, ok := top["workspace"]; ok {
 			var keys entry
@@ -201,7 +201,7 @@ func TestHistorySchemaLock(t *testing.T) {
 	}
 	require.Len(t, workspaces, 1)
 	for k := range workspaces[0] {
-		assert.Truef(t, allowedWorkspace[k], "unexpected workspace JSON key %q — add to allowedWorkspace with a safety justification, or remove the field", k)
+		assert.Truef(t, allowedWorkspace[k], "unexpected workspace JSON key %q: add to allowedWorkspace with a safety justification, or remove the field", k)
 	}
 	require.NotEmpty(t, projects, "the fixture's stats reached the file")
 
@@ -224,7 +224,7 @@ func TestHistorySchemaLock(t *testing.T) {
 	for path, targets := range projects {
 		for target, stats := range targets {
 			for k := range stats {
-				assert.Truef(t, allowedStats[k], "unexpected Stats JSON key %q (project=%q target=%q) — add to allowedStats with a safety justification", k, path, target)
+				assert.Truef(t, allowedStats[k], "unexpected Stats JSON key %q (project=%q target=%q): add to allowedStats with a safety justification", k, path, target)
 			}
 		}
 	}
@@ -268,7 +268,7 @@ func TestHistorySchemaLock(t *testing.T) {
 			require.NoErrorf(t, json.Unmarshal(rawOutcomes, &outcomes), "unmarshal recent_outcomes (project=%q target=%q)", path, target)
 			for _, o := range outcomes {
 				for k := range o {
-					assert.Truef(t, allowedOutcome[k], "unexpected Outcome JSON key %q (project=%q target=%q) — add to allowedOutcome with a safety justification", k, path, target)
+					assert.Truef(t, allowedOutcome[k], "unexpected Outcome JSON key %q (project=%q target=%q): add to allowedOutcome with a safety justification", k, path, target)
 				}
 			}
 		}
