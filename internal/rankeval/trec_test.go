@@ -2,6 +2,7 @@ package rankeval
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"slices"
 	"strings"
@@ -96,6 +97,17 @@ func TestRankBreaksTiesByHashWhateverTheInputOrder(t *testing.T) {
 	slices.Reverse(reversed)
 	assert.Equal(t, want, Rank(reversed, len(tied)))
 	assert.Equal(t, want[:2], Rank(slices.Clone(tied), 2))
+}
+
+func TestTopMatchesRankWithTies(t *testing.T) {
+	var hits []Hit
+	for i := range 500 {
+		hits = append(hits, Hit{Doc: fmt.Sprintf("d%03d", i), Score: float64(i % 7)})
+	}
+	want := Rank(slices.Clone(hits), 40)
+	assert.Equal(t, want, Top(slices.Values(hits), 40))
+	assert.Equal(t, Rank(slices.Clone(hits), 500), Top(slices.Values(hits), 1000), "k past the end")
+	assert.Empty(t, Top(slices.Values(hits), 0))
 }
 
 func TestWilsonInterval(t *testing.T) {

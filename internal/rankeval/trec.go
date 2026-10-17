@@ -3,9 +3,11 @@ package rankeval
 import (
 	"bufio"
 	"cmp"
+	"container/heap"
 	"fmt"
 	"hash/fnv"
 	"io"
+	"iter"
 	"maps"
 	"math"
 	"slices"
@@ -97,25 +99,57 @@ func WriteRun(w io.Writer, run TRECRun) error {
 	return bw.Flush()
 }
 
-// Rank sorts hits in place by score descending, ties by the FNV-1a hash of the
-// document id and then the id itself, and returns the first k. The hash depends on
-// the id alone, so no arm and no id prefix wins ties systematically (Cabanac et al.,
-// CLEF 2010; Lin and Yang, SIGIR 2019).
-func Rank(hits []Hit, k int) []Hit {
-	keys := make(map[string]uint64, len(hits))
-	for _, h := range hits {
-		keys[h.Doc] = tieHash(h.Doc)
+// CompareHits orders a before b when its score is higher; equal scores go by the
+// FNV-1a hash of the document id, then the id itself. The hash depends on the id
+// alone, so no arm and no id prefix wins ties systematically (Cabanac et al., CLEF
+// 2010; Lin and Yang, SIGIR 2019).
+func CompareHits(a, b Hit) int {
+	if c := cmp.Compare(b.Score, a.Score); c != 0 {
+		return c
 	}
-	slices.SortFunc(hits, func(a, b Hit) int {
-		if c := cmp.Compare(b.Score, a.Score); c != 0 {
-			return c
-		}
-		if c := cmp.Compare(keys[a.Doc], keys[b.Doc]); c != 0 {
-			return c
-		}
-		return strings.Compare(a.Doc, b.Doc)
-	})
+	if c := cmp.Compare(tieHash(a.Doc), tieHash(b.Doc)); c != 0 {
+		return c
+	}
+	return strings.Compare(a.Doc, b.Doc)
+}
+
+// Rank sorts hits in place by CompareHits and returns the first k.
+func Rank(hits []Hit, k int) []Hit {
+	slices.SortFunc(hits, CompareHits)
 	return hits[:min(k, len(hits))]
+}
+
+// Top returns the first k of hits by CompareHits, in that order, holding at most k
+// hits at once, so a ranker can score a whole corpus without sorting it.
+func Top(hits iter.Seq[Hit], k int) []Hit {
+	if k < 1 {
+		return nil
+	}
+	worst := &worstFirst{}
+	for h := range hits {
+		switch {
+		case len(*worst) < k:
+			heap.Push(worst, h)
+		case CompareHits(h, (*worst)[0]) < 0:
+			(*worst)[0] = h
+			heap.Fix(worst, 0)
+		}
+	}
+	return Rank(*worst, k)
+}
+
+// worstFirst is a heap whose root is the hit CompareHits ranks last.
+type worstFirst []Hit
+
+func (w worstFirst) Len() int           { return len(w) }
+func (w worstFirst) Less(i, j int) bool { return CompareHits(w[i], w[j]) > 0 }
+func (w worstFirst) Swap(i, j int)      { w[i], w[j] = w[j], w[i] }
+func (w *worstFirst) Push(x any)        { *w = append(*w, x.(Hit)) }
+func (w *worstFirst) Pop() any {
+	old := *w
+	h := old[len(old)-1]
+	*w = old[:len(old)-1]
+	return h
 }
 
 func tieHash(doc string) uint64 {
