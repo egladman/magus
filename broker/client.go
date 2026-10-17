@@ -111,8 +111,8 @@ func NewClient(addr string, opts ...ClientOption) *Client {
 	dir, _ := os.Getwd()
 	lease := trail.SpawnFromEnv().Lease
 	c := &Client{
-		addr:  addr,
-		hello: hello{Magic: helloMagic, Protocol: ProtocolVersion, PID: os.Getpid(), Dir: dir, Argv: os.Args, Lease: lease},
+		addr:   addr,
+		hello:  hello{Magic: helloMagic, Protocol: ProtocolVersion, PID: os.Getpid(), Dir: dir, Argv: os.Args, Lease: lease},
 		held:   map[string]*heldClaim{},
 		riders: map[string]*heldRider{},
 		done:   make(chan struct{}),
