@@ -213,7 +213,7 @@ func TestHoldStepGroupOutlivesACancelledRunAndWarnsOnAnUnansweredRelease(t *test
 	out := captureLog(t, func() {
 		holdStepGroup(ctx, holder, "claim-1", 4242, "sleep 30")()
 	})
-	assert.NoError(t, holder.holdErr, "the hold ran on a context the cancel did not reach")
+	require.NoError(t, holder.holdErr, "the hold ran on a context the cancel did not reach")
 	assert.True(t, holder.holdHasTime, "the hold is bounded")
 	assert.Contains(t, out, "the broker may still hold process group 4242 (sleep 30), which ended")
 	assert.Contains(t, out, "connection reset")

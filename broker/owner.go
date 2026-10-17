@@ -589,7 +589,7 @@ func (c *Client) ReleaseHold(ctx context.Context, id string) error {
 		return nil
 	}
 	if err := cn.roundTrip(ctx, c.next(), typeHoldRelease, holdReleaseRequest{ID: remote}, typeHoldReply, nil, nil); err != nil {
-		return fmt.Errorf("broker: release hold %s: %w", id, err)
+		return fmt.Errorf("release hold %s: %w", id, err)
 	}
 	return nil
 }
