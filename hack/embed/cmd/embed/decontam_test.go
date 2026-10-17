@@ -40,9 +40,9 @@ func TestDecontamDropsAPlantedThirteenGram(t *testing.T) {
 	require.Equal(t, map[string]int{"cornstack": 2, "repo": 4}, d.report.Scanned)
 	require.Equal(t, map[string]int{"cornstack": 1, "repo": 2}, d.report.Dropped)
 	require.Equal(t, map[string]int{
-		"cornstack/ngram/csn-go":       1,
-		"repo/ngram/commit-subjects":   1,
-		"repo/exact/commit-subjects":   1,
+		"cornstack/ngram/csn-go":     1,
+		"repo/ngram/commit-subjects": 1,
+		"repo/exact/commit-subjects": 1,
 	}, d.report.DroppedBy)
 	require.Equal(t, []droppedText{
 		{ID: "row:1", Kind: "cornstack", Reason: "ngram", Sets: []string{"csn-go"}},

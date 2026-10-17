@@ -177,4 +177,3 @@ func WilsonInterval(successes, n int) (lo, hi float64) {
 	half := z / (1 + z*z/nf) * math.Sqrt(p*(1-p)/nf+z*z/(4*nf*nf))
 	return max(0, center-half), min(1, center+half)
 }
-

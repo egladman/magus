@@ -46,17 +46,17 @@ type decontaminator struct {
 
 // decontamReport is what a texts run records about decontamination in runs.jsonl.
 type decontamReport struct {
-	GramWords    int            `json:"gram_words"`
-	MinGramWords int            `json:"min_gram_words"`
-	Common       int            `json:"common"`
-	EvalTexts    map[string]int `json:"eval_texts"`
+	GramWords    int               `json:"gram_words"`
+	MinGramWords int               `json:"min_gram_words"`
+	Common       int               `json:"common"`
+	EvalTexts    map[string]int    `json:"eval_texts"`
 	EvalSHA256   map[string]string `json:"eval_sha256,omitempty"`
-	LeftOut      []string       `json:"left_out"`
-	Grams        int            `json:"grams"`
-	CommonGrams  int            `json:"common_grams"`
-	Scanned      map[string]int `json:"scanned"`
-	Dropped      map[string]int `json:"dropped"`
-	DroppedBy    map[string]int `json:"dropped_by"`
+	LeftOut      []string          `json:"left_out"`
+	Grams        int               `json:"grams"`
+	CommonGrams  int               `json:"common_grams"`
+	Scanned      map[string]int    `json:"scanned"`
+	Dropped      map[string]int    `json:"dropped"`
+	DroppedBy    map[string]int    `json:"dropped_by"`
 }
 
 // droppedText is one line of dropped.jsonl: a training text decontamination removed, why,
