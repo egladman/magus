@@ -324,21 +324,33 @@ export fun bootstrap(root: str, job: str, source: str) > Row !> any {
     // harness before job exec takes the lease.
     magusAt(local, root: root, args: ["agent", "harness", "install"]);
     std\print("refreshed the wired harness skills");
-    final took = magusAt(local, root: root, args: ["job", "exec", job]);
+    return claimThenIndex(
+        fun (args: [str]) > str !> any => magusAt(local, root: root, args: args),
+        root: root,
+        job: job,
+        main: main,
+        trackedClean: fun () > bool !> any => (vcs\cmd(["diff", "HEAD", "--quiet"], opts: {"dir": root, "quiet": true, "allow_failure": true}).code) == 0,
+    );
+}
+
+// claimThenIndex takes the job's lease, refuses a row unfit for root, and only then builds the
+// graph: the lease records the base, so an edit made while the graph builds lands after it.
+// run executes a magus subcommand and returns its output.
+export fun claimThenIndex(run: fun (args: [str]) > str !> any, root: str, job: str, main: str, trackedClean: fun () > bool !> any) > Row !> any {
+    final took = run(["job", "exec", job]);
     foreach (line in took.split("\n")) {
         if (line.trim() != "") {
             std\print("  {line.trim()}");
         }
     }
-    final row = parseRow(magusAt(local, root: root, args: ["describe", "job", job, "-o", "json"]));
-    final trackedClean = (vcs\cmd(["diff", "HEAD", "--quiet"], opts: {"dir": root, "quiet": true, "allow_failure": true}).code) == 0;
+    final row = parseRow(run(["describe", "job", job, "-o", "json"]));
     try {
-        checkFit(row, root: root, main: main, trackedClean: trackedClean);
+        checkFit(row, root: root, main: main, trackedClean: trackedClean());
     } catch (e: str) {
         throw "bootstrap-worktree: REFUSED, job {job} is not fit to work here:\n  {e}";
     }
     try {
-        magusAt(local, root: root, args: ["graph", "build", "--silent"]);
+        run(["graph", "build", "--silent"]);
         std\print("built the graph");
     } catch (e: str) {
         std\print(graphBuildFailed(e));
@@ -469,6 +481,22 @@ test "a row with no checkpoint passes and says nothing verified its base" {
     final row = Row{ id = "j", state = "declared", checkpoint = "", reportedBase = "abc", baseVerdict = "unknown", checkoutRoot = WT };
     assert\equal(fitReasons(row, root: WT, main: MAIN, trackedClean: true), want: [<str>], message: "fit");
     assert\equal(render(row, root: WT)[1], want: "base abc recorded; the row names no checkpoint, so nothing verified it", message: "note");
+}
+
+test "the lease is taken before the graph is built" {
+    final described = fs\readFile("hack/testdata/bootstrap-match.json");
+    final ran = mut [<str>];
+    claimThenIndex(
+        fun (args: [str]) > str !> any {
+            ran.append(args.join(" "));
+            return if (args[0] == "describe") described else "";
+        },
+        root: "/work/magus/.claude/worktrees/w1",
+        job: "agent-scripts",
+        main: "/work/magus",
+        trackedClean: fun () > bool !> any => true,
+    );
+    assert\equal(ran.join("|"), want: "job exec agent-scripts|describe job agent-scripts -o json|graph build --silent", message: "step order");
 }
 
 test "an ended job is refused" {
