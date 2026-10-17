@@ -1491,7 +1491,7 @@ func describeWorkspacesOutput(ctx context.Context, root string) ([]types.Workspa
 
 	entries := make([]types.WorkspaceEntry, 0, len(declared))
 	for _, wsRoot := range declared {
-		cfg, err := loadWorkspaceCfg(wsRoot)
+		cfg, err := loadWorkspaceConfig(wsRoot)
 		if err != nil {
 			return nil, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
 		}

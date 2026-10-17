@@ -336,7 +336,7 @@ func TestRefuseModelTierLimitsNamesTheBoundAndTheWayOut(t *testing.T) {
 
 func tieredStore(t *testing.T, set *types.ModelTierSet, matrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error)) *Store {
 	t.Helper()
-	loc := tmpLoc(t, t.TempDir())
+	loc := tempLocation(t, t.TempDir())
 	loc.ModelTiers, loc.ModelTierMatrix = set, matrix
 	return NewStore(loc)
 }
@@ -425,7 +425,7 @@ func TestStoreKeepsTheStoredTierAgainstAWholeRowWrite(t *testing.T) {
 func TestStoreAssignsNothingWithoutTiers(t *testing.T) {
 	t.Parallel()
 
-	s := tmpStore(t, t.TempDir())
+	s := tempStore(t, t.TempDir())
 	row := lease("a")
 	row.Model = ""
 	assert.Nil(t, seed(t, s, row).ModelTier)
@@ -498,7 +498,7 @@ func TestStoreFillsTheMatrixRequestWithTheProjectsThatOwnTheWritePaths(t *testin
 
 	matrix := countingMatrix{}
 	var asked [][]string
-	loc := tmpLoc(t, t.TempDir())
+	loc := tempLocation(t, t.TempDir())
 	loc.ModelTiers, loc.ModelTierMatrix = tierSet(t), matrix.choose
 	loc.Owners = func(_ context.Context, files []string) ([]string, error) {
 		asked = append(asked, files)
@@ -523,7 +523,7 @@ func TestStoreFillsTheMatrixRequestWithTheProjectsThatOwnTheWritePaths(t *testin
 func TestStoreAsksNoOneForOwnersWithoutAMatrix(t *testing.T) {
 	t.Parallel()
 
-	loc := tmpLoc(t, t.TempDir())
+	loc := tempLocation(t, t.TempDir())
 	loc.ModelTiers = tierSet(t)
 	loc.Owners = func(context.Context, []string) ([]string, error) {
 		t.Error("Owners was asked with no matrix registered")
@@ -538,7 +538,7 @@ func TestStoreFailsAForkWhoseOwnersCannotBeFound(t *testing.T) {
 	t.Parallel()
 
 	matrix := countingMatrix{}
-	loc := tmpLoc(t, t.TempDir())
+	loc := tempLocation(t, t.TempDir())
 	loc.ModelTiers, loc.ModelTierMatrix = tierSet(t), matrix.choose
 	loc.Owners = func(context.Context, []string) ([]string, error) { return nil, errors.New("graph does not build") }
 	s := NewStore(loc)

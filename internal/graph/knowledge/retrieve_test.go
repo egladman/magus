@@ -138,7 +138,7 @@ func TestRetrieveSaysWhenTheLexicalIndexIsMissing(t *testing.T) {
 	assert.Equal(t, ShippedWeights().Digest(), ranking.Weights)
 
 	opts := shipped()
-	opts.Lexical = g.searchIdx().lexicalIndex()
+	opts.Lexical = g.ensureSearchIndex().lexicalIndex()
 	_, ranking, err = g.Retrieve("parse", opts)
 	require.NoError(t, err)
 	assert.Empty(t, ranking.Note)

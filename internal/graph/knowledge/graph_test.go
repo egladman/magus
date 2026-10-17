@@ -139,7 +139,7 @@ func buildConcurrencyFixture() *Graph {
 // scenario: one *Graph, published with no lazy indices built yet, handed to many
 // concurrent readers at once (concurrent HTTP/MCP requests hitting the SAME graph
 // right after a rebuild). ensureAdj (out/in) and the project-path index (now part of
-// searchIdx) used to build those indices behind a bare nil check, so two goroutines
+// ensureSearchIndex) used to build those indices behind a bare nil check, so two goroutines
 // racing the first query after a rebuild could write g.out/g.in and the index at the same time, a
 // concurrent map write, which is an unrecoverable Go runtime fatal (crashes the
 // whole server process), not a recoverable panic. Run with -race: before the fix

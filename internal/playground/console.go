@@ -312,7 +312,7 @@ func (s *Console) run(ctx context.Context, target string) []Line {
 	key, charms := splitCharms(target)
 	r := dry.Run(ctx, s.src, key, charms)
 	if !r.OK {
-		return []Line{{HTML: esc(diagMsg(r.Diag, "dry-run failed")), Class: "err"}}
+		return []Line{{HTML: esc(diagnosticMessage(r.Diag, "dry-run failed")), Class: "err"}}
 	}
 	var out []Line
 	if r.Output != "" {
@@ -398,7 +398,7 @@ func (s *Console) eval(ctx context.Context, src string) []Line {
 	if d := r.Diag; d != nil && d.Line > 0 {
 		where = ` <span class="muted">(line ` + strconv.Itoa(d.Line) + ":" + strconv.Itoa(d.Col) + `)</span>`
 	}
-	out = append(out, Line{HTML: esc(diagMsg(r.Diag, "error")) + where, Class: "err"})
+	out = append(out, Line{HTML: esc(diagnosticMessage(r.Diag, "error")) + where, Class: "err"})
 	return out
 }
 
@@ -428,7 +428,7 @@ func orDot(s string) string {
 	return s
 }
 
-func diagMsg(d *dry.Diag, fallback string) string {
+func diagnosticMessage(d *dry.Diag, fallback string) string {
 	if d != nil && d.Msg != "" {
 		return d.Msg
 	}

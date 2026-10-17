@@ -372,7 +372,7 @@ func TestApplyAndForkMergePlaceDerivedClaims(t *testing.T) {
 	goals := []types.Goal{{ID: "moved", Kind: types.GoalKindSymbol, Symbols: []string{"A", "Notes"}}}
 	record := types.Declaration{ID: "wave/job", WritePaths: []string{"other.go"}, Check: forkCheck(), Goals: goals}
 
-	s := NewStore(tmpLoc(t, root))
+	s := NewStore(tempLocation(t, root))
 	plan, err := Apply(t.Context(), s, []types.Declaration{record}, config.Jobs{}, read, nil, true)
 	require.NoError(t, err)
 	require.Len(t, plan, 1)
@@ -400,7 +400,7 @@ func TestApplyAndForkMergePlaceDerivedClaims(t *testing.T) {
 func TestApplyKeepsAFrozenSignature(t *testing.T) {
 	t.Parallel()
 
-	s := tmpStore(t, t.TempDir())
+	s := tempStore(t, t.TempDir())
 	record := types.Declaration{ID: "wave/job", WritePaths: []string{"api.go"}, Check: forkCheck(), Goals: []types.Goal{
 		{ID: "shape", Kind: types.GoalKindSymbol, Expect: types.ExpectSignature, Symbols: []string{"Api"}},
 	}}
@@ -515,7 +515,7 @@ func TestForkMergeHoldsANewRowToTheLimits(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	s := NewStore(tmpLoc(t, t.TempDir()))
+	s := NewStore(tempLocation(t, t.TempDir()))
 	limits := config.Jobs{MaxDepth: 1, DefaultTimeout: time.Hour}
 	merge := func(parent string) func(*types.Job) {
 		return func(u *types.Job) { u.Parent, u.State, u.ReadOnly = parent, types.StateDeclared, true }
@@ -552,7 +552,7 @@ func TestForkMergeRecomputesTheWriteProofOfMovedPaths(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	s := NewStore(tmpLoc(t, loadableRoot(t)))
+	s := NewStore(tempLocation(t, loadableRoot(t)))
 	writes := func(paths ...string) func(*types.Job) {
 		return func(u *types.Job) {
 			u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, paths
@@ -580,7 +580,7 @@ func TestForkMergeRefusesADirectoryAddedToARowThatExists(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	s := NewStore(tmpLoc(t, loadableRoot(t)))
+	s := NewStore(tempLocation(t, loadableRoot(t)))
 	_, err := ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
 		u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"internal/job/store.go"}
 	}, config.Jobs{}, nil)
@@ -601,7 +601,7 @@ func TestForkMergeRefusesAnUngradableDenyPathAddedToARowThatExists(t *testing.T)
 	t.Parallel()
 
 	ctx := t.Context()
-	s := NewStore(tmpLoc(t, testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": "package run\n"}).Root()))
+	s := NewStore(tempLocation(t, testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": "package run\n"}).Root()))
 	_, err := ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
 		u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"run.go", "notes.txt"}
 	}, config.Jobs{}, nil)
@@ -652,7 +652,7 @@ func TestUngradedProblemsHoldAWritingJobToACheckOrAGoal(t *testing.T) {
 		})
 	}
 
-	_, err := ForkMerge(t.Context(), NewStore(tmpLoc(t, t.TempDir())), "w",
+	_, err := ForkMerge(t.Context(), NewStore(tempLocation(t, t.TempDir())), "w",
 		func(u *types.Job) { u.WritePaths = []string{"a.go"} }, config.Jobs{}, nil)
 	require.ErrorContains(t, err, "declares neither a check nor a goal", "the tool's fork and job.put hold a new row to it")
 }
@@ -698,7 +698,7 @@ func appliedRow(t *testing.T, write ...string) (*Store, Location) {
 	for _, p := range write {
 		require.NoError(t, os.WriteFile(filepath.Join(root, p), []byte(p+"\n"), 0o644))
 	}
-	loc := tmpLoc(t, root)
+	loc := tempLocation(t, root)
 	s := NewStore(loc)
 	_, err := s.Update(t.Context(), "w", Declare(spec(write...), 0))
 	require.NoError(t, err)
@@ -838,7 +838,7 @@ func TestApplyRefusesStatusAnEndedJobAndAnUnboundedOne(t *testing.T) {
 func TestApplyCreatesANewJob(t *testing.T) {
 	t.Parallel()
 
-	s := NewStore(tmpLoc(t, loadableRoot(t)))
+	s := NewStore(tempLocation(t, loadableRoot(t)))
 	rec := types.Declaration{ID: "fresh", WritePaths: []string{"internal/job/store.go"}, Check: forkCheck()}
 	got, err := Apply(t.Context(), s, []types.Declaration{rec}, config.Jobs{}, nil, func() string { return "rev-1" }, false)
 	require.NoError(t, err)
@@ -895,7 +895,7 @@ func TestForkDoorsGradeAgainstTheRowsTheyRead(t *testing.T) {
 	t.Parallel()
 
 	var pinned [][]string
-	loc := tmpLoc(t, testRoot(t).Root())
+	loc := tempLocation(t, testRoot(t).Root())
 	loc.Grader = func(ctx context.Context, _ string, row types.Job) CheckVerdict {
 		snap, ok := SnapshotFromContext(ctx)
 		if !assert.True(t, ok, "%s was graded with no rows pinned", row.ID) {

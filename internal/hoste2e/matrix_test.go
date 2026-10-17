@@ -333,7 +333,7 @@ func writeReport(t *testing.T, hosts []hostReport, results []result) {
 	if magus == "" {
 		magus = repoPath(t, "magus")
 	}
-	magusVersion, _ := versionOf(magus)
+	magusVersion, _ := binaryVersion(magus)
 	report := map[string]any{
 		"generated_at":  time.Now().UTC().Format(time.RFC3339),
 		"magus":         magus,

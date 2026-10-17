@@ -71,8 +71,8 @@ func ids(groups [][]types.Change) [][]string {
 	return out
 }
 
-// idsOf names the changes vs decide, in order.
-func idsOf(vs []types.Verdict) []string {
+// changeIDs names the changes vs decide, in order.
+func changeIDs(vs []types.Verdict) []string {
 	var out []string
 	for _, v := range vs {
 		out = append(out, v.Change.ID)

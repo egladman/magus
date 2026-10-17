@@ -71,5 +71,3 @@ func (e *Events) Emit(ev Event) {
 	defer e.mu.Unlock()
 	_, _ = e.w.Write(append(line, '\n'))
 }
-
-func partitionPtr(i int) *int { return &i }

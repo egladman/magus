@@ -18,7 +18,7 @@ import (
 func TestALockWaitNamesTheHolder(t *testing.T) {
 	t.Parallel()
 
-	loc := tmpLoc(t, t.TempDir())
+	loc := tempLocation(t, t.TempDir())
 	holder, waiter := NewStore(loc), NewStore(loc)
 	taken, release := make(chan struct{}), make(chan struct{})
 	done := make(chan error)

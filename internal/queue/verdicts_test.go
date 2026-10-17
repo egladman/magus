@@ -29,14 +29,14 @@ func TestPollSeesOnlyFinishedVerdictsEachOnceAndTheDoneMarker(t *testing.T) {
 	batch, err = reader.Poll(ctx)
 	require.NoError(t, err)
 	assert.False(t, batch.Done)
-	assert.Equal(t, []string{"pr-1"}, idsOf(batch.Verdicts))
+	assert.Equal(t, []string{"pr-1"}, changeIDs(batch.Verdicts))
 
 	require.NoError(t, writer.Record(waiting("2")))
 	require.NoError(t, writer.MarkDone())
 	batch, err = reader.Poll(ctx)
 	require.NoError(t, err)
 	assert.True(t, batch.Done)
-	assert.Equal(t, []string{"2"}, idsOf(batch.Verdicts), "only what appeared since the last poll")
+	assert.Equal(t, []string{"2"}, changeIDs(batch.Verdicts), "only what appeared since the last poll")
 }
 
 func TestRecordRefusesAnIDThatEscapesTheDirectory(t *testing.T) {
@@ -58,7 +58,7 @@ func TestPollRejectsAnUnreadableVerdictForItsChangeAlone(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(path, "4", VerdictFile), []byte("{"), 0o644))
 	batch, err := (&VerdictDir{Path: path}).Poll(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, []string{"3"}, idsOf(batch.Verdicts))
+	assert.Equal(t, []string{"3"}, changeIDs(batch.Verdicts))
 	require.Len(t, batch.Rejected, 2)
 	assert.Equal(t, "2", batch.Rejected[0].Change)
 	assert.Contains(t, batch.Rejected[0].Reason, `holds the verdict on "1"`)

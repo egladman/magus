@@ -74,15 +74,15 @@ func TestCacheIncludeDefaultsOff(t *testing.T) {
 func TestCacheIncludeExplicit(t *testing.T) {
 	t.Parallel()
 	on := Cache{Include: CacheInclude{
-		OS:   CacheIncludeFlag{Enabled: boolPtr(true)},
-		Arch: CacheIncludeFlag{Enabled: boolPtr(true)},
+		OS:   CacheIncludeFlag{Enabled: new(true)},
+		Arch: CacheIncludeFlag{Enabled: new(true)},
 	}}
 	assert.True(t, on.IncludeOS())
 	assert.True(t, on.IncludeArch())
 
 	off := Cache{Include: CacheInclude{
-		OS:   CacheIncludeFlag{Enabled: boolPtr(false)},
-		Arch: CacheIncludeFlag{Enabled: boolPtr(false)},
+		OS:   CacheIncludeFlag{Enabled: new(false)},
+		Arch: CacheIncludeFlag{Enabled: new(false)},
 	}}
 	assert.False(t, off.IncludeOS())
 	assert.False(t, off.IncludeArch())

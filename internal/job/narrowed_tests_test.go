@@ -326,7 +326,7 @@ func TestForkAndApplyRefuseACheckThatLeavesOutATest(t *testing.T) {
 	narrow := goTestCheck("-run", "Alpha")
 	paths := []string{"pkg/a.go"}
 
-	s := tmpStore(t, testRoot(t).Root())
+	s := tempStore(t, testRoot(t).Root())
 	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths, u.Check = paths, narrow }, config.Jobs{}, nil)
 	require.ErrorContains(t, err, "TestBeta", "a fork by merge, the tool's put")
 
@@ -356,7 +356,7 @@ func TestForkLetsARowThatAlreadyNarrowsTakeAnUnrelatedUpdate(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	s := tmpStore(t, testRoot(t).Root())
+	s := tempStore(t, testRoot(t).Root())
 	seed(t, s, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha"), State: types.StateDeclared})
 
 	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.Model = "opus" }, config.Jobs{}, nil)
@@ -371,7 +371,7 @@ func TestForkGradesOnlyTheAddedWritePathsOfAnUpdate(t *testing.T) {
 	ctx := context.Background()
 	w := testRoot(t)
 	w.Write("other/o_test.go", "package other\n\nimport \"testing\"\n\nfunc TestOther(t *testing.T) {}\n")
-	s := tmpStore(t, w.Root())
+	s := tempStore(t, w.Root())
 	seed(t, s, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha"), State: types.StateDeclared})
 
 	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths = append(u.WritePaths, "other/o.go") }, config.Jobs{}, nil)

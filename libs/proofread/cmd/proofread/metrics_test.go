@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func metricsOf(t *testing.T, args []string, stdin string) []measured {
+func measuredRun(t *testing.T, args []string, stdin string) []measured {
 	t.Helper()
 
 	var stdout, stderr bytes.Buffer
@@ -37,7 +37,7 @@ func TestMetricsMeasuresEachFileInArgumentOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := metricsOf(t, []string{"reference", "-metrics", a, b}, "")
+	got := measuredRun(t, []string{"reference", "-metrics", a, b}, "")
 
 	if len(got) != 2 || got[0].Source != a || got[0].Words != 10 || got[0].Sentences != 2 ||
 		got[1].Source != b || got[1].Words != 3 || got[1].Syllables != 3 {
@@ -46,7 +46,7 @@ func TestMetricsMeasuresEachFileInArgumentOrder(t *testing.T) {
 }
 
 func TestMetricsMeasuresStdinAndSymbols(t *testing.T) {
-	got := metricsOf(t, []string{"review-reply", "--stdin", "-metrics"}, "The map races. It needs a lock.")
+	got := measuredRun(t, []string{"review-reply", "--stdin", "-metrics"}, "The map races. It needs a lock.")
 	if len(got) != 1 || got[0].Source != "review-reply" || got[0].Sentences != 2 || got[0].SentenceWordsMean != 3.5 {
 		t.Errorf("reply metrics = %+v", got)
 	}
@@ -57,7 +57,7 @@ func TestMetricsMeasuresStdinAndSymbols(t *testing.T) {
 
 	symbols := `[{"node":"n","source":"a.go:3","language":"go","name":"F","kind":"function","owner":"","doc":"F runs it."}]`
 
-	got = metricsOf(t, []string{"doc-comment", "--stdin", "-metrics"}, symbols)
+	got = measuredRun(t, []string{"doc-comment", "--stdin", "-metrics"}, symbols)
 	if len(got) != 1 || got[0].Source != "a.go:3" || got[0].Words != 3 {
 		t.Errorf("doc metrics = %+v", got)
 	}

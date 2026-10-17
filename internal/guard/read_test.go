@@ -129,7 +129,7 @@ func readDeps(root string) Dependencies {
 	indexed := map[string]bool{"Store": true, "Open": true, "Close": true, "helper": true}
 	return Dependencies{
 		SymbolDefined: func(name string) (bool, bool) { return indexed[name], true },
-		GraphIDs: graphOf(map[string][]string{"docsection": {
+		GraphIDs: kindLookup(map[string][]string{"docsection": {
 			"docsection:docs/a.md#alpha", "docsection:docs/a.md#beta", "docsection:docs/a.md#gamma",
 		}}),
 		scope: workspaceScope{root: root},
@@ -152,7 +152,7 @@ func TestReadNavigationDeniesWholeReads(t *testing.T) {
 	stale.GraphIDs = func(context.Context, string) ([]string, bool) { return nil, false }
 	partial := readDeps(root)
 	partial.SymbolDefined = func(name string) (bool, bool) { return name == "Open", true }
-	partial.GraphIDs = graphOf(map[string][]string{"docsection": {"docsection:docs/a.md#alpha"}})
+	partial.GraphIDs = kindLookup(map[string][]string{"docsection": {"docsection:docs/a.md#alpha"}})
 	storeMap := "What the file holds (3 declarations):\n  3-4: Store\n  6-30: Open\n  32-130: Store.Close"
 	pageMap := "What the file holds (3 headings):\n  1-3: # Alpha\n  4-130: ## Beta\n  131-132: ## Gamma"
 

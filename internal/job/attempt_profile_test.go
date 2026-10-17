@@ -39,8 +39,8 @@ func TestAttemptWorkFoldsTheHoldersCallsUpToAndAfterItsFirstWrite(t *testing.T) 
 	assert.GreaterOrEqual(t, *got.SetupMs, int64(0))
 	want := types.JobWork{
 		Calls: 4, Writes: 2, SetupCalls: 2, Denials: 1,
-		SetupContext: ptr(int64(30_000)), SetupTokens: ptr(int64(30_000)),
-		ContextTokens: ptr(int64(110_000)), PeakTokens: ptr(int64(50_000)),
+		SetupContext: new(int64(30_000)), SetupTokens: new(int64(30_000)),
+		ContextTokens: new(int64(110_000)), PeakTokens: new(int64(50_000)),
 		SetupMs: got.SetupMs,
 	}
 	assert.Equal(t, want, *got, "another lease's calls are not this holder's")
@@ -62,7 +62,7 @@ func TestAttemptWorkLeavesTheContextUnknownWhenACallReportedNone(t *testing.T) {
 	require.NotNil(t, got.SetupMs)
 	assert.Equal(t, types.JobWork{
 		Calls: 2, Writes: 1, SetupCalls: 1,
-		SetupTokens: ptr(int64(30_000)), // the first write itself reported one
+		SetupTokens: new(int64(30_000)), // the first write itself reported one
 		SetupMs:     got.SetupMs,
 	}, *got)
 }
@@ -78,7 +78,7 @@ func TestAttemptWorkOfAHolderThatNeverWroteHasNoSetupFigures(t *testing.T) {
 	require.NotNil(t, got)
 	assert.Equal(t, types.JobWork{
 		Calls: 1, SetupCalls: 1,
-		ContextTokens: ptr(int64(10_000)), PeakTokens: ptr(int64(10_000)),
+		ContextTokens: new(int64(10_000)), PeakTokens: new(int64(10_000)),
 	}, *got)
 }
 
@@ -114,11 +114,11 @@ func TestPriceAttemptIsTheContextFloorOrUnknown(t *testing.T) {
 	metered := func(tokens int64, id string) types.AgentFacts {
 		return types.AgentFacts{ContextTokens: tokens, ContextModel: id, Billing: types.AgentBillingMetered}
 	}
-	known := &types.JobWork{ContextTokens: ptr(int64(3_000_000))}
+	known := &types.JobWork{ContextTokens: new(int64(3_000_000))}
 
 	tokens, cost := s.priceAttempt(known, []types.AgentFacts{metered(1_000_000, "m"), metered(1_000_000, "m"), metered(2_000_000, "m")})
-	assert.Equal(t, ptr(int64(3_000_000)), tokens, "a repeated context is one model call")
-	assert.Equal(t, ptr(3.0), cost)
+	assert.Equal(t, new(int64(3_000_000)), tokens, "a repeated context is one model call")
+	assert.Equal(t, new(3.0), cost)
 
 	tokens, cost = s.priceAttempt(known, []types.AgentFacts{metered(1_000_000, "unpriced")})
 	assert.Nil(t, tokens, "a model the table does not know")
@@ -132,5 +132,3 @@ func TestPriceAttemptIsTheContextFloorOrUnknown(t *testing.T) {
 	assert.Nil(t, tokens, "no model table")
 	assert.Nil(t, cost)
 }
-
-func ptr[T any](v T) *T { return &v }

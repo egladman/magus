@@ -23,7 +23,7 @@ import (
 func TestRecordsSweptKeepsItsLastPass(t *testing.T) {
 	t.Parallel()
 
-	s := tmpStore(t, t.TempDir())
+	s := tempStore(t, t.TempDir())
 	path, err := s.Path()
 	require.NoError(t, err)
 	rows := []types.Job{{ID: "a"}}
@@ -106,7 +106,7 @@ func TestForkRefusesAWorkspaceLoadWritePathInASharedCheckout(t *testing.T) {
 
 	ctx := context.Background()
 	root := loadableRepo(t)
-	loc := tmpLoc(t, root)
+	loc := tempLocation(t, root)
 	s := NewStore(loc)
 	limits := config.Jobs{}
 
@@ -134,7 +134,7 @@ func TestForkRefusesAWorkspaceLoadWritePathInASharedCheckout(t *testing.T) {
 	})
 
 	t.Run("an empty checkout refuses nothing", func(t *testing.T) {
-		alone := NewStore(tmpLoc(t, root))
+		alone := NewStore(tempLocation(t, root))
 		_, err := ForkMerge(ctx, alone, "solo", func(u *types.Job) {
 			u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"magusfile.buzz"}
 		}, limits, nil)
@@ -149,7 +149,7 @@ func TestForkIntoItsOwnCheckoutJudgesThatCheckout(t *testing.T) {
 
 	ctx := context.Background()
 	root := loadableRepo(t)
-	s := NewStore(tmpLoc(t, root))
+	s := NewStore(tempLocation(t, root))
 	limits := config.Jobs{}
 
 	held, err := ForkMerge(ctx, s, "wave/worker-one", func(u *types.Job) {
@@ -188,7 +188,7 @@ func TestForkRecordsWhetherTheWritePathsWereProvenDisjoint(t *testing.T) {
 
 	ctx := context.Background()
 	root := loadableRepo(t)
-	loc := tmpLoc(t, root)
+	loc := tempLocation(t, root)
 	s := NewStore(loc)
 
 	alone, err := ForkMerge(ctx, s, "wave/first", func(u *types.Job) {
@@ -221,7 +221,7 @@ func TestForkProvesAgainstDeclaredJobsNoOneHasExecuted(t *testing.T) {
 
 	ctx := context.Background()
 	root := loadableRoot(t)
-	s := NewStore(tmpLoc(t, root))
+	s := NewStore(tempLocation(t, root))
 	fork := func(name string, paths ...string) types.Job {
 		t.Helper()
 		row, err := ForkMerge(ctx, s, name, func(u *types.Job) {
@@ -273,7 +273,7 @@ func TestForkRefusesADirectoryWritePath(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			s := NewStore(tmpLoc(t, root))
+			s := NewStore(tempLocation(t, root))
 			_, err := ForkMerge(context.Background(), s, "wave/job", func(u *types.Job) {
 				u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, tc.paths
 			}, config.Jobs{}, nil)
@@ -293,7 +293,7 @@ func TestForkRefusesADirectoryWritePath(t *testing.T) {
 
 	t.Run("an update to a row that exists is not a fork", func(t *testing.T) {
 		t.Parallel()
-		s := NewStore(tmpLoc(t, root))
+		s := NewStore(tempLocation(t, root))
 		ctx := context.Background()
 		_, err := ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
 			u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"internal/job/store.go"}
@@ -317,7 +317,7 @@ func TestSharedCheckoutRefusalIgnoresAJobThatIsOver(t *testing.T) {
 
 			ctx := context.Background()
 			root := loadableRepo(t)
-			s := NewStore(tmpLoc(t, root))
+			s := NewStore(tempLocation(t, root))
 
 			done, err := ForkMerge(ctx, s, "wave/done", func(u *types.Job) {
 				u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"magus.yaml"}
@@ -344,7 +344,7 @@ func TestSharedCheckoutRefusalNamesTheHoldersUnusedPaths(t *testing.T) {
 
 	ctx := context.Background()
 	root := loadableRepo(t)
-	s := NewStore(tmpLoc(t, root))
+	s := NewStore(tempLocation(t, root))
 	held, err := ForkMerge(ctx, s, "wave/worker-one", func(u *types.Job) {
 		u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"internal/job/store.go"}
 	}, config.Jobs{}, nil)
@@ -376,7 +376,7 @@ func TestSharedCheckoutRefusalNamesTheHoldersUnusedPaths(t *testing.T) {
 	t.Run("a dry run files no request", func(t *testing.T) {
 		t.Parallel()
 		root := loadableRepo(t)
-		s := NewStore(tmpLoc(t, root))
+		s := NewStore(tempLocation(t, root))
 		held, err := ForkMerge(ctx, s, "wave/worker-one", func(u *types.Job) {
 			u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"internal/job/store.go"}
 		}, config.Jobs{}, nil)

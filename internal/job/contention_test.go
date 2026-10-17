@@ -18,7 +18,7 @@ func TestUnusedWritePaths(t *testing.T) {
 	holderRepo := testkit.NewRepo(t, files)
 	rev := holderRepo.Head()
 	holderRepo.WriteTree(map[string]string{"run.go": strings.Replace(claimGo, "a()", "a2()", 1), "a.md": "# A2\n"})
-	s := NewStore(tmpLoc(t, root))
+	s := NewStore(tempLocation(t, root))
 
 	holder := func(paths ...string) types.Job {
 		return types.Job{ID: "A", State: types.StateRunning, WritePaths: paths, Checkpoint: rev, CheckoutRoot: holderRepo.Root()}

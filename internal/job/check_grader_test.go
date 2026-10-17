@@ -28,7 +28,7 @@ func (r *gradeRecorder) grade(_ context.Context, root string, row types.Job) Che
 func graderStore(t *testing.T, verdict CheckVerdict) (*Store, *gradeRecorder) {
 	t.Helper()
 	rec := &gradeRecorder{verdict: verdict}
-	loc := tmpLoc(t, testRoot(t).Root())
+	loc := tempLocation(t, testRoot(t).Root())
 	loc.Grader = rec.grade
 	return NewStore(loc), rec
 }
@@ -39,7 +39,7 @@ func TestStoreGradesAgainstItsOwnRoot(t *testing.T) {
 	s, rec := graderStore(t, CheckVerdict{})
 	assert.Empty(t, deniedCheckProblems(t.Context(), s, types.Job{ID: "w", Check: forkCheck()}))
 	assert.Equal(t, []string{s.root}, rec.roots)
-	assert.Nil(t, tmpStore(t, t.TempDir()).grader, "a Location that names no grader grades nothing")
+	assert.Nil(t, tempStore(t, t.TempDir()).grader, "a Location that names no grader grades nothing")
 }
 
 func TestDeniedCheckProblemsQuoteTheVerdictAndNameATargetThatCompiles(t *testing.T) {
@@ -86,7 +86,7 @@ func TestDeniedCheckProblemsAcceptWhatTheGuardLets(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, rec.graded, 2, "a changed check is")
 
-	assert.Empty(t, deniedCheckProblems(t.Context(), tmpStore(t, t.TempDir()), types.Job{ID: "w", Check: forkCheck()}), "a store with no grader finds nothing")
+	assert.Empty(t, deniedCheckProblems(t.Context(), tempStore(t, t.TempDir()), types.Job{ID: "w", Check: forkCheck()}), "a store with no grader finds nothing")
 	_, err = ForkMerge(t.Context(), s, "scout", func(u *types.Job) { u.ReadOnly = true }, config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.Len(t, rec.graded, 2, "a job with no check has nothing to grade")
@@ -97,7 +97,7 @@ func TestDeniedCheckProblemsAcceptWhatTheGuardLets(t *testing.T) {
 func humanOnlyGrader(t *testing.T) (*Store, *gradeRecorder) {
 	t.Helper()
 	rec := &gradeRecorder{}
-	loc := tmpLoc(t, testRoot(t).Root())
+	loc := tempLocation(t, testRoot(t).Root())
 	loc.Grader = func(ctx context.Context, root string, row types.Job) CheckVerdict {
 		rec.grade(ctx, root, row)
 		if row.Check.Target != "bench" {

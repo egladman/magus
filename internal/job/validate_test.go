@@ -21,7 +21,7 @@ func validateWorkspace(t *testing.T) (*Store, []*types.Project) {
 	top.TargetInputs["lint"] = []types.InputRef{{Glob: "**/*.go"}}
 	top.TargetChains = map[string][]types.ChainStep{"ci": {{Target: "lint"}, {Target: "test"}}}
 	projects[1].MagusfileTargets = []string{"content-generate", "site-generate"}
-	return NewStore(tmpLoc(t, root)).InWorkspace(Workspace{Projects: projects}), projects
+	return NewStore(tempLocation(t, root)).InWorkspace(Workspace{Projects: projects}), projects
 }
 
 func codes(ps types.JobProblems) []types.DiagnosticCode {
@@ -124,14 +124,14 @@ func TestValidateMergeNamesWhatItCouldNotCheck(t *testing.T) {
 	root, _ := regeneratedWorkspace(t)
 	merge := func(u *types.Job) { u.WritePaths, u.Check = []string{"cli/registry.go"}, forkCheck() }
 
-	v := validateMerge(t.Context(), NewStore(tmpLoc(t, root)), nil, "w", merge, config.Jobs{}, nil)
+	v := validateMerge(t.Context(), NewStore(tempLocation(t, root)), nil, "w", merge, config.Jobs{}, nil)
 	assert.Empty(t, v.Problems)
 	assert.Len(t, v.Unchecked, 4, "the target, outputs, gates and breadth checks each say they did not run")
 	for _, why := range v.Unchecked {
 		assert.Contains(t, why, "without a workspace")
 	}
 
-	unavailable := NewStore(tmpLoc(t, root)).InWorkspace(Workspace{Unavailable: "magusfile.buzz: line 3: unexpected }"})
+	unavailable := NewStore(tempLocation(t, root)).InWorkspace(Workspace{Unavailable: "magusfile.buzz: line 3: unexpected }"})
 	v = validateMerge(t.Context(), unavailable, nil, "w", merge, config.Jobs{}, nil)
 	require.Len(t, v.Unchecked, 4)
 	assert.Contains(t, v.Unchecked[0], "the workspace did not load: magusfile.buzz: line 3")

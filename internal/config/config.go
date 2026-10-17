@@ -982,8 +982,6 @@ type Report struct {
 	Filter []string `json:"filter" yaml:"filter"`
 }
 
-func boolPtr(v bool) *bool { return &v }
-
 // EnvVars documents every MAGUS_* environment variable magus reads: one per config
 // field, from the generated schema with its built-in default, then the ones no field
 // carries.
@@ -1110,9 +1108,9 @@ func Defaults() Config {
 			Threshold:        0.05,
 			AnnotateGHA:      true,
 		},
-		Hints: Hints{Enabled: boolPtr(true)},
+		Hints: Hints{Enabled: new(true)},
 		Knowledge: Knowledge{
-			VCS: KnowledgeVCSConfig{Authorship: boolPtr(true)},
+			VCS: KnowledgeVCSConfig{Authorship: new(true)},
 			// MinShared 4 is the line that mattered: at 3, identical triples of small
 			// helpers scored a perfect 1.0 and were most of the list.
 			Duplication: DuplicationConfig{MinCallees: 3, MinShared: 4, MinScore: 0.7, MinSpanRatio: 0.5},

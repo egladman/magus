@@ -39,7 +39,7 @@ func listingTree(t *testing.T) (string, Dependencies) {
 		}
 	}
 	return root, Dependencies{
-		IndexedIDs: graphOf(map[string][]string{types.KindFile: {
+		IndexedIDs: kindLookup(map[string][]string{types.KindFile: {
 			"file:internal/api/handler.go", "file:internal/api/handler_test.go", "file:internal/api/gen/x.go",
 			"file:spells/a/spell.buzz", "file:spells/b/spell.buzz", "file:internal/half/indexed.go", "file:docs/site.go",
 		}}),

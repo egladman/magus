@@ -62,8 +62,8 @@ func TestGitHookOperationHonorsTheExportedIndex(t *testing.T) {
 	ctx := t.Context()
 	gitRun(t, dir, "merge", "-q", "--no-commit", "--no-ff", "side")
 	// A second index, as git commit -a would hand the hook, with h staged in it alone.
-	index := filepath.Join(gitDirOf(t, dir), "index.settle")
-	data, err := os.ReadFile(filepath.Join(gitDirOf(t, dir), "index"))
+	index := filepath.Join(absoluteGitDir(t, dir), "index.settle")
+	data, err := os.ReadFile(filepath.Join(absoluteGitDir(t, dir), "index"))
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(index, data, 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "h"), []byte("new\n"), 0o644))
@@ -95,7 +95,7 @@ func TestSettleReadsWriteNoIndex(t *testing.T) {
 	// Same content, new stat data: a refreshing status would rewrite this entry.
 	later := time.Now().Add(time.Hour)
 	require.NoError(t, os.Chtimes(filepath.Join(dir, "f"), later, later))
-	index := filepath.Join(gitDirOf(t, dir), "index")
+	index := filepath.Join(absoluteGitDir(t, dir), "index")
 	before, err := os.ReadFile(index)
 	require.NoError(t, err)
 
@@ -146,7 +146,7 @@ func TestHookStageAfterAMergeThatDeletesAFile(t *testing.T) {
 func TestGitHookOperationAfterTheCommit(t *testing.T) {
 	dir := settleRepo(t)
 	ctx := t.Context()
-	gitDir := gitDirOf(t, dir)
+	gitDir := absoluteGitDir(t, dir)
 	touch := func(name string) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(gitDir, name)), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(gitDir, name), []byte("x\n"), 0o644))
@@ -367,7 +367,7 @@ func TestSettleHooksStartMagusOnlyToSettle(t *testing.T) {
 func TestGitHookOperationSettlesTheWholeSequence(t *testing.T) {
 	dir := settleRepo(t)
 	ctx := t.Context()
-	gitDir := gitDirOf(t, dir)
+	gitDir := absoluteGitDir(t, dir)
 	start := gitRun2(t, dir, "rev-parse", "HEAD")
 	for _, name := range []string{"p1", "p2"} {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(name+"\n"), 0o644))

@@ -85,7 +85,7 @@ func TestFetchAndVerifyIndex_Valid(t *testing.T) {
 	indexData, sigData := buildIndex(t, priv, releases)
 	srv := startIndexServer(t, indexData, sigData)
 
-	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
+	opts := Options{Keys: activeRing(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	idx, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.NoError(t, err)
 	require.Equal(t, ReleaseIndex{
@@ -105,7 +105,7 @@ func TestFetchAndVerifyIndex_BadSig(t *testing.T) {
 	badSig := ed25519.Sign(wrongPriv, indexData)
 	srv := startIndexServer(t, indexData, badSig)
 
-	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
+	opts := Options{Keys: activeRing(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	_, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "signature check failed")
@@ -128,7 +128,7 @@ func TestFetchAndVerifyIndex_Unreachable(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
+	opts := Options{Keys: activeRing(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	_, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.Error(t, err, "unreachable index must return an error, not succeed")
 	// Must not silently fall back to anything.
@@ -164,7 +164,7 @@ func TestFetchAndVerifyIndex_WrongSchemaVersion(t *testing.T) {
 	sig := ed25519.Sign(priv, data)
 	srv := startIndexServer(t, data, sig)
 
-	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
+	opts := Options{Keys: activeRing(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	_, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "schema_version")
@@ -538,7 +538,7 @@ func TestFetchAndVerifyManifestValid(t *testing.T) {
 
 	m, err := FetchAndVerifyManifest(
 		context.Background(), srv.URL+"/sums", srv.URL+"/sig",
-		Options{Keys: ringOf(pub)},
+		Options{Keys: activeRing(pub)},
 	)
 	require.NoError(t, err)
 	require.Equal(t, Manifest{
@@ -568,7 +568,7 @@ func TestFetchAndVerifyManifestBadSig(t *testing.T) {
 
 	_, err = FetchAndVerifyManifest(
 		context.Background(), srv.URL+"/sums", srv.URL+"/sig",
-		Options{Keys: ringOf(pub)},
+		Options{Keys: activeRing(pub)},
 	)
 	assert.Error(t, err, "expected signature failure")
 }
@@ -697,7 +697,7 @@ func TestDiscoveryURLOverride(t *testing.T) {
 	// Serve from a custom (non-default) server to prove the override works.
 	srv := startIndexServer(t, indexData, sigData)
 
-	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
+	opts := Options{Keys: activeRing(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	idx, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.NoError(t, err)
 	require.Len(t, idx.Releases, 1)
@@ -721,7 +721,7 @@ func TestDiscoveryURLFromEnv(t *testing.T) {
 
 	t.Setenv("MAGUS_UPDATE_URL", srv.URL+"/index.json")
 
-	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client()} // DiscoveryURL intentionally empty
+	opts := Options{Keys: activeRing(pub), HTTPClient: srv.Client()} // DiscoveryURL intentionally empty
 	idx, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.NoError(t, err)
 	assert.Equal(t, "v7.0.0", idx.Releases[0].Version)
@@ -746,7 +746,7 @@ func TestCompare_DetectsIndexDowngradeAgainstRunning(t *testing.T) {
 	indexData, sigData := buildIndex(t, priv, releases)
 	srv := startIndexServer(t, indexData, sigData)
 
-	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
+	opts := Options{Keys: activeRing(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	idx, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.NoError(t, err)
 

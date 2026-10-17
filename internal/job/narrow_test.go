@@ -60,11 +60,11 @@ func TestRefuseWholeFileConfigClaims(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			fork := NewStore(tmpLoc(t, root))
+			fork := NewStore(tempLocation(t, root))
 			_, forkErr := ForkMerge(t.Context(), fork, "wave/job", func(u *types.Job) {
 				u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, tc.paths
 			}, config.Jobs{}, nil)
-			apply := NewStore(tmpLoc(t, root))
+			apply := NewStore(tempLocation(t, root))
 			_, applyErr := Apply(t.Context(), apply, []types.Declaration{{ID: "wave/job", WritePaths: tc.paths, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
 			for door, err := range map[string]error{"fork": forkErr, "apply": applyErr} {
 				if tc.want == "" {
@@ -86,7 +86,7 @@ func TestRefuseWholeFileConfigClaims(t *testing.T) {
 
 	t.Run("an apply adding it to a live job", func(t *testing.T) {
 		t.Parallel()
-		s := NewStore(tmpLoc(t, root))
+		s := NewStore(tempLocation(t, root))
 		seed(t, s, types.Job{ID: "wave/job", State: types.StateRunning, WritePaths: []string{"notes.buzz"}, Check: forkCheck()})
 		_, err := Apply(t.Context(), s, []types.Declaration{{ID: "wave/job", WritePaths: []string{"notes.buzz", "magusfile.buzz"}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
 		require.ErrorIs(t, err, types.WritePathConfigWholeFile)
@@ -95,13 +95,13 @@ func TestRefuseWholeFileConfigClaims(t *testing.T) {
 	t.Run("a checkout that places no line of either", func(t *testing.T) {
 		t.Parallel()
 		bare := testkit.NewRepo(t, map[string]string{"magusfile.buzz": configMagusfile, "magus.yaml": "jobs:\n  stale_after: 2h\n"}).Root()
-		assert.Empty(t, wholeFileConfigClaimProblems(t.Context(), NewStore(tmpLoc(t, bare)), types.Job{ID: "wave/job", WritePaths: []string{"magusfile.buzz", "magus.yaml"}}))
+		assert.Empty(t, wholeFileConfigClaimProblems(t.Context(), NewStore(tempLocation(t, bare)), types.Job{ID: "wave/job", WritePaths: []string{"magusfile.buzz", "magus.yaml"}}))
 	})
 
 	t.Run("a magus.yaml that declares nothing yet", func(t *testing.T) {
 		t.Parallel()
 		empty := testkit.NewRepo(t, map[string]string{".gitattributes": "*.yaml diff=yaml\n", "magus.yaml": "{}\n"}).Root()
-		assert.Empty(t, wholeFileConfigClaimProblems(t.Context(), NewStore(tmpLoc(t, empty)), types.Job{ID: "wave/job", WritePaths: []string{"magus.yaml"}}))
+		assert.Empty(t, wholeFileConfigClaimProblems(t.Context(), NewStore(tempLocation(t, empty)), types.Job{ID: "wave/job", WritePaths: []string{"magus.yaml"}}))
 	})
 }
 
@@ -109,7 +109,7 @@ func TestNarrowConfigHold(t *testing.T) {
 	t.Parallel()
 
 	root := testkit.NewRepo(t, configFiles).Root()
-	loc := tmpLoc(t, root)
+	loc := tempLocation(t, root)
 	s := NewStore(loc)
 	seed(t, s, types.Job{ID: "cfg", State: types.StateRunning, WritePaths: []string{"**/*.buzz"}, Check: forkCheck()})
 	seed(t, s, types.Job{ID: "whole", State: types.StateRunning, WritePaths: []string{"libs/lib/magusfile.buzz"}, Check: forkCheck()})
@@ -161,7 +161,7 @@ func TestConfigRefusalRequestsOneRelease(t *testing.T) {
 
 	root := testkit.NewRepo(t, configFiles).Root()
 	elsewhere := testkit.NewRepo(t, configFiles)
-	s := NewStore(tmpLoc(t, root))
+	s := NewStore(tempLocation(t, root))
 	seed(t, s, types.Job{ID: "cfg", State: types.StateRunning, WritePaths: []string{"**/*.buzz"}, Checkpoint: elsewhere.Head(), CheckoutRoot: elsewhere.Root()})
 	fork := func(id string, paths ...string) error {
 		_, err := ForkMerge(t.Context(), s, id, func(u *types.Job) {

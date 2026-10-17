@@ -230,7 +230,7 @@ func graphReads(reg *wsRegistry) func(ctx context.Context, root, verb string, re
 		}
 		// Resolved per read rather than kept from the open, so the read honors magus.yaml
 		// as it is now, as the client's own read would.
-		cfg, err := loadWorkspaceCfg(root)
+		cfg, err := loadWorkspaceConfig(root)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", proc.ErrNotAdoptable, err)
 		}

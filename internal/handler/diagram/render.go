@@ -494,7 +494,7 @@ func buildFigure(g graph, desc, anchorHref string) figure.Figure {
 	names := actorNames(g.nodes)
 	actors := make(map[string]*figure.Actor, len(g.nodes))
 	for _, n := range g.nodes {
-		a := &figure.Actor{Name: names[n.ID], Link: linkTo(anchorHref, n.Anchor), Look: &plain}
+		a := &figure.Actor{Name: names[n.ID], Link: anchorLink(anchorHref, n.Anchor), Look: &plain}
 		actors[n.ID] = a
 		f.Boxes = append(f.Boxes, figure.Box{Actor: a})
 	}
@@ -524,8 +524,8 @@ func actorNames(nodes []Node) map[string]string {
 	return out
 }
 
-// linkTo fills anchorHref for an actor, which figure paints as a plain link.
-func linkTo(anchorHref, anchor string) string {
+// anchorLink fills anchorHref for an actor, which figure paints as a plain link.
+func anchorLink(anchorHref, anchor string) string {
 	if anchorHref == "" {
 		return ""
 	}

@@ -25,7 +25,7 @@ import (
 func TestLandingProbesAppendAndRewriteOnADrop(t *testing.T) {
 	t.Parallel()
 
-	s := tmpStore(t, t.TempDir())
+	s := tempStore(t, t.TempDir())
 	path, err := s.Path()
 	require.NoError(t, err)
 	probes := filepath.Join(filepath.Dir(path), landingProbesFile)
@@ -444,7 +444,7 @@ func plant(t *testing.T, s *Store, rows ...types.Job) {
 // stderr lines captured.
 func sweepStore(t *testing.T, now int64, staleAfter time.Duration) (*Store, *strings.Builder) {
 	t.Helper()
-	s := tmpStore(t, t.TempDir())
+	s := tempStore(t, t.TempDir())
 	var notices strings.Builder
 	s.clock = func() time.Time { return time.Unix(now, 0) }
 	s.staleAfter = &staleAfter
@@ -646,7 +646,7 @@ func TestListSweepIsIdempotent(t *testing.T) {
 // Exec records where the job was taken, so removing that worktree ends the job.
 func TestExecRecordsTheCheckoutAndItsRemovalEndsTheJob(t *testing.T) {
 	checkout := execRepo(t).Root()
-	s := tmpStore(t, checkout)
+	s := tempStore(t, checkout)
 	var notices strings.Builder
 	s.notices = &notices
 	seed(t, s, types.Job{ID: "w", State: types.StateDeclared, Checkpoint: "abc"})
@@ -679,7 +679,7 @@ func TestExecRecordsTheCheckoutAndItsRemovalEndsTheJob(t *testing.T) {
 // That is not the job doing anything, and moving updated for it made dead rows look alive.
 func TestUnattributedWritesLeaveUpdatedAlone(t *testing.T) {
 	root := t.TempDir()
-	s := tmpStore(t, root)
+	s := tempStore(t, root)
 	plant(t, s, types.Job{ID: "w", State: types.StateRunning, WritePaths: []string{"a.go"}, Created: 50, Updated: 50})
 
 	require.NoError(t, s.RecordUnattributedWrite(t.Context(), "w", "a.go"))
@@ -706,7 +706,7 @@ func TestSweepReadsStaleAfterFromTheWorkspace(t *testing.T) {
 			if tc.yaml != "" {
 				require.NoError(t, os.WriteFile(filepath.Join(root, config.Filename), []byte(tc.yaml), 0o644))
 			}
-			s := tmpStore(t, root)
+			s := tempStore(t, root)
 			s.notices = io.Discard
 			plant(t, s, types.Job{ID: "untaken", State: types.StateDeclared, Updated: old})
 
@@ -723,7 +723,7 @@ func TestSweepReadsStaleAfterFromTheWorkspace(t *testing.T) {
 func TestSweepRefusesAnUnreadableWorkspaceConfig(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, config.Filename), []byte("jobs:\n  stale_aftr: 1h\n"), 0o644))
-	s := tmpStore(t, root)
+	s := tempStore(t, root)
 	plant(t, s, types.Job{ID: "untaken", State: types.StateDeclared, Updated: 1})
 
 	_, err := s.List()
@@ -825,7 +825,7 @@ func TestLandedJobsEndWhenSquashedIntoOneBaseCommit(t *testing.T) {
 	squash := repo.Head()
 	repo.Git("update-ref", "refs/remotes/origin/main", squash)
 
-	s := tmpStore(t, root)
+	s := tempStore(t, root)
 	var notices strings.Builder
 	s.notices = &notices
 	exited := func(id string, wt *testkit.Repo, file string) types.Job {
@@ -869,7 +869,7 @@ func TestALandedSubsetOfTheWorkLeavesTheJobExited(t *testing.T) {
 	repo.Commit("take a.go alone", map[string]string{"a.go": "package a // landed\n"})
 	repo.Git("update-ref", "refs/remotes/origin/main", repo.Head())
 
-	s := tmpStore(t, repo.Root())
+	s := tempStore(t, repo.Root())
 	s.notices = io.Discard
 	plant(t, s, types.Job{ID: "job", State: types.StateExited, Checkpoint: seedRev, CheckoutRoot: wt.Root(),
 		WritePaths: []string{"a.go", "b.go"}, Result: &types.JobResult{ChangedPaths: []string{"a.go"}}, Updated: 1})
@@ -1049,7 +1049,7 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 				Checkpoint: cmp.Or(tc.checkpoint, checkpoint), CheckoutRoot: cmp.Or(tc.checkout, worker),
 				Goals: []types.Goal{tc.goal.Resolve()},
 			}
-			loc := tmpLoc(t, t.TempDir())
+			loc := tempLocation(t, t.TempDir())
 			plant(t, NewStore(loc), row)
 			result := types.JobResult{Schema: types.Schema{Version: types.JobResultSchemaVersion}, Job: "goal", ChangedPaths: changed}
 			if tc.run.Found {
@@ -1277,7 +1277,7 @@ func exitedWithRunsIn(t *testing.T, waiter string, row types.Job, result types.J
 		}
 	}
 	row.CheckoutRoot = holder
-	loc := tmpLoc(t, waiter)
+	loc := tempLocation(t, waiter)
 	seed(t, NewStore(loc), row)
 	_, err := Exit(t.Context(), boundStore(loc, row.ID), row.ID, &result, func(_ context.Context, ref string) (types.JobAttempt, error) {
 		return holderRuns[ref], nil

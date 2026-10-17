@@ -1529,7 +1529,7 @@ func TestTouchedSymbolsAreTheOnesThePatchChanged(t *testing.T) {
 +	d()
 +}
 `
-	head := graphOf(
+	head := newGraph(
 		rangedSymbol(goSymbol("api", ""), "api", "api.go:1", 0, "Package"),
 		rangedSymbol(goSymbol("api", "Open()."), "Open", "api.go:3", 5, "Function"),
 		rangedSymbol(goSymbol("api", "Close()."), "Close", "api.go:7", 9, "Function"),
@@ -1564,7 +1564,7 @@ const twoHunkPatch = `diff --git a/api.go b/api.go
 // that hunk changed.
 func TestDiffHunksSplitSymbolsAcrossHunks(t *testing.T) {
 	open, closeID := goSymbol("api", "Open()."), goSymbol("api", "Close().")
-	head := graphOf(
+	head := newGraph(
 		rangedSymbol(open, "Open", "api.go:3", 5, "Function"),
 		rangedSymbol(closeID, "Close", "api.go:20", 22, "Function"),
 	)

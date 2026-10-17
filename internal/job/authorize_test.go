@@ -17,7 +17,7 @@ import (
 func declared(t *testing.T, rows ...types.Job) Location {
 	t.Helper()
 
-	loc := tmpLoc(t, t.TempDir())
+	loc := tempLocation(t, t.TempDir())
 	s := NewStore(loc)
 	for _, row := range rows {
 		seed(t, s, row)
@@ -339,7 +339,7 @@ func TestUnstampedActorReadsAndWritesNothing(t *testing.T) {
 	t.Setenv(EnvStampedLease, "1")
 	// A checkout with a revision, so the exec below is refused for its caller and not for
 	// a missing base.
-	loc := tmpLoc(t, execRepo(t).Root())
+	loc := tempLocation(t, execRepo(t).Root())
 	seed(t, NewStore(loc), workerRow())
 	loc.Actor = nil
 	s := NewStore(loc)
@@ -383,7 +383,7 @@ func TestUnstampedActorReadsAndWritesNothing(t *testing.T) {
 func TestRowRecordsTheDoorThatDeclaredIt(t *testing.T) {
 	t.Parallel()
 
-	loc := tmpLoc(t, t.TempDir())
+	loc := tempLocation(t, t.TempDir())
 	cred := types.Credential{Kind: types.KindStored, ID: "3fa9c1d2", Name: "connector-1", Grant: types.GrantConnector}
 	ctx := trail.ContextWithHost(trail.ContextWithCredential(trail.ContextWithEntryPoint(t.Context(), types.EntryPointMCP), cred), "claude-code")
 	row := workerRow()
@@ -409,7 +409,7 @@ func TestUnattributedWriteIsRecordedAcrossLeases(t *testing.T) {
 
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "held.go"), []byte("package held\n"), 0o644))
-	loc := tmpLoc(t, root)
+	loc := tempLocation(t, root)
 	loc.Actor = &Actor{}
 	seed(t, NewStore(loc), types.Job{ID: "adj/other", WritePaths: []string{"held.go"}, State: types.StateRunning})
 

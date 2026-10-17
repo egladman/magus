@@ -994,7 +994,7 @@ func TestReportOfADryRunStoreCachesNothing(t *testing.T) {
 func TestRetentionPrunesFootprintsNoLiveRowNames(t *testing.T) {
 	t.Parallel()
 
-	s := tmpStore(t, t.TempDir())
+	s := tempStore(t, t.TempDir())
 	keep := time.Duration(0)
 	s.retain = &keep
 	dir := footprintsDir(s.path)

@@ -133,7 +133,7 @@ func TestRenderGoAPIMethodSetsSeparateValueFromPointerReceivers(t *testing.T) {
 
 type Base struct{}
 func (Base) FromBase() {}
-func (*Base) PtrFromBase() {}
+func (*Base) PointerFromBase() {}
 
 type Counter struct{ Base }
 func (c Counter) Get() int { return 0 }
@@ -142,13 +142,13 @@ func (c *Counter) Add(delta int) error { return nil }
 	assert.Equal(t, []string{
 		"example.com/m.Base type struct",
 		"example.com/m.Base.FromBase method func()",
-		"example.com/m.Base.PtrFromBase method(ptr) func()",
+		"example.com/m.Base.PointerFromBase method(ptr) func()",
 		"example.com/m.Counter type struct",
 		"example.com/m.Counter.Add method(ptr) func(delta int) error",
 		"example.com/m.Counter.Base embedded Base",
 		"example.com/m.Counter.FromBase method func()",
 		"example.com/m.Counter.Get method func() int",
-		"example.com/m.Counter.PtrFromBase method(ptr) func()",
+		"example.com/m.Counter.PointerFromBase method(ptr) func()",
 	}, got, "promoted methods are part of the method set a caller sees")
 }
 

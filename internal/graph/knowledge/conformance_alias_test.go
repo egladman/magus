@@ -135,16 +135,16 @@ func TestConformanceAliasRows(t *testing.T) {
 	o := aliasOptions()
 
 	out := g.Conformance(o)
-	share := conformanceRowFor(t, out, types.ConformanceAliasShare, types.ConformancePopSource, "")
+	share := findConformanceRow(t, out, types.ConformanceAliasShare, types.ConformancePopSource, "")
 	assert.Equal(t, []string{"internal/spell/remote", "lib/mcp", "internal/queue/types"}, itemIDs(share.Violations))
-	clash := conformanceRowFor(t, out, types.ConformanceNameClash, types.ConformancePopSource, "")
+	clash := findConformanceRow(t, out, types.ConformanceNameClash, types.ConformancePopSource, "")
 	assert.Equal(t, []string{"internal/queue/types"}, itemIDs(clash.Violations))
 
 	o.Ratchet = types.ConformanceRatchet{Schema: 1, Known: []types.ConformanceKnown{{
 		Metric: types.ConformanceAliasShare, Items: []string{"internal/spell/remote", "internal/gone"}, Reason: "rename pending", Line: 3,
 	}}}
 	out = g.Conformance(o)
-	share = conformanceRowFor(t, out, types.ConformanceAliasShare, types.ConformancePopSource, "")
+	share = findConformanceRow(t, out, types.ConformanceAliasShare, types.ConformancePopSource, "")
 	assert.Equal(t, 1, share.Known)
 	assert.Equal(t, []string{"lib/mcp", "internal/queue/types"}, itemIDs(share.Violations))
 	assert.Equal(t, []types.ConformanceKnown{{

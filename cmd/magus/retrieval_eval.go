@@ -59,7 +59,7 @@ func (r replayer) replay(ctx context.Context, j rankeval.Judgment) (rankeval.Run
 	switch j.Verb {
 	case readQuery:
 		read.Nearest = true
-		res := searchLoaded(ctx, r.graphFor(read.Input), read, r.coverage)
+		res := searchLoaded(ctx, r.loadedGraph(read.Input), read, r.coverage)
 		run.Latency = time.Since(start)
 		for _, n := range res.Out.Nodes {
 			sources[n.ID] = n.Source
@@ -70,7 +70,7 @@ func (r replayer) replay(ctx context.Context, j rankeval.Judgment) (rankeval.Run
 		answer = res.Out.Answer
 		err = writeQueryText(ctx, &printed, r.next, r.next.served(hint.NextForQuery(res.Out)), res)
 	case readExplain:
-		res := explainLoaded(ctx, r.graphFor(read.Input), read, r.coverage)
+		res := explainLoaded(ctx, r.loadedGraph(read.Input), read, r.coverage)
 		run.Latency = time.Since(start)
 		answer = res.Answer
 		// A miss prints to stderr only.
@@ -115,8 +115,8 @@ func (r replayer) replay(ctx context.Context, j rankeval.Judgment) (rankeval.Run
 	return run, nil
 }
 
-// graphFor is the graph the CLI verb would load for input.
-func (r replayer) graphFor(input string) *knowledge.Graph {
+// loadedGraph is the graph the CLI verb would load for input.
+func (r replayer) loadedGraph(input string) *knowledge.Graph {
 	if knowledge.SeedsLazyLayer(input) {
 		return r.symbols
 	}

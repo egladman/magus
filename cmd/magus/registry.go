@@ -56,7 +56,7 @@ func newEntry(root string, now time.Time) *wsEntry {
 
 // openWorkspace opens root the way every registry workspace is opened.
 func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error) {
-	cfg, err := loadWorkspaceCfg(root)
+	cfg, err := loadWorkspaceConfig(root)
 	if err != nil {
 		return nil, fmt.Errorf("load config %s: %w", root, err)
 	}
@@ -108,7 +108,7 @@ func (r *wsRegistry) load(e *wsEntry) {
 	})
 }
 
-func loadWorkspaceCfg(root string) (config.Config, error) {
+func loadWorkspaceConfig(root string) (config.Config, error) {
 	path := filepath.Join(root, "magus.yaml")
 	cfg, err := config.LoadFile(path, false)
 	if err != nil {

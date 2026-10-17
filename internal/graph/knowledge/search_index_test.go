@@ -494,7 +494,7 @@ func TestResolveSearchIndexBuiltOnceUnderConcurrency(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_ = g.Resolve(fmt.Sprintf("project=proj%d kind=file", i%10), 0)
-			got[i] = g.searchIdx()
+			got[i] = g.ensureSearchIndex()
 		}()
 	}
 	wg.Wait()

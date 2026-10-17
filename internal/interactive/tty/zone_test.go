@@ -325,7 +325,7 @@ func TestPaintZoneSurvivesScrollingOutput(t *testing.T) {
 	// Line 40's own trailing newline scrolls it up one, so the last line of
 	// output sits one row above the cursor, which waits on the last scrolling row.
 	assert.Contains(t, s.Row(14-borderRows), "compiling package 40")
-	assert.Equal(t, 15-borderRows, cursorRowOf(s), "the cursor stays inside the scrolling area, never in the zone")
+	assert.Equal(t, 15-borderRows, cursorRow(s), "the cursor stays inside the scrolling area, never in the zone")
 	// ...and the zone did not move with it.
 	assert.Equal(t, "pool 4/8 running", bandRow(s, 16-borderRowsPerEdge), "the status row held its place under 40 lines of output")
 	assert.Equal(t, "api built in 1.2s", toastRow(s, 24-borderRowsPerEdge), "the toast held its place too")
@@ -341,11 +341,11 @@ func TestPaintLeavesTheCursorWhereTheCallerLeftIt(t *testing.T) {
 	l := z.Acquire(4)
 
 	fmt.Fprint(s, "a partial line, mid-write")
-	row, col := cursorRowOf(s), cursorCol(s)
+	row, col := cursorRow(s), cursorCol(s)
 
 	_, err := l.Set([]Line{{Text: "repaint one"}, {Text: "repaint two"}})
 	require.NoError(t, err)
-	assert.Equal(t, row, cursorRowOf(s), "a repaint must not move the caller's cursor")
+	assert.Equal(t, row, cursorRow(s), "a repaint must not move the caller's cursor")
 	assert.Equal(t, col, cursorCol(s))
 
 	// And the caller's own line is intact and can be continued.
@@ -430,7 +430,7 @@ func TestPaintTwoConsumersShareOneTerminal(t *testing.T) {
 
 // Small readers over the emulator, so the assertions below stay about what a
 // reader would see rather than about accessor spelling.
-func cursorRowOf(s *screen.Screen) int { r, _ := s.Cursor(); return r }
-func cursorCol(s *screen.Screen) int { _, c := s.Cursor(); return c }
-func scrollTop(s *screen.Screen) int { t, _ := s.ScrollRegion(); return t }
+func cursorRow(s *screen.Screen) int    { r, _ := s.Cursor(); return r }
+func cursorCol(s *screen.Screen) int    { _, c := s.Cursor(); return c }
+func scrollTop(s *screen.Screen) int    { t, _ := s.ScrollRegion(); return t }
 func scrollBottom(s *screen.Screen) int { _, b := s.ScrollRegion(); return b }

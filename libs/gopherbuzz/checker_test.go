@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func checkSrc(src string) []typeError {
+func checkSource(src string) []typeError {
 	prog, err := ParseEmbedded(src)
 	if err != nil {
 		return []typeError{{Line: 0, Col: 0, Msg: err.Error()}}
@@ -29,14 +29,14 @@ func checkSrc(src string) []typeError {
 // checkOK asserts that Check reports no errors for src.
 func checkOK(t *testing.T, src string) {
 	t.Helper()
-	errs := checkSrc(src)
+	errs := checkSource(src)
 	assert.Emptyf(t, errs, "expected no errors, got:\n%s", fmtErrors(errs))
 }
 
 // checkErr asserts that Check reports at least one error containing substr.
 func checkErr(t *testing.T, src, substr string) {
 	t.Helper()
-	errs := checkSrc(src)
+	errs := checkSource(src)
 	if !assert.NotEmptyf(t, errs, "expected error containing %q, got none", substr) {
 		return
 	}
@@ -365,7 +365,7 @@ final _f = &greet(1);
 // arguments afterwards, against slots they were never matched to, would stack a
 // spurious type error on top of the real one.
 func TestCheck_UnresolvedArgumentsReportOnce(t *testing.T) {
-	errs := checkSrc(`
+	errs := checkSource(`
 fun f(a: str, b: int) > void {}
 f(b: 2);
 `)
@@ -425,7 +425,7 @@ func TestCheck_AnonymousObjectTypeMismatch(t *testing.T) {
 func TestCheck_InjectedGlobalMemberCall(t *testing.T) {
 	// A host embedding gopherbuzz can inject a namespace global (the magusfile
 	// pattern, where the magus host binds `magus`). Such a global is pre-registered
-	// as types.Any via extraGlobals, so member calls on it type-check. checkSrc
+	// as types.Any via extraGlobals, so member calls on it type-check. checkSource
 	// registers none, so exercise checkWithGlobals with a neutral injected name.
 	prog, err := ParseEmbedded(`host.project.register(".");`)
 	require.NoError(t, err, "parse")
@@ -599,7 +599,7 @@ func TestCheckTypeNoFalsePositives(t *testing.T) {
 // stdlib module), an alias equal to the path's last segment binds the same name the
 // import would without it. collectTopLevel computes the default name from the path
 // string alone, so this needs no file on disk (unlike the Session-based import
-// tests below). checkSrc runs embedded (see TestCheck_RedundantImportAliasIsMagusDialectOnly
+// tests below). checkSource runs embedded (see TestCheck_RedundantImportAliasIsMagusDialectOnly
 // for the strict side of this rule).
 func TestCheck_RedundantImportAlias(t *testing.T) {
 	checkErr(t, `import "spells/harness/codex" as codex;`, `import alias "codex" is redundant, drop `+"`as codex`")
@@ -1522,7 +1522,7 @@ func TestCheck_ErrorInsideInterpolationPointsIntoTheString(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			errs := checkSrc(tc.src)
+			errs := checkSource(tc.src)
 			require.NotEmpty(t, errs)
 			assert.Equal(t, tc.line, errs[0].Line, fmtErrors(errs))
 			assert.Equal(t, tc.col, errs[0].Col, fmtErrors(errs))

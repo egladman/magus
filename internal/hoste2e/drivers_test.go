@@ -52,7 +52,7 @@ func claudeDriver() *hostDriver {
 		} else {
 			args = append(args, "--resume", conv.id)
 		}
-		run := w.runHost(t, labelFor(conv), h.path, args)
+		run := w.runHost(t, turnLabel(conv), h.path, args)
 		var out struct {
 			Result string `json:"result"`
 		}
@@ -87,8 +87,8 @@ func codexDriver() *hostDriver {
 		writeFile(t, filepath.Join(dir, "config.toml"), config)
 	}
 	h.turn = func(t *testing.T, w *workspace, conv *conversation, prompt string) (string, hostRun) {
-		last := filepath.Join(w.logs, labelFor(conv)+".last-message")
-		run := w.runHost(t, labelFor(conv), h.path, []string{"exec", "--json",
+		last := filepath.Join(w.logs, turnLabel(conv)+".last-message")
+		run := w.runHost(t, turnLabel(conv), h.path, []string{"exec", "--json",
 			"--dangerously-bypass-approvals-and-sandbox", "--dangerously-bypass-hook-trust",
 			"--cd", w.dir, "-m", h.model, "--output-last-message", last, prompt})
 		body, _ := os.ReadFile(last)
@@ -137,12 +137,12 @@ func cursorDriver() *hostDriver {
 	h.turn = func(t *testing.T, w *workspace, conv *conversation, prompt string) (string, hostRun) {
 		args := []string{"-p", "--output-format", "json", "--force", "--trust", "--approve-mcps",
 			"--workspace", w.dir, "--model", h.model, prompt}
-		run := w.runHost(t, labelFor(conv), h.path, args)
+		run := w.runHost(t, turnLabel(conv), h.path, args)
 		// cursor-agent 2026.10.01 sometimes drops its connection with every event hooked;
 		// one retry, reported, rather than a flaky row.
 		if strings.Contains(run.stdout+run.stderr, "WritableIterable is closed") {
 			t.Logf("cursor-agent lost its connection (WritableIterable is closed); retrying once")
-			run = w.runHost(t, labelFor(conv)+"-retry", h.path, args)
+			run = w.runHost(t, turnLabel(conv)+"-retry", h.path, args)
 		}
 		var out struct {
 			Result string `json:"result"`
@@ -184,7 +184,7 @@ func opencodeDriver() *hostDriver {
 		writeJSON(t, path, config)
 	}
 	h.turn = func(t *testing.T, w *workspace, conv *conversation, prompt string) (string, hostRun) {
-		run := w.runHost(t, labelFor(conv), h.path, []string{"run", "--format", "json", "--dir", w.dir, "--auto", "-m", h.model, prompt})
+		run := w.runHost(t, turnLabel(conv), h.path, []string{"run", "--format", "json", "--dir", w.dir, "--auto", "-m", h.model, prompt})
 		return opencodeText(run.stdout), run
 	}
 	h.skips = map[string]string{
@@ -213,7 +213,7 @@ func opencodeText(stdout string) string {
 	return strings.Join(parts, "\n")
 }
 
-func labelFor(conv *conversation) string { return "turn" + strconv.Itoa(conv.turns+1) }
+func turnLabel(conv *conversation) string { return "turn" + strconv.Itoa(conv.turns+1) }
 
 func writeJSON(t *testing.T, path string, v any) {
 	t.Helper()

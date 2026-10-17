@@ -18,7 +18,7 @@ func worked(job string, ended, durationMs, setup, contextTokens int64, projects 
 		Projects: projects,
 		Work: &types.JobWork{
 			Calls: 10, Writes: 2, SetupCalls: 4, Denials: 1,
-			SetupTokens: ptr(setup), SetupContext: ptr(setup), ContextTokens: ptr(contextTokens),
+			SetupTokens: new(setup), SetupContext: new(setup), ContextTokens: new(contextTokens),
 		},
 	}
 }
@@ -52,9 +52,9 @@ func TestGroupingRecordsMeasuresSplitGroupsAsAWhole(t *testing.T) {
 	pass := volatility.WilsonLower(10, 10)
 	assert.Equal(t, types.GroupingRecord{
 		Shape: types.GroupingSplit, Verdict: types.GroupingMeasured, Jobs: 10, Groups: 5, Known: 10,
-		PassLower: &pass, SetupTokensMedian: ptr(int64(1_000)), SetupShare: ptr(0.25),
-		ContextPerGroup: ptr(8_000.0), WallMsPerGroup: ptr(6_000.0), DenialsPerJob: ptr(1.0),
-		UnattributedPerJob: ptr(0.0), ReworkPerJob: ptr(0.0), WideningsPerJob: ptr(0.0),
+		PassLower: &pass, SetupTokensMedian: new(int64(1_000)), SetupShare: new(0.25),
+		ContextPerGroup: new(8_000.0), WallMsPerGroup: new(6_000.0), DenialsPerJob: new(1.0),
+		UnattributedPerJob: new(0.0), ReworkPerJob: new(0.0), WideningsPerJob: new(0.0),
 	}, got)
 }
 

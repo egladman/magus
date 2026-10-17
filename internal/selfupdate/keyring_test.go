@@ -145,9 +145,9 @@ func mustKey(t *testing.T) ed25519.PublicKey {
 	return pub
 }
 
-// ringOf wraps a test public key as a one-key active ring, the shape every call site
+// activeRing wraps a test public key as a one-key active ring, the shape every call site
 // had before the ring existed.
-func ringOf(pub ed25519.PublicKey) Keyring {
+func activeRing(pub ed25519.PublicKey) Keyring {
 	return Keyring{{ID: KeyID(pub), State: KeyActive, Pub: pub}}
 }
 

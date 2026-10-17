@@ -157,7 +157,7 @@ func TestValidate_SpellImports(t *testing.T) {
 // Each cache tier is written independently. The local tier off with the remote tier
 // explicitly on is the one incoherent pair, refused rather than quietly writing nothing.
 func TestValidate_CacheTierWrites(t *testing.T) {
-	on, off := boolPtr(true), boolPtr(false)
+	on, off := new(true), new(false)
 	for name, tc := range map[string]struct {
 		local, remote         *bool
 		wantLocal, wantRemote bool
@@ -196,7 +196,7 @@ func TestValidate_CacheTierWrites(t *testing.T) {
 // mcp.http is honored only while the server serves MCP at all; an explicit true beside
 // mcp.enabled false is refused rather than ignored.
 func TestValidate_MCPHTTP(t *testing.T) {
-	on, off := boolPtr(true), boolPtr(false)
+	on, off := new(true), new(false)
 	for name, tc := range map[string]struct {
 		enabled, http *bool
 		wantHTTP      bool

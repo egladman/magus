@@ -42,7 +42,7 @@ func TestAMadeUpCheckpointIsRefusedAtForkAndAtApply(t *testing.T) {
 	t.Parallel()
 
 	root, _ := committedRepo(t)
-	s := NewStore(tmpLoc(t, root))
+	s := NewStore(tempLocation(t, root))
 
 	_, err := ForkMerge(t.Context(), s, "forked", checkpointMerge(madeUpRevision), config.Jobs{}, nil)
 	require.Error(t, err, "magus\\job.put stored a revision the repository does not hold")
@@ -69,7 +69,7 @@ func TestARealAbbreviatedCheckpointIsStoredExpanded(t *testing.T) {
 	older := repo.Head()
 	repo.Commit("later", map[string]string{"later.txt": "later\n"})
 	head := repo.Head()
-	s := NewStore(tmpLoc(t, repo.Root()))
+	s := NewStore(tempLocation(t, repo.Root()))
 	digest := strings.Repeat("0123456789abcdef", 2)
 
 	forked, err := ForkMerge(t.Context(), s, "forked", checkpointMerge(older[:9]+"+"+digest), config.Jobs{}, nil)
@@ -91,7 +91,7 @@ func TestACheckpointOffTheCheckoutsHistoryIsRefused(t *testing.T) {
 	repo.Git("switch", "-q", "-c", "elsewhere")
 	elsewhere := repo.Commit("elsewhere", map[string]string{"elsewhere.txt": "x\n"})
 	repo.Git("switch", "-q", "main")
-	s := NewStore(tmpLoc(t, repo.Root()))
+	s := NewStore(tempLocation(t, repo.Root()))
 
 	_, err := ForkMerge(t.Context(), s, "forked", checkpointMerge(elsewhere), config.Jobs{}, nil)
 	require.Error(t, err)
@@ -112,7 +112,7 @@ func TestACheckpointDigestAtHeadIsCheckedAgainstTheTree(t *testing.T) {
 	t.Parallel()
 
 	root, head := committedRepo(t)
-	s := NewStore(tmpLoc(t, root))
+	s := NewStore(tempLocation(t, root))
 	madeUp := head + "+" + strings.Repeat("0123456789abcdef", 2)
 
 	_, err := ForkMerge(t.Context(), s, "forked", checkpointMerge(madeUp), config.Jobs{}, nil)
@@ -132,7 +132,7 @@ func TestAForkByMergeNamingNoCheckpointRecordsTheCheckouts(t *testing.T) {
 
 	root, _ := committedRepo(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "new.go"), []byte("package new\n"), 0o644))
-	s := NewStore(tmpLoc(t, root))
+	s := NewStore(tempLocation(t, root))
 
 	forked, err := ForkMerge(t.Context(), s, "forked", checkpointMerge(""), config.Jobs{}, nil)
 	require.NoError(t, err)
@@ -150,7 +150,7 @@ func TestACheckpointDigestOfTheWrongShapeIsRefused(t *testing.T) {
 	t.Parallel()
 
 	root, head := committedRepo(t)
-	s := NewStore(tmpLoc(t, root))
+	s := NewStore(tempLocation(t, root))
 	for _, digest := range []string{"xyz", strings.Repeat("ab", 8), strings.Repeat("AB", 16), ""} {
 		token := head + "+" + digest
 		_, err := ForkMerge(t.Context(), s, "forked", checkpointMerge(token), config.Jobs{}, nil)
@@ -164,7 +164,7 @@ func TestACheckpointDigestOfTheWrongShapeIsRefused(t *testing.T) {
 func TestACheckpointIsRefusedWhereNoVersionControlAnswers(t *testing.T) {
 	t.Parallel()
 
-	s := NewStore(tmpLoc(t, loadableRoot(t)))
+	s := NewStore(tempLocation(t, loadableRoot(t)))
 	_, err := ForkMerge(t.Context(), s, "forked", checkpointMerge(madeUpRevision), config.Jobs{}, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), madeUpRevision)
@@ -181,7 +181,7 @@ func TestADirtyCheckpointTokenFromTheTreeIsAccepted(t *testing.T) {
 	root, head := committedRepo(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "internal", "job", "store.go"), []byte("package job\n\n// edited\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "new.go"), []byte("package new\n"), 0o644))
-	s := NewStore(tmpLoc(t, root))
+	s := NewStore(tempLocation(t, root))
 	token := dirtyToken(t, root)
 	require.True(t, strings.HasPrefix(token, head+"+"), token)
 

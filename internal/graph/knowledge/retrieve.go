@@ -70,7 +70,7 @@ var ShippedWeights = sync.OnceValue(func() textrank.Weights {
 func (g *Graph) Retrieve(input string, opts RetrieveOptions) ([]types.KnowledgeMatch, types.KnowledgeRanking, error) {
 	ranking := types.KnowledgeRanking{Weights: opts.Weights.Digest(), Reader: opts.Reader}
 	q := g.normalizePaths(parseQuery(input))
-	ix := g.searchIdx()
+	ix := g.ensureSearchIndex()
 	cq := g.compileQuery(q)
 	tokens, need := queryTokens(cq.terms)
 

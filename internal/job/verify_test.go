@@ -848,7 +848,7 @@ func TestUnclaimedFootprint(t *testing.T) {
 // integrationRow seeds a job checked by `test .` with one more check goal, in state.
 func integrationRow(t *testing.T, state types.JobState) *Store {
 	t.Helper()
-	s := tmpStore(t, t.TempDir())
+	s := tempStore(t, t.TempDir())
 	_, err := s.Update(t.Context(), "w", func(u *types.Job) {
 		types.Declaration{ID: "w", WritePaths: []string{"a.go"}, Check: forkCheck(), Goals: []types.Goal{
 			{ID: "lint", Check: types.LeaseCheck{Target: "lint", Project: "docs"}},
@@ -959,7 +959,7 @@ func TestWaitIntegrationAcceptsARunUnderAnotherLease(t *testing.T) {
 func TestWaitIntegrationGradesSymbolGoalsAgainstTheCheckoutsGraph(t *testing.T) {
 	t.Parallel()
 
-	s := tmpStore(t, t.TempDir())
+	s := tempStore(t, t.TempDir())
 	_, err := s.Update(t.Context(), "w", func(u *types.Job) {
 		types.Declaration{ID: "w", WritePaths: []string{"a.go"}, Goals: []types.Goal{
 			{ID: "moved", Kind: types.GoalKindSymbol, Symbols: []string{"Api"}},

@@ -24,7 +24,7 @@ func attentionRows(t *testing.T, root string) []sessions.AttentionRequest {
 func TestEndSessionEndsTheTakenJobAndExecTakesItBack(t *testing.T) {
 	repo := execRepo(t)
 	root := repo.Root()
-	loc := tmpLoc(t, root)
+	loc := tempLocation(t, root)
 	s := NewStore(loc)
 	seed(t, s, types.Job{ID: "w", Checkpoint: repo.Head(), State: types.StateDeclared})
 	_, err := s.Exec(t.Context(), "w")
@@ -58,7 +58,7 @@ func TestEndSessionEndsTheTakenJobAndExecTakesItBack(t *testing.T) {
 
 func TestEndSessionLeavesWorkItDidNotTake(t *testing.T) {
 	root := t.TempDir()
-	s := tmpStore(t, root)
+	s := tempStore(t, root)
 	seed(t, s, types.Job{ID: "untaken", State: types.StateDeclared})
 	seed(t, s, types.Job{ID: "returned", State: types.StateExited})
 	callers := map[string]Caller{
@@ -84,7 +84,7 @@ func TestEndSessionLeavesWorkItDidNotTake(t *testing.T) {
 }
 
 func TestExecDoesNotTakeBackARowEndedForAnotherReason(t *testing.T) {
-	s := tmpStore(t, execRepo(t).Root())
+	s := tempStore(t, execRepo(t).Root())
 	seed(t, s, types.Job{ID: "w", Checkpoint: baseA, State: types.StateNoReturn})
 	require.NoError(t, s.update(t.Context(), func(f *jobsFile) error {
 		f.Jobs[0].EndReason = "overdue: its deadline passed 1m0s ago"
@@ -96,7 +96,7 @@ func TestExecDoesNotTakeBackARowEndedForAnotherReason(t *testing.T) {
 }
 
 func TestExecTakesBackASessionEndedRowOnlyInItsOwnCheckout(t *testing.T) {
-	loc := tmpLoc(t, execRepo(t).Root())
+	loc := tempLocation(t, execRepo(t).Root())
 	elsewhere := t.TempDir()
 	seed(t, NewStore(loc), types.Job{ID: "w", Checkpoint: baseA, State: types.StateNoReturn})
 	require.NoError(t, NewStore(loc).update(t.Context(), func(f *jobsFile) error {
@@ -110,7 +110,7 @@ func TestExecTakesBackASessionEndedRowOnlyInItsOwnCheckout(t *testing.T) {
 }
 
 func TestTreeRootIsTheTopmostAncestor(t *testing.T) {
-	s := tmpStore(t, t.TempDir())
+	s := tempStore(t, t.TempDir())
 	plant(t, s,
 		types.Job{ID: "plan", State: types.StateRunning},
 		types.Job{ID: "plan/a", Parent: "plan", State: types.StateRunning},

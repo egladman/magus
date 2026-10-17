@@ -38,7 +38,7 @@ func TestOwedRegenerationRecordMergesAndDrops(t *testing.T) {
 
 	path, err := OwedRegenerationPath(ctx, dir)
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(gitDirOf(t, dir), owedFileName), path)
+	assert.Equal(t, filepath.Join(absoluteGitDir(t, dir), owedFileName), path)
 
 	require.NoError(t, DropOwedRegenerations(ctx, dir, []OwedRegeneration{
 		{Project: ".", Target: "generate", Paths: []string{"gen/a.md"}},
@@ -149,7 +149,7 @@ func TestInstallRegenHookCoexists(t *testing.T) {
 	assert.Empty(t, again)
 }
 
-func gitDirOf(t *testing.T, dir string) string {
+func absoluteGitDir(t *testing.T, dir string) string {
 	t.Helper()
 	out, err := gitOutput(t.Context(), dir, gitOpts{}, "rev-parse", "--absolute-git-dir")
 	require.NoError(t, err)

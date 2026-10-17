@@ -43,8 +43,8 @@ func TestDiagramIDsStayUnique(t *testing.T) {
 func TestDiagramActorNamesStayApart(t *testing.T) {
 	names := actorNames([]Node{{ID: "a", Anchor: "x", Label: "core"}, {ID: "b", Anchor: "y", Label: "core"}, {ID: "c", Anchor: "z", Label: "app"}})
 	assert.Equal(t, map[string]string{"a": "core (x)", "b": "core (y)", "c": "app"}, names)
-	assert.Equal(t, "https://h/blob/r/libs/lib", linkTo("https://h/blob/r/{path}", "libs/lib"))
-	assert.Empty(t, linkTo("", "libs/lib"))
+	assert.Equal(t, "https://h/blob/r/libs/lib", anchorLink("https://h/blob/r/{path}", "libs/lib"))
+	assert.Empty(t, anchorLink("", "libs/lib"))
 }
 
 func TestDiagramFingerprintMovesWithTheGraph(t *testing.T) {

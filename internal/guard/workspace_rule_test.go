@@ -27,10 +27,10 @@ var errStaleLoad = errors.New(`magusfile: exec magusfile.buzz: [BZZ2001] buzz: i
 
 // unloadedDeps is a workspace whose working tree and approved copy both fail to load the
 // way a binary older than the tree does.
-func unloadedDeps() Dependencies { return unloadedDepsFor(errStaleLoad) }
+func unloadedDeps() Dependencies { return unloadedDependencies(errStaleLoad) }
 
-// unloadedDepsFor is unloadedDeps failing with loadErr on both sides.
-func unloadedDepsFor(loadErr error) Dependencies {
+// unloadedDependencies is unloadedDeps failing with loadErr on both sides.
+func unloadedDependencies(loadErr error) Dependencies {
 	approvedErr := errors.New("approved magusfile: " + loadErr.Error())
 	return Dependencies{
 		LoadFailure:         loadErr,
@@ -159,7 +159,7 @@ func TestLoadFailureOfATypoDeniesOnlyGatedVerbs(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	recordLoadedPolicy(t, cacheDir)
 	ownCheckout(t, ctx, true)
-	deps := unloadedDepsFor(typo)
+	deps := unloadedDependencies(typo)
 
 	push := Judge(ctx, deps, Request{Input: "git push", Host: "claude-code", Session: "s1"})
 	stored := shortDeny(t, cacheDir, push, denyRulePolicyUnloaded,
@@ -224,7 +224,7 @@ func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
 		recordLoadedPolicy(t, cacheDir)
 		ownCheckout(t, ctx, true)
 		other := testkit.NewWorkspace(t).WriteExecutable("magus", "#!/bin/sh\n")
-		deps := unloadedDepsFor(staleMsg)
+		deps := unloadedDependencies(staleMsg)
 		deps.Binary, deps.BinaryVersion = other, version
 
 		v := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
@@ -238,7 +238,7 @@ func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)
 		recordLoadedPolicy(t, cacheDir)
 		root := ownCheckout(t, ctx, true)
-		deps := unloadedDepsFor(staleMsg)
+		deps := unloadedDependencies(staleMsg)
 		deps.Binary, deps.BinaryVersion = filepath.Join(root, "magus"), version
 
 		v := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
@@ -249,7 +249,7 @@ func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)
 		recordLoadedPolicy(t, cacheDir)
 		ownCheckout(t, ctx, false)
-		deps := unloadedDepsFor(staleMsg)
+		deps := unloadedDependencies(staleMsg)
 		deps.Binary, deps.BinaryVersion = "/usr/local/bin/magus", version
 
 		v := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
@@ -260,7 +260,7 @@ func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)
 		recordLoadedPolicy(t, cacheDir)
 		root := ownCheckout(t, ctx, true)
-		deps := unloadedDepsFor(errors.New("magusfile: exec magusfile.buzz: unexpected '}'"))
+		deps := unloadedDependencies(errors.New("magusfile: exec magusfile.buzz: unexpected '}'"))
 		deps.Binary, deps.BinaryVersion = filepath.Join(root, "magus"), version
 
 		v := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
@@ -272,7 +272,7 @@ func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)
 		recordLoadedPolicy(t, cacheDir)
 		root := ownCheckout(t, ctx, true)
-		deps := unloadedDepsFor(staleMsg)
+		deps := unloadedDependencies(staleMsg)
 		deps.Binary, deps.BinaryVersion = filepath.Join(root, "magus"), version
 
 		Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
@@ -328,7 +328,7 @@ func TestSkewedBinaryIsAWorkspaceRuleErrorEveryCall(t *testing.T) {
 			recordLoadedPolicy(t, cacheDir)
 			root := ownCheckout(t, ctx, true)
 			require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "vale"), 0o755))
-			deps := unloadedDepsFor(c.loadErr)
+			deps := unloadedDependencies(c.loadErr)
 			deps.Binary, deps.BinaryVersion = filepath.Join(root, "magus"), version
 
 			change := Judge(ctx, deps, Request{Input: "touch NOTES.md", Host: "claude-code", Session: "change"})
@@ -448,7 +448,7 @@ func TestLoadFailureOfATypoPassesAWriteWithTheNote(t *testing.T) {
 	ctx, root, cacheDir := writeFixture(t)
 	recordLoadedPolicy(t, cacheDir)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("#!/bin/sh\n"), 0o755))
-	v := Judge(ctx, unloadedDepsFor(errors.New("magusfile.buzz:3:1: expected expression")), Request{Input: filepath.Join(root, "CHANGELOG.md"), IsPath: true, Host: "claude-code", Session: "s1"})
+	v := Judge(ctx, unloadedDependencies(errors.New("magusfile.buzz:3:1: expected expression")), Request{Input: filepath.Join(root, "CHANGELOG.md"), IsPath: true, Host: "claude-code", Session: "s1"})
 	assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryWriteRuleFailed)), unworded(v))
 	assert.Contains(t, v.Context, "Only the built-in rules applied to this write.")
 }

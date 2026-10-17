@@ -52,10 +52,10 @@ func (g *Graph) searchHolder() *searchHolder {
 	return g.search
 }
 
-// searchIdx returns g's search index, building it on first use. Built under the holder's
+// ensureSearchIndex returns g's search index, building it on first use. Built under the holder's
 // mutex for the reason ensureAdj uses adjMu: the server publishes one *Graph to concurrent
 // requests, and a bare nil check would let two first-queries build and publish together.
-func (g *Graph) searchIdx() *searchIndex {
+func (g *Graph) ensureSearchIndex() *searchIndex {
 	h := g.searchHolder()
 	h.mu.Lock()
 	defer h.mu.Unlock()

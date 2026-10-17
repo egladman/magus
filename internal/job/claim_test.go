@@ -34,7 +34,7 @@ func TestRefuseUngradableClaims(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			s := NewStore(tmpLoc(t, root))
+			s := NewStore(tempLocation(t, root))
 			_, err := ForkMerge(context.Background(), s, "wave/job", func(u *types.Job) {
 				u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, tc.paths
 			}, config.Jobs{}, nil)
@@ -64,7 +64,7 @@ func TestRefuseUngradableClaims(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			s := NewStore(tmpLoc(t, root))
+			s := NewStore(tempLocation(t, root))
 			_, err := ForkMerge(context.Background(), s, "wave/job", func(u *types.Job) {
 				u.Check, u.State, u.WritePaths, u.DenyPaths = forkCheck(), types.StateDeclared, []string{"run.go", "notes.txt"}, []string{tc.deny}
 			}, config.Jobs{}, nil)
@@ -79,7 +79,7 @@ func TestRefuseUngradableClaims(t *testing.T) {
 
 	t.Run("a checkout with no version control", func(t *testing.T) {
 		t.Parallel()
-		s := NewStore(tmpLoc(t, t.TempDir()))
+		s := NewStore(tempLocation(t, t.TempDir()))
 		ps := ungradableClaimProblems(context.Background(), s, types.Job{ID: "wave/job", WritePaths: []string{"run.go#executeStages"}})
 		require.Len(t, ps, 1)
 		p := ps[0]
@@ -90,7 +90,7 @@ func TestRefuseUngradableClaims(t *testing.T) {
 
 	t.Run("every bad entry is its own problem", func(t *testing.T) {
 		t.Parallel()
-		ps := ungradableClaimProblems(context.Background(), NewStore(tmpLoc(t, root)), types.Job{ID: "wave/job",
+		ps := ungradableClaimProblems(context.Background(), NewStore(tempLocation(t, root)), types.Job{ID: "wave/job",
 			WritePaths: []string{"run.go", "run.go#", "notes.txt#Intro"}, DenyPaths: []string{"*.go#x"}})
 		fields := make([]string, len(ps))
 		for i, p := range ps {
@@ -125,14 +125,14 @@ func TestRefuseUnorderedFileShare(t *testing.T) {
 		{name: "a child of the holder", aWrite: []string{"magusfile.buzz"}, bWrite: []string{"magusfile.buzz"}, bParent: "A"},
 		{name: "a glob is not a literal file", aWrite: []string{"docs/x.md"}, bWrite: []string{"docs/**"}},
 		{name: "a file with no diff driver", aWrite: []string{"notes.txt"}, bWrite: []string{"notes.txt"}},
-		{name: "an untaken holder is left alone", aWrite: []string{"magusfile.buzz"}, aCheckout: strPtr(""), bWrite: []string{"magusfile.buzz"}},
-		{name: "a holder in the same checkout is left alone", aWrite: []string{"magusfile.buzz"}, aCheckout: strPtr(bRoot), bWrite: []string{"magusfile.buzz"}},
+		{name: "an untaken holder is left alone", aWrite: []string{"magusfile.buzz"}, aCheckout: new(""), bWrite: []string{"magusfile.buzz"}},
+		{name: "a holder in the same checkout is left alone", aWrite: []string{"magusfile.buzz"}, aCheckout: new(bRoot), bWrite: []string{"magusfile.buzz"}},
 		{name: "a holder blocked on depends_on is left alone", aWrite: []string{"magusfile.buzz"}, aDependsOn: []string{"C"}, bWrite: []string{"magusfile.buzz"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			loc := tmpLoc(t, bRoot)
+			loc := tempLocation(t, bRoot)
 			s := NewStore(loc)
 			checkout := aRoot
 			if tc.aCheckout != nil {
@@ -170,7 +170,7 @@ func TestExitedHolderClaimsNoFileShare(t *testing.T) {
 	aRev := aRepo.Head()
 
 	for state, refused := range map[types.JobState]bool{types.StateRunning: true, types.StateExited: false} {
-		s := NewStore(tmpLoc(t, bRoot))
+		s := NewStore(tempLocation(t, bRoot))
 		seed(t, s, types.Job{ID: "A", State: state, WritePaths: []string{"magusfile.buzz"}, Checkpoint: aRev, CheckoutRoot: aRoot})
 		rows, err := s.List()
 		require.NoError(t, err)
@@ -195,7 +195,7 @@ func TestUnorderedFileShareNamesTheHoldersUnusedPaths(t *testing.T) {
 	aRev := aRepo.Head()
 	aRepo.WriteTree(map[string]string{"run.go": strings.Replace(claimGo, "a()", "a2()", 1)})
 
-	s := NewStore(tmpLoc(t, bRoot))
+	s := NewStore(tempLocation(t, bRoot))
 	seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"run.go", "notes.md"}, Checkpoint: aRev, CheckoutRoot: aRepo.Root()})
 	rows, err := s.List()
 	require.NoError(t, err)
@@ -214,7 +214,7 @@ func TestUnorderedFileShareNamesTheHoldersUnusedPaths(t *testing.T) {
 
 	t.Run("an unreadable footprint is unknown, never all used", func(t *testing.T) {
 		t.Parallel()
-		s := NewStore(tmpLoc(t, bRoot))
+		s := NewStore(tempLocation(t, bRoot))
 		seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"run.go"}, Checkpoint: "not-a-revision", CheckoutRoot: aRepo.Root()})
 		rows, err := s.List()
 		require.NoError(t, err)
@@ -236,7 +236,7 @@ func TestRefuseUnorderedFileShareReadsTheReplacementsDependsOn(t *testing.T) {
 	aRoot := aRepo.Root()
 	aRev := aRepo.Head()
 
-	s := NewStore(tmpLoc(t, bRoot))
+	s := NewStore(tempLocation(t, bRoot))
 	seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"magusfile.buzz"}, Checkpoint: aRev, CheckoutRoot: aRoot})
 	seed(t, s, types.Job{ID: "B", State: types.StateDeclared, WritePaths: []string{"notes.txt"}})
 	rows, err := s.List()
@@ -286,7 +286,7 @@ func TestRefuseUngradableClaimsAmbiguousWord(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			s := NewStore(tmpLoc(t, root))
+			s := NewStore(tempLocation(t, root))
 			err := ungradableClaimProblems(context.Background(), s, types.Job{ID: "wave/job", WritePaths: tc.paths}).Err()
 			if tc.want == "" {
 				require.NoError(t, err)
@@ -299,7 +299,7 @@ func TestRefuseUngradableClaimsAmbiguousWord(t *testing.T) {
 
 	t.Run("a deny path is held to it", func(t *testing.T) {
 		t.Parallel()
-		err := ungradableClaimProblems(context.Background(), NewStore(tmpLoc(t, root)), types.Job{ID: "wave/job", DenyPaths: []string{"run.go#ctx"}}).Err()
+		err := ungradableClaimProblems(context.Background(), NewStore(tempLocation(t, root)), types.Job{ID: "wave/job", DenyPaths: []string{"run.go#ctx"}}).Err()
 		require.ErrorIs(t, err, types.WritePathClaimUngradable)
 		assert.Contains(t, err.Error(), `deny path "run.go#ctx" names 2 declarations of run.go`)
 	})
@@ -340,7 +340,7 @@ func TestRefuseUnorderedFileSharePrintsTheClaimPair(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			s := NewStore(tmpLoc(t, bRoot))
+			s := NewStore(tempLocation(t, bRoot))
 			seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: tc.holds, Checkpoint: aRev, CheckoutRoot: aRepo.Root()})
 			rows, err := s.List()
 			require.NoError(t, err)
@@ -356,7 +356,7 @@ func TestRefuseUnorderedFileSharePrintsTheClaimPair(t *testing.T) {
 	t.Run("a holder that has touched nothing, and a job with no symbol goals, get the generic advice", func(t *testing.T) {
 		t.Parallel()
 		quiet := testkit.NewRepo(t, claimFiles)
-		s := NewStore(tmpLoc(t, bRoot))
+		s := NewStore(tempLocation(t, bRoot))
 		seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"run.go"}, Checkpoint: quiet.Head(), CheckoutRoot: quiet.Root()})
 		rows, err := s.List()
 		require.NoError(t, err)
@@ -371,7 +371,7 @@ func TestForkNotes(t *testing.T) {
 	t.Parallel()
 
 	root := testkit.NewRepo(t, claimFiles).Root()
-	s := NewStore(tmpLoc(t, root))
+	s := NewStore(tempLocation(t, root))
 	ctx := context.Background()
 
 	for _, tc := range []struct {
@@ -431,7 +431,7 @@ func TestForkNotesListEveryConfigDeclarationTheChangeTouches(t *testing.T) {
 		`"5m"`, `"9m"`,
 		"> void {\n}", "> void {\n    ctx.log(\"x\");\n}",
 	).Replace(configMagusfile)})
-	s := NewStore(tmpLoc(t, repo.Root()))
+	s := NewStore(tempLocation(t, repo.Root()))
 	row := types.Job{ID: "B", State: types.StateRunning, WritePaths: []string{"magusfile.buzz#project.targets.test"}, Checkpoint: rev, CheckoutRoot: repo.Root()}
 
 	got := ForkNotes(t.Context(), s, nil, row)
@@ -445,10 +445,6 @@ func TestForkNotesListEveryConfigDeclarationTheChangeTouches(t *testing.T) {
 	assert.Empty(t, ForkNotes(t.Context(), s, nil, row), "a row no checkout has taken has changed nothing")
 }
 
-// strPtr returns a pointer to s, for a test table field that must tell "not given" (nil)
-// apart from "given as empty".
-func strPtr(s string) *string { return &s }
-
 // TestRefuseUnorderedFileShareTransitiveDependsOn pins that depends_on orders a pair even
 // through an intermediate row (C3): B depends on M, M depends on A, so B and A are ordered
 // though neither names the other directly.
@@ -461,7 +457,7 @@ func TestRefuseUnorderedFileShareTransitiveDependsOn(t *testing.T) {
 	aRoot := aRepo.Root()
 	aRev := aRepo.Head()
 
-	loc := tmpLoc(t, bRoot)
+	loc := tempLocation(t, bRoot)
 	s := NewStore(loc)
 	seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"magusfile.buzz"}, Checkpoint: aRev, CheckoutRoot: aRoot})
 	seed(t, s, types.Job{ID: "M", State: types.StateRunning, WritePaths: []string{"magusfile.buzz"}, Checkpoint: aRev, CheckoutRoot: aRoot, DependsOn: []string{"A"}})

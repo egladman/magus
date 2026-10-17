@@ -24,7 +24,7 @@ func outcomeStore(t *testing.T, set *types.ModelTierSet, matrix func(context.Con
 	root := execRepo(t).Root()
 	history := filepath.Join(t.TempDir(), "history.json")
 	require.NoError(t, os.WriteFile(filepath.Join(root, config.Filename), []byte("history_path: "+strconv.Quote(history)+"\n"), 0o644))
-	loc := tmpLoc(t, root)
+	loc := tempLocation(t, root)
 	loc.ModelTiers, loc.ModelTierMatrix, loc.DryRun = set, matrix, dryRun
 	return NewStore(loc), history
 }
@@ -294,7 +294,7 @@ func TestStoreFeedsRecordedOutcomesToTheMatrix(t *testing.T) {
 func TestStoreCountsAWideningOnlyForATakenRowThatGainsWritePaths(t *testing.T) {
 	t.Parallel()
 
-	s := tmpStore(t, t.TempDir())
+	s := tempStore(t, t.TempDir())
 	row := lease("a")
 
 	declared := seed(t, s, row)
@@ -329,7 +329,7 @@ func TestStoreCountsAWideningOnlyForATakenRowThatGainsWritePaths(t *testing.T) {
 func TestStoreCountsReworkRoundsAndKeepsThemAgainstAWholeRowWrite(t *testing.T) {
 	t.Parallel()
 
-	s := tmpStore(t, t.TempDir())
+	s := tempStore(t, t.TempDir())
 	row := lease("a")
 	row.State = types.StateExited
 	seed(t, s, row)
@@ -446,8 +446,8 @@ func TestStoreRecordsTheParentAttemptProjectsAndWork(t *testing.T) {
 	want.Tokens, want.CostUSD = nil, nil // no model table to price against
 	want.Work = &types.JobWork{
 		Calls: 2, Writes: 1, SetupCalls: 1,
-		SetupContext: ptr(int64(10_000)), SetupTokens: ptr(int64(30_000)),
-		ContextTokens: ptr(int64(40_000)), PeakTokens: ptr(int64(30_000)),
+		SetupContext: new(int64(10_000)), SetupTokens: new(int64(30_000)),
+		ContextTokens: new(int64(40_000)), PeakTokens: new(int64(30_000)),
 		SetupMs: got.Work.SetupMs,
 	}
 	assert.Equal(t, want, got)

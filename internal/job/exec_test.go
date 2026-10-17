@@ -103,7 +103,7 @@ func TestStoreExec(t *testing.T) {
 				tt.work(repo)
 			}
 			reported := checkoutToken(t, repo.Root())
-			s := tmpStore(t, repo.Root())
+			s := tempStore(t, repo.Root())
 			seed(t, s, types.Job{ID: "u1", Checkpoint: checkpoint, State: types.StateDeclared})
 
 			got, err := s.Exec(ctx, "u1")
@@ -152,7 +152,7 @@ func TestExecReadsTheBaseFromTheCheckout(t *testing.T) {
 	repo := execRepo(t)
 	clean := repo.Head()
 	repo.WriteTree(map[string]string{"a.txt": "a edited\n"})
-	s := tmpStore(t, repo.Root())
+	s := tempStore(t, repo.Root())
 	seed(t, s, types.Job{ID: "u1", Checkpoint: clean, State: types.StateDeclared})
 
 	got, err := s.Exec(ctx, "u1")
@@ -172,7 +172,7 @@ func TestStoreExecRefusesAnUnknownLease(t *testing.T) {
 
 	ctx := t.Context()
 	repo := execRepo(t)
-	s := tmpStore(t, repo.Root())
+	s := tempStore(t, repo.Root())
 	seed(t, s, types.Job{ID: "declared", Checkpoint: repo.Head()})
 
 	_, err := s.Exec(ctx, "typo")
@@ -193,7 +193,7 @@ func TestStoreExecRefusesACheckoutWithNoRevision(t *testing.T) {
 
 	ctx := t.Context()
 	root := t.TempDir()
-	s := tmpStore(t, root)
+	s := tempStore(t, root)
 	seed(t, s, types.Job{ID: "u1", Checkpoint: baseA, State: types.StateDeclared})
 
 	_, err := s.Exec(ctx, "u1")
@@ -217,7 +217,7 @@ func TestStoreExecIsIdempotentPerBase(t *testing.T) {
 	repo := execRepo(t)
 	handed := repo.Head()
 	repo.Commit("elsewhere", map[string]string{"b.txt": "b\n"})
-	s := tmpStore(t, repo.Root())
+	s := tempStore(t, repo.Root())
 	seed(t, s, types.Job{ID: "u1", Checkpoint: handed, Criteria: "declared goal"})
 
 	diverged, err := s.Exec(ctx, "u1")
@@ -268,7 +268,7 @@ func TestStoreExecResolvesAnAbbreviatedRevision(t *testing.T) {
 			if tt.dirty {
 				repo.WriteTree(map[string]string{"a.txt": "a changed\n"})
 			}
-			s := tmpStore(t, repo.Root())
+			s := tempStore(t, repo.Root())
 			seed(t, s, types.Job{ID: "u1", Checkpoint: checkpoint})
 			got, err := s.Exec(t.Context(), "u1")
 			require.NoError(t, err)
@@ -284,7 +284,7 @@ func TestStoreExecRefusesAnEndedJob(t *testing.T) {
 
 	repo := execRepo(t)
 	for _, state := range []types.JobState{types.StatePass, types.StateFail, types.StateNoReturn} {
-		s := tmpStore(t, repo.Root())
+		s := tempStore(t, repo.Root())
 		seed(t, s, types.Job{ID: "u1", Checkpoint: repo.Head(), State: state})
 
 		_, err := s.Exec(t.Context(), "u1")
@@ -322,7 +322,7 @@ func TestStoreExecCountsUntrackedFilesAsThePatch(t *testing.T) {
 			res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
 			require.NoError(t, err)
 
-			s := tmpStore(t, root)
+			s := tempStore(t, root)
 			seed(t, s, types.Job{ID: "u1", Checkpoint: rev, State: types.StateDeclared})
 			got, err := s.Exec(ctx, "u1")
 			require.NoError(t, err)
@@ -434,7 +434,7 @@ func TestStoreExecTakesAJobForkedInAnotherCheckout(t *testing.T) {
 func twoCheckouts(t *testing.T) (main, worktree Location, head string) {
 	t.Helper()
 	repo := execRepo(t)
-	main = tmpLoc(t, repo.Root())
+	main = tempLocation(t, repo.Root())
 	worktree = main
 	worktree.Root = repo.AddWorktree("w").Root()
 	return main, worktree, repo.Head()
@@ -446,7 +446,7 @@ func TestStoreExecByItsBoundHolderStartsTheJob(t *testing.T) {
 	t.Parallel()
 
 	repo := execRepo(t)
-	loc := tmpLoc(t, repo.Root())
+	loc := tempLocation(t, repo.Root())
 	seed(t, NewStore(loc), types.Job{ID: "u1", Checkpoint: repo.Head(), State: types.StateDeclared})
 
 	got, err := boundStore(loc, "u1").Exec(t.Context(), "u1")

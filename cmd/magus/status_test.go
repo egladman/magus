@@ -427,23 +427,21 @@ func TestProbeMCPReadiness(t *testing.T) {
 	})
 }
 
-func boolPtr(b bool) *bool { return &b }
-
 // mcpServing returns an MCP config enabled and pointing at a live endpoint whose /readyz
 // returns code (200 serving, 503 not-ready). mcpUnreachable and mcpDisabled are the other
 // two states. They build an explicit config to pass in, so no test mutates package state.
 func mcpServing(t *testing.T, code int) config.MCP {
-	return config.MCP{Address: readyzServer(t, code), Enabled: boolPtr(true)}
+	return config.MCP{Address: readyzServer(t, code), Enabled: new(true)}
 }
 
 // mcpUnreachable returns an enabled MCP config whose address nothing listens on.
 func mcpUnreachable() config.MCP {
-	return config.MCP{Address: "127.0.0.1:1", Enabled: boolPtr(true)}
+	return config.MCP{Address: "127.0.0.1:1", Enabled: new(true)}
 }
 
 // mcpDisabled returns an MCP config with the server turned off.
 func mcpDisabled() config.MCP {
-	return config.MCP{Enabled: boolPtr(false)}
+	return config.MCP{Enabled: new(false)}
 }
 
 func TestMCPAddress(t *testing.T) {

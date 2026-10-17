@@ -69,7 +69,7 @@ func TestRetireDropsWhatIsOverAndOld(t *testing.T) {
 func TestAWriteRetainsOncePerInterval(t *testing.T) {
 	t.Parallel()
 
-	s := tmpStore(t, t.TempDir())
+	s := tempStore(t, t.TempDir())
 	now := time.Unix(retainNow, 0)
 	s.clock = func() time.Time { return now }
 	path, err := s.Path()
@@ -143,7 +143,7 @@ func TestARetentionPassReadsJobsRetain(t *testing.T) {
 			if tc.yaml != "" {
 				require.NoError(t, os.WriteFile(filepath.Join(root, config.Filename), []byte(tc.yaml), 0o644))
 			}
-			s := tmpStore(t, root)
+			s := tempStore(t, root)
 			s.clock = func() time.Time { return time.Unix(retainNow, 0) }
 			rows := []types.Job{aged("ten-days", types.StatePass, 10), aged("two-days", types.StatePass, 2), aged("live", types.StateRunning, 10)}
 			err := s.update(t.Context(), func(f *jobsFile) error {
@@ -167,7 +167,7 @@ func TestARetentionPassReadsJobsRetain(t *testing.T) {
 func TestDeleteArchivesOnlyTheDroppedRow(t *testing.T) {
 	t.Parallel()
 
-	s := tmpStore(t, t.TempDir())
+	s := tempStore(t, t.TempDir())
 	seed(t, s, lease("keep"))
 	seed(t, s, lease("drop"))
 	_, err := s.Delete(t.Context(), "drop", false)

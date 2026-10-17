@@ -31,7 +31,7 @@ func symbolNode(id, label, source, signature, digest string) types.KnowledgeNode
 	}
 }
 
-func graphOf(nodes ...types.KnowledgeNode) *knowledge.Graph {
+func newGraph(nodes ...types.KnowledgeNode) *knowledge.Graph {
 	g := knowledge.NewGraph()
 	g.Merge(nodes, nil)
 	return g
@@ -155,7 +155,7 @@ func TestAttachAPIDeltaClassifiesAndBumps(t *testing.T) {
 			symbolNode(goSymbol("api", "hidden()."), "hidden", private, "func hidden() error", "d4"),
 		},
 	}
-	head := graphOf(
+	head := newGraph(
 		symbolNode(goSymbol("api", "Open()."), "Open", kept, "func Open(root string, quiet bool) error", "d1x"),
 		symbolNode(goSymbol("api", "Steady()."), "Steady", "api.go:40", "func Steady() error", "d3"),
 		symbolNode(goSymbol("api", "hidden()."), "hidden", private, "func hidden() error", "d4x"),
@@ -193,7 +193,7 @@ func TestAttachAPIDeltaLikelyOnlyFromSignatures(t *testing.T) {
 			symbolNode(goSymbol("api", "Open()."), "Open", "api.go:10", "func Open() error", "d1"),
 		},
 	}
-	head := graphOf(symbolNode(goSymbol("api", "Open()."), "Open", "api.go:10", "func Open(quiet bool) error", "d2"))
+	head := newGraph(symbolNode(goSymbol("api", "Open()."), "Open", "api.go:10", "func Open(quiet bool) error", "d2"))
 	out := types.Diff{Files: []types.DiffFile{{Path: "api.go", Project: "."}}}
 
 	attachAPIDelta(&out, map[string]*types.DiffFile{"api.go": &out.Files[0]}, head,
@@ -216,7 +216,7 @@ func TestAttachAPIDeltaMembersClassifyThemselves(t *testing.T) {
 			symbolNode(typeID+"Root.", "Root", "api.go:11", "struct field Root string", "d2"),
 		},
 	}
-	head := graphOf(
+	head := newGraph(
 		symbolNode(typeID, "Config", "api.go:10", "type Config struct { Root string; Quiet bool }", "d1x"),
 		symbolNode(typeID+"Root.", "Root", "api.go:11", "struct field Root string", "d2"),
 		symbolNode(typeID+"Quiet.", "Quiet", "api.go:12", "struct field Quiet bool", "d3"),
@@ -238,7 +238,7 @@ func TestAttachAPIDeltaRefusesABaselineWithoutSymbols(t *testing.T) {
 	out := types.Diff{Files: []types.DiffFile{{Path: "api.go", Project: "."}}}
 	base := types.KnowledgeGraphOutput{SchemaVersion: types.KnowledgeSchemaVersion}
 
-	attachAPIDelta(&out, map[string]*types.DiffFile{"api.go": &out.Files[0]}, graphOf(),
+	attachAPIDelta(&out, map[string]*types.DiffFile{"api.go": &out.Files[0]}, newGraph(),
 		diffConfig{baseline: &base, baselineLabel: "main"}, noExternals)
 
 	assert.Nil(t, out.API, "no symbols on the base side means unknown, never an empty delta")
@@ -252,7 +252,7 @@ func TestAttachAPIDeltaRefusesAnOlderSchema(t *testing.T) {
 		symbolNode(goSymbol("api", "Open()."), "Open", "api.go:10", "", ""),
 	}}
 
-	attachAPIDelta(&out, map[string]*types.DiffFile{}, graphOf(), diffConfig{baseline: &base, baselineLabel: "main"}, noExternals)
+	attachAPIDelta(&out, map[string]*types.DiffFile{}, newGraph(), diffConfig{baseline: &base, baselineLabel: "main"}, noExternals)
 
 	assert.Nil(t, out.API)
 	require.Len(t, out.Notes, 1)

@@ -89,9 +89,9 @@ func TestInsightsUseHistoryAndProjectLabels(t *testing.T) {
 		Definition: types.HotspotDefinition,
 		Commits:    10,
 		Nodes: []types.Node{
-			{Path: ".", Name: rootName, Children: []string{}, Dir: canonicalRoot, BlastRadius: 3, Churn: 1, Authors: 1, LastCommit: insightTimePtr(1)},
-			{Path: "api", Name: "api", Children: []string{"."}, Dir: filepath.Join(canonicalRoot, "api"), BlastRadius: 2, Churn: 3, Authors: 2, LastCommit: insightTimePtr(3)},
-			{Path: "docs", Name: "docs", Children: []string{"api"}, Dir: filepath.Join(canonicalRoot, "docs"), BlastRadius: 1, Churn: 2, Authors: 2, LastCommit: insightTimePtr(4)},
+			{Path: ".", Name: rootName, Children: []string{}, Dir: canonicalRoot, BlastRadius: 3, Churn: 1, Authors: 1, LastCommit: new(insightTime(1))},
+			{Path: "api", Name: "api", Children: []string{"."}, Dir: filepath.Join(canonicalRoot, "api"), BlastRadius: 2, Churn: 3, Authors: 2, LastCommit: new(insightTime(3))},
+			{Path: "docs", Name: "docs", Children: []string{"api"}, Dir: filepath.Join(canonicalRoot, "docs"), BlastRadius: 1, Churn: 2, Authors: 2, LastCommit: new(insightTime(4))},
 		},
 	}, hotspots)
 }
@@ -138,11 +138,6 @@ func commitInsightFiles(t *testing.T, dir, author, when string, files map[string
 
 func insightTime(day int) time.Time {
 	return time.Date(2026, time.January, day, 0, 0, 0, 0, time.UTC)
-}
-
-func insightTimePtr(day int) *time.Time {
-	t := insightTime(day)
-	return &t
 }
 
 // TestDuplicationHistoryCountsFilesChangingTogether pins the co-change evidence: copies in

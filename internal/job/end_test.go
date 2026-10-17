@@ -109,7 +109,7 @@ func TestExitWithAResultRefusesADescendantStillWorking(t *testing.T) {
 func TestAbandonWaitsOnAPersonWhenARestatedDescendantHoldsWork(t *testing.T) {
 	t.Parallel()
 	repo := execRepo(t)
-	loc := tmpLoc(t, repo.Root())
+	loc := tempLocation(t, repo.Root())
 	s := NewStore(loc)
 	seed(t, s, types.Job{ID: "plan", State: types.StateRunning, ReadOnly: true})
 	seed(t, s, types.Job{ID: "plan/w", Parent: "plan", State: types.StateRunning, WritePaths: []string{"a.txt"}, CheckoutRoot: repo.Root()})
@@ -144,7 +144,7 @@ func TestAbandonWaitsOnAPersonWhenARestatedDescendantHoldsWork(t *testing.T) {
 func TestAbandonNeedsNoPersonForADescendantHoldingNoWork(t *testing.T) {
 	t.Parallel()
 	repo := execRepo(t)
-	s := NewStore(tmpLoc(t, repo.Root()))
+	s := NewStore(tempLocation(t, repo.Root()))
 	seed(t, s, types.Job{ID: "plan", State: types.StateRunning, ReadOnly: true})
 	seed(t, s, types.Job{ID: "plan/w", Parent: "plan", State: types.StateRunning, WritePaths: []string{"a.txt"}, CheckoutRoot: repo.Root()})
 	require.NoError(t, os.WriteFile(filepath.Join(repo.Root(), "other.txt"), []byte("not its paths\n"), 0o644))
@@ -301,7 +301,7 @@ func TestJobPruneWaitsOnAPersonForARestatedDescendantHoldingWork(t *testing.T) {
 	t.Parallel()
 	const now = int64(100_000)
 	repo := execRepo(t)
-	s := tmpStore(t, repo.Root())
+	s := tempStore(t, repo.Root())
 	staleAfter := 2 * time.Hour
 	s.clock = func() time.Time { return time.Unix(now, 0) }
 	s.staleAfter = &staleAfter

@@ -438,7 +438,7 @@ func (r *validation) release() { <-r.slots }
 func (r *validation) start(ctx context.Context, group int, f *flight) {
 	fctx, cancel := context.WithCancel(ctx)
 	f.cancel = cancel
-	r.Events.Emit(Event{Kind: EventGate, Change: f.change.ID, Partition: partitionPtr(group), Commit: f.cand.Commit, Depth: f.depth})
+	r.Events.Emit(Event{Kind: EventGate, Change: f.change.ID, Partition: new(group), Commit: f.cand.Commit, Depth: f.depth})
 	go func() {
 		defer r.release()
 		start := time.Now()

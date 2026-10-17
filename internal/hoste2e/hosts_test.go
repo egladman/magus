@@ -94,7 +94,7 @@ func (h *hostDriver) locate(envName string, candidates ...candidate) {
 		if c.path == "" {
 			continue
 		}
-		v, err := versionOf(c.path)
+		v, err := binaryVersion(c.path)
 		if err != nil {
 			tried = append(tried, fmt.Sprintf("%s (%s): %v", c.path, c.source, err))
 			continue
@@ -109,7 +109,7 @@ func (h *hostDriver) locate(envName string, candidates ...candidate) {
 	h.note = "absent: " + strings.Join(append(tried, h.binary+" not on PATH"), "; ")
 }
 
-func versionOf(bin string) (string, error) {
+func binaryVersion(bin string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, "--version")

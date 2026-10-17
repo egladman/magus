@@ -20,16 +20,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// tmpLedger isolates the real user state directory and BAGGAGE, so a test run under a
+// newWorkspaceLedger isolates the real user state directory and BAGGAGE, so a test run under a
 // leased worker grades the row it planted rather than that worker's.
-func tmpLedger(t *testing.T) (cacheDir, root string, store *job.Store) {
+func newWorkspaceLedger(t *testing.T) (cacheDir, root string, store *job.Store) {
 	t.Helper()
 	root = testkit.NewWorkspace(t).Root()
 	cacheDir, store = ledgerIn(t, root)
 	return cacheDir, root, store
 }
 
-// ledgerIn is tmpLedger over a root the caller already has.
+// ledgerIn is newWorkspaceLedger over a root the caller already has.
 func ledgerIn(t *testing.T, root string) (cacheDir string, store *job.Store) {
 	t.Helper()
 	testkit.Isolate(t)
@@ -69,7 +69,7 @@ func wireGuardHook(t *testing.T, w *testkit.Workspace) {
 }
 
 func TestBoundLeasePassesWithNoLeaseBound(t *testing.T) {
-	cacheDir, root, _ := tmpLedger(t)
+	cacheDir, root, _ := newWorkspaceLedger(t)
 
 	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, root))
 
@@ -81,7 +81,7 @@ func TestBoundLeasePassesWithNoLeaseBound(t *testing.T) {
 }
 
 func TestBoundLeaseFailsWhenTheMarkerAndTheEnvironmentDisagree(t *testing.T) {
-	cacheDir, root, _ := tmpLedger(t)
+	cacheDir, root, _ := newWorkspaceLedger(t)
 	bindCheckout(t, cacheDir, "adj/marker")
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=adj/from-env")
 
@@ -104,7 +104,7 @@ func TestBoundLeaseFailsWhenTheMarkerAndTheEnvironmentDisagree(t *testing.T) {
 // meant a worker bound to one job could be graded against another's write paths by
 // exporting its id.
 func TestActingLeasePrefersTheMarkerOverTheEnvironment(t *testing.T) {
-	cacheDir, _, _ := tmpLedger(t)
+	cacheDir, _, _ := newWorkspaceLedger(t)
 	bindCheckout(t, cacheDir, "adj/marker")
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=adj/from-env")
 
@@ -120,7 +120,7 @@ func TestActingLeasePrefersTheMarkerOverTheEnvironment(t *testing.T) {
 }
 
 func TestBoundLeaseReportsAnUnreadableLedgerAsUnknown(t *testing.T) {
-	cacheDir, root, store := tmpLedger(t)
+	cacheDir, root, store := newWorkspaceLedger(t)
 	bindCheckout(t, cacheDir, "adj/live")
 	path, err := store.Path()
 	require.NoError(t, err)
@@ -134,7 +134,7 @@ func TestBoundLeaseReportsAnUnreadableLedgerAsUnknown(t *testing.T) {
 }
 
 func TestBoundLeaseFailsOnAnUnknownBoundID(t *testing.T) {
-	cacheDir, root, _ := tmpLedger(t)
+	cacheDir, root, _ := newWorkspaceLedger(t)
 	bindCheckout(t, cacheDir, "adj/no-such-lease")
 
 	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, root))
@@ -151,7 +151,7 @@ func TestBoundLeaseFailsOnAnUnknownBoundID(t *testing.T) {
 }
 
 func TestBoundLeaseFailsOnATerminalBoundRow(t *testing.T) {
-	cacheDir, root, store := tmpLedger(t)
+	cacheDir, root, store := newWorkspaceLedger(t)
 	seed(t, store, types.Job{ID: "adj/done", State: types.StatePass})
 	bindCheckout(t, cacheDir, "adj/done")
 
@@ -168,7 +168,7 @@ func TestBoundLeaseFailsOnATerminalBoundRow(t *testing.T) {
 // A row with no state can no longer be written through the store, which stores it as
 // declared; one an older magus wrote is planted as the line it left.
 func TestBoundLeaseFailsOnARowWithNoState(t *testing.T) {
-	cacheDir, root, store := tmpLedger(t)
+	cacheDir, root, store := newWorkspaceLedger(t)
 	path, err := store.Path()
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
@@ -186,7 +186,7 @@ func TestBoundLeaseFailsOnARowWithNoState(t *testing.T) {
 }
 
 func TestBoundLeaseFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
-	cacheDir, root, store := tmpLedger(t)
+	cacheDir, root, store := newWorkspaceLedger(t)
 	seed(t, store, types.Job{ID: "adj/live", State: types.StateRunning})
 	bindCheckout(t, cacheDir, "adj/live")
 
@@ -243,7 +243,7 @@ func registeredLease(t *testing.T, id string) (cacheDir string, w *testkit.Works
 }
 
 func TestCheckJobTreeEndsOrphansAndFlagsStaleJobs(t *testing.T) {
-	_, root, store := tmpLedger(t)
+	_, root, store := newWorkspaceLedger(t)
 	seed(t, store, types.Job{ID: "root", State: types.StatePass})
 	seed(t, store, types.Job{ID: "root/orphan", Parent: "root", State: types.StateRunning})
 	seed(t, store, types.Job{ID: "live", State: types.StateRunning})
@@ -264,7 +264,7 @@ func TestCheckJobTreeEndsOrphansAndFlagsStaleJobs(t *testing.T) {
 }
 
 func TestCheckJobTreePassesAHealthyPlan(t *testing.T) {
-	_, root, store := tmpLedger(t)
+	_, root, store := newWorkspaceLedger(t)
 	seed(t, store, types.Job{ID: "live", State: types.StateRunning})
 
 	got := checkJobTree(place(t, "", root), config.Jobs{StaleAfter: time.Hour}, time.Now().Unix())
@@ -272,7 +272,7 @@ func TestCheckJobTreePassesAHealthyPlan(t *testing.T) {
 }
 
 func TestCheckJobTreeNamesJobsBlockedOnAnEndedDependency(t *testing.T) {
-	_, root, store := tmpLedger(t)
+	_, root, store := newWorkspaceLedger(t)
 	seed(t, store, types.Job{ID: "dep", State: types.StateFail})
 	seed(t, store, types.Job{ID: "waiter", State: types.StateDeclared, DependsOn: []string{"dep"}, WritePaths: []string{"internal/job"}})
 	seed(t, store, types.Job{ID: "queued", State: types.StateDeclared, DependsOn: []string{"live"}})

@@ -77,7 +77,7 @@ func TestMissingImportAllowsRestoringTheNamedFile(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
-	deps := unloadedDepsFor(errMissingImport)
+	deps := unloadedDependencies(errMissingImport)
 
 	for _, line := range []string{
 		"git mv hack/policy/guard.old.buzz hack/policy/guard.buzz",
@@ -120,7 +120,7 @@ func TestRestoreIsDeniedWhenTheLoadErrorNamesNoFile(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
-	deps := unloadedDepsFor(errMissingMember)
+	deps := unloadedDependencies(errMissingMember)
 
 	shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, "git restore hack/policy/guard.buzz"), denyRuleStaleBinary, staleOwnSay)
 }
@@ -132,6 +132,6 @@ func TestBootstrapRunsWhileAnImportDoesNotResolve(t *testing.T) {
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
 
-	v := judgeUnloaded(ctx, unloadedDepsFor(errMissingImport), ward.BootstrapCommand)
+	v := judgeUnloaded(ctx, unloadedDependencies(errMissingImport), ward.BootstrapCommand)
 	assert.NotEqual(t, decisionDeny, v.Decision, v.Reason)
 }

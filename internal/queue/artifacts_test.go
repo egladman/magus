@@ -140,12 +140,12 @@ func TestArtifactFollowerUnpacksArtifactsAcrossPollsAndIsDoneOnceTheRunCompletes
 
 	batch, err = f.Poll(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"1"}, idsOf(batch.Verdicts))
+	assert.Equal(t, []string{"1"}, changeIDs(batch.Verdicts))
 	assert.False(t, batch.Done)
 
 	batch, err = f.Poll(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"2"}, idsOf(batch.Verdicts), "each verdict once")
+	assert.Equal(t, []string{"2"}, changeIDs(batch.Verdicts), "each verdict once")
 	assert.True(t, batch.Done)
 	assert.Len(t, r.fetched, 3, "each artifact is downloaded once")
 }
@@ -162,7 +162,7 @@ func TestArtifactFollowerIsDoneOnlyAfterAListingThatSaidTheRunCompleted(t *testi
 	r.lists(true, one)
 	batch, err := f.Poll(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"1"}, idsOf(batch.Verdicts))
+	assert.Equal(t, []string{"1"}, changeIDs(batch.Verdicts))
 	assert.False(t, batch.Done)
 
 	batch, err = f.Poll(ctx)
@@ -190,7 +190,7 @@ func TestArtifactFollowerWithoutFollowReadsOneListingOfARunInProgress(t *testing
 	assert.True(t, ok)
 	batch, err := f.Poll(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"1"}, idsOf(batch.Verdicts))
+	assert.Equal(t, []string{"1"}, changeIDs(batch.Verdicts))
 	assert.True(t, batch.Done, "a run still going is complete as far as one pass reads")
 }
 
@@ -281,7 +281,7 @@ func TestAnArtifactThatFailsIsRejectedForItsChangeAlone(t *testing.T) {
 	r.lists(false, failing, escaping, dots, four)
 	batch, err := f.Poll(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, []string{"4"}, idsOf(batch.Verdicts))
+	assert.Equal(t, []string{"4"}, changeIDs(batch.Verdicts))
 	reasons := map[string]string{}
 	for _, rej := range batch.Rejected {
 		reasons[rej.Change] = rej.Reason
@@ -343,7 +343,7 @@ func TestArtifactFollowerKeepsTheListingsHeadersFromAnotherHostAndOffHTTPS(t *te
 	f.Client.Transport.(*http.Transport).TLSClientConfig.InsecureSkipVerify = true // the storage server's own certificate
 	batch, err := f.Poll(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, []string{"1"}, idsOf(batch.Verdicts))
+	assert.Equal(t, []string{"1"}, changeIDs(batch.Verdicts))
 	assert.Equal(t, []string{"|"}, seen)
 	require.Len(t, batch.Rejected, 1)
 	assert.Contains(t, batch.Rejected[0].Reason, "which is not https")

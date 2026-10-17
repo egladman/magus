@@ -185,22 +185,22 @@ func TestConformanceModeKnobsRow(t *testing.T) {
 	o := couplingOptions()
 
 	out := g.Conformance(o)
-	knobs := conformanceRowFor(t, out, types.ConformanceModeKnobs, types.ConformancePopSource, "")
+	knobs := findConformanceRow(t, out, types.ConformanceModeKnobs, types.ConformancePopSource, "")
 	assert.Equal(t, []types.ConformanceItem{{ID: "internal/proc/run/exec.go#Exec", Source: "internal/proc/run/exec.go:135", Measure: 3}}, knobs.Violations)
 	assert.Equal(t, []int{1, 157, 30}, []int{
-		conformanceRowFor(t, out, types.ConformanceSharedBody, types.ConformancePopSource, "").N,
-		conformanceRowFor(t, out, types.ConformanceSharedBody, types.ConformancePopSource, "").P99,
-		conformanceRowFor(t, out, types.ConformanceSharedBody, types.ConformancePopSource, "").Value,
+		findConformanceRow(t, out, types.ConformanceSharedBody, types.ConformancePopSource, "").N,
+		findConformanceRow(t, out, types.ConformanceSharedBody, types.ConformancePopSource, "").P99,
+		findConformanceRow(t, out, types.ConformanceSharedBody, types.ConformancePopSource, "").Value,
 	})
-	assert.Equal(t, 3, conformanceRowFor(t, out, types.ConformanceCallerSpread, types.ConformancePopSource, "").P99)
-	assert.Equal(t, 6, conformanceRowFor(t, out, types.ConformanceSharedReach, types.ConformancePopSource, "").P99)
+	assert.Equal(t, 3, findConformanceRow(t, out, types.ConformanceCallerSpread, types.ConformancePopSource, "").P99)
+	assert.Equal(t, 6, findConformanceRow(t, out, types.ConformanceSharedReach, types.ConformancePopSource, "").P99)
 
 	o.Ratchet = types.ConformanceRatchet{Schema: 1, Known: []types.ConformanceKnown{{
 		Metric: types.ConformanceModeKnobs, Items: []string{"internal/proc/run/exec.go#Exec", "internal/a/a.go#Gone"},
 		Reason: "one process primitive: TTY sizing is termcast's knob, CancelGrace the queue's", Line: 2,
 	}}}
 	out = g.Conformance(o)
-	knobs = conformanceRowFor(t, out, types.ConformanceModeKnobs, types.ConformancePopSource, "")
+	knobs = findConformanceRow(t, out, types.ConformanceModeKnobs, types.ConformancePopSource, "")
 	assert.Empty(t, knobs.Violations)
 	assert.Equal(t, 1, knobs.Known)
 	assert.Equal(t, []types.ConformanceKnown{{

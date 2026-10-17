@@ -127,7 +127,7 @@ func lensFixtureOptions() types.ConformanceOptions {
 	return o
 }
 
-func conformanceRowFor(t *testing.T, out types.ConformanceOutput, m types.ConformanceMetric, p types.ConformancePopulation, scope string) types.ConformanceRow {
+func findConformanceRow(t *testing.T, out types.ConformanceOutput, m types.ConformanceMetric, p types.ConformancePopulation, scope string) types.ConformanceRow {
 	t.Helper()
 	for _, r := range out.Rows {
 		if r.Key == (types.ConformanceKey{Metric: m, Population: p, Scope: scope}) {
@@ -159,15 +159,15 @@ func TestConformanceMeasuresEveryMetricAndPopulation(t *testing.T) {
 	assert.Equal(t, 1, out.Excluded, "third/t.go")
 
 	// The committed 30 is enforced, not the anchor 100 or the live p95 40; a.go is known.
-	lines := conformanceRowFor(t, out, types.ConformanceFileLines, types.ConformancePopSource, "")
+	lines := findConformanceRow(t, out, types.ConformanceFileLines, types.ConformancePopSource, "")
 	assert.Equal(t, types.ConformanceRow{
 		Key: lines.Key, N: 5, P50: 10, P90: 40, P95: 40, P99: 40, Live: 40, Value: 30, Anchor: 100,
 		Known: 1, Source: types.ConformanceFromRatchet,
 	}, lines)
-	assert.Equal(t, 60, conformanceRowFor(t, out, types.ConformanceFileLines, types.ConformancePopMain, "").P99)
-	assert.Equal(t, 30, conformanceRowFor(t, out, types.ConformanceFileLines, types.ConformancePopTest, "").P99)
+	assert.Equal(t, 60, findConformanceRow(t, out, types.ConformanceFileLines, types.ConformancePopMain, "").P99)
+	assert.Equal(t, 30, findConformanceRow(t, out, types.ConformanceFileLines, types.ConformancePopTest, "").P99)
 
-	funcs := conformanceRowFor(t, out, types.ConformanceFuncLines, types.ConformancePopSource, "")
+	funcs := findConformanceRow(t, out, types.ConformanceFuncLines, types.ConformancePopSource, "")
 	wantFuncs := funcs
 	wantFuncs.N = 8 // F, G, the twins, three methods and Root
 	wantFuncs.Violations = []types.ConformanceItem{
@@ -175,41 +175,41 @@ func TestConformanceMeasuresEveryMetricAndPopulation(t *testing.T) {
 		{ID: "internal/b/b.go#G", Source: "internal/b/b.go:3", Measure: 10},
 	}
 	assert.Equal(t, wantFuncs, funcs)
-	assert.Equal(t, 26, conformanceRowFor(t, out, types.ConformanceFuncLines, types.ConformancePopMain, "").P99)
+	assert.Equal(t, 26, findConformanceRow(t, out, types.ConformanceFuncLines, types.ConformancePopMain, "").P99)
 
-	methods := conformanceRowFor(t, out, types.ConformanceTypeMethods, types.ConformancePopSource, "")
+	methods := findConformanceRow(t, out, types.ConformanceTypeMethods, types.ConformancePopSource, "")
 	wantMethods := methods
 	wantMethods.N = 1
 	wantMethods.P50 = 3 // T declares M1, M2 and M3
 	assert.Equal(t, wantMethods, methods)
 
-	assert.Equal(t, 2, conformanceRowFor(t, out, types.ConformanceFileSymbols, types.ConformancePopSource, "").P99, "a.go: F and T")
-	assert.Equal(t, 2, conformanceRowFor(t, out, types.ConformanceFileSymbols, types.ConformancePopMain, "").P50, "main and Run")
+	assert.Equal(t, 2, findConformanceRow(t, out, types.ConformanceFileSymbols, types.ConformancePopSource, "").P99, "a.go: F and T")
+	assert.Equal(t, 2, findConformanceRow(t, out, types.ConformanceFileSymbols, types.ConformancePopMain, "").P50, "main and Run")
 
 	// A package is keyed by its own directory when that directory has a value, else its layer.
-	tool := conformanceRowFor(t, out, types.ConformanceDepFanout, types.ConformancePopMain, "cmd/tool")
+	tool := findConformanceRow(t, out, types.ConformanceDepFanout, types.ConformancePopMain, "cmd/tool")
 	assert.Equal(t, []int{1, 2, 89}, []int{tool.N, tool.P50, tool.Value})
-	internal := conformanceRowFor(t, out, types.ConformanceDepFanout, types.ConformancePopSource, "internal")
+	internal := findConformanceRow(t, out, types.ConformanceDepFanout, types.ConformancePopSource, "internal")
 	assert.Equal(t, []int{2, 1, 62}, []int{internal.N, internal.P99, internal.Value},
 		"b importing the generated package counts; what gen imports would not")
 
-	clones := conformanceRowFor(t, out, types.ConformanceCloneTokens, types.ConformancePopSource, "")
+	clones := findConformanceRow(t, out, types.ConformanceCloneTokens, types.ConformancePopSource, "")
 	wantClones := clones
 	wantClones.N = 5 // main's body counts with source
 	wantClones.Violations = []types.ConformanceItem{
 		{ID: "internal/a/a.go#F, internal/b/b.go#G", Source: "internal/a/a.go:3", Measure: 90},
 	}
 	assert.Equal(t, wantClones, clones)
-	testClones := conformanceRowFor(t, out, types.ConformanceCloneTokens, types.ConformancePopTest, "")
+	testClones := findConformanceRow(t, out, types.ConformanceCloneTokens, types.ConformancePopTest, "")
 	assert.Equal(t, 1, testClones.N)
 	assert.Empty(t, testClones.Violations, "no value is configured for test clones")
 	assert.Empty(t, testClones.Source)
 
 	assert.Equal(t, []types.ConformanceItem{{ID: "internal/a/a.go#T", Source: "internal/a/a.go:14", Measure: 1}},
-		conformanceRowFor(t, out, types.ConformanceExportScope, types.ConformancePopSource, "").Violations,
+		findConformanceRow(t, out, types.ConformanceExportScope, types.ConformancePopSource, "").Violations,
 		"F is used from cmd/tool; T only from its own test")
 	assert.Equal(t, []types.ConformanceItem{{ID: "cmd/tool/main.go#Run", Source: "cmd/tool/main.go:32", Measure: 1}},
-		conformanceRowFor(t, out, types.ConformanceExportScope, types.ConformancePopMain, "").Violations)
+		findConformanceRow(t, out, types.ConformanceExportScope, types.ConformancePopMain, "").Violations)
 
 	assert.Equal(t, []types.ConformanceKnown{
 		{Metric: types.ConformanceFileLines, Items: []string{"internal/b/b.go"}, Reason: "split pending", Line: 10},
@@ -222,14 +222,14 @@ func TestConformanceKnownCloneGroup(t *testing.T) {
 	o := lensFixtureOptions()
 	o.Ratchet.Known = []types.ConformanceKnown{{Metric: types.ConformanceCloneTokens, Items: []string{"internal/a/a.go#F", "internal/b/b.go#G"}, Reason: "one home pending"}}
 
-	clones := conformanceRowFor(t, g.Conformance(o), types.ConformanceCloneTokens, types.ConformancePopSource, "")
+	clones := findConformanceRow(t, g.Conformance(o), types.ConformanceCloneTokens, types.ConformancePopSource, "")
 	assert.Equal(t, 1, clones.Known)
 	assert.Empty(t, clones.Violations)
 	assert.Empty(t, g.Conformance(o).Stale)
 
 	// A group's members must all be known: one entry naming only F leaves the group judged.
 	o.Ratchet.Known[0].Items = []string{"internal/a/a.go#F"}
-	clones = conformanceRowFor(t, g.Conformance(o), types.ConformanceCloneTokens, types.ConformancePopSource, "")
+	clones = findConformanceRow(t, g.Conformance(o), types.ConformanceCloneTokens, types.ConformancePopSource, "")
 	assert.Zero(t, clones.Known)
 	assert.Len(t, clones.Violations, 1)
 }
@@ -243,7 +243,7 @@ func TestConformanceKnownItemIgnoresItsMeasure(t *testing.T) {
 		Known:      []types.ConformanceKnown{{Metric: types.ConformanceFileLines, Items: []string{"pkg/f00.go"}, Reason: "split pending"}},
 	}}
 	out := conformanceSizedFiles(300, 10).Conformance(o)
-	row := conformanceRowFor(t, out, types.ConformanceFileLines, types.ConformancePopSource, "")
+	row := findConformanceRow(t, out, types.ConformanceFileLines, types.ConformancePopSource, "")
 	assert.Equal(t, 1, row.Known, "f00.go at 10x the value")
 	assert.Empty(t, row.Violations)
 	assert.Empty(t, out.Stale)
@@ -261,7 +261,7 @@ func TestConformanceKnownIDMatchingNoSampleIsStale(t *testing.T) {
 	out := conformanceSizedFiles(300, 10).Conformance(o)
 	assert.Equal(t, []types.ConformanceKnown{known}, out.Stale)
 	assert.Equal(t, []types.ConformanceItem{{ID: "pkg/f00.go", Source: "pkg/f00.go:1", Measure: 300}},
-		conformanceRowFor(t, out, types.ConformanceFileLines, types.ConformancePopSource, "").Violations)
+		findConformanceRow(t, out, types.ConformanceFileLines, types.ConformancePopSource, "").Violations)
 }
 
 // carryOptions enforce 10 func lines and 30 file lines on source, with one known entry of
@@ -300,7 +300,7 @@ func TestConformanceCarriesARenamedKnownFunction(t *testing.T) {
 	recordShapes(&o, before)
 
 	out := assembleLens([]types.KnowledgeSymbol{long("Renamed"), other}).Conformance(o)
-	row := conformanceRowFor(t, out, types.ConformanceFuncLines, types.ConformancePopSource, "")
+	row := findConformanceRow(t, out, types.ConformanceFuncLines, types.ConformancePopSource, "")
 	assert.Equal(t, 2, row.Known, "Renamed is Long")
 	assert.Empty(t, row.Violations)
 	out.Rows = nil
@@ -324,7 +324,7 @@ func TestConformanceCarriesAnItemListedTwice(t *testing.T) {
 
 	out := assembleLens([]types.KnowledgeSymbol{long("Renamed")}).Conformance(o)
 	assert.Equal(t, []types.ConformanceCarry{{Metric: types.ConformanceFuncLines, From: "pkg/a.go#Long", To: []string{"pkg/a.go#Renamed"}}}, out.Carried)
-	assert.Equal(t, 1, conformanceRowFor(t, out, types.ConformanceFuncLines, types.ConformancePopSource, "").Known)
+	assert.Equal(t, 1, findConformanceRow(t, out, types.ConformanceFuncLines, types.ConformancePopSource, "").Known)
 }
 
 func TestConformanceCarriesAMovedKnownFile(t *testing.T) {
@@ -342,7 +342,7 @@ func TestConformanceCarriesAMovedKnownFile(t *testing.T) {
 	require.NotEmpty(t, o.Ratchet.Known[0].Shapes["pkg/old.go"])
 
 	out := assembleLens(append(file("pkg/new.go"), small)).Conformance(o)
-	row := conformanceRowFor(t, out, types.ConformanceFileLines, types.ConformancePopSource, "")
+	row := findConformanceRow(t, out, types.ConformanceFileLines, types.ConformancePopSource, "")
 	assert.Equal(t, 1, row.Known)
 	assert.Empty(t, row.Violations)
 	assert.Empty(t, out.Stale)
@@ -363,7 +363,7 @@ func TestConformanceShapeTwinsCarryNothing(t *testing.T) {
 	o.Ratchet.Known[0].Shapes = map[string]string{"pkg/a.go#Long": "SA"}
 
 	out := assembleLens([]types.KnowledgeSymbol{renamed, twin}).Conformance(o)
-	assert.Len(t, conformanceRowFor(t, out, types.ConformanceFuncLines, types.ConformancePopSource, "").Violations, 2)
+	assert.Len(t, findConformanceRow(t, out, types.ConformanceFuncLines, types.ConformancePopSource, "").Violations, 2)
 	out.Rows = nil
 	assert.Equal(t, types.ConformanceOutput{
 		Stale: []types.ConformanceKnown{
@@ -398,7 +398,7 @@ func TestConformanceRenamedCloneMemberKeepsItsGroupKnown(t *testing.T) {
 		}
 	}
 	out := assembleLens(syms).Conformance(o)
-	clones := conformanceRowFor(t, out, types.ConformanceCloneTokens, types.ConformancePopSource, "")
+	clones := findConformanceRow(t, out, types.ConformanceCloneTokens, types.ConformancePopSource, "")
 	assert.Equal(t, 1, clones.Known)
 	assert.Empty(t, clones.Violations)
 	assert.Empty(t, out.Stale)
@@ -415,7 +415,7 @@ func TestConformanceKnownExportGoesStaleOnAnOutsideCaller(t *testing.T) {
 	o.Ratchet.Known = []types.ConformanceKnown{known}
 
 	before := lensFixture().Conformance(o)
-	assert.Equal(t, 1, conformanceRowFor(t, before, types.ConformanceExportScope, types.ConformancePopSource, "").Known)
+	assert.Equal(t, 1, findConformanceRow(t, before, types.ConformanceExportScope, types.ConformancePopSource, "").Known)
 	assert.Empty(t, before.Stale)
 
 	syms := lensSymbols()
@@ -425,7 +425,7 @@ func TestConformanceKnownExportGoesStaleOnAnOutsideCaller(t *testing.T) {
 		}
 	}
 	after := assembleLens(syms).Conformance(o)
-	assert.Zero(t, conformanceRowFor(t, after, types.ConformanceExportScope, types.ConformancePopSource, "").Known)
+	assert.Zero(t, findConformanceRow(t, after, types.ConformanceExportScope, types.ConformancePopSource, "").Known)
 	assert.Equal(t, []types.ConformanceKnown{known}, after.Stale, "only cmd/tool/main.go changed")
 }
 
@@ -437,7 +437,7 @@ func TestConformanceNewCopyFailsAKnownCloneGroupAtItsFirstMember(t *testing.T) {
 
 	syms := append(lensSymbols(), conformanceSym("/internal/b", "H().", "internal/b/b.go", 14, 23, 20, "S1", 90))
 	out := assembleLens(syms).Conformance(o)
-	clones := conformanceRowFor(t, out, types.ConformanceCloneTokens, types.ConformancePopSource, "")
+	clones := findConformanceRow(t, out, types.ConformanceCloneTokens, types.ConformancePopSource, "")
 	assert.Zero(t, clones.Known)
 	assert.Equal(t, []types.ConformanceItem{
 		{ID: "internal/a/a.go#F, internal/b/b.go#G, internal/b/b.go#H", Source: "internal/a/a.go:3", Measure: 90},
@@ -523,7 +523,7 @@ func TestConformanceProposalRule(t *testing.T) {
 			if tc.committed > 0 {
 				o.Ratchet = types.ConformanceRatchet{Schema: 1, Thresholds: []types.ConformanceThreshold{{ConformanceKey: key, Value: tc.committed}}}
 			}
-			row := conformanceRowFor(t, g.Conformance(o), types.ConformanceFileLines, types.ConformancePopSource, "")
+			row := findConformanceRow(t, g.Conformance(o), types.ConformanceFileLines, types.ConformancePopSource, "")
 			assert.Len(t, row.Violations, tc.violating)
 			wantRow := row
 			wantRow.Live, wantRow.Propose, wantRow.Source = 29, tc.propose, tc.src
@@ -597,7 +597,7 @@ func TestConformanceCallSequenceRow(t *testing.T) {
 	o := callSeqOptions()
 	o.MinSample, o.Step = 1, 0.05
 
-	row := conformanceRowFor(t, g.Conformance(o), types.ConformanceCallSequence, types.ConformancePopSource, "")
+	row := findConformanceRow(t, g.Conformance(o), types.ConformanceCallSequence, types.ConformancePopSource, "")
 	assert.Equal(t, []int{3, 8, 7}, []int{row.N, row.Live, row.Value},
 		"A and B share eight steps, C shares one; the steps call nothing and the wrapper is no step")
 	assert.Equal(t, []types.ConformanceItem{
@@ -609,7 +609,7 @@ func TestConformanceCallSequenceRow(t *testing.T) {
 		{Metric: types.ConformanceCallSequence, Items: []string{"internal/b/b.go#B", "internal/c/c.go#C"}, Reason: "fold pending", Line: 3},
 	}}
 	out := g.Conformance(o)
-	row = conformanceRowFor(t, out, types.ConformanceCallSequence, types.ConformancePopSource, "")
+	row = findConformanceRow(t, out, types.ConformanceCallSequence, types.ConformancePopSource, "")
 	row.P50, row.P90, row.P95, row.P99 = 0, 0, 0, 0
 	assert.Equal(t, types.ConformanceRow{
 		Key: types.ConformanceKey{Metric: types.ConformanceCallSequence, Population: types.ConformancePopSource},

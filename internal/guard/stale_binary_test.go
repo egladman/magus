@@ -95,7 +95,7 @@ func TestFreshWorktreeWithoutABinaryDeniesWrites(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	root := ownCheckout(t, ctx, false)
 	declareGuardRule(t, root)
-	deps := unloadedDepsFor(errMissingMember)
+	deps := unloadedDependencies(errMissingMember)
 
 	for _, line := range []string{"touch notes.txt", "git commit -m x", "./magus agent install", "git push origin HEAD:topic"} {
 		stored := shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, line), denyRuleStaleBinary, noBinaryOwnSay)
@@ -127,7 +127,7 @@ func TestUnloadedTreeWithoutABinaryNamesTheMissingBinary(t *testing.T) {
 	root := ownCheckout(t, ctx, false)
 	declareGuardRule(t, root)
 
-	v := judgeUnloaded(ctx, unloadedDepsFor(errors.New("magusfile.buzz:3:1: expected expression")), "touch notes.txt")
+	v := judgeUnloaded(ctx, unloadedDependencies(errors.New("magusfile.buzz:3:1: expected expression")), "touch notes.txt")
 	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, noBinaryOwnSay)
 	assert.NotContains(t, stored, "older than")
 }
@@ -137,7 +137,7 @@ func TestUnloadedTreeWithoutABinaryNamesTheMissingBinary(t *testing.T) {
 func TestUnloadedTreeWithoutAVisibleRuleDeniesNothing(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	ownCheckout(t, ctx, false)
-	v := judgeUnloaded(ctx, unloadedDepsFor(errMissingMember), "touch notes.txt")
+	v := judgeUnloaded(ctx, unloadedDependencies(errMissingMember), "touch notes.txt")
 	assert.NotEqual(t, decisionDeny, v.Decision, v.Reason)
 }
 
@@ -147,7 +147,7 @@ func TestStaleBinaryDeniesEveryWriteSeam(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
-	deps := unloadedDepsFor(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
+	deps := unloadedDependencies(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
 
 	for _, line := range []string{"git push origin HEAD:topic", "./magus agent harness install", "./magus config set --global key=log.format,value=json", "touch notes.txt"} {
 		stored := shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, line), denyRuleStaleBinary, staleOwnSay)
@@ -176,7 +176,7 @@ func TestStaleBinaryRepeatNamesTheRule(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
-	deps := unloadedDepsFor(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
+	deps := unloadedDependencies(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
 
 	first := Judge(ctx, deps, Request{Input: "touch a", Host: "claude-code", Session: "s1"})
 	shortDeny(t, cacheDir, first, denyRuleStaleBinary, staleOwnSay)
@@ -194,7 +194,7 @@ func TestStaleBinaryRemedyFollowsTheCaller(t *testing.T) {
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
-	deps := unloadedDepsFor(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
+	deps := unloadedDependencies(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
 
 	shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, "touch notes.txt"), denyRuleStaleBinary, staleOwnSay)
 
@@ -225,7 +225,7 @@ func TestStaleBinaryLetsAWorkerFastForwardToItsBinary(t *testing.T) {
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
-	deps := unloadedDepsFor(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
+	deps := unloadedDependencies(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
 	judge := func(session, line string) types.GuardJudgment {
 		return Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: session, Lease: "lease-a"})
 	}
@@ -256,7 +256,7 @@ func TestStaleBinaryLetsAReadOnlyScoutRecord(t *testing.T) {
 	ctx, _ := fleetFixture(t, fixture.FleetLeases()[0], scout)
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
-	deps := unloadedDepsFor(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
+	deps := unloadedDependencies(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
 
 	for _, line := range []string{
 		"./magus job exec scout",
@@ -567,7 +567,7 @@ func TestStaleBinaryDeniesStateChangingMCPTools(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
-	deps := unloadedDepsFor(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
+	deps := unloadedDependencies(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
 
 	for name, call := range map[string]string{
 		"client script":     mcpEnvelope(t, "client", map[string]any{"script": "import \"magus\";\nfun main(args: [str]) > void !> any { magus\\cmd(\"agent\", args: [\"install\"]); }"}),
@@ -603,7 +603,7 @@ func TestStaleBinaryMCPDenyFollowsTheCaller(t *testing.T) {
 	ctx, _ := fleetFixture(t, fixture.FleetLeases()[0])
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
-	deps := unloadedDepsFor(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
+	deps := unloadedDependencies(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
 
 	worker := Judge(ctx, deps, Request{Input: mcpEnvelope(t, "client", map[string]any{"script": "x"}), Host: "claude-code", Session: "s1", Lease: "lease-a"})
 	stored := servedDeny(t, hookLocation(ctx, Dependencies{}).cacheDir, worker, denyRuleStaleBinary, staleWorkerSay, placementNext(denyRuleStaleBinary, "lease-a"))
