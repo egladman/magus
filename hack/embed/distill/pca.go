@@ -27,7 +27,7 @@ type PCA struct {
 // in the same order on one machine.
 func FitPCA(rows [][]float32, k int) (*PCA, error) {
 	if len(rows) < 2 {
-		return nil, fmt.Errorf("pca: %d rows; a covariance needs at least 2", len(rows))
+		return nil, fmt.Errorf("pca: %d rows, but a covariance needs at least 2", len(rows))
 	}
 	dims := len(rows[0])
 	if k < 1 || k > dims {

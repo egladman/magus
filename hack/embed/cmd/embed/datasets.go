@@ -101,7 +101,7 @@ var spanRef = regexp.MustCompile(`^(.+):(\d+)-(\d+)$`)
 func resolveRef(root, ref string, files map[string][]string) (string, error) {
 	m := spanRef.FindStringSubmatch(ref)
 	if m == nil {
-		return "", fmt.Errorf("ref %q is not a path:first-last span; graph node refs are not resolved yet", ref)
+		return "", fmt.Errorf("ref %q is not a path:first-last span, and graph node refs are not resolved yet", ref)
 	}
 	first, err1 := strconv.Atoi(m[2])
 	last, err2 := strconv.Atoi(m[3])

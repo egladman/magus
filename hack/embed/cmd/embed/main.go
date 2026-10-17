@@ -208,7 +208,7 @@ func (m *textMix) addCornstack(cache string, skipped map[string]bool, ratio floa
 			fmt.Printf("input %s: left out by -skip\n", in.Name)
 			continue
 		case !strings.HasSuffix(in.Name, ".jsonl.gz"):
-			return fmt.Errorf("input %s: no reader for its format; name it in -skip to leave it out", in.Name)
+			return fmt.Errorf("input %s: no reader for its format, so name it in -skip to leave it out", in.Name)
 		case rows == 0:
 			fmt.Printf("input %s: not read, the earlier inputs filled -cornstack\n", in.Name)
 			continue
@@ -309,7 +309,7 @@ func lastCommit(root, path string) (string, error) {
 	}
 	rev := strings.TrimSpace(string(b))
 	if rev == "" {
-		return "", fmt.Errorf("no commit has written %s; commit it or pass -rev", path)
+		return "", fmt.Errorf("no commit has written %s, so commit it or pass -rev", path)
 	}
 	return rev, nil
 }
@@ -534,8 +534,8 @@ func runRecord(args []string) error {
 	}
 	line.Texts = n
 	line.Complete = line.Rows == n
-	line.TextsFile = relTo(*cache, *texts)
-	line.Manifest = relTo(*cache, found[0])
+	line.TextsFile = relativize(*cache, *texts)
+	line.Manifest = relativize(*cache, found[0])
 
 	prior, err := os.ReadFile(*out)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -626,9 +626,9 @@ func countTexts(path string) (int, error) {
 	return n, nil
 }
 
-// relTo keeps machine paths out of the committed runs log: a path under the cache root
-// is recorded relative to it.
-func relTo(root, path string) string {
+// relativize keeps machine paths out of the committed runs log: a path under the cache
+// root is recorded relative to it.
+func relativize(root, path string) string {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return path

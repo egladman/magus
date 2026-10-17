@@ -101,7 +101,7 @@ func (m *Model) FitScale(examples []Example) (float64, error) {
 	}
 	alpha := sy / ss
 	if !(alpha > 0) || math.IsInf(alpha, 0) {
-		return 0, fmt.Errorf("fit scale: the least-squares scale is %v; the directions do not point toward the targets", alpha)
+		return 0, fmt.Errorf("fit scale: the least-squares scale is %v, so the directions do not point toward the targets", alpha)
 	}
 	for t := range m.beta {
 		m.beta[t] = softplusInv(alpha * softplus(m.beta[t]))
@@ -268,7 +268,7 @@ func (o TrainOptions) validate(dims int, examples, pairs int) error {
 	case !(o.Lambda >= 0):
 		return fmt.Errorf("lambda %v is negative", o.Lambda)
 	case pairs > 0 && o.Lambda == 0:
-		return errors.New("pairs were given but lambda is 0; pass no pairs to train MSE alone")
+		return errors.New("pairs were given but lambda is 0, so pass no pairs to train MSE alone")
 	case !(o.Temperature > 0):
 		return fmt.Errorf("temperature %v is not positive", o.Temperature)
 	case o.Workers < 1:
