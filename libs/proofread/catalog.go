@@ -461,13 +461,6 @@ var coreTexts = map[Rule]ruleText{
 		catches:   "a doc comment sentence over 60 words",
 		why:       "House style: over the same 46664 blocks a sentence's p50 is 17 words, p90 34 and p99 50.",
 	},
-	RuleNameSuffix: {
-		code:      "PRF6003",
-		dimension: DimensionConventions,
-		catches:   "a function or method name whose last word is Of or For",
-		why: "House style: this repository names a function for what it returns or does, so `valueOf` " +
-			"and `configFor` are renamed.",
-	},
 	RuleAside: {
 		code:      "PRF6004",
 		dimension: DimensionConventions,

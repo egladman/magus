@@ -198,45 +198,6 @@ func TestTermsReportsTheHyphenatedSubagent(t *testing.T) {
 	runJudgeCases(t, cases)
 }
 
-func TestNameSuffixReportsACallableNameEndingInOfOrFor(t *testing.T) {
-	cases := []struct {
-		name string
-		want []Finding
-	}{
-		// A name ending in For.
-		{name: "parseConfig"},
-		{name: "configFor", want: []Finding{nameSuffixFinding("configFor")}},
-		// A name ending in Of.
-		{name: "valueOf", want: []Finding{nameSuffixFinding("valueOf")}},
-		// Of and For only as whole trailing words.
-		{name: "newClient"},
-		{name: "ForEach"},
-		{name: "Platform"},
-		{name: "Offset"},
-		// Snake case.
-		{name: "value_of", want: []Finding{nameSuffixFinding("value_of")}},
-		{name: "for"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			assertFindings(t, Judge(Symbol{Name: tc.name, Callable: true}, houseOn), tc.want)
-		})
-	}
-}
-
-func TestNameSuffixSkipsANameThatIsNotCallable(t *testing.T) {
-	assertFindings(t, Judge(Symbol{Name: "valueOf"}, houseOn), nil)
-}
-
-func nameSuffixFinding(name string) Finding {
-	return Finding{
-		Rule:    RuleNameSuffix,
-		Message: "Rename '" + name + "': no function or method name ends in the word Of or For.",
-		Match:   name,
-	}
-}
-
 const knowledgeSchemaVersionDoc = "KnowledgeSchemaVersion is stamped into every exported graph, shard, and manifest.\n" +
 	"External consumers (agent skills, MCP tools, other tools reading the node-link\n" +
 	"JSON) check it; a bump is a changelog event. Increment when the node/edge shape\n" +

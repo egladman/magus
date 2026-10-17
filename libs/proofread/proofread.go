@@ -32,8 +32,6 @@ const (
 	RuleFiller Rule = "filler"
 	// RuleTerms reports a spelling the glossary replaces.
 	RuleTerms Rule = "terms"
-	// RuleNameSuffix reports a function or method name whose last word is Of or For.
-	RuleNameSuffix Rule = "name-suffix"
 	// RuleAside reports a spaced hyphen spelling an em-dash.
 	RuleAside Rule = "aside"
 	// RuleHistory reports a phrase narrating the change rather than the code.
@@ -323,7 +321,6 @@ var coreChecks = []check{
 	{rule: RuleCommentSentence, on: comment, house: true, judge: commentSentence},
 	fillerCheck,
 	{rule: RuleTerms, on: slices.Concat(everywhere, stylesheet), house: true, judge: terms},
-	{rule: RuleNameSuffix, on: docOnly, house: true, judge: nameSuffix},
 	{rule: RuleAside, on: slices.Concat(comment, help), house: true, judge: aside},
 	{rule: RuleHistory, on: comment, house: true, judge: history},
 	{rule: RuleDocStub, on: docOnly, house: true, judge: docStub},
@@ -373,7 +370,7 @@ type Symbol struct {
 	Name string
 	// Owner is the display name of the enclosing type when Name is a method.
 	Owner string
-	// Callable marks a function or method, the only symbols whose name is judged.
+	// Callable marks a function or method.
 	Callable bool
 	// Doc is the doc comment, with any signature code block the indexer
 	// prepends already dropped.
@@ -490,9 +487,8 @@ type input struct {
 	css *cssComment
 }
 
-// Judge runs the doc rules over s. They judge nothing when Doc is empty, and
-// [RuleNameSuffix] judges only a callable. Findings come in [Rules] order,
-// then in the order their text appears in Doc.
+// Judge runs the doc rules over s. They judge nothing when Doc is empty.
+// Findings come in [Rules] order, then in the order their text appears in Doc.
 func Judge(s Symbol, opts ...Option) []Finding {
 	lines := strings.Split(s.Doc, "\n")
 	out := run(input{

@@ -168,11 +168,6 @@ func merely(text string, at int) bool {
 // tool.
 var termsPattern = regexp.MustCompile(`(?i)\bsub-agents?\b`)
 
-// nameSuffixPattern matches a name whose last word is Of or For, in camel or
-// snake case, after at least one other word. A name ending in Of or For
-// describes its argument rather than what it returns.
-var nameSuffixPattern = regexp.MustCompile(`\b(?:\w*[a-z0-9](?:Of|For)|\w+_(?:of|for))\b`)
-
 // commentBlock budgets each paragraph rather than the whole doc, the scope
 // Vale judged the rule at.
 func commentBlock(in input) []Finding {
@@ -289,22 +284,6 @@ func terms(in input) []Finding {
 	}
 
 	return out
-}
-
-func nameSuffix(in input) []Finding {
-	if !in.symbol.Callable {
-		return nil
-	}
-
-	m := nameSuffixPattern.FindString(in.symbol.Name)
-	if m == "" {
-		return nil
-	}
-
-	return []Finding{{
-		Message: fmt.Sprintf("Rename '%s': no function or method name ends in the word Of or For.", m),
-		Match:   m,
-	}}
 }
 
 func keep(s string) string { return s }
