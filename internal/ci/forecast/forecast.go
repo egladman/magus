@@ -135,7 +135,7 @@ func (f Forecaster) fitMemory(projects []*types.Project, durations []int64, n, l
 // down, which is the exact failure this packing exists to prevent. They used to be
 // much worse than floors: a target's processes were folded as a maximum on the
 // premise that they run in sequence, so a parallel suite whose real footprint was
-// 3GB recorded 1.2GB (see types/execcost.go). That is fixed at the source now by
+// 3GB recorded 1.2GB (see types/exec_cost.go). That is fixed at the source now by
 // sampling the process tree, but history written before the fix still carries the
 // old figures, so treat a passing fit as necessary rather than sufficient.
 //
