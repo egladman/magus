@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 )
 
@@ -84,13 +85,8 @@ func RecordHoldoutRead(path string, read HoldoutRead) ([]HoldoutRead, error) {
 				errHoldoutRead, p.Set, p.Digest, p.Candidate, p.At.Format(time.RFC3339))
 		}
 	}
-	out, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
-	if err != nil {
+	if err := file.AppendLines(path, [][]byte{line}, 0o644); err != nil {
 		return nil, err
 	}
-	if _, err := out.Write(append(line, '\n')); err != nil {
-		out.Close()
-		return nil, err
-	}
-	return prior, out.Close()
+	return prior, nil
 }

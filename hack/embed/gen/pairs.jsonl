@@ -16208,10 +16208,9 @@
 {"doc_ref":"internal/race/recorder.go:28-34","query_ref":"internal/race/recorder.go:26-27","source":"go-doc-decl","split":"train"}
 {"doc_ref":"internal/race/recorder.go:37-40","query_ref":"internal/race/recorder.go:36-36","source":"go-doc-decl","split":"train"}
 {"doc_ref":"internal/race/util.go:14-22","query_ref":"internal/race/util.go:8-13","source":"go-doc-decl","split":"train"}
-{"doc_ref":"internal/rankeval/holdout.go:16-22","query_ref":"internal/rankeval/holdout.go:13-15","source":"go-doc-decl","split":"holdout"}
-{"doc_ref":"internal/rankeval/holdout.go:25-31","query_ref":"internal/rankeval/holdout.go:24-24","source":"go-doc-decl","split":"holdout"}
-{"doc_ref":"internal/rankeval/holdout.go:35-38","query_ref":"internal/rankeval/holdout.go:33-34","source":"go-doc-decl","split":"holdout"}
-{"doc_ref":"internal/rankeval/holdout.go:63-96","query_ref":"internal/rankeval/holdout.go:57-62","source":"go-doc-decl","split":"holdout"}
+{"doc_ref":"internal/rankeval/holdout.go:16-16","query_ref":"internal/rankeval/holdout.go:14-15","source":"go-doc-decl","split":"holdout"}
+{"doc_ref":"internal/rankeval/holdout.go:35-38","query_ref":"internal/rankeval/holdout.go:34-34","source":"go-doc-decl","split":"holdout"}
+{"doc_ref":"internal/rankeval/holdout.go:63-96","query_ref":"internal/rankeval/holdout.go:58-62","source":"go-doc-decl","split":"holdout"}
 {"doc_ref":"internal/rankeval/judgment.go:104-110","query_ref":"internal/rankeval/judgment.go:103-103","source":"go-doc-decl","split":"train"}
 {"doc_ref":"internal/rankeval/judgment.go:114-117","query_ref":"internal/rankeval/judgment.go:112-113","source":"go-doc-decl","split":"train"}
 {"doc_ref":"internal/rankeval/judgment.go:121-123","query_ref":"internal/rankeval/judgment.go:119-120","source":"go-doc-decl","split":"train"}
