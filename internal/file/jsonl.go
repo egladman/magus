@@ -56,19 +56,11 @@ func ReadLines(path string) (Lines, error) {
 
 // AppendLines adds lines to the end of the file at path in one write, so a reader sees each
 // of them whole or not at all, and syncs it. It creates the file and its directory.
-func AppendLines(path string, lines [][]byte, perm os.FileMode) error {
-	return appendLines(path, lines, perm, true)
-}
-
-// AppendLinesNoSync is [AppendLines] without the sync: the lines survive the process
-// dying but not the machine. It is for a store appended to on a hot path, such as once per
-// RPC, where a sync per append costs more than a lost tail; on macOS a sync is an
-// F_FULLFSYNC and takes milliseconds.
-func AppendLinesNoSync(path string, lines [][]byte, perm os.FileMode) error {
-	return appendLines(path, lines, perm, false)
-}
-
-func appendLines(path string, lines [][]byte, perm os.FileMode, sync bool) error {
+func AppendLines(path string, lines [][]byte, perm os.FileMode, opts ...AppendOption) error {
+	var o appendOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -77,11 +69,21 @@ func appendLines(path string, lines [][]byte, perm os.FileMode, sync bool) error
 		return err
 	}
 	_, err = f.Write(joinLines(lines))
-	if err == nil && sync {
+	if err == nil && !o.skipSync {
 		err = f.Sync()
 	}
 	return errors.Join(err, f.Close())
 }
+
+// AppendOption changes how [AppendLines] writes.
+type AppendOption func(*appendOptions)
+
+type appendOptions struct{ skipSync bool }
+
+// WithoutSync skips the sync: the lines survive the process dying but not the machine. It
+// is for a store appended to on a hot path, such as once per RPC, where a sync per append
+// costs more than a lost tail; on macOS a sync is an F_FULLFSYNC and takes milliseconds.
+func WithoutSync() AppendOption { return func(o *appendOptions) { o.skipSync = true } }
 
 // RewriteLines replaces the file at path with lines through a rename, so a reader sees the
 // old file or the new one. It creates the directory.
@@ -168,7 +170,9 @@ func (l JSONL[T]) Update(ctx context.Context, fn func(entries []T) []T) error {
 		all = append(all, add...)
 		live := l.fold(all)
 		if !partial && !CompactDue(len(all), len(live)) {
-			return l.write(AppendLines, add)
+			return l.write(func(path string, lines [][]byte, perm os.FileMode) error {
+				return AppendLines(path, lines, perm)
+			}, add)
 		}
 		if partial {
 			slog.With(attr.Component("magus")).WarnContext(ctx, "store rewritten",

@@ -70,7 +70,7 @@ func AppendFeedbackMark(dir string, m types.TrailMark, now time.Time) (types.Tra
 	if err != nil {
 		return m, err
 	}
-	if err := file.AppendLinesNoSync(filepath.Join(dir, marksFile), [][]byte{line}, 0o644); err != nil {
+	if err := file.AppendLines(filepath.Join(dir, marksFile), [][]byte{line}, 0o644, file.WithoutSync()); err != nil {
 		return m, fmt.Errorf("feedback: %w", err)
 	}
 	return m, nil

@@ -654,7 +654,7 @@ func Append(ctx context.Context, base string, e Event) {
 	if err != nil {
 		return
 	}
-	_ = file.AppendLinesNoSync(eventsPath(base), [][]byte{line}, 0o644)
+	_ = file.AppendLines(eventsPath(base), [][]byte{line}, 0o644, file.WithoutSync())
 }
 
 // WriteBlob stores a payload under a provenance prefix (e.g. "mcp") and returns its ref and byte

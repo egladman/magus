@@ -32,7 +32,7 @@ func TestAppendAndRewriteLines(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "dir", "x.jsonl")
 	require.NoError(t, AppendLines(path, [][]byte{[]byte("one"), []byte("two")}, 0o644))
-	require.NoError(t, AppendLinesNoSync(path, [][]byte{[]byte("three")}, 0o644))
+	require.NoError(t, AppendLines(path, [][]byte{[]byte("three")}, 0o644, WithoutSync()))
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, "one\ntwo\nthree\n", string(raw))

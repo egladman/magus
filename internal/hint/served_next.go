@@ -96,7 +96,7 @@ func AppendServedNext(cacheDir string, next []types.NextStep) {
 	// A bounded wait rather than a drop: a lost line is a command magus served and then
 	// refuses, and the holder is only ever appending a few hundred bytes.
 	_ = file.WithLock(context.Background(), journal+".lock", servedNextLockWait, func() error {
-		if err := file.AppendLinesNoSync(journal, lines, 0o644); err != nil {
+		if err := file.AppendLines(journal, lines, 0o644, file.WithoutSync()); err != nil {
 			return err
 		}
 		rotateServedNext(journal)
