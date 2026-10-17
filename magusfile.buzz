@@ -2289,8 +2289,11 @@ export fun install_linter(ctx: magus\Context, args: [str]) > void !> any {
 // each rule is hack/lint/<rule>.buzz, and hack/lint/run.buzz reports drift between their
 // reads and this footprint. A tree glob stops at a nested project, hence the named paths.
 export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
-    // The proofread rules run the linked proofread rather than compile it.
-    ctx.needs(proofreadlib\proofread_build);
+    // This rule reads broad source and prose globs. Run every formatter CI uses first so
+    // the scheduler can order those writes before its reads (MGS4008).
+    ctx.needs(format, gopherbuzz\format, diagnostics\format, conventions\format,
+        testlayout\format, scipbuzz\format, xdg\format, cmdline\format,
+        proofreadlib\proofread_build);
     ctx.readsFiles("hack/lint/*.buzz",
                    "spells/**/*.buzz", "internal/queue/provider/*.buzz", "hack/**/*.buzz",
                    "hack/README.md",
