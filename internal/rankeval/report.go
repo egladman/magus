@@ -297,7 +297,7 @@ func (r Report) Text() string {
 		for _, verb := range slices.Sorted(maps.Keys(s.Verbs)) {
 			row("verb="+verb, s.Verbs[verb])
 		}
-		w.Flush()
+		_ = w.Flush()
 		if n := s.Nodes; n != nil {
 			fmt.Fprintf(&b, "node-level, not comparable to the rows above: queries %d, R@10 %.3f, nDCG@10 %.3f, MRR %.3f\n",
 				n.Queries, n.Recall10, n.NDCG10, n.MRR)

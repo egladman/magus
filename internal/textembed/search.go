@@ -64,7 +64,7 @@ func (ix *Index) checkSearch(q Vector, opts SearchOptions) {
 }
 
 func (ix *Index) eligible(doc int, allow []uint64) bool {
-	return ix.invNorm[doc] != 0 && (allow == nil || allow[doc/64]>>(doc%64)&1 == 1)
+	return ix.invNorm[doc] != 0 && (len(allow) == 0 || allow[doc/64]>>(doc%64)&1 == 1)
 }
 
 // candidates returns, in doc order, the r eligible docs whose sign codes score highest

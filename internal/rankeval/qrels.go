@@ -161,7 +161,7 @@ func JudgedGold(qrels []Qrel) (map[string]map[string]int, error) {
 	gold := map[string]map[string]int{}
 	for k, by := range last {
 		if len(by) > 1 {
-			return nil, fmt.Errorf("qrels: %s %s is graded under %d guideline/judge pairs; score one", k.query, k.file, len(by))
+			return nil, fmt.Errorf("qrels: %s %s is graded under %d guideline/judge pairs, want one", k.query, k.file, len(by))
 		}
 		if gold[k.query] == nil {
 			gold[k.query] = map[string]int{}
@@ -207,7 +207,7 @@ func DigestQueries(queries []Query, set EvalSet) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		h.Write(append(line, '\n'))
+		_, _ = h.Write(append(line, '\n'))
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }

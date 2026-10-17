@@ -39,8 +39,8 @@ var tokenizerDigest = sync.OnceValue(func() string {
 	h := sha256.New()
 	for _, tok := range textrank.Tokens(probe) {
 		// A token holds only letters, digits and '_', so '\n' cannot occur inside one.
-		h.Write([]byte(tok))
-		h.Write([]byte{'\n'})
+		_, _ = h.Write([]byte(tok))
+		_, _ = h.Write([]byte{'\n'})
 	}
 	return hex.EncodeToString(h.Sum(nil))
 })
@@ -154,10 +154,10 @@ func checkDims(dims int) error {
 func EncodeTable(w io.Writer, spec TableSpec) error {
 	hdr, err := spec.header()
 	if err != nil {
-		return fmt.Errorf("textembed: encode table: %w", err)
+		return fmt.Errorf("encode table: %w", err)
 	}
 	if _, err := w.Write(layoutTable(hdr, spec)); err != nil {
-		return fmt.Errorf("textembed: encode table: %w", err)
+		return fmt.Errorf("encode table: %w", err)
 	}
 	return nil
 }
@@ -265,7 +265,7 @@ func layoutTable(hdr []byte, spec TableSpec) []byte {
 func ReadTable(data []byte) (*Table, error) {
 	t, err := readTable(data)
 	if err != nil {
-		return nil, fmt.Errorf("textembed: read table: %w", err)
+		return nil, fmt.Errorf("read table: %w", err)
 	}
 	return t, nil
 }

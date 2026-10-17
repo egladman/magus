@@ -53,7 +53,7 @@ func TestReadJudgmentsRejects(t *testing.T) {
 		"bad date":          {strings.Replace(validJudgment, `"2026-01-01"`, `"2026-1-1"`, 1), `line 2: judgment a: date "2026-1-1"`},
 		"no session":        {strings.Replace(validJudgment, `"session":"s1",`, ``, 1), "line 2: judgment a: an agent-agreement row names no session"},
 		"shell variable":    {strings.Replace(validJudgment, `"query":"q"`, `"query":"$q"`, 1), "line 2: judgment a: query \"$q\" holds an unexpanded shell variable"},
-		"dir dot gold":      {strings.Replace(validJudgment, `"file:x":1`, `"file:x":1,"dir:.":1`, 1), "line 2: judgment a: dir:. is gold"},
+		"dir dot gold":      {strings.Replace(validJudgment, `"file:x":1`, `"file:x":1,"dir:.":1`, 1), "line 2: judgment a: gold names the root dir"},
 		"grade zero":        {strings.Replace(validJudgment, `"file:x":1`, `"file:x":0`, 1), "line 2: judgment a: gold file:x has grade 0, want 1-3"},
 		"grade four":        {strings.Replace(validJudgment, `"file:x":1`, `"file:x":4`, 1), "line 2: judgment a: gold file:x has grade 4, want 1-3"},
 		"judged grade 3":    {strings.Replace(strings.Replace(validJudgment, `"agent-agreement"`, `"definition-lookup"`, 1), `"file:x":1`, `"file:x":3`, 1), "line 2: judgment a: gold file:x has grade 3, want 0-2"},

@@ -169,7 +169,7 @@ func (j Judgment) validate() error {
 		}
 		// Every root-level hit expands to dir:., so it is gold to any ranker.
 		if id == "dir:." {
-			return fmt.Errorf("judgment %s: dir:. is gold", j.ID)
+			return fmt.Errorf("judgment %s: gold names the root dir", j.ID)
 		}
 	}
 	return nil

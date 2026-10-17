@@ -80,7 +80,7 @@ func RecordHoldoutRead(path string, read HoldoutRead) ([]HoldoutRead, error) {
 	}
 	for _, p := range prior {
 		if p.Digest == read.Digest && !read.ReportOnly {
-			return prior, fmt.Errorf("%w: %s %s was read for %s at %s; a further read only reports, with MAGUS_EVAL_REPORT_ONLY=1",
+			return prior, fmt.Errorf("%w: %s %s was read for %s at %s, so a further read needs MAGUS_EVAL_REPORT_ONLY=1 and only reports",
 				errHoldoutRead, p.Set, p.Digest, p.Candidate, p.At.Format(time.RFC3339))
 		}
 	}

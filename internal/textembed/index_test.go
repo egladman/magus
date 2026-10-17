@@ -157,8 +157,8 @@ func TestIndexReadRefuses(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("ReadIndex error = %v, want one naming %q", err, tt.want)
 			}
-			if !strings.HasPrefix(err.Error(), "textembed: read index: ") {
-				t.Errorf("error %q lacks the package prefix", err)
+			if !strings.HasPrefix(err.Error(), "read index: ") {
+				t.Errorf("error %q does not say it was reading the index", err)
 			}
 		})
 	}

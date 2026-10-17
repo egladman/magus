@@ -74,22 +74,22 @@ func (ix *Index) Len() int { return ix.n }
 func (ix *Index) WriteTo(w io.Writer) (int64, error) {
 	head, err := ix.head()
 	if err != nil {
-		return 0, fmt.Errorf("textembed: write index: %w", err)
+		return 0, fmt.Errorf("write index: %w", err)
 	}
 	sum := sha256.Sum256(head)
 	head = append(head, sum[:]...)
 	n, err := w.Write(head)
 	if err != nil {
-		return int64(n), fmt.Errorf("textembed: write index: %w", err)
+		return int64(n), fmt.Errorf("write index: %w", err)
 	}
 	size := int64(ix.n) * int64(ix.dims)
 	m, err := io.Copy(w, io.NewSectionReader(ix.rows, 0, size))
 	total := int64(n) + m
 	if err != nil {
-		return total, fmt.Errorf("textembed: write index: %w", err)
+		return total, fmt.Errorf("write index: %w", err)
 	}
 	if m != size {
-		return total, fmt.Errorf("textembed: write index: copied %d bytes of rows, want %d", m, size)
+		return total, fmt.Errorf("write index: copied %d bytes of rows, want %d", m, size)
 	}
 	return total, nil
 }
@@ -122,7 +122,7 @@ func (ix *Index) head() ([]byte, error) {
 func ReadIndex(r io.ReaderAt, size int64, t *Table) (*Index, error) {
 	ix, err := readIndex(r, size, t)
 	if err != nil {
-		return nil, fmt.Errorf("textembed: read index: %w", err)
+		return nil, fmt.Errorf("read index: %w", err)
 	}
 	return ix, nil
 }
