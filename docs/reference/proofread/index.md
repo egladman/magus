@@ -102,7 +102,6 @@ Each rule also has a dimension, the cost its findings name to the reader:
 | --------------------------------------- | ------- | ----------- | ----------- | -------------------------------------------------------------------------------- |
 | [comment-block](comment-block.md)       | PRF6001 | economy     | off (house) | a doc comment over 250 words                                                     |
 | [comment-sentence](comment-sentence.md) | PRF6002 | economy     | off (house) | a doc comment sentence over 60 words                                             |
-| [name-suffix](name-suffix.md)           | PRF6003 | conventions | off (house) | a function or method name whose last word is Of or For                           |
 | [aside](aside.md)                       | PRF6004 | conventions | off (house) | a spaced hyphen spelling an em dash in a doc comment                             |
 | [history](history.md)                   | PRF6005 | conventions | off (house) | a doc comment phrase narrating the change rather than the code ("used to")       |
 | [docstub](docstub.md)                   | PRF6006 | economy     | off (house) | a one-line doc comment that only repeats the symbol's name                       |
