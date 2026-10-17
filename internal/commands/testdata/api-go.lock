@@ -3585,7 +3585,7 @@ github.com/egladman/magus/types.Path.Base field string "json:\"base,omitempty\""
 github.com/egladman/magus/types.Path.BuzzObject method func() BuzzObject
 github.com/egladman/magus/types.Path.IsDir field bool "json:\"is_dir,omitempty\" buzz:\"isDir\""
 github.com/egladman/magus/types.Path.Rebase method func(base string) Path
-github.com/egladman/magus/types.Path.RelativeTo method func(base string) (Path, error)
+github.com/egladman/magus/types.Path.Relativize method func(base string) (Path, error)
 github.com/egladman/magus/types.Path.Resolve method func() Path
 github.com/egladman/magus/types.Path.Value field string "json:\"value\""
 github.com/egladman/magus/types.PathReadDenied const DiagnosticCode = "MGS2001"
