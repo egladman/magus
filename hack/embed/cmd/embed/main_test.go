@@ -103,7 +103,9 @@ func TestTextsLeaveOutGeneratedFilesAndChangelogs(t *testing.T) {
 		{Kind: "file", Path: "std/crypto.go", Split: "holdout"},
 	}
 	files := map[string][]byte{"internal/textrank/tokens.go": kept}
-	m := textMix{forced: map[string]bool{}, excluded: map[string]int{}}
+	d, err := newDecontaminator(&evalCorpus{}, 1)
+	require.NoError(t, err)
+	m := textMix{forced: map[string]bool{}, excluded: map[string]int{}, decontam: d}
 	require.NoError(t, m.addRepo(records, files, "HEAD", "sources.jsonl", 512))
 	require.Equal(t, []teacher.Text{{ID: "internal/textrank/tokens.go:1-1", Text: "package textrank\n"}}, m.texts)
 	require.Equal(t, map[string]int{"generated": 1, "changelog-fragment": 1, "changelog": 1}, m.excluded)

@@ -123,16 +123,16 @@ func runTexts(args []string) error {
 	maxBytes := fs.Int("chunk-bytes", 512, "a text holds at most this many bytes, so the teacher's 256-token cap rarely cuts it")
 	ratio := fs.Float64("cornstack", 1, "CoRNStack rows per in-repo text; each row adds two texts")
 	skip := fs.String("skip", "", "comma-separated input names left out; an input with no reader must be named here")
+	evalDir := fs.String("eval", "", "the directory of external eval sets, one <name>.jsonl of {\"id\", \"text\"} lines per set: every query and gold document")
+	noEval := fs.String("no-eval", "", "comma-separated eval sets left out of decontamination, each recorded in runs.jsonl")
+	common := fs.Int("common", 10, "a 13-word window more eval texts than this hold is boilerplate and drops nothing")
+	runsPath := fs.String("runs", "runs.jsonl", "the runs log the decontamination counts are appended to")
 	_ = fs.Parse(args)
 	if *out == "" {
 		*out = filepath.Join(*cache, "training")
 	}
-	skipped := map[string]bool{}
-	for name := range strings.SplitSeq(*skip, ",") {
-		if name != "" {
-			skipped[name] = true
-		}
-	}
+	skipped := commaSet(*skip)
+	leftOut := commaSet(*noEval)
 
 	records, err := readSources(*sourcesPath)
 	if err != nil {
@@ -148,7 +148,7 @@ func runTexts(args []string) error {
 	}
 	var paths []string
 	for _, r := range records {
-		if r.Kind == "file" && r.Split == "train" && excludedReason(r) == "" {
+		if r.Kind == "file" && (r.Split == "holdout" || excludedReason(r) == "") {
 			paths = append(paths, r.Path)
 		}
 	}
@@ -157,7 +157,17 @@ func runTexts(args []string) error {
 		return err
 	}
 
-	mix := textMix{forced: map[string]bool{}, excluded: map[string]int{}}
+	evals, err := evalTexts(records, files, *root, *rev, *evalDir, leftOut)
+	if err != nil {
+		return err
+	}
+	d, err := newDecontaminator(evals, *common)
+	if err != nil {
+		return err
+	}
+	d.report.LeftOut = slices.Sorted(maps.Keys(leftOut))
+
+	mix := textMix{forced: map[string]bool{}, excluded: map[string]int{}, decontam: d}
 	if err := mix.addRepo(records, files, *rev, *sourcesPath, *maxBytes); err != nil {
 		return err
 	}
@@ -171,10 +181,132 @@ func runTexts(args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := writeDropped(filepath.Join(*out, "dropped.jsonl"), d.dropped); err != nil {
+		return err
+	}
+	line := textsLine{
+		Kind: "texts", Rev: *rev, TextsSHA256: digest, TextsFile: relativize(*cache, filepath.Join(*out, "texts.jsonl")),
+		Texts: len(mix.texts), Excluded: mix.excluded, Decontam: d.report,
+	}
+	if err := appendLine(*runsPath, line); err != nil {
+		return err
+	}
 	fmt.Printf("files at %s; %d texts: %d chunks of %d files, %d figures, %d CoRNStack documents and %d queries; texts %s; %d forced tokens\n",
 		*rev, len(mix.texts), repo-mix.figures, mix.files, mix.figures, mix.docs, mix.queries, digest, len(mix.forced))
-	fmt.Printf("train files left out of the texts: %v\n", mix.excluded)
+	fmt.Printf("train files left out of the texts: %v; dropped as eval repeats: %v, by kind/reason/set %v; %d of %d eval grams are boilerplate\n",
+		mix.excluded, d.report.Dropped, d.report.DroppedBy, d.report.CommonGrams, d.report.Grams)
 	return nil
+}
+
+// textsLine is the line a texts run appends to runs.jsonl.
+type textsLine struct {
+	Kind        string         `json:"kind"`
+	Rev         string         `json:"rev"`
+	TextsSHA256 string         `json:"texts_sha256"`
+	TextsFile   string         `json:"texts_file"`
+	Texts       int            `json:"texts"`
+	Excluded    map[string]int `json:"excluded"`
+	Decontam    decontamReport `json:"decontam"`
+}
+
+func commaSet(s string) map[string]bool {
+	out := map[string]bool{}
+	for name := range strings.SplitSeq(s, ",") {
+		if name != "" {
+			out[name] = true
+		}
+	}
+	return out
+}
+
+// evalTexts gathers every text the training texts must not repeat: the external sets
+// under dir, each holdout file at rev, the eval fold's figure titles and descriptions,
+// every commit subject up to rev, and the judged and harvested queries under
+// testdata/retrieval. A set leftOut names is skipped; any other that is missing is an
+// error.
+func evalTexts(records []sourceRecord, files map[string][]byte, root, rev, dir string, leftOut map[string]bool) (*evalCorpus, error) {
+	e := &evalCorpus{}
+	if err := readEvalSets(e, dir, leftOut); err != nil {
+		return nil, err
+	}
+	for _, r := range records {
+		switch {
+		case r.Kind == "file" && r.Split == "holdout" && !leftOut["repo-holdout"]:
+			if sha256Hex(files[r.Path]) != r.SHA256 {
+				return nil, fmt.Errorf("%s at %s does not hash to the manifest's %s", r.Path, rev, r.SHA256)
+			}
+			e.add("repo-holdout", string(files[r.Path]))
+		case r.Kind == "figure" && r.Fold == 0 && !leftOut["figure-queries"]:
+			e.add("figure-queries", r.Title, r.Desc)
+		}
+	}
+	if !leftOut["commit-subjects"] {
+		b, err := exec.Command("git", "-C", root, "log", "--format=%s", rev).Output()
+		if err != nil {
+			return nil, fmt.Errorf("git log %s: %w", rev, err)
+		}
+		e.add("commit-subjects", strings.Split(strings.TrimSpace(string(b)), "\n")...)
+	}
+	for _, q := range [][2]string{{"judged-queries", "queries.jsonl"}, {"harvested-queries", "judgments.jsonl"}} {
+		if leftOut[q[0]] {
+			continue
+		}
+		queries, err := readQueries(filepath.Join(root, "testdata", "retrieval", q[1]))
+		if err != nil {
+			return nil, fmt.Errorf("eval set %s: %w; name it in -no-eval to leave it out", q[0], err)
+		}
+		e.add(q[0], queries...)
+	}
+	return e, nil
+}
+
+// readQueries reads the query field of every line of a rankeval queries or judgments file.
+func readQueries(path string) ([]string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	n := 0
+	for line := range bytes.Lines(b) {
+		n++
+		var r struct {
+			Query string `json:"query"`
+		}
+		if err := json.Unmarshal(line, &r); err != nil {
+			return nil, fmt.Errorf("%s:%d: %w", path, n, err)
+		}
+		out = append(out, r.Query)
+	}
+	return out, nil
+}
+
+func writeDropped(path string, dropped []droppedText) error {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	for _, t := range dropped {
+		if err := enc.Encode(t); err != nil {
+			return err
+		}
+	}
+	return writeAtomic(path, buf.Bytes())
+}
+
+func appendLine(path string, v any) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(append(b, '\n')); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // textMix is the training texts as texts assembles them, the forced tokens, and the
@@ -184,6 +316,7 @@ type textMix struct {
 	forced         map[string]bool
 	inputs         []sourceRecord
 	excluded       map[string]int
+	decontam       *decontaminator
 	files, figures int
 	docs, queries  int
 }
@@ -208,12 +341,16 @@ func (m *textMix) addRepo(records []sourceRecord, files map[string][]byte, rev, 
 			}
 			m.files++
 			for _, c := range chunks(string(files[r.Path]), maxBytes) {
-				m.texts = append(m.texts, teacher.Text{ID: r.Path + ":" + c.span(), Text: c.text})
+				id := r.Path + ":" + c.span()
+				if m.decontam.admit("repo", id, c.text) {
+					m.texts = append(m.texts, teacher.Text{ID: id, Text: c.text})
+				}
 			}
 		case "figure":
-			if r.Fold != 0 {
+			id := "figure:" + r.ID
+			if r.Fold != 0 && m.decontam.admit("figure", id, r.Title+"\n"+r.Desc) {
 				m.figures++
-				m.texts = append(m.texts, teacher.Text{ID: "figure:" + r.ID, Text: r.Title + "\n" + r.Desc})
+				m.texts = append(m.texts, teacher.Text{ID: id, Text: r.Title + "\n" + r.Desc})
 			}
 		case "forced":
 			for _, t := range r.Tokens {
@@ -247,7 +384,7 @@ func (m *textMix) addCornstack(cache string, skipped map[string]bool, ratio floa
 		if err != nil {
 			return err
 		}
-		got, err := readCornstack(path, in.Name, rows, maxBytes)
+		got, err := readCornstack(path, in.Name, rows, maxBytes, m.decontam)
 		if err != nil {
 			return err
 		}
@@ -492,8 +629,9 @@ func runeCut(s string, maxBytes int) int {
 }
 
 // readCornstack reads up to rows rows of a CoRNStack shard in file order, each as its
-// query and the first chunk of its document.
-func readCornstack(path, name string, rows, maxBytes int) ([]teacher.Text, error) {
+// query and the first chunk of its document. A row whose query or whole document d
+// refuses is dropped and the next row read in its place.
+func readCornstack(path, name string, rows, maxBytes int, d *decontaminator) ([]teacher.Text, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -520,6 +658,9 @@ func readCornstack(path, name string, rows, maxBytes int) ([]teacher.Text, error
 			continue
 		}
 		id := name + ":" + strconv.Itoa(row)
+		if !d.admit("cornstack", id, r.Query, r.Document) {
+			continue
+		}
 		out = append(out,
 			teacher.Text{ID: id + ":query", Text: r.Query[:runeCut(r.Query, maxBytes)]},
 			teacher.Text{ID: id + ":document", Text: doc[0].text})
@@ -601,19 +742,7 @@ func runRecord(args []string) error {
 			return nil
 		}
 	}
-	b, err := json.Marshal(line)
-	if err != nil {
-		return err
-	}
-	f, err := os.OpenFile(*out, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		return err
-	}
-	if _, err := f.Write(append(b, '\n')); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
+	if err := appendLine(*out, line); err != nil {
 		return err
 	}
 	rate := 0.0
