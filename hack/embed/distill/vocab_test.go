@@ -42,6 +42,20 @@ func TestVocabForcesTokensWhateverTheirCount(t *testing.T) {
 	assert.Equal(t, []int64{4, 0, 0, 0, 0, 0}, v.Counts)
 }
 
+func TestVocabForcesProductNames(t *testing.T) {
+	// A diagnostic code, a Context member and a target name, one from each forced set
+	// kind: a code stays whole, camelCase splits, and a kebab name keeps no whole token.
+	got, err := ForcedTokens([]string{"MGS2001", "readsFiles", "go-test"})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]bool{"mgs2001": true, "readsfiles": true, "reads": true, "files": true, "go": true, "test": true}, got)
+
+	opts := vocabOptions()
+	opts.Forced = []string{"MGS2001", "readsFiles", "go-test"}
+	v, err := BuildVocab(vocabTexts(), opts)
+	require.NoError(t, err)
+	assert.Subset(t, v.Tokens, []string{"mgs2001", "readsfiles", "reads", "files", "go", "test"})
+}
+
 func TestVocabRefuses(t *testing.T) {
 	opts := vocabOptions()
 	opts.Size = 2

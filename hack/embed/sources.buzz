@@ -521,7 +521,56 @@ fun forcedSets(c: Snapshot) > [{str: any}] !> any {
         }
     }
     sets.append({"set": "graph-names", "ref": "kind=spell kind=op docs/reference/manpage", "tokens": uniqueSorted(names)});
+    sets.append({"set": "charm-names", "ref": "kind=charm", "tokens": labels("charm")});
+    sets.append(withField("set", value: "magus-context", record: contextMembers(c)));
+    sets.append({"set": "target-names", "ref": "kind=target", "tokens": labels("target")});
     return sets;
+}
+
+fun labels(kind: str) > [str] !> any {
+    final found: mut [str] = mut [];
+    foreach (n in nodes(kind)) {
+        found.append(n.label);
+    }
+    if (found.len() == 0) {
+        throw "sources: the graph holds no {kind} node, so the forced set would be empty";
+    }
+    return uniqueSorted(found);
+}
+
+// contextMembers is every object and member name the Buzz declaration in
+// MagusContextSource gives magus\Context and magus\Exec: the names a target body calls
+// on ctx, read from the raw string up to its closing backtick.
+fun contextMembers(c: Snapshot) > {str: any} !> any {
+    final file = "internal/spell/builtins.go";
+    foreach (s in c.symbolsByFile[file] ?? []) {
+        if (s.label != "MagusContextSource") {
+            continue;
+        }
+        final start = spanLine(s.source);
+        final ls = c.lines(file);
+        final names: mut [str] = mut [];
+        var n = start;
+        while (n <= ls.len()) {
+            var t = ls[n - 1].trim();
+            if (n == start) {
+                final tick = t.indexOf("`") ?? t.len();
+                t = t.sub(tick + 1, len: t.len() - tick - 1).trim();
+            } else if (t == "`") {
+                return {"ref": "{file}:{start}-{n}", "symbol": s.id, "tokens": uniqueSorted(names)};
+            }
+            if (t.startsWith("export object ")) {
+                names.append(t.sub(14, len: t.len() - 14).split(" ")[0]);
+            } else if (t.startsWith("extern fun ")) {
+                names.append(t.sub(11, len: t.len() - 11).split("(")[0]);
+            } else if (t.indexOf(":") -> colon) {
+                names.append(t.sub(0, len: colon));
+            }
+            n = n + 1;
+        }
+        throw "sources: {file}:{start} opens MagusContextSource but no line closes it with a backtick";
+    }
+    throw "sources: {file} declares no MagusContextSource; the forced set lost its source of truth";
 }
 
 // The approved downloads, pinned by the HF revision and the LFS sha256 the hub serves.
