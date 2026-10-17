@@ -85,7 +85,7 @@ func ruleNames(cs []check) []Rule {
 func TestRulesListsEveryRuleInReportOrder(t *testing.T) {
 	want := slices.Concat([]Rule{
 		RuleCommentBlock, RuleCommentSentence, RuleFiller, RuleTerms,
-		RuleNameSuffix, RuleAside, RuleHistory, RuleDocStub,
+		RuleAside, RuleHistory, RuleDocStub,
 		RuleLeadContext, RuleReplyVoice, RuleTense, RuleHedge, RuleAttribution,
 		RuleTerseSentence, RuleTerseParagraph, RuleWordy, RuleBareRule,
 		RuleSecondPerson, RuleStepVerb, RuleCondescension,
@@ -217,7 +217,6 @@ func TestJudgeReportsInRuleOrderThenTextOrder(t *testing.T) {
 		{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply"},
 		{Rule: RuleTerms, Message: "Write 'subagent', not 'sub-agent'.", Match: "sub-agent"},
 		{Rule: RuleTerms, Message: "Write 'subagent', not 'Sub-agent'.", Match: "Sub-agent"},
-		nameSuffixFinding("valueOf"),
 		{Rule: RuleAside, Message: asideMessage, Match: "sub-agent - basically"},
 		{
 			Rule:    RuleHistory,

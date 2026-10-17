@@ -7,7 +7,6 @@
     "attribution": "deny",
     "comment-block": "deny",
     "comment-sentence": "deny",
-    "name-suffix": "deny",
     "aside": "deny",
     "docstub": "deny",
     "terse-sentence": "deny",

@@ -227,7 +227,7 @@ test "a finding the decisions table denies is held and advice is not" {
     final advised = finding("verdict", node: "symbol:x/Old().", source: "a/old.go:3").cloneMutable();
     advised["decision"] = "advise";
     rows.append(advised);
-    final held = ["comment-block", "comment-sentence", "filler", "terms", "name-suffix", "aside", "docstub"];
+    final held = ["comment-block", "comment-sentence", "filler", "terms", "aside", "docstub"];
     foreach (rule in held) {
         rows.append(finding(rule, node: "symbol:x/" + rule + ".", source: "a/" + rule + ".go:1"));
     }
@@ -236,7 +236,7 @@ test "a finding the decisions table denies is held and advice is not" {
 }
 
 test "the doc-comment budgets are denied and history stays off" {
-    foreach (rule in ["comment-block", "comment-sentence", "name-suffix", "aside", "docstub"]) {
+    foreach (rule in ["comment-block", "comment-sentence", "aside", "docstub"]) {
         assert\equal(decisions\decide(rule, given: "off"), want: "deny", message: rule);
     }
     assert\equal(decisions\decide("history", given: "off"), want: "off", message: "history keeps its shipped off");

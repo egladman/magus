@@ -16,7 +16,6 @@ const (
 	weakCrucial  = "Replace 'crucial' with what is actually so."
 	leakTBD      = "Remove 'TBD': it is left over from a tool or a template."
 	termsMessage = "Write 'subagent', not 'sub-agent'."
-	nameSuffix   = "Rename 'configFor': no function or method name ends in the word Of or For."
 )
 
 // row is the finding proofread writes for rule, its code and page read from
@@ -155,29 +154,6 @@ func TestRunKeepsInputOrderThenFindingOrder(t *testing.T) {
 	)
 
 	assertArgs(t, []string{"doc-comment", "--stdin", "-decisions", houseTable(t, proofread.RuleTerms)}, in, want)
-}
-
-func TestRunJudgesANameSuffixOnlyOnACallable(t *testing.T) {
-	decisions := houseTable(t, proofread.RuleNameSuffix)
-	found := rows(t, row("n", "", "doc-comment", proofread.RuleNameSuffix, proofread.DecisionDeny, nameSuffix, "configFor"))
-
-	cases := []struct {
-		kind string
-		want string
-	}{
-		{"function", found},
-		{"method", found},
-		{"type", "[]\n"},
-		{"", "[]\n"},
-	}
-
-	for _, tc := range cases {
-		t.Run("kind "+tc.kind, func(t *testing.T) {
-			in := `[{"node":"n","name":"configFor","kind":"` + tc.kind + `","doc":""}]`
-
-			assertArgs(t, []string{"doc-comment", "--stdin", "-decisions", decisions}, in, tc.want)
-		})
-	}
 }
 
 func TestRunJudgesReferenceFilesInArgumentOrder(t *testing.T) {

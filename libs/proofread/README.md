@@ -206,7 +206,6 @@ where a decisions table would deny it. The [proofread guide](https://eli.gladman
 | `comment-sentence`   | PRF6002 | doc comment, stylesheet          | off (house)                          | a doc sentence over 60 words                                                     |
 | `filler`             | PRF4001 | all                              | deny                                 | throat-clearing ("Note that") and filler adverbs ("simply")                      |
 | `terms`              | PRF5001 | all                              | off (house)                          | a spelling the glossary replaces ("sub-agent")                                   |
-| `name-suffix`        | PRF6003 | doc comment                      | off (house)                          | a function or method name whose last word is Of or For                           |
 | `aside`              | PRF6004 | doc comment, stylesheet, help    | off (house)                          | a spaced hyphen spelling an em-dash, inline or ending a line                     |
 | `history`            | PRF6005 | doc comment, stylesheet          | off (house)                          | a phrase narrating the change rather than the code ("used to")                   |
 | `docstub`            | PRF6006 | doc comment                      | off (house)                          | a one-line doc that only repeats the symbol's name                               |

@@ -24,7 +24,6 @@ final RULES: {str: str} = {
     // The doc-comment budgets the symbol-docs lint held every Go and TypeScript doc to.
     "comment-block": "deny",
     "comment-sentence": "deny",
-    "name-suffix": "deny",
     // A spaced hyphen is the em dash typed in ASCII: in a doc comment, and in the help text of
     // a command or flag, which hack/lint/cli-help-follows-proofread-rules.buzz judges.
     "aside": "deny",
